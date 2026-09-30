@@ -1,40 +1,26 @@
-"""
-Image prefetcher built on ThreadManager and ImageCache.
+"""Bounded speculative derivatives, decoded/scaled by the existing ImageWorker.
 
-- Decodes raw images into QImage on IO threads (thread-safe)
-- Builds at most one speculative scaled derivative on one lazy OS-demoted background thread
-- Keeps speculative backlog bounded/latest-useful without a persistent helper process
-- Caches decoded/display-ready images in a bounded LRU cache
-- Supports post-transition delay to reduce IO contention
+One admitted source batch feeds all of its planned display variants. The parent
+owns intent, cooldown, cache admission and generation fencing, never Qt scaling.
 """
 from __future__ import annotations
 
-from collections import deque
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable
 import threading
 import time
-from PySide6.QtCore import QSize
+
 from PySide6.QtGui import QImage
 
-from core.logging.logger import (
-    get_logger,
-    is_cache_logging_enabled,
-    is_perf_metrics_enabled,
-    is_verbose_logging,
-)
-from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
+from core.logging.logger import get_logger, is_cache_logging_enabled
 from rendering.display_modes import DisplayMode
-from rendering.image_processor_async import AsyncImageProcessor
 from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
-
 _MIB = 1024 * 1024
 
 
-def _request_logical_bytes(request: Dict[str, Any]) -> int:
-    """Return the future RGBA8 footprint represented by a scaled request."""
-    return max(0, int(request.get("width") or 0)) * max(0, int(request.get("height") or 0)) * 4
+def _request_logical_bytes(request: dict[str, Any]) -> int:
+    return int(request["width"]) * int(request["height"]) * 4
 
 
 def _cache_trace(message: str, *args: Any) -> None:
@@ -45,572 +31,209 @@ def _cache_trace(message: str, *args: Any) -> None:
 class ImagePrefetcher:
     def __init__(
         self,
-        thread_manager: ThreadManager,
         cache: ImageCache,
+        *,
+        derive: Callable[[str, list[dict[str, Any]], int, Callable], Callable[[], None]],
         max_concurrent: int = 2,
         post_transition_delay_ms: float = 100.0,
-        max_pending_requests: Optional[int] = None,
-        max_pending_scaled_bytes: Optional[int] = None,
+        max_pending_requests: int | None = None,
+        max_pending_scaled_bytes: int | None = None,
     ) -> None:
-        self._threads = thread_manager
         self._cache = cache
-        # Keep derivative work strict single-flight.  The ThreadManager route used
-        # below is a lazy serial lane with real Windows thread demotion; unlike
-        # TaskPriority.LOW metadata, it does not compete at ordinary scheduler
-        # priority with Qt Quick/visualizer work.
-        self._max_scaled_concurrent = 1
-        self._max_concurrent = max(1, min(4, int(max_concurrent)))
-        self._max_pending_requests = max(
-            self._max_concurrent,
-            int(max_pending_requests or (self._max_concurrent * 4)),
-        )
+        self._derive = derive
+        budget_slots = max(1, min(4, int(max_concurrent)))
+        self._max_pending_requests = min(16, max(
+            budget_slots, int(max_pending_requests or budget_slots * 4),
+        ))
         cache_budget = max(1, int(getattr(cache, "max_memory_bytes", 256 * _MIB)))
-        self._max_pending_scaled_bytes = max(
+        self._max_pending_scaled_bytes = min(128 * _MIB, max(
             16 * _MIB,
             int(max_pending_scaled_bytes or min(cache_budget // 2, 128 * _MIB)),
-        )
-        self._inflight: Set[str] = set()
-        self._pending_raw_paths: deque[str] = deque()
-        self._pending_raw_keys: Set[str] = set()
-        self._scaled_inflight: Set[str] = set()
-        self._pending_scaled_requests: List[Dict[str, Any]] = []
-        self._pending_scaled_keys: Set[str] = set()
-        self._scaled_inflight_paths: Dict[str, str] = {}
+        ))
+        self._pending_scaled_requests: list[dict[str, Any]] = []
+        self._pending_scaled_keys: set[str] = set()
         self._pending_scaled_bytes = 0
+        self._scaled_inflight: set[str] = set()
+        self._active_batch: object | None = None
+        self._active_path: str | None = None
+        self._active_generation: int | None = None
+        self._active_cancel: Callable[[], None] | None = None
         self._lock = threading.Lock()
         self._prefetch_generation = 0
-        self._raw_inflight_generations: Dict[str, int] = {}
-        self._scaled_inflight_generations: Dict[str, int] = {}
-        # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
-        self._transition_end_time: float = 0.0
+        self._transition_end_time = 0.0
 
     def notify_transition_complete(self) -> None:
-        """Notify prefetcher that a transition just completed.
-        
-        Prefetching will be delayed by post_transition_delay_ms to reduce
-        IO contention with transition rendering.
-        """
-        self._transition_end_time = time.time()
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] ImagePrefetcher: transition complete, delaying prefetch for %.0fms",
-                        self._post_transition_delay_ms)
-        _cache_trace(
-            "Prefetcher transition cool-down armed delay_ms=%d",
-            self.get_post_transition_delay_ms(),
-        )
-
-    def _is_in_post_transition_delay(self) -> bool:
-        """Check if we're still within the post-transition delay window."""
-        if self._post_transition_delay_ms <= 0:
-            return False
-        elapsed_ms = (time.time() - self._transition_end_time) * 1000
-        return elapsed_ms < self._post_transition_delay_ms
-
-    def is_in_post_transition_delay(self) -> bool:
-        """Public, read-only cool-down state for scheduler coordination."""
-        return self._is_in_post_transition_delay()
+        self._transition_end_time = time.monotonic()
 
     def get_post_transition_delay_ms(self) -> int:
-        """Return the configured post-transition delay in whole milliseconds."""
         return max(0, int(round(self._post_transition_delay_ms)))
 
     def get_remaining_post_transition_delay_ms(self) -> int:
-        """Return remaining cool-down time in whole milliseconds."""
-        if self._post_transition_delay_ms <= 0:
-            return 0
-        elapsed_ms = (time.time() - self._transition_end_time) * 1000
+        elapsed_ms = (time.monotonic() - self._transition_end_time) * 1000
         return max(0, int(round(self._post_transition_delay_ms - elapsed_ms)))
 
-    def get_cached(self, path: str) -> Optional[QImage]:
-        img = self._cache.get(path)
-        if isinstance(img, QImage):
-            return img
-        return None
+    def is_in_post_transition_delay(self) -> bool:
+        return self.get_remaining_post_transition_delay_ms() > 0
 
-    def snapshot_state(self) -> Dict[str, int]:
-        """Return lightweight queue state for cache fallback diagnostics."""
+    def snapshot_state(self) -> dict[str, int]:
         with self._lock:
             return {
-                "raw_inflight": len(self._inflight),
-                "raw_pending": len(self._pending_raw_paths),
                 "scaled_inflight": len(self._scaled_inflight),
                 "scaled_pending": len(self._pending_scaled_requests),
             }
 
-    def snapshot_budget_state(self) -> Dict[str, int]:
-        """Return exact pending-work budget state for diagnostics/tests."""
+    def snapshot_budget_state(self) -> dict[str, int]:
         with self._lock:
             return {
-                "raw_pending": len(self._pending_raw_paths),
                 "scaled_pending": len(self._pending_scaled_requests),
                 "scaled_pending_bytes": self._pending_scaled_bytes,
                 "max_pending_requests": self._max_pending_requests,
                 "max_pending_scaled_bytes": self._max_pending_scaled_bytes,
             }
-    
+
     def clear_inflight(self) -> None:
-        """Invalidate current work and clear queued/inflight ownership."""
         with self._lock:
             self._prefetch_generation += 1
-            self._inflight.clear()
-            self._raw_inflight_generations.clear()
-            self._pending_raw_paths.clear()
-            self._pending_raw_keys.clear()
-            self._scaled_inflight.clear()
-            self._scaled_inflight_generations.clear()
-            self._scaled_inflight_paths.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
             self._pending_scaled_bytes = 0
-        if is_verbose_logging():
-            logger.debug("Prefetcher inflight set cleared")
-        _cache_trace("Cleared inflight and pending prefetch state")
+            self._scaled_inflight.clear()
+            cancel = self._active_cancel
+            self._active_batch = None
+            self._active_path = None
+            self._active_generation = None
+            self._active_cancel = None
+        if cancel is not None:
+            cancel()
+        _cache_trace("Invalidated prefetch generation and cleared derivative intents")
 
-    def prefetch_paths(self, paths: List[str]) -> None:
-        if not paths:
-            return
-        # Submit up to max_concurrent immediately; keep the rest as a bounded
-        # producer backlog so scaled warmups do not orphan later preview paths.
-        # During post-transition cool-down we still register the intent, but
-        # _pump_raw_prefetch() will avoid dispatching work until the cool-down
-        # ends. Dropping the registration here makes the next transition pay the
-        # worker fallback cost.
-        submissions: List[tuple[str, int]] = []
-        queued_count = 0
-        skipped_count = 0
-        with self._lock:
-            active_slots = 0 if self._is_in_post_transition_delay() else max(0, self._max_concurrent - len(self._inflight))
-            for p in paths:
-                if not p:
-                    continue
-                if self._cache.contains(p) or p in self._inflight or p in self._pending_raw_keys:
-                    skipped_count += 1
-                    continue
-                if active_slots > 0:
-                    self._inflight.add(p)
-                    self._raw_inflight_generations[p] = self._prefetch_generation
-                    submissions.append((p, self._prefetch_generation))
-                    active_slots -= 1
-                elif len(self._pending_raw_paths) < self._max_pending_requests:
-                    self._pending_raw_paths.append(p)
-                    self._pending_raw_keys.add(p)
-                    queued_count += 1
-                else:
-                    skipped_count += 1
+    def _prune_pending_locked(self) -> None:
+        retained = [
+            request for request in self._pending_scaled_requests
+            if request["_prefetch_generation"] == self._prefetch_generation
+            and not self._cache.contains(request["cache_key"])
+        ]
+        self._pending_scaled_requests = retained
+        self._pending_scaled_keys = {request["cache_key"] for request in retained}
+        self._pending_scaled_bytes = sum(map(_request_logical_bytes, retained))
 
-        for path, generation in submissions:
-            self._submit_load(path, generation)
-
-        if submissions or queued_count:
-            _cache_trace(
-                "Registered raw prefetch producers active=%d pending=%d skipped=%d",
-                len(submissions),
-                queued_count,
-                skipped_count,
-            )
-
-    def _pump_raw_prefetch(self) -> None:
-        if self._is_in_post_transition_delay():
-            return
-
-        submissions: List[tuple[str, int]] = []
-        with self._lock:
-            active_slots = max(0, self._max_concurrent - len(self._inflight))
-            while active_slots > 0 and self._pending_raw_paths:
-                path = self._pending_raw_paths.popleft()
-                self._pending_raw_keys.discard(path)
-                if not path or self._cache.contains(path) or path in self._inflight:
-                    continue
-                self._inflight.add(path)
-                self._raw_inflight_generations[path] = self._prefetch_generation
-                submissions.append((path, self._prefetch_generation))
-                active_slots -= 1
-
-        for path, generation in submissions:
-            self._submit_load(path, generation)
-
-        if submissions:
-            with self._lock:
-                pending_total = len(self._pending_raw_paths)
-            _cache_trace(
-                "Dispatched raw prefetch backlog active_new=%d pending_remaining=%d",
-                len(submissions),
-                pending_total,
-            )
-
-    def _prune_unowned_scaled_requests_locked(self) -> tuple[int, int]:
-        """Release derivative intents whose raw parent can no longer exist.
-
-        Caller holds ``self._lock``. A nonresident raw parent is still valid while
-        an active or queued raw producer owns it; otherwise the derivative is
-        undispatchable and must surrender both key and logical-byte ownership.
-        """
-
-        if not self._pending_scaled_requests:
-            return 0, 0
-
-        retained: List[Dict[str, Any]] = []
-        reclaimed_count = 0
-        reclaimed_bytes = 0
-        for request in self._pending_scaled_requests:
-            cache_key = str(request.get("cache_key") or "")
-            raw_path = str(request.get("path") or "")
-            generation = int(request.get("_prefetch_generation", -1))
-            raw_has_producer = raw_path in self._inflight or raw_path in self._pending_raw_keys
-            derivative_ready = bool(cache_key and self._cache.contains(cache_key))
-            raw_owned = bool(
-                raw_path
-                and (self._cache.contains(raw_path) or raw_has_producer)
-            )
-            if generation == self._prefetch_generation and raw_owned and not derivative_ready:
-                retained.append(request)
+    def register_scaled_requests(self, requests: list[dict[str, Any]]) -> int:
+        """Admit complete per-source groups, bounded by count and RGBA bytes."""
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for request in requests:
+            owned = dict(request)
+            path, key = str(owned["path"]), str(owned["cache_key"])
+            width, height = int(owned["width"]), int(owned["height"])
+            mode = owned["display_mode"]
+            if not isinstance(mode, DisplayMode):
+                mode = DisplayMode.from_string(str(mode))
+            if not path or not key or width <= 0 or height <= 0:
+                raise ValueError("scaled-prefetch request has invalid path/cache/geometry")
+            if not isinstance(owned["use_lanczos"], bool) or not isinstance(owned["sharpen"], bool):
+                raise TypeError("scaled-prefetch quality fields must be resolved booleans")
+            # Preserve the foreground quality authority. No speculative PIL or
+            # parent-process fallback is admitted for these requests.
+            if owned["use_lanczos"] or owned["sharpen"]:
                 continue
+            owned.update(path=path, cache_key=key, width=width, height=height, display_mode=mode)
+            groups.setdefault(path, []).append(owned)
 
-            self._pending_scaled_keys.discard(cache_key)
-            request_bytes = _request_logical_bytes(request)
-            reclaimed_bytes += request_bytes
-            reclaimed_count += 1
-
-        if reclaimed_count:
-            self._pending_scaled_requests = retained
-            self._pending_scaled_bytes = max(0, self._pending_scaled_bytes - reclaimed_bytes)
-        return reclaimed_count, reclaimed_bytes
-
-    def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> int:
-        """Queue scaled-variant warmup requests and process them with bounded concurrency."""
-        if not requests:
-            return 0
-
-        queued_any = False
-        queued_count = 0
-        skipped_without_raw = 0
-        skipped_budget = 0
-        reclaimed_count = 0
-        reclaimed_bytes = 0
+        queued = 0
         with self._lock:
-            reclaimed_count, reclaimed_bytes = self._prune_unowned_scaled_requests_locked()
-            for request in requests:
-                cache_key = str(request.get("cache_key") or "")
-                raw_path = str(request.get("path") or "")
-                if not cache_key or not raw_path:
+            self._prune_pending_locked()
+            for path, group in groups.items():
+                # A late variant cannot cause another decode of an active source.
+                # The next preview registration can admit it after retirement.
+                if path == self._active_path and self._active_generation == self._prefetch_generation:
                     continue
-                if self._cache.contains(cache_key):
-                    continue
-                raw_has_producer = raw_path in self._inflight or raw_path in self._pending_raw_keys
-                if not self._cache.contains(raw_path) and not raw_has_producer:
-                    skipped_without_raw += 1
-                    continue
-                if cache_key in self._scaled_inflight or cache_key in self._pending_scaled_keys:
-                    continue
-                request_bytes = _request_logical_bytes(request)
+                unique: dict[str, dict[str, Any]] = {}
+                for request in group:
+                    key = request["cache_key"]
+                    if key not in self._pending_scaled_keys and not self._cache.contains(key):
+                        unique.setdefault(key, request)
+                admitted = list(unique.values())
+                needed = sum(map(_request_logical_bytes, admitted))
                 if (
-                    len(self._pending_scaled_requests) >= self._max_pending_requests
-                    or self._pending_scaled_bytes + request_bytes > self._max_pending_scaled_bytes
+                    len(self._pending_scaled_requests) + len(admitted) > self._max_pending_requests
+                    or self._pending_scaled_bytes + needed > self._max_pending_scaled_bytes
                 ):
-                    skipped_budget += 1
+                    _cache_trace("Skipped source batch at prefetch budget path=%s derivatives=%d bytes=%d", path, len(admitted), needed)
                     continue
-                owned_request = dict(request)
-                owned_request["_prefetch_generation"] = self._prefetch_generation
-                self._pending_scaled_requests.append(owned_request)
-                self._pending_scaled_keys.add(cache_key)
-                self._pending_scaled_bytes += request_bytes
-                queued_any = True
-                queued_count += 1
+                for request in admitted:
+                    request["_prefetch_generation"] = self._prefetch_generation
+                    self._pending_scaled_requests.append(request)
+                    self._pending_scaled_keys.add(request["cache_key"])
+                self._pending_scaled_bytes += needed
+                queued += len(admitted)
+        self._pump_scaled_prefetch()
+        return queued
 
-        if reclaimed_count:
-            _cache_trace(
-                "Reclaimed unowned scaled prefetch requests count=%d bytes=%d",
-                reclaimed_count,
-                reclaimed_bytes,
-            )
-        if queued_any:
-            with self._lock:
-                pending_total = len(self._pending_scaled_requests)
-            _cache_trace("Registered scaled prefetch requests pending=%d", pending_total)
-            self._pump_scaled_prefetch()
-        if skipped_without_raw:
-            _cache_trace(
-                "Skipped scaled prefetch requests without raw producer skipped=%d",
-                skipped_without_raw,
-            )
-        if skipped_budget:
-            _cache_trace(
-                "Skipped scaled prefetch requests at bounded backlog skipped=%d pending_bytes=%d cap_bytes=%d",
-                skipped_budget,
-                self._pending_scaled_bytes,
-                self._max_pending_scaled_bytes,
-            )
-        return queued_count
-
-    def _submit_load(self, path: str, generation: int) -> None:
-        # inflight is already marked by caller under lock
-        from utils.image_loader import ImageLoader
-
+    def _pump_scaled_prefetch(self) -> None:
         with self._lock:
-            if self._raw_inflight_generations.get(path) != generation:
+            self._prune_pending_locked()
+            if self._active_batch is not None or self.is_in_post_transition_delay() or not self._pending_scaled_requests:
                 return
+            path = self._pending_scaled_requests[0]["path"]
+            requests = [request for request in self._pending_scaled_requests if request["path"] == path]
+            self._pending_scaled_requests = [request for request in self._pending_scaled_requests if request["path"] != path]
+            self._prune_pending_locked()
+            generation = self._prefetch_generation
+            token = object()
+            self._active_batch = token
+            self._active_path = path
+            self._active_generation = generation
+            self._scaled_inflight = {request["cache_key"] for request in requests}
 
-        def _load_qimage(p: str) -> Optional[QImage]:
-            return ImageLoader.load_qimage_silent(p)
-
-        def _on_done(res) -> None:
-            # res is TaskResult
-            cached = False
+        def _on_done(images: dict[str, QImage], error: Exception | None = None) -> None:
             try:
-                img: Optional[QImage] = res.result if res and res.success else None
-                if img is not None:
-                    with self._lock:
-                        if (
-                            self._prefetch_generation == generation
-                            and self._raw_inflight_generations.get(path) == generation
-                        ):
-                            try:
-                                self._cache.put(path, img)
-                                # ``ImageCache.put`` may legitimately self-evict an
-                                # oversized/new entry while enforcing its hard LRU
-                                # cap. A successful call is therefore not residency
-                                # proof for derivative ownership.
-                                cached = self._cache.contains(path)
-                                if cached and is_verbose_logging():
-                                    logger.debug(f"Prefetched and cached: {path}")
-                            except Exception as e:
-                                logger.debug("[MISC] Exception suppressed: %s", e)
-            finally:
+                if error is not None:
+                    logger.error("[PREFETCH] Worker derivative batch failed path=%s: %s", path, error)
+                    return
                 with self._lock:
-                    if self._raw_inflight_generations.get(path) == generation:
-                        self._raw_inflight_generations.pop(path, None)
-                        self._inflight.discard(path)
-                self._pump_raw_prefetch()
-                if cached:
-                    self._pump_scaled_prefetch(preferred_path=path)
-                else:
-                    self._pump_scaled_prefetch()
-
-        try:
-            self._threads.submit_task(
-                ThreadPoolType.IO,
-                _load_qimage,
-                path,
-                priority=TaskPriority.LOW,
-                callback=_on_done,
-                category="image.prefetch_raw",
-            )
-        except Exception as e:
-            logger.debug(f"Prefetch submit failed for {path}: {e}")
-            with self._lock:
-                if self._raw_inflight_generations.get(path) == generation:
-                    self._raw_inflight_generations.pop(path, None)
-                    self._inflight.discard(path)
-            self._pump_raw_prefetch()
-            self._pump_scaled_prefetch()
-
-    def _pump_scaled_prefetch(self, preferred_path: Optional[str] = None) -> None:
-        reclaimed_count = 0
-        reclaimed_bytes = 0
-        with self._lock:
-            reclaimed_count, reclaimed_bytes = self._prune_unowned_scaled_requests_locked()
-
-        if reclaimed_count:
-            _cache_trace(
-                "Reclaimed unowned scaled prefetch requests count=%d bytes=%d",
-                reclaimed_count,
-                reclaimed_bytes,
-            )
-
-        # Ownership cleanup is intentionally independent of dispatch cooldown: a
-        # dead derivative must not retain backlog budget merely because rendering
-        # has asked prefetch compute to pause briefly.
-        if self._is_in_post_transition_delay():
-            return
-
-        requests_to_submit: List[Dict[str, Any]] = []
-        with self._lock:
-            available_slots = self._max_scaled_concurrent - len(self._scaled_inflight)
-            if available_slots <= 0 or not self._pending_scaled_requests:
-                return
-
-            selected_indices: List[int] = []
-            if preferred_path:
-                for idx, pending in enumerate(self._pending_scaled_requests):
-                    if len(selected_indices) >= available_slots:
-                        break
-                    if pending.get("path") == preferred_path and self._cache.contains(str(pending.get("path") or "")):
-                        selected_indices.append(idx)
-
-            for idx, pending in enumerate(self._pending_scaled_requests):
-                if len(selected_indices) >= available_slots:
-                    break
-                if idx in selected_indices:
-                    continue
-                if self._cache.contains(str(pending.get("path") or "")):
-                    selected_indices.append(idx)
-
-            if not selected_indices:
-                return
-
-            selected_index_set = set(selected_indices)
-            selected_requests = [
-                self._pending_scaled_requests[idx]
-                for idx in selected_indices
-            ]
-            self._pending_scaled_requests = [
-                request
-                for idx, request in enumerate(self._pending_scaled_requests)
-                if idx not in selected_index_set
-            ]
-
-            for request in selected_requests:
-                cache_key = str(request.get("cache_key") or "")
-                self._pending_scaled_keys.discard(cache_key)
-                self._pending_scaled_bytes = max(
-                    0,
-                    self._pending_scaled_bytes - _request_logical_bytes(request),
-                )
-                generation = int(request.get("_prefetch_generation", -1))
-                if generation != self._prefetch_generation:
-                    continue
-                self._scaled_inflight.add(cache_key)
-                self._scaled_inflight_generations[cache_key] = generation
-                self._scaled_inflight_paths[cache_key] = str(request.get("path") or "")
-                requests_to_submit.append(request)
-
-        for request in requests_to_submit:
-            _cache_trace(
-                "Dispatching scaled prefetch path=%s key=%s pending_remaining=%d",
-                request.get("path"),
-                request.get("cache_key"),
-                len(self._pending_scaled_requests),
-            )
-            self._submit_scaled_request(request)
-
-    def _submit_scaled_request(self, request: Dict[str, Any]) -> None:
-        try:
-            raw_path = str(request["path"])
-            cache_key = str(request["cache_key"])
-            width = int(request["width"])
-            height = int(request["height"])
-            display_mode = request["display_mode"]
-            use_lanczos = request["use_lanczos"]
-            sharpen = request["sharpen"]
-            generation = int(request["_prefetch_generation"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(f"incomplete scaled-prefetch request: {exc}") from exc
-        if not isinstance(display_mode, DisplayMode):
-            display_mode = DisplayMode.from_string(str(display_mode))
-        if not isinstance(use_lanczos, bool) or not isinstance(sharpen, bool):
-            raise TypeError("scaled-prefetch quality fields must be resolved booleans")
-        if not raw_path or not cache_key or width <= 0 or height <= 0:
-            raise ValueError("scaled-prefetch request has invalid path/cache/geometry")
-        # Lanczos/sharpening enters Pillow and may hold the GIL. Do not move that
-        # quality path into the parent process speculatively; foreground image
-        # processing remains authoritative and preserves authored quality.
-        if use_lanczos or sharpen:
-            with self._lock:
-                if self._scaled_inflight_generations.get(cache_key) == generation:
-                    self._scaled_inflight_generations.pop(cache_key, None)
-                    self._scaled_inflight.discard(cache_key)
-                    self._scaled_inflight_paths.pop(cache_key, None)
-            _cache_trace(
-                "Skipped scaled prefetch key=%s because Pillow-quality processing is foreground-owned",
-                cache_key,
-            )
-            self._pump_scaled_prefetch()
-            return
-
-        def _compute_scaled_variant() -> Optional[tuple[str, QImage]]:
-            try:
-                with self._lock:
-                    if (
-                        self._prefetch_generation != generation
-                        or self._scaled_inflight_generations.get(cache_key) != generation
-                    ):
-                        return None
-                base = self._cache.get(raw_path)
-                # Worker-thread speculative processing is QImage-only. QPixmap
-                # is a GUI/platform resource and must not be converted here.
-                if not isinstance(base, QImage) or base.isNull():
-                    return None
-                scaled = AsyncImageProcessor.process_qimage(
-                    base,
-                    QSize(width, height),
-                    display_mode,
-                    use_lanczos=False,
-                    sharpen=False,
-                )
-                if scaled.isNull():
-                    return None
-                return cache_key, scaled
-            except Exception as e:
-                logger.debug("Scaled prefetch compute failed for %s: %s", cache_key, e)
-                return None
-
-        def _on_done(res) -> None:
-            scaled_cached = False
-            try:
-                payload = res.result if res and res.success else None
-                if payload:
-                    key, image = payload
-                    with self._lock:
-                        if (
-                            self._prefetch_generation == generation
-                            and self._scaled_inflight_generations.get(cache_key) == generation
-                        ):
-                            self._cache.put(key, image)
-                            scaled_cached = True
+                    if generation != self._prefetch_generation or self._active_batch is not token:
+                        return
+                    for request in requests:
+                        key = request["cache_key"]
+                        image = images.get(key)
+                        if image is None:
+                            continue
+                        if not isinstance(image, QImage) or image.isNull():
+                            raise TypeError("worker derivative must be a non-null QImage")
+                        self._cache.put(key, image)
+                        if self._cache.contains(key):
                             stats = request.get("stats")
                             if isinstance(stats, dict):
                                 stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
-                            if is_perf_metrics_enabled():
-                                logger.info(
-                                    "[PERF] [PREFETCH] Cached scaled variant %s (%dx%d, mode=%s)",
-                                    key,
-                                    width,
-                                    height,
-                                    display_mode.value,
-                                )
-                            _cache_trace(
-                                "Scaled prefetch completed key=%s target=%dx%d mode=%s",
-                                key,
-                                width,
-                                height,
-                                display_mode.value,
-                            )
             finally:
                 with self._lock:
-                    if self._scaled_inflight_generations.get(cache_key) == generation:
-                        self._scaled_inflight_generations.pop(cache_key, None)
-                        self._scaled_inflight.discard(cache_key)
-                        self._scaled_inflight_paths.pop(cache_key, None)
-                    has_more_scaled_owners = any(
-                        str(pending.get("path") or "") == raw_path
-                        for pending in self._pending_scaled_requests
-                    ) or raw_path in self._scaled_inflight_paths.values()
-                    if scaled_cached and not has_more_scaled_owners:
-                        remover = getattr(self._cache, "remove", None)
-                        if callable(remover) and remover(raw_path):
-                            stats = request.get("stats")
-                            if isinstance(stats, dict):
-                                stats["raw_released_after_scaled"] = int(
-                                    stats.get("raw_released_after_scaled", 0)
-                                ) + 1
-                            _cache_trace(
-                                "Released raw prefetch source after final scaled derivative path=%s",
-                                raw_path,
-                            )
+                    if self._active_batch is token:
+                        self._active_batch = None
+                        self._active_path = None
+                        self._active_generation = None
+                        self._active_cancel = None
+                        self._scaled_inflight.clear()
                 self._pump_scaled_prefetch()
 
         try:
-            self._threads.submit_background_task(
-                _compute_scaled_variant,
-                callback=_on_done,
-                category="image.prefetch_scaled",
-            )
-        except Exception as e:
-            logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
+            cancel = self._derive(path, requests, generation, _on_done)
+            if not callable(cancel):
+                raise TypeError("prefetch derivative submission must return its cancellation handle")
             with self._lock:
-                if self._scaled_inflight_generations.get(cache_key) == generation:
-                    self._scaled_inflight_generations.pop(cache_key, None)
-                    self._scaled_inflight.discard(cache_key)
-                    self._scaled_inflight_paths.pop(cache_key, None)
-            self._pump_scaled_prefetch()
+                still_current = self._active_batch is token
+                if still_current:
+                    self._active_cancel = cancel
+            # A clear or synchronous completion can race submission. Never
+            # attach a previous correlation's handle to the next source owner.
+            if not still_current:
+                cancel()
+        except Exception:
+            with self._lock:
+                if self._active_batch is token:
+                    self._active_batch = None
+                    self._active_path = None
+                    self._active_generation = None
+                    self._active_cancel = None
+                    self._scaled_inflight.clear()
+            logger.exception("[PREFETCH] Failed to submit worker derivative batch path=%s", path)
+            raise

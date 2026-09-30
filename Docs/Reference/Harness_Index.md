@@ -88,6 +88,18 @@ Current ImageWorker shared-memory lifecycle proof:
 python tools\image_worker_shm_lifecycle_harness.py --cycles 50 --width 3840 --height 2160
 ```
 
+For the speculative Qt source-batch isolation probe, run the same harness with `--parent-baseline` and then
+`--prefetch`, each with `--cycles 50 --warmup-cycles 10` and distinct `--output-dir` paths. Both modes use the same
+source at twice target size. The baseline measures the retired parent Qt work; prefetch exercises the production
+supervisor callback, returns two display derivatives from one child decode, checks byte parity/retirement and reports
+parent handoff plus child scale durations. It creates no QGuiApplication or per-request thread.
+
+Live P0 acceptance uses the usual two-display runtime with `--perf --frame-trace` and no `--usage`, at least 30 completed
+transitions. `python tools\frame_trace_report.py logs\screensaver_frame_trace.bin` reports handoff median/p95 and
+`late_overlapping_handoff` for both Visualizer render and draw intervals; absent handoff evidence is unavailable,
+not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and count completions with
+`python tools\image_change_perf_parser.py logs\screensaver_perf.log`. `Current_Plan.md` owns the acceptance status.
+
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 
 ### Retained Visualizer causal/lifecycle diagnostics — no active investigation

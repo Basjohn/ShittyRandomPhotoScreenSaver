@@ -330,8 +330,6 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
     if isinstance(stats, dict):
         return stats
     stats = {
-        "raw_hits": 0,
-        "raw_misses": 0,
         "scaled_hits": 0,
         "scaled_misses": 0,
         "worker_requests": 0,
@@ -340,10 +338,8 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "prefetch_resume_runs": 0,
         "scaled_prefetch_requests": 0,
         "scaled_prefetch_completed": 0,
-        "scaled_derivations": 0,
-        "raw_released_after_scaled": 0,
-        "raw_prefetch_paths": 0,
-        "raw_prefetch_skipped_display_ready": 0,
+        "prefetch_source_paths": 0,
+        "prefetch_skipped_display_ready": 0,
         "scaled_consumed_released": 0,
     }
     setattr(engine, "_cache_runtime_stats", stats)
@@ -614,8 +610,6 @@ def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
         return "prefetch_state=unavailable"
     return (
         "prefetch_state="
-        f"raw_inflight:{int(snapshot.get('raw_inflight', 0))},"
-        f"raw_pending:{int(snapshot.get('raw_pending', 0))},"
         f"scaled_inflight:{int(snapshot.get('scaled_inflight', 0))},"
         f"scaled_pending:{int(snapshot.get('scaled_pending', 0))}"
     )
@@ -669,18 +663,19 @@ def load_image_via_worker(
 
     runtime_generation, runtime_display_manager = _capture_runtime_identity(engine)
     response = None
+    payload = {
+        "path": image_path,
+        "target_width": target_width,
+        "target_height": target_height,
+        "mode": display_mode,
+        "use_lanczos": use_lanczos,
+        "sharpen": sharpen,
+    }
     try:
         response = supervisor.send_request_and_await_response(
             WorkerType.IMAGE,
             MessageType.IMAGE_PRESCALE,
-            payload={
-                "path": image_path,
-                "target_width": target_width,
-                "target_height": target_height,
-                "mode": display_mode,
-                "use_lanczos": use_lanczos,
-                "sharpen": sharpen,
-            },
+            payload=payload,
             timeout_ms=timeout_ms,
         )
 
@@ -836,6 +831,263 @@ def load_image_via_worker(
         message = f"ImageWorker transport/consume failure: {e}"
         logger.error("%s %s", TAG_WORKER, message)
         raise ImageProcessingInfrastructureError(message) from e
+
+
+def derive_prefetch_via_worker(
+    engine: ScreensaverEngine,
+    image_path: str,
+    requests: list[dict[str, Any]],
+    generation: int,
+    complete: Callable[[dict[str, QImage], BaseException | None], None],
+) -> Callable[[], None]:
+    """Submit one speculative batch and let the supervisor own its completion."""
+    import os
+    import threading
+    from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
+
+    supervisor = engine._process_supervisor
+    if not supervisor or not supervisor.is_running(WorkerType.IMAGE_PREFETCH):
+        complete({}, ImageProcessingInfrastructureError("Prefetch ImageWorker is not running"))
+        return lambda: None
+    try:
+        derivatives = [
+            {
+                "cache_key": request["cache_key"],
+                "width": int(request["width"]),
+                "height": int(request["height"]),
+                "mode": _normalize_display_mode(request["display_mode"]).value,
+            }
+            for request in requests
+        ]
+    except (KeyError, TypeError, ValueError) as exc:
+        complete({}, ImageProcessingInfrastructureError(f"Invalid prefetch request: {exc}"))
+        return lambda: None
+
+    runtime_generation, display_manager = _capture_runtime_identity(engine)
+    state_lock = threading.Lock()
+    state = {
+        "cancelled": False,
+        "completion_started": False,
+        "finished": False,
+        "correlation_id": None,
+    }
+
+    def _cancel(*, reason: str = "prefetch_cancelled") -> None:
+        correlation_id = None
+        with state_lock:
+            if state["cancelled"] or state["finished"]:
+                return
+            state["cancelled"] = True
+            # The supervisor already removed the registered callback before it
+            # invoked us. Once that callback owns the response, cancellation
+            # only fences publication; adding a tombstone would retain an entry
+            # for a reply that cannot arrive again.
+            if state["completion_started"]:
+                return
+            correlation_id = state["correlation_id"]
+        if correlation_id:
+            supervisor.abandon_response(
+                WorkerType.IMAGE_PREFETCH,
+                correlation_id,
+                reason=reason,
+            )
+
+    def _response_complete(response: object | None) -> None:
+        if response is None:
+            with state_lock:
+                if state["cancelled"] or state["completion_started"]:
+                    return
+                state["completion_started"] = True
+                state["finished"] = True
+            complete({}, ImageProcessingInfrastructureError("Prefetch ImageWorker stopped"))
+            return
+
+        with state_lock:
+            if state["cancelled"] or state["completion_started"]:
+                supervisor.dispose_response(response, reason="prefetch_cancelled_callback")
+                return
+            state["completion_started"] = True
+
+        images: dict[str, QImage] = {}
+        completion_error: BaseException | None = None
+        try:
+            if not _runtime_identity_is_current(
+                engine,
+                runtime_generation,
+                display_manager,
+                label="prefetch_worker_response",
+            ):
+                raise ImageProcessingStaleRuntimeError(
+                    "Prefetch response belongs to a retired runtime"
+                )
+            if not response.success:
+                supervisor.dispose_response(response, reason="prefetch_source_rejected")
+                if response.msg_type == MessageType.IMAGE_RESULT:
+                    logger.warning(
+                        "[PREFETCH] ImageWorker rejected source %s: %s",
+                        image_path,
+                        response.error,
+                    )
+                else:
+                    raise ImageProcessingInfrastructureError(
+                        f"Prefetch worker contract failure: {response.error}"
+                    )
+            else:
+                payload = response.payload
+                if (
+                    payload.get("path") != image_path
+                    or payload.get("generation") != generation
+                    or payload.get("decode_count") != 1
+                    or not isinstance(payload.get("worker_pid"), int)
+                    or payload["worker_pid"] <= 0
+                    or payload["worker_pid"] == os.getpid()
+                    or payload.get("format") != "RGBA"
+                ):
+                    raise ImageProcessingInfrastructureError(
+                        "Prefetch worker attribution/identity contract failed"
+                    )
+                manifest = payload.get("derivatives")
+                if not isinstance(manifest, list) or len(manifest) != len(derivatives):
+                    raise ImageProcessingInfrastructureError(
+                        "Prefetch worker derivative count changed"
+                    )
+                total_bytes = 0
+                for expected, actual in zip(derivatives, manifest):
+                    size = expected["width"] * expected["height"] * 4
+                    if (
+                        not isinstance(actual, dict)
+                        or any(actual.get(key) != value for key, value in expected.items())
+                        or actual.get("offset") != total_bytes
+                        or actual.get("size") != size
+                    ):
+                        raise ImageProcessingInfrastructureError(
+                            "Prefetch worker RGBA manifest contract failed"
+                        )
+                    total_bytes += size
+                if (
+                    not payload.get("shared_memory_name")
+                    or payload.get("shared_memory_data_size") != total_bytes
+                ):
+                    raise ImageProcessingInfrastructureError(
+                        "Prefetch worker shared-memory size contract failed"
+                    )
+
+                def _copy_derivatives(
+                    view: memoryview,
+                    _descriptor: object,
+                ) -> dict[str, QImage]:
+                    if len(view) != total_bytes:
+                        raise ValueError("Prefetch mapping does not match its manifest")
+                    images = {}
+                    for derivative in manifest:
+                        start = derivative["offset"]
+                        region = view[start:start + derivative["size"]]
+                        source = QImage(
+                            region,
+                            derivative["width"],
+                            derivative["height"],
+                            derivative["width"] * 4,
+                            QImage.Format.Format_RGBA8888,
+                        )
+                        try:
+                            image = source.copy()
+                            if image.isNull():
+                                raise ValueError("QImage failed to detach prefetch RGBA")
+                            images[derivative["cache_key"]] = image
+                        finally:
+                            del source
+                            region.release()
+                    return images
+
+                sink = current_frame_trace()
+                batch_id = time.perf_counter_ns() if sink is not None else 0
+                if sink is not None:
+                    sink.record(
+                        FrameTraceEvent.PREFETCH_HANDOFF_BEGIN,
+                        revision=batch_id,
+                        auxiliary=total_bytes,
+                    )
+                try:
+                    images = supervisor.consume_shared_memory_response(
+                        response,
+                        _copy_derivatives,
+                    )
+                finally:
+                    if sink is not None:
+                        sink.record(FrameTraceEvent.PREFETCH_HANDOFF_END, revision=batch_id)
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[PERF] [PREFETCH] worker_pid=%d generation=%d decodes=1 "
+                        "derivatives=%d bytes=%d worker_ms=%.3f",
+                        payload["worker_pid"],
+                        generation,
+                        len(images),
+                        total_bytes,
+                        response.processing_time_ms,
+                    )
+        except Exception as exc:
+            supervisor.dispose_response(response, reason="prefetch_response_rejected")
+            logger.error("[PREFETCH] Worker batch aborted path=%s: %s", image_path, exc)
+            if not isinstance(exc, ImageProcessingAbortError):
+                completion_error = ImageProcessingInfrastructureError(
+                    f"Prefetch transport/consume failure: {exc}"
+                )
+            else:
+                completion_error = exc
+            images = {}
+
+        with state_lock:
+            if state["cancelled"]:
+                return
+            state["finished"] = True
+        complete(images, completion_error)
+
+    correlation_id = supervisor.send_message(
+        WorkerType.IMAGE_PREFETCH,
+        MessageType.IMAGE_PREFETCH_BATCH,
+        payload={
+            "path": image_path,
+            "generation": generation,
+            "derivatives": derivatives,
+        },
+    )
+    if not correlation_id:
+        complete({}, ImageProcessingInfrastructureError("Prefetch ImageWorker rejected request"))
+        return lambda: None
+    with state_lock:
+        state["correlation_id"] = correlation_id
+    if not supervisor.register_response_callback(
+        WorkerType.IMAGE_PREFETCH,
+        correlation_id,
+        _response_complete,
+    ):
+        _cancel(reason="prefetch_callback_registration_failed")
+        complete({}, ImageProcessingInfrastructureError("Prefetch ImageWorker callback unavailable"))
+        return lambda: None
+    return _cancel
+
+
+def build_image_prefetcher(engine: ScreensaverEngine, *, max_concurrent: int | None = None):
+    """Single construction authority for bootstrap and source reinitialisation."""
+    import weakref
+    from utils.image_prefetcher import ImagePrefetcher
+
+    engine_ref = weakref.ref(engine)
+
+    def _derive(path, requests, generation, complete):
+        live_engine = engine_ref()
+        if live_engine is None:
+            complete({}, ImageProcessingStaleRuntimeError("Prefetch engine retired"))
+            return lambda: None
+        return derive_prefetch_via_worker(live_engine, path, requests, generation, complete)
+
+    if max_concurrent is None:
+        max_concurrent = max(1, min(4, int(engine.settings_manager.get("cache.max_concurrent"))))
+    return ImagePrefetcher(
+        cache=engine._image_cache,
+        max_concurrent=max_concurrent,
+        derive=_derive,
+    )
 
 
 # ------------------------------------------------------------------
@@ -1846,48 +2098,31 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
             protector(protected_keys)
 
         scaled_requests = _build_prefetch_scaled_requests(engine, paths)
-        raw_prefetch_paths: List[str] = []
-        raw_prefetch_seen: set[str] = set()
-        for request in scaled_requests:
-            raw_path = str(request.get("path") or "")
-            if raw_path and raw_path not in raw_prefetch_seen:
-                raw_prefetch_seen.add(raw_path)
-                raw_prefetch_paths.append(raw_path)
-
-        # A cached display-ready derivative is sufficient for its planned
-        # preview slot. Decoding the raw source again creates a representation
-        # with no scaled consumer, increases cache pressure, and leaves that raw
-        # image resident until unrelated LRU eviction. Raw prefetch producers
-        # therefore exist only for the missing scaled requests planned below.
-        if raw_prefetch_paths:
-            engine._prefetcher.prefetch_paths(raw_prefetch_paths)
+        source_paths = list(dict.fromkeys(request["path"] for request in scaled_requests))
+        # Register the complete derivative plan together so one worker decode
+        # can feed every planned display variant. No raw parent producer exists.
         _bump_cache_runtime_stat(
             engine,
-            "raw_prefetch_paths",
-            len(raw_prefetch_paths),
+            "prefetch_source_paths",
+            len(source_paths),
         )
         _bump_cache_runtime_stat(
             engine,
-            "raw_prefetch_skipped_display_ready",
-            max(0, len(paths) - len(raw_prefetch_paths)),
+            "prefetch_skipped_display_ready",
+            max(0, len(paths) - len(source_paths)),
         )
         _cache_trace(
-            "Prefetch preview source=%s path_count=%d raw_producers=%d "
+            "Prefetch preview source=%s path_count=%d source_batches=%d "
             "display_ready_skips=%d paths=%s",
             preview_source,
             len(paths),
-            len(raw_prefetch_paths),
-            max(0, len(paths) - len(raw_prefetch_paths)),
+            len(source_paths),
+            max(0, len(paths) - len(source_paths)),
             " | ".join(paths[:5]),
         )
         if scaled_requests:
             _bump_cache_runtime_stat(engine, "scaled_prefetch_requests", len(scaled_requests))
-            register_scaled_requests = getattr(engine._prefetcher, "register_scaled_requests", None)
-            queued_count = len(scaled_requests)
-            if callable(register_scaled_requests):
-                queued = register_scaled_requests(scaled_requests)
-                if isinstance(queued, int):
-                    queued_count = queued
+            queued_count = engine._prefetcher.register_scaled_requests(scaled_requests)
             _cache_trace(
                 "Queued scaled warmup request_count=%d prepared=%d preview_source=%s",
                 queued_count,
@@ -1897,18 +2132,19 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
 
         if is_perf_metrics_enabled():
             logger.info(
-                "[PERF] [PREFETCH] scheduled preview_paths=%d raw_producers=%d "
+                "[PERF] [PREFETCH] scheduled preview_paths=%d source_batches=%d "
                 "scaled_requests=%d protected_immediate=%d source=%s",
                 len(paths),
-                len(raw_prefetch_paths),
+                len(source_paths),
                 len(scaled_requests),
                 len(protected_keys),
                 preview_source,
             )
         elif is_verbose_logging():
             logger.debug("Prefetch scheduled for %d upcoming images", len(paths))
-    except Exception as e:
-        logger.debug(f"Prefetch schedule failed: {e}")
+    except Exception:
+        logger.exception("[PREFETCH] Preview registration failed")
+        raise
 
 
 def _schedule_prefetch_resume(

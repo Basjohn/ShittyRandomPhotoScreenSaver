@@ -75,6 +75,8 @@ EVENT_NAMES = {
     61: "bubble_draw_ready",
     62: "lifecycle_begin",
     63: "lifecycle_end",
+    64: "prefetch_handoff_begin",
+    65: "prefetch_handoff_end",
 }
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
@@ -287,6 +289,89 @@ def _paired_worker_intervals(
                 intervals.append((start, end))
     intervals.sort()
     return intervals
+
+
+def _prefetch_handoff_intervals(
+    handoff_events: dict[int, dict[int, list[tuple[int, int]]]],
+) -> tuple[list[tuple[int, int, int]], dict[str, int]]:
+    """Pair parent receive/copy edges by their unique prefetch request id.
+
+    ``auxiliary`` on the begin edge is the received RGBA byte count. Keep the
+    unmatched/invalid counts visible so a partial trace cannot look clean.
+    """
+
+    intervals: list[tuple[int, int, int]] = []
+    begin_count = 0
+    end_count = 0
+    invalid_pairs = 0
+    orphan_begins = 0
+    orphan_ends = 0
+    for events in handoff_events.values():
+        begins = events.get(64, ())
+        ends = events.get(65, ())
+        begin_count += len(begins)
+        end_count += len(ends)
+        paired_edges = min(len(begins), len(ends))
+        orphan_begins += len(begins) - paired_edges
+        orphan_ends += len(ends) - paired_edges
+        for (begin_ns, bytes_count), (end_ns, _end_auxiliary) in zip(begins, ends):
+            if end_ns < begin_ns:
+                invalid_pairs += 1
+                continue
+            intervals.append((begin_ns, end_ns, bytes_count))
+    intervals.sort()
+    return intervals, {
+        "begins": begin_count,
+        "ends": end_count,
+        "paired": len(intervals),
+        "orphan_begins": orphan_begins,
+        "orphan_ends": orphan_ends,
+        "invalid_pairs": invalid_pairs,
+    }
+
+
+def _visualizer_intervals_by_screen(
+    by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]],
+    *,
+    start_event: int,
+    end_event: int,
+) -> dict[int, list[tuple[int, int]]]:
+    intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for (screen, _generation, _revision), events in by_window_revision.items():
+        for start_ns, end_ns in zip(
+            events.get(start_event, ()),
+            events.get(end_event, ()),
+        ):
+            if end_ns >= start_ns:
+                intervals_by_screen[screen].append((start_ns, end_ns))
+    for intervals in intervals_by_screen.values():
+        intervals.sort()
+    return intervals_by_screen
+
+
+def _print_prefetch_handoff_overlap(
+    *,
+    screen: int,
+    label: str,
+    intervals: list[tuple[int, int]],
+    handoff_intervals: list[tuple[int, int]],
+) -> None:
+    """Count late Visualizer work whose interval overlaps parent handoff work."""
+
+    late_intervals = [
+        (start_ns, end_ns)
+        for start_ns, end_ns in intervals
+        if end_ns - start_ns > 16_700_000
+    ]
+    late_overlapping = sum(
+        _interval_overlap_ns(start_ns, end_ns, handoff_intervals) > 0
+        for start_ns, end_ns in late_intervals
+    )
+    print(
+        f"screen={screen} prefetch_handoff_overlap interval={label} "
+        f"intervals={len(intervals)} late_over_16_7ms={len(late_intervals)} "
+        f"late_overlapping_handoff={late_overlapping}"
+    )
 
 
 def _interval_overlap_ns(
@@ -752,6 +837,11 @@ def main() -> int:
     worker_events: dict[tuple[int, int], dict[int, list[int]]] = defaultdict(
         lambda: defaultdict(list)
     )
+    # P0 parent-process receive/copy edges use their request id as ``revision``.
+    # They are screenless because each can affect every active QQuickWindow.
+    prefetch_handoff_events: dict[int, dict[int, list[tuple[int, int]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     # Background QSGRenderNode events are independent of visualizer logical
     # revisions. Their revision field is a node-local render sequence and aux is
     # the active transition run id (0 for steady background rendering).
@@ -789,6 +879,8 @@ def main() -> int:
             lifecycle_edges.append((ts_ns, event))
         if event in (15, 16, 17, 18) and revision >= 0:
             worker_events[(int(aux), int(revision))][event].append(ts_ns)
+        if event in (64, 65) and revision >= 0:
+            prefetch_handoff_events[int(revision)][event].append((ts_ns, int(aux)))
         if event in RENDER_CYCLE_EVENT_IDS and screen >= 0 and revision >= 0:
             render_cycle_events[(int(screen), int(aux), int(revision))][event].append(ts_ns)
         elif event in (19, 20, 21, 22, 23) and screen >= 0 and revision >= 0:
@@ -904,6 +996,68 @@ def main() -> int:
             f"p95={_pct(durations, .95):.3f} p99={_pct(durations, .99):.3f} "
             f"max={max(durations):.3f}"
         )
+
+    prefetch_handoffs, prefetch_handoff_counts = _prefetch_handoff_intervals(
+        prefetch_handoff_events
+    )
+    print(
+        "prefetch_handoff_counts "
+        f"begins={prefetch_handoff_counts['begins']} "
+        f"ends={prefetch_handoff_counts['ends']} "
+        f"paired={prefetch_handoff_counts['paired']} "
+        f"orphan_begins={prefetch_handoff_counts['orphan_begins']} "
+        f"orphan_ends={prefetch_handoff_counts['orphan_ends']} "
+        f"invalid_pairs={prefetch_handoff_counts['invalid_pairs']}"
+    )
+    if prefetch_handoffs:
+        handoff_durations_ms = [
+            (end_ns - begin_ns) / 1_000_000.0
+            for begin_ns, end_ns, _bytes_count in prefetch_handoffs
+        ]
+        handoff_bytes = [bytes_count for _begin_ns, _end_ns, bytes_count in prefetch_handoffs]
+        print(
+            f"prefetch_handoff_ms n={len(handoff_durations_ms)} "
+            f"median={statistics.median(handoff_durations_ms):.3f} "
+            f"p95={_pct(handoff_durations_ms, .95):.3f} "
+            f"p99={_pct(handoff_durations_ms, .99):.3f} "
+            f"max={max(handoff_durations_ms):.3f} "
+            f"bytes_total={sum(handoff_bytes)} "
+            f"bytes_median={statistics.median(handoff_bytes):.0f}"
+        )
+    else:
+        print("prefetch_handoff_ms unavailable=no_valid_handoffs")
+
+    prefetch_handoff_intervals = [
+        (begin_ns, end_ns) for begin_ns, end_ns, _bytes_count in prefetch_handoffs
+    ]
+    render_begin_to_draw = _visualizer_intervals_by_screen(
+        by_window_revision,
+        start_event=8,
+        end_event=5,
+    )
+    render_mode = _visualizer_intervals_by_screen(
+        by_window_revision,
+        start_event=12,
+        end_event=13,
+    )
+    if not prefetch_handoff_intervals:
+        print("prefetch_handoff_visualizer_overlap unavailable=no_valid_handoffs")
+    elif not render_begin_to_draw and not render_mode:
+        print("prefetch_handoff_visualizer_overlap unavailable=no_visualizer_intervals")
+    else:
+        for screen in sorted(set(render_begin_to_draw) | set(render_mode)):
+            _print_prefetch_handoff_overlap(
+                screen=screen,
+                label="render_begin->render_draw",
+                intervals=render_begin_to_draw.get(screen, []),
+                handoff_intervals=prefetch_handoff_intervals,
+            )
+            _print_prefetch_handoff_overlap(
+                screen=screen,
+                label="render_mode_begin->render_mode_ready",
+                intervals=render_mode.get(screen, []),
+                handoff_intervals=prefetch_handoff_intervals,
+            )
 
     background_intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)
     background_idle_intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)

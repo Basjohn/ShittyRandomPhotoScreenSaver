@@ -203,6 +203,71 @@ def test_report_keeps_latency_per_screen_and_counts_repeat_draws(tmp_path: Path)
     assert "screen=1 render_begin->draw_ms n=1 median=1.000" in out
 
 
+def test_report_correlates_parent_prefetch_handoffs_with_late_visualizer_work(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "prefetch_handoff_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        # Begin aux is the RGBA byte count. The handoff is screenless because it
+        # can contend with every active QQuickWindow.
+        (100_000_000, 64, -1, 101, 0, 8_000_000),
+        (120_000_000, 65, -1, 101, 0, 0),
+        (200_000_000, 64, -1, 102, 0, 4_000_000),
+        (204_000_000, 65, -1, 102, 0, 0),
+        (220_000_000, 64, -1, 103, 0, 2_000_000),
+        (230_000_000, 65, -1, 104, 0, 0),
+        # One late screen-1 draw and mode interval overlap the first handoff.
+        (105_000_000, 8, 1, 7, 0, 3),
+        (107_000_000, 12, 1, 7, 0, 3),
+        (125_000_000, 5, 1, 7, 0, 3),
+        (126_000_000, 13, 1, 7, 0, 3),
+        (300_000_000, 8, 1, 8, 0, 3),
+        (301_000_000, 12, 1, 8, 0, 3),
+        (310_000_000, 5, 1, 8, 0, 3),
+        (310_000_000, 13, 1, 8, 0, 3),
+        # This late screen-2 draw does not overlap either parent handoff.
+        (300_000_000, 8, 2, 9, 0, 3),
+        (320_000_000, 5, 2, 9, 0, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "prefetch_handoff_begin: 3" in out
+    assert "prefetch_handoff_end: 3" in out
+    assert (
+        "prefetch_handoff_counts begins=3 ends=3 paired=2 orphan_begins=1 "
+        "orphan_ends=1 invalid_pairs=0"
+    ) in out
+    assert (
+        "prefetch_handoff_ms n=2 median=12.000 p95=20.000 p99=20.000 "
+        "max=20.000 bytes_total=12000000 bytes_median=6000000"
+    ) in out
+    assert (
+        "screen=1 prefetch_handoff_overlap interval=render_begin->render_draw "
+        "intervals=2 late_over_16_7ms=1 late_overlapping_handoff=1"
+    ) in out
+    assert (
+        "screen=1 prefetch_handoff_overlap interval=render_mode_begin->render_mode_ready "
+        "intervals=2 late_over_16_7ms=1 late_overlapping_handoff=1"
+    ) in out
+    assert (
+        "screen=2 prefetch_handoff_overlap interval=render_begin->render_draw "
+        "intervals=1 late_over_16_7ms=1 late_overlapping_handoff=0"
+    ) in out
+
+
 def test_render_trace_splits_sync_wait_from_python_gl_work() -> None:
     root = Path(__file__).resolve().parents[1]
     item = (root / "rendering" / "quick" / "visualizer" / "item.py").read_text(

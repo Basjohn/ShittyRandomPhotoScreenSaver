@@ -102,6 +102,11 @@ class FrameTraceEvent(IntEnum):
     # frames between these are not stall points; the report splits them out.
     LIFECYCLE_BEGIN = 62
     LIFECYCLE_END = 63
+    # P0 scaled-prefetch process isolation: these mark only the parent process's
+    # shared-memory receive/copy handoff. The Qt scale/format work remains in
+    # the ImageWorker and is proven separately by its worker identity/timing.
+    PREFETCH_HANDOFF_BEGIN = 64
+    PREFETCH_HANDOFF_END = 65
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

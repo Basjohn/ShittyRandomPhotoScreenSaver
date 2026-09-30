@@ -345,6 +345,13 @@ class ImageWorker(BaseWorker):
             height,
         )
 
+    @staticmethod
+    def _decode_qimage(path: str) -> Any:
+        """Decode one batch-local source without creating a GUI application."""
+        from PySide6.QtGui import QImage
+
+        return QImage(path)
+
     def _prefetch_batch_error(
         self,
         msg: WorkerMessage,
@@ -451,12 +458,13 @@ class ImageWorker(BaseWorker):
         start = time.time()
         try:
             from PySide6.QtCore import QSize
-            from PySide6.QtGui import QImage
 
             from rendering.display_modes import DisplayMode
             from rendering.image_processor_async import AsyncImageProcessor
 
-            source = QImage(path)
+            decode_started_ns = time.perf_counter_ns()
+            source = self._decode_qimage(path)
+            decode_finished_ns = time.perf_counter_ns()
             if source.isNull():
                 return WorkerResponse(
                     msg_type=MessageType.IMAGE_RESULT,
@@ -469,6 +477,7 @@ class ImageWorker(BaseWorker):
 
             packed = bytearray()
             response_derivatives: list[dict[str, Any]] = []
+            scale_started_ns = time.perf_counter_ns()
             for derivative in requested_derivatives:
                 result = AsyncImageProcessor.process_qimage(
                     source,
@@ -491,6 +500,7 @@ class ImageWorker(BaseWorker):
                     }
                 )
                 self._prescale_count += 1
+            scale_finished_ns = time.perf_counter_ns()
 
             data = bytes(packed)
             try:
@@ -521,6 +531,10 @@ class ImageWorker(BaseWorker):
                     "generation": generation,
                     "decode_count": 1,
                     "worker_pid": os.getpid(),
+                    "decode_started_ns": decode_started_ns,
+                    "decode_finished_ns": decode_finished_ns,
+                    "scale_started_ns": scale_started_ns,
+                    "scale_finished_ns": scale_finished_ns,
                     "format": "RGBA",
                     "derivatives": response_derivatives,
                     **descriptor.payload_fields(),

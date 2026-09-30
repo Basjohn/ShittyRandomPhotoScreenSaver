@@ -890,11 +890,8 @@ class ScreensaverEngine(QObject):
                 )
             self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
             if self.thread_manager:
-                self._prefetcher = ImagePrefetcher(
-                    self.thread_manager,
-                    self._image_cache,
-                    max_concurrent=max_conc,
-                )
+                from engine.image_pipeline import build_image_prefetcher
+                self._prefetcher = build_image_prefetcher(self, max_concurrent=max_conc)
             logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
         except Exception as e:
             logger.debug(f"Prefetcher init failed: {e}")
@@ -1277,10 +1274,8 @@ class ScreensaverEngine(QObject):
     def _start_workers(self) -> None:
         """Start multiprocessing workers based on settings.
 
-        Foreground image processing keeps its dedicated process. Speculative
-        scaled warmup deliberately does not start a second persistent image
-        process: the current A/B restores the smoother control's bounded shared
-        COMPUTE path while preserving foreground-worker isolation.
+        Foreground and admitted speculative derivatives use separate existing
+        worker roles so speculative batches cannot block requested images.
 
         Respects max_workers setting: 'auto' = half CPU cores, or explicit 1-8.
         """
@@ -1310,16 +1305,20 @@ class ScreensaverEngine(QObject):
         workers_started = 0
         workers_failed = 0
         
-        # Foreground ImageWorker owns the multiprocessing slot. The registered
-        # IMAGE_PREFETCH factory is retained as reusable infrastructure/tests, but
-        # production startup does not admit that persistent helper process.
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "image publication unavailable"),
         ]
+        from engine.image_pipeline import _get_display_quality_settings
+        use_lanczos, sharpen = _get_display_quality_settings(self)
+        if self._prefetch_ahead > 0 and not use_lanczos and not sharpen:
+            worker_configs.append((
+                WorkerType.IMAGE_PREFETCH, 'workers.image.enabled',
+                "SpeculativeImageWorker", "speculative derivatives unavailable",
+            ))
         
         for worker_type, setting_key, name, failure_msg in worker_configs:
             if workers_started >= max_workers:
-                logger.debug(f"{name} skipped - max_workers limit reached ({max_workers})")
+                logger.warning("[WORKER] %s skipped: max_workers limit reached (%d)", name, max_workers)
                 continue
                 
             if bool(self.settings_manager.get(setting_key)):
