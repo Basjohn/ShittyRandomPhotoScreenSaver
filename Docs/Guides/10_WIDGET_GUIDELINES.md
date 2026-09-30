@@ -249,13 +249,16 @@ clipping, aspect and directional shadow geometry, but not a second artwork-swap 
 likewise presentation-only: source truth changes immediately and the text layer must preserve deterministic alignment and
 layout ownership while animating.
 
-Asset lane is deliberate:
+Immutable widget imagery belongs to the canonical Qt resource tree:
 
-- Settings GUI micro-assets/fonts in `ui/resources/assets.qrc` are embedded and addressed through `:/ui/assets/...`;
-- runtime/branded widget imagery remains raw `images/` data and is resolved as packaged filesystem/file URLs;
-- adding a runtime logo to QRC does not remove the requirement to package raw `images/` when the runtime loader expects it.
+- put source assets in the matching `ui/assets/` family and declare a stable alias in `ui/resources/assets.qrc`;
+- use `ui.resources.assets.resource_path()` for Qt image APIs and `resource_url()` for QML;
+- preserve image bytes, dimensions, alpha and DPR behavior; do not extract resources or retain loose package copies;
+- leave user/downloaded artwork, editable themes/presets and replaceable sounds on their existing filesystem paths.
 
-Do not silently move a family between lanes. When `assets.qrc` changes, regenerate `assets_rc.py`; when a raw branded asset changes, keep the Nuitka/installer raw-image packaging contract intact.
+Build Runner regenerates stale bindings with the selected toolchain before compilation and fails if regeneration
+fails. Guided Setup alone owns the separately measured lazy preview bundle; ordinary widgets must not import it.
+The durable ownership rule is in `Spec.md` → Settings themes / native backdrop.
 
 ## 10. Geometry / dynamic height / ordinary stacking
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Convert SVG weather icons to PNG with transparency using Qt (Windows-compatible)."""
-import sys
 from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 def convert_svgs_to_pngs():
     """Convert all SVG files in weather directory to PNG with transparency."""
-    weather_dir = Path("F:/Programming/Apps/ShittyRandomPhotoScreenSaver2_5/images/weather")
+    weather_dir = ROOT / "ui" / "assets" / "weather" / "source"
     
     if not weather_dir.exists():
         print(f"Error: Directory not found: {weather_dir}")

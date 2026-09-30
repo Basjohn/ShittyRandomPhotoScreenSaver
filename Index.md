@@ -48,6 +48,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
+| immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |

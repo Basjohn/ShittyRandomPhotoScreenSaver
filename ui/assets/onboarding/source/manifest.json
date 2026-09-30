@@ -1,0 +1,432 @@
+{
+  "format": "png",
+  "version": 2,
+  "widgets": [
+    {
+      "family_id": "clocks",
+      "path": "widget_clocks.png",
+      "size": [
+        1800,
+        951
+      ]
+    },
+    {
+      "family_id": "weather",
+      "path": "widget_weather.png",
+      "size": [
+        828,
+        515
+      ]
+    },
+    {
+      "family_id": "media",
+      "path": "widget_media.png",
+      "size": [
+        946,
+        477
+      ]
+    },
+    {
+      "family_id": "visualizers",
+      "path": "widget_visualizers.png",
+      "size": [
+        777,
+        544
+      ]
+    },
+    {
+      "family_id": "reddit",
+      "path": "widget_reddit.png",
+      "size": [
+        1347,
+        397
+      ]
+    },
+    {
+      "family_id": "feeds",
+      "path": "widget_feeds.png",
+      "size": [
+        1776,
+        834
+      ]
+    },
+    {
+      "family_id": "gmail",
+      "path": "widget_gmail.png",
+      "size": [
+        897,
+        435
+      ]
+    },
+    {
+      "family_id": "steam",
+      "path": "widget_steam.png",
+      "size": [
+        1763,
+        1083
+      ]
+    },
+    {
+      "family_id": "system_audio_osd",
+      "path": "widget_system_audio_osd.png",
+      "size": [
+        657,
+        189
+      ]
+    },
+    {
+      "family_id": "system_stats",
+      "path": "widget_system_stats.png",
+      "size": [
+        465,
+        510
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "transition_id": "crossfade",
+      "path": "transition_crossfade.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "slide",
+      "path": "transition_slide.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "wipe",
+      "path": "transition_wipe.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "warp_dissolve",
+      "path": "transition_warp_dissolve.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "block_flip",
+      "path": "transition_block_flip.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "block_spins",
+      "path": "transition_block_spins.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.38,
+        0.46,
+        0.58
+      ]
+    },
+    {
+      "transition_id": "blinds",
+      "path": "transition_blinds.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "diffuse",
+      "path": "transition_diffuse.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "ripple",
+      "path": "transition_ripple.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "crumble",
+      "path": "transition_crumble.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "particle",
+      "path": "transition_particle.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "burn",
+      "path": "transition_burn.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "glass_shatter",
+      "path": "transition_glass_shatter.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "exploding_tiles",
+      "path": "transition_exploding_tiles.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "pixel_accretion",
+      "path": "transition_pixel_accretion.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "ink_bloom",
+      "path": "transition_ink_bloom.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "melt_drip",
+      "path": "transition_melt_drip.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    }
+  ],
+  "visualizer_modes": [
+    {
+      "mode_id": "spectrum",
+      "path": "visualizer_spectrum.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "oscilloscope",
+      "path": "visualizer_oscilloscope.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "sine_wave",
+      "path": "visualizer_sine_wave.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "bubble",
+      "path": "visualizer_bubble.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "devcurve",
+      "path": "visualizer_devcurve.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "sphere",
+      "path": "visualizer_sphere.png",
+      "size": [
+        417,
+        372
+      ]
+    }
+  ],
+  "generation": {
+    "widgets": "hidden Windows-QPA QQuickRenderControl worker",
+    "gl": "hidden Windows-QPA QOffscreenSurface worker"
+  },
+  "total_bytes": 17355333
+}

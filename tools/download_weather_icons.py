@@ -55,10 +55,10 @@ def main() -> int:
         print("No SVG URLs found on index page; layout may have changed.")
         return 1
 
-    # Assume this script lives in <project>/scripts/; place icons in <project>/images/weather
+    # Keep authored Weather source assets beside the QRC manifest inputs.
     script_path = Path(__file__).resolve()
     project_root = script_path.parent.parent
-    out_dir = project_root / "images" / "weather"
+    out_dir = project_root / "ui" / "assets" / "weather" / "source"
 
     download_svgs(urls, out_dir)
     print("Done.")

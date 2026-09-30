@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, Property, Signal, Slot
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
 from rendering.custom_child_geometry import (
     CustomChildSize,
@@ -65,7 +66,7 @@ from .steam_common import (
 )
 
 
-_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
+_STEAM_LOGO = resource_url("branding/logos/Steam_Logo_Cropped.png")
 _STEAM_DEFAULTS = require_canonical_default("widgets.steam")
 _ABANDONMENT_DEFAULTS = require_canonical_default("widgets.abandonment_issues")
 if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(_ABANDONMENT_DEFAULTS, Mapping):
@@ -862,7 +863,7 @@ class AbandonmentIssuesPresentationModel(QObject):
 
     @Property(str, constant=True)
     def logoSource(self) -> str:
-        return _STEAM_LOGO.resolve().as_uri() if _STEAM_LOGO.is_file() else ""
+        return _STEAM_LOGO
 
     @Property(str, notify=stateChanged)
     def artworkSource(self) -> str:

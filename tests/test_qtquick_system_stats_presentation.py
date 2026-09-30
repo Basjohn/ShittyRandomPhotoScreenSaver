@@ -243,7 +243,10 @@ def test_system_stats_family_is_public_and_default_leaves_are_explicit() -> None
 def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
     descriptor = ordinary_widget_family_component("system_stats")
     assert descriptor.qml_filename == "SystemStatsPresentation.qml"
-    assert (ROOT / "images" / "system_stats_tools.svg").is_file()
+    from PySide6.QtCore import QFile
+    from ui.resources.assets import resource_path
+
+    assert QFile.exists(resource_path("widgets/system/system_stats_tools.svg"))
     qml = (QML_ROOT / descriptor.qml_filename).read_text(encoding="utf-8")
     for forbidden in (
         "Timer {",

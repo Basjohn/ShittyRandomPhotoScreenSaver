@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
@@ -46,9 +47,7 @@ from .theme_projection import (
 )
 
 
-_SYSTEM_STATS_ICON = (
-    Path(__file__).resolve().parents[3] / "images" / "system_stats_tools.svg"
-)
+_SYSTEM_STATS_ICON = resource_url("widgets/system/system_stats_tools.svg")
 _DEFAULTS = require_canonical_default("widgets.system_stats")
 if not isinstance(_DEFAULTS, Mapping):
     raise TypeError("Canonical System Stats defaults must be a mapping")
@@ -495,11 +494,7 @@ class SystemStatsPresentationModel(QObject):
 
     @Property(str, constant=True)
     def iconSource(self) -> str:
-        return (
-            _SYSTEM_STATS_ICON.resolve().as_uri()
-            if _SYSTEM_STATS_ICON.is_file()
-            else ""
-        )
+        return _SYSTEM_STATS_ICON
 
     @Property(str, notify=sampleChanged)
     def cpuValue(self) -> str:

@@ -134,6 +134,34 @@ function Assert-SRPSSQmlSourceContract {
     }
 }
 
+function Invoke-SRPSSQrcRegeneration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PythonExe
+    )
+
+    $qrcTool = Join-Path $RepoRoot 'tools\regen_qrc.py'
+    if (-not (Test-Path -LiteralPath $qrcTool -PathType Leaf)) {
+        throw "QRC regeneration tool is missing: $qrcTool"
+    }
+    $pythonCommand = Get-Command -Name $PythonExe -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $pythonCommand) {
+        throw "Selected Python toolchain is missing: $PythonExe"
+    }
+    $pythonPath = $pythonCommand.Source
+
+    Push-Location $RepoRoot
+    try {
+        & $pythonPath $qrcTool --python $pythonPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Selected PySide6 QRC generation failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Publish-SRPSSDirectory {
     [CmdletBinding()]
     param(
@@ -309,7 +337,11 @@ function Assert-SRPSSSourceProductAssets {
 
     $requiredFiles = @(
         'SRPSS.ico',
-        'images\LogoBMP.bmp',
+        'ui\assets\installer\LogoBMP.bmp',
+        'ui\resources\assets.qrc',
+        'ui\resources\assets_rc.py',
+        'ui\resources\onboarding_assets.qrc',
+        'ui\resources\onboarding_assets_rc.py',
         'resources\tutuogg.ogg',
         'resources\jedimodeyall.mp3',
         'rendering\quick\qml\DisplayScene.qml',
@@ -317,8 +349,7 @@ function Assert-SRPSSSourceProductAssets {
         'rendering\quick\qml\SystemStatsPresentation.qml',
         'rendering\quick\qml\VisualizerPresentation.qml',
         'rendering\quick\qml\WidgetInteractionGlow.qml',
-        'rendering\quick\qml\shaders\widget_glow.frag.qsb',
-        'images\system_stats_tools.svg'
+        'rendering\quick\qml\shaders\widget_glow.frag.qsb'
     )
     foreach ($relativePath in $requiredFiles) {
         $candidate = Join-Path $RepoRoot $relativePath
@@ -376,7 +407,6 @@ function Assert-SRPSSOnefileQuickPayloadContract {
 
     $requiredArguments = @(
         '--include-data-dir=rendering/quick/qml=rendering/quick/qml',
-        '--include-data-dir=images=images',
         '--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg',
         '--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3',
         '--include-package=rendering.quick',
@@ -389,7 +419,9 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-qt-plugins=multimedia',
         '--include-module=PySide6.QtQuick',
         '--include-module=PySide6.QtQml',
-        '--include-module=PySide6.QtMultimedia'
+        '--include-module=PySide6.QtMultimedia',
+        '--include-module=ui.resources.assets_rc',
+        '--include-module=ui.resources.onboarding_assets_rc'
     )
     foreach ($argument in $requiredArguments) {
         if ($NuitkaArguments -notcontains $argument) {

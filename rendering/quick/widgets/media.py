@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 import math
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, Property, Signal
@@ -17,6 +16,7 @@ from core.media.provider_registry import (
     preserve_provider_setting,
 )
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
@@ -53,7 +53,6 @@ from .host import (
 )
 
 
-_IMAGE_ROOT = Path(__file__).resolve().parents[3] / "images"
 _PROVIDER_LOGOS = {
     "spotify": "Spotify_Primary_Logo_RGB_Black.png",
     # A generic browser AUMID cannot prove the site. Never show a Spotify logo
@@ -117,10 +116,6 @@ def _with_alpha(rgba: tuple[int, int, int, int], scale: float) -> QColor:
     color = QColor(*rgba)
     color.setAlpha(max(0, min(255, int(round(color.alpha() * scale)))))
     return color
-
-
-def _file_source(path: Path) -> str:
-    return path.resolve().as_uri() if path.is_file() else ""
 
 
 _TITLE_CASE_WORD_RE = re.compile(r"[^\W_]+(?:['’][^\W_]+)*", re.UNICODE)
@@ -1227,7 +1222,7 @@ class MediaPresentationModel(QObject):
     @Property(str, notify=stateChanged)
     def providerLogoSource(self) -> str:
         filename = _PROVIDER_LOGOS.get(self._snapshot.provider.lower(), "")
-        return _file_source(_IMAGE_ROOT / filename) if filename else ""
+        return resource_url(f"branding/logos/{filename}") if filename else ""
 
     @Property(str, notify=stateChanged)
     def artworkSource(self) -> str:

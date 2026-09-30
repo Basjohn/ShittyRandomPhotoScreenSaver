@@ -162,7 +162,7 @@ root, audio consumer or preview cache; Arrange's size meter and its private QML 
 does. Static PNGs decode only on the visited page; artwork rescales only on geometry
 or DPR changes using the same helper as About. Arrange never starts a screensaver runtime or data provider.
 
-`python tools/onboarding_preview_foundry.py` authors the bundled `images/onboarding` PNGs. It is never imported or
+`python tools/onboarding_preview_foundry.py` authors the bundled `ui/assets/onboarding/source` PNGs. It is never imported or
 run by onboarding.
 
 - Widgets render through the production retained presenters with fictional local fixtures, each card enabled, via
@@ -186,7 +186,9 @@ run by onboarding.
   failure, not permission to ship a blank placeholder. Lossless PNG only (never JPEG), 24 MB budget; a rebuild
   removes generated files the new set no longer contains.
 
-The build asset check requires the preview directory and operator-provided `images/SRPSSWitch.png`. See
+The build resource prerequisite checks the preview sources and operator-provided `ui/assets/onboarding/source/SRPSSWitch.png`,
+then regenerates `onboarding_assets_rc.py` when stale. Runtime reads this bundle through Qt resources; it is registered
+only when Guided Setup explicitly requests an asset. See
 `Docs/Architecture/Persisted_Input_Compatibility.md` for content-sized CUSTOM downgrade behavior. The mechanisms behind
 the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md`.
 
@@ -239,4 +241,3 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - final runtime start;
 - Settings → QUICK START lazy reopen;
 - no network or provider work while Quick Start and Arrange are closed.
-

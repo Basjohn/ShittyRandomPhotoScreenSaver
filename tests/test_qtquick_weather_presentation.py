@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from core.settings.default_contract import require_canonical_default
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QFile, QObject
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
@@ -266,17 +266,17 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.forecastText == "Tomorrow: 19°C, light rain"
     assert model.extendedForecastText.count("\n") == 4
     assert [row["day"] for row in model.forecastDayCards] == ["FRI", "SAT", "SUN", "MON", "TUE"]
-    assert all(row["icon"].startswith("file:") for row in model.forecastDayCards)
+    assert all(row["icon"].startswith("qrc:") for row in model.forecastDayCards)
     assert model.extendedForecastAvailable is True
     assert model.set_content_extent(760, 420) is True
     assert model.extendedForecastAvailable is True
     assert model.clear_content_extent() is True
     assert model.extendedForecastAvailable is True
     assert model.conditionIconSource.endswith("partly-cloudy-day.png")
-    assert "/images/weather/presented/" in model.conditionIconSource.replace("\\", "/")
-    assert "/images/weather/presented/detail/" in model.rainIconSource.replace("\\", "/")
-    assert "/images/weather/presented/detail/" in model.humidityIconSource.replace("\\", "/")
-    assert "/images/weather/presented/detail/" in model.windIconSource.replace("\\", "/")
+    assert "/srpss/weather/presented/" in model.conditionIconSource
+    assert "/srpss/weather/presented/detail/" in model.rainIconSource
+    assert "/srpss/weather/presented/detail/" in model.humidityIconSource
+    assert "/srpss/weather/presented/detail/" in model.windIconSource
     assert model.weather_pending_first_show() is False
 
     runtime.fail("offline")
@@ -614,14 +614,16 @@ def test_weather_qml_and_registry_are_static_presentation_only() -> None:
     assert 'readonly property real verticalBudget:' in qml
     assert 'weatherModel.contentExtentHeight : Number.POSITIVE_INFINITY' in qml
     assert '"roleId": "extended_icons"' in qml
+    from ui.resources.assets import resource_path
+
     for asset in (
-        ROOT / "images" / "weather" / "presented" / "overcast-day.png",
-        ROOT / "images" / "weather" / "presented" / "clear-night.png",
-        ROOT / "images" / "weather" / "presented" / "detail" / "umbrella.png",
-        ROOT / "images" / "weather" / "presented" / "detail" / "humidity.png",
-        ROOT / "images" / "weather" / "presented" / "detail" / "wind.png",
+        "weather/presented/overcast-day.png",
+        "weather/presented/clear-night.png",
+        "weather/presented/detail/umbrella.png",
+        "weather/presented/detail/humidity.png",
+        "weather/presented/detail/wind.png",
     ):
-        assert asset.is_file(), asset
+        assert QFile.exists(resource_path(asset)), asset
     assert "WeatherPresentation 1.0 WeatherPresentation.qml" in (
         QML_ROOT / "qmldir"
     ).read_text(encoding="utf-8")

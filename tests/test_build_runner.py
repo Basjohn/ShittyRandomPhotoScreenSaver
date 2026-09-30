@@ -245,7 +245,9 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         job.script.write_text("fixture", encoding="utf-8")
     for asset in (
         tmp_path / "SRPSS.ico",
-        tmp_path / "images" / "LogoBMP.bmp",
+        tmp_path / "ui" / "assets" / "installer" / "LogoBMP.bmp",
+        tmp_path / "ui" / "resources" / "assets.qrc",
+        tmp_path / "ui" / "resources" / "onboarding_assets.qrc",
         tmp_path / "resources" / "tutuogg.ogg",
         tmp_path / "resources" / "jedimodeyall.mp3",
         tmp_path / "rendering" / "quick" / "qml" / "DisplayScene.qml",
@@ -254,9 +256,6 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         tmp_path / "rendering" / "quick" / "qml" / "SystemStatsPresentation.qml",
         tmp_path / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         tmp_path / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
-        tmp_path / "images" / "system_stats_tools.svg",
-        tmp_path / "images" / "SRPSSWitch.png",
-        tmp_path / "images" / "onboarding" / "widget_clocks.png",
         tmp_path / "themes" / "Default.srtheme",
         tmp_path / "themes" / "widgets" / "Default.srwtheme",
         tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1.json",
@@ -294,6 +293,8 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
 
     result = build_runner.run_preflight("normal", tmp_path)
 
+    # Generated modules may be absent: the Foundry prerequisite creates them.
+    assert not (tmp_path / "ui" / "resources" / "assets_rc.py").exists()
     assert result.errors == []
     assert {"diagnostic"} == result.unavailable_jobs
     assert any("Diagnostic Runtime" in warning for warning in result.warnings)

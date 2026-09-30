@@ -26,6 +26,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from core.reddit_preparation import RedditPost, candidate_identity
+from ui.resources.assets import resource_url
 from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
@@ -53,7 +54,7 @@ from .host import (
 )
 
 
-_REDDIT_LOGO = Path(__file__).resolve().parents[3] / "images" / "Reddit_Logo_C.png"
+_REDDIT_LOGO = resource_url("branding/logos/Reddit_Logo_C.png")
 _STYLE_KEYS = frozenset(
     {
         "font_family",
@@ -841,7 +842,7 @@ class RedditPresentationModel(QObject):
 
     @Property(str, constant=True)
     def logoSource(self) -> str:
-        return _REDDIT_LOGO.resolve().as_uri() if _REDDIT_LOGO.is_file() else ""
+        return _REDDIT_LOGO
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:

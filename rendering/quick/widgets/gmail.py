@@ -20,6 +20,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
@@ -57,15 +58,15 @@ from .host import (
 )
 
 
-_GMAIL_LOGO = Path(__file__).resolve().parents[3] / "images" / "google-gmail.png"
-_GMAIL_UNREAD_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-envelope.png"
-_GMAIL_READ_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-read.png"
+_GMAIL_LOGO = resource_url("branding/logos/google-gmail.png")
+_GMAIL_UNREAD_ENVELOPE = resource_url("branding/logos/gmail-envelope.png")
+_GMAIL_READ_ENVELOPE = resource_url("branding/logos/gmail-read.png")
 _GMAIL_ACTION_ICONS = {
     "mark_read": _GMAIL_READ_ENVELOPE,
     "mark_unread": _GMAIL_UNREAD_ENVELOPE,
-    "archive": Path(__file__).resolve().parents[3] / "images" / "gmail-archive.svg",
-    "spam": Path(__file__).resolve().parents[3] / "images" / "gmail-spam.png",
-    "trash": Path(__file__).resolve().parents[3] / "images" / "gmail-trash.png",
+    "archive": resource_url("branding/logos/gmail-archive.svg"),
+    "spam": resource_url("branding/logos/gmail-spam.png"),
+    "trash": resource_url("branding/logos/gmail-trash.png"),
 }
 
 
@@ -879,23 +880,15 @@ class GmailPresentationModel(QObject):
 
     @Property(str, constant=True)
     def logoSource(self) -> str:
-        return _GMAIL_LOGO.resolve().as_uri() if _GMAIL_LOGO.is_file() else ""
+        return _GMAIL_LOGO
 
     @Property(str, constant=True)
     def unreadEnvelopeSource(self) -> str:
-        return (
-            _GMAIL_UNREAD_ENVELOPE.resolve().as_uri()
-            if _GMAIL_UNREAD_ENVELOPE.is_file()
-            else ""
-        )
+        return _GMAIL_UNREAD_ENVELOPE
 
     @Property(str, constant=True)
     def readEnvelopeSource(self) -> str:
-        return (
-            _GMAIL_READ_ENVELOPE.resolve().as_uri()
-            if _GMAIL_READ_ENVELOPE.is_file()
-            else ""
-        )
+        return _GMAIL_READ_ENVELOPE
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
@@ -1086,8 +1079,7 @@ class GmailPresentationModel(QObject):
 
     @Slot(str, result=str)
     def actionIconSource(self, action: str) -> str:
-        path = _GMAIL_ACTION_ICONS.get(str(action))
-        return path.resolve().as_uri() if path is not None and path.is_file() else ""
+        return _GMAIL_ACTION_ICONS.get(str(action), "")
 
     @Slot(str, result=bool)
     def ownsMessage(self, message_id: str) -> bool:

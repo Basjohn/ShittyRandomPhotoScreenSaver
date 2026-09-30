@@ -2,21 +2,29 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from io import BytesIO
 
 import numpy as np
 from PIL import Image
 
 from core.about_art_theme import recolor_liquid_rgba
+from ui.resources.assets import resource_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _asset(name: str) -> np.ndarray:
-    return np.asarray(Image.open(ROOT / "images" / name).convert("RGBA"), dtype=np.uint8)
+    return np.asarray(
+        Image.open(BytesIO(resource_bytes(f"branding/about/{name}"))).convert("RGBA"),
+        dtype=np.uint8,
+    )
 
 
 def _mask(name: str) -> np.ndarray:
-    return np.asarray(Image.open(ROOT / "images" / name).convert("L"), dtype=np.uint8)
+    return np.asarray(
+        Image.open(BytesIO(resource_bytes(f"branding/about/{name}"))).convert("L"),
+        dtype=np.uint8,
+    )
 
 
 def test_about_liquid_recolour_preserves_unmasked_art() -> None:
@@ -79,5 +87,5 @@ def test_settings_shell_minimum_is_1280_by_760() -> None:
 def test_about_tab_consumes_explicit_masks_and_theme_semantic() -> None:
     source = (ROOT / "ui" / "settings_about_tab.py").read_text(encoding="utf-8")
     assert 'color("about.art.liquid")' in source
-    assert '"Logo_LiquidMask.png"' in source
-    assert '"Shoogle300W_LiquidMask.png"' in source
+    assert '"branding/about/Logo_LiquidMask.png"' in source
+    assert '"branding/about/Shoogle300W_LiquidMask.png"' in source

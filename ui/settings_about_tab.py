@@ -24,6 +24,7 @@ from ui.settings_theme_spec import SettingsThemeSpec
 from core.about_art_theme import themed_about_rgba
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 from ui.widgets.outlined_button import OutlinedButton
+from ui.resources.assets import resource_path
 
 if TYPE_CHECKING:
     from ui.settings_dialog import SettingsDialog
@@ -110,7 +111,7 @@ def _about_notice_style() -> str:
     )
 
 
-def _theme_about_art_pixmap(source_path: Path, mask_path: Path) -> QPixmap:
+def _theme_about_art_pixmap(source_path: str, mask_path: str) -> QPixmap:
     """Build one themed About pixmap from explicit liquid-mask assets."""
 
     target = _SETTINGS_THEME.color("about.art.liquid")
@@ -133,14 +134,11 @@ def _theme_about_art_pixmap(source_path: Path, mask_path: Path) -> QPixmap:
 def _refresh_about_art_sources(dialog: "SettingsDialog") -> None:
     """Rebuild themed About artwork from original images + explicit masks."""
 
-    images_dir = getattr(dialog, "_about_images_dir", None)
-    if images_dir is None:
-        return
     try:
-        logo_path = Path(images_dir) / "Logo.png"
-        logo_mask = Path(images_dir) / "Logo_LiquidMask.png"
-        shoogle_path = Path(images_dir) / "Shoogle300W.png"
-        shoogle_mask = Path(images_dir) / "Shoogle300W_LiquidMask.png"
+        logo_path = resource_path("branding/about/Logo.png")
+        logo_mask = resource_path("branding/about/Logo_LiquidMask.png")
+        shoogle_path = resource_path("branding/about/Shoogle300W.png")
+        shoogle_mask = resource_path("branding/about/Shoogle300W_LiquidMask.png")
         dialog._about_logo_source = _theme_about_art_pixmap(logo_path, logo_mask)
         dialog._about_shoogle_source = _theme_about_art_pixmap(shoogle_path, shoogle_mask)
         dialog._about_last_card_width = 0
@@ -213,27 +211,13 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     dialog._about_shoogle_source = None
     dialog._about_last_card_width: int = 0
 
-    # Resolve images directory robustly (works both in dev and frozen builds)
-    try:
-        images_dir = (Path(__file__).resolve().parent.parent / "images").resolve()
-        if not images_dir.exists():
-            alt_dir = (Path.cwd() / "images").resolve()
-            if alt_dir.exists():
-                images_dir = alt_dir
-        logger.debug("[ABOUT] Images directory resolved to %s (exists=%s)", images_dir, images_dir.exists())
-    except Exception:
-        logger.debug("[SETTINGS] Exception suppressed")
-        images_dir = Path.cwd() / "images"
-
-    dialog._about_images_dir = images_dir
-
     logo_label = QLabel()
     logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
     dialog._about_logo_label = logo_label
     try:
-        logo_path = images_dir / "Logo.png"
-        logo_pm = QPixmap(str(logo_path))
-        logger.debug("[ABOUT] Loading logo pixmap from %s (exists=%s, null=%s)", logo_path, logo_path.exists(), logo_pm.isNull())
+        logo_path = resource_path("branding/about/Logo.png")
+        logo_pm = QPixmap(logo_path)
+        logger.debug("[ABOUT] Loading logo pixmap from %s (null=%s)", logo_path, logo_pm.isNull())
         if not logo_pm.isNull():
             dialog._about_logo_source = logo_pm
     except Exception:
@@ -244,9 +228,9 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     shoogle_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
     dialog._about_shoogle_label = shoogle_label
     try:
-        shoogle_path = images_dir / "Shoogle300W.png"
-        shoogle_pm = QPixmap(str(shoogle_path))
-        logger.debug("[ABOUT] Loading Shoogle pixmap from %s (exists=%s, null=%s)", shoogle_path, shoogle_path.exists(), shoogle_pm.isNull())
+        shoogle_path = resource_path("branding/about/Shoogle300W.png")
+        shoogle_pm = QPixmap(shoogle_path)
+        logger.debug("[ABOUT] Loading Shoogle pixmap from %s (null=%s)", shoogle_path, shoogle_pm.isNull())
         if not shoogle_pm.isNull():
             dialog._about_shoogle_source = shoogle_pm
     except Exception:
@@ -496,4 +480,3 @@ def _refresh_live_about_tabs(theme: SettingsThemeSpec) -> None:
 
 
 _THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_about_tabs)
-

@@ -11,13 +11,13 @@ except Exception:  # pragma: no cover
 
 
 _JOST_FONT_PATHS = (
-    ":/ui/assets/fonts/Jost-Regular.ttf",
-    ":/ui/assets/fonts/Jost-SemiBold.ttf",
-    ":/ui/assets/fonts/Jost-Bold.ttf",
+    ":/srpss/fonts/Jost-Regular.ttf",
+    ":/srpss/fonts/Jost-SemiBold.ttf",
+    ":/srpss/fonts/Jost-Bold.ttf",
 )
 _INTER_FONT_PATHS = (
-    ":/ui/assets/fonts/Inter-VariableFont_opsz,wght.ttf",
-    ":/ui/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
+    ":/srpss/fonts/Inter-VariableFont_opsz,wght.ttf",
+    ":/srpss/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
 )
 _FONTS_REGISTERED = False
 

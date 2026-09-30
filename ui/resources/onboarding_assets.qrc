@@ -1,0 +1,42 @@
+<RCC>
+  <qresource prefix="/srpss">
+    <file alias="onboarding/context_menu_edit.png" compression-algorithm="none">../assets/onboarding/source/context_menu_edit.png</file>
+    <file alias="onboarding/manifest.json">../assets/onboarding/source/manifest.json</file>
+    <file alias="onboarding/SRPSSWitch.png" compression-algorithm="none">../assets/onboarding/source/SRPSSWitch.png</file>
+    <file alias="onboarding/transition_blinds.png" compression-algorithm="none">../assets/onboarding/source/transition_blinds.png</file>
+    <file alias="onboarding/transition_block_flip.png" compression-algorithm="none">../assets/onboarding/source/transition_block_flip.png</file>
+    <file alias="onboarding/transition_block_spins.png" compression-algorithm="none">../assets/onboarding/source/transition_block_spins.png</file>
+    <file alias="onboarding/transition_burn.png" compression-algorithm="none">../assets/onboarding/source/transition_burn.png</file>
+    <file alias="onboarding/transition_crossfade.png" compression-algorithm="none">../assets/onboarding/source/transition_crossfade.png</file>
+    <file alias="onboarding/transition_crumble.png" compression-algorithm="none">../assets/onboarding/source/transition_crumble.png</file>
+    <file alias="onboarding/transition_destination.png" compression-algorithm="none">../assets/onboarding/source/transition_destination.png</file>
+    <file alias="onboarding/transition_diffuse.png" compression-algorithm="none">../assets/onboarding/source/transition_diffuse.png</file>
+    <file alias="onboarding/transition_exploding_tiles.png" compression-algorithm="none">../assets/onboarding/source/transition_exploding_tiles.png</file>
+    <file alias="onboarding/transition_glass_shatter.png" compression-algorithm="none">../assets/onboarding/source/transition_glass_shatter.png</file>
+    <file alias="onboarding/transition_ink_bloom.png" compression-algorithm="none">../assets/onboarding/source/transition_ink_bloom.png</file>
+    <file alias="onboarding/transition_melt_drip.png" compression-algorithm="none">../assets/onboarding/source/transition_melt_drip.png</file>
+    <file alias="onboarding/transition_particle.png" compression-algorithm="none">../assets/onboarding/source/transition_particle.png</file>
+    <file alias="onboarding/transition_pixel_accretion.png" compression-algorithm="none">../assets/onboarding/source/transition_pixel_accretion.png</file>
+    <file alias="onboarding/transition_ripple.png" compression-algorithm="none">../assets/onboarding/source/transition_ripple.png</file>
+    <file alias="onboarding/transition_slide.png" compression-algorithm="none">../assets/onboarding/source/transition_slide.png</file>
+    <file alias="onboarding/transition_source.png" compression-algorithm="none">../assets/onboarding/source/transition_source.png</file>
+    <file alias="onboarding/transition_warp_dissolve.png" compression-algorithm="none">../assets/onboarding/source/transition_warp_dissolve.png</file>
+    <file alias="onboarding/transition_wipe.png" compression-algorithm="none">../assets/onboarding/source/transition_wipe.png</file>
+    <file alias="onboarding/visualizer_bubble.png" compression-algorithm="none">../assets/onboarding/source/visualizer_bubble.png</file>
+    <file alias="onboarding/visualizer_devcurve.png" compression-algorithm="none">../assets/onboarding/source/visualizer_devcurve.png</file>
+    <file alias="onboarding/visualizer_oscilloscope.png" compression-algorithm="none">../assets/onboarding/source/visualizer_oscilloscope.png</file>
+    <file alias="onboarding/visualizer_sine_wave.png" compression-algorithm="none">../assets/onboarding/source/visualizer_sine_wave.png</file>
+    <file alias="onboarding/visualizer_spectrum.png" compression-algorithm="none">../assets/onboarding/source/visualizer_spectrum.png</file>
+    <file alias="onboarding/visualizer_sphere.png" compression-algorithm="none">../assets/onboarding/source/visualizer_sphere.png</file>
+    <file alias="onboarding/widget_clocks.png" compression-algorithm="none">../assets/onboarding/source/widget_clocks.png</file>
+    <file alias="onboarding/widget_feeds.png" compression-algorithm="none">../assets/onboarding/source/widget_feeds.png</file>
+    <file alias="onboarding/widget_gmail.png" compression-algorithm="none">../assets/onboarding/source/widget_gmail.png</file>
+    <file alias="onboarding/widget_media.png" compression-algorithm="none">../assets/onboarding/source/widget_media.png</file>
+    <file alias="onboarding/widget_reddit.png" compression-algorithm="none">../assets/onboarding/source/widget_reddit.png</file>
+    <file alias="onboarding/widget_steam.png" compression-algorithm="none">../assets/onboarding/source/widget_steam.png</file>
+    <file alias="onboarding/widget_system_audio_osd.png" compression-algorithm="none">../assets/onboarding/source/widget_system_audio_osd.png</file>
+    <file alias="onboarding/widget_system_stats.png" compression-algorithm="none">../assets/onboarding/source/widget_system_stats.png</file>
+    <file alias="onboarding/widget_visualizers.png" compression-algorithm="none">../assets/onboarding/source/widget_visualizers.png</file>
+    <file alias="onboarding/widget_weather.png" compression-algorithm="none">../assets/onboarding/source/widget_weather.png</file>
+  </qresource>
+</RCC>

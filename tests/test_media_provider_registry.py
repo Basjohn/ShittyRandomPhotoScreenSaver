@@ -480,4 +480,7 @@ def test_new_media_providers_require_explicit_gsmtc_identity_and_keep_old_failov
         ("apple_music", "Apple_Music_Icon_RGB.png"),
     ):
         assert provider_id in MEDIA_PROVIDER_REGISTRY
-        assert (Path(__file__).resolve().parents[1] / "images" / filename).exists()
+        from PySide6.QtCore import QFile
+        from ui.resources.assets import resource_path
+
+        assert QFile.exists(resource_path(f"branding/logos/{filename}"))

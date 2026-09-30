@@ -99,13 +99,14 @@ def test_media_new_visual_role_defaults_are_persisted() -> None:
 
 
 def test_steam_family_headers_use_alpha_cropped_logo_asset() -> None:
-    cropped = ROOT / "images" / "Steam_Logo_Cropped.png"
-    assert cropped.is_file()
-    assert cropped.stat().st_size > 0
+    from ui.resources.assets import resource_path
+    from PySide6.QtCore import QFile
+
+    assert QFile.exists(resource_path("branding/logos/Steam_Logo_Cropped.png"))
     for relative in (
         "rendering/quick/widgets/achievement_pulse.py",
         "rendering/quick/widgets/abandonment_issues.py",
     ):
         source = _text(relative)
-        assert '"Steam_Logo_Cropped.png"' in source
+        assert 'resource_url("branding/logos/Steam_Logo_Cropped.png")' in source
         assert ' / "Steam_Logo.png"' not in source

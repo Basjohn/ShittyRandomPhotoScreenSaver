@@ -17,8 +17,20 @@ SILENCE_TEXT = (
 )
 
 
-def asset_path(name: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "images" / name
+def asset_path(name: str) -> str:
+    """Return one lazy Guided Setup QRC path without filesystem extraction."""
+
+    from ui.resources.onboarding_assets import onboarding_resource_path
+
+    return onboarding_resource_path(name)
+
+
+def asset_bytes(name: str) -> bytes:
+    """Read a non-image Guided Setup resource from the lazy QRC pack."""
+
+    from ui.resources.onboarding_assets import onboarding_resource_bytes
+
+    return onboarding_resource_bytes(name)
 
 
 # Units and abbreviations that stay as written inside Title Case copy.
@@ -181,7 +193,7 @@ class ImagePanel(QLabel):
     physical pixel: a small preview stays sharp at its true size instead of
     being stretched blurry on a high-DPI display.
     """
-    def __init__(self, path: Path, parent=None, *, upscale=True):
+    def __init__(self, path: str | Path, parent=None, *, upscale=True):
         super().__init__(parent)
         self._upscale = upscale
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -192,7 +204,7 @@ class ImagePanel(QLabel):
             raise FileNotFoundError(f"Guided Setup image missing or unreadable: {path}")
         self._last_scale = None
 
-    def set_source(self, path: Path):
+    def set_source(self, path: str | Path):
         source = QPixmap(str(path))
         if source.isNull():
             raise FileNotFoundError(f"Guided Setup image missing or unreadable: {path}")

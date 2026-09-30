@@ -10,13 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from html import escape
-from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, Property, Signal
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_exists, resource_url
 from core.settings.shadow_direction import (
     resolve_directional_extensions,
     resolve_signed_offset,
@@ -41,8 +41,6 @@ from .host import (
 )
 
 
-_WEATHER_ICON_DIR = Path(__file__).resolve().parents[3] / "images" / "weather"
-_WEATHER_PRESENTED_ICON_DIR = _WEATHER_ICON_DIR / "presented"
 _WEATHER_SETTINGS_TARGET = "weather_location"
 _WEATHER_CODE_ICON_MAP: tuple[tuple[frozenset[int], str], ...] = (
     (frozenset({0}), "clear-day.png"),
@@ -145,9 +143,9 @@ def _file_source(filename: str, *, presented: bool = False) -> str:
     blur or per-frame image effect work.
     """
 
-    root = _WEATHER_PRESENTED_ICON_DIR if presented else _WEATHER_ICON_DIR
-    path = root / filename
-    return path.resolve().as_uri() if path.is_file() else ""
+    prefix = "weather/presented" if presented else "weather"
+    name = f"{prefix}/{filename}"
+    return resource_url(name) if resource_exists(name) else ""
 
 
 def _condition_icon_source(

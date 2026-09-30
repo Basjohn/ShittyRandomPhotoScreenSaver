@@ -2,6 +2,4 @@
 
 # Ensure compiled Qt resources (assets_rc) are registered before any stylesheets load.
 from .resources import assets_rc  # noqa: F401
-from .settings_dialog import SettingsDialog
-
-__all__ = ['SettingsDialog']
+__all__: list[str] = []
