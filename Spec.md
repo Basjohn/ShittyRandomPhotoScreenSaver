@@ -36,6 +36,10 @@ Hard: one accelerated runtime surface per selected display; standalone `QQuickWi
 Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
 remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
+Wallpaper lookahead uses bounded source batches in the supervised speculative image worker. The parent caches only
+display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.
+The construction, generation and shared-memory ownership contract lives in `Docs/Contracts.md` → Wallpaper image cache and prefetch.
+
 ## Retired presentation architecture
 
 The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path is retired. The accepted Quick runtime is the sole production presentation authority; the old path is not rollback architecture, a facade, test convenience or fallback. Caller-dead residue is cleanup debt and must not be rebuilt merely to satisfy stale tests.

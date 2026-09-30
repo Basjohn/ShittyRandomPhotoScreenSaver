@@ -972,12 +972,8 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
             # Re-create prefetcher only if cache is available
             if engine._image_cache and engine.thread_manager:
                 try:
-                    from utils.image_prefetcher import ImagePrefetcher
-                    engine._prefetcher = ImagePrefetcher(
-                        thread_manager=engine.thread_manager,
-                        cache=engine._image_cache,
-                        max_concurrent=2,
-                    )
+                    from engine.image_pipeline import build_image_prefetcher
+                    engine._prefetcher = build_image_prefetcher(engine)
                     logger.info("Prefetcher restarted with updated queue")
                 except Exception as e:
                     logger.warning(f"Failed to restart prefetcher: {e}")

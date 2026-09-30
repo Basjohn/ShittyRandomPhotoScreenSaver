@@ -356,28 +356,23 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             cache_flow = getattr(engine, "_cache_runtime_stats", None)
             if isinstance(cache_flow, dict):
                 logger.info(
-                    "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
+                    "[PERF] [CACHE] ImageCacheFlow: scaled_hits=%d "
                     "scaled_misses=%d worker_requests=%d worker_authority_failures=%d "
                     "scaled_prefetch_requests=%d "
-                    "scaled_prefetch_completed=%d scaled_derivations=%d "
-                    "raw_released_after_scaled=%d raw_prefetch_paths=%d "
-                    "raw_prefetch_skipped_display_ready=%d "
+                    "scaled_prefetch_completed=%d prefetch_source_paths=%d "
+                    "prefetch_skipped_display_ready=%d "
                     "scaled_consumed_released=%d "
                     "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
-                    int(cache_flow.get("raw_hits", 0)),
-                    int(cache_flow.get("raw_misses", 0)),
                     int(cache_flow.get("scaled_hits", 0)),
                     int(cache_flow.get("scaled_misses", 0)),
                     int(cache_flow.get("worker_requests", 0)),
                     int(cache_flow.get("worker_authority_failures", 0)),
                     int(cache_flow.get("scaled_prefetch_requests", 0)),
                     int(cache_flow.get("scaled_prefetch_completed", 0)),
-                    int(cache_flow.get("scaled_derivations", 0)),
-                    int(cache_flow.get("raw_released_after_scaled", 0)),
-                    int(cache_flow.get("raw_prefetch_paths", 0)),
+                    int(cache_flow.get("prefetch_source_paths", 0)),
                     int(
                         cache_flow.get(
-                            "raw_prefetch_skipped_display_ready",
+                            "prefetch_skipped_display_ready",
                             0,
                         )
                     ),

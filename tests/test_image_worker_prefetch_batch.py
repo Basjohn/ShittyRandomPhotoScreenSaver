@@ -24,6 +24,12 @@ from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 
 
+def _image_worker_without_gui(request_queue: Any, response_queue: Any) -> None:
+    """Assert the spawned worker owns no QApplication before handling QImages."""
+    assert QGuiApplication.instance() is None
+    image_worker_main(request_queue, response_queue)
+
+
 def _packed_rgba8888(qimage: QImage) -> bytes:
     rgba = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
     width, height = int(rgba.width()), int(rgba.height())
@@ -49,6 +55,29 @@ def _expected_derivative(path: str, width: int, height: int, mode: str) -> bytes
         sharpen=False,
     )
     return _packed_rgba8888(processed)
+
+
+def _write_gradient_source(
+    path: Path,
+    size: tuple[int, int],
+    *,
+    transparent: bool,
+) -> None:
+    """Write a nonuniform source so one derivative cannot stand in for another."""
+    width, height = size
+    pixels = [
+        (
+            (x * 47 + y * 13) % 256,
+            (x * 19 + y * 71) % 256,
+            (x * 89 + y * 23) % 256,
+            ((x * 31 + y * 17) % 255) if transparent else 255,
+        )
+        for y in range(height)
+        for x in range(width)
+    ]
+    image = Image.new("RGBA", size)
+    image.putdata(pixels)
+    image.save(path)
 
 
 def _await_response(response_queue: Any, correlation_id: str) -> WorkerResponse:
@@ -91,7 +120,7 @@ def _run_batch(
     request_queue = context.Queue()
     response_queue = context.Queue()
     process = context.Process(
-        target=image_worker_main,
+        target=_image_worker_without_gui,
         args=(request_queue, response_queue),
     )
     process.start()
@@ -132,11 +161,11 @@ def _consume_batch_payload(payload: dict[str, object]) -> tuple[bytes, SharedMem
 
 
 @pytest.mark.parametrize(
-    ("source_size", "rgba", "derivatives"),
+    ("source_size", "transparent", "derivatives"),
     [
         (
             (91, 37),
-            (223, 71, 19, 255),
+            False,
             [
                 {"cache_key": "wide-fill", "width": 48, "height": 48, "mode": "fill"},
                 {"cache_key": "wide-fit", "width": 48, "height": 48, "mode": "fit"},
@@ -145,7 +174,7 @@ def _consume_batch_payload(payload: dict[str, object]) -> tuple[bytes, SharedMem
         ),
         (
             (37, 91),
-            (31, 167, 239, 96),
+            True,
             [
                 {"cache_key": "tall-fill", "width": 48, "height": 48, "mode": "fill"},
                 {"cache_key": "tall-fit", "width": 48, "height": 48, "mode": "fit"},
@@ -157,12 +186,11 @@ def _consume_batch_payload(payload: dict[str, object]) -> tuple[bytes, SharedMem
 def test_spawned_batch_matches_qimage_derivatives_and_reclaims_one_transfer(
     tmp_path: Path,
     source_size: tuple[int, int],
-    rgba: tuple[int, int, int, int],
+    transparent: bool,
     derivatives: list[dict[str, object]],
 ) -> None:
-    assert QGuiApplication.instance() is None
     source_path = tmp_path / "source.png"
-    Image.new("RGBA", source_size, rgba).save(source_path)
+    _write_gradient_source(source_path, source_size, transparent=transparent)
 
     response, transferred, descriptor = _run_batch(str(source_path), derivatives)
 
@@ -174,6 +202,9 @@ def test_spawned_batch_matches_qimage_derivatives_and_reclaims_one_transfer(
     assert payload["decode_count"] == 1
     assert payload["worker_pid"] != os.getpid()
     assert "rgba_data" not in payload
+    assert payload["decode_started_ns"] <= payload["decode_finished_ns"]
+    assert payload["decode_finished_ns"] <= payload["scale_started_ns"]
+    assert payload["scale_started_ns"] <= payload["scale_finished_ns"]
 
     assert descriptor is not None
     response_derivatives = payload["derivatives"]
@@ -244,7 +275,10 @@ def test_batch_rejects_bounded_request_before_decode(
     context = multiprocessing.get_context("spawn")
     request_queue = context.Queue()
     response_queue = context.Queue()
-    process = context.Process(target=image_worker_main, args=(request_queue, response_queue))
+    process = context.Process(
+        target=_image_worker_without_gui,
+        args=(request_queue, response_queue),
+    )
     process.start()
     try:
         ready = WorkerResponse.from_dict(response_queue.get(timeout=15.0))
@@ -276,6 +310,45 @@ class _MemoryQueue:
 
     def put_nowait(self, item: dict[str, object]) -> None:
         self.items.append(item)
+
+
+def test_batch_decodes_the_source_once_for_all_derivatives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_path = tmp_path / "source.png"
+    _write_gradient_source(source_path, (64, 41), transparent=True)
+    worker = ImageWorker(_MemoryQueue(), _MemoryQueue())
+    decoded_paths: list[str] = []
+    original_decode = worker._decode_qimage
+
+    def _spy_decode(path: str) -> QImage:
+        decoded_paths.append(path)
+        return original_decode(path)
+
+    monkeypatch.setattr(worker, "_decode_qimage", _spy_decode)
+    try:
+        response = worker.handle_message(
+            WorkerMessage(
+                msg_type=MessageType.IMAGE_PREFETCH_BATCH,
+                seq_no=1,
+                correlation_id="decode-once",
+                worker_type=WorkerType.IMAGE,
+                payload={
+                    "path": str(source_path),
+                    "generation": 1,
+                    "derivatives": [
+                        {"cache_key": "fill", "width": 32, "height": 32, "mode": "fill"},
+                        {"cache_key": "fit", "width": 32, "height": 32, "mode": "fit"},
+                        {"cache_key": "shrink", "width": 48, "height": 30, "mode": "shrink"},
+                    ],
+                },
+            )
+        )
+        assert response is not None
+        assert response.success
+        assert decoded_paths == [str(source_path)]
+        assert response.payload["decode_count"] == 1
+        assert response.payload["scale_started_ns"] <= response.payload["scale_finished_ns"]
+    finally:
+        worker._cleanup()
 
 
 def test_batch_shared_memory_failure_is_an_error_not_an_inline_fallback(

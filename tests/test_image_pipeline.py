@@ -409,8 +409,8 @@ def test_exact_scaled_hit_is_consumed_without_probing_raw_or_rewriting_cache():
     # cache instead of displacing the nearer lookahead.
     assert removed == [scaled_key]
     assert engine._cache_runtime_stats["scaled_consumed_released"] == 1
-    assert engine._cache_runtime_stats["raw_hits"] == 0
-    assert engine._cache_runtime_stats["raw_misses"] == 0
+    assert "raw_hits" not in engine._cache_runtime_stats
+    assert "raw_misses" not in engine._cache_runtime_stats
 
 
 def test_worker_success_caches_neither_raw_nor_its_consumed_result(
@@ -714,8 +714,6 @@ def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):
 def test_cache_fallback_diagnostics_include_prefetcher_state():
     prefetcher = SimpleNamespace(
         snapshot_state=lambda: {
-            "raw_inflight": 1,
-            "raw_pending": 4,
             "scaled_inflight": 2,
             "scaled_pending": 3,
         }
@@ -723,7 +721,7 @@ def test_cache_fallback_diagnostics_include_prefetcher_state():
     engine = SimpleNamespace(_prefetcher=prefetcher)
 
     assert _describe_prefetcher_state(engine) == (
-        "prefetch_state=raw_inflight:1,raw_pending:4,scaled_inflight:2,scaled_pending:3"
+        "prefetch_state=scaled_inflight:2,scaled_pending:3"
     )
 
 
@@ -786,7 +784,7 @@ def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests()
 
     schedule_prefetch(engine)
 
-    assert fake_prefetcher.paths == [path_a, path_b]
+    assert fake_prefetcher.paths is None
     assert fake_prefetcher.requests is not None
     assert len(fake_prefetcher.requests) == 2
     assert {
@@ -857,11 +855,11 @@ def test_schedule_prefetch_does_not_decode_raw_for_display_ready_preview():
 
     schedule_prefetch(engine)
 
-    assert prefetcher.paths == [missing_path]
+    assert prefetcher.paths == []
     assert [request["path"] for request in prefetcher.requests] == [missing_path]
-    assert engine._cache_runtime_stats["raw_prefetch_paths"] == 1
+    assert engine._cache_runtime_stats["prefetch_source_paths"] == 1
     assert (
-        engine._cache_runtime_stats["raw_prefetch_skipped_display_ready"]
+        engine._cache_runtime_stats["prefetch_skipped_display_ready"]
         == 1
     )
 
@@ -924,9 +922,9 @@ def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
 
     assert prefetcher.prefetch_calls == []
     assert prefetcher.register_calls == []
-    assert engine._cache_runtime_stats["raw_prefetch_paths"] == 0
+    assert engine._cache_runtime_stats["prefetch_source_paths"] == 0
     assert (
-        engine._cache_runtime_stats["raw_prefetch_skipped_display_ready"]
+        engine._cache_runtime_stats["prefetch_skipped_display_ready"]
         == 2
     )
 

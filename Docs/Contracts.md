@@ -389,11 +389,13 @@ delay fresh metadata.
 
 ### Wallpaper image cache and prefetch
 
-The decoded image cache (`utils/image_cache.py`, bounded by `cache.max_items`/`cache.max_memory_mb`) holds speculative lookahead only:
-- a raw decode stays until its display-ready derivative exists;
-- a derivative stays until a display consumes it.
+The image cache (`utils/image_cache.py`, bounded by `cache.max_items`/`cache.max_memory_mb`) holds speculative display-ready derivatives until a display consumes them. The parent has no speculative raw-decode producer or Qt scaling path.
 
-Once a display captures a derivative into its `PresentationImage`, the presentation owns the pixels and the derivative leaves the cache. ImageWorker results are not cached. Exact reuse happens per batch (`processed_by_transform`), never through the cache. A consumed derivative left at the LRU's recent end displaced the nearer lookahead and doubled the decode/scale work (R-99). The parked transition render node keeps its warm GL programs but no run or frame references. Numpy's OpenBLAS runs one thread in every process (`core/native_threads.py`, R-99).
+`engine.image_pipeline.build_image_prefetcher` is the single construction authority for engine bootstrap and source reinitialisation. `ImagePrefetcher` owns bounded per-source derivative intents, generation fencing and the post-transition cooldown. Each admitted source batch decodes once in the existing `IMAGE_PREFETCH` worker role and computes all planned Qt derivatives there, byte-identical to `AsyncImageProcessor.process_qimage` for the same resolved request. Its source image retires at batch end. The foreground `IMAGE` worker retains its separate requested-image queue and quality authority; Lanczos/sharpen requests remain foreground-owned.
+
+One packed shared-memory response carries the batch's derivative manifest and decode/PID attribution. The supervisor's existing single response listener owns completion; no generic executor waiter, per-request thread, polling timer or parent-process fallback exists. Generation clear cancels the correlation and fences cache publication; late/malformed responses retire through the shared-memory transport. Count and RGBA-byte caps apply before dispatch and again before worker decode. Explicit `--frame-trace` records parent handoff intervals; ordinary runtime does not collect those timings.
+
+Once a display captures a derivative into its `PresentationImage`, the presentation owns the pixels and the derivative leaves the cache. Foreground ImageWorker results are not cached. Exact reuse happens per foreground batch (`processed_by_transform`), never through the cache. A consumed derivative left at the LRU's recent end displaced the nearer lookahead and doubled the decode/scale work (R-99). The parked transition render node keeps its warm GL programs but no run or frame references. Numpy's OpenBLAS runs one thread in every process (`core/native_threads.py`, R-99).
 
 ## Shadow authority
 
