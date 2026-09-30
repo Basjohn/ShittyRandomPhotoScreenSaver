@@ -126,7 +126,7 @@ BLOCK_SPIN_BOX_VERTEX_COUNT = (
 )
 
 
-BLOCK_SPIN_QUICK_VERTEX_SOURCE = """#version 410 core
+BLOCK_SPIN_QUICK_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUv;
@@ -214,7 +214,7 @@ void main() {
 """.replace("__THICKNESS__", f"{BLOCK_SPIN_THICKNESS:.6f}")
 
 
-BLOCK_SPIN_FRAGMENT_SOURCE = """#version 410 core
+BLOCK_SPIN_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vUv;
 in vec3 vNormal;
 in vec3 vViewDirection;

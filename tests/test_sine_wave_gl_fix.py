@@ -80,13 +80,13 @@ def test_sine_wave_fragment_shader_compiles(qt_app):
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
     fmt.setProfile(QSurfaceFormat.CoreProfile)
-    fmt.setVersion(3, 3)
+    fmt.setVersion(4, 6)
     fmt.setSwapBehavior(QSurfaceFormat.SingleBuffer)
 
     context = QOpenGLContext()
     context.setFormat(fmt)
     if not context.create():
-        pytest.skip("OpenGL 3.3 context unavailable on this runner")
+        pytest.skip("OpenGL 4.6 context unavailable on this runner")
 
     surface = QOffscreenSurface()
     surface.setFormat(fmt)

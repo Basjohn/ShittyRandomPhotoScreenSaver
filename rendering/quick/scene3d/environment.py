@@ -20,7 +20,7 @@ from .post import FULLSCREEN_VERTEX_SOURCE
 
 # 16 bilinear taps over the output texel's footprint: a box filter wide enough for a
 # 4K photograph (~7.5 source texels per copy texel) without aliasing into the copy.
-_COPY_FRAGMENT = """#version 410 core
+_COPY_FRAGMENT = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uPhoto;

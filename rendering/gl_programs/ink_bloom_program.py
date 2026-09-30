@@ -69,7 +69,7 @@ float inkHeight(vec2 uv) {
 """
 
 INK_BLOOM_VERTEX_SOURCE = (
-    """#version 410 core
+    """#version 460 core
 layout(location=0) in vec2 aUv;
 uniform mat4 uMatrix;
 out vec2 vSurfaceUv;
@@ -95,7 +95,7 @@ void main() {
 )
 
 INK_BLOOM_FRAGMENT_SOURCE = (
-    """#version 410 core
+    """#version 460 core
 in vec2 vSurfaceUv;
 in vec3 vWorld;
 in vec3 vNormal;

@@ -25,7 +25,7 @@ _MIN_STRIPS = 2
 _MAX_STRIPS = 25
 
 
-_BLOCK_FLIP_FRAGMENT_SOURCE = """#version 410 core
+_BLOCK_FLIP_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 

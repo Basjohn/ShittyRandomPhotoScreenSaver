@@ -11,7 +11,7 @@ from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
 
 
-QUICK_VISUALIZER_VERTEX_SOURCE = """#version 330 core
+QUICK_VISUALIZER_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 
 uniform mat4 uMatrix;

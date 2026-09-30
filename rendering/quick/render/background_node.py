@@ -62,7 +62,7 @@ def transition_dense_sample_offsets(extent: int) -> tuple[int, ...]:
     )
 
 
-_VERTEX_SOURCE = """#version 410 core
+_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 
 uniform mat4 uMatrix;
@@ -77,7 +77,7 @@ void main() {
 """
 
 
-_FRAGMENT_SOURCE = """#version 410 core
+_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vUv;
 out vec4 fragColor;
 

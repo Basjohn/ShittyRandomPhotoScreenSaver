@@ -190,11 +190,11 @@ def test_real_gl_elastic_peak_keeps_varied_destination_interior_texels(qt_app):
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
     fmt.setProfile(QSurfaceFormat.CoreProfile)
-    fmt.setVersion(4, 1)
+    fmt.setVersion(4, 6)
     context = QOpenGLContext()
     context.setFormat(fmt)
     if not context.create():
-        pytest.skip("OpenGL 4.1 context unavailable")
+        pytest.skip("OpenGL 4.6 context unavailable")
     surface = QOffscreenSurface()
     surface.setFormat(fmt)
     surface.create()

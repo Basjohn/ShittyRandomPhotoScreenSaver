@@ -31,7 +31,7 @@ class BaseGLProgram(ABC):
     # Shared vertex shader for fullscreen quad transitions.
     # Subclasses can override if they need custom vertex logic.
     FULLSCREEN_VERTEX_SHADER = """
-#version 330 core
+#version 460 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
 out vec2 vUV;

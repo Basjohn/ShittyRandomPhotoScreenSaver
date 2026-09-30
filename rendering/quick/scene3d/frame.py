@@ -11,7 +11,7 @@ from typing import Protocol
 
 # The item quad: attribute 0 is a unit square placed in Qt Quick item pixels.
 # vUv keeps the bottom-up convention the transition fragments were authored in.
-ITEM_QUAD_VERTEX_SOURCE = """#version 410 core
+ITEM_QUAD_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 
 uniform mat4 uMatrix;

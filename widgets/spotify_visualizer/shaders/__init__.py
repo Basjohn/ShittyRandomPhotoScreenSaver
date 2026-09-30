@@ -18,7 +18,7 @@ _SHADER_DIR = Path(__file__).parent
 _FRAGMENT_SHADER_CACHE: Dict[str, str] | None = None
 
 # Shared vertex shader for all visualizer types (fullscreen quad)
-SHARED_VERTEX_SHADER: str = """#version 330 core
+SHARED_VERTEX_SHADER: str = """#version 460 core
 layout(location = 0) in vec2 a_pos;
 out vec2 v_uv;
 void main() {

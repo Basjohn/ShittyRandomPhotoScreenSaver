@@ -29,7 +29,7 @@ class WipeProgram(BaseGLProgram):
 
     @property
     def vertex_source(self) -> str:
-        return """#version 410 core
+        return """#version 460 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
@@ -45,7 +45,7 @@ void main() {
     def fragment_source(self) -> str:
         # Optimized: Uses precomputed axis value instead of mode branching.
         # The Python side computes the axis transformation, shader just applies it.
-        return """#version 410 core
+        return """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 

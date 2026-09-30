@@ -137,8 +137,14 @@ def test_processed_route_captures_opaque_presentation_pixels(qt_app) -> None:
     _assert_opaque_over_black(presentation.rgba8)
 
 
-def test_native_background_labels_opaque_pixels_premultiplied(qt_app) -> None:
+def test_native_background_labels_opaque_pixels_premultiplied(qt_app, monkeypatch) -> None:
     from PySide6.QtQuick import QSGSimpleTextureNode
+
+    # This pixel-label seam uses a fake window and deliberately performs no GL upload.
+    monkeypatch.setattr(
+        "rendering.quick.render.background_image_node.validate_or_quit_current_opengl_context",
+        lambda **_kwargs: None,
+    )
 
     handed: list[QImage] = []
 

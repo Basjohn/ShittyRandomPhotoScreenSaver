@@ -28,7 +28,7 @@ _MOTION_STYLE_CODES = {
 }
 
 
-_SLIDE_FRAGMENT_SOURCE = """#version 410 core
+_SLIDE_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 

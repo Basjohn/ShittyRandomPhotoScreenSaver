@@ -4,7 +4,16 @@ import logging
 
 import pytest
 
+from core.diagnostics import lifecycle_window
 from core.performance.event_loop_recorder import EventLoopStallRecorder
+
+
+@pytest.fixture(autouse=True)
+def _closed_lifecycle_window():
+    """Recorder unit samples must start and end in the steady-state window."""
+    lifecycle_window.close_window()
+    yield
+    lifecycle_window.close_window()
 
 
 def _prime(recorder: EventLoopStallRecorder, expected_at: float = 10.0) -> None:

@@ -17,6 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QGuiApplication
 
+from rendering.quick.render import background_image_node
 from rendering.quick.render.background_item import BackgroundRenderItem
 from rendering.quick.render.background_image_node import RetainedBackgroundSceneNode
 from rendering.quick.scene_controller import _render_snapshot_has_intentional_base_frame
@@ -28,7 +29,14 @@ def gui_app():
     yield app
 
 
-def test_migration_proof_background_is_opt_in(gui_app):
+def test_migration_proof_background_is_opt_in(gui_app, monkeypatch):
+    # This proof-only unit path constructs a QSG node without a real Quick
+    # window/context. The real empty-window startup probe owns validation.
+    monkeypatch.setattr(
+        background_image_node,
+        "validate_or_quit_current_opengl_context",
+        lambda **_kwargs: None,
+    )
     owner = QObject()
     item = BackgroundRenderItem()
     item.setParent(owner)

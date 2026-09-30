@@ -39,7 +39,7 @@ void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Positio
         fmt = QSurfaceFormat()
         fmt.setRenderableType(QSurfaceFormat.OpenGL)
         fmt.setProfile(QSurfaceFormat.CoreProfile)
-        fmt.setVersion(4, 1)
+        fmt.setVersion(4, 6)
         self.context = QOpenGLContext()
         self.context.setFormat(fmt)
         assert self.context.create()

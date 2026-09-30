@@ -219,6 +219,14 @@ def retained(qt_app, monkeypatch):
         return _Texture(f"adopted-{texture_id}")
 
     monkeypatch.setattr(background_image_node, "wrap_gl_texture", fake_wrap)
+    # These route/ownership cases deliberately substitute every GL-facing
+    # boundary. The production render-thread probe remains strict; this fixture
+    # only admits the synthetic no-context node construction.
+    monkeypatch.setattr(
+        background_image_node,
+        "validate_or_quit_current_opengl_context",
+        lambda **_kwargs: None,
+    )
     window = _Window(events)
     telemetry = RenderNodeTelemetry(gui_thread_id=1)
     node = RetainedBackgroundSceneNode(window=window, telemetry=telemetry, screen_index=0, frame_trace=None)

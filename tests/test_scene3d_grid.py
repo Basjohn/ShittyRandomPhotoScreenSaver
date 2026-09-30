@@ -46,7 +46,7 @@ def test_grid_density_follows_the_tier_and_the_aspect():
 
 def test_the_grid_source_needs_a_displacement():
     source = lib.scene3d_grid_vertex_source("vec3 sceneDisplace(vec2 uv) { return scenePlanePoint(uv, 1.0); }")
-    assert source.startswith("#version 410 core\n") and source.count("void main()") == 1
+    assert source.startswith("#version 460 core\n") and source.count("void main()") == 1
     with pytest.raises(ValueError):
         lib.scene3d_grid_vertex_source("vec3 bend(vec2 uv) { return vec3(uv, 0.0); }")
 

@@ -8,7 +8,7 @@ no event the kick is zero and the path is exactly the plain shatter.
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
-GLASS_VERTEX = """#version 410 core
+GLASS_VERTEX = """#version 460 core
 layout(location=0) in vec2 aUv;
 layout(location=1) in vec2 aCenter;
 layout(location=2) in float aZ;
@@ -125,7 +125,7 @@ void main() {
 }
 """
 
-GLASS_FRAGMENT = """#version 410 core
+GLASS_FRAGMENT = """#version 460 core
 in vec2 vUv;
 noperspective in vec2 vScreenUv;
 in vec3 vNormal;

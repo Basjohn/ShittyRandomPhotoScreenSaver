@@ -17,7 +17,7 @@ from rendering.quick.render.gl_resources import compile_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
 
 
-_IMAGE_FRAGMENT = """#version 410 core
+_IMAGE_FRAGMENT = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uImage;
@@ -26,7 +26,7 @@ void main() { FragColor = texture(uImage, vec2(vUv.x, 1.0-vUv.y)); }
 
 # The photograph plane (z = 0) through a moving camera; texture v runs down the item.
 _CAMERA_PLANE_VERTEX = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "layout(location = 0) in vec2 aPosition;\n"
     "uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec4 uCameraA; uniform vec4 uCameraB;\n"
     "out vec2 vUv;\n"
@@ -40,7 +40,7 @@ void main() {
 }
 """
 )
-_CAMERA_PLANE_FRAGMENT = """#version 410 core
+_CAMERA_PLANE_FRAGMENT = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uImage;

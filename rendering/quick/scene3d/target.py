@@ -57,7 +57,7 @@ vec4 sceneResolved(ivec2 texel) {
 }
 """
 
-_COMPOSITE_HEADER = """#version 410 core
+_COMPOSITE_HEADER = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform ivec2 uOrigin;
@@ -90,14 +90,14 @@ void main() {
 """
 
 # The whole allocation, resolved for the post effects (outside the rect it is cleared black).
-_RESOLVE_FRAGMENT = "#version 410 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
+_RESOLVE_FRAGMENT = "#version 460 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
 void main() {
     FragColor = sceneResolved(ivec2(gl_FragCoord.xy));
 }
 """
 
 # The same, with the screen motion averaged into the second output.
-_RESOLVE_MOTION_FRAGMENT = ("#version 410 core\nlayout(location = 0) out vec4 FragColor;\n"
+_RESOLVE_MOTION_FRAGMENT = ("#version 460 core\nlayout(location = 0) out vec4 FragColor;\n"
                             "layout(location = 1) out vec4 Motion;\n" + _RESOLVE_GLSL + """
 uniform sampler2DMS uMotionSamples;
 void main() {
