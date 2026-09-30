@@ -445,13 +445,95 @@ function Assert-SRPSSOnedirQuickPayload {
 function Assert-SRPSSPythonRuntimeDependencies {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$PythonExe
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [string]$RequirementsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'requirements.txt')
     )
+
+    if (-not (Test-Path -LiteralPath $RequirementsPath -PathType Leaf)) {
+        throw "Canonical runtime requirements file not found: $RequirementsPath"
+    }
 
     # Keep this aligned with requirements.txt and the dynamic/lazy runtime
     # surfaces that Nuitka cannot safely infer from one top-level import graph.
     $probe = @'
 import importlib
+from importlib import metadata as importlib_metadata
+from pathlib import Path
+import re
+import sys
+
+
+requirements_path = Path(sys.argv[1]).resolve()
+qt_distributions = (
+    "PySide6",
+    "PySide6_Addons",
+    "PySide6_Essentials",
+    "shiboken6",
+)
+
+
+def canonical_distribution(name):
+    return re.sub(r"[-_.]+", "-", name).casefold()
+
+
+expected_qt_pins = {}
+for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+    line = raw_line.split("#", 1)[0].strip()
+    if not line:
+        continue
+    match = re.fullmatch(r"([^=<>!~\[\s]+)==([^\s;]+)", line)
+    if match is None:
+        continue
+    name, version = match.groups()
+    canonical_name = canonical_distribution(name)
+    if canonical_name in {
+        canonical_distribution(distribution) for distribution in qt_distributions
+    }:
+        expected_qt_pins[canonical_name] = version
+
+missing_pins = [
+    distribution
+    for distribution in qt_distributions
+    if canonical_distribution(distribution) not in expected_qt_pins
+]
+if missing_pins:
+    raise RuntimeError(
+        "requirements must pin exact versions for: " + ", ".join(missing_pins)
+    )
+
+metadata_mismatches = []
+for distribution in qt_distributions:
+    expected = expected_qt_pins[canonical_distribution(distribution)]
+    installed = importlib_metadata.version(distribution)
+    if installed != expected:
+        metadata_mismatches.append(
+            f"{distribution}: installed {installed}, required {expected}"
+        )
+if metadata_mismatches:
+    raise RuntimeError("Qt distribution version mismatch: " + "; ".join(metadata_mismatches))
+
+import PySide6
+from PySide6 import QtCore
+import shiboken6
+
+loaded_versions = {
+    "PySide6": PySide6.__version__,
+    "Qt runtime": QtCore.qVersion(),
+    "shiboken6": shiboken6.__version__,
+}
+loaded_expectations = {
+    "PySide6": expected_qt_pins[canonical_distribution("PySide6")],
+    "Qt runtime": expected_qt_pins[canonical_distribution("PySide6_Essentials")],
+    "shiboken6": expected_qt_pins[canonical_distribution("shiboken6")],
+}
+loaded_mismatches = [
+    f"{name}: loaded {loaded_versions[name]}, required {expected}"
+    for name, expected in loaded_expectations.items()
+    if loaded_versions[name] != expected
+]
+if loaded_mismatches:
+    raise RuntimeError("Loaded Qt/Shiboken version mismatch: " + "; ".join(loaded_mismatches))
+
 modules = (
     "PySide6.QtCore",
     "PySide6.QtGui",
@@ -476,8 +558,8 @@ for name in modules:
 print("SRPSS_RUNTIME_DEPENDENCIES_OK")
 '@
 
-    & $PythonExe -c $probe 2>&1 | ForEach-Object { Write-Host $_ }
+    & $PythonExe -c $probe $RequirementsPath 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
-        throw "Python runtime dependency probe failed for: $PythonExe"
+        throw "Python runtime dependency/version probe failed for: $PythonExe"
     }
 }
