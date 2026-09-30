@@ -1,5 +1,5 @@
 <#
-Dedicated repo-venv build worker for the installable SRPSS diagnostic runtime.
+Dedicated repo-venv build worker for the published SRPSS diagnostic runtime.
 
 The ordinary standard and Media Center workers remain diagnostics-free.  This
 thin worker reuses the canonical onefile compiler pipeline with isolated build,
@@ -24,7 +24,6 @@ if (-not (Test-Path -LiteralPath $Worker -PathType Leaf)) {
     -EntryPoint 'main_diagnostic.py' `
     -AppName 'SRPSS_Diagnostic' `
     -Console:$Console `
-    -SkipScrRename `
     -ReinstallVenvDeps:$ReinstallVenvDeps `
     -BuildTarget 'diagnostic' `
     -DistributionName 'diagnostic' `

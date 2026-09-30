@@ -40,6 +40,14 @@ Wallpaper lookahead uses bounded source batches in the supervised speculative im
 display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.
 The construction, generation and shared-memory ownership contract lives in `Docs/Contracts.md` → Wallpaper image cache and prefetch.
 
+## Build control and products
+
+`tools/build_runner.py` owns sequential build execution. One active process owner places the Windows build root
+in a kill-on-close Job Object before resuming it; Emergency Stop and runner shutdown cancel that tree and prevent
+queued jobs from starting. Operator abort is distinct from compiler failure. A new run creates a fresh owner.
+Diagnostic publishes `SRPSS_Diagnostic.scr` through the canonical SCR builder; only Standard and Media Center have
+installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
+
 ## Retired presentation architecture
 
 The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path is retired. The accepted Quick runtime is the sole production presentation authority; the old path is not rollback architecture, a facade, test convenience or fallback. Caller-dead residue is cleanup debt and must not be rebuilt merely to satisfy stale tests.

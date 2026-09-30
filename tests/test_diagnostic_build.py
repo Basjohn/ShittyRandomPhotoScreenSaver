@@ -8,6 +8,9 @@ from core import build_profile
 from core.logging import crash_capture
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def test_compiled_runtime_detection_is_authoritative_and_product_neutral(
     monkeypatch,
 ) -> None:
@@ -44,10 +47,27 @@ def test_diagnostic_identity_is_not_inferred_from_executable_name(monkeypatch) -
     monkeypatch.setattr(
         build_profile.sys,
         "executable",
-        r"C:\Program Files\SRPSS Diagnostic\SRPSS_Diagnostic.exe",
+        r"C:\Program Files\SRPSS Diagnostic\SRPSS_Diagnostic.scr",
     )
 
     assert build_profile.is_diagnostic_build() is False
+
+
+def test_diagnostic_runtime_worker_publishes_scr_without_an_installer() -> None:
+    worker = (ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1").read_text(
+        encoding="utf-8"
+    )
+    canonical_workers = (
+        ROOT / "scripts" / "build_nuitka.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+    )
+
+    assert "-SkipScrRename" not in worker
+    assert all(
+        "SkipScrRename" not in path.read_text(encoding="utf-8")
+        for path in canonical_workers
+    )
+    assert not (ROOT / "scripts" / "SRPSS_Diagnostic_Installer.iss").exists()
 
 
 def test_diagnostic_crash_capture_is_inert_for_release(tmp_path, monkeypatch) -> None:
@@ -127,14 +147,14 @@ def test_diagnostic_entrypoint_defaults_to_run_without_overriding_explicit_mode(
     sys.modules.pop("main_diagnostic", None)
     import main_diagnostic
 
-    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.exe", "--perf"])
+    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.scr", "--perf"])
     main_diagnostic._inject_run_mode_arg()
     assert main_diagnostic.sys.argv[1] == "/s"
     assert main_diagnostic.sys.argv[-1] == "--perf"
 
-    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.exe", "/c:1234"])
+    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.scr", "/c:1234"])
     main_diagnostic._inject_run_mode_arg()
-    assert main_diagnostic.sys.argv == ["SRPSS_Diagnostic.exe", "/c:1234"]
+    assert main_diagnostic.sys.argv == ["SRPSS_Diagnostic.scr", "/c:1234"]
 
     source = Path(main_diagnostic.__file__).read_text(encoding="utf-8")
     assert "rendering.display_widget" not in source

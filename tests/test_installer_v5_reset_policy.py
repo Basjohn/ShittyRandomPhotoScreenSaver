@@ -32,7 +32,6 @@ def test_post_migration_installers_keep_reset_available_but_opt_in() -> None:
     for name in (
         "SRPSS_Installer.iss",
         "SRPSS_MediaCenter_Installer.iss",
-        "SRPSS_Diagnostic_Installer.iss",
     ):
         text = _text(name)
         assert "Flags: unchecked" in _reset_task_line(text)
@@ -54,10 +53,3 @@ def test_selected_reset_clears_json_and_matching_legacy_qsettings_tree() -> None
         'Subkey: "Software\\ShittyRandomPhotoScreenSaver\\Screensaver_MC"; '
         'Flags: deletekey; Tasks: resetsettings'
     ) in mc
-
-    diagnostic = _text("SRPSS_Diagnostic_Installer.iss")
-    assert 'Name: "{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in diagnostic
-    assert (
-        'Subkey: "Software\\ShittyRandomPhotoScreenSaver\\Screensaver"; '
-        'Flags: deletekey; Tasks: resetsettings'
-    ) in diagnostic

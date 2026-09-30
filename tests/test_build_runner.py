@@ -42,14 +42,13 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
     assert venv[3].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
     assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
     assert normal[5].script == venv[5].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
-    assert normal[6].script == venv[6].script == tmp_path / "scripts" / "SRPSS_Diagnostic_Installer.iss"
-    assert normal[6].default_selected is False
+    assert normal[2].expected_artifact == tmp_path / "release" / "diagnostic" / "SRPSS_Diagnostic.scr"
+    assert "diagnostic_installer" not in {job.key for job in normal}
     assert [job.output_dir for job in normal] == [
         tmp_path / "release" / "screensaver",
         tmp_path / "release" / "media_center",
         tmp_path / "release" / "diagnostic",
         tmp_path / "release" / "reddit_helper",
-        tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
     ]
@@ -144,13 +143,16 @@ def test_run_job_writes_one_clickable_runner_log(monkeypatch, tmp_path):
         kwargs["stdout"].write(b"fixture output\n")
         job.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
         job.expected_artifact.write_bytes(b"artifact")
-        return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=0, wait=lambda: 0)
 
-    monkeypatch.setattr(build_runner.subprocess, "run", fake_run)
+    owner = SimpleNamespace(
+        start=lambda command, **kwargs: fake_run(command, **kwargs),
+        retire=lambda process: False,
+    )
     monkeypatch.setattr(build_runner, "_windows_subprocess_kwargs", lambda: {})
     preflight = build_runner.PreflightResult(pwsh=Path("pwsh.exe"))
 
-    result = build_runner.run_job(job, preflight, tmp_path / "logs")
+    result = build_runner.run_job(job, preflight, tmp_path / "logs", process_owner=owner)
 
     assert result.returncode == 0
     assert result.log_path.is_file()
@@ -177,17 +179,36 @@ def test_run_job_rejects_zero_exit_without_expected_artifact(monkeypatch, tmp_pa
 
     def fake_run(command, **kwargs):
         kwargs["stdout"].write(b"fixture output\n")
-        return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=0, wait=lambda: 0)
 
-    monkeypatch.setattr(build_runner.subprocess, "run", fake_run)
+    owner = SimpleNamespace(
+        start=lambda command, **kwargs: fake_run(command, **kwargs),
+        retire=lambda process: False,
+    )
     monkeypatch.setattr(build_runner, "_windows_subprocess_kwargs", lambda: {})
     preflight = build_runner.PreflightResult(pwsh=Path("pwsh.exe"))
 
-    result = build_runner.run_job(job, preflight, tmp_path / "logs")
+    result = build_runner.run_job(job, preflight, tmp_path / "logs", process_owner=owner)
 
     assert result.returncode == 1
     assert "expected artifact is missing" in result.detail.lower()
 
+
+
+def test_diagnostic_stale_exe_cannot_satisfy_scr_result(tmp_path):
+    job = next(job for job in build_runner.jobs_for_mode("venv", tmp_path) if job.key == "diagnostic")
+    job.output_dir.mkdir(parents=True)
+    job.expected_artifact.with_suffix(".exe").write_bytes(b"stale diagnostic executable")
+    owner = SimpleNamespace(
+        start=lambda *_args, **_kwargs: SimpleNamespace(wait=lambda: 0),
+        retire=lambda _process: False,
+    )
+    result = build_runner.run_job(
+        job, build_runner.PreflightResult(pwsh=Path("pwsh.exe")),
+        tmp_path / "logs", process_owner=owner,
+    )
+    assert result.returncode == 1
+    assert "expected artifact is missing" in result.detail.lower()
 
 
 def test_parse_args_uses_only_canonical_mode_spelling() -> None:
@@ -204,7 +225,7 @@ def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")
 
     assert payload["mode"] == "venv"
-    assert len(payload["jobs"]) == 7
+    assert len(payload["jobs"]) == 6
     assert Path(payload["jobs"][2]["script"]) == build_runner.REPO_ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
     assert payload["jobs"][2]["default_selected"] is False
     assert Path(payload["jobs"][4]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
@@ -250,10 +271,10 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     (tmp_path / "requirements.txt").write_text(
         "\n".join(
             (
-                "PySide6==6.9.1",
-                "PySide6_Addons==6.9.1",
-                "PySide6_Essentials==6.9.1",
-                "shiboken6==6.9.1",
+                "PySide6==6.11.2",
+                "PySide6_Addons==6.11.2",
+                "PySide6_Essentials==6.11.2",
+                "shiboken6==6.11.2",
                 "PyOpenGL==3.1.10",
                 "PyAudioWPatch==0.2.12.7",
                 "sounddevice==0.5.3",
@@ -274,7 +295,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     result = build_runner.run_preflight("normal", tmp_path)
 
     assert result.errors == []
-    assert {"diagnostic", "diagnostic_installer"} <= result.unavailable_jobs
+    assert {"diagnostic"} == result.unavailable_jobs
     assert any("Diagnostic Runtime" in warning for warning in result.warnings)
 
 
@@ -290,9 +311,6 @@ def test_workers_and_installers_share_the_canonical_output_layout():
         encoding="utf-8"
     )
     diagnostic_entrypoint = (build_runner.REPO_ROOT / "main_diagnostic.py").read_text(
-        encoding="utf-8"
-    )
-    diagnostic_installer = (scripts / "SRPSS_Diagnostic_Installer.iss").read_text(
         encoding="utf-8"
     )
 
@@ -312,16 +330,6 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert "from core.build_profile import activate_diagnostic_build" in diagnostic_entrypoint
     assert "from core.logging import crash_capture" in diagnostic_entrypoint
     assert "from core.logging import ownership_trace" in diagnostic_entrypoint
-    assert r"release\diagnostic\SRPSS_Diagnostic.exe" in diagnostic_installer
-    assert "Setup_SRPSS_Diagnostic" in diagnostic_installer
-    assert "AppId={{9E730AA6-0FF0-4EF5-AE55-7D88956F32DE}" in diagnostic_installer
-    assert "SCRNSAVE.EXE" not in diagnostic_installer
-    assert r"{sys}\SRPSS.scr" not in diagnostic_installer
-    assert r"{localappdata}\SRPSS Diagnostic" in diagnostic_installer
-    assert r'Parameters: """{app}\logs"""' in diagnostic_installer
-    assert "Full Telemetry" not in diagnostic_installer
-    assert "commonappdata" not in diagnostic_installer.lower()
-    assert "reddit_helper" not in diagnostic_installer.lower()
 
     for mode in ("normal", "venv"):
         jobs = {
