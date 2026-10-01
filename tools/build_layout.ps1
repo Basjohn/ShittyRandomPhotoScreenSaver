@@ -343,11 +343,7 @@ function Get-SRPSSNuitkaQmlPruneArguments {
         '*Qt6StateMachine*.dll',
         '*Qt6Test.dll',
         '*Qt6WebChannel*.dll',
-        '*Qt6WebSockets.dll',
-        # Qt's 20 MiB software raster OpenGL fallback cannot satisfy SRPSS's
-        # explicit hardware OpenGL 4.6 Core requirement and must never become
-        # an alternate presentation authority.
-        '*opengl32sw.dll'
+        '*Qt6WebSockets.dll'
     )) {
         $arguments.Add("--noinclude-dlls=$dllPattern")
     }
@@ -357,12 +353,12 @@ function Get-SRPSSNuitkaQmlPruneArguments {
     # frozen product solely for an unused decoder.
     $arguments.Add('--noinclude-dlls=*qpdf.dll')
 
-    # QOpenGLContext/QSurfaceFormat live in QtGui and SRPSS has no production
-    # import of PySide6.QtOpenGL or QOpenGLWidget. Nuitka's PySide plugin was
-    # nevertheless injecting QtOpenGL.pyd as an implicit standalone module.
-    # Keep the native Qt/Quick OpenGL substrate; reject only the unused Python
-    # binding module and QOpenGLWidget-specific helper framework.
-    $arguments.Add('--nofollow-import-to=PySide6.QtOpenGL')
+    # PySide6.QtQuick has a binding-level dependency on PySide6.QtOpenGL even
+    # though SRPSS does not import that binding directly. Do not prune it merely
+    # because application source references QOpenGLContext through QtGui. A
+    # frozen build can otherwise compile successfully and then die before Python
+    # logging starts when QtQuick initialises. Qt6OpenGLWidgets remains separate
+    # and unused; the QtOpenGL binding/native Qt6OpenGL substrate is retained.
 
     # Named timezone conversion is owned by QtCore.QTimeZone.  Do not let a
     # stale global/.venv pytz install wander back into a frozen product merely
@@ -427,8 +423,6 @@ function Assert-SRPSSForbiddenFrozenPayloadAbsent {
         'qt6test',
         'qt6webchannel',
         'qt6websockets',
-        'opengl32sw.dll',
-        'pyside6/qtopengl.pyd',
         'pytz',
         'tzdata'
     )

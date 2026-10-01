@@ -20,10 +20,14 @@ if (-not (Test-Path -LiteralPath $Worker -PathType Leaf)) {
     throw "Canonical venv onefile worker not found: $Worker"
 }
 
+# Diagnostic is deliberately always console-enabled. If the frozen runtime
+# fails before ordinary logging/crash capture comes up, the console is the last
+# available human-visible failure surface. The optional -Console switch remains
+# accepted for backwards-compatible invocations but no longer controls this.
 & $Worker `
     -EntryPoint 'main_diagnostic.py' `
     -AppName 'SRPSS_Diagnostic' `
-    -Console:$Console `
+    -Console `
     -ReinstallVenvDeps:$ReinstallVenvDeps `
     -BuildTarget 'diagnostic' `
     -DistributionName 'diagnostic' `

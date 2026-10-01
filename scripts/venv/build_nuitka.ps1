@@ -387,6 +387,7 @@ $argsList = @(
     "--include-qt-plugins=qml",
     "--include-module=PySide6.QtMultimedia",
     "--include-module=PySide6.QtQuick",
+    "--include-module=PySide6.QtOpenGL",
     "--include-module=PySide6.QtQml",
     "--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc",
     "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc",

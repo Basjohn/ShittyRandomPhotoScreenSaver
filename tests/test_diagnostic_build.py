@@ -63,6 +63,11 @@ def test_diagnostic_runtime_worker_publishes_scr_without_an_installer() -> None:
     )
 
     assert "-SkipScrRename" not in worker
+    # Diagnostic must always own a console failure surface. Build Runner does
+    # not pass -Console, so the wrapper itself forces the canonical worker into
+    # console mode.
+    assert "    -Console `" in worker
+    assert "-Console:$Console" not in worker
     assert all(
         "SkipScrRename" not in path.read_text(encoding="utf-8")
         for path in canonical_workers

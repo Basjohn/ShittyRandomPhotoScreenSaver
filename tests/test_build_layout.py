@@ -458,18 +458,17 @@ def test_pytz_is_retired_from_requirements_and_frozen_payload_contract() -> None
 
 
 
-def test_frozen_bloat_contract_rejects_software_gl_and_unused_qt_qml_fossils() -> None:
+def test_frozen_bloat_contract_preserves_qtquick_opengl_binding_and_rejects_unused_qt_qml_fossils() -> None:
     contract = LAYOUT_SCRIPT.read_text(encoding="utf-8")
 
-    # SRPSS requires hardware OpenGL 4.6 Core; Qt's software OpenGL fallback
-    # cannot satisfy that contract and must not become an alternate renderer.
-    assert "*opengl32sw.dll" in contract
+    # PySide6.QtQuick has a binding-level dependency on PySide6.QtOpenGL. A
+    # source grep is not sufficient grounds to prune it, and the Qt Windows
+    # software-GL deployment DLL is likewise retained until a frozen runtime
+    # probe proves that this specific package can start without it.
+    assert "--nofollow-import-to=PySide6.QtOpenGL" not in contract
+    assert "pyside6/qtopengl.pyd" not in contract
+    assert "opengl32sw.dll" not in contract
     assert '$arguments.Add("--noinclude-dlls=$dllPattern")' in contract
-
-    # QOpenGLContext/QSurfaceFormat are consumed from QtGui. The much larger
-    # PySide QtOpenGL binding was being injected implicitly without an SRPSS import.
-    assert "--nofollow-import-to=PySide6.QtOpenGL" in contract
-    assert "pyside6/qtopengl.pyd" in contract
 
     # These frameworks were measured as dependency fossils of QML namespaces
     # outside the authored QtQuick + QtQuick.Effects allowlist.
@@ -492,6 +491,23 @@ def test_frozen_bloat_contract_rejects_software_gl_and_unused_qt_qml_fossils() -
         "*Qt6Test.dll",
     ):
         assert pattern in contract
+
+
+
+def test_every_runtime_worker_explicitly_keeps_pyside_qtopengl_for_qtquick() -> None:
+    workers = (
+        REPO_ROOT / "scripts" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    )
+    for worker in workers:
+        source = worker.read_text(encoding="utf-8")
+        assert '"--include-module=PySide6.QtQuick"' in source
+        assert '"--include-module=PySide6.QtOpenGL"' in source
+        assert source.index('"--include-module=PySide6.QtQuick"') < source.index(
+            '"--include-module=PySide6.QtOpenGL"'
+        )
 
 
 def test_every_product_worker_clears_published_payload_before_nuitka() -> None:
