@@ -32,9 +32,6 @@ regression-tested. `Spec.md` → Build control and products owns the durable con
 
 - [~] On the next operator build, exercise Standard/MC/Diagnostic SCR, active-child Emergency Stop, then a clean
   rerun in the same Foundry session. The agent must not run build scripts. Preserve intentional Jobs=3/4/5.
-- [~] **Normal-mode interpreter, operator admin action:** `C:\Python311` still has Qt 6.9.1 because its launchers
-  require administrator access. Upgrade its four Qt pins to `requirements.txt` before Normal Standard/MC builds.
-  The project `.venv` is verified 6.11.2; Diagnostic always uses it. This does not block source work.
 - [~] **Separate dependency audit:** when the next operator 6.11.2 MC build supplies a Nuitka report, investigate
   the old artifact's unused WebEngine payload before proposing exclusions. Asset cleanup did not change Qt module
   exclusions or Jobs; broad dependency trimming remains outside this slice.
@@ -187,10 +184,11 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 - [ ] **Pre-existing Qt test suppression:** `tests/conftest.py` broadly filters slot-miss AttributeErrors. Reproduce
   cross-generation background/Visualizer `sceneGraphInvalidated` retirement in a bounded unfiltered test, then
   narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.
-- [ ] **Global Python cleanup:** the denied Normal-mode Qt upgrade left pip `~yside6-essentials` rollback metadata;
-  the original 6.9.1 modules were restored and verified. Global pip also reports the unchanged opencv/numpy version
-  conflict. Operator may delete `C:\Python311\Lib\site-packages\~yside6_essentials-6.9.1.dist-info` during maintenance;
-  the correctly named Qt metadata remains. Cleanup is non-blocking; the project `.venv` passes pip check.
+- [ ] **Global Python cleanup:** both interpreters now report PySide/Qt and all four package pins at 6.11.2.
+  Global pip still sees the old rollback metadata directories `C:\Python311\Lib\site-packages\~yside6_essentials-6.9.1.dist-info`
+  and `C:\Python311\Lib\site-packages\~-side6_essentials-6.9.1.dist-info`; operator may delete those two during maintenance.
+  The correctly named 6.11.2 metadata remains. Global pip also reports the unchanged opencv/numpy version conflict.
+  Cleanup is non-blocking; the project `.venv` passes pip check.
 - [ ] **Existing local timezone heuristic:** `widgets/timezone_utils.get_local_timezone()` selects the first named
   zone sharing an offset and uses `time.daylight` rather than the current DST state. Audit its callers and preserve
   local-zone identity before changing it. The asset cleanup retains the existing pytz authority and behavior.
