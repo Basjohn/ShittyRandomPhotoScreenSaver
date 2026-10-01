@@ -16,7 +16,7 @@ from core.settings.layout_slots import get_layout_slot_payload
 from core.windows.monitor_resolution import screen_device_size
 from rendering.quick.widgets.preferred_size_measurement import OrdinaryPreferredSizeMeter
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
-from ui.onboarding.common import Page, action, checkbox, text_label
+from ui.onboarding.common import Page, action, checkbox, font_with_point_delta, text_label
 from ui.styled_popup import StyledPopup
 from ui.settings_theme_runtime import get_active_settings_theme, subscribe_settings_theme
 from ui.tabs.shared_styles import NoWheelSlider
@@ -173,7 +173,7 @@ class _ArrangeCanvas(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color("panel.group.surface"))
         painter.drawRoundedRect(QRectF(self.rect()), 8.0, 8.0)
-        small = self.font(); small.setPointSizeF(max(7.0, small.pointSizeF() - 1.0))
+        small = font_with_point_delta(self, -1.0, minimum_points=7.0)
         target = self._display_under(self._selected) if (self._dragging and self._selected is not None) else None
         for display in self.model.displays:
             rect = QRectF(self._project(display.geometry)).adjusted(1, 1, -1, -1)

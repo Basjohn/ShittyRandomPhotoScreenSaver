@@ -24,6 +24,7 @@ from core.settings.shadow_direction import (
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.custom_layout_contract import saved_screen_signature_aliases
 from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
@@ -310,10 +311,10 @@ class ClockPresentationConfig:
 
         overrides = values.get("display_mode_overrides", {})
         if display_signature and isinstance(overrides, Mapping):
-            projected["display_mode"] = overrides.get(
-                display_signature,
-                projected["display_mode"],
-            )
+            for alias in saved_screen_signature_aliases((display_signature,), overrides):
+                if alias in overrides:
+                    projected["display_mode"] = overrides[alias]
+                    break
         config = cls.from_mapping(normalized_id, projected)
         style_defaults_source = canonical if normalized_id == "clock" else base_canonical
         style_defaults = {

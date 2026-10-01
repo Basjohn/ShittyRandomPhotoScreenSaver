@@ -31,6 +31,8 @@ from core.settings.layout_slots import apply_layout_slot, get_layout_slot_payloa
 from core.settings.widget_family_catalog import get_family_id_for_widget, get_widget_member_label
 from rendering.custom_layout_commit import commit_custom_session
 from rendering.custom_layout_contract import (
+    get_screen_layout_entries_for_aliases,
+    saved_screen_signature_aliases,
     choose_best_screen_for_global_rect,
     choose_content_placement_anchor,
     clamp_local_rect_to_bounds,
@@ -344,9 +346,7 @@ class ArrangeModel:
         layouts = custom.get("displays", {})
         if not isinstance(layouts, Mapping):
             return None
-        bucket = next((layouts.get(alias) for alias in display.signature_aliases if isinstance(layouts.get(alias), Mapping)), None)
-        if not isinstance(bucket, Mapping):
-            return None
+        _matched, bucket = get_screen_layout_entries_for_aliases(custom, display.signature_aliases)
         payload = get_widget_layout_variant_payload(bucket, descriptor.widget_id, variant)
         return deserialize_custom_layout_entry(descriptor.widget_id, variant, payload)
 
@@ -938,7 +938,7 @@ class ArrangeModel:
         restore = load_custom_layout_restore_map(widgets)
         for key in (self._reset_keys if keys is None else keys):
             display = self._display_map[key.display_identity]
-            for alias in display.signature_aliases:
+            for alias in saved_screen_signature_aliases(display.signature_aliases, custom.get("displays", {})):
                 remove_screen_layout_entry(custom, alias, key.widget_id, key.geometry_variant)
             remaining = custom.get("displays", {})
             has_remaining = any(isinstance(bucket, Mapping) and key.widget_id in bucket for bucket in remaining.values()) if isinstance(remaining, Mapping) else False

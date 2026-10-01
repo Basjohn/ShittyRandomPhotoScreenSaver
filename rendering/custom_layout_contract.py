@@ -7,15 +7,18 @@ reapplying to the same physical display identity when possible.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from PySide6.QtCore import QPoint, QRect, QSize
 from PySide6.QtGui import QGuiApplication, QScreen
+from core.logging.logger import get_logger
 
 from rendering.custom_layout_session import (
     DEFAULT_GEOMETRY_VARIANT,
     normalize_geometry_variant,
 )
+logger = get_logger(__name__)
+
 CUSTOM_LAYOUT_VERSION = 2
 CUSTOM_LAYOUT_SETTINGS_KEY = "custom_layout"
 CUSTOM_LAYOUT_RESTORE_VERSION = 1
@@ -197,7 +200,7 @@ def get_screen_signature(screen: QScreen | None) -> str:
         pass
 
     if serial_present and identity_parts:
-        return "|".join(identity_parts)
+        return normalize_screen_signature("|".join(identity_parts))
     if identity_parts:
         return "|".join(
             identity_parts + ([geometry_part] if geometry_part else [])
@@ -205,6 +208,55 @@ def get_screen_signature(screen: QScreen | None) -> str:
     if geometry_part:
         return geometry_part
     return f"id:{id(screen)}"
+
+
+def normalize_screen_signature(signature: str) -> str:
+    """Serial-backed identity is independent of Qt's EDID manufacturer label.
+
+    Qt 6.11 on Windows changed these labels for existing monitors. Keep the
+    serial, model and name exact; geometry and the display label are metadata,
+    not a new physical monitor. Serial-less identities retain their full key.
+    """
+
+    parts = str(signature).split("|")
+    # The retired Quick-local identity used QRect's tuple spelling. This is
+    # only an encoding migration: a serial-less screen still needs exact facts.
+    for index, part in enumerate(parts):
+        if part.startswith("geometry:(") and part.endswith(")"):
+            try:
+                x, y, width, height = (int(value.strip()) for value in part[10:-1].split(","))
+            except ValueError:
+                continue
+            parts[index] = f"geom:{x}_{y}_{width}x{height}"
+    if not any(part.startswith("serial:") and part[7:] for part in parts):
+        return "|".join(parts)
+    return "|".join(
+        part for part in parts
+        if not part.startswith(("manufacturer:", "geom:"))
+    )
+
+
+def saved_screen_signature_aliases(
+    aliases: tuple[str, ...], saved_signatures: Iterable[str],
+) -> tuple[str, ...]:
+    """Match old input keys without guessing by monitor index or geometry.
+
+    Canonical and the current Qt label win conflicts; older labels only fill
+    missing widgets/variants. This also serves Arrange's QScreen-free draft.
+    """
+
+    canonical = normalize_screen_signature(aliases[0]) if aliases else ""
+    result = list(dict.fromkeys(((canonical,) if canonical else ()) + aliases))
+    if canonical:
+        matching = [
+            key for key in saved_signatures
+            if isinstance(key, str) and normalize_screen_signature(key) == canonical
+        ]
+        # A prior geometry-qualified key is older than its geometry-free key.
+        for key in sorted(matching, key=lambda value: "|geom:" in value):
+            if key not in result:
+                result.append(key)
+    return tuple(result)
 
 
 def get_screen_signature_aliases(screen: QScreen | None) -> tuple[str, ...]:
@@ -239,6 +291,9 @@ def get_screen_signature_aliases(screen: QScreen | None) -> tuple[str, ...]:
     except Exception:
         geom_part = ""
 
+    previous = "|".join(identity_parts)
+    if canonical.startswith("serial:") and previous and previous not in aliases:
+        aliases.append(previous)
     legacy = "|".join(identity_parts + ([geom_part] if geom_part else []))
     if legacy and legacy not in aliases:
         aliases.append(legacy)
@@ -447,21 +502,13 @@ def resolve_screen_layout_signature(
     displays = custom_layout_map.get("displays", {})
     if not isinstance(displays, Mapping):
         return None
-    for alias in get_screen_signature_aliases(screen):
+    for alias in saved_screen_signature_aliases(get_screen_signature_aliases(screen), displays):
         if alias not in displays:
             continue
         layouts = displays.get(alias)
         if isinstance(layouts, Mapping):
             return alias
 
-    canonical = get_screen_signature(screen)
-    if canonical and "|geom:" not in canonical:
-        legacy_prefix = f"{canonical}|geom:"
-        for saved_signature, layouts in displays.items():
-            if not isinstance(saved_signature, str):
-                continue
-            if saved_signature.startswith(legacy_prefix) and isinstance(layouts, Mapping):
-                return saved_signature
     return None
 
 
@@ -471,10 +518,29 @@ def get_screen_layout_entries_for_screen(
 ) -> tuple[str | None, dict[str, Any]]:
     """Return the matched signature and layouts for a live screen."""
 
-    matched = resolve_screen_layout_signature(custom_layout_map, screen)
-    if matched is None:
+    return get_screen_layout_entries_for_aliases(
+        custom_layout_map, get_screen_signature_aliases(screen),
+    )
+
+
+def get_screen_layout_entries_for_aliases(
+    custom_layout_map: Mapping[str, Any], aliases: tuple[str, ...],
+) -> tuple[str | None, dict[str, Any]]:
+    """Read all matching input buckets, preserving independent face variants."""
+
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, Mapping):
         return None, {}
-    return matched, get_screen_layout_entries(custom_layout_map, matched)
+    matching = [
+        key for key in saved_screen_signature_aliases(aliases, displays)
+        if isinstance(displays.get(key), Mapping)
+    ]
+    entries: dict[str, Any] = {}
+    for key in reversed(matching):
+        for widget_id, variants in displays[key].items():
+            if isinstance(variants, Mapping):
+                entries[widget_id] = {**entries.get(widget_id, {}), **variants}
+    return (matching[0] if matching else None), entries
 
 
 def canonicalize_screen_layout_bucket(
@@ -483,53 +549,31 @@ def canonicalize_screen_layout_bucket(
 ) -> str | None:
     """Move any legacy matching bucket onto the canonical signature."""
 
-    canonical = get_screen_signature(screen)
-    if not canonical:
+    return canonicalize_screen_layout_aliases(
+        custom_layout_map, get_screen_signature_aliases(screen),
+    )
+
+
+def canonicalize_screen_layout_aliases(
+    custom_layout_map: dict[str, Any], aliases: tuple[str, ...],
+) -> str | None:
+    """Migrate matching old buckets onto one canonical key on an explicit save."""
+
+    if not aliases:
         return None
+    canonical = normalize_screen_signature(aliases[0])
 
     displays = custom_layout_map.setdefault("displays", {})
     if not isinstance(displays, dict):
         displays = {}
         custom_layout_map["displays"] = displays
 
-    target_layouts = displays.get(canonical, {})
-    if not isinstance(target_layouts, dict):
-        target_layouts = dict(target_layouts) if isinstance(target_layouts, Mapping) else {}
-
-    source_signatures: list[str] = []
-    for alias in get_screen_signature_aliases(screen):
-        if alias != canonical and alias in displays:
-            source_signatures.append(alias)
-    if "|geom:" not in canonical:
-        legacy_prefix = f"{canonical}|geom:"
-        source_signatures.extend(
-            str(saved_signature)
-            for saved_signature in displays
-            if isinstance(saved_signature, str)
-            and saved_signature != canonical
-            and saved_signature.startswith(legacy_prefix)
-            and saved_signature not in source_signatures
-        )
-
-    for source_signature in source_signatures:
-        source_layouts = displays.get(source_signature, {})
-        if not isinstance(source_layouts, Mapping):
-            displays.pop(source_signature, None)
+    _matched, target_layouts = get_screen_layout_entries_for_aliases(custom_layout_map, aliases)
+    for source_signature in saved_screen_signature_aliases(aliases, displays):
+        if source_signature == canonical or source_signature not in displays:
             continue
-        merged: dict[str, Any] = {}
-        for widget_id in set(source_layouts) | set(target_layouts):
-            source_variants = source_layouts.get(widget_id, {})
-            target_variants = target_layouts.get(widget_id, {})
-            if not isinstance(source_variants, Mapping):
-                source_variants = {}
-            if not isinstance(target_variants, Mapping):
-                target_variants = {}
-            merged[str(widget_id)] = {
-                **dict(source_variants),
-                **dict(target_variants),
-            }
-        target_layouts = merged
         displays.pop(source_signature, None)
+        logger.info("[CUSTOM_LAYOUT] Migrated saved display identity %s -> %s", source_signature, canonical)
 
     displays[canonical] = target_layouts
     return canonical

@@ -224,6 +224,12 @@ title sits 1 px (normal) or 2 px (large) further from the arrow, because the win
 size hint grows by the same amount, so a title never clips at any scale. The header padding is renderer geometry defined once in
 `ui/settings_theme.py` (its QSS and `BucketToggle` both read it; the renderer never imports widgets).
 
+Shared combo typography uses positive point sizes equivalent to its authored 14/13/12 logical-pixel sizes at
+Windows' 96 logical DPI. Qt 6.11's Windows 11 menu-indicator metric reads `QFont.pointSize()` even for a pixel font;
+pixel-only combo QSS therefore produces `QFont::setPointSize(-1)`. Preserve text metrics at the shared style owner,
+without suppressing messages or replacing the native style. Painted onboarding labels adjust fonts in their
+original units through `ui/onboarding/common.py`, including Arrange's readable minimum size.
+
 ## `dark.qss` status
 
 `themes/dark.qss` is **retired and physically deleted**. The 2026-09-14 operator-accepted retirement removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the narrow Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using ThemeSpec context-menu roles, and the color-picker wrapper owns its residual subsettings chrome. No legacy palette was copied into a replacement monolith.

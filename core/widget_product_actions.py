@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from core.steam.links import SteamLinkTarget
+from rendering.custom_layout_contract import normalize_screen_signature, saved_screen_signature_aliases
 
 _CLOCK_WIDGET_IDS = frozenset({"clock", "clock2", "clock3"})
 _CLOCK_DISPLAY_MODES = frozenset({"analog", "digital"})
@@ -30,7 +31,7 @@ def update_clock_display_mode_override(
     """
 
     normalized_widget_id = str(widget_id or "")
-    identity = str(display_identity or "").strip()
+    identity = normalize_screen_signature(str(display_identity or "").strip())
     mode = str(normalized_mode or "").strip().lower()
     if normalized_widget_id not in _CLOCK_WIDGET_IDS:
         raise ValueError(f"unsupported Clock widget id: {normalized_widget_id!r}")
@@ -48,9 +49,13 @@ def update_clock_display_mode_override(
         if isinstance(overrides_value, Mapping)
         else {}
     )
-    if overrides.get(identity) == mode:
+    aliases = saved_screen_signature_aliases((identity,), overrides)
+    old_keys = [key for key in aliases if key != identity and key in overrides]
+    if overrides.get(identity) == mode and not old_keys:
         return result, False
 
+    for key in old_keys:
+        overrides.pop(key)
     overrides[identity] = mode
     section["display_mode_overrides"] = overrides
     result[normalized_widget_id] = section

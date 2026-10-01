@@ -96,9 +96,9 @@ void main() {
     // outwards. At t=0 the band is collapsed to a thin line; by t=1 it
     // covers the full cell / stripe.
     float w = clamp(t, 0.0, 1.0);
-    float half = 0.5 * w;
-    float left = 0.5 - half;
-    float right = 0.5 + half;
+    float halfWidth = 0.5 * w;
+    float left = 0.5 - halfWidth;
+    float right = 0.5 + halfWidth;
 
     // Soft edges so the band does not appear as a harsh 1px stripe.
     float feather = clamp(u_feather, 0.001, 0.5);

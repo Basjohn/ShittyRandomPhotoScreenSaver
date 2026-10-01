@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (QLabel, QPushButton, QCheckBox, QListWidget,
     QScrollArea, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QSizePolicy, QVBoxLayout, QWidget)
 
@@ -15,6 +15,19 @@ SILENCE_TEXT = (
     "When SRPSS has no image sources, show the simple No Image Sources popup "
     "instead of opening Guided Setup automatically."
 )
+
+
+def font_with_point_delta(widget: QWidget, delta: float, *, minimum_points: float = 1.0) -> QFont:
+    """Adjust a painted label without converting a QSS pixel font into -1 pt."""
+
+    font = widget.font()
+    if font.pixelSize() > 0:
+        pixels_per_point = widget.logicalDpiY() / 72.0
+        font.setPixelSize(max(1, round(minimum_points * pixels_per_point),
+                              round(font.pixelSize() + delta * pixels_per_point)))
+    else:
+        font.setPointSizeF(max(minimum_points, font.pointSizeF() + delta))
+    return font
 
 
 def asset_path(name: str) -> str:

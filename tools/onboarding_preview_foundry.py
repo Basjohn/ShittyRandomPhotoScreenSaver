@@ -1155,6 +1155,7 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int):
     from OpenGL import GL as gl
     from PIL import Image
     from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+    from rendering.quick.bootstrap import QUICK_OPENGL_VERSION, validate_current_opengl_context
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 
     app = QGuiApplication.instance() or QGuiApplication(["onboarding-spectrum"])
@@ -1164,12 +1165,13 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int):
             "Spectrum preview requires the hidden Windows-QPA QOffscreenSurface worker"
         )
     context = QOpenGLContext(); fmt = QSurfaceFormat(); fmt.setRenderableType(QSurfaceFormat.OpenGL)
-    fmt.setProfile(QSurfaceFormat.CoreProfile); fmt.setVersion(4, 1); context.setFormat(fmt)
+    fmt.setProfile(QSurfaceFormat.CoreProfile); fmt.setVersion(*QUICK_OPENGL_VERSION); context.setFormat(fmt)
     if not context.create(): raise RuntimeError("offscreen Spectrum GL context unavailable")
     surface = QOffscreenSurface(); surface.setFormat(context.format()); surface.create()
     if not context.makeCurrent(surface): raise RuntimeError("offscreen Spectrum GL admission failed")
     color = depth = fbo = 0; host = QuickVisualizerRenderHost()
     try:
+        validate_current_opengl_context(reason="onboarding-spectrum", context=context)
         color = int(gl.glGenTextures(1)); gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
         depth = int(gl.glGenRenderbuffers(1)); gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, depth)

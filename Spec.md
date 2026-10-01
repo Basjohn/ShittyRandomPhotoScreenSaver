@@ -347,6 +347,13 @@ Settings-window theme/shadow ownership is separate from runtime overlay-widget s
 
 ## Geometry / CUSTOM
 
+Runtime display identity, CUSTOM and Clock face overrides share `rendering/custom_layout_contract.py`.
+Serial-backed keys use serial/model/name; Qt's manufacturer label is metadata and cannot move a saved layout.
+Old manufacturer/geometry-qualified keys are accepted at the input boundary, with independent widget/face variants
+merged and canonical/current-label entries winning conflicts. Explicit layout saves migrate them to one canonical
+bucket without changing the geometry. Serial-less keys retain exact monitor facts and geometry; there is no
+monitor-index or approximate-geometry replay.
+
 Non-CUSTOM stacking first attempts full authored sizes, then bounded whole-card
 shrink/re-stack trials down to the shared 40% whole-card floor only when placement remains unresolved.
 The bounded search samples 5% bands and refines the first fitting band in 1% steps;

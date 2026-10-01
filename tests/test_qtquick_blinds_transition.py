@@ -162,7 +162,7 @@ def test_blinds_reuses_the_authored_shader_without_simplifying_its_visual_stack(
     assert "if (u_direction == 2)" in source
     assert "fract(diag * bands)" in source
     assert "vec2 uvLocal" in source
-    assert "float half = 0.5 * w" in source
+    assert "float halfWidth = 0.5 * w" in source
     assert "smoothstep(left - feather, left, coord)" in source
     assert "smoothstep(0.96, 1.0, t)" in source
     assert "FragColor = mix(oldColor, newColor, mixFactor);" in source
@@ -183,3 +183,35 @@ def test_quick_blinds_renderer_compiles_the_existing_authored_fragment_source():
     assert 'uniforms["u_grid"]' in renderer_source
     assert 'uniforms["u_feather"]' in renderer_source
     assert 'uniforms["u_direction"]' in renderer_source
+
+
+def test_authored_band_shaders_compile_in_the_real_opengl_46_context():
+    report = _probe('''
+import json
+from rendering.quick.bootstrap import configure_quick_graphics
+configure_quick_graphics(reason="band-shader-regression")
+from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+from OpenGL import GL as gl
+from rendering.quick.render.gl_resources import compile_program
+from rendering.gl_programs.blinds_program import blinds_program
+from rendering.gl_programs.blockflip_program import blockflip_program
+app = QGuiApplication([])
+context = QOpenGLContext()
+context.setFormat(QSurfaceFormat.defaultFormat())
+assert context.create()
+surface = QOffscreenSurface()
+surface.setFormat(context.format())
+surface.create()
+assert context.makeCurrent(surface)
+compiled = []
+try:
+    for shader in (blinds_program, blockflip_program):
+        program = compile_program(shader.vertex_source, shader.fragment_source, label=shader.name)
+        assert gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+        gl.glDeleteProgram(program)
+        compiled.append(shader.name)
+finally:
+    context.doneCurrent()
+print(json.dumps({"compiled": compiled}))
+''')
+    assert report == {"compiled": ["Blinds", "BlockFlip"]}

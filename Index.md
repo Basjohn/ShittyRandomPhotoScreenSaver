@@ -53,6 +53,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
+| stable display identity, saved CUSTOM replay and Clock face overrides | `Spec.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |

@@ -27,6 +27,19 @@ The current agent/container may lack PySide6/OpenGL. In that environment, a coll
 
 ## 1.1 Qt delivery and painted-geometry evidence
 
+`tests/test_qt611_display_identity_migration.py` crosses runtime identity, committed hydration, Clock face selection,
+Arrange and explicit save: changing a manufacturer label must preserve saved geometry, merge independent variants,
+avoid another monitor's data, and retire old keys without repeated migration. `tests/test_qt611_presentation_messages.py`
+parses every canonical QML component and captures warnings during real construction of every ordinary family
+(both Clock faces), exercises onboarding paint
+with pixel and point fonts, and reproduces the native Windows 11 combo font warning in a fresh process before
+proving identical text metrics and zero font warnings with the corrected shared style.
+`tests/test_qtquick_blinds_transition.py` compiles/links the authored band shaders in a real OpenGL context;
+the existing Blinds smoke checks source/midpoint/destination patterns and retirement per direction.
+`tests/test_qt611_shader_admission.py` compiles the registered transition/Visualizer implementations, including
+optional scene3d motion/trail/AA/post variants, proves resource retirement, and renders the actual Spectrum preview
+with the production OpenGL floor. These are bounded admission checks, not aesthetic or long-duration acceptance.
+
 Immutable resource ownership is covered by `tests/test_qt_resource_assets.py` (Qt lookup and lazy Guided Setup
 registration), `tests/test_widget_theme_link_and_asset_contract.py` (immutable resources versus editable themes),
 and the retained widget/About tests. `tests/test_qrc_regeneration.py` protects selected-toolchain regeneration,
