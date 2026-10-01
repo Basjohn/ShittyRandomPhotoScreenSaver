@@ -89,38 +89,27 @@ class QuickPixelAccretionRenderer:
         if trails:
             self._trails.draw(self._target, frame, self._resources,
                               scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
-                              lambda time, fade: self._draw_tiles(frame, time, seed, tile_size, travel, False,
-                                                                  (fade, progress)))
+                              lambda ghosts: self._draw_tile_ghosts(frame, ghosts, seed, tile_size, travel, progress))
         self._resources.begin_depth(frame)
         self._draw_tiles(frame, progress, seed, tile_size, travel, motion)
 
     _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed")
 
-    def _draw_tiles(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool,
-                    ghost: tuple[float, float] | None = None) -> None:
-        """``ghost``: (fade, the moment now) to draw the tiles as a motion-trail ghost."""
+    def _draw_tiles(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool) -> None:
         columns, rows, _actual_size = pixel_accretion_grid(
             frame.viewport[2], frame.viewport[3], tile_size
         )
-        if ghost is not None:
-            program, uniforms = trail_program(self._resources, "microquads", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
-                                              PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
-                                              self._TILE_UNIFORMS + motion_uniform_names())
-        else:
-            program, uniforms = motion_program(
-                self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
-                (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
-                self._TILE_UNIFORMS, motion,
-            )
+        program, uniforms = motion_program(
+            self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
+            (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
+            self._TILE_UNIFORMS, motion,
+        )
         bind_frame(program, uniforms, frame)
         gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
         gl.glUniform2f(uniforms["uDirection"], *direction_vector(frame.run.request.direction))
         gl.glUniform1f(uniforms["uProgress"], progress)
         gl.glUniform1f(uniforms["uTravel"], travel)
         gl.glUniform1f(uniforms["uSeed"], float(seed))
-        if ghost is not None:
-            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
-            set_motion_uniforms(uniforms, frame, ghost[1])
         if motion:
             set_motion_uniforms(uniforms, frame,
                                 max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
@@ -128,6 +117,27 @@ class QuickPixelAccretionRenderer:
         gl.glBindVertexArray(vao)
         with self._target.velocity_writes():
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
+
+    def _draw_tile_ghosts(self, frame, ghosts, seed: int, tile_size: int, travel: float, now: float) -> None:
+        """Bind the micro-tile ghost pass once; only ghost time and fade vary."""
+        columns, rows, _actual_size = pixel_accretion_grid(frame.viewport[2], frame.viewport[3], tile_size)
+        program, uniforms = trail_program(
+            self._resources, "microquads", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
+            PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS + motion_uniform_names(),
+        )
+        bind_frame(program, uniforms, frame)
+        gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
+        gl.glUniform2f(uniforms["uDirection"], *direction_vector(frame.run.request.direction))
+        gl.glUniform1f(uniforms["uTravel"], travel)
+        gl.glUniform1f(uniforms["uSeed"], float(seed))
+        set_motion_uniforms(uniforms, frame, now)
+        vao, count = self._resources.mesh("microquad", PIXEL_ACCRETION_QUAD_VERTICES, (2, 2))
+        gl.glBindVertexArray(vao)
+        with self._target.velocity_writes():
+            for time, fade in ghosts:
+                gl.glUniform1f(uniforms["uProgress"], time)
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
 
     def park(self) -> None:
         """Drop the per-run scene target and trails; the program and mesh stay warm."""

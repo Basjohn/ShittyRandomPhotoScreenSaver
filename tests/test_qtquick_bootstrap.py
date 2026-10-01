@@ -326,7 +326,8 @@ def test_actual_context_validation_logs_capabilities_once_and_revalidates_after_
     assert len(gl.calls) == 8
 
 
-def test_actual_context_validation_rejects_callable_but_unresolved_gl_entry_point():
+@pytest.mark.parametrize("entry_point", bootstrap._REQUIRED_GL_ENTRY_POINTS["direct_state_access"])
+def test_actual_context_validation_rejects_callable_but_unresolved_gl_entry_point(entry_point):
     class _NullEntryPoint:
         def __call__(self):
             return None
@@ -336,7 +337,7 @@ def test_actual_context_validation_rejects_callable_but_unresolved_gl_entry_poin
 
     context = _FakeContext()
     gl = _FakeGl()
-    gl.glCreateBuffers = _NullEntryPoint()
+    setattr(gl, entry_point, _NullEntryPoint())
 
     with pytest.raises(RuntimeError, match="direct_state_access"):
         bootstrap.validate_current_opengl_context(

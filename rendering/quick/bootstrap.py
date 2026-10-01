@@ -23,14 +23,14 @@ QUICK_GLSL_VERSION = (4, 60)
 QUICK_SWAP_INTERVAL = 0
 QUICK_QML_IMPORT_ENV = "QML_IMPORT_PATH"
 
-# These are the foundation primitives planned immediately after the 4.6 floor.
-# They are core in a real 4.6 context; naming them here makes startup rejection
-# and the diagnostic record explicit without adding extension scans or frame-time
-# driver queries.
+# These are the 4.6 foundation primitives used by scene3d consumers or admitted
+# for its next slices. Naming them here makes startup rejection and the diagnostic
+# record explicit without adding extension scans or frame-time driver queries.
 _REQUIRED_GL_ENTRY_POINTS: dict[str, tuple[str, ...]] = {
     "direct_state_access": (
         "glCreateBuffers",
         "glNamedBufferStorage",
+        "glNamedBufferSubData",
         "glCreateTextures",
         "glTextureStorage2D",
     ),

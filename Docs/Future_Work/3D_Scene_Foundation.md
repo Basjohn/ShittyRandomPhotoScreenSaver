@@ -427,5 +427,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1–S11, plus Motion Trails and the 2026-09-29 high-fidelity shared foundation documented above.
-- Remaining/active: Motion Trails CPU cleanup, S12–S20 under the 2026-09-30 operator promotion.
+- Landed: S1–S12, Motion Trails with per-variant invariant setup, and the high-fidelity shared foundation above.
+- Remaining/active: S13–S20 under the 2026-09-30 operator promotion.

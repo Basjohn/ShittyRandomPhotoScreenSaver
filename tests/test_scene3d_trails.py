@@ -9,11 +9,25 @@ import numpy as np
 import pytest
 
 from rendering.gl_programs import scene3d as lib
+from rendering.quick.transitions.implementations import (
+    block_spins,
+    crumble,
+    exploding_tiles,
+    glass_shatter,
+    pixel_accretion,
+)
 from tools.transition_contact_sheet import TransitionCapture
 
 _TRAILED = (("block_spins", "left", "blockspin", 0.45), ("exploding_tiles", "center_out", "exploding_tiles", 0.3),
             ("glass_shatter", "left", "glass_shatter", 0.4), ("crumble", None, "crumble", 0.65),
             ("pixel_accretion", "left", "pixel_accretion", 0.4))
+_TRAIL_MODULES = {
+    "block_spins": (block_spins, 1),
+    "exploding_tiles": (exploding_tiles, 1),
+    "glass_shatter": (glass_shatter, 1),
+    "crumble": (crumble, 2),   # chunks and optional debris are distinct programs.
+    "pixel_accretion": (pixel_accretion, 1),
+}
 
 
 def test_ghosts_trail_the_moment_at_a_fixed_real_time_oldest_and_faintest_first():
@@ -69,5 +83,30 @@ def test_trails_are_light_lines_where_pieces_moved_and_nothing_on_still_ones(qt_
         assert renderer._trails.has_resources
         capture.host.park()
         assert not renderer._trails.has_resources
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("effect,direction,section,progress", _TRAILED)
+def test_each_trail_variant_is_prepared_once_per_pass(qt_app, monkeypatch, effect, direction, section, progress):
+    """The three ghosts change only their time/fade; static state is never rebound per ghost."""
+    capture = TransitionCapture(480, 270)
+    try:
+        run = capture.run(effect, direction=direction, duration_ms=1500,
+                          settings={section: {"motion_trails": "On"}})
+        capture.render(run, progress)  # compile/allocate before observing this one prepared pass.
+        module, expected = _TRAIL_MODULES[effect]
+        actual = module.trail_program
+        calls = 0
+
+        def count(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return actual(*args, **kwargs)
+
+        monkeypatch.setattr(module, "trail_program", count)
+        capture.render(run, progress)
+        assert calls == expected
     finally:
         capture.close()

@@ -114,12 +114,9 @@ class QuickCrumbleRenderer:
     def _draw_scene(self, frame, progress, seed, depth, thickness, debris, before, trails=False) -> None:
         self._resources.draw_image(frame, frame.destination_texture_id)
         if trails:
-            def ghost(time, fade):
-                self._draw_chunks(frame, time, seed, depth, thickness, None, (fade, progress))
-                if debris > 0.0:
-                    self._draw_debris(frame, time, depth, debris, None, (fade, progress))
             self._trails.draw(self._target, frame, self._resources,
-                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms), ghost)
+                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
+                              lambda ghosts: self._draw_ghosts(frame, ghosts, seed, depth, thickness, debris, progress))
         self._resources.begin_depth(frame)
         self._draw_chunks(frame, progress, seed, depth, thickness, before)
         if debris > 0.0:
@@ -188,17 +185,13 @@ class QuickCrumbleRenderer:
     )
     _DEBRIS_UNIFORMS = ("uMatrix", "uItemSize", "uProgress", "uDepth", "uDebris")
 
-    def _draw_chunks(self, frame, progress, seed, depth, thickness, before, ghost=None) -> None:
+    def _draw_chunks(self, frame, progress, seed, depth, thickness, before) -> None:
         # Release order and motion are per-chunk attributes; uSeed only varies
         # the crack stroke timing in the fragment stage.
-        if ghost is not None:   # (fade, the moment now): a motion-trail ghost
-            program, u = trail_program(self._resources, "chunks", CRUMBLE_MOTION_VERTEX, CRUMBLE_GHOST_FRAGMENT,
-                                       self._CHUNK_UNIFORMS + motion_uniform_names())
-        else:
-            program, u = motion_program(
-                self._resources, "chunks", (CRUMBLE_VERTEX, CRUMBLE_FRAGMENT),
-                (CRUMBLE_MOTION_VERTEX, CRUMBLE_MOTION_FRAGMENT), self._CHUNK_UNIFORMS, before is not None,
-            )
+        program, u = motion_program(
+            self._resources, "chunks", (CRUMBLE_VERTEX, CRUMBLE_FRAGMENT),
+            (CRUMBLE_MOTION_VERTEX, CRUMBLE_MOTION_FRAGMENT), self._CHUNK_UNIFORMS, before is not None,
+        )
         bind_frame(program, u, frame)
         for name, value in (
             ("uProgress", progress),
@@ -212,24 +205,17 @@ class QuickCrumbleRenderer:
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._motion_texture)
         gl.glUniform1i(u["uMotion"], 1)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        if ghost is not None:
-            gl.glUniform1f(u["uGhostFade"], ghost[0])
-            set_motion_uniforms(u, frame, ghost[1])
         if before is not None:
             set_motion_uniforms(u, frame, before)
         gl.glBindVertexArray(self._chunk_vao)
         with self._target.velocity_writes():
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._chunk_count)
 
-    def _draw_debris(self, frame, progress, depth, debris, before, ghost=None) -> None:
-        if ghost is not None:   # (fade, the moment now): a motion-trail ghost
-            program, u = trail_program(self._resources, "debris", DEBRIS_MOTION_VERTEX, DEBRIS_GHOST_FRAGMENT,
-                                       self._DEBRIS_UNIFORMS + motion_uniform_names())
-        else:
-            program, u = motion_program(
-                self._resources, "debris", (DEBRIS_VERTEX, DEBRIS_FRAGMENT),
-                (DEBRIS_MOTION_VERTEX, DEBRIS_MOTION_FRAGMENT), self._DEBRIS_UNIFORMS, before is not None,
-            )
+    def _draw_debris(self, frame, progress, depth, debris, before) -> None:
+        program, u = motion_program(
+            self._resources, "debris", (DEBRIS_VERTEX, DEBRIS_FRAGMENT),
+            (DEBRIS_MOTION_VERTEX, DEBRIS_MOTION_FRAGMENT), self._DEBRIS_UNIFORMS, before is not None,
+        )
         bind_frame(program, u, frame)
         for name, value in (
             ("uProgress", progress),
@@ -237,15 +223,59 @@ class QuickCrumbleRenderer:
             ("uDebris", debris),
         ):
             gl.glUniform1f(u[name], value)
-        if ghost is not None:
-            gl.glUniform1f(u["uGhostFade"], ghost[0])
-            set_motion_uniforms(u, frame, ghost[1])
         if before is not None:
             set_motion_uniforms(u, frame, before)
         vao, count = self._resources.mesh("debris_chip", CRUMBLE_CHIP_VERTICES, (3, 3))
         gl.glBindVertexArray(vao)
         with self._target.velocity_writes():
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, self._debris_count)
+
+    def _draw_ghosts(self, frame, ghosts, seed: float, depth: float, thickness: float, debris: float,
+                     now: float) -> None:
+        """Group MAX-blended ghosts by program so each variant's invariant state binds once."""
+        ghosts = tuple(ghosts)
+        self._draw_chunk_ghosts(frame, ghosts, seed, depth, thickness, now)
+        if debris > 0.0:
+            self._draw_debris_ghosts(frame, ghosts, depth, debris, now)
+
+    def _draw_chunk_ghosts(self, frame, ghosts, seed: float, depth: float, thickness: float, now: float) -> None:
+        program, uniforms = trail_program(
+            self._resources, "chunks", CRUMBLE_MOTION_VERTEX, CRUMBLE_GHOST_FRAGMENT,
+            self._CHUNK_UNIFORMS + motion_uniform_names(),
+        )
+        bind_frame(program, uniforms, frame)
+        for name, value in (
+            ("uDepth", depth), ("uThickness", thickness), ("uSeed", seed), ("uMotionFrames", float(MOTION_FRAMES)),
+        ):
+            gl.glUniform1f(uniforms[name], value)
+        gl.glActiveTexture(gl.GL_TEXTURE1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self._motion_texture)
+        gl.glUniform1i(uniforms["uMotion"], 1)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        set_motion_uniforms(uniforms, frame, now)
+        gl.glBindVertexArray(self._chunk_vao)
+        with self._target.velocity_writes():
+            for time, fade in ghosts:
+                gl.glUniform1f(uniforms["uProgress"], time)
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._chunk_count)
+
+    def _draw_debris_ghosts(self, frame, ghosts, depth: float, debris: float, now: float) -> None:
+        program, uniforms = trail_program(
+            self._resources, "debris", DEBRIS_MOTION_VERTEX, DEBRIS_GHOST_FRAGMENT,
+            self._DEBRIS_UNIFORMS + motion_uniform_names(),
+        )
+        bind_frame(program, uniforms, frame)
+        gl.glUniform1f(uniforms["uDepth"], depth)
+        gl.glUniform1f(uniforms["uDebris"], debris)
+        set_motion_uniforms(uniforms, frame, now)
+        vao, count = self._resources.mesh("debris_chip", CRUMBLE_CHIP_VERTICES, (3, 3))
+        gl.glBindVertexArray(vao)
+        with self._target.velocity_writes():
+            for time, fade in ghosts:
+                gl.glUniform1f(uniforms["uProgress"], time)
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, self._debris_count)
 
     def release_resources(self) -> None:
         errors = []

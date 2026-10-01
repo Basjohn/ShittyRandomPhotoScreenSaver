@@ -166,8 +166,7 @@ class QuickBlockSpinsRenderer:
             now = frame.sample.eased_progress
             self._trails.draw(self._target, frame, self._target_resources,
                               scene3d_trail_ghosts(now, frame.run.request.duration_ms),
-                              lambda time, fade: self._draw_slab(frame, time, edge_glass, False, environment,
-                                                                 (fade, now)))
+                              lambda ghosts: self._draw_slab_ghosts(frame, ghosts, edge_glass, environment, now))
 
         gl.glDepthMask(gl.GL_TRUE)
         gl.glClearDepth(1.0)
@@ -177,19 +176,14 @@ class QuickBlockSpinsRenderer:
         self._draw_slab(frame, frame.sample.eased_progress, edge_glass, motion, environment)
 
     def _draw_slab(self, frame: QuickTransitionRenderFrame, progress: float, edge_glass: int, motion: bool,
-                   environment: int, ghost: tuple[float, float] | None = None) -> None:
-        """``ghost``: (fade, the moment now) to draw the slab as a motion-trail ghost."""
+                   environment: int) -> None:
         axis_mode, spin_direction = _block_spin_direction_state(
             frame.run.request.direction
         )
         spin = block_spin_progress(progress)
         uniforms = self._slab_uniforms
         program = self._slab_program
-        if ghost is not None:
-            program, uniforms = trail_program(self._target_resources, "slab", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
-                                              BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
-                                              tuple(self._slab_uniforms) + motion_uniform_names("uAngle"))
-        elif motion:
+        if motion:
             program = self._target_resources.program("slab_motion", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
                                                      BLOCK_SPIN_MOTION_FRAGMENT_SOURCE)
             uniforms = self._target_resources.uniforms("slab_motion", tuple(self._slab_uniforms)
@@ -209,9 +203,6 @@ class QuickBlockSpinsRenderer:
         gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
         gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
         gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
-        if ghost is not None:
-            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
-            set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(ghost[1]) * spin_direction, "uAngle")
         if motion:
             # The slab's angle one shutter ago.
             before = max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0)
@@ -229,6 +220,38 @@ class QuickBlockSpinsRenderer:
         gl.glBindVertexArray(self._box_vao)
         with self._target.velocity_writes():
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
+
+    def _draw_slab_ghosts(self, frame: QuickTransitionRenderFrame, ghosts, edge_glass: int, environment: int,
+                          now: float) -> None:
+        """One ghost pass: static slab state once, then each ghost's angle and fade."""
+        axis_mode, spin_direction = _block_spin_direction_state(frame.run.request.direction)
+        program, uniforms = trail_program(
+            self._target_resources, "slab", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
+            tuple(self._slab_uniforms) + motion_uniform_names("uAngle"),
+        )
+        gl.glUseProgram(program)
+        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
+        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+        gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
+        gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
+        gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
+        set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(now) * spin_direction, "uAngle")
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
+        gl.glUniform1i(uniforms["uOldTexture"], 0)
+        gl.glActiveTexture(gl.GL_TEXTURE1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
+        gl.glUniform1i(uniforms["uNewTexture"], 1)
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glBindVertexArray(self._box_vao)
+        with self._target.velocity_writes():
+            for time, fade in ghosts:
+                gl.glUniform1f(uniforms["uAngle"], math.pi * block_spin_progress(time) * spin_direction)
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
 
     def release_resources(self) -> None:
         errors: list[str] = []
