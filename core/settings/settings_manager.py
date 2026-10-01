@@ -20,7 +20,14 @@ from core.settings.json_store import (
 )
 from core.settings.legacy_setting_aliases import (
     LEGACY_DOTTED_SETTING_ALIASES,
+    RETIRED_SETTING_KEYS,
     is_legacy_setting_alias,
+)
+from core.settings.resample_filter_input_compat import (
+    LEGACY_USE_LANCZOS_KEY,
+    RESAMPLE_FILTER_KEY,
+    migrate_legacy_use_lanczos,
+    normalize_resample_filter,
 )
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.structured_roots import (
@@ -136,6 +143,12 @@ class SettingsManager(QObject):
             self._migrate_legacy_setting_aliases()
         except Exception:
             logger.debug("Legacy settings alias migration failed", exc_info=True)
+
+        try:
+            self._migrate_legacy_resample_filter_before_defaults()
+        except Exception:
+            logger.exception("Legacy resample-filter migration failed; refusing to replace the selected quality")
+            raise
 
         # Upgrade the retired Visualizer enabled-id list *before* current defaults
         # are merged. Otherwise mode_activation defaults would mask the old user
@@ -332,6 +345,8 @@ class SettingsManager(QObject):
             raise KeyError(
                 f"Retired setting key {text!r}; use current key {canonical!r}"
             )
+        if text == LEGACY_USE_LANCZOS_KEY:
+            raise KeyError(f"Retired setting key {text!r}")
         return text
 
     def _migrate_legacy_setting_aliases(self) -> None:
@@ -353,6 +368,31 @@ class SettingsManager(QObject):
 
         if migrated:
             logger.info("Migrated legacy setting aliases: %s", migrated)
+
+    def _migrate_legacy_resample_filter_before_defaults(self) -> None:
+        """Promote the retired display bool before current defaults can mask it."""
+
+        migrated = False
+        with self._lock:
+            if not self._settings.contains(LEGACY_USE_LANCZOS_KEY):
+                return
+            legacy_value = self._settings.value(LEGACY_USE_LANCZOS_KEY)
+            if not self._settings.contains(RESAMPLE_FILTER_KEY):
+                self._settings.setValue(
+                    RESAMPLE_FILTER_KEY,
+                    migrate_legacy_use_lanczos(legacy_value),
+                )
+            self._settings.remove(LEGACY_USE_LANCZOS_KEY)
+            self._settings.sync()
+            self._clear_cache_locked()
+            migrated = True
+
+        if migrated:
+            logger.info(
+                "Migrated retired %s to %s",
+                LEGACY_USE_LANCZOS_KEY,
+                RESAMPLE_FILTER_KEY,
+            )
 
     def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:
         """Preserve old per-mode dormancy before current defaults can mask it.
@@ -894,6 +934,8 @@ class SettingsManager(QObject):
             return self._to_plain_value(value)
 
         try:
+            if dotted == RESAMPLE_FILTER_KEY:
+                return normalize_resample_filter(value, fallback=canonical)
             if isinstance(canonical, bool):
                 return self.to_bool(value, default=canonical)
             if isinstance(canonical, int) and not isinstance(canonical, bool):
@@ -1211,8 +1253,6 @@ class SettingsManager(QObject):
         repairs = {}
         
         with self._lock:
-            from core.settings.legacy_setting_aliases import RETIRED_SETTING_KEYS
-
             for retired_key in sorted(RETIRED_SETTING_KEYS):
                 if self._settings.contains(retired_key):
                     self._settings.remove(retired_key)
@@ -1275,6 +1315,29 @@ class SettingsManager(QObject):
                     require_canonical_default('display.mode', self._application),
                 )
                 repairs['display.mode'] = f"Invalid value: {display_mode!r}"
+
+            # Validate display.resample_filter - one canonical enum controls
+            # foreground and speculative image processing.
+            resample_filter = self._settings.value(RESAMPLE_FILTER_KEY)
+            canonical_resample_filter = require_canonical_default(
+                RESAMPLE_FILTER_KEY,
+                self._application,
+            )
+            normalized_resample_filter = normalize_resample_filter(
+                resample_filter,
+                fallback=canonical_resample_filter,
+            )
+            if resample_filter != normalized_resample_filter:
+                logger.warning(
+                    "Repairing %s: %r -> %r",
+                    RESAMPLE_FILTER_KEY,
+                    resample_filter,
+                    normalized_resample_filter,
+                )
+                self._settings.setValue(RESAMPLE_FILTER_KEY, normalized_resample_filter)
+                repairs[RESAMPLE_FILTER_KEY] = (
+                    f"Invalid value: {resample_filter!r}"
+                )
 
             # Validate display.render_backend_mode - must be valid enum
             backend_mode = self._settings.value('display.render_backend_mode')

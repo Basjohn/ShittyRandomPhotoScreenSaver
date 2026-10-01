@@ -166,7 +166,7 @@ def test_image_pipeline_copies_directly_from_mapping_into_qt_owned_image() -> No
             2,
             1,
             display_mode="fill",
-            use_lanczos=False,
+            resample_filter="smooth",
             sharpen=False,
         )
         assert qimage is not None
@@ -209,7 +209,7 @@ def test_runtime_generation_rejection_reclaims_before_qimage_copy() -> None:
                 2,
                 1,
                 display_mode="fill",
-                use_lanczos=False,
+                resample_filter="smooth",
                 sharpen=False,
             )
         accounting = supervisor.get_shared_memory_accounting_snapshot()

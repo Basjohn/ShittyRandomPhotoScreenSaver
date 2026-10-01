@@ -308,7 +308,7 @@ def _build_scaled_cache_key(
     target_width: int,
     target_height: int,
     display_mode: DisplayMode,
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
     device_pixel_ratio: float = 1.0,
 ) -> str:
@@ -321,7 +321,7 @@ def _build_scaled_cache_key(
     )
     return (
         f"{image_path}|scaled:{mode.value}:{target_width}x{target_height}"
-        f":l{1 if use_lanczos else 0}:s{1 if sharpen else 0}{dpr_suffix}"
+        f":f{resample_filter}:s{1 if sharpen else 0}{dpr_suffix}"
     )
 
 
@@ -368,19 +368,19 @@ def _probe_cache(
     return cached
 
 
-def _get_display_quality_settings(engine: ScreensaverEngine) -> tuple[bool, bool]:
+def _get_display_quality_settings(engine: ScreensaverEngine) -> tuple[str, bool]:
     settings = getattr(engine, "settings_manager", None)
     application = settings.get_application_name() if settings is not None else None
-    canonical_lanczos = bool(
-        require_canonical_default("display.use_lanczos", application)
+    canonical_filter = str(
+        require_canonical_default("display.resample_filter", application)
     )
     canonical_sharpen = bool(
         require_canonical_default("display.sharpen_downscale", application)
     )
     if settings is None:
-        return canonical_lanczos, canonical_sharpen
+        return canonical_filter, canonical_sharpen
     return (
-        settings.get_bool("display.use_lanczos"),
+        settings.get("display.resample_filter"),
         settings.get_bool("display.sharpen_downscale"),
     )
 
@@ -499,7 +499,7 @@ def _build_prefetch_scaled_requests(
     if cache is None or not paths:
         return []
 
-    use_lanczos, sharpen = _get_display_quality_settings(engine)
+    resample_filter, sharpen = _get_display_quality_settings(engine)
     requests: List[Dict[str, Any]] = []
     seen_keys: set[str] = set()
     for path, spec in _get_prefetch_request_plan(engine, paths):
@@ -508,7 +508,7 @@ def _build_prefetch_scaled_requests(
             spec["width"],
             spec["height"],
             spec["display_mode"],
-            use_lanczos,
+            resample_filter,
             sharpen,
             spec["device_pixel_ratio"],
         )
@@ -523,7 +523,7 @@ def _build_prefetch_scaled_requests(
                 "width": spec["width"],
                 "height": spec["height"],
                 "display_mode": spec["display_mode"],
-                "use_lanczos": use_lanczos,
+                "resample_filter": resample_filter,
                 "sharpen": sharpen,
             }
         )
@@ -577,7 +577,7 @@ def _build_immediate_prefetch_protected_keys(
     else:
         immediate_plan = plan[: max(1, len(ordered_specs))]
 
-    use_lanczos, sharpen = _get_display_quality_settings(engine)
+    resample_filter, sharpen = _get_display_quality_settings(engine)
     keys: List[str] = []
     seen: set[str] = set()
     for path, spec in immediate_plan:
@@ -586,7 +586,7 @@ def _build_immediate_prefetch_protected_keys(
             spec["width"],
             spec["height"],
             spec["display_mode"],
-            use_lanczos,
+            resample_filter,
             sharpen,
             spec["device_pixel_ratio"],
         )
@@ -656,7 +656,7 @@ def load_image_via_worker(
     target_height: int,
     *,
     display_mode: str,
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
     timeout_ms: int = 500,
 ) -> Optional[QImage]:
@@ -698,7 +698,7 @@ def load_image_via_worker(
         "target_width": target_width,
         "target_height": target_height,
         "mode": display_mode,
-        "use_lanczos": use_lanczos,
+        "resample_filter": resample_filter,
         "sharpen": sharpen,
     }
     try:
@@ -869,6 +869,8 @@ def derive_prefetch_via_worker(
                 "width": int(request["width"]),
                 "height": int(request["height"]),
                 "mode": _normalize_display_mode(request["display_mode"]).value,
+                "resample_filter": request["resample_filter"],
+                "sharpen": request["sharpen"],
             }
             for request in requests
         ]
@@ -1115,7 +1117,7 @@ class _ProcessedDisplayImage:
     width: int
     height: int
     display_mode: DisplayMode
-    use_lanczos: bool
+    resample_filter: str
     sharpen: bool
     path: str
 
@@ -1173,7 +1175,7 @@ def _process_display_image_candidate(
     display: Any,
     display_index: int,
     meta: ImageMetadata,
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
     *,
     perf_trace: "ImageChangePerfTrace | None" = None,
@@ -1201,7 +1203,7 @@ def _process_display_image_candidate(
         width,
         height,
         display_mode,
-        use_lanczos,
+        resample_filter,
         sharpen,
         getattr(display, "device_pixel_ratio", 1.0),
     )
@@ -1241,7 +1243,7 @@ def _process_display_image_candidate(
             worker_qimage = load_image_via_worker(
                 engine, img_path, width, height,
                 display_mode=display_mode_str,
-                use_lanczos=use_lanczos,
+                resample_filter=resample_filter,
                 sharpen=sharpen,
                 timeout_ms=3000,
             )
@@ -1300,7 +1302,7 @@ def _process_display_image_candidate(
         width=width,
         height=height,
         display_mode=display_mode,
-        use_lanczos=bool(use_lanczos),
+        resample_filter=resample_filter,
         sharpen=bool(sharpen),
         path=img_path,
     )
@@ -1310,7 +1312,7 @@ def _process_display_with_replacements(
     display: Any,
     display_index: int,
     initial_meta: ImageMetadata,
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
     *,
     max_replacements: int = _DISPLAY_IMAGE_REPLACEMENT_LIMIT,
@@ -1326,7 +1328,7 @@ def _process_display_with_replacements(
             display,
             display_index,
             candidate,
-            use_lanczos,
+            resample_filter,
             sharpen,
             perf_trace=perf_trace,
         )
@@ -1382,7 +1384,7 @@ def _process_same_image_with_replacements(
     engine: "ScreensaverEngine",
     displays: List[Any],
     initial_meta: ImageMetadata,
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
     *,
     max_replacements: int = _DISPLAY_IMAGE_REPLACEMENT_LIMIT,
@@ -1404,7 +1406,7 @@ def _process_same_image_with_replacements(
                     display,
                     display_index,
                     candidate,
-                    use_lanczos,
+                    resample_filter,
                     sharpen,
                     perf_trace=perf_trace,
                 )
@@ -1446,7 +1448,7 @@ def _process_previous_images_with_exact_reuse(
     engine: "ScreensaverEngine",
     displays: List[Any],
     image_metas: List[ImageMetadata],
-    use_lanczos: bool,
+    resample_filter: str,
     sharpen: bool,
 ) -> Dict[int, _ProcessedDisplayImage | Dict[str, Any]]:
     """Process previous-image targets once per exact source/transform identity."""
@@ -1465,7 +1467,7 @@ def _process_previous_images_with_exact_reuse(
         reuse_key = (
             source_identity,
             _display_processing_reuse_key(display),
-            bool(use_lanczos),
+            resample_filter,
             bool(sharpen),
         )
         result = processed_by_identity.get(reuse_key)
@@ -1475,7 +1477,7 @@ def _process_previous_images_with_exact_reuse(
                 display,
                 display_index,
                 meta,
-                use_lanczos,
+                resample_filter,
                 sharpen,
             )
             if result is not None:
@@ -1594,14 +1596,14 @@ def load_and_display_image_async(
             if not display_list:
                 return None
 
-            use_lanczos, sharpen = _get_display_quality_settings(engine)
+            resample_filter, sharpen = _get_display_quality_settings(engine)
 
             if same_image:
                 processed_images, selected_meta = _process_same_image_with_replacements(
                     engine,
                     display_list,
                     image_metas[0],
-                    use_lanczos,
+                    resample_filter,
                     sharpen,
                     perf_trace=perf_trace,
                 )
@@ -1621,7 +1623,7 @@ def load_and_display_image_async(
                         display,
                         display_index,
                         initial_meta,
-                        use_lanczos,
+                        resample_filter,
                         sharpen,
                         perf_trace=perf_trace,
                     )
@@ -1909,12 +1911,12 @@ def load_and_display_image_async_with_metas(
                 label="previous_image_worker_start",
             ):
                 return None
-            use_lanczos, sharpen = _get_display_quality_settings(engine)
+            resample_filter, sharpen = _get_display_quality_settings(engine)
             processed_images = _process_previous_images_with_exact_reuse(
                 engine,
                 list(processing_targets),
                 image_metas,
-                use_lanczos,
+                resample_filter,
                 sharpen,
             )
             return {"processed": processed_images} if processed_images else None

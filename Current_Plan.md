@@ -25,6 +25,9 @@ Durable ownership is in `Docs/Contracts.md`; probes are routed from `Docs/Refere
 
 - [~] Inspect subsequently supplied ordinary-use logs for repeatable post-transition Visualizer handoff overlap.
   Native copying releases the GIL; a lower copy wall time has not been demonstrated. Continue other work meanwhile.
+- [~] Observe Lanczos/Hamming with sharpening in ordinary use after the processing/lookahead correction. Focused
+  quality, cache, transport and migration bars pass; loaded-desktop transition tails remain an observation, not a gate.
+  Filter ownership and bounded processing measurements live in `Docs/Reference/Image_Quality.md`.
 
 ## 2. Build Runner | Awaiting operator build acceptance, non-blocking
 
@@ -170,10 +173,6 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 - [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules).
   After P0 proves the new worker derivative path, create a lean worker entry if Nuitka multiprocessing proves it can
   save the measured ~100 MB resident without duplicating worker ownership.
-- [ ] **Lanczos/sharpen prefetch admission.** Enabling either currently disables speculative batches, so the user pays
-  foreground decode/scale latency on each new image. Measure representative large sources, then extend the existing
-  worker batch only with exact foreground-quality parity, bounded memory and foreground priority. Preserve selected
-  quality; never relabel a Qt-scaled derivative as Lanczos or introduce a second cache/worker authority.
 - [ ] **`--usage` sampler diagnostics cost.** Re-evaluate on PySide 6.11.2/current tree; if collection still contaminates
   frame evidence, keep it excluded from acceptance or move remaining Python work out of the GIL-held interval.
 - [ ] **Gmail refresh handle slope.** Classify with `--handle-attribution`, then fix at the owning resource.

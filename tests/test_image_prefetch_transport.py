@@ -51,7 +51,7 @@ class _DeliverySupervisor(ProcessSupervisor):
 
 
 def _request(key, width):
-    return {"cache_key": key, "width": width, "height": 1, "display_mode": DisplayMode.FILL}
+    return {"cache_key": key, "width": width, "height": 1, "display_mode": DisplayMode.FILL, "resample_filter": "smooth", "sharpen": False}
 
 
 def _response(supervisor, *, mutate=None):
@@ -61,8 +61,8 @@ def _response(supervisor, *, mutate=None):
         "path": "photo.png", "generation": 7, "decode_count": 1,
         "worker_pid": os.getpid() + 100, "format": "RGBA",
         "derivatives": [
-            {"cache_key": "large", "width": 2, "height": 1, "mode": "fill", "offset": 0, "size": 8},
-            {"cache_key": "small", "width": 1, "height": 1, "mode": "fill", "offset": 8, "size": 4},
+            {"cache_key": "large", "width": 2, "height": 1, "mode": "fill", "resample_filter": "smooth", "sharpen": False, "offset": 0, "size": 8},
+            {"cache_key": "small", "width": 1, "height": 1, "mode": "fill", "resample_filter": "smooth", "sharpen": False, "offset": 8, "size": 4},
         ],
         **descriptor.payload_fields(),
     }
@@ -115,19 +115,19 @@ def test_constructor_uses_canonical_budget_without_retaining_engine():
     cancel()
 
 
-@pytest.mark.parametrize("ahead,lanczos,sharpen,limit,enabled,expected", [
-    (4, False, False, 2, True, [WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH]),
-    (0, False, False, 2, True, [WorkerType.IMAGE]),
-    (4, True, False, 2, True, [WorkerType.IMAGE]),
-    (4, False, True, 2, True, [WorkerType.IMAGE]),
-    (4, False, False, 1, True, [WorkerType.IMAGE]),
-    (4, False, False, 2, False, []),
+@pytest.mark.parametrize("ahead,resample_filter,sharpen,limit,enabled,expected", [
+    (4, "smooth", False, 2, True, [WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH]),
+    (0, "smooth", False, 2, True, [WorkerType.IMAGE]),
+    (4, "lanczos", False, 2, True, [WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH]),
+    (4, "hamming", True, 2, True, [WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH]),
+    (4, "smooth", False, 1, True, [WorkerType.IMAGE]),
+    (4, "smooth", False, 2, False, []),
 ])
-def test_worker_startup_admits_speculation_only_for_selected_quality_and_budget(ahead, lanczos, sharpen, limit, enabled, expected):
+def test_worker_startup_admits_speculation_only_for_selected_quality_and_budget(ahead, resample_filter, sharpen, limit, enabled, expected):
     from engine.screensaver_engine import ScreensaverEngine
 
     values = {"workers.max_workers": limit, "workers.image.enabled": enabled,
-              "display.use_lanczos": lanczos, "display.sharpen_downscale": sharpen}
+              "display.resample_filter": resample_filter, "display.sharpen_downscale": sharpen}
     started = []
     engine = SimpleNamespace(
         _process_supervisor=SimpleNamespace(start=lambda role: started.append(role) or True),
@@ -170,6 +170,8 @@ def test_async_transport_detaches_all_derivatives_and_finalizes_once():
     lambda payload: payload["derivatives"][1].update(offset=4),
     lambda payload: payload.update(shared_memory_data_size=8),
     lambda payload: payload.update(decode_count=2),
+    lambda payload: payload["derivatives"][0].update(resample_filter="hamming"),
+    lambda payload: payload["derivatives"][0].update(sharpen=True),
 ])
 def test_bad_response_reclaims_shared_memory_and_never_publishes(mutate):
     supervisor = _DeliverySupervisor()
@@ -238,8 +240,8 @@ def test_rounding_source_crosses_spawned_worker_and_real_parent_consumer(tmp_pat
         completed.set()
 
     requests = [
-        {"cache_key": "wide", "width": 16, "height": 9, "display_mode": DisplayMode.FILL},
-        {"cache_key": "tall", "width": 9, "height": 16, "display_mode": DisplayMode.FILL},
+        {"cache_key": "wide", "width": 16, "height": 9, "display_mode": DisplayMode.FILL, "resample_filter": "smooth", "sharpen": False},
+        {"cache_key": "tall", "width": 9, "height": 16, "display_mode": DisplayMode.FILL, "resample_filter": "smooth", "sharpen": False},
     ]
     try:
         assert supervisor.start(WorkerType.IMAGE_PREFETCH)

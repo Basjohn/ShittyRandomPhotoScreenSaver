@@ -65,7 +65,7 @@ def test_in_process_processor_returns_opaque_pixels_for_transparent_sources(
     qt_app, mode, source, screen
 ) -> None:
     result = AsyncImageProcessor.process_qimage(
-        _transparent_qimage(*source), QSize(*screen), mode, use_lanczos=False, sharpen=False
+        _transparent_qimage(*source), QSize(*screen), mode, resample_filter="smooth", sharpen=False
     )
     assert result.size() == QSize(*screen)
     _assert_opaque_over_black(_rgba_pixels(result))
@@ -75,7 +75,7 @@ def test_in_process_perfect_fit_leaves_opaque_sources_untouched(qt_app) -> None:
     source = QImage(QSize(64, 48), QImage.Format.Format_RGB32)
     source.fill(QColor(12, 34, 56))
     result = AsyncImageProcessor.process_qimage(
-        source, QSize(64, 48), DisplayMode.FILL, use_lanczos=False, sharpen=False
+        source, QSize(64, 48), DisplayMode.FILL, resample_filter="smooth", sharpen=False
     )
     assert result.cacheKey() == source.cacheKey()
 
@@ -117,7 +117,7 @@ def test_worker_prescale_returns_opaque_pixels_for_transparent_sources(
                 "target_width": target[0],
                 "target_height": target[1],
                 "mode": mode,
-                "use_lanczos": False,
+                "resample_filter": "smooth",
                 "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
@@ -131,7 +131,7 @@ def test_worker_prescale_returns_opaque_pixels_for_transparent_sources(
 def test_processed_route_captures_opaque_presentation_pixels(qt_app) -> None:
     processed = AsyncImageProcessor.process_qimage(
         _transparent_qimage(64, 48), QSize(64, 48), DisplayMode.FILL,
-        use_lanczos=False, sharpen=False,
+        resample_filter="smooth", sharpen=False,
     )
     presentation = presentation_image_from_processed_qimage(processed, image_path="t.png")
     _assert_opaque_over_black(presentation.rgba8)

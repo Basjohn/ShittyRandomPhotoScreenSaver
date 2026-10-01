@@ -63,7 +63,7 @@ def _processing_targets(*displays) -> tuple[DisplayProcessingDescriptor, ...]:
 
 def _prefetch_settings(**overrides):
     values = {
-        "display.use_lanczos": True,
+        "display.resample_filter": "lanczos",
         "display.sharpen_downscale": False,
         "display.same_image_all_monitors": False,
     }
@@ -71,6 +71,7 @@ def _prefetch_settings(**overrides):
     return SimpleNamespace(
         get_application_name=lambda: "Screensaver",
         get_bool=lambda key: bool(values[key]),
+        get=lambda key: values[key],
     )
 
 
@@ -96,7 +97,7 @@ def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):
         object(),
         1,
         bad,
-        False,
+        'smooth',
         False,
         max_replacements=2,
     )
@@ -130,7 +131,7 @@ def test_same_image_replacement_stays_atomic_across_displays(monkeypatch):
         engine,
         [object(), object()],
         bad,
-        False,
+        'smooth',
         False,
         max_replacements=1,
     )
@@ -176,7 +177,7 @@ def test_same_image_reuses_identical_transform_processing(monkeypatch):
         engine,
         targets,
         meta,
-        False,
+        'smooth',
         False,
     )
 
@@ -212,7 +213,7 @@ def test_same_image_does_not_reuse_different_dpr_processing(monkeypatch):
         engine,
         targets,
         meta,
-        False,
+        'smooth',
         False,
     )
 
@@ -248,7 +249,7 @@ def test_previous_image_reuses_exact_source_transform_processing(monkeypatch):
         SimpleNamespace(),
         targets,
         [shared, shared],
-        True,
+        'lanczos',
         False,
     )
 
@@ -283,14 +284,14 @@ def test_previous_image_keeps_different_source_or_dpr_processing_separate(monkey
         SimpleNamespace(),
         targets,
         [first, first],
-        False,
+        'smooth',
         False,
     )
     different_sources = _process_previous_images_with_exact_reuse(
         SimpleNamespace(),
         [targets[0], targets[0]],
         [first, second],
-        False,
+        'smooth',
         False,
     )
 
@@ -307,10 +308,10 @@ def test_previous_image_keeps_different_source_or_dpr_processing_separate(monkey
 def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
     path = r"C:\\wall\\same-pixels-different-dpr.jpg"
     key_1x = _build_scaled_cache_key(
-        path, 4, 4, DisplayMode.FILL, False, False, 1.0
+        path, 4, 4, DisplayMode.FILL, 'smooth', False, 1.0
     )
     key_2x = _build_scaled_cache_key(
-        path, 4, 4, DisplayMode.FILL, False, False, 2.0
+        path, 4, 4, DisplayMode.FILL, 'smooth', False, 2.0
     )
     assert key_1x != key_2x
 
@@ -332,7 +333,7 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
             display_mode=DisplayMode.FILL,
             device_pixel_ratio=1.0,
         ),
-        0, meta, False, False,
+        0, meta, 'smooth', False,
     )
     second = _process_display_image_candidate(
         engine,
@@ -341,7 +342,7 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
             display_mode=DisplayMode.FILL,
             device_pixel_ratio=2.0,
         ),
-        1, meta, False, False,
+        1, meta, 'smooth', False,
     )
 
     assert first is not None and second is not None
@@ -358,6 +359,14 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
     assert store == {}
 
 
+def test_scaled_cache_separates_every_filter_and_sharpen_choice():
+    keys = {
+        _build_scaled_cache_key("photo.png", 1920, 1080, DisplayMode.FILL, name, sharpen)
+        for name in ("smooth", "hamming", "lanczos") for sharpen in (False, True)
+    }
+    assert len(keys) == 6
+
+
 def test_exact_scaled_hit_is_consumed_without_probing_raw_or_rewriting_cache():
     path = r"C:\wall\display-ready.jpg"
     scaled_key = _build_scaled_cache_key(
@@ -365,7 +374,7 @@ def test_exact_scaled_hit_is_consumed_without_probing_raw_or_rewriting_cache():
         4,
         4,
         DisplayMode.FILL,
-        False,
+        'smooth',
         False,
         1.0,
     )
@@ -397,7 +406,7 @@ def test_exact_scaled_hit_is_consumed_without_probing_raw_or_rewriting_cache():
         display,
         0,
         SimpleNamespace(local_path=path, url=None),
-        False,
+        'smooth',
         False,
     )
 
@@ -452,7 +461,7 @@ def test_worker_success_caches_neither_raw_nor_its_consumed_result(
         display,
         0,
         SimpleNamespace(local_path=str(path), url=None),
-        False,
+        'smooth',
         False,
     )
 
@@ -508,7 +517,7 @@ def test_worker_failure_is_classified_and_never_runs_parent_fallback(
             display,
             0,
             SimpleNamespace(local_path=str(path), url=None),
-            False,
+            'smooth',
             False,
         )
 
@@ -549,7 +558,7 @@ def test_worker_candidate_rejection_remains_retryable_without_parent_fallback(
         display,
         0,
         SimpleNamespace(local_path=str(path), url=None),
-        False,
+        'smooth',
         False,
     ) is None
     assert engine._cache_runtime_stats["worker_requests"] == 1
@@ -617,6 +626,7 @@ def test_normal_async_worker_authority_failure_does_not_advance_retry_queue(monk
         display_manager=display_manager,
         settings_manager=SimpleNamespace(
             get_bool=lambda key: True if key == "display.same_image_all_monitors" else False,
+            get=lambda key: "smooth",
             get_application_name=lambda: "Screensaver",
         ),
         image_queue=SimpleNamespace(next=lambda: queue_calls.append(True)),
@@ -790,8 +800,8 @@ def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests()
     assert {
         req["cache_key"] for req in fake_prefetcher.requests
     } == {
-        _build_scaled_cache_key(path_a, 3840, 2160, DisplayMode.FIT, True, False),
-        _build_scaled_cache_key(path_b, 3840, 2160, DisplayMode.FIT, True, False),
+        _build_scaled_cache_key(path_a, 3840, 2160, DisplayMode.FIT, 'lanczos', False),
+        _build_scaled_cache_key(path_b, 3840, 2160, DisplayMode.FIT, 'lanczos', False),
     }
     assert engine._cache_runtime_stats["scaled_prefetch_requests"] == 2
 
@@ -813,7 +823,7 @@ def test_schedule_prefetch_does_not_decode_raw_for_display_ready_preview():
         3840,
         2160,
         DisplayMode.FILL,
-        True,
+        'lanczos',
         False,
     )
 
@@ -878,7 +888,7 @@ def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
             1920,
             1080,
             DisplayMode.FIT,
-            True,
+            'lanczos',
             False,
         )
         for path in paths
@@ -981,10 +991,10 @@ def test_schedule_prefetch_different_images_aligns_requests_to_display_order():
     assert fake_prefetcher.requests is not None
     assert len(fake_prefetcher.requests) == 4
     assert [request["cache_key"] for request in fake_prefetcher.requests] == [
-        _build_scaled_cache_key(paths[0], 1920, 1080, DisplayMode.FILL, True, False),
-        _build_scaled_cache_key(paths[1], 1280, 720, DisplayMode.FIT, True, False),
-        _build_scaled_cache_key(paths[2], 1920, 1080, DisplayMode.FILL, True, False),
-        _build_scaled_cache_key(paths[3], 1280, 720, DisplayMode.FIT, True, False),
+        _build_scaled_cache_key(paths[0], 1920, 1080, DisplayMode.FILL, 'lanczos', False),
+        _build_scaled_cache_key(paths[1], 1280, 720, DisplayMode.FIT, 'lanczos', False),
+        _build_scaled_cache_key(paths[2], 1920, 1080, DisplayMode.FILL, 'lanczos', False),
+        _build_scaled_cache_key(paths[3], 1280, 720, DisplayMode.FIT, 'lanczos', False),
     ]
     assert engine._cache_runtime_stats["scaled_prefetch_requests"] == 4
 
@@ -1039,10 +1049,10 @@ def test_schedule_prefetch_same_image_prioritizes_first_preview_for_all_display_
 
     assert fake_prefetcher.requests is not None
     assert [request["cache_key"] for request in fake_prefetcher.requests] == [
-        _build_scaled_cache_key(paths[0], 1920, 1080, DisplayMode.FILL, True, False),
-        _build_scaled_cache_key(paths[0], 1280, 720, DisplayMode.FIT, True, False),
-        _build_scaled_cache_key(paths[1], 1920, 1080, DisplayMode.FILL, True, False),
-        _build_scaled_cache_key(paths[2], 1920, 1080, DisplayMode.FILL, True, False),
+        _build_scaled_cache_key(paths[0], 1920, 1080, DisplayMode.FILL, 'lanczos', False),
+        _build_scaled_cache_key(paths[0], 1280, 720, DisplayMode.FIT, 'lanczos', False),
+        _build_scaled_cache_key(paths[1], 1920, 1080, DisplayMode.FILL, 'lanczos', False),
+        _build_scaled_cache_key(paths[2], 1920, 1080, DisplayMode.FILL, 'lanczos', False),
     ]
     assert engine._cache_runtime_stats["scaled_prefetch_requests"] == 4
 

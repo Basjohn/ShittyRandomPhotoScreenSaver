@@ -37,15 +37,13 @@ class TestDisplayTab:
         display_tab.settings_manager.set('display.mode', 'fill')
         display_tab.settings_manager.set('timing.interval', 10)
         display_tab.settings_manager.set('queue.shuffle', True)
-        display_tab.settings_manager.set('display.use_lanczos', True)
+        display_tab.settings_manager.set('display.resample_filter', 'hamming')
         display_tab.settings_manager.set('display.sharpen_downscale', False)
         
         # Create new tab instance - should load these settings
         new_tab = DisplayTab(display_tab.settings_manager)
         
-        # Verify settings were loaded (indirectly by checking UI state)
-        # The UI elements should reflect the loaded settings
-        assert new_tab is not None
+        assert new_tab.resample_filter_combo.currentData() == 'hamming'
         
         new_tab.deleteLater()
     
@@ -96,17 +94,18 @@ class TestDisplayTab:
         # Should handle string 'true' correctly
         assert value in [True, 'true']
     
-    def test_display_tab_lanczos_setting(self, qt_app, display_tab):
-        """Test Lanczos quality setting (new feature)."""
-        # Test enabling Lanczos
-        display_tab.settings_manager.set('display.use_lanczos', True)
-        value = display_tab.settings_manager.get('display.use_lanczos', False)
-        assert value in (True, 'true')
-        
-        # Test disabling Lanczos
-        display_tab.settings_manager.set('display.use_lanczos', False)
-        value = display_tab.settings_manager.get('display.use_lanczos', True)
-        assert value in (False, 'false')
+    @pytest.mark.parametrize('resample_filter', ('smooth', 'hamming', 'lanczos'))
+    def test_display_tab_resample_filter_loads_and_saves(
+        self, qt_app, display_tab, resample_filter,
+    ):
+        """The combo persists canonical data rather than presentation text."""
+        display_tab.settings_manager.set('display.resample_filter', resample_filter)
+        display_tab._load_settings()
+
+        assert display_tab.resample_filter_combo.currentData() == resample_filter
+
+        display_tab._save_settings()
+        assert display_tab.settings_manager.get('display.resample_filter') == resample_filter
     
     def test_display_tab_sharpen_setting(self, qt_app, display_tab):
         """Test sharpen filter setting (new feature)."""
@@ -143,7 +142,7 @@ class TestDisplayTab:
             'display.mode': 'fit',
             'timing.interval': 15,
             'queue.shuffle': True,
-            'display.use_lanczos': True,
+            'display.resample_filter': 'lanczos',
             'display.sharpen_downscale': True
         }
         

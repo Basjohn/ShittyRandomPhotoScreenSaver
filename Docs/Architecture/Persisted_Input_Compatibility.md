@@ -38,6 +38,10 @@ without the safe path below.
   merge independent face/widget entries and migrate keys on explicit saves. Runtime and Settings Arrange use the
   same matching/merge rule. *Blocked:* treating the changed label as a new monitor, discarding old geometry, or
   guessing a match by monitor index. Serial-less keys still require exact identity/geometry facts.
+- **Wallpaper resampling choice** (`core/settings/resample_filter_input_compat.py`). Profile/SST input promotes the
+  retired `display.use_lanczos` boolean to `display.resample_filter` before defaults merge, then removes the old leaf.
+  Explicit current choices win. Runtime/UI/export use only the enum. *Blocked:* default-merging first and losing an
+  authored Lanczos selection, or keeping the old checkbox as a second quality authority.
 - **QSettings → JSON profile** (`core/settings/settings_manager.py`:
   `_run_initial_migration` / `_migrate_from_qsettings`). Fires whenever
   `settings_v2.json` is absent, including after Reset.

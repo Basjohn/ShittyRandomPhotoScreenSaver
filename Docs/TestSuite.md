@@ -357,7 +357,14 @@ Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms
 
 `test_image_prefetcher.py` protects bounded source batching, cooldown, cancellation and stale-cache fencing.
 `test_image_prefetch_transport.py` crosses the production construction/packed-response seam, including a spawned worker's near-aspect FILL request, detached QImage lifetime and malformed/cancelled shared-memory retirement. Manifest rejection retains expected/actual geometry and complete spaced paths in console diagnostics.
-`test_image_worker_prefetch_batch.py` spawns a QImage-only worker, proves Qt byte parity for opaque/transparent FILL/FIT/SHRINK inputs, and rejects repeated source decodes and over-budget batches.
+`test_image_worker_prefetch_batch.py` spawns the image worker, proves Qt byte parity for ordinary Smooth and exact
+foreground/batch parity for all three filters with/without sharpening, and rejects repeated source decodes,
+mixed-quality inputs and over-budget batches. Transport fixtures reject mismatched filter/sharpen manifests as well
+as geometry, and pipeline fixtures isolate all six quality cache identities.
+`test_image_quality.py` guards bounded visible-region FILL work, sharpening halo, severe-reduction detail and opaque
+source ownership; `test_resample_filter_settings.py` and `test_display_tab.py` preserve old Lanczos selections and
+round-trip the new enum without retaining a second setting. The mechanism and measured scope are in
+`Docs/Reference/Image_Quality.md`.
 `test_async_image_processor_current.py` checks exact FILL coverage at near-matching source/target aspect ratios, with no black edge padding for RGB or RGBA, and pixel-exact odd-width Qt/Pillow row-stride conversion.
 `test_frame_trace.py` protects explicit parent-handoff attribution and interval-overlap counting; these automated bars do not close two-display performance acceptance.
 

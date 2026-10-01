@@ -16,6 +16,7 @@ LEGACY_DOTTED_SETTING_ALIASES = {
 # registered but never started (wallpaper feeds run in-process on the shared
 # feed core), and no FFT worker ever existed.
 RETIRED_SETTING_KEYS = frozenset({
+    "display.use_lanczos",
     "workers.rss.enabled",
     "workers.fft.enabled",
 })

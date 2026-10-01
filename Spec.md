@@ -46,6 +46,9 @@ and validate the same floor.
 Wallpaper lookahead uses bounded source batches in the supervised speculative image worker. The parent caches only
 display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.
 The construction, generation and shared-memory ownership contract lives in `Docs/Contracts.md` → Wallpaper image cache and prefetch.
+Display quality uses the canonical `display.resample_filter` choice (Smooth, Hamming or Lanczos) with independent
+downscale sharpening. Every choice supports bounded lookahead with foreground-identical pixels. Processing,
+one-way migration and quality/cost measurements live in `Docs/Reference/Image_Quality.md`.
 
 ## Build control and products
 
