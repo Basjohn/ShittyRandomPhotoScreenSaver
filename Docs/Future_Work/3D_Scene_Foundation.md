@@ -308,17 +308,19 @@ Migrate the existing context-local owners in three reviewable slices. Allocation
 steady-frame speedup: identify removed calls and measure the actual consumer before claiming a performance gain.
 
 #### S13a — Shared static meshes and source/destination texture binding
-- [ ] In `scene3d/resources.py`, allocate static mesh VAOs/VBOs with named DSA setup and immutable buffer storage.
+- [x] In `scene3d/resources.py`, allocate static mesh VAOs/VBOs with named DSA setup and immutable buffer storage.
   The existing mesh record retains handle ownership, partial-failure cleanup and retry; introduce no parallel pool.
-- [ ] Replace repeated source/destination texture-unit selection and binds with one multi-bind operation. Assign
+- [x] Replace repeated source/destination texture-unit selection and binds with one multi-bind operation. Assign
   sampler units once per linked program through its existing program/uniform cache; texture IDs still bind every draw.
   No texture-state cache may assume Qt left a binding intact. Zero texture IDs must preserve inherited target semantics.
-- [ ] Admit every newly called GL entry point through the current-context bootstrap gate. No import-time probing,
+- [x] Admit every newly called GL entry point through the current-context bootstrap gate. No import-time probing,
   extension fallback or repeated capability query in render frames.
-- [ ] Prove real mesh pixels, unchanged generic VAO/array-buffer bindings during construction, immutable storage,
+- [x] Prove real mesh pixels, unchanged generic VAO/array-buffer bindings during construction, immutable storage,
   exact sampler routing and untouched active/unrelated texture units. Retain allocation-failure/release-retry tests.
-- [ ] Compare all five affected 3D transitions before/after, warm first frames, parked resources and outer state fence.
+- [x] Compare all five affected 3D transitions before/after, warm first frames, parked resources and outer state fence.
   Measure warm submission calls and time separately from one-time mesh construction.
+
+Durable contracts and the measured submission scope: `Docs/Reference/Scene3D_Resources.md`.
 
 #### S13b — PhotoEnvironment texture and framebuffer construction
 - [ ] In `scene3d/environment.py`, allocate the known-size environment texture with immutable storage for its complete

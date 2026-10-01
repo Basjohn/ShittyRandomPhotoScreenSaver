@@ -7,7 +7,6 @@ every handle stays with its context-local renderer.
 from __future__ import annotations
 
 from array import array
-import ctypes
 
 from OpenGL import GL as gl
 
@@ -49,7 +48,7 @@ void main() { FragColor = texture(uImage, vUv); }
 
 
 def pack_floats(values) -> bytes:
-    """Pack floats as C ``float`` bytes, ready for ``glBufferData``.
+    """Pack floats as C ``float`` bytes, ready for immutable mesh storage.
 
     Byte-identical to ``(ctypes.c_float * n)(*values)`` at roughly a third of the
     cost (Glass default: 153k floats, 14 ms -> 4 ms on the render thread), and it
@@ -63,6 +62,13 @@ def pack_floats(values) -> bytes:
 
 # (key, vertex, fragment) of the image underlay ``draw_image`` uses (for a gradual warm-up).
 UNDERLAY_PROGRAM = ("underlay", ITEM_QUAD_VERTEX_SOURCE, _IMAGE_FRAGMENT)
+
+
+def _create_one(create) -> int:
+    """Call PyOpenGL's output-array DSA creation wrappers for one object."""
+    names = (gl.GLuint * 1)()
+    create(1, names)
+    return int(names[0])
 
 
 def warm_programs(entries) -> bool:
@@ -79,20 +85,48 @@ def warm_programs(entries) -> bool:
     return True
 
 
-def bind_frame(program: int, uniforms: dict[str, int], frame: SceneFrame) -> None:
+class _UniformLocations(dict[str, int]):
+    """One linked program's locations and its one-time image-sampler setup.
+
+    Instances live only in ``MeshResources._uniforms`` alongside the owning
+    program.  Releasing programs drops the mapping too, so a reused GL name
+    can never inherit sampler setup from an earlier program generation.
+    """
+
+    def __init__(
+        self,
+        locations: dict[str, int],
+        image_samplers: tuple[tuple[int, int, str], ...],
+    ) -> None:
+        super().__init__(locations)
+        self.image_samplers = image_samplers
+        self.image_sampler_units_initialized = False
+
+
+def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame) -> None:
     """Use the program with the frame's matrix and item size; a transition frame's
-    source/destination textures bind to units 0/1 when the program declares them."""
+    source/destination textures bind to units 0/1 when the program declares them.
+
+    ``QuickTransitionRenderFrame`` guarantees both image names are live.  Bind
+    only the units the program declares: unlike ``glBindTexture``, a zero name
+    given to ``glBindTextures`` unbinds every texture target on that unit.
+    """
     gl.glUseProgram(program)
     gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
     gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-    for unit, name, attribute in (
-        (0, "uOldTex", "source_texture_id"),
-        (1, "uNewTex", "destination_texture_id"),
-    ):
-        if name in uniforms:
-            gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, getattr(frame, attribute))
-            gl.glUniform1i(uniforms[name], unit)
+    samplers = uniforms.image_samplers
+    if not samplers:
+        return
+    gl.glBindTextures(
+        samplers[0][0],
+        len(samplers),
+        tuple(getattr(frame, attribute) for _unit, _location, attribute in samplers),
+    )
+    if not uniforms.image_sampler_units_initialized:
+        for unit, location, _attribute in samplers:
+            if location >= 0:
+                gl.glProgramUniform1i(program, location, unit)
+        uniforms.image_sampler_units_initialized = True
 
 
 class MeshResources:
@@ -101,7 +135,7 @@ class MeshResources:
     def __init__(self, label: str) -> None:
         self.label = label
         self._programs: dict[str, int] = {}
-        self._uniforms: dict[str, dict[str, int]] = {}
+        self._uniforms: dict[str, _UniformLocations] = {}
         self._meshes: dict[str, tuple[int, int, int]] = {}
 
     @property
@@ -116,7 +150,7 @@ class MeshResources:
     def has_program(self, key: str) -> bool:
         return key in self._programs
 
-    def uniforms(self, key: str, names: tuple[str, ...], *, required: bool = True) -> dict[str, int]:
+    def uniforms(self, key: str, names: tuple[str, ...], *, required: bool = True) -> _UniformLocations:
         """Uniform locations, looked up once. A missing uniform is an error unless the program is
         a variant whose driver may drop what its output no longer reads (``required=False``:
         location -1, which ``glUniform*`` ignores)."""
@@ -125,7 +159,17 @@ class MeshResources:
             missing = [name for name, location in locations.items() if location < 0]
             if missing and required:
                 raise RuntimeError(f"{self.label} {key} missing uniforms: {', '.join(missing)}")
-            self._uniforms[key] = locations
+            image_samplers = tuple(
+                (unit, locations[name], attribute)
+                for unit, name, attribute in (
+                    (0, "uOldTex", "source_texture_id"),
+                    (1, "uNewTex", "destination_texture_id"),
+                )
+                if name in locations
+            )
+            if image_samplers and image_samplers[-1][0] - image_samplers[0][0] + 1 != len(image_samplers):
+                raise RuntimeError(f"{self.label} {key} image samplers must occupy contiguous texture units")
+            self._uniforms[key] = _UniformLocations(locations, image_samplers)
         return self._uniforms[key]
 
     def mesh(
@@ -135,31 +179,36 @@ class MeshResources:
         attributes: tuple[int, ...],
     ) -> tuple[int, int]:
         """Upload interleaved float vertices once; *vertices* may be packed C-float bytes."""
-        if key not in self._meshes:
-            stride = sum(attributes)
-            packed_bytes = isinstance(vertices, (bytes, bytearray))
-            if packed_bytes and len(vertices) % 4:
-                raise ValueError("packed mesh bytes must hold whole 32-bit floats")
-            float_count = len(vertices) // 4 if packed_bytes else len(vertices)
-            if not stride or float_count % stride:
-                raise ValueError("interleaved mesh must contain complete vertices")
-            vao = int(gl.glGenVertexArrays(1))
-            self._meshes[key] = (vao, 0, 0)
-            vbo = int(gl.glGenBuffers(1))
-            self._meshes[key] = (vao, vbo, 0)
-            if not vao or not vbo:
-                raise RuntimeError(f"{self.label} mesh allocation failed")
-            data = bytes(vertices) if packed_bytes else pack_floats(vertices)
-            gl.glBindVertexArray(vao)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
-            gl.glBufferData(gl.GL_ARRAY_BUFFER, len(data), data, gl.GL_STATIC_DRAW)
-            offset = 0
-            for index, size in enumerate(attributes):
-                gl.glEnableVertexAttribArray(index)
-                gl.glVertexAttribPointer(index, size, gl.GL_FLOAT, gl.GL_FALSE, stride * 4, ctypes.c_void_p(offset * 4))
-                offset += size
-            self._meshes[key] = (vao, vbo, float_count // stride)
-        vao, _vbo, count = self._meshes[key]
+        held = self._meshes.get(key)
+        if held is not None:
+            vao, _vbo, count = held
+            if count < 0:
+                raise RuntimeError(f"{self.label} mesh {key} allocation is incomplete; release before retrying")
+            return vao, count
+        stride = sum(attributes)
+        packed_bytes = isinstance(vertices, (bytes, bytearray))
+        if packed_bytes and len(vertices) % 4:
+            raise ValueError("packed mesh bytes must hold whole 32-bit floats")
+        float_count = len(vertices) // 4 if packed_bytes else len(vertices)
+        if not stride or float_count % stride:
+            raise ValueError("interleaved mesh must contain complete vertices")
+        vao = _create_one(gl.glCreateVertexArrays)
+        self._meshes[key] = (vao, 0, -1)
+        vbo = _create_one(gl.glCreateBuffers)
+        self._meshes[key] = (vao, vbo, -1)
+        if not vao or not vbo:
+            raise RuntimeError(f"{self.label} mesh allocation failed")
+        data = bytes(vertices) if packed_bytes else pack_floats(vertices)
+        gl.glNamedBufferStorage(vbo, len(data), data, 0)
+        gl.glVertexArrayVertexBuffer(vao, 0, vbo, 0, stride * 4)
+        offset = 0
+        for index, size in enumerate(attributes):
+            gl.glEnableVertexArrayAttrib(vao, index)
+            gl.glVertexArrayAttribFormat(vao, index, size, gl.GL_FLOAT, gl.GL_FALSE, offset * 4)
+            gl.glVertexArrayAttribBinding(vao, index, 0)
+            offset += size
+        count = float_count // stride
+        self._meshes[key] = (vao, vbo, count)
         return vao, count
 
     def drop_mesh(self, key: str) -> None:
