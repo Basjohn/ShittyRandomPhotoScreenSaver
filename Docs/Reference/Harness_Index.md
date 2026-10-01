@@ -94,6 +94,12 @@ source at twice target size. The baseline measures the retired parent Qt work; p
 supervisor callback, returns two display derivatives from one child decode, checks byte parity/retirement and reports
 parent handoff plus child scale durations. It creates no QGuiApplication or per-request thread.
 
+For a bounded selected-quality replay, use `--prefetch --resample-filter lanczos --sharpen --cycles 2
+--warmup-cycles 1 --source "C:\path\photo.png" --output-dir "C:\path\diagnostic-output"`. Hamming and Smooth
+use the same `--resample-filter` selector. Source files are read-only; omitting `--source` generates a temporary
+fixture. The report records filter/sharpen identity, byte parity and mapping retirement. The parent-baseline lane
+remains Smooth without sharpening, so its Qt timing label cannot silently describe another filter.
+
 Use available two-display `--perf --frame-trace` logs for live P0 evidence; no minimum transition count is required.
 Keep diagnostic flags with the evidence so sampler cost can be interpreted. `python tools\frame_trace_report.py logs\screensaver_frame_trace.bin` reports handoff median/p95 and
 `late_overlapping_handoff` for both Visualizer render and draw intervals; absent handoff evidence is unavailable,

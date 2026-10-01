@@ -716,7 +716,7 @@ class TestWorkerContracts:
                 "target_width": 1920,
                 "target_height": 1080,
                 "mode": "fill",
-                "use_lanczos": False,
+                "resample_filter": "smooth",
                 "sharpen": False,
             },
             worker_type=WorkerType.IMAGE_PREFETCH,

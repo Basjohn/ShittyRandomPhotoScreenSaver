@@ -7,7 +7,7 @@ shared memory for large images.
 
 Key responsibilities:
 - Decode images from disk (JPEG, PNG, WebP, etc.)
-- Prescale to target dimensions using Lanczos
+- Prescale to target dimensions using the resolved resample filter
 - Apply sharpening for downscaled images
 - Return RGBA data for Qt consumption
 """
@@ -33,9 +33,10 @@ from core.process.shared_memory_transport import (
     wait_for_shared_memory_attachment,
 )
 from core.process.workers.base import BaseWorker
+from rendering.image_quality import RESAMPLE_FILTERS, decode_image, process_image
 
 try:
-    from PIL import Image, ImageFilter
+    from PIL import Image
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -53,10 +54,6 @@ class ImageWorker(BaseWorker):
     on the UI thread. Uses shared memory for large images (>5MB)
     to avoid queue serialization overhead.
     """
-    
-    # Quality settings
-    LANCZOS_RESAMPLE = Image.Resampling.LANCZOS if PIL_AVAILABLE else None
-    SHARPEN_THRESHOLD = 0.5  # Apply sharpening when scale < 0.5
     
     # Shared memory threshold: 2MB (lowered from 5MB to catch 2560x1438 images)
     # 2560x1438 RGBA = 14.7MB, so this threshold ensures shared memory is used
@@ -168,7 +165,7 @@ class ImageWorker(BaseWorker):
             target_width = int(msg.payload["target_width"])
             target_height = int(msg.payload["target_height"])
             mode = str(msg.payload["mode"])
-            use_lanczos = msg.payload["use_lanczos"]
+            resample_filter = msg.payload["resample_filter"]
             sharpen = msg.payload["sharpen"]
         except (KeyError, TypeError, ValueError) as exc:
             return WorkerResponse(
@@ -178,13 +175,17 @@ class ImageWorker(BaseWorker):
                 success=False,
                 error=f"Incomplete IMAGE_PRESCALE payload: {exc}",
             )
-        if not isinstance(use_lanczos, bool) or not isinstance(sharpen, bool):
+        if (
+            not isinstance(resample_filter, str)
+            or resample_filter not in RESAMPLE_FILTERS
+            or not isinstance(sharpen, bool)
+        ):
             return WorkerResponse(
                 msg_type=MessageType.ERROR,
                 seq_no=msg.seq_no,
                 correlation_id=msg.correlation_id,
                 success=False,
-                error="IMAGE_PRESCALE quality fields must be resolved booleans",
+                error="IMAGE_PRESCALE requires a resolved resample filter and sharpen boolean",
             )
         if mode not in {"fill", "fit", "shrink"}:
             return WorkerResponse(
@@ -235,8 +236,8 @@ class ImageWorker(BaseWorker):
         
         start = time.time()
         try:
-            rgba_data, width, height, original_size = self._pil_prescale_rgba(
-                path, target_width, target_height, mode, use_lanczos, sharpen
+            rgba_data, width, height, original_size = self._prescale_rgba(
+                path, target_width, target_height, mode, resample_filter, sharpen
             )
             data_size = len(rgba_data)
 
@@ -401,6 +402,8 @@ class ImageWorker(BaseWorker):
             width = derivative.get("width")
             height = derivative.get("height")
             mode = derivative.get("mode")
+            resample_filter = derivative.get("resample_filter")
+            sharpen = derivative.get("sharpen")
             if not isinstance(cache_key, str) or not cache_key:
                 return self._prefetch_batch_error(
                     msg,
@@ -423,6 +426,16 @@ class ImageWorker(BaseWorker):
                     msg,
                     f"IMAGE_PREFETCH_BATCH derivative {index} has unknown mode: {mode!r}",
                 )
+            if (
+                not isinstance(resample_filter, str)
+                or resample_filter not in RESAMPLE_FILTERS
+                or not isinstance(sharpen, bool)
+            ):
+                return self._prefetch_batch_error(
+                    msg,
+                    "IMAGE_PREFETCH_BATCH derivative "
+                    f"{index} requires a resolved resample filter and sharpen boolean",
+                )
             logical_bytes += width * height * 4
             if logical_bytes > self.PREFETCH_BATCH_MAX_LOGICAL_BYTES:
                 return self._prefetch_batch_error(
@@ -435,12 +448,23 @@ class ImageWorker(BaseWorker):
                     "width": width,
                     "height": height,
                     "mode": mode,
+                    "resample_filter": resample_filter,
+                    "sharpen": sharpen,
                 }
+            )
+        quality_signatures = {
+            (derivative["resample_filter"], derivative["sharpen"])
+            for derivative in normalized
+        }
+        if len(quality_signatures) != 1:
+            return self._prefetch_batch_error(
+                msg,
+                "IMAGE_PREFETCH_BATCH derivatives must share one resolved resample filter and sharpen value",
             )
         return path, generation, normalized
 
     def _handle_prefetch_batch(self, msg: WorkerMessage) -> WorkerResponse:
-        """Decode one speculative source once and return its Qt derivatives together."""
+        """Decode one speculative source once and return its resolved derivatives together."""
         validated = self._validated_prefetch_batch(msg)
         if isinstance(validated, WorkerResponse):
             return validated
@@ -457,15 +481,17 @@ class ImageWorker(BaseWorker):
         self._send_busy_notification(msg.correlation_id)
         start = time.time()
         try:
-            from PySide6.QtCore import QSize
-
-            from rendering.display_modes import DisplayMode
-            from rendering.image_processor_async import AsyncImageProcessor
-
             decode_started_ns = time.perf_counter_ns()
-            source = self._decode_qimage(path)
+            quality_batch = (
+                requested_derivatives[0]["resample_filter"] != "smooth"
+                or requested_derivatives[0]["sharpen"]
+            )
+            if quality_batch:
+                source = decode_image(path)
+            else:
+                source = self._decode_qimage(path)
             decode_finished_ns = time.perf_counter_ns()
-            if source.isNull():
+            if not quality_batch and source.isNull():
                 return WorkerResponse(
                     msg_type=MessageType.IMAGE_RESULT,
                     seq_no=msg.seq_no,
@@ -479,14 +505,30 @@ class ImageWorker(BaseWorker):
             response_derivatives: list[dict[str, Any]] = []
             scale_started_ns = time.perf_counter_ns()
             for derivative in requested_derivatives:
-                result = AsyncImageProcessor.process_qimage(
-                    source,
-                    QSize(derivative["width"], derivative["height"]),
-                    DisplayMode.from_string(derivative["mode"]),
-                    use_lanczos=False,
-                    sharpen=False,
-                )
-                rgba_data, width, height = self._packed_rgba8888(result)
+                if quality_batch:
+                    result = process_image(
+                        source,
+                        (derivative["width"], derivative["height"]),
+                        derivative["mode"],
+                        derivative["resample_filter"],
+                        derivative["sharpen"],
+                    )
+                    rgba_data = result.convert("RGBA").tobytes("raw", "RGBA")
+                    width, height = result.size
+                else:
+                    from PySide6.QtCore import QSize
+
+                    from rendering.display_modes import DisplayMode
+                    from rendering.image_processor_async import AsyncImageProcessor
+
+                    result = AsyncImageProcessor.process_qimage(
+                        source,
+                        QSize(derivative["width"], derivative["height"]),
+                        DisplayMode.from_string(derivative["mode"]),
+                        resample_filter="smooth",
+                        sharpen=False,
+                    )
+                    rgba_data, width, height = self._packed_rgba8888(result)
                 offset = len(packed)
                 packed.extend(rgba_data)
                 response_derivatives.append(
@@ -495,6 +537,8 @@ class ImageWorker(BaseWorker):
                         "width": width,
                         "height": height,
                         "mode": derivative["mode"],
+                        "resample_filter": derivative["resample_filter"],
+                        "sharpen": derivative["sharpen"],
                         "offset": offset,
                         "size": len(rgba_data),
                     }
@@ -560,149 +604,46 @@ class ImageWorker(BaseWorker):
             if msg.correlation_id not in self._pending_shared_transfers:
                 self._send_idle_notification(msg.correlation_id)
 
-    def _pil_prescale_rgba(
+    def _prescale_rgba(
         self,
         path: str,
         target_width: int,
         target_height: int,
         mode: str,
-        use_lanczos: bool,
+        resample_filter: str,
         sharpen: bool,
     ) -> Tuple[bytes, int, int, Tuple[int, int]]:
-        """The foreground derivative: PIL decode and scale to opaque RGBA bytes."""
-        img = Image.open(path)
-        img.load()
-        original_size = img.size
+        """Foreground derivative through the matching Qt or Pillow branch."""
+        if resample_filter == "smooth" and not sharpen:
+            from PySide6.QtCore import QSize
 
-        # Wallpaper pixels are opaque (Guardrails): composite any source
-        # transparency over black before scaling, so every display mode
-        # (FILL crops and FIT/SHRINK padding alike) returns opaque RGBA.
-        if img.has_transparency_data:
-            img = Image.alpha_composite(
-                Image.new("RGBA", img.size, (0, 0, 0, 255)),
-                img.convert("RGBA"),
+            from rendering.display_modes import DisplayMode
+            from rendering.image_processor_async import AsyncImageProcessor
+
+            source = self._decode_qimage(path)
+            if source.isNull():
+                raise ValueError(f"Qt could not decode {path}")
+            result = AsyncImageProcessor.process_qimage(
+                source,
+                QSize(target_width, target_height),
+                DisplayMode.from_string(mode),
+                resample_filter="smooth",
+                sharpen=False,
             )
+            rgba_data, width, height = self._packed_rgba8888(result)
+            return rgba_data, width, height, (source.width(), source.height())
 
-        # Convert to RGBA
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
-
-        # Calculate scale based on mode
-        scaled_size = self._calculate_scale_size(
-            original_size, (target_width, target_height), mode
+        source = decode_image(path)
+        original_size = source.size
+        final_image = process_image(
+            source,
+            (target_width, target_height),
+            mode,
+            resample_filter,
+            sharpen,
         )
-
-        # Prescale if needed
-        if scaled_size != original_size:
-            resample = self.LANCZOS_RESAMPLE if use_lanczos else Image.Resampling.BILINEAR
-            img = img.resize(scaled_size, resample)
-
-            # Apply sharpening for aggressive downscaling
-            if sharpen and PIL_AVAILABLE:
-                scale_factor = min(
-                    scaled_size[0] / original_size[0],
-                    scaled_size[1] / original_size[1]
-                )
-                if scale_factor < self.SHARPEN_THRESHOLD:
-                    img = img.filter(ImageFilter.UnsharpMask(
-                        radius=2, percent=150, threshold=3
-                    ))
-                elif scale_factor < 1.0:
-                    img = img.filter(ImageFilter.SHARPEN)
-
-        # Handle mode-specific cropping/padding
-        final_img = self._apply_display_mode(
-            img, (target_width, target_height), mode
-        )
-
-        width, height = final_img.size
-        return final_img.tobytes("raw", "RGBA"), width, height, original_size
-
-    def _calculate_scale_size(
-        self,
-        source: Tuple[int, int],
-        target: Tuple[int, int],
-        mode: str,
-    ) -> Tuple[int, int]:
-        """Calculate scaled size based on display mode."""
-        src_w, src_h = source
-        tgt_w, tgt_h = target
-        
-        if src_w == 0 or src_h == 0:
-            return target
-        
-        src_ratio = src_w / src_h
-        tgt_ratio = tgt_w / tgt_h
-        
-        if mode == "fill":
-            # Scale to cover target completely (crop excess)
-            if src_ratio > tgt_ratio:
-                # Source wider - scale by height
-                new_h = tgt_h
-                new_w = int(new_h * src_ratio)
-            else:
-                # Source taller - scale by width
-                new_w = tgt_w
-                new_h = int(new_w / src_ratio)
-            return (max(new_w, tgt_w), max(new_h, tgt_h))
-        
-        elif mode == "fit":
-            # Scale to fit within target (may have bars)
-            if src_ratio > tgt_ratio:
-                new_w = tgt_w
-                new_h = int(new_w / src_ratio)
-            else:
-                new_h = tgt_h
-                new_w = int(new_h * src_ratio)
-            return (new_w, new_h)
-        
-        elif mode == "shrink":
-            # Only shrink if larger
-            if src_w <= tgt_w and src_h <= tgt_h:
-                return source
-            # Scale down to fit
-            if src_ratio > tgt_ratio:
-                new_w = tgt_w
-                new_h = int(new_w / src_ratio)
-            else:
-                new_h = tgt_h
-                new_w = int(new_h * src_ratio)
-            return (new_w, new_h)
-        
-        return source
-    
-    def _apply_display_mode(
-        self,
-        img: "Image.Image",
-        target: Tuple[int, int],
-        mode: str,
-    ) -> "Image.Image":
-        """Apply display mode (crop for fill, pad for fit/shrink)."""
-        tgt_w, tgt_h = target
-        img_w, img_h = img.size
-        
-        if mode == "fill":
-            # Crop to target size (center crop)
-            if img_w > tgt_w or img_h > tgt_h:
-                left = (img_w - tgt_w) // 2
-                top = (img_h - tgt_h) // 2
-                right = left + tgt_w
-                bottom = top + tgt_h
-                return img.crop((left, top, right, bottom))
-            return img
-        
-        elif mode in ("fit", "shrink"):
-            # Pad with black to target size (center)
-            if img_w == tgt_w and img_h == tgt_h:
-                return img
-            
-            result = Image.new("RGBA", target, (0, 0, 0, 255))
-            x = (tgt_w - img_w) // 2
-            y = (tgt_h - img_h) // 2
-            result.paste(img, (x, y))
-            return result
-        
-        return img
+        width, height = final_image.size
+        return final_image.convert("RGBA").tobytes("raw", "RGBA"), width, height, original_size
     
     def _handle_config(self, msg: WorkerMessage) -> WorkerResponse:
         """Handle configuration update."""

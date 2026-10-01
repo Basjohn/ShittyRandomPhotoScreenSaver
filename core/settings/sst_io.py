@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING, Any, Dict
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
 from core.settings.legacy_setting_aliases import promote_legacy_section_aliases, RETIRED_SETTING_KEYS
+from core.settings.resample_filter_input_compat import (
+    promote_legacy_display_resample_filter,
+)
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 from core.settings.structured_input_compat import normalize_legacy_structured_mapping_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
@@ -257,6 +260,10 @@ def _project_import_state(
             section_mapping, _legacy_alias_changed = promote_legacy_section_aliases(
                 section_key, section_value
             )
+            if section_key == "display":
+                section_mapping, _resample_changed = (
+                    promote_legacy_display_resample_filter(section_mapping)
+                )
             for raw_subkey, subval in section_mapping.items():
                 dotted = f"{section_key}.{raw_subkey}"
                 if dotted in _SST_NON_IMPORTABLE_KEYS:

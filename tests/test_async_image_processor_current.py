@@ -22,15 +22,15 @@ def _image(width: int, height: int, *, alpha: bool = False) -> QImage:
 
 
 @pytest.mark.parametrize("mode", (DisplayMode.FILL, DisplayMode.FIT, DisplayMode.SHRINK))
-@pytest.mark.parametrize("use_lanczos", (False, True))
-def test_resolved_modes_return_exact_screen_canvas(mode, use_lanczos) -> None:
-    if use_lanczos and not PILLOW_AVAILABLE:
+@pytest.mark.parametrize("resample_filter", ("smooth", "hamming", "lanczos"))
+def test_resolved_modes_return_exact_screen_canvas(mode, resample_filter) -> None:
+    if resample_filter != "smooth" and not PILLOW_AVAILABLE:
         pytest.skip("PIL/Pillow not installed")
     result = AsyncImageProcessor.process_qimage(
         _image(1600, 900),
         QSize(1920, 1080),
         mode,
-        use_lanczos=use_lanczos,
+        resample_filter=resample_filter,
         sharpen=False,
     )
     assert not result.isNull()
@@ -42,7 +42,7 @@ def test_fill_portrait_crops_to_exact_screen() -> None:
         _image(1080, 1920),
         QSize(1920, 1080),
         DisplayMode.FILL,
-        use_lanczos=False,
+        resample_filter="smooth",
         sharpen=False,
     )
     assert result.size() == QSize(1920, 1080)
@@ -55,13 +55,13 @@ def test_fill_portrait_crops_to_exact_screen() -> None:
     ((13, 23), (9, 16)),
 ])
 @pytest.mark.parametrize("alpha", (False, True))
-@pytest.mark.parametrize("use_lanczos", (False, True))
-def test_fill_rounding_covers_every_edge_without_padding(source_size, target_size, alpha, use_lanczos):
-    if use_lanczos and not PILLOW_AVAILABLE:
+@pytest.mark.parametrize("resample_filter", ("smooth", "hamming", "lanczos"))
+def test_fill_rounding_covers_every_edge_without_padding(source_size, target_size, alpha, resample_filter):
+    if resample_filter != "smooth" and not PILLOW_AVAILABLE:
         pytest.skip("PIL/Pillow not installed")
     result = AsyncImageProcessor.process_qimage(
         _image(*source_size, alpha=alpha), QSize(*target_size), DisplayMode.FILL,
-        use_lanczos=use_lanczos, sharpen=False,
+        resample_filter=resample_filter, sharpen=False,
     )
     assert result.size() == QSize(*target_size)
     # A solid source must reach every edge; padding a short derivative would
@@ -82,7 +82,7 @@ def test_shrink_small_image_does_not_upscale_source_pixels() -> None:
         source,
         screen,
         DisplayMode.SHRINK,
-        use_lanczos=False,
+        resample_filter="smooth",
         sharpen=False,
     )
     assert result.size() == screen
@@ -100,7 +100,7 @@ def test_null_qimage_returns_black_screen_sized_fallback() -> None:
         QImage(),
         screen,
         DisplayMode.FILL,
-        use_lanczos=False,
+        resample_filter="smooth",
         sharpen=False,
     )
     assert result.size() == screen
@@ -113,7 +113,7 @@ def test_lanczos_aggressive_downscale_keeps_resolved_canvas_size() -> None:
         _image(3840, 2160),
         QSize(960, 540),
         DisplayMode.FIT,
-        use_lanczos=True,
+        resample_filter="lanczos",
         sharpen=True,
     )
     assert not result.isNull()
@@ -126,7 +126,7 @@ def test_lanczos_rgba_path_preserves_alpha_capability() -> None:
         _image(600, 600, alpha=True),
         QSize(300, 300),
         DisplayMode.FIT,
-        use_lanczos=True,
+        resample_filter="lanczos",
         sharpen=False,
     )
     assert not result.isNull()
@@ -141,7 +141,7 @@ def test_lanczos_preserves_odd_width_rows_and_channel_order(alpha):
         for x in range(source.width()):
             source.setPixelColor(x, y, QColor(10 + x * 20, 30 + y * 60, 200 - x * 13 - y * 7))
     result = AsyncImageProcessor.process_qimage(
-        source, source.size(), DisplayMode.FIT, use_lanczos=True, sharpen=False,
+        source, source.size(), DisplayMode.FIT, resample_filter="lanczos", sharpen=False,
     )
     # No resize: the oracle is the authored source, not a second conversion.
     # RGB888 rows have one byte of alignment padding at this width.

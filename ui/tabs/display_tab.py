@@ -312,24 +312,31 @@ class DisplayTab(QWidget):
     def _build_quality_section(self) -> QWidget:
         group, layout = self._new_section_group("Image Quality")
 
-        lanczos_row, _ = add_aligned_row(
+        resample_row, _ = add_aligned_row(
             layout,
-            "",
+            "Resampling:",
             label_width=self._LABEL_WIDTH,
-            wrap=False,
         )
-        self.lanczos_check = QCheckBox(
-            "Use Lanczos Scaling (Higher Quality, More CPU)"
+        self.resample_filter_combo = StyledComboBox(size_variant="hero")
+        self.resample_filter_combo.addItem("Smooth (fast)", "smooth")
+        self.resample_filter_combo.addItem("Hamming (balanced)", "hamming")
+        self.resample_filter_combo.addItem("Lanczos (fine detail)", "lanczos")
+        self.resample_filter_combo.setCurrentIndex(
+            max(
+                0,
+                self.resample_filter_combo.findData(
+                    self._canonical_default("display.resample_filter")
+                ),
+            )
         )
-        self.lanczos_check.setProperty("circleIndicator", True)
-        self.lanczos_check.setChecked(bool(self._canonical_default("display.use_lanczos")))
-        self.lanczos_check.setToolTip(
-            "Lanczos provides better image quality when scaling, especially for "
-            "downscaling. Disable if experiencing performance issues during transitions."
+        self.resample_filter_combo.setToolTip(
+            "Smooth is the fastest option. Hamming improves downscaling detail "
+            "with modest cost. Lanczos preserves the finest detail but is the "
+            "most CPU-intensive."
         )
-        self.lanczos_check.stateChanged.connect(self._save_settings)
-        lanczos_row.addWidget(self.lanczos_check)
-        lanczos_row.addStretch()
+        self.resample_filter_combo.currentIndexChanged.connect(self._save_settings)
+        resample_row.addWidget(self.resample_filter_combo)
+        resample_row.addStretch()
 
         sharpen_row, _ = add_aligned_row(
             layout,
@@ -639,7 +646,7 @@ class DisplayTab(QWidget):
         self.mode_combo.blockSignals(True)
         self.interval_spin.blockSignals(True)
         self.shuffle_check.blockSignals(True)
-        self.lanczos_check.blockSignals(True)
+        self.resample_filter_combo.blockSignals(True)
         self.sharpen_check.blockSignals(True)
         # Block input toggles
         self.interaction_mode_check.blockSignals(True)
@@ -713,9 +720,17 @@ class DisplayTab(QWidget):
             shuffle = self._settings.get_bool('queue.shuffle')
             self.shuffle_check.setChecked(shuffle)
             
-            # Quality (Lanczos and sharpen)
-            lanczos = self._settings.get_bool('display.use_lanczos')
-            self.lanczos_check.setChecked(lanczos)
+            # Quality: one resolved resampling enum plus optional sharpening.
+            resample_filter = str(self._settings.get('display.resample_filter'))
+            default_resample_filter = str(
+                self._canonical_default('display.resample_filter')
+            )
+            resample_index = self.resample_filter_combo.findData(resample_filter)
+            if resample_index < 0:
+                resample_index = self.resample_filter_combo.findData(
+                    default_resample_filter
+                )
+            self.resample_filter_combo.setCurrentIndex(max(0, resample_index))
             
             sharpen = self._settings.get_bool('display.sharpen_downscale')
             self.sharpen_check.setChecked(sharpen)
@@ -784,14 +799,18 @@ class DisplayTab(QWidget):
                 self._settings.set('display.render_backend_mode', 'opengl')
                 self._settings.set('display.hw_accel', True)
 
-            logger.debug(f"Loaded display settings: lanczos={lanczos}, sharpen={sharpen}")
+            logger.debug(
+                "Loaded display settings: resample_filter=%s, sharpen=%s",
+                resample_filter,
+                sharpen,
+            )
         finally:
             # Re-enable signals
             self.same_image_check.blockSignals(False)
             self.mode_combo.blockSignals(False)
             self.interval_spin.blockSignals(False)
             self.shuffle_check.blockSignals(False)
-            self.lanczos_check.blockSignals(False)
+            self.resample_filter_combo.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.interaction_mode_check.blockSignals(False)
             self.widget_glow_on_hover_check.blockSignals(False)
@@ -835,9 +854,14 @@ class DisplayTab(QWidget):
         self._settings.set('timing.interval', self.interval_spin.value())
         self._settings.set('queue.shuffle', self.shuffle_check.isChecked())
         
-        # Quality (Lanczos and sharpen)
-        lanczos = self.lanczos_check.isChecked()
-        self._settings.set('display.use_lanczos', lanczos)
+        # Quality: persist the enum data, never display text or retired flags.
+        default_resample_filter = str(
+            self._canonical_default('display.resample_filter')
+        )
+        selected_resample_filter = self.resample_filter_combo.currentData()
+        if not isinstance(selected_resample_filter, str):
+            selected_resample_filter = default_resample_filter
+        self._settings.set('display.resample_filter', selected_resample_filter)
         
         sharpen = self.sharpen_check.isChecked()
         self._settings.set('display.sharpen_downscale', sharpen)
@@ -902,7 +926,7 @@ class DisplayTab(QWidget):
 
         logger.info(
             f"Saved display settings: mode={selected_mode}, "
-            f"lanczos={lanczos}, sharpen={sharpen}, "
+            f"resample_filter={selected_resample_filter}, sharpen={sharpen}, "
             f"same_image={self.same_image_check.isChecked()}"
         )
 

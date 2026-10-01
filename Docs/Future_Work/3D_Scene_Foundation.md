@@ -304,15 +304,42 @@ contract and actual-context rejection. Maintained diagnostics and shared scene3d
 Ordinary-use physical validation and operator builds remain non-blocking checklists in `Current_Plan.md`.
 
 ### S13 — DSA, immutable storage and multi-bind
-- [ ] New scene3d resources use Direct State Access (`glCreate*`, named buffer/texture/framebuffer operations) and
-  immutable texture/buffer storage where lifetime/size is known. Migrate old shared resources only behind identity tests.
-- [ ] Use multi-bind APIs for repeated texture/buffer range binding where they reduce Python calls; do not batch cheap
-  one-off effects merely for architectural symmetry.
-- [ ] Remove state queries made obsolete by DSA from the shared resource path, while the outer Qt state fences still
-  restore every state actually inherited/touched.
-- **Reward:** fewer Python→driver calls and less bind/query ceremony; simpler resource construction/cleanup.
-- **Hazards:** DSA does not remove Qt's inherited-state contract. Never assume owned state outside the explicit scene.
-- **Bars:** pixel/statistical identity for migrated consumers and measured CPU-submit reduction or no migration.
+Migrate the existing context-local owners in three reviewable slices. Allocation-time DSA is not automatically a
+steady-frame speedup: identify removed calls and measure the actual consumer before claiming a performance gain.
+
+#### S13a — Shared static meshes and source/destination texture binding
+- [ ] In `scene3d/resources.py`, allocate static mesh VAOs/VBOs with named DSA setup and immutable buffer storage.
+  The existing mesh record retains handle ownership, partial-failure cleanup and retry; introduce no parallel pool.
+- [ ] Replace repeated source/destination texture-unit selection and binds with one multi-bind operation. Assign
+  sampler units once per linked program through its existing program/uniform cache; texture IDs still bind every draw.
+  No texture-state cache may assume Qt left a binding intact. Zero texture IDs must preserve inherited target semantics.
+- [ ] Admit every newly called GL entry point through the current-context bootstrap gate. No import-time probing,
+  extension fallback or repeated capability query in render frames.
+- [ ] Prove real mesh pixels, unchanged generic VAO/array-buffer bindings during construction, immutable storage,
+  exact sampler routing and untouched active/unrelated texture units. Retain allocation-failure/release-retry tests.
+- [ ] Compare all five affected 3D transitions before/after, warm first frames, parked resources and outer state fence.
+  Measure warm submission calls and time separately from one-time mesh construction.
+
+#### S13b — PhotoEnvironment texture and framebuffer construction
+- [ ] In `scene3d/environment.py`, allocate the known-size environment texture with immutable storage for its complete
+  mip chain. Use named texture parameters/mipmap generation and named framebuffer attachment/status operations.
+- [ ] Keep the existing destination-photo copy owner, one copy per run, sampler look and `park()` retirement.
+  Raster work still binds its drawing framebuffer and restores inherited framebuffer, viewport and scissor state.
+- [ ] Prove reflection pixels, mip levels, lent-photo immutability, allocation reuse, failure cleanup and park retirement.
+  Record construction-call savings; do not advertise an unmeasured steady-frame benefit.
+
+#### S13c — Fixed-size scene and post-process allocations
+- [ ] Migrate `scene3d/target.py`, `post.py` and `motion.py` separately behind their current real-pixel tests: immutable
+  textures and named framebuffer construction only where allocation size/sample count is already fixed.
+- [ ] Preserve attachment formats, sample counts, size buckets, bloom/velocity writes, exact endpoints and dormant cost.
+  Retain draw-time state restoration; only remove queries made unnecessary by named construction operations.
+- [ ] For each owner, prove repeated size reuse, explicit resize retirement, exception restoration, disabled-feature
+  resource absence and unchanged rendered pixels before proceeding to the next owner.
+
+Changing UBO streams remain under S14: `UniformBlock.bound()` deliberately orphans mutable storage, so immutable
+storage is not a drop-in replacement. Multi-buffer binding is deferred until a real consumer uses multiple points.
+Effect-private dynamic/instanced buffers require their own measured migration; static shared meshes do not authorise
+changing their update policy. DSA never removes Qt's inherited-state contract or creates another render owner.
 
 ### S14 — Persistent mapped stream + SSBO foundation
 - [ ] Add one bounded context-local persistent/coherent (or explicitly flushed) mapped ring for small changing frame

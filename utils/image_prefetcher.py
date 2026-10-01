@@ -13,6 +13,7 @@ from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger, is_cache_logging_enabled
 from rendering.display_modes import DisplayMode
+from rendering.image_quality import RESAMPLE_FILTERS
 from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
@@ -130,14 +131,26 @@ class ImagePrefetcher:
                 mode = DisplayMode.from_string(str(mode))
             if not path or not key or width <= 0 or height <= 0:
                 raise ValueError("scaled-prefetch request has invalid path/cache/geometry")
-            if not isinstance(owned["use_lanczos"], bool) or not isinstance(owned["sharpen"], bool):
-                raise TypeError("scaled-prefetch quality fields must be resolved booleans")
-            # Preserve the foreground quality authority. No speculative PIL or
-            # parent-process fallback is admitted for these requests.
-            if owned["use_lanczos"] or owned["sharpen"]:
-                continue
+            resample_filter = owned.get("resample_filter")
+            if (
+                not isinstance(resample_filter, str)
+                or resample_filter not in RESAMPLE_FILTERS
+                or not isinstance(owned.get("sharpen"), bool)
+            ):
+                raise TypeError("scaled-prefetch requires a resolved resample filter and sharpen boolean")
             owned.update(path=path, cache_key=key, width=width, height=height, display_mode=mode)
             groups.setdefault(path, []).append(owned)
+
+        for path, group in groups.items():
+            quality_signatures = {
+                (request["resample_filter"], request["sharpen"])
+                for request in group
+            }
+            if len(quality_signatures) != 1:
+                raise ValueError(
+                    "scaled-prefetch source group must share one resolved "
+                    f"resample filter and sharpen value path={path}"
+                )
 
         queued = 0
         with self._lock:

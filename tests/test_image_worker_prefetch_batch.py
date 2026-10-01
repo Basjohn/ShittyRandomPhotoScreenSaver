@@ -51,7 +51,7 @@ def _expected_derivative(path: str, width: int, height: int, mode: str) -> bytes
         source,
         QSize(width, height),
         DisplayMode.from_string(mode),
-        use_lanczos=False,
+        resample_filter="smooth",
         sharpen=False,
     )
     return _packed_rgba8888(processed)
@@ -80,6 +80,22 @@ def _write_gradient_source(
     if not transparent:
         image = image.convert("RGB")
     image.save(path)
+
+
+def _resolved_derivatives(
+    derivatives: list[dict[str, object]],
+    *,
+    resample_filter: str = "smooth",
+    sharpen: bool = False,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "resample_filter": resample_filter,
+            "sharpen": sharpen,
+            **derivative,
+        }
+        for derivative in derivatives
+    ]
 
 
 def _await_response(response_queue: Any, correlation_id: str) -> WorkerResponse:
@@ -139,7 +155,7 @@ def _run_batch(
                 payload={
                     "path": path,
                     "generation": 37,
-                    "derivatives": derivatives,
+                    "derivatives": _resolved_derivatives(derivatives),
                 },
             ).to_dict()
         )
@@ -238,6 +254,8 @@ def test_spawned_batch_matches_qimage_derivatives_and_reclaims_one_transfer(
             "width": width,
             "height": height,
             "mode": mode,
+            "resample_filter": "smooth",
+            "sharpen": False,
             "offset": cursor,
             "size": len(expected),
         }
@@ -303,7 +321,7 @@ def test_batch_rejects_bounded_request_before_decode(
                 payload={
                     "path": "does-not-need-to-exist.png",
                     "generation": 1,
-                    "derivatives": derivatives,
+                    "derivatives": _resolved_derivatives(derivatives),
                 },
             ).to_dict()
         )
@@ -345,11 +363,11 @@ def test_batch_decodes_the_source_once_for_all_derivatives(tmp_path: Path, monke
                 payload={
                     "path": str(source_path),
                     "generation": 1,
-                    "derivatives": [
+                    "derivatives": _resolved_derivatives([
                         {"cache_key": "fill", "width": 32, "height": 32, "mode": "fill"},
                         {"cache_key": "fit", "width": 32, "height": 32, "mode": "fit"},
                         {"cache_key": "shrink", "width": 48, "height": 30, "mode": "shrink"},
-                    ],
+                    ]),
                 },
             )
         )
@@ -358,6 +376,140 @@ def test_batch_decodes_the_source_once_for_all_derivatives(tmp_path: Path, monke
         assert decoded_paths == [str(source_path)]
         assert response.payload["decode_count"] == 1
         assert response.payload["scale_started_ns"] <= response.payload["scale_finished_ns"]
+    finally:
+        worker._cleanup()
+
+
+@pytest.mark.parametrize(
+    ("resample_filter", "sharpen"),
+    [(name, sharpen) for name in ("smooth", "hamming", "lanczos") for sharpen in (False, True)],
+)
+def test_spawned_batch_is_byte_identical_to_foreground_derivative(
+    tmp_path: Path,
+    resample_filter: str,
+    sharpen: bool,
+) -> None:
+    """Speculation must return the exact selected foreground quality pixels."""
+    source_path = tmp_path / "quality-gradient.png"
+    _write_gradient_source(source_path, (91, 37), transparent=True)
+    derivatives = [
+        {"cache_key": "fill", "width": 48, "height": 48, "mode": "fill"},
+        {"cache_key": "fit", "width": 48, "height": 48, "mode": "fit"},
+    ]
+    response, transferred, _descriptor = _run_batch(
+        str(source_path),
+        _resolved_derivatives(
+            derivatives,
+            resample_filter=resample_filter,
+            sharpen=sharpen,
+        ),
+    )
+    assert response.success
+
+    foreground = ImageWorker(_MemoryQueue(), _MemoryQueue())
+    try:
+        cursor = 0
+        metadata = response.payload["derivatives"]
+        assert isinstance(metadata, list)
+        for request, entry in zip(derivatives, metadata, strict=True):
+            assert isinstance(entry, dict)
+            assert entry["resample_filter"] == resample_filter
+            assert entry["sharpen"] is sharpen
+            expected, width, height, _original = foreground._prescale_rgba(
+                str(source_path),
+                int(request["width"]),
+                int(request["height"]),
+                str(request["mode"]),
+                resample_filter,
+                sharpen,
+            )
+            assert (width, height) == (request["width"], request["height"])
+            size = int(entry["size"])
+            assert transferred[cursor:cursor + size] == expected
+            cursor += size
+        assert cursor == len(transferred)
+    finally:
+        foreground._cleanup()
+
+
+def test_quality_batch_decodes_one_pillow_source_for_all_derivatives(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_path = tmp_path / "quality-source.png"
+    _write_gradient_source(source_path, (64, 41), transparent=False)
+    worker = ImageWorker(_MemoryQueue(), _MemoryQueue())
+    decoded_paths: list[str] = []
+    original_decode = image_worker_module.decode_image
+
+    def _spy_decode(path: str):
+        decoded_paths.append(path)
+        return original_decode(path)
+
+    monkeypatch.setattr(image_worker_module, "decode_image", _spy_decode)
+    try:
+        response = worker.handle_message(
+            WorkerMessage(
+                msg_type=MessageType.IMAGE_PREFETCH_BATCH,
+                seq_no=1,
+                correlation_id="quality-decode-once",
+                worker_type=WorkerType.IMAGE,
+                payload={
+                    "path": str(source_path),
+                    "generation": 1,
+                    "derivatives": _resolved_derivatives(
+                        [
+                            {"cache_key": "fill", "width": 32, "height": 32, "mode": "fill"},
+                            {"cache_key": "fit", "width": 32, "height": 32, "mode": "fit"},
+                        ],
+                        resample_filter="hamming",
+                    ),
+                },
+            )
+        )
+        assert response is not None and response.success
+        assert decoded_paths == [str(source_path)]
+        assert response.payload["decode_count"] == 1
+    finally:
+        worker._cleanup()
+
+
+def test_worker_rejects_mixed_quality_batch_before_source_decode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = ImageWorker(_MemoryQueue(), _MemoryQueue())
+    decoded_paths: list[str] = []
+
+    def _unexpected_decode(path: str) -> QImage:
+        decoded_paths.append(path)
+        raise AssertionError("mixed quality must be rejected before a source decode")
+
+    monkeypatch.setattr(worker, "_decode_qimage", _unexpected_decode)
+    try:
+        response = worker.handle_message(
+            WorkerMessage(
+                msg_type=MessageType.IMAGE_PREFETCH_BATCH,
+                seq_no=1,
+                correlation_id="mixed-quality",
+                worker_type=WorkerType.IMAGE,
+                payload={
+                    "path": "does-not-need-to-exist.png",
+                    "generation": 1,
+                    "derivatives": [
+                        *_resolved_derivatives([
+                            {"cache_key": "smooth", "width": 8, "height": 8, "mode": "fill"},
+                        ]),
+                        *_resolved_derivatives([
+                            {"cache_key": "lanczos", "width": 8, "height": 8, "mode": "fill"},
+                        ], resample_filter="lanczos"),
+                    ],
+                },
+            )
+        )
+        assert response is not None and not response.success
+        assert response.msg_type is MessageType.ERROR
+        assert "share one resolved resample filter" in (response.error or "")
+        assert decoded_paths == []
     finally:
         worker._cleanup()
 
@@ -383,14 +535,14 @@ def test_batch_shared_memory_failure_is_an_error_not_an_inline_fallback(
             payload={
                 "path": str(source_path),
                 "generation": 1,
-                "derivatives": [
+                "derivatives": _resolved_derivatives([
                     {
                         "cache_key": "only",
                         "width": 8,
                         "height": 8,
                         "mode": "fill",
                     }
-                ],
+                ]),
             },
         )
     )

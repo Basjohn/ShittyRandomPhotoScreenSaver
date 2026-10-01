@@ -1308,9 +1308,7 @@ class ScreensaverEngine(QObject):
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "image publication unavailable"),
         ]
-        from engine.image_pipeline import _get_display_quality_settings
-        use_lanczos, sharpen = _get_display_quality_settings(self)
-        if self._prefetch_ahead > 0 and not use_lanczos and not sharpen:
+        if self._prefetch_ahead > 0:
             worker_configs.append((
                 WorkerType.IMAGE_PREFETCH, 'workers.image.enabled',
                 "SpeculativeImageWorker", "speculative derivatives unavailable",

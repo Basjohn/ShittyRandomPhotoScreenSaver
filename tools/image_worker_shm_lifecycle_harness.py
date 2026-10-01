@@ -43,6 +43,7 @@ from core.process.workers.image_worker import (
 from engine.image_pipeline import derive_prefetch_via_worker, load_image_via_worker
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
+from rendering.image_quality import RESAMPLE_FILTERS, decode_image, process_image
 
 
 def _linear_slope(values: list[float]) -> float:
@@ -130,21 +131,32 @@ def _packed_rgba8888(image: QImage) -> bytes:
         del rgba
 
 
-def _build_prefetch_requests(width: int, height: int) -> list[dict[str, Any]]:
+def _build_prefetch_requests(
+    width: int,
+    height: int,
+    *,
+    resample_filter: str,
+    sharpen: bool,
+) -> list[dict[str, Any]]:
     half_width = max(1, (int(width) * 2) // 3)
     half_height = max(1, (int(height) * 2) // 3)
+    quality_label = f"{resample_filter}-sharpen{int(sharpen)}"
     return [
         {
-            "cache_key": f"p0-primary-{width}x{height}",
+            "cache_key": f"p0-primary-{width}x{height}-{quality_label}",
             "width": int(width),
             "height": int(height),
             "display_mode": DisplayMode.FILL,
+            "resample_filter": resample_filter,
+            "sharpen": sharpen,
         },
         {
-            "cache_key": f"p0-secondary-{half_width}x{half_height}",
+            "cache_key": f"p0-secondary-{half_width}x{half_height}-{quality_label}",
             "width": half_width,
             "height": half_height,
             "display_mode": DisplayMode.FILL,
+            "resample_filter": resample_filter,
+            "sharpen": sharpen,
         },
     ]
 
@@ -153,7 +165,30 @@ def _expected_prefetch_bytes(
     source_path: Path,
     requests: list[dict[str, Any]],
 ) -> dict[str, bytes]:
-    """One untimed parity reference; samples never execute Qt scale in parent."""
+    """One untimed parity reference through the worker's selected quality branch."""
+
+    if not requests:
+        return {}
+    signatures = {
+        (str(request["resample_filter"]), bool(request["sharpen"]))
+        for request in requests
+    }
+    if len(signatures) != 1:
+        raise ValueError("prefetch parity requires one resolved quality signature")
+    resample_filter, sharpen = next(iter(signatures))
+    if resample_filter != "smooth" or sharpen:
+        source = decode_image(str(source_path))
+        expected: dict[str, bytes] = {}
+        for request in requests:
+            result = process_image(
+                source,
+                (int(request["width"]), int(request["height"])),
+                request["display_mode"].value,
+                resample_filter,
+                sharpen,
+            )
+            expected[str(request["cache_key"])] = result.convert("RGBA").tobytes("raw", "RGBA")
+        return expected
 
     source = QImage(str(source_path))
     if source.isNull():
@@ -165,8 +200,8 @@ def _expected_prefetch_bytes(
                 source,
                 QSize(int(request["width"]), int(request["height"])),
                 request["display_mode"],
-                use_lanczos=False,
-                sharpen=False,
+                resample_filter=resample_filter,
+                sharpen=sharpen,
             )
             try:
                 expected[str(request["cache_key"])] = _packed_rgba8888(result)
@@ -197,7 +232,7 @@ def _parent_baseline_sample(
                     source,
                     QSize(int(request["width"]), int(request["height"])),
                     request["display_mode"],
-                    use_lanczos=False,
+                    resample_filter="smooth",
                     sharpen=False,
                 )
                 try:
@@ -270,11 +305,34 @@ def run_harness(
     exercise_shutdown_transfer: bool = True,
     prefetch: bool = False,
     parent_baseline: bool = False,
+    resample_filter: str | None = None,
+    sharpen: bool = False,
+    source_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run one bounded foreground, parent-baseline, or production-prefetch lane."""
 
     if prefetch and parent_baseline:
         raise ValueError("--prefetch and --parent-baseline are mutually exclusive")
+    if (
+        resample_filter is not None
+        and (
+            not isinstance(resample_filter, str)
+            or resample_filter not in RESAMPLE_FILTERS
+        )
+    ):
+        raise ValueError(f"Unknown resample filter: {resample_filter!r}")
+    if not isinstance(sharpen, bool):
+        raise TypeError("sharpen must be a boolean")
+    default_filter = "smooth" if (prefetch or parent_baseline) else "lanczos"
+    effective_filter = resample_filter or default_filter
+    if parent_baseline and (effective_filter != "smooth" or sharpen):
+        raise ValueError(
+            "--parent-baseline measures only historical smooth Qt scaling; "
+            "use --resample-filter smooth without --sharpen"
+        )
+    supplied_source = Path(source_path) if source_path is not None else None
+    if supplied_source is not None and not supplied_source.is_file():
+        raise FileNotFoundError(f"Source image does not exist: {supplied_source}")
     cycles = max(1, int(cycles))
     width = max(1, int(width))
     height = max(1, int(height))
@@ -312,19 +370,32 @@ def run_harness(
     started_at = time.monotonic()
     expected_prefetch: dict[str, bytes] = {}
     prefetch_requests = (
-        _build_prefetch_requests(width, height) if (prefetch or parent_baseline) else []
+        _build_prefetch_requests(
+            width,
+            height,
+            resample_filter=effective_filter,
+            sharpen=sharpen,
+        )
+        if (prefetch or parent_baseline)
+        else []
     )
 
     with tempfile.TemporaryDirectory(prefix="srpss_image_worker_shm_") as temp_dir:
-        source_path = Path(temp_dir) / "synthetic_source.png"
-        # A deterministic opaque source avoids network/file variability. P0
-        # baseline/prefetch sources are twice target size so Qt actually scales.
-        image = Image.new("RGB", (source_width, source_height), (31, 97, 173))
-        image.save(source_path, "PNG")
-        image.close()
+        synthetic_source = supplied_source is None
+        if supplied_source is None:
+            resolved_source_path = Path(temp_dir) / "synthetic_source.png"
+            # A deterministic opaque source avoids network/file variability. P0
+            # baseline/prefetch sources are twice target size so Qt actually scales.
+            image = Image.new("RGB", (source_width, source_height), (31, 97, 173))
+            image.save(resolved_source_path, "PNG")
+            image.close()
+        else:
+            resolved_source_path = supplied_source
+            with Image.open(resolved_source_path) as source_image:
+                source_width, source_height = source_image.size
 
         if prefetch:
-            expected_prefetch = _expected_prefetch_bytes(source_path, prefetch_requests)
+            expected_prefetch = _expected_prefetch_bytes(resolved_source_path, prefetch_requests)
 
         if worker_required and not supervisor.start(worker_type):
             raise RuntimeError(f"{worker_type.value} worker failed to start")
@@ -376,15 +447,17 @@ def run_harness(
             for cycle in range(1, cycles + 1):
                 if parent_baseline:
                     duration_ns, qimage = _parent_baseline_sample(
-                        source_path,
+                        resolved_source_path,
                         prefetch_requests,
                     )
                     parent_baseline_durations_ns.append(duration_ns)
                     if qimage.width() != width or qimage.height() != height:
                         errors.append(f"cycle {cycle}: parent baseline output size changed")
                     pixel = qimage.pixelColor(width // 2, height // 2)
-                    if (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) != (31, 97, 173, 255):
+                    if synthetic_source and (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) != (31, 97, 173, 255):
                         errors.append(f"cycle {cycle}: parent baseline pixel data changed")
+                    if pixel.alpha() != 255:
+                        errors.append(f"cycle {cycle}: parent baseline output was not opaque")
                     del qimage
                     samples.append({"cycle": cycle, "parent_qt_scale_format_ns": duration_ns})
                     continue
@@ -393,7 +466,7 @@ def run_harness(
                     handoff_count_before = len(parent_handoffs)
                     images = _await_prefetch_batch(
                         engine,
-                        source_path,
+                        resolved_source_path,
                         prefetch_requests,
                         generation=1,
                         timeout_ms=timeout_ms,
@@ -435,12 +508,12 @@ def run_harness(
                 else:
                     qimage = load_image_via_worker(
                         engine,
-                        str(source_path),
+                        str(resolved_source_path),
                         width,
                         height,
                         display_mode="fill",
-                        use_lanczos=True,
-                        sharpen=False,
+                        resample_filter=effective_filter,
+                        sharpen=sharpen,
                         timeout_ms=timeout_ms,
                     )
                     if qimage is None:
@@ -451,8 +524,10 @@ def run_harness(
                             f"cycle {cycle}: unexpected size {qimage.width()}x{qimage.height()}"
                         )
                     pixel = qimage.pixelColor(width // 2, height // 2)
-                    if (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) != (31, 97, 173, 255):
+                    if synthetic_source and (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) != (31, 97, 173, 255):
                         errors.append(f"cycle {cycle}: copied pixel data changed")
+                    if pixel.alpha() != 255:
+                        errors.append(f"cycle {cycle}: copied image was not opaque")
                     del qimage
 
                 accounting = supervisor.get_shared_memory_accounting_snapshot()
@@ -492,7 +567,7 @@ def run_harness(
             if effective_shutdown_transfer:
                 if prefetch:
                     shutdown_payload = {
-                        "path": str(source_path),
+                        "path": str(resolved_source_path),
                         "generation": 1,
                         "derivatives": [
                             {
@@ -500,6 +575,8 @@ def run_harness(
                                 "width": int(request["width"]),
                                 "height": int(request["height"]),
                                 "mode": request["display_mode"].value,
+                                "resample_filter": request["resample_filter"],
+                                "sharpen": request["sharpen"],
                             }
                             for request in prefetch_requests
                         ],
@@ -507,12 +584,12 @@ def run_harness(
                     message_type = MessageType.IMAGE_PREFETCH_BATCH
                 else:
                     shutdown_payload = {
-                        "path": str(source_path),
+                        "path": str(resolved_source_path),
                         "target_width": width,
                         "target_height": height,
                         "mode": "fill",
-                        "use_lanczos": True,
-                        "sharpen": False,
+                        "resample_filter": effective_filter,
+                        "sharpen": sharpen,
                     }
                     message_type = MessageType.IMAGE_PRESCALE
                 correlation_id = supervisor.send_message(
@@ -593,10 +670,14 @@ def run_harness(
         "scenario": scenario,
         "cycles_requested": cycles,
         "cycles_completed": len(samples),
+        "source_path": str(resolved_source_path),
+        "synthetic_source": synthetic_source,
         "source_width": source_width,
         "source_height": source_height,
         "width": width,
         "height": height,
+        "resample_filter": effective_filter,
+        "sharpen": sharpen,
         "rgba_bytes_per_image": width * height * 4,
         "warmup_cycles": warmup_cycles,
         "worker_type": worker_type.value if worker_required else None,
@@ -646,6 +727,24 @@ def main() -> int:
     parser.add_argument("--warmup-cycles", type=int, default=10)
     parser.add_argument("--timeout-ms", type=int, default=15_000)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--source",
+        type=Path,
+        help="read this image without modifying it instead of creating the synthetic source",
+    )
+    parser.add_argument(
+        "--resample-filter",
+        choices=sorted(RESAMPLE_FILTERS),
+        help=(
+            "resolved filter; defaults to smooth for --prefetch/--parent-baseline "
+            "and lanczos for the foreground lifecycle lane"
+        ),
+    )
+    parser.add_argument(
+        "--sharpen",
+        action="store_true",
+        help="apply the resolved downscale sharpening in foreground or speculative worker lanes",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--prefetch",
@@ -663,6 +762,13 @@ def main() -> int:
         help="skip the final in-flight transfer retirement edge",
     )
     args = parser.parse_args()
+    if args.parent_baseline and (
+        args.resample_filter not in (None, "smooth") or args.sharpen
+    ):
+        parser.error(
+            "--parent-baseline measures only historical smooth Qt scaling; "
+            "use --resample-filter smooth without --sharpen"
+        )
 
     report = run_harness(
         cycles=args.cycles,
@@ -673,6 +779,9 @@ def main() -> int:
         exercise_shutdown_transfer=not args.no_shutdown_transfer,
         prefetch=args.prefetch,
         parent_baseline=args.parent_baseline,
+        resample_filter=args.resample_filter,
+        sharpen=args.sharpen,
+        source_path=args.source,
     )
     output_dir = args.output_dir or _default_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)

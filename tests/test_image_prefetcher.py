@@ -100,7 +100,7 @@ def _request(
     width: int = 16,
     height: int = 9,
     stats: dict[str, int] | None = None,
-    use_lanczos: bool = False,
+    resample_filter: str = "smooth",
     sharpen: bool = False,
 ) -> dict[str, object]:
     return {
@@ -110,7 +110,7 @@ def _request(
         "width": width,
         "height": height,
         "display_mode": DisplayMode.FILL,
-        "use_lanczos": use_lanczos,
+        "resample_filter": resample_filter,
         "sharpen": sharpen,
     }
 
@@ -319,14 +319,40 @@ def test_cache_self_eviction_does_not_count_derivative_as_completed(qt_app) -> N
     assert stats.get("scaled_prefetch_completed", 0) == 0
 
 
-def test_foreground_quality_requests_are_skipped_without_decoding(qt_app) -> None:
+def test_quality_requests_are_admitted_to_the_existing_bounded_worker_batch(qt_app) -> None:
     cache, derive = _Cache(), _AsyncDerive()
     prefetcher = _prefetcher(cache, derive)
 
     assert prefetcher.register_scaled_requests([
-        _request(r"C:\wall\quality.jpg", "lanczos", use_lanczos=True),
-        _request(r"C:\wall\quality.jpg", "sharpen", sharpen=True),
-    ]) == 0
+        _request(r"C:\wall\quality.jpg", "lanczos", resample_filter="lanczos"),
+        _request(r"C:\wall\quality.jpg", "second-lanczos", resample_filter="lanczos"),
+    ]) == 2
+    assert len(derive.submissions) == 1
+    assert [request["resample_filter"] for request in derive.submissions[0]["requests"]] == [
+        "lanczos", "lanczos",
+    ]
+
+
+@pytest.mark.parametrize("resample_filter", ["nearest", None, ["lanczos"]])
+def test_unresolved_or_unknown_resample_filter_is_rejected_before_submission(qt_app, resample_filter: object) -> None:
+    cache, derive = _Cache(), _AsyncDerive()
+    prefetcher = _prefetcher(cache, derive)
+    request = _request(r"C:\wall\quality.jpg", "quality")
+    request["resample_filter"] = resample_filter
+
+    with pytest.raises(TypeError, match="resolved resample filter"):
+        prefetcher.register_scaled_requests([request])
+    assert derive.submissions == []
+
+
+def test_mixed_quality_source_group_is_rejected_before_worker_submission(qt_app) -> None:
+    cache, derive = _Cache(), _AsyncDerive()
+    prefetcher = _prefetcher(cache, derive)
+    with pytest.raises(ValueError, match="share one resolved resample filter"):
+        prefetcher.register_scaled_requests([
+            _request(r"C:\wall\quality.jpg", "smooth"),
+            _request(r"C:\wall\quality.jpg", "lanczos", resample_filter="lanczos"),
+        ])
     assert derive.submissions == []
 
 
