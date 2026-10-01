@@ -90,8 +90,8 @@ def test_gmail_action_icon_paths_are_covered_by_asset_manifest():
     assert referenced <= manifest
 
 
-def test_nuitka_builds_include_gmail_qrc_modules():
-    """Normal and MC builds retain the generated immutable-resource modules."""
+def test_nuitka_builds_include_binary_qrc_packs():
+    """Normal and MC builds ship binary immutable-resource packs as data."""
     scripts = (
         ROOT / "scripts" / "build_nuitka.ps1",
         ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
@@ -100,8 +100,8 @@ def test_nuitka_builds_include_gmail_qrc_modules():
     for script in scripts:
         text = script.read_text(encoding="utf-8")
         assert "--include-data-dir=images=images" not in text
-        assert "--include-module=ui.resources.assets_rc" in text
-        assert "--include-module=ui.resources.onboarding_assets_rc" in text
+        assert "--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc" in text
+        assert "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc" in text
 
 
 def test_nuitka_builds_include_ui_tabs_package_for_descriptor_loaded_sections():

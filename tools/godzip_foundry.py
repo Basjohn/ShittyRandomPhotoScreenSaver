@@ -155,6 +155,7 @@ from godzip_foundry_core import (  # noqa: E402
     git_pull_ff_only,
     git_push_current,
     inspect_godzip,
+    is_generated_qrc_python,
     inspect_pull,
     is_transfer_note_markdown,
     launch_run_command,
@@ -864,7 +865,11 @@ class CreateTab(QWidget):
         self._update_summary()
 
     def select_changed(self) -> None:
-        self.tree.set_leaf_checks(lambda payload: bool(payload.status))
+        # Generated QRC Python is deliberately opt-in even when Git marks it
+        # changed; the compact QRC sources/assets are enough for regeneration.
+        self.tree.set_leaf_checks(
+            lambda payload: bool(payload.status) and not is_generated_qrc_python(payload.path)
+        )
         self._update_summary()
 
     def select_all(self) -> None:

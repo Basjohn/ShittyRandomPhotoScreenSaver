@@ -24,8 +24,7 @@ urllib3==2.5.0
 feedparser==6.0.12
 sgmllib3k==1.0.0
 
-# Timezone support
-pytz==2025.2
+# Timezone support is provided by PySide6.QtCore.QTimeZone; do not bundle pytz/tzdata.
 
 # Windows Media Session API
 winrt-runtime==3.2.1

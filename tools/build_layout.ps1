@@ -47,6 +47,50 @@ function Reset-SRPSSBuildDirectory {
     return $safePath
 }
 
+function Remove-SRPSSPathWithRetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$AttemptCount = 4,
+        [int]$DelayMilliseconds = 200
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $attempts = [Math]::Max(1, $AttemptCount)
+    for ($attempt = 1; $attempt -le $attempts; $attempt += 1) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        } catch {
+            if ($attempt -ge $attempts) {
+                throw (
+                    "Could not remove '$Path' after $attempts bounded attempts. " +
+                    "A running/previewed artifact or another process may still hold the path: " +
+                    $_.Exception.Message
+                )
+            }
+            Start-Sleep -Milliseconds ([Math]::Max(0, $DelayMilliseconds))
+        }
+    }
+}
+
+function Clear-SRPSSPublishedProductDirectory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ReleaseRoot
+    )
+
+    $releaseFull = [System.IO.Path]::GetFullPath($ReleaseRoot)
+    $safePath = Resolve-SRPSSChildPath -Path $Path -ParentPath $releaseFull
+    if (Test-Path -LiteralPath $safePath) {
+        Remove-SRPSSPathWithRetry -Path $safePath
+    }
+}
+
 function Remove-SRPSSBuildDirectory {
     [CmdletBinding()]
     param(
@@ -134,6 +178,291 @@ function Assert-SRPSSQmlSourceContract {
     }
 }
 
+
+function Assert-SRPSSQmlExternalImportContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $qmlRoot = Join-Path $RepoRoot 'rendering\quick\qml'
+    if (-not (Test-Path -LiteralPath $qmlRoot -PathType Container)) {
+        throw "Qt Quick QML source directory does not exist: $qmlRoot"
+    }
+
+    # The frozen QML dependency surface is intentionally tiny. Expanding it
+    # must be an explicit packaging decision rather than silently re-growing
+    # the PySide6 QML tree in every product.
+    $allowedImports = @(
+        'QtQuick',
+        'QtQuick.Effects'
+    )
+    $seenImports = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $unexpected = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($qmlFile in @(Get-ChildItem -LiteralPath $qmlRoot -Filter '*.qml' -File -Recurse)) {
+        $lineNumber = 0
+        foreach ($line in [System.IO.File]::ReadLines($qmlFile.FullName)) {
+            $lineNumber += 1
+            $match = [regex]::Match($line, '^\s*import\s+([A-Za-z0-9_.]+)(?:\s|$)')
+            if (-not $match.Success) {
+                continue
+            }
+
+            $namespace = $match.Groups[1].Value
+            if (-not $namespace.StartsWith('Qt', [System.StringComparison]::Ordinal)) {
+                continue
+            }
+
+            [void]$seenImports.Add($namespace)
+            if ($allowedImports -notcontains $namespace) {
+                $relativePath = [System.IO.Path]::GetRelativePath($RepoRoot, $qmlFile.FullName)
+                $unexpected.Add(("{0}:{1}: {2}" -f $relativePath, $lineNumber, $namespace))
+            }
+        }
+    }
+
+    if ($unexpected.Count -gt 0) {
+        throw (
+            "Qt QML import contract expanded beyond the frozen packaging allowlist. " +
+            "Review the new runtime dependency before changing the prune contract: " +
+            ($unexpected -join '; ')
+        )
+    }
+
+    foreach ($requiredNamespace in $allowedImports) {
+        if (-not $seenImports.Contains($requiredNamespace)) {
+            throw "Expected Qt QML namespace is no longer used: $requiredNamespace"
+        }
+    }
+
+    return @($seenImports | Sort-Object)
+}
+
+function Get-SRPSSNuitkaQmlPruneArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    # Validate live source before applying the denylist. QtQuick,
+    # QtQuick.Effects, and the core QtQuick/QtQml substrate are intentionally
+    # retained; the families below are not imported by any SRPSS QML file.
+    [void](Assert-SRPSSQmlExternalImportContract -RepoRoot $RepoRoot)
+
+    $unusedQmlFamilies = @(
+        'Qt/labs',
+        'Qt3D',
+        'Qt5Compat',
+        'QtCharts',
+        'QtDataVisualization',
+        'QtGraphs',
+        'QtLocation',
+        'QtMultimedia',
+        'QtNetwork',
+        'QtPositioning',
+        'QtQml/StateMachine',
+        'QtQml/XmlListModel',
+        'QtQuick3D',
+        'QtQuick/Controls',
+        'QtQuick/Dialogs',
+        'QtQuick/Layouts',
+        'QtQuick/LocalStorage',
+        'QtQuick/NativeStyle',
+        'QtQuick/Particles',
+        'QtQuick/Pdf',
+        'QtQuick/Shapes',
+        'QtQuick/Templates',
+        'QtQuick/Timeline',
+        'QtQuick/VectorImage',
+        'QtQuick/VirtualKeyboard',
+        'QtRemoteObjects',
+        'QtScxml',
+        'QtSensors',
+        'QtTest',
+        'QtTextToSpeech',
+        'QtWebChannel',
+        'QtWebEngine',
+        'QtWebSockets',
+        'QtWebView'
+    )
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    foreach ($family in $unusedQmlFamilies) {
+        # Nuitka's PySide6 plugin turns QtQuick/QtQml usage into one monolithic
+        # QML-directory scan.  A one-level wildcard is not sufficient for nested
+        # QML families and, more importantly, excluding only the QML plugin DLL
+        # does not stop Nuitka's dependency scanner from retaining its linked
+        # Qt framework DLLs.  Exclude the family tree recursively here; the
+        # top-level framework denylist below closes the dependency side too.
+        $arguments.Add("--noinclude-data-files=PySide6/qml/$family/**")
+        $arguments.Add("--noinclude-dlls=PySide6/qml/$family/**")
+    }
+
+    # These Qt framework families have no authored Python/QML import in SRPSS.
+    # QML plugin scanning can nevertheless discover their plugin binaries and
+    # then pull the linked framework DLLs into standalone/onefile products.
+    # Match by DLL basename so transitive copies cannot survive merely because
+    # they were discovered from another path.  Keep core QtQuick/Qml/Gui/Core,
+    # Widgets, Svg, Multimedia, OpenGL and ShaderTools out of this denylist.
+    foreach ($dllPattern in @(
+        '*Qt6WebEngine*.dll',
+        '*Qt6Pdf*.dll',
+        '*Qt6VirtualKeyboard*.dll',
+        '*Qt6Quick3D*.dll',
+        '*Qt63D*.dll',
+        '*Qt6Charts*.dll',
+        '*Qt6Graphs*.dll',
+        '*Qt6DataVisualization*.dll',
+        '*Qt6Location*.dll',
+        '*Qt6Positioning*.dll',
+        '*Qt6RemoteObjects*.dll',
+        '*Qt6Scxml*.dll',
+        '*Qt6Sensors*.dll',
+        '*Qt6TextToSpeech*.dll',
+        '*Qt6WebView*.dll',
+        '*Qt6QuickControls2*.dll',
+        '*Qt6QuickTemplates2*.dll',
+        # QML scan dependency fossils whose source namespaces are explicitly
+        # outside the authored QtQuick + QtQuick.Effects contract.
+        '*Qt6Labs*.dll',
+        '*Qt6Concurrent.dll',
+        '*Qt6MultimediaQuick.dll',
+        '*Qt6OpenGLWidgets.dll',
+        '*Qt6QmlLocalStorage.dll',
+        '*Qt6QmlNetwork.dll',
+        '*Qt6QmlXmlListModel.dll',
+        '*Qt6QuickDialogs2*.dll',
+        '*Qt6QuickLayouts.dll',
+        '*Qt6QuickParticles.dll',
+        '*Qt6QuickTest.dll',
+        '*Qt6QuickTimeline*.dll',
+        '*Qt6QuickVectorImage*.dll',
+        '*Qt6SpatialAudio.dll',
+        '*Qt6Sql.dll',
+        '*Qt6StateMachine*.dll',
+        '*Qt6Test.dll',
+        '*Qt6WebChannel*.dll',
+        '*Qt6WebSockets.dll',
+        # Qt's 20 MiB software raster OpenGL fallback cannot satisfy SRPSS's
+        # explicit hardware OpenGL 4.6 Core requirement and must never become
+        # an alternate presentation authority.
+        '*opengl32sw.dll'
+    )) {
+        $arguments.Add("--noinclude-dlls=$dllPattern")
+    }
+
+    # qpdf.dll is an image-format plugin, not the QtQuick.Pdf QML plugin.
+    # SRPSS has no PDF source contract; keeping it pulls Qt6Pdf into every
+    # frozen product solely for an unused decoder.
+    $arguments.Add('--noinclude-dlls=*qpdf.dll')
+
+    # QOpenGLContext/QSurfaceFormat live in QtGui and SRPSS has no production
+    # import of PySide6.QtOpenGL or QOpenGLWidget. Nuitka's PySide plugin was
+    # nevertheless injecting QtOpenGL.pyd as an implicit standalone module.
+    # Keep the native Qt/Quick OpenGL substrate; reject only the unused Python
+    # binding module and QOpenGLWidget-specific helper framework.
+    $arguments.Add('--nofollow-import-to=PySide6.QtOpenGL')
+
+    # Named timezone conversion is owned by QtCore.QTimeZone.  Do not let a
+    # stale global/.venv pytz install wander back into a frozen product merely
+    # because it still happens to exist in the build interpreter.
+    $arguments.Add('--nofollow-import-to=pytz')
+    $arguments.Add('--nofollow-import-to=tzdata')
+    $arguments.Add('--noinclude-data-files=pytz/**')
+    $arguments.Add('--noinclude-data-files=tzdata/**')
+
+    return @($arguments)
+}
+
+function Assert-SRPSSForbiddenFrozenPayloadAbsent {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$DistributionRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $DistributionRoot -PathType Container)) {
+        throw "Frozen payload validation root does not exist: $DistributionRoot"
+    }
+
+    # This is intentionally a product assertion, not merely a size heuristic.
+    # These tokens name frozen families with no SRPSS runtime contract. If
+    # Nuitka/plugin behavior changes and one comes back, the MC build must fail
+    # rather than silently publishing dead payload.
+    $forbiddenTokens = @(
+        'webengine',
+        'qpdf',
+        'qt6pdf',
+        'virtualkeyboard',
+        'quick3d',
+        'qt3d',
+        'qt6charts',
+        'qt6graphs',
+        'datavisualization',
+        'qt6location',
+        'qt6positioning',
+        'qt6remoteobjects',
+        'qt6scxml',
+        'qt6sensors',
+        'qt6texttospeech',
+        'qt6webview',
+        'qt6quickcontrols2',
+        'qt6quicktemplates2',
+        'qt6labs',
+        'qt6concurrent',
+        'qt6multimediaquick',
+        'qt6openglwidgets',
+        'qt6qmllocalstorage',
+        'qt6qmlnetwork',
+        'qt6qmlxmllistmodel',
+        'qt6quickdialogs2',
+        'qt6quicklayouts',
+        'qt6quickparticles',
+        'qt6quicktest',
+        'qt6quicktimeline',
+        'qt6quickvectorimage',
+        'qt6spatialaudio',
+        'qt6sql',
+        'qt6statemachine',
+        'qt6test',
+        'qt6webchannel',
+        'qt6websockets',
+        'opengl32sw.dll',
+        'pyside6/qtopengl.pyd',
+        'pytz',
+        'tzdata'
+    )
+
+    $hits = [System.Collections.Generic.List[string]]::new()
+    $rootFull = [System.IO.Path]::GetFullPath($DistributionRoot)
+    foreach ($file in @(Get-ChildItem -LiteralPath $rootFull -Recurse -File -ErrorAction Stop)) {
+        $relative = [System.IO.Path]::GetRelativePath($rootFull, $file.FullName).Replace('\', '/').ToLowerInvariant()
+        foreach ($token in $forbiddenTokens) {
+            if ($relative.Contains($token)) {
+                $hits.Add($relative)
+                break
+            }
+        }
+    }
+
+    if ($hits.Count -gt 0) {
+        $preview = @($hits | Sort-Object -Unique | Select-Object -First 24) -join '; '
+        throw "Unused frozen payload survived packaging: $preview"
+    }
+
+    return $true
+}
+
+# Compatibility alias for older build-worker references. New workers use the
+# broader frozen-payload assertion above.
+function Assert-SRPSSForbiddenQtPayloadAbsent {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$DistributionRoot
+    )
+    return Assert-SRPSSForbiddenFrozenPayloadAbsent -DistributionRoot $DistributionRoot
+}
+
 function Invoke-SRPSSQrcRegeneration {
     [CmdletBinding()]
     param(
@@ -211,7 +540,7 @@ function Publish-SRPSSDirectory {
         }
 
         if (Test-Path -LiteralPath $targetFull) {
-            Remove-Item -LiteralPath $targetFull -Recurse -Force
+            Remove-SRPSSPathWithRetry -Path $targetFull
         }
 
         Move-Item -LiteralPath $publishPath -Destination $targetFull
@@ -292,16 +621,16 @@ function Get-SRPSSQrcSourceMetrics {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [Parameter(Mandatory = $true)][string]$QrcRelativePath,
-        [Parameter(Mandatory = $true)][string]$GeneratedModuleRelativePath
+        [Parameter(Mandatory = $true)][string]$GeneratedPackRelativePath
     )
 
     $qrcPath = Join-Path $RepoRoot $QrcRelativePath
-    $generatedPath = Join-Path $RepoRoot $GeneratedModuleRelativePath
+    $generatedPath = Join-Path $RepoRoot $GeneratedPackRelativePath
     if (-not (Test-Path -LiteralPath $qrcPath -PathType Leaf)) {
         throw "QRC manifest does not exist: $qrcPath"
     }
     if (-not (Test-Path -LiteralPath $generatedPath -PathType Leaf)) {
-        throw "Generated QRC module does not exist: $generatedPath"
+        throw "Generated binary QRC pack does not exist: $generatedPath"
     }
 
     [xml]$qrc = Get-Content -LiteralPath $qrcPath -Raw
@@ -322,14 +651,16 @@ function Get-SRPSSQrcSourceMetrics {
 
     $qrcFile = Get-Item -LiteralPath $qrcPath
     $generatedFile = Get-Item -LiteralPath $generatedPath
+    $ratio = if ($sourceBytes -gt 0) { [double]$generatedFile.Length / [double]$sourceBytes } else { 0.0 }
     return [pscustomobject]@{
         qrc = $QrcRelativePath
         qrc_manifest_bytes = [long]$qrcFile.Length
         source_file_count = $sourceFiles.Count
         source_bytes = $sourceBytes
-        generated_module = $GeneratedModuleRelativePath
-        generated_module_bytes = [long]$generatedFile.Length
-        representation_note = 'Generated *_rc.py bytes are escaped Python source representation, not deployed/frozen payload bytes.'
+        generated_pack = $GeneratedPackRelativePath
+        generated_pack_bytes = [long]$generatedFile.Length
+        generated_to_source_ratio = [Math]::Round($ratio, 4)
+        representation_note = 'Binary .rcc is the deployed Qt resource representation registered through QResource; generated Python resource modules are not packaged.'
     }
 }
 
@@ -358,15 +689,15 @@ function Write-SRPSSBuildFootprintReport {
         Get-SRPSSQrcSourceMetrics `
             -RepoRoot $RepoRoot `
             -QrcRelativePath 'ui\resources\assets.qrc' `
-            -GeneratedModuleRelativePath 'ui\resources\assets_rc.py'
+            -GeneratedPackRelativePath 'ui\resources\assets.rcc'
         Get-SRPSSQrcSourceMetrics `
             -RepoRoot $RepoRoot `
             -QrcRelativePath 'ui\resources\onboarding_assets.qrc' `
-            -GeneratedModuleRelativePath 'ui\resources\onboarding_assets_rc.py'
+            -GeneratedPackRelativePath 'ui\resources\onboarding_assets.rcc'
     )
 
     $payload = [ordered]@{
-        schema_version = 1
+        schema_version = 2
         generated_at_utc = [DateTime]::UtcNow.ToString('o')
         product = $ProductName
         primary_artifact = [ordered]@{
@@ -381,7 +712,7 @@ function Write-SRPSSBuildFootprintReport {
         qrc_source_reference = $resources
         notes = @(
             'This report describes the current build and current package contents only.',
-            'Generated *_rc.py source size is intentionally not treated as installed/frozen resource size.',
+            'Binary .rcc packs are the installed/frozen Qt resource representation; generated Python resource modules are excluded.',
             'Use the Nuitka XML plus published payload buckets/largest files to identify real dependency/package bloat before adding exclusions.'
         )
     }
@@ -397,8 +728,8 @@ function Write-SRPSSBuildFootprintReport {
     Write-Host "[BUILD] Footprint: artifact=$artifactMiB MiB, published payload=$payloadMiB MiB, files=$($published.file_count)"
     foreach ($resource in $resources) {
         $sourceMiB = [Math]::Round(([double]$resource.source_bytes / 1MB), 2)
-        $generatedMiB = [Math]::Round(([double]$resource.generated_module_bytes / 1MB), 2)
-        Write-Host "[BUILD] QRC source reference $($resource.qrc): source=$sourceMiB MiB -> generated Python=$generatedMiB MiB (not frozen-size equivalence)"
+        $generatedMiB = [Math]::Round(([double]$resource.generated_pack_bytes / 1MB), 2)
+        Write-Host "[BUILD] QRC source reference $($resource.qrc): source=$sourceMiB MiB -> binary RCC=$generatedMiB MiB"
     }
     Write-Host "[BUILD] Nuitka compilation report: $NuitkaReportPath"
     Write-Host "[BUILD] Footprint report: $OutputPath"
@@ -518,11 +849,10 @@ function Assert-SRPSSSourceProductAssets {
 
     $requiredFiles = @(
         'SRPSS.ico',
-        'ui\assets\installer\LogoBMP.bmp',
         'ui\resources\assets.qrc',
-        'ui\resources\assets_rc.py',
+        'ui\resources\assets.rcc',
         'ui\resources\onboarding_assets.qrc',
-        'ui\resources\onboarding_assets_rc.py',
+        'ui\resources\onboarding_assets.rcc',
         'resources\tutuogg.ogg',
         'resources\jedimodeyall.mp3',
         'rendering\quick\qml\DisplayScene.qml',
@@ -601,12 +931,18 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-module=PySide6.QtQuick',
         '--include-module=PySide6.QtQml',
         '--include-module=PySide6.QtMultimedia',
-        '--include-module=ui.resources.assets_rc',
-        '--include-module=ui.resources.onboarding_assets_rc'
+        '--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc',
+        '--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc'
     )
     foreach ($argument in $requiredArguments) {
         if ($NuitkaArguments -notcontains $argument) {
             throw "Onefile build is missing required Qt Quick/runtime declaration: $argument"
+        }
+    }
+
+    foreach ($pruneArgument in @(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $RepoRoot)) {
+        if ($NuitkaArguments -notcontains $pruneArgument) {
+            throw "Onefile build is missing required Qt QML bloat exclusion: $pruneArgument"
         }
     }
 
@@ -633,7 +969,9 @@ function Assert-SRPSSOnedirQuickPayload {
 
     $requiredProductFiles = @(
         'resources\tutuogg.ogg',
-        'resources\jedimodeyall.mp3'
+        'resources\jedimodeyall.mp3',
+        'ui\resources\assets.rcc',
+        'ui\resources\onboarding_assets.rcc'
     )
     foreach ($relativePath in $requiredProductFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $DistributionRoot $relativePath) -PathType Leaf)) {

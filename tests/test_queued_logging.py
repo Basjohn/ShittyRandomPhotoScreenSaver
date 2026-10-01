@@ -261,6 +261,149 @@ def test_saturated_warning_cannot_defeat_bounded_close_timeout() -> None:
     assert final["writer_alive"] is False
 
 
+def test_producer_reentry_during_enqueue_never_reacquires_controller_locks(
+    monkeypatch,
+) -> None:
+    messages: list[str] = []
+    raw_stderr: list[tuple[int, bytes]] = []
+    nested_state = {"active": False}
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    handler = CaptureHandler(logging.DEBUG)
+    controller = logger_mod._QueuedLoggingController(
+        (handler,),
+        main_handler=handler,
+        capacity=8,
+    )
+    monkeypatch.setattr(
+        logger_mod.os,
+        "write",
+        lambda fd, data: raw_stderr.append((fd, bytes(data))) or len(data),
+    )
+
+    class TriggerAcceptLock:
+        """Raise instead of deadlocking if recursive ingress touches this lock."""
+
+        def __init__(self) -> None:
+            self.held = False
+            self.triggered = False
+
+        def __enter__(self):
+            if self.held:
+                raise AssertionError("recursive enqueue reacquired _accept_lock")
+            self.held = True
+            if not self.triggered:
+                self.triggered = True
+                nested_state["active"] = True
+                try:
+                    controller.enqueue(_record(logging.WARNING, "nested-gc-style-log"))
+                finally:
+                    nested_state["active"] = False
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.held = False
+
+    class ProbeMetricsLock:
+        """The recursion fuse must not touch metrics while the outer call is paused."""
+
+        def __init__(self) -> None:
+            self._real = threading.Lock()
+
+        def __enter__(self):
+            if nested_state["active"]:
+                raise AssertionError("producer reentry touched _metrics_lock")
+            self._real.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self._real.release()
+
+    controller._accept_lock = TriggerAcceptLock()
+    controller._metrics_lock = ProbeMetricsLock()
+
+    controller.enqueue(_record(logging.INFO, "outer"))
+    controller.enqueue(_record(logging.INFO, "after-reentry"))
+    metrics = controller.close(1.0)
+
+    assert "outer" in messages
+    assert "after-reentry" in messages
+    assert "nested-gc-style-log" not in messages
+    assert raw_stderr == [
+        (2, b"SRPSS producer logging reentry suppressed WARNING+ record\n")
+    ]
+    assert metrics["producer_reentry_fallbacks"] == 1
+    assert metrics["enqueued"] == 2
+    assert metrics["dequeued"] == 2
+
+
+def test_slow_gc_callback_inside_log_enqueue_cannot_reenter_logging() -> None:
+    import core.performance.gc_policy as gc_policy
+
+    messages: list[str] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    handler = CaptureHandler(logging.DEBUG)
+    controller = logger_mod._QueuedLoggingController(
+        (handler,),
+        main_handler=handler,
+        capacity=8,
+    )
+    policy = gc_policy.RuntimeGCPolicy()
+    gc_logger = gc_policy.logger
+    old_handlers = list(gc_logger.handlers)
+    old_propagate = gc_logger.propagate
+    old_level = gc_logger.level
+
+    class TriggerAcceptLock:
+        def __init__(self) -> None:
+            self.held = False
+            self.triggered = False
+
+        def __enter__(self):
+            if self.held:
+                raise AssertionError("GC callback recursively entered logging ingress")
+            self.held = True
+            if not self.triggered:
+                self.triggered = True
+                policy._starts_ns[2] = time.perf_counter_ns() - 20_000_000
+                policy._gc_callback(
+                    "stop",
+                    {"generation": 2, "collected": 0, "uncollectable": 0},
+                )
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.held = False
+
+    controller._accept_lock = TriggerAcceptLock()
+    gc_logger.handlers = [controller.ingress_handler]
+    gc_logger.propagate = False
+    gc_logger.setLevel(logging.DEBUG)
+    try:
+        controller.enqueue(_record(logging.INFO, "outer-gc-collision"))
+        controller.enqueue(_record(logging.INFO, "after-gc-collision"))
+        metrics = controller.close(1.0)
+    finally:
+        gc_logger.handlers = old_handlers
+        gc_logger.propagate = old_propagate
+        gc_logger.setLevel(old_level)
+
+    assert "outer-gc-collision" in messages
+    assert "after-gc-collision" in messages
+    assert policy._collections[2] == 1
+    assert policy._slow_collections[2] == 1
+    assert metrics["producer_reentry_fallbacks"] == 0
+    assert metrics["enqueued"] == 2
+    assert metrics["dequeued"] == 2
+
+
 def test_writer_handler_reentry_falls_back_without_recursive_queueing() -> None:
     logger = logging.getLogger("test.queued_logging.reentry")
     original_handlers = list(logger.handlers)

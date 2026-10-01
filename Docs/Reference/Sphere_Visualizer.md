@@ -69,7 +69,7 @@ This gate removes competing low-level 3D architectures. Promotion
 means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
 preserving the complete behavioural golden above. It does **not** authorise retuning, renaming Sphere state, exposing
 hidden technical controls, replacing its logical runtime, or turning Sphere into a base class. See `Current_Plan.md`
-and `Docs/Future_Work/3D_Scene_Foundation.md` S19.
+and `Current_Plan.md` S19.
 
 ## Current shared-boundary rule
 

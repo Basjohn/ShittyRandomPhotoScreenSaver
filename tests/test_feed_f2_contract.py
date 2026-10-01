@@ -157,3 +157,19 @@ def test_feed_custom_xy_resize_projects_content_extent_and_reflows_without_io():
     assert "readonly property int gridRowCapacity" in qml
     for forbidden in ("Timer {", "XMLHttpRequest", "NetworkAccess"):
         assert forbidden not in qml
+
+
+def test_feed_article_refresh_fade_is_body_scoped_event_driven_and_timerless():
+    source = _text("rendering/quick/widgets/feeds.py")
+    qml = _text("rendering/quick/qml/FeedPresentation.qml")
+
+    assert "contentTransitionRequested = Signal()" in source
+    assert "def commitPendingContent(" in source
+    assert "self.contentTransitionRequested.emit()" in source
+    assert "function onContentTransitionRequested()" in qml
+    assert "id: articleContentFade" in qml
+    assert 'target: body' in qml
+    assert 'script: feedRoot.feedModel.commitPendingContent()' in qml
+    assert 'property: "fadeOpacity"' not in qml[qml.index("id: articleContentFade"):qml.index("Item {", qml.index("id: articleContentFade") + 1)]
+    assert "Timer {" not in qml
+    assert "Thread(" not in source

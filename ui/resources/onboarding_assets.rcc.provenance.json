@@ -1,0 +1,8 @@
+{
+  "inputs_sha256": "0bfae8be62576a6a4c4c1ec710ccc25216bdc83eb36b97cd8a03f5698c2fbc36",
+  "pack_bytes": 17459279,
+  "pack_sha256": "d46b2e626ab69b50e6df4bba698ac0854a2f3d3564e2e3be760219963c25e915",
+  "qrc": "onboarding_assets.qrc",
+  "schema": 2,
+  "toolchain_sha256": "e8e6c0e55d019979888e0f9d518c0194f87b2c5a23f7234eb46febf57892189b"
+}

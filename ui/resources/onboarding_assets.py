@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from PySide6.QtCore import QFile, QIODevice
 
+from .registration import ensure_onboarding_resources
+
 
 _PREFIX = ":/srpss/onboarding/"
 
 
 def _register() -> None:
-    # Generated registration is idempotent, but importing this large module is
-    # deliberately deferred until Guided Setup actually requests an asset.
-    from . import onboarding_assets_rc  # noqa: F401
+    # The binary onboarding pack remains completely dormant until this explicit
+    # lookup boundary is crossed.
+    ensure_onboarding_resources()
 
 
 def onboarding_resource_path(name: str) -> str:

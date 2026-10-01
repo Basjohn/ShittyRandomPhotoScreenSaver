@@ -26,7 +26,6 @@ exact current source
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
-| `Docs/Future_Work/` | a focused decomposition for promoted, architecturally large work, created only when needed (currently `3D_Scene_Foundation.md`; implemented plans are historicalised) |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
@@ -44,12 +43,14 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | runtime presentation architecture | `Docs/Architecture/Compositor_Architecture.md` |
 | Qt/OpenGL production floor | `Spec.md` → Accepted runtime presentation; `rendering/quick/bootstrap.py` |
 | Settings theme / Acrylic / Glass / Theme Foundry | `Docs/Architecture/Settings_Theme_Architecture.md` |
+| runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
+| presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
@@ -60,7 +61,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | transitions and material surfaces (open physical acceptance at the end of the reference) | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
-| 3D scene foundation plan (slices, risks, performance hazards) | `Docs/Future_Work/3D_Scene_Foundation.md` |
+| active 3D scene foundation plan / live slices | `Current_Plan.md` |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md` |
 | current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |
@@ -70,6 +71,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / retirement | `Docs/TestSuite.md` |
 | harness commands | `Docs/Reference/Harness_Index.md` |
+| Steam source/auth/privacy contract | `Docs/Reference/Steam_Source_Contracts.md` |
 | Friend Pulse current contract | `Docs/Reference/Steam_Friend_Pulse.md` |
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |
 | Sphere current experimental contract | `Docs/Reference/Sphere_Visualizer.md` |

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 import time
 from typing import Any
 
-from PySide6.QtCore import QObject, Property, Signal
+from PySide6.QtCore import QDateTime, QTimeZone, QObject, Property, Signal
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
@@ -27,6 +27,7 @@ from rendering.custom_child_geometry import CustomChildSize, child_role_map, cla
 from rendering.custom_layout_contract import saved_screen_signature_aliases
 from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
+from widgets.timezone_utils import resolve_timezone
 
 from .theme_projection import (
     resolve_card_surface_colors,
@@ -41,12 +42,6 @@ from .host import (
     OverlayCardStyle,
     OverlayWidgetGeometry,
 )
-
-try:
-    import pytz
-except ImportError:  # pragma: no cover - the frozen/runtime dependency is present
-    pytz = None
-
 
 _WEEKDAYS = (
     "MONDAY",
@@ -455,31 +450,58 @@ class ClockPresentationSnapshot:
     second_angle: float
 
 
-def _parse_timezone(name: str) -> tzinfo | None:
-    normalized = str(name or "local").strip()
-    if not normalized or normalized.lower() == "local":
-        return None
-    if pytz is not None:
-        try:
-            return pytz.timezone(normalized)
-        except pytz.UnknownTimeZoneError:
-            pass
-    if normalized.upper().startswith("UTC"):
-        suffix = normalized[3:]
-        if suffix in {"", "+0", "-0"}:
-            return timezone.utc
-        try:
-            sign = -1 if suffix.startswith("-") else 1
-            suffix = suffix[1:] if suffix[:1] in {"+", "-"} else suffix
-            hour_text, _, minute_text = suffix.partition(":")
-            offset = timedelta(
-                hours=sign * int(hour_text),
-                minutes=sign * int(minute_text or "0"),
-            )
-            return timezone(offset)
-        except (TypeError, ValueError):
-            return None
-    return None
+def _parse_timezone(name: str) -> QTimeZone | tzinfo | None:
+    """Resolve persisted Clock timezone values through Qt or a fixed UTC offset."""
+
+    return resolve_timezone(name)
+
+
+def _datetime_in_timezone(
+    zone: QTimeZone | tzinfo | None,
+    instant: datetime | None = None,
+) -> datetime:
+    """Return a Python datetime projected through Qt's named-zone backend.
+
+    QTimeZone is deliberately kept as the named-zone authority rather than
+    pretending it is a Python ``tzinfo``.  For display/hand math we convert the
+    requested instant to a normal fixed-offset Python datetime whose wall clock
+    and abbreviation came from Qt for that instant.
+    """
+
+    if isinstance(zone, QTimeZone):
+        if instant is None:
+            qdt = QDateTime.currentDateTime(zone)
+        else:
+            if instant.tzinfo is None:
+                raise ValueError("Named-zone conversion requires an aware datetime")
+            utc_instant = instant.astimezone(timezone.utc)
+            epoch_ms = int(utc_instant.timestamp() * 1000)
+            qdt = QDateTime.fromMSecsSinceEpoch(epoch_ms, zone)
+
+        if not qdt.isValid():
+            raise ValueError("Qt failed to resolve named timezone datetime")
+
+        qdate = qdt.date()
+        qtime = qdt.time()
+        offset = timedelta(seconds=int(qdt.offsetFromUtc()))
+        abbreviation = zone.abbreviation(qdt)
+        python_zone = timezone(offset, abbreviation) if abbreviation else timezone(offset)
+        return datetime(
+            qdate.year(),
+            qdate.month(),
+            qdate.day(),
+            qtime.hour(),
+            qtime.minute(),
+            qtime.second(),
+            qtime.msec() * 1000,
+            tzinfo=python_zone,
+        )
+
+    if instant is None:
+        return datetime.now() if zone is None else datetime.now(zone)
+    if instant.tzinfo is None:
+        raise ValueError("Timezone conversion requires an aware datetime")
+    return instant.astimezone() if zone is None else instant.astimezone(zone)
 
 
 def _standardize_timezone_abbreviation(abbreviation: str) -> str:
@@ -549,14 +571,12 @@ class ClockPresentationModel(QObject):
         config: ClockPresentationConfig,
         style: ClockPresentationStyle,
         *,
-        now_provider: Callable[[tzinfo | None], datetime] | None = None,
+        now_provider: Callable[[QTimeZone | tzinfo | None], datetime] | None = None,
         ticker_provider: Callable[[], GlobalClockTicker] = get_global_clock_ticker,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._now_provider = now_provider or (
-            lambda zone: datetime.now() if zone is None else datetime.now(zone)
-        )
+        self._now_provider = now_provider or _datetime_in_timezone
         self._ticker_provider = ticker_provider
         self._ticker: GlobalClockTicker | None = None
         self._active = False

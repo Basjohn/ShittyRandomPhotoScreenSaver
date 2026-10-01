@@ -480,6 +480,7 @@ _CHILD_ROLE_MAP = child_role_map(FEED_CUSTOM_CHILD_ROLES)
 
 class FeedPresentationModel(QObject):
     stateChanged = Signal()
+    contentTransitionRequested = Signal()
     contentExtentChanged = Signal()
     customGeometryChanged = Signal()
 
@@ -497,6 +498,10 @@ class FeedPresentationModel(QObject):
         self._runtime_service: object | None = None
         self._rows = FeedRowsModel(self)
         self._display: FeedDisplay | None = None
+        # Article refreshes stage one latest-wins retained presentation while
+        # QML performs the sparse content fade.  No timer/thread owns this edge:
+        # the runtime result is the event, and QML commits it at opacity zero.
+        self._pending_content: tuple[FeedDisplay, str, str, bool] | None = None
         self._snapshot = None
         self._local_artwork_by_item: dict[str, str] = {}
         self._content_extent: tuple[float, float] | None = None
@@ -548,11 +553,59 @@ class FeedPresentationModel(QObject):
             if callable(detach):
                 detach(self)
         self._rows.replace_rows(())
+        self._pending_content = None
         self._snapshot = None
         self._local_artwork_by_item.clear()
 
     def is_feed_consumer_alive(self) -> bool:
         return self._active and not self._retired
+
+    def _commit_display_state(
+        self,
+        display: FeedDisplay,
+        *,
+        view_state: str,
+        status_text: str,
+        refreshing: bool,
+    ) -> bool:
+        old_display = self._display
+        old_view_state = self._view_state
+        old_status_text = self._status_text
+        old_refreshing = self._refreshing
+        self._display = display
+        rows_changed = self._rows.replace_rows(display.rows)
+        self._view_state = str(view_state)
+        self._status_text = str(status_text)
+        self._refreshing = bool(refreshing)
+        changed = (
+            old_display != self._display
+            or rows_changed
+            or old_view_state != self._view_state
+            or old_status_text != self._status_text
+            or old_refreshing != self._refreshing
+        )
+        if changed:
+            self.stateChanged.emit()
+        return changed
+
+    @property
+    def has_pending_content_transition(self) -> bool:
+        return self._pending_content is not None
+
+    @Slot(result=bool)
+    def commitPendingContent(self) -> bool:  # noqa: N802
+        pending = self._pending_content
+        if not self.is_feed_consumer_alive() or pending is None:
+            return False
+        self._pending_content = None
+        display, view_state, status_text, refreshing = pending
+        self._commit_display_state(
+            display,
+            view_state=view_state,
+            status_text=status_text,
+            refreshing=refreshing,
+        )
+        return True
 
     def on_feed_runtime_result(self, result: FeedRefreshResult, *, from_cache: bool) -> None:
         if not self.is_feed_consumer_alive():
@@ -563,33 +616,45 @@ class FeedPresentationModel(QObject):
             # once. A cache miss is not a source failure; keep loading.
             return
         if snapshot is not None:
-            old_view_state = self._view_state
-            old_status_text = self._status_text
-            old_refreshing = self._refreshing
             self._snapshot = snapshot
             self._local_artwork_by_item = dict(result.local_artwork_by_item)
             display = self._project_accepted_snapshot()
-            display_changed = display != self._display
-            self._display = display
-            rows_changed = self._rows.replace_rows(display.rows)
-            self._view_state = "ready" if display.rows else "empty"
+            view_state = "ready" if display.rows else "empty"
             stale = result.status in {"stale_cache", "backoff_cache"}
             if stale:
-                self._status_text = "CACHED · SOURCE TEMPORARILY UNAVAILABLE"
+                status_text = "CACHED · SOURCE TEMPORARILY UNAVAILABLE"
             elif from_cache:
-                self._status_text = "CACHED"
+                status_text = "CACHED"
             else:
-                self._status_text = ""
-            self._refreshing = False
-            if (
-                display_changed
-                or rows_changed
-                or old_view_state != self._view_state
-                or old_status_text != self._status_text
-                or old_refreshing != self._refreshing
-            ):
-                self.stateChanged.emit()
+                status_text = ""
+
+            # First paint is admitted immediately; startup/lifecycle reveal owns
+            # that appearance.  Subsequent article-set mutations are staged and
+            # committed only at the midpoint of one QML-owned body fade.  This
+            # keeps Grid and List identical, avoids per-delegate animation cost,
+            # and adds no timer, poll, worker or Python per-frame publication.
+            content_changed = (
+                self._display is not None
+                and tuple(display.rows) != tuple(self._display.rows)
+            )
+            if content_changed:
+                self._pending_content = (display, view_state, status_text, False)
+                self.contentTransitionRequested.emit()
+                return
+
+            # A later result can converge back to the currently painted rows
+            # while a fade is in flight. Cancel the staged content in that case;
+            # the QML ScriptAction becomes a harmless no-op and fades back in.
+            self._pending_content = None
+            self._commit_display_state(
+                display,
+                view_state=view_state,
+                status_text=status_text,
+                refreshing=False,
+            )
             return
+
+        self._pending_content = None
         self._refreshing = False
         self._view_state = "error"
         self._status_text = "FEED UNAVAILABLE"

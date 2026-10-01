@@ -1,0 +1,8 @@
+{
+  "inputs_sha256": "79a505eacabf4aba6feb6431a370f8faf4af0860ea2a02caa8d401a37206aad7",
+  "pack_bytes": 3801943,
+  "pack_sha256": "4d823b1161ee14fc860123518f50c025191cddcf13dee4f66f997e3def6c4b7c",
+  "qrc": "assets.qrc",
+  "schema": 2,
+  "toolchain_sha256": "e8e6c0e55d019979888e0f9d518c0194f87b2c5a23f7234eb46febf57892189b"
+}

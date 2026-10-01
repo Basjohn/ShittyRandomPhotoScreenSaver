@@ -10,6 +10,15 @@
 ;      every file under release\media_center into {app}.
 ;
 
+; Remove yesterday's installer before compiler-version/style validation.
+; A failed compile must never leave stale Setup_*.exe looking current.
+#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS_Media_Center.exe')
+
+; Installer styling/background directives require Inno Setup 6.7.2+; 7.x remains supported.
+#if Ver < EncodeVer(6, 7, 2)
+#error SRPSS installers require Inno Setup 6.7.2 or newer (Inno Setup 7.x is supported).
+#endif
+
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
@@ -28,10 +37,17 @@ OutputBaseFilename=Setup_SRPSS_Media_Center
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
+CloseApplications=yes
+CloseApplicationsFilter=*.exe,*.dll,*.scr
+RestartApplications=no
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-WizardSmallImageFile=..\ui\assets\installer\LogoBMP.bmp
 VersionInfoVersion=5.0.6
+WizardStyle=modern dark includetitlebar hidebevels
+WizardBackColor=#0d181e
+WizardImageFile=
+WizardSmallImageFile=..\ui\assets\installer\SRPSSWizard.png
+WizardSmallImageBackColor=none
 AllowUNCPath=False
 
 [Languages]
@@ -45,7 +61,11 @@ Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Add
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
 
 [Files]
-; Copy everything inside the Nuitka onedir output into {app}
+; Installed shortcut/ARP icon. Wizard branding uses the transparent PNG above.
+Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; Copy everything inside the Nuitka onedir output into {app}. This wildcard
+; already includes SRPSS_Media_Center.exe; do not duplicate the EXE below.
 Source: "..\release\media_center\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
 ; Keep one packaged copy inside the MC install so visualizer imports can
 ; still restore from bundled assets even though runtime loading now uses the
@@ -57,10 +77,6 @@ Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commona
 Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 Source: "..\release\media_center\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
-; Include the EXE itself (for convenience when browsing install dir)
-Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
-; Installer icon for shortcuts / ARP entry
-Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
 ; When the 5.0.0 migration-reset task is selected, delete the pre-JSON MC QSettings tree too.
@@ -83,11 +99,71 @@ Type: filesandordirs; Name: "{app}"
 ; 5.0.0 migration-reset task for the Media Center profile only.
 Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettings
 
-; Wipe both the packaged backup copy and the shared active curated tree so
-; stale/renamed files never linger across upgrades.
-Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
+; CurStepChanged clean-replaces the entire installer-owned {app} payload while
+; preserving only Inno's unins* bookkeeping files. Keep shared mutable/catalogue
+; trees below clean-replaced independently.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 
+[Code]
+function IsInstallerBookkeepingFile(const Name: String): Boolean;
+var
+  LowerName: String;
+begin
+  LowerName := Lowercase(Name);
+  Result := Pos('unins', LowerName) = 1;
+end;
+
+procedure CleanInstallerOwnedAppPayload();
+var
+  AppDir: String;
+  EntryPath: String;
+  FindRec: TFindRec;
+  DeleteOK: Boolean;
+  Failed: Boolean;
+begin
+  AppDir := ExpandConstant('{app}');
+  if not DirExists(AppDir) then
+    Exit;
+
+  Failed := False;
+  Log('SRPSS: clean-replacing installer-owned application payload: ' + AppDir);
+  if FindFirst(AddBackslash(AppDir) + '*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') and
+           (not IsInstallerBookkeepingFile(FindRec.Name)) then
+        begin
+          EntryPath := AddBackslash(AppDir) + FindRec.Name;
+          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+            DeleteOK := DelTree(EntryPath, True, True, True)
+          else
+            DeleteOK := DelTree(EntryPath, False, True, False);
+
+          if not DeleteOK then
+          begin
+            Log('SRPSS: failed to remove stale installer-owned payload: ' + EntryPath);
+            Failed := True;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+
+  if Failed then
+    RaiseException(
+      'SRPSS could not clean-replace its application directory. ' +
+      'Close any running SRPSS process and retry the installer.'
+    );
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    CleanInstallerOwnedAppPayload();
+end;

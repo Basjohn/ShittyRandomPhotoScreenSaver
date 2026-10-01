@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QUrl
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 
 from core.settings.default_contract import require_canonical_default
@@ -25,6 +26,62 @@ def test_feed_presentation_qml_component_compiles_with_shadowed_text_contract(qt
     assert component.status() == QQmlComponent.Status.Ready, [
         error.toString() for error in component.errors()
     ]
+
+
+def test_feed_article_change_defers_row_reset_until_fade_midpoint(qt_app):
+    """A post-first-paint article mutation is event-staged, not abruptly reset."""
+    from time import time
+
+    from core.feeds.models import FeedDocument, FeedHealth, FeedItem, FeedRefreshResult, FeedSnapshot
+    from rendering.quick.widgets.feeds import (
+        FeedPresentationConfig, FeedPresentationModel, FeedPresentationStyle,
+    )
+
+    values = {"feeds_custom_1": {
+        "enabled": True,
+        "feed_url": "https://example.test/feed.xml",
+        "view_mode": "grid",
+        "show_images": False,
+        "item_limit": 3,
+    }}
+    config = FeedPresentationConfig.from_widgets_mapping(values, widget_id="feeds_custom_1")
+    model = FeedPresentationModel(
+        config,
+        FeedPresentationStyle.project(
+            config, dict(require_canonical_default("widgets.shadows"))
+        ),
+    )
+    model._active = True  # Test-only admission; no runtime/network owner.
+
+    def result(item_id: str, title: str) -> FeedRefreshResult:
+        now = time()
+        return FeedRefreshResult(
+            "available",
+            FeedSnapshot(
+                FeedDocument(
+                    "Example", "https://example.test", "rss20",
+                    (FeedItem(item_id, title, f"https://example.test/{item_id}"),),
+                ),
+                now,
+            ),
+            FeedHealth(last_success_at=now),
+        )
+
+    transition_spy = QSignalSpy(model.contentTransitionRequested)
+    model.on_feed_runtime_result(result("one", "First"), from_cache=False)
+    assert transition_spy.count() == 0
+    assert model.rowModel.rows[0].title == "First"
+
+    model.on_feed_runtime_result(result("two", "Second"), from_cache=False)
+    assert transition_spy.count() == 1
+    assert model.has_pending_content_transition is True
+    # The old article set stays painted until QML reaches opacity zero.
+    assert model.rowModel.rows[0].title == "First"
+
+    assert model.commitPendingContent() is True
+    assert model.rowModel.rows[0].title == "Second"
+    assert model.has_pending_content_transition is False
+    assert model.commitPendingContent() is False
 
 
 def test_f3_feed_grid_uses_local_artwork_and_geometry_visible_admission(qt_app, tmp_path):

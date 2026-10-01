@@ -240,6 +240,10 @@ class _QueuedLoggingController:
         self._emergency_writes = 0
         self._emergency_stderr_fallbacks = 0
         self._reentry_fallbacks = 0
+        # Producer-side recursion can happen from GC/finalizer callbacks while
+        # this same thread already owns an ingress lock.  Its fuse is deliberately
+        # lock-free; see _producer_reentry_fallback().
+        self._producer_reentry_fallbacks = 0
         self._snapshot_errors = 0
         self._writer_errors = 0
         self._queue_high_water = 0
@@ -276,6 +280,16 @@ class _QueuedLoggingController:
         return self._thread
 
     def enqueue(self, source_record: logging.LogRecord) -> None:
+        # Ingress is a leaf operation.  A GC/finalizer callback can run at any
+        # Python allocation point, including while this thread owns
+        # _accept_lock or _metrics_lock.  Recursive producer logging must
+        # therefore be rejected *before* touching any controller lock, queue,
+        # formatter or ordinary handler.  The guard remains set through caller
+        # telemetry so recursion from the final accounting block is safe too.
+        if bool(getattr(self._dispatch_state, "in_enqueue", False)):
+            self._producer_reentry_fallback(source_record)
+            return
+        self._dispatch_state.in_enqueue = True
         started_ns = time.perf_counter_ns()
         try:
             if bool(getattr(self._dispatch_state, "in_dispatch", False)):
@@ -331,11 +345,14 @@ class _QueuedLoggingController:
             elif drop_level is not None:
                 self._record_low_priority_drop(drop_level)
         finally:
-            elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
-            with self._metrics_lock:
-                self._caller_records += 1
-                self._caller_total_ns += elapsed_ns
-                self._caller_max_ns = max(self._caller_max_ns, elapsed_ns)
+            try:
+                elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+                with self._metrics_lock:
+                    self._caller_records += 1
+                    self._caller_total_ns += elapsed_ns
+                    self._caller_max_ns = max(self._caller_max_ns, elapsed_ns)
+            finally:
+                self._dispatch_state.in_enqueue = False
 
     def _record_low_priority_drop(self, levelno: int) -> None:
         with self._metrics_lock:
@@ -359,6 +376,29 @@ class _QueuedLoggingController:
         try:
             sys.__stderr__.write(f"{prefix}{message}\n")
             sys.__stderr__.flush()
+        except Exception:
+            pass
+
+    def _producer_reentry_fallback(self, record: logging.LogRecord) -> None:
+        """Fail closed on recursive ingress without touching controller locks.
+
+        This path exists specifically for GC/finalizer re-entry: the interrupted
+        outer enqueue may already own _accept_lock or _metrics_lock.  DEBUG/INFO
+        are dropped.  WARNING+ gets one fixed raw stderr breadcrumb; formatting
+        the original message is intentionally forbidden because __str__/format
+        hooks can themselves recurse into logging.
+        """
+
+        # Lock-free diagnostic only. Exactness is less important than ensuring
+        # the recursion fuse itself can never wait on the interrupted enqueue.
+        self._producer_reentry_fallbacks += 1
+        if record.levelno < logging.WARNING:
+            return
+        try:
+            os.write(
+                2,
+                b"SRPSS producer logging reentry suppressed WARNING+ record\n",
+            )
         except Exception:
             pass
 
@@ -561,7 +601,7 @@ class _QueuedLoggingController:
                 "dropped_debug=%d dropped_info=%d dropped_other_low=%d "
                 "emergency_attempts=%d emergency_main_writes=%d "
                 "emergency_stderr_fallbacks=%d reentry_fallbacks=%d "
-                "snapshot_errors=%d writer_errors=%d "
+                "producer_reentry_fallbacks=%d snapshot_errors=%d writer_errors=%d "
                 "high_water=%d capacity=%d caller_avg_ms=%.4f "
                 "caller_max_ms=%.4f writer_lag_avg_ms=%.4f "
                 "writer_lag_max_ms=%.4f file_commit_lag_avg_ms=%.4f "
@@ -578,6 +618,7 @@ class _QueuedLoggingController:
                 metrics["emergency_writes"],
                 metrics["emergency_stderr_fallbacks"],
                 metrics["reentry_fallbacks"],
+                metrics["producer_reentry_fallbacks"],
                 metrics["snapshot_errors"],
                 metrics["writer_errors"],
                 metrics["queue_high_water"],
@@ -694,6 +735,7 @@ class _QueuedLoggingController:
                 "emergency_writes": self._emergency_writes,
                 "emergency_stderr_fallbacks": self._emergency_stderr_fallbacks,
                 "reentry_fallbacks": self._reentry_fallbacks,
+                "producer_reentry_fallbacks": self._producer_reentry_fallbacks,
                 "snapshot_errors": self._snapshot_errors,
                 "writer_errors": self._writer_errors,
                 "caller_records": self._caller_records,
@@ -2404,6 +2446,7 @@ def _inactive_logging_metrics() -> dict[str, int | float | bool]:
         "emergency_writes": 0,
         "emergency_stderr_fallbacks": 0,
         "reentry_fallbacks": 0,
+        "producer_reentry_fallbacks": 0,
         "snapshot_errors": 0,
         "writer_errors": 0,
         "caller_records": 0,

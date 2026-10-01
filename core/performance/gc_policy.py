@@ -24,7 +24,7 @@ import threading
 import time
 from typing import Any
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -36,6 +36,8 @@ class GCPolicySnapshot:
     active_thresholds: tuple[int, int, int]
     collections: tuple[int, int, int]
     collected: tuple[int, int, int]
+    uncollectable: tuple[int, int, int]
+    slow_collections: tuple[int, int, int]
     duration_ms: tuple[float, float, float]
     duration_max_ms: tuple[float, float, float]
 
@@ -109,6 +111,8 @@ class RuntimeGCPolicy:
         self._starts_ns = [0, 0, 0]
         self._collections = [0, 0, 0]
         self._collected = [0, 0, 0]
+        self._uncollectable = [0, 0, 0]
+        self._slow_collections = [0, 0, 0]
         self._duration_ms = [0.0, 0.0, 0.0]
         self._duration_max_ms = [0.0, 0.0, 0.0]
 
@@ -219,13 +223,31 @@ class RuntimeGCPolicy:
         snapshot = self.snapshot()
         logger.info(
             "[GC_POLICY] RUN policy restored original=%s collections=%s "
+            "collected=%s uncollectable=%s slow_ge_%.1fms=%s "
             "duration_ms=%s max_ms=%s freeze_restored=%s",
             self._original_thresholds,
             snapshot.collections,
+            snapshot.collected,
+            snapshot.uncollectable,
+            self._WARN_MS,
+            snapshot.slow_collections,
             tuple(round(v, 2) for v in snapshot.duration_ms),
             tuple(round(v, 2) for v in snapshot.duration_max_ms),
             not unfreeze_failed,
         )
+        if any(snapshot.slow_collections):
+            # GC callbacks are forbidden from logging.  Emit their aggregate
+            # warning only after the callback has been removed and ordinary
+            # logging is once again a safe operation.
+            logger.warning(
+                "[PERF][GC_POLICY] deferred slow-collection summary "
+                "slow_ge_%.1fms=%s max_ms=%s collected=%s uncollectable=%s",
+                self._WARN_MS,
+                snapshot.slow_collections,
+                tuple(round(v, 2) for v in snapshot.duration_max_ms),
+                snapshot.collected,
+                snapshot.uncollectable,
+            )
         return not unfreeze_failed
 
     def snapshot(self) -> GCPolicySnapshot:
@@ -236,11 +258,22 @@ class RuntimeGCPolicy:
                 active_thresholds=self._active_thresholds,
                 collections=tuple(self._collections),
                 collected=tuple(self._collected),
+                uncollectable=tuple(self._uncollectable),
+                slow_collections=tuple(self._slow_collections),
                 duration_ms=tuple(self._duration_ms),
                 duration_max_ms=tuple(self._duration_max_ms),
             )
 
     def _gc_callback(self, phase: str, info: dict[str, Any]) -> None:
+        """Capture collection telemetry without locks, logging, I/O or Qt work.
+
+        CPython can invoke this callback from an arbitrary allocation point.
+        That includes code already holding the logging ingress locks or this
+        policy's own lifecycle lock.  The callback is therefore deliberately
+        leaf-like: mutate only small in-memory counters while the GIL is held.
+        Reporting happens later from stop(), after this callback is removed.
+        """
+
         generation = int(info.get("generation", -1) or 0)
         if generation < 0 or generation >= len(self._starts_ns):
             return
@@ -259,32 +292,19 @@ class RuntimeGCPolicy:
         )
         collected = max(0, int(info.get("collected", 0) or 0))
         uncollectable = max(0, int(info.get("uncollectable", 0) or 0))
-        with self._lock:
-            self._collections[generation] += 1
-            self._collected[generation] += collected
-            self._duration_ms[generation] += elapsed_ms
-            self._duration_max_ms[generation] = max(
-                self._duration_max_ms[generation], elapsed_ms
-            )
 
+        # No lock here by design.  gc.callbacks execute as Python callbacks
+        # under the GIL, and this path must remain safe even if collection
+        # interrupts code that already owns self._lock or a logging lock.
+        self._collections[generation] += 1
+        self._collected[generation] += collected
+        self._uncollectable[generation] += uncollectable
+        self._duration_ms[generation] += elapsed_ms
+        self._duration_max_ms[generation] = max(
+            self._duration_max_ms[generation], elapsed_ms
+        )
         if elapsed_ms >= self._WARN_MS:
-            logger.warning(
-                "[PERF][GC_POLICY] generation=%d duration_ms=%.2f collected=%d "
-                "uncollectable=%d counts=%s thresholds=%s",
-                generation,
-                elapsed_ms,
-                collected,
-                uncollectable,
-                gc.get_count(),
-                gc.get_threshold(),
-            )
-        elif is_perf_metrics_enabled() and generation >= 1:
-            logger.debug(
-                "[PERF][GC_POLICY] generation=%d duration_ms=%.2f collected=%d",
-                generation,
-                elapsed_ms,
-                collected,
-            )
+            self._slow_collections[generation] += 1
 
 
 __all__ = [

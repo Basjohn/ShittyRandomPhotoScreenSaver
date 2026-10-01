@@ -245,7 +245,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         job.script.write_text("fixture", encoding="utf-8")
     for asset in (
         tmp_path / "SRPSS.ico",
-        tmp_path / "ui" / "assets" / "installer" / "LogoBMP.bmp",
+        tmp_path / "ui" / "assets" / "installer" / "SRPSSWizard.png",
         tmp_path / "ui" / "resources" / "assets.qrc",
         tmp_path / "ui" / "resources" / "onboarding_assets.qrc",
         tmp_path / "resources" / "tutuogg.ogg",
@@ -285,6 +285,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     )
     monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
     monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+    monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: (7, 1, 0))
     # This test pins job/asset preflight against a synthetic tree. The defaults
     # authority audit is a separate cross-cutting concern (it inspects the real
     # settings snapshot + Python sources and has its own focused suite), so hold
@@ -293,12 +294,64 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
 
     result = build_runner.run_preflight("normal", tmp_path)
 
-    # Generated modules may be absent: the Foundry prerequisite creates them.
-    assert not (tmp_path / "ui" / "resources" / "assets_rc.py").exists()
+    # Generated binary packs may be absent: the Foundry prerequisite creates them.
+    assert not (tmp_path / "ui" / "resources" / "assets.rcc").exists()
     assert result.errors == []
     assert {"diagnostic"} == result.unavailable_jobs
     assert any("Diagnostic Runtime" in warning for warning in result.warnings)
 
+
+
+def test_inno_discovery_prefers_7_then_6_and_falls_back_to_path(monkeypatch, tmp_path):
+    seven = tmp_path / "Inno Setup 7" / "ISCC.exe"
+    six = tmp_path / "Inno Setup 6" / "ISCC.exe"
+    seven.parent.mkdir(parents=True)
+    six.parent.mkdir(parents=True)
+    seven.write_bytes(b"fixture")
+    six.write_bytes(b"fixture")
+
+    monkeypatch.delenv("SRPSS_ISCC_PATH", raising=False)
+    monkeypatch.setattr(build_runner, "ISCC_CANDIDATES", (seven, six))
+    monkeypatch.setattr(build_runner.shutil, "which", lambda _name: None)
+    assert build_runner._find_iscc() == seven
+
+    seven.unlink()
+    assert build_runner._find_iscc() == six
+
+    six.unlink()
+    path_iscc = tmp_path / "path" / "ISCC.exe"
+    monkeypatch.setattr(
+        build_runner.shutil,
+        "which",
+        lambda name: str(path_iscc) if name == "ISCC.exe" else None,
+    )
+    assert build_runner._find_iscc() == path_iscc
+
+
+def test_inno_version_parser_accepts_6_7_2_and_7_series():
+    assert build_runner._parse_iscc_version_output("6.7.2") == (6, 7, 2)
+    assert build_runner._parse_iscc_version_output("Inno Setup 7.1.0") == (7, 1, 0)
+    assert build_runner._parse_iscc_version_output("not a version") is None
+
+
+def test_preflight_blocks_unverifiable_or_old_inno(monkeypatch, tmp_path):
+    monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
+    monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+    monkeypatch.setattr(build_runner, "audit_defaults_authority", lambda _root: [])
+    monkeypatch.setattr(build_runner, "audit_qml_source_contract", lambda _root: [])
+
+    # We only care about the compiler gate here; missing fixture inputs are noisy
+    # but independent, so assert specifically on the Inno jobs/error.
+    monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: (6, 7, 1))
+    old = build_runner.run_preflight("normal", tmp_path)
+    assert "standard_installer" in old.unavailable_jobs
+    assert "media_center_installer" in old.unavailable_jobs
+    assert any("6.7.2 or newer is required" in error for error in old.errors)
+
+    monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: None)
+    unknown = build_runner.run_preflight("normal", tmp_path)
+    assert "standard_installer" in unknown.unavailable_jobs
+    assert any("Could not determine Inno Setup compiler version" in error for error in unknown.errors)
 
 def test_workers_and_installers_share_the_canonical_output_layout():
     scripts = build_runner.REPO_ROOT / "scripts"
@@ -378,3 +431,82 @@ def test_helper_state_record_is_bounded_metadata(tmp_path):
     assert payload["bundle_file_count"] == 1
     assert payload["bundle_size"] == 6
     assert state.stat().st_size < 4096
+
+
+def test_run_job_clears_previous_product_output_before_expensive_worker(monkeypatch, tmp_path):
+    script = tmp_path / "scripts" / "build.ps1"
+    script.parent.mkdir()
+    script.write_text("Write-Host ok", encoding="utf-8")
+    output_dir = tmp_path / "release" / "diagnostic"
+    output_dir.mkdir(parents=True)
+    stale = output_dir / "SRPSS_Diagnostic.scr"
+    stale.write_bytes(b"stale locked-candidate")
+    job = build_runner.Job(
+        "diagnostic",
+        "Diagnostic Runtime",
+        "powershell",
+        script,
+        output_dir,
+        output_dir / "SRPSS_Diagnostic.scr",
+    )
+
+    def fake_run(command, **kwargs):
+        assert not stale.exists(), "stale published artifact survived until worker launch"
+        job.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
+        job.expected_artifact.write_bytes(b"fresh")
+        return SimpleNamespace(returncode=0, wait=lambda: 0)
+
+    owner = SimpleNamespace(
+        start=lambda command, **kwargs: fake_run(command, **kwargs),
+        retire=lambda process: False,
+    )
+    monkeypatch.setattr(build_runner, "_windows_subprocess_kwargs", lambda: {})
+
+    result = build_runner.run_job(
+        job,
+        build_runner.PreflightResult(pwsh=Path("pwsh.exe")),
+        tmp_path / "logs",
+        process_owner=owner,
+    )
+
+    assert result.returncode == 0
+    assert job.expected_artifact.read_bytes() == b"fresh"
+
+
+def test_run_job_reports_locked_previous_payload_before_worker_launch(monkeypatch, tmp_path):
+    script = tmp_path / "scripts" / "build.ps1"
+    script.parent.mkdir()
+    script.write_text("Write-Host should-not-run", encoding="utf-8")
+    output_dir = tmp_path / "release" / "diagnostic"
+    output_dir.mkdir(parents=True)
+    job = build_runner.Job(
+        "diagnostic",
+        "Diagnostic Runtime",
+        "powershell",
+        script,
+        output_dir,
+        output_dir / "SRPSS_Diagnostic.scr",
+    )
+
+    monkeypatch.setattr(
+        build_runner,
+        "_clear_previous_product_output",
+        lambda _job: (_ for _ in ()).throw(PermissionError("fixture lock")),
+    )
+    owner = SimpleNamespace(
+        start=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("worker started")),
+        retire=lambda _process: False,
+    )
+
+    result = build_runner.run_job(
+        job,
+        build_runner.PreflightResult(pwsh=Path("pwsh.exe")),
+        tmp_path / "logs",
+        process_owner=owner,
+    )
+
+    assert result.returncode == 1
+    assert "previous published payload" in result.detail.lower()
+    assert "fixture lock" in result.detail.lower()
+    assert result.log_path.is_file()
+    assert "Build not started" in result.log_path.read_text(encoding="utf-8")

@@ -8,6 +8,15 @@
 ; 2) Compile this .iss file in Inno Setup (or select Standard Installer).
 ; 3) Distribute release\installers\Setup_SRPSS.exe to end users.
 
+; Remove yesterday's installer before compiler-version/style validation.
+; A failed compile must never leave stale Setup_*.exe looking current.
+#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS.exe')
+
+; Installer styling/background directives require Inno Setup 6.7.2+; 7.x remains supported.
+#if Ver < EncodeVer(6, 7, 2)
+#error SRPSS installers require Inno Setup 6.7.2 or newer (Inno Setup 7.x is supported).
+#endif
+
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
@@ -23,10 +32,17 @@ OutputBaseFilename=Setup_SRPSS
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
+CloseApplications=yes
+CloseApplicationsFilter=*.exe,*.dll,*.scr
+RestartApplications=no
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-WizardSmallImageFile=..\ui\assets\installer\LogoBMP.bmp
 VersionInfoVersion=5.0.6
+WizardStyle=modern dark includetitlebar hidebevels
+WizardBackColor=#0d181e
+WizardImageFile=
+WizardSmallImageFile=..\ui\assets\installer\SRPSSWizard.png
+WizardSmallImageBackColor=none
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,14 +52,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 
 [Files]
+; Installed shortcut/ARP icon. Wizard branding uses the transparent PNG above.
+Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Main screensaver from the canonical release payload.
 Source: ".\..\release\screensaver\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
 
-; Application icon used for shortcuts and ARP entry.
-Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
-
-; Media provider logos.
-Source: ".\..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ignoreversion
+; Immutable provider logos are Qt resources in the SCR. Do not resurrect loose
+; image copies here; ui/resources/assets.qrc is the runtime authority.
 
 ; Reddit helper watcher bundle.
 Source: ".\..\release\reddit_helper\*"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: recursesubdirs createallsubdirs ignoreversion
@@ -71,6 +87,11 @@ Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\helper_signals"; Permissions: users-modify
 
 [InstallDelete]
+; The Standard SCR is a Nuitka onefile using a stable per-user extraction cache.
+; Clean it on upgrade so retired frozen dependencies (WebEngine/pytz/etc.) cannot
+; survive merely because a prior onefile payload had already extracted them.
+Type: filesandordirs; Name: "{localappdata}\SRPSS\onefile"
+
 ; 5.0.0 migration-reset task. Delete the canonical user settings snapshot;
 ; caches, credentials, themes, presets, and other state remain untouched.
 Type: files; Name: "{userappdata}\SRPSS\settings_v2.json"; Tasks: resetsettings
@@ -80,7 +101,8 @@ Type: files; Name: "{sys}\\Sprss.scr"
 Type: files; Name: "{sys}\\PSrpss.scr"
 Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 
-; Clean-replace shipped data and helper bundle.
+; Clean-replace shipped data and helper bundle. {app} itself is clean-replaced
+; in CurStepChanged while preserving only Inno's unins* bookkeeping files.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
@@ -104,6 +126,7 @@ Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhid
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SRPSS_RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteHelperTask"
 
 [UninstallDelete]
+Type: filesandordirs; Name: "{localappdata}\SRPSS\onefile"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 
@@ -111,6 +134,60 @@ Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent
 
 [Code]
+function IsInstallerBookkeepingFile(const Name: String): Boolean;
+var
+  LowerName: String;
+begin
+  LowerName := Lowercase(Name);
+  Result := Pos('unins', LowerName) = 1;
+end;
+
+procedure CleanInstallerOwnedAppPayload();
+var
+  AppDir: String;
+  EntryPath: String;
+  FindRec: TFindRec;
+  DeleteOK: Boolean;
+  Failed: Boolean;
+begin
+  AppDir := ExpandConstant('{app}');
+  if not DirExists(AppDir) then
+    Exit;
+
+  Failed := False;
+  Log('SRPSS: clean-replacing installer-owned application payload: ' + AppDir);
+  if FindFirst(AddBackslash(AppDir) + '*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') and
+           (not IsInstallerBookkeepingFile(FindRec.Name)) then
+        begin
+          EntryPath := AddBackslash(AppDir) + FindRec.Name;
+          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+            DeleteOK := DelTree(EntryPath, True, True, True)
+          else
+            DeleteOK := DelTree(EntryPath, False, True, False);
+
+          if not DeleteOK then
+          begin
+            Log('SRPSS: failed to remove stale installer-owned payload: ' + EntryPath);
+            Failed := True;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+
+  if Failed then
+    RaiseException(
+      'SRPSS could not clean-replace its application directory. ' +
+      'Close any running SRPSS process and retry the installer.'
+    );
+end;
+
 function XmlEscape(const Value: String): String;
 begin
   Result := Value;
@@ -279,6 +356,8 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssInstall then
+    CleanInstallerOwnedAppPayload()
+  else if CurStep = ssPostInstall then
     RegisterRedditHelperTask();
 end;

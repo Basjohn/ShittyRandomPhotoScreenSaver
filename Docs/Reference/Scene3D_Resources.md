@@ -82,4 +82,4 @@ The expanded fence deliberately pays for the previously missing state; the isola
 
 Changing uniform streams still use the existing mutable/orphaned UBO owner. Immutable static storage is not a
 drop-in replacement for that update policy. Persistent mapped streaming, multiple buffer-range binding and effect-
-private dynamic/instanced transport require the separate S14 decomposition in `Docs/Future_Work/3D_Scene_Foundation.md`.
+private dynamic/instanced transport are tracked by the live S14 checklist in `Current_Plan.md`.

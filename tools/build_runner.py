@@ -75,9 +75,13 @@ HELPER_ARTIFACT = RELEASE_DIR / "reddit_helper" / "SRPSS_RedditHelper.exe"
 HELPER_STATE_PATH = helper_state_path()
 
 ISCC_CANDIDATES = (
-    Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
+    Path(r"C:\Program Files\Inno Setup 7\ISCC.exe"),
+    Path(r"C:\Program Files (x86)\Inno Setup 7\ISCC.exe"),
     Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
+    Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
 )
+MIN_ISCC_VERSION = (6, 7, 2)
+
 
 COLORS = {
     "root": "#0d181e",
@@ -264,6 +268,7 @@ class PreflightResult:
     unavailable_jobs: set[str] = field(default_factory=set)
     pwsh: Path | None = None
     iscc: Path | None = None
+    iscc_version: tuple[int, int, int] | None = None
 
     @property
     def ok(self) -> bool:
@@ -653,7 +658,7 @@ def ensure_selected_qrc_current(
     process_owner: BuildProcessOwner,
     repo_root: Path = REPO_ROOT,
 ) -> tuple[QrcStatus, ...]:
-    """Regenerate the ownership-scoped resource set once per Foundry run."""
+    """Regenerate the ownership-scoped binary resource packs once per Foundry run."""
     prepare_qrc_environment(mode, process_owner, repo_root)
     python_executable = qrc_python_for_mode(mode, repo_root)
     return ensure_qrc_targets_current(
@@ -759,7 +764,45 @@ def _find_iscc() -> Path | None:
         candidate = Path(override)
         if candidate.is_file() and candidate.name.lower() == "iscc.exe":
             return candidate
-    return next((path for path in ISCC_CANDIDATES if path.is_file()), None)
+
+    candidate = next((path for path in ISCC_CANDIDATES if path.is_file()), None)
+    if candidate is not None:
+        return candidate
+
+    resolved = shutil.which("ISCC.exe") or shutil.which("ISCC")
+    return Path(resolved) if resolved else None
+
+
+def _parse_iscc_version_output(output: str) -> tuple[int, int, int] | None:
+    match = re.search(r"(?<!\d)(\d+)\.(\d+)(?:\.(\d+))?", str(output or ""))
+    if match is None:
+        return None
+    return (
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3) or 0),
+    )
+
+
+def _query_iscc_version(iscc: Path) -> tuple[int, int, int] | None:
+    """Read the compiler engine version without compiling any installer."""
+    try:
+        completed = subprocess.run(
+            [str(iscc), "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+            **_windows_subprocess_kwargs(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    return _parse_iscc_version_output(completed.stdout)
 
 
 def _find_pwsh() -> Path | None:
@@ -768,7 +811,12 @@ def _find_pwsh() -> Path | None:
 
 
 def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResult:
-    result = PreflightResult(pwsh=_find_pwsh(), iscc=_find_iscc())
+    iscc = _find_iscc()
+    result = PreflightResult(
+        pwsh=_find_pwsh(),
+        iscc=iscc,
+        iscc_version=_query_iscc_version(iscc) if iscc is not None else None,
+    )
     jobs = jobs_for_mode(mode, repo_root)
 
     for issue in audit_defaults_authority(repo_root):
@@ -791,7 +839,18 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             job.key for job in jobs if job.kind == "powershell"
         )
     if result.iscc is None:
-        result.errors.append("Inno Setup 6 console compiler (ISCC.exe) was not found")
+        result.errors.append("Supported Inno Setup console compiler (ISCC.exe, 6.7.2+) was not found")
+        result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
+    elif result.iscc_version is None:
+        result.errors.append(
+            f"Could not determine Inno Setup compiler version: {result.iscc}"
+        )
+        result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
+    elif result.iscc_version < MIN_ISCC_VERSION:
+        found = ".".join(str(part) for part in result.iscc_version)
+        result.errors.append(
+            f"Inno Setup 6.7.2 or newer is required; found {found} at {result.iscc}"
+        )
         result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
 
     if not (repo_root / ".venv").is_dir():
@@ -806,7 +865,7 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
 
     required_assets = (
         repo_root / "SRPSS.ico",
-        repo_root / "ui" / "assets" / "installer" / "LogoBMP.bmp",
+        repo_root / "ui" / "assets" / "installer" / "SRPSSWizard.png",
         repo_root / "ui" / "resources" / "assets.qrc",
         repo_root / "ui" / "resources" / "onboarding_assets.qrc",
         repo_root / "resources" / "tutuogg.ogg",
@@ -1173,6 +1232,42 @@ def prune_build_runner_logs(
                 pass
 
 
+def _clear_previous_product_output(
+    job: Job,
+    *,
+    attempts: int = 4,
+    delay_seconds: float = 0.2,
+) -> None:
+    """Clear a worker-owned published payload before expensive compilation.
+
+    A locked old SCR/EXE must fail here, not after Nuitka has spent minutes
+    compiling and then discovered it cannot replace the published artifact.
+    The worker repeats the same ownership check for direct-script use; this
+    runner-side guard also prevents a stale artifact from satisfying the footer.
+    """
+
+    target = job.output_dir
+    if not target.exists():
+        return
+
+    last_error: OSError | None = None
+    for attempt in range(max(1, int(attempts))):
+        try:
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink(missing_ok=True)
+            return
+        except OSError as exc:
+            last_error = exc
+            if attempt + 1 >= max(1, int(attempts)):
+                break
+            time.sleep(max(0.0, float(delay_seconds)))
+
+    assert last_error is not None
+    raise last_error
+
+
 def run_job(
     job: Job,
     preflight: PreflightResult,
@@ -1194,6 +1289,22 @@ def run_job(
     if job.kind == "powershell":
         if preflight.pwsh is None:
             return JobResult(1, "PowerShell 7 unavailable", log_path, job.output_dir)
+        try:
+            _clear_previous_product_output(job)
+        except OSError as exc:
+            detail = f"Previous published payload is locked or cannot be cleared: {exc}"
+            try:
+                log_path.write_text(
+                    f"SRPSS Build Runner {APP_VERSION}\n"
+                    f"Job: {job.name}\n"
+                    "Build not started: previous published payload could not be cleared.\n"
+                    f"Target: {job.output_dir}\n"
+                    f"Error: {exc}\n",
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+            return JobResult(1, detail, log_path, job.output_dir)
         command = [
             str(preflight.pwsh),
             "-NoProfile",
@@ -1205,6 +1316,15 @@ def run_job(
     else:
         if preflight.iscc is None:
             return JobResult(1, "ISCC.exe unavailable", log_path, job.output_dir)
+        try:
+            job.expected_artifact.unlink(missing_ok=True)
+        except OSError as exc:
+            return JobResult(
+                1,
+                f"Could not clear previous installer artifact: {exc}",
+                log_path,
+                job.output_dir,
+            )
         try:
             stamp_iss_version(job.script)
         except OSError as exc:
@@ -2399,7 +2519,7 @@ class BuildRunnerApp:
                 self._events.put(
                     (
                         "footer",
-                        "Checking the selected PySide6 QRC resource prerequisite…",
+                        "Checking the selected PySide6 binary QRC resource prerequisite…",
                         COLORS["amber"],
                     )
                 )
@@ -2410,7 +2530,7 @@ class BuildRunnerApp:
                 self._events.put(
                     (
                         "footer",
-                        f"QRC resource modules are current: {qrc_assets} QRC assets.",
+                        f"QRC binary resource packs are current: {qrc_assets} QRC assets.",
                         COLORS["green"],
                     )
                 )

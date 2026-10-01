@@ -37,8 +37,10 @@ def test_friend_pulse_and_system_stats_assets_are_in_the_product_contract() -> N
     assert "rendering\\quick\\qml\\SystemStatsPresentation.qml" in contract
     assert "ui\\resources\\assets.qrc" in contract
     assert "ui\\resources\\onboarding_assets.qrc" in contract
-    assert "--include-module=ui.resources.assets_rc" in contract
-    assert "--include-module=ui.resources.onboarding_assets_rc" in contract
+    assert "--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc" in contract
+    assert "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc" in contract
+    assert "--include-module=ui.resources.assets_rc" not in contract
+    assert "--include-module=ui.resources.onboarding_assets_rc" not in contract
     assert "--include-data-dir=images=images" not in contract
 
 
@@ -51,7 +53,7 @@ def test_build_runner_preflight_checks_friend_pulse_and_system_stats_assets() ->
     assert '"ui" / "resources" / "onboarding_assets.qrc"' in contract
 
 
-def test_every_product_worker_generates_and_retains_the_two_qrc_modules() -> None:
+def test_every_product_worker_generates_and_retains_the_two_binary_qrc_packs() -> None:
     scripts = (
         REPO_ROOT / "scripts" / "build_nuitka.ps1",
         REPO_ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
@@ -62,8 +64,10 @@ def test_every_product_worker_generates_and_retains_the_two_qrc_modules() -> Non
         worker = script.read_text(encoding="utf-8")
         assert "Invoke-SRPSSQrcRegeneration" in worker
         assert "--include-data-dir=images=images" not in worker
-        assert "--include-module=ui.resources.assets_rc" in worker
-        assert "--include-module=ui.resources.onboarding_assets_rc" in worker
+        assert "--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc" in worker
+        assert "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc" in worker
+        assert "--include-module=ui.resources.assets_rc" not in worker
+        assert "--include-module=ui.resources.onboarding_assets_rc" not in worker
 
 
 def test_every_product_worker_emits_nuitka_and_footprint_reports_without_dropping_qrc() -> None:
@@ -77,13 +81,15 @@ def test_every_product_worker_emits_nuitka_and_footprint_reports_without_droppin
         worker = script.read_text(encoding="utf-8")
         assert "--report=$NuitkaReportFile" in worker
         assert "Write-SRPSSBuildFootprintReport" in worker
-        assert "--include-module=ui.resources.onboarding_assets_rc" in worker
+        assert "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc" in worker
+        assert "--include-module=ui.resources.assets_rc" not in worker
+        assert "--include-module=ui.resources.onboarding_assets_rc" not in worker
 
     shared = LAYOUT_SCRIPT.read_text(encoding="utf-8")
     assert "function Write-SRPSSBuildFootprintReport" in shared
     assert "function Get-SRPSSQrcSourceMetrics" in shared
-    assert "generated_module_bytes" in shared
-    assert "not deployed/frozen payload bytes" in shared
+    assert "generated_pack_bytes" in shared
+    assert "Binary .rcc is the deployed Qt resource representation" in shared
     assert "This report describes the current build and current package contents only." in shared
 
 
@@ -106,8 +112,8 @@ def test_build_footprint_report_records_current_payload_and_qrc_source_reference
         '<RCC><qresource prefix="/srpss/onboarding"><file>../assets/onboarding.bin</file></qresource></RCC>',
         encoding="utf-8",
     )
-    (resources / "assets_rc.py").write_bytes(b"x" * 47)
-    (resources / "onboarding_assets_rc.py").write_bytes(b"y" * 113)
+    (resources / "assets.rcc").write_bytes(b"x" * 47)
+    (resources / "onboarding_assets.rcc").write_bytes(b"y" * 113)
 
     published = repo / "release" / "fixture"
     internal = published / "_internal"
@@ -140,14 +146,15 @@ Write-SRPSSBuildFootprintReport `
 
     assert result.returncode == 0, result.stderr + result.stdout
     payload = __import__("json").loads(footprint.read_text(encoding="utf-8-sig"))
+    assert payload["schema_version"] == 2
     assert payload["product"] == "fixture"
     assert payload["primary_artifact"]["bytes"] == len(b"artifact-bytes")
     assert payload["published_payload"]["file_count"] == 2
     qrc = {row["qrc"]: row for row in payload["qrc_source_reference"]}
     assert qrc[r"ui\resources\assets.qrc"]["source_bytes"] == len(b"ordinary-source")
-    assert qrc[r"ui\resources\assets.qrc"]["generated_module_bytes"] == 47
+    assert qrc[r"ui\resources\assets.qrc"]["generated_pack_bytes"] == 47
     assert qrc[r"ui\resources\onboarding_assets.qrc"]["source_bytes"] == len(b"onboarding-source-bytes")
-    assert qrc[r"ui\resources\onboarding_assets.qrc"]["generated_module_bytes"] == 113
+    assert qrc[r"ui\resources\onboarding_assets.qrc"]["generated_pack_bytes"] == 113
     assert any("current build and current package contents only" in note for note in payload["notes"])
 
 
@@ -314,3 +321,198 @@ Assert-SRPSSOnefileVisualizerShaderContract `
 
     assert result.returncode != 0
     assert "does not declare" in (result.stdout + result.stderr)
+
+
+def test_qml_bloat_prune_contract_is_shared_by_every_product_worker() -> None:
+    shared = LAYOUT_SCRIPT.read_text(encoding="utf-8")
+    assert "function Assert-SRPSSQmlExternalImportContract" in shared
+    assert "function Get-SRPSSNuitkaQmlPruneArguments" in shared
+    assert "'QtWebEngine'" in shared
+    assert "'QtQuick/Pdf'" in shared
+    assert "'QtQuick/VirtualKeyboard'" in shared
+    assert "'QtQuick/Controls'" in shared
+    assert "'QtQuick3D'" in shared
+    assert "--noinclude-dlls=*qpdf.dll" in shared
+    assert "*Qt6WebEngine*.dll" in shared
+    assert "*Qt6Pdf*.dll" in shared
+    assert "*Qt6VirtualKeyboard*.dll" in shared
+    assert "function Assert-SRPSSForbiddenFrozenPayloadAbsent" in shared
+    assert "--nofollow-import-to=pytz" in shared
+    assert "--noinclude-data-files=pytz/**" in shared
+    assert "--nofollow-import-to=tzdata" in shared
+    assert "--noinclude-data-files=tzdata/**" in shared
+
+    scripts = (
+        REPO_ROOT / "scripts" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    )
+    for script in scripts:
+        worker = script.read_text(encoding="utf-8")
+        assert "'Get-SRPSSNuitkaQmlPruneArguments'," in worker
+        assert "$argsList += @(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $Root)" in worker
+
+
+def test_qml_prune_arguments_keep_authored_qtquick_effects_and_drop_unused_families(tmp_path):
+    repo_root = tmp_path / "repo"
+    qml_root = repo_root / "rendering" / "quick" / "qml"
+    qml_root.mkdir(parents=True)
+    (qml_root / "Scene.qml").write_text("import QtQuick\nItem {}\n", encoding="utf-8")
+    (qml_root / "Shadow.qml").write_text(
+        "import QtQuick\nimport QtQuick.Effects\nItem {}\n",
+        encoding="utf-8",
+    )
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+@(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $env:SRPSS_REPO_ROOT) -join "`n"
+""",
+        repo_root=repo_root,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    prune = result.stdout.replace("\\", "/")
+    assert "PySide6/qml/QtWebEngine/**" in prune
+    assert "PySide6/qml/QtQuick/Pdf/**" in prune
+    assert "PySide6/qml/QtQuick/VirtualKeyboard/**" in prune
+    assert "PySide6/qml/QtQuick/Controls/**" in prune
+    assert "*qpdf.dll" in prune
+    assert "*Qt6WebEngine*.dll" in prune
+    assert "*Qt6Pdf*.dll" in prune
+    assert "*Qt6VirtualKeyboard*.dll" in prune
+    assert "--nofollow-import-to=pytz" in prune
+    assert "--noinclude-data-files=pytz/**" in prune
+    assert "--nofollow-import-to=tzdata" in prune
+    assert "--noinclude-data-files=tzdata/**" in prune
+    assert "PySide6/qml/QtQuick/Effects/**" not in prune
+    assert "PySide6/qml/QtQuick/**" not in prune
+
+
+
+def test_media_center_workers_fail_if_forbidden_frozen_payload_survives() -> None:
+    for relative in (
+        "scripts/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_mc_onedir.ps1",
+    ):
+        worker = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "'Assert-SRPSSForbiddenFrozenPayloadAbsent'," in worker
+        assert "Assert-SRPSSForbiddenFrozenPayloadAbsent -DistributionRoot $Exe.DirectoryName" in worker
+        assert "Forbidden unused frozen families (including pytz) absent from onedir payload." in worker
+
+
+
+def test_forbidden_frozen_payload_assertion_rejects_pytz_tree(tmp_path):
+    dist_root = tmp_path / "dist"
+    zoneinfo = dist_root / "pytz" / "zoneinfo" / "Africa"
+    zoneinfo.mkdir(parents=True)
+    (zoneinfo / "Johannesburg").write_bytes(b"tz")
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+Assert-SRPSSForbiddenFrozenPayloadAbsent -DistributionRoot $env:SRPSS_DIST_ROOT | Out-Null
+""",
+        dist_root=dist_root,
+    )
+
+    assert result.returncode != 0
+    output = (result.stdout + result.stderr).casefold()
+    assert "pytz" in output
+    assert "unused frozen payload" in output
+
+def test_qml_import_contract_rejects_new_external_qt_family_until_packaging_is_reviewed(tmp_path):
+    repo_root = tmp_path / "repo"
+    qml_root = repo_root / "rendering" / "quick" / "qml"
+    qml_root.mkdir(parents=True)
+    (qml_root / "Scene.qml").write_text(
+        "import QtQuick\nimport QtQuick.Effects\nimport QtQuick.Controls\nItem {}\n",
+        encoding="utf-8",
+    )
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+Assert-SRPSSQmlExternalImportContract -RepoRoot $env:SRPSS_REPO_ROOT | Out-Null
+""",
+        repo_root=repo_root,
+    )
+
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert "QtQuick.Controls" in output
+    assert "packaging" in output.lower()
+
+def test_pytz_is_retired_from_requirements_and_frozen_payload_contract() -> None:
+    requirements = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8").casefold()
+    shared = LAYOUT_SCRIPT.read_text(encoding="utf-8").casefold()
+
+    assert "pytz==" not in requirements
+    assert "qtimezone" in requirements
+    assert "'pytz'" in shared
+    assert "--nofollow-import-to=pytz" in shared
+    assert "--noinclude-data-files=pytz/**" in shared
+    assert "--nofollow-import-to=tzdata" in shared
+    assert "--noinclude-data-files=tzdata/**" in shared
+
+
+
+def test_frozen_bloat_contract_rejects_software_gl_and_unused_qt_qml_fossils() -> None:
+    contract = LAYOUT_SCRIPT.read_text(encoding="utf-8")
+
+    # SRPSS requires hardware OpenGL 4.6 Core; Qt's software OpenGL fallback
+    # cannot satisfy that contract and must not become an alternate renderer.
+    assert "*opengl32sw.dll" in contract
+    assert '$arguments.Add("--noinclude-dlls=$dllPattern")' in contract
+
+    # QOpenGLContext/QSurfaceFormat are consumed from QtGui. The much larger
+    # PySide QtOpenGL binding was being injected implicitly without an SRPSS import.
+    assert "--nofollow-import-to=PySide6.QtOpenGL" in contract
+    assert "pyside6/qtopengl.pyd" in contract
+
+    # These frameworks were measured as dependency fossils of QML namespaces
+    # outside the authored QtQuick + QtQuick.Effects allowlist.
+    for pattern in (
+        "*Qt6Labs*.dll",
+        "*Qt6QuickDialogs2*.dll",
+        "*Qt6QuickLayouts.dll",
+        "*Qt6QuickParticles.dll",
+        "*Qt6QuickTimeline*.dll",
+        "*Qt6QuickVectorImage*.dll",
+        "*Qt6WebChannel*.dll",
+        "*Qt6WebSockets.dll",
+        "*Qt6StateMachine*.dll",
+        "*Qt6QmlLocalStorage.dll",
+        "*Qt6QmlXmlListModel.dll",
+        "*Qt6MultimediaQuick.dll",
+        "*Qt6SpatialAudio.dll",
+        "*Qt6OpenGLWidgets.dll",
+        "*Qt6QuickTest.dll",
+        "*Qt6Test.dll",
+    ):
+        assert pattern in contract
+
+
+def test_every_product_worker_clears_published_payload_before_nuitka() -> None:
+    scripts = (
+        REPO_ROOT / "scripts" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    )
+    for script in scripts:
+        worker = script.read_text(encoding="utf-8")
+        clear_index = worker.index("Clear-SRPSSPublishedProductDirectory -Path $DistributionDir")
+        compile_index = worker.index("Starting Nuitka")
+        assert clear_index < compile_index, script
+        assert "Existing published payload is locked; aborting before compilation" in worker
+
+
+def test_publication_uses_bounded_retry_for_late_windows_locks() -> None:
+    contract = LAYOUT_SCRIPT.read_text(encoding="utf-8")
+    assert "function Remove-SRPSSPathWithRetry" in contract
+    assert "AttemptCount = 4" in contract
+    assert "Start-Sleep -Milliseconds" in contract
+    publish = contract[contract.index("function Publish-SRPSSDirectory") :]
+    assert "Remove-SRPSSPathWithRetry -Path $targetFull" in publish
