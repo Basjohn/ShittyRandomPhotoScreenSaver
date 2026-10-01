@@ -381,6 +381,8 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert "main_diagnostic.py" in diagnostic_worker
     assert "SRPSS_Diagnostic" in diagnostic_worker
     assert "-DistributionName 'diagnostic'" in diagnostic_worker
+    assert "    -Console `" in diagnostic_worker
+    assert "-Console:$Console" not in diagnostic_worker
     assert "from core.build_profile import activate_diagnostic_build" in diagnostic_entrypoint
     assert "from core.logging import crash_capture" in diagnostic_entrypoint
     assert "from core.logging import ownership_trace" in diagnostic_entrypoint

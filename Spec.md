@@ -79,12 +79,17 @@ families, Charts/Graphs/DataVisualization and Location/Positioning. Standard, Me
 the same exclusion authority; Diagnostic inherits it through the Venv Standard worker. Native Qt Multimedia remains
 packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
 context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
-`opengl32sw.dll` is explicitly outside the product contract because the software OpenGL fallback cannot satisfy the
-mandatory hardware OpenGL 4.6 Core floor. `PySide6.QtOpenGL`/QOpenGLWidget are also outside the runtime contract; SRPSS
-uses `QOpenGLContext` from QtGui plus PyOpenGL. Linked framework DLLs belonging solely to QML namespaces rejected by
-the authored-import allowlist are packaging fossils and are denied by the same frozen-payload assertion. WGL remains a
-valid Windows OpenGL platform surface and must not be confused with WebGL. A new dependency cut requires a fresh
-current-build report plus runtime acceptance of the affected surface.
+The PySide6 QtQuick binding has a binding-level dependency on `PySide6.QtOpenGL`, even though SRPSS application
+source obtains `QOpenGLContext`/`QSurfaceFormat` from QtGui and uses PyOpenGL for renderer calls. Therefore
+`PySide6.QtOpenGL` and the native `Qt6OpenGL` substrate are mandatory frozen dependencies and must not be pruned by
+source-import reasoning alone. `Qt6OpenGLWidgets` remains outside the runtime contract because the QWidget/QOpenGLWidget
+presentation path is retired. `opengl32sw.dll` is retained unless a frozen-runtime acceptance probe proves that this
+particular PySide/Qt Windows package does not require the fallback loader path; hardware OpenGL 4.6 remains the actual
+runtime floor, but that policy is not evidence that a Qt deployment support DLL is loader-safe to remove. Linked
+framework DLLs belonging solely to QML namespaces rejected by the authored-import allowlist may be denied only when
+the current frozen dependency graph and runtime acceptance both agree. WGL remains a valid Windows OpenGL platform
+surface and must not be confused with WebGL. A new dependency cut requires a fresh current-build report plus runtime
+acceptance of the affected surface.
 
 Only Standard and Media Center have installers. Their two canonical `.iss` files are self-contained and each requires
 Inno Setup 6.7.2 or newer, deletes the previous expected `Setup_*.exe` before compilation so failure cannot masquerade
