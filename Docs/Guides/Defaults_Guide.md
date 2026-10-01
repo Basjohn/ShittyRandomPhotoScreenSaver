@@ -28,8 +28,8 @@ Forbidden patterns include:
 - copied widget/transition default tables in descriptors, preview helpers or runtime owners;
 - treating a Settings-session capture, runtime history, recovery metadata or user `Custom` snapshot as a
   fresh-install product default;
-- reintroducing checked-in copies of the defaults (`defaults_snapshot.json`, SST defaults documents; retired
-  2026-09-27 and rejected by the authority audit);
+- reintroducing checked-in copies of the defaults (`defaults_snapshot.json`, SST defaults documents), which the
+  authority audit permanently rejects;
 - allowing tooling/root entrypoints to escape the same authority audit as production packages.
 
 Use `require_canonical_default(...)`, `get_default_settings(...)`, typed-model default projection, or the
@@ -75,11 +75,11 @@ transient DSP/lifecycle/readiness/cache/history state -> runtime owner initializ
 renderer/catalog/implementation capability fact -> implementation metadata
 ```
 
-Never add a canonical key merely to silence an `AttributeError`/`KeyError` from transient runtime state. Conversely, never remove a canonical setting merely because it looks presentation/runtime-like: first prove every current consumer and persistence/import path has a legitimate replacement authority in the same change. The 2026-09-06 sanitization exposed both failure directions: unseeded transient Visualizer DSP snapshot attributes belonged in `audio_worker.__init__`, while stale default-init descriptors incorrectly requested unprefixed Visualizer appearance fields that were actually projected from mode-owned settings.
+Never add a canonical key merely to silence an `AttributeError`/`KeyError` from transient runtime state. Conversely, never remove a canonical setting merely because it looks presentation/runtime-like: first prove every current consumer and persistence/import path has a legitimate replacement authority in the same change. The durable failure modes are both guarded: transient Visualizer DSP snapshot attributes belong in `audio_worker.__init__`, while Visualizer appearance fields are projected from mode-owned settings rather than invented as unprefixed defaults.
 
 The permanent completeness tests are therefore intentionally **settings-contract** tests, not a claim that every runtime attribute belongs in schema. `tests/test_settings_defaults_completeness.py` covers current settings/default-resolvable descriptors and per-mode technical keys, allowing explicit derivation-by-design; runtime-state initialization needs its own owner-specific tests.
 
-## Approved fresh-profile baseline (2026-09-06)
+## Approved fresh-profile baseline
 
 The reviewed standard/Screensaver baseline is intentionally conservative about screen space and capability cost:
 
@@ -222,7 +222,7 @@ prior live state when not committed.
 ## Post-sanitization settings authority
 
 The Quick-era family/transition activation defaults, Random/pool defaults and retired-presentation schema handling are
-landed destination behavior. The 2026-09-06 defaults-authority sweep removed duplicate/shadow product-default owners
-and installed a whole-first-party-Python anti-fragmentation gate. Future cleanup may delete caller-dead residue only
-after exact use/caller proof; it must not silently redefine reset/default behavior. Any future default change follows
-the safe-default workflow above and regenerates derived artifacts deliberately.
+current destination behavior. Duplicate/shadow product-default owners are forbidden and the whole-first-party-Python
+anti-fragmentation audit enforces that boundary. Cleanup may delete caller-dead residue only after exact use/caller
+proof; it must not silently redefine reset/default behavior. Any future default change follows the safe-default workflow
+above and regenerates derived artifacts deliberately.

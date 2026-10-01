@@ -1,9 +1,9 @@
 # Future Work
 
 The single live router for **deferred** features and architectural horizons. `Current_Plan.md` owns active work. The
-2026-09-30 operator direction promoted the OpenGL 4.6 / modern scene3d / Voxel Sphere / high-fidelity effects program,
-so those items no longer live here as dormant backlog; their active order is in `Current_Plan.md` and their technical
-decomposition is in `Docs/Future_Work/3D_Scene_Foundation.md`.
+OpenGL 4.6 / modern scene3d / Voxel Sphere / high-fidelity effects program is already promoted, so those items no
+longer live here as dormant backlog; their active order is in `Current_Plan.md` and their technical decomposition is
+in `Docs/Future_Work/3D_Scene_Foundation.md`.
 
 ## 1. Authority and activation
 
@@ -55,7 +55,7 @@ The shared foundation is now active work, not future work. The durable architect
 - quality tiers bound sample counts, grid/volume resolution, particle counts and post work;
 - no timer/poller/forced frame to service graphics work.
 
-Voxel Sphere promotion is explicitly active as of 2026-09-30: share the GPU substrate, not the Sphere behavioural model.
+Voxel Sphere promotion is active: share the GPU substrate, not the Sphere behavioural model.
 
 ## 3. Graphics API horizon after OpenGL 4.6
 

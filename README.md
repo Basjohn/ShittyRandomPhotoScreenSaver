@@ -30,6 +30,12 @@ A look at the current features. Developer contracts and work-in-progress details
     - Diffuse
     - Block Puzzle Flip
     - Blinds
+    - Burn
+    - Glass Shatter
+    - Exploding Tiles
+    - Directional Pixel Accretion
+    - Ink Bloom
+    - Melt Drip
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 
@@ -41,7 +47,7 @@ A look at the current features. Developer contracts and work-in-progress details
   - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), with an optional isolated experimental Sphere and a preset/Custom system.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
   - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
-  - **FEEDS** Custom RSS/Atom widget with List/Grid/Compact layouts, optional locally cached article artwork and clickable HTTP/S stories. Custom 1 is the currently admitted slot; the remaining fixed slots/NEWS categories are still gated work.
+  - **FEEDS** Ten retained feed cards: four Custom RSS/Atom/JSON/h-feed slots plus six News categories, with List/Grid/Compact layouts, optional locally cached article artwork, clickable HTTP/S stories and validated magnet actions.
   - **System Audio OSD** Optional retained master-volume/mute overlay driven from the shared Windows audio source.
   
 - **Custom Layouts**
@@ -59,10 +65,12 @@ A look at the current features. Developer contracts and work-in-progress details
     - **Sources** – folders + RSS/JSON feeds
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
     - **Transitions** – transition type, duration, directions, per‑type tuning
-    - **Widgets** – clocks, weather, media, visualizer, Reddit, Gmail, Steam families, FEEDS, System Stats and the optional system-audio OSD (You'll need to configure these to your liking! Geolocation is kinda shit.)
+    - **Widgets** – clocks, weather, media, Reddit, Gmail, Steam families, FEEDS, System Stats and the optional system-audio OSD (You'll need to configure these to your liking! Geolocation is kinda shit.)
+    - **Visualizers** – mode selection, presets/Custom state and per-mode presentation/reactivity controls.
     - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
-    - **Presets** - Preset system to get going fast with an auto-saving custom preset for your personalization. 
+    - **Themes** – Settings and Widget theme selection/customisation.
     - **About** – version, credits, SST/JSON-based settings Import/Export, emergency defaults button and preset import/export.
+    - **Quick Start** – lazy guided shortcuts for setup and layout changes after first run.
     
 - **Interaction Mode & Interaction Gating**
   - Optional "Interaction" mode: ordinary mouse movement/clicks no longer exit; explicit external-link actions can hand off to the desktop and exit cleanly.

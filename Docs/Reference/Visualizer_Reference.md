@@ -194,8 +194,9 @@ Historical R-21 proves that shrinking the content geometry to hide bleed is not 
 The selected Quick implementation is **one render-node-local SDF/stencil clip host** inside the same
 `QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted under PySide 6.9.1
 and **failed** that runtime's bar (rounded cases exposed stencil metadata whose framebuffer contents did not
-match; rectangular cases could expose an invalid sentinel scissor). The PySide 6.11.2 upgrade must re-run that
-proof before changing ownership. That failed handoff is
+match; rectangular cases could expose an invalid sentinel scissor). Any proposal to replace the current clip owner
+must first repeat that proof on the current runtime; version advancement by itself does not reopen the failed handoff.
+That failed handoff is
 **not a selectable implementation** and must not be reopened or kept as a fallback unless new
 contradictory evidence later justifies it.
 
@@ -413,8 +414,9 @@ A test name does not prove it exercises the real output path.
 
 ## 16. 3D scene foundation (optional for modes)
 
-A mode may build on the shared 3D foundation the transitions use; none does today, and Voxel Sphere stays isolated
-(its promotion gate stands). Plan and hazards: `Docs/Future_Work/3D_Scene_Foundation.md`. The binding lessons in
+A mode may build on the shared 3D foundation the transitions use. No Visualizer has completed adoption yet; Voxel
+Sphere is the active promotion target and remains behaviourally private until its S19 golden passes. Plan and hazards:
+`Docs/Future_Work/3D_Scene_Foundation.md`. The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,

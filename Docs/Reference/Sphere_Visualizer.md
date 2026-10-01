@@ -1,6 +1,6 @@
 # Voxel Sphere — accepted experimental preservation and isolation contract
 
-Status: **ACCEPTED EXPERIMENTAL — ISOLATED.** Visual/product acceptance does **not** promote Sphere into permanent/shared visualizer architecture. It remains independently removable, lazy and mode-owned until the operator explicitly authorizes promotion.
+Status: **ACCEPTED EXPERIMENTAL — LOW-LEVEL SUBSTRATE PROMOTION ACTIVE.** Sphere remains independently removable, lazy and mode-owned while S19 moves only its duplicate GPU/resource plumbing onto the shared scene3d substrate. Visual/product acceptance does **not** promote Sphere reaction/state semantics into shared Visualizer architecture or make Sphere a permanent default mode.
 
 ## Current golden
 
@@ -15,7 +15,7 @@ Two original Sphere goldens remain (two additional Rainbow variants are separate
 | 1 | **Glass Current** | Former Preset 5 / Transparent React snapshot. Intake (`Particle Outtake` off), translucent fill and bright independent edges preserved. |
 | 2 | **Voxel Bloom** | Former Preset 6 / Reactive Voxel snapshot. Outtake on, opaque neutral presentation and Sphere shadow enabled. |
 
-Their exact persisted snapshots are golden inputs. A future promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
+Their exact persisted snapshots are golden inputs. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
 
 ## Isolation / ownership contract
 
@@ -24,13 +24,13 @@ Their exact persisted snapshots are golden inputs. A future promotion must prese
 - Sphere currently declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Those omissions are deliberate isolation, not missing wiring to repair.
 - The descriptor currently resolves its hidden technical profile through canonical **Spectrum** technical settings. That resolved technical state is part of the isolated Sphere golden even though Sphere has no generic technical-control UI. Do not casually expose, remap or replace it.
 - Existing BeatEngine spectrum/live-pre-AGC seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
-- Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The 2026-09-30 promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
+- Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The active promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
 
 ### What is reusable from the experimental-isolation method
 
 The **boundary mechanism** is valuable architecture for future experiments: descriptor-driven lazy Settings/runtime/renderer/capture resolution, independent enable/disable/dormancy, a private persisted prefix, explicit opt-out from shared setting families, and normal renderer retirement. Future experimental modes should reuse that pattern rather than contaminating accepted-mode owners.
 
-Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. Extracting or refactoring those into a shared experimental framework is promotion work and is forbidden until explicitly requested. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
+Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. The active substrate promotion does not authorize extracting or refactoring those behavioural owners into a shared experimental framework. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
 
 ## Current Settings hygiene
 
@@ -50,7 +50,7 @@ Additional presentation controls expose existing renderer constants rather than 
 
 The current experimental drop-shadow implementation is a **projected voxel silhouette**, not the old circular proxy and not voxel-to-voxel lighting. Shadow and hero compile the same Sphere vertex shader and consume the same rigid rotation, fragmentation, size pulse, tracer-local turns, perspective and intake/outtake cohort transforms. The shadow fragment contributes flat inherited shadow colour only. Sphere-local **Shadow Opacity / Softness / Distance / Size** controls parameterize this pass; softness may add one expanded instanced feather layer, while disabled/zero-opacity shadow adds no second shadow clear/draw. Do not generalize this into shared 3D shadow infrastructure unless another concrete consumer proves the same contract.
 
-## Promotion golden gate — ACTIVATED 2026-09-30
+## Promotion golden gate — active
 
 Before any architectural promotion into shared/permanent ownership, capture both **Glass Current** and **Voxel Bloom** with:
 
@@ -65,7 +65,7 @@ After the candidate promotion, replay identical evidence. Promotion is rejected 
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 
-The operator activated this gate on 2026-09-30 specifically to remove competing low-level 3D architectures. Promotion
+This gate removes competing low-level 3D architectures. Promotion
 means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
 preserving the complete behavioural golden above. It does **not** authorise retuning, renaming Sphere state, exposing
 hidden technical controls, replacing its logical runtime, or turning Sphere into a base class. See `Current_Plan.md`
@@ -73,8 +73,15 @@ and `Docs/Future_Work/3D_Scene_Foundation.md` S19.
 
 ## Current shared-boundary rule
 
-Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. Any proposed extraction into shared infrastructure is a **promotion** and must pass the dormant golden gate above.
+Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. Only the low-level GPU/resource/material/post/compute seams named by S19 are in the active promotion; any behavioural extraction beyond them requires separate approval and the golden gate above.
 
 ## Open operator gate: energy-floor controls
 
-The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection. Remaining: the native Windows settings/preset run and active-music observation of independent floor effects, Reset and Custom Save/reopen. Do not retune authored values on the operator's behalf.
+The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection.
+
+- [ ] Native Windows Settings/preset run proves fragment and particle floors change independently.
+- [ ] Active-music observation confirms the two floors affect only their intended admission paths.
+- [ ] Reset restores the authored defaults.
+- [ ] Custom Save/reopen preserves user-authored values.
+
+Do not retune authored values on the operator's behalf.

@@ -15,7 +15,7 @@ If source contradicts these durable destination contracts, determine whether sou
 
 ## 1A. Mode modularization / enable-disable preflight
 
-When changing mode registry, mode enablement, mode cycling or the landed Visualizers Settings tab:
+When changing mode registry, mode enablement, mode cycling or the current Visualizers Settings tab:
 
 - [ ] Treat **all registered canonical modes** and **currently enabled modes** as different sets. Schema/default/preset migration may need all registered modes; runtime selection/cycling/render imports/Settings pills use enabled modes only.
 - [ ] If the Visualizer family is ON, at least one mode remains enabled, but any mode may be the sole enabled mode. Zero enabled modes is not a second family-disable mechanism.

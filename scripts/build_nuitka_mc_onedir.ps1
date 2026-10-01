@@ -51,6 +51,8 @@ $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path $LogDir ("build_nuitka_mc_onedir_{0}.log" -f $Timestamp)
+$NuitkaReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_report_{0}.xml" -f $Timestamp)
+$FootprintReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_footprint_{0}.json" -f $Timestamp)
 $MaxLogFiles = 10
 
 if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
@@ -68,7 +70,8 @@ foreach ($RequiredBuildCommand in @(
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
     'Assert-SRPSSOnedirQuickPayload',
-    'Assert-SRPSSOnedirVisualizerShaders'
+    'Assert-SRPSSOnedirVisualizerShaders',
+    'Write-SRPSSBuildFootprintReport'
 )) {
     if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Shared build layout did not load required function: $RequiredBuildCommand"
@@ -122,6 +125,15 @@ if ($existingLogs.Count -ge $MaxLogFiles) {
     $logsToRemove = $existingLogs | Select-Object -Skip ($MaxLogFiles - 1)
     foreach ($log in $logsToRemove) {
         try { Remove-Item -Force $log.FullName } catch {}
+    }
+}
+foreach ($ReportFilter in @('build_nuitka_mc_onedir_report_*.xml', 'build_nuitka_mc_onedir_footprint_*.json')) {
+    $existingReports = @(Get-ChildItem -Path $LogDir -Filter $ReportFilter -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    if ($existingReports.Count -ge $MaxLogFiles) {
+        $reportsToRemove = $existingReports | Select-Object -Skip ($MaxLogFiles - 1)
+        foreach ($report in $reportsToRemove) {
+            try { Remove-Item -Force $report.FullName } catch {}
+        }
     }
 }
 
@@ -187,6 +199,7 @@ $argsList = @(
     "--remove-output",
     "--output-dir=$BuildOutputDir",
     "--output-filename=$AppName",
+    "--report=$NuitkaReportFile",
     $consoleArg,
     "--enable-plugin=pyside6",
     "--include-data-dir=presets=presets",
@@ -330,6 +343,19 @@ try {
 }
 
 try {
+    Write-SRPSSBuildFootprintReport `
+        -RepoRoot $Root `
+        -ProductName 'media_center' `
+        -PublishedRoot $DistributionDir `
+        -PrimaryArtifact $Exe.FullName `
+        -NuitkaReportPath $NuitkaReportFile `
+        -OutputPath $FootprintReportFile | Out-Null
+} catch {
+    Write-Host "[BUILD-N-ONEDIR] Error: failed to write build footprint evidence - $($_.Exception.Message)"
+    exit 1
+}
+
+try {
     Remove-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot
     Write-Host "[BUILD-N-ONEDIR] Cleaned build directory: $BuildDir"
 } catch {
@@ -339,3 +365,5 @@ try {
 Write-Host "[BUILD-N-ONEDIR] Build success (one-dir root): $($Exe.DirectoryName)"
 Write-Host "[BUILD-N-ONEDIR] Release directory: $DistributionDir"
 Write-Host "[BUILD-N-ONEDIR] Log: $LogFile"
+Write-Host "[BUILD-N-ONEDIR] Nuitka report: $NuitkaReportFile"
+Write-Host "[BUILD-N-ONEDIR] Footprint report: $FootprintReportFile"

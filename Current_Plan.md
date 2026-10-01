@@ -5,16 +5,13 @@ Active development work only. Implemented features keep their open physical acce
 audits are historicalised. Work this file **top to bottom** unless the operator explicitly redirects it. Commit and
 push coherent slices; preserve accepted visual/temporal contracts unless a slice explicitly authorises a look change.
 
-## 0. GODZIP Foundry handoff tooling | LANDED IN THIS HANDOFF
+## 0. GODZIP Foundry handoff tooling | Windows acceptance only
 
-- [x] **DIFF → LOCAL vs GIT HEAD.** The Foundry now has a first-class non-mutating local-worktree diff. It compares
-  HEAD to the bytes actually on disk, including staged, unstaged, untracked and deleted non-ignored files. A staged
-  file edited again therefore reports HEAD → the later local bytes, not merely HEAD → index.
-- [x] **Agent/headless DIFF CLI.** `python tools/godzip_foundry.py --diff-local` prints the local diff and exits;
-  `--diff-godzip <zip>` does the existing GODZIP→local comparison without opening the GUI; `--diff-output <path>`
-  writes either result to a file instead of stdout. No Git/repo mutation is performed by either path.
+The Foundry owns non-mutating LOCAL-vs-HEAD and GODZIP-vs-LOCAL diff flows in both GUI and headless CLI form. The
+durable command contract is in `Docs/Contracts.md`; completed implementation detail stays in source control.
+
 - [ ] Installed Windows acceptance only: open DIFF, run LOCAL vs GIT HEAD on a deliberately dirty repo, then compare
-  the result to the CLI form. The core unit bars cover complete HEAD→disk semantics; GUI acceptance is visual only.
+  the result to `python tools/godzip_foundry.py --diff-local`. The core unit bars already cover HEAD-to-disk semantics.
 
 ## 1. P0 | Awaiting ordinary-use observation, non-blocking
 
@@ -29,16 +26,18 @@ Durable ownership is in `Docs/Contracts.md`; probes are routed from `Docs/Refere
   quality, cache, transport and migration bars pass; loaded-desktop transition tails remain an observation, not a gate.
   Filter ownership and bounded processing measurements live in `Docs/Reference/Image_Quality.md`.
 
-## 2. Build Runner | Awaiting operator build acceptance, non-blocking
+## 2. Build Runner | Awaiting operator build acceptance and package evidence, non-blocking
 
-Emergency Stop, process-tree ownership, Diagnostic SCR and automatic resource regeneration are implemented and
-regression-tested. `Spec.md` → Build control and products owns the durable contract.
+Emergency Stop, process-tree ownership, Diagnostic SCR, automatic resource regeneration and persistent current-build
+package evidence are implemented. Every runtime build emits a Nuitka XML report plus compact footprint JSON into
+`logs/`; `Spec.md` → Build control and products owns the durable contract.
 
 - [~] On the next operator build, exercise Standard/MC/Diagnostic SCR, active-child Emergency Stop, then a clean
   rerun in the same Foundry session. The agent must not run build scripts. Preserve intentional Jobs=3/4/5.
-- [~] **Separate dependency audit:** when the next operator 6.11.2 MC build supplies a Nuitka report, investigate
-  the old artifact's unused WebEngine payload before proposing exclusions. Asset cleanup did not change Qt module
-  exclusions or Jobs; broad dependency trimming remains outside this slice.
+- [ ] **Current-build dependency/package trim:** use the new MC Nuitka XML and footprint JSON to identify actual large
+  package/plugin contributors, beginning with any WebEngine/unused Qt payload that is truly present. Do not add
+  exclusions from directory-name suspicion alone; prove the current import/plugin owner or dead payload first, then
+  trim at the canonical worker contract.
 
 ## 3. Qt 6.11.2 / OpenGL 4.6 | Awaiting physical validation, non-blocking
 
@@ -58,13 +57,15 @@ no source gate before section 4; operator builds remain non-blocking.
 
 ## 3A. Immutable resources | Awaiting installed measurements, non-blocking
 
-Immutable imagery uses the canonical QRC namespace, with a measured lazy Guided Setup bundle. Build Foundry owns
-toolchain validation, environment preparation, cancellation and content-based regeneration. Source/consumer/packaging
-checks pass. `pytz` remains because Windows Qt/stdlib facilities failed the existing named-zone parity contract.
+Immutable imagery uses the canonical QRC namespace, with Guided Setup kept in its own lazy-registration bundle. Build
+Foundry owns toolchain validation, environment preparation, cancellation and content-based regeneration. Generated
+`*_rc.py` files are escaped Python-source representations and therefore may be much larger than the original assets;
+they are not frozen-size evidence. `pytz` remains because the supported named-zone contract still requires it.
 
-- [~] On the next operator build, verify QRC images/fonts/About/Guided Setup in the installed products and record
-  frozen binary/install deltas. The old MC image payload was 222 files / 21,924,720 bytes; new packaging removes that
-  loose directory. Actual new frozen sizes remain unmeasured. Themes, presets and replaceable sounds remain loose.
+- [~] On the next operator build, verify QRC images/fonts/About/Guided Setup in the installed products and use the new
+  footprint/Nuitka reports to record the real frozen/install contribution. The loose runtime `images/` directory is
+  intentionally gone; onboarding QRC is required product content and is **not** a debloat target merely because its
+  generated Python source is large. Themes, presets and replaceable sounds remain loose.
 
 ## 4. Modern OpenGL 4.6 scene3d expansion | paused at S13 checkpoint
 
@@ -193,16 +194,15 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 - [ ] **Pre-existing Qt test suppression:** `tests/conftest.py` broadly filters slot-miss AttributeErrors. Reproduce
   cross-generation background/Visualizer `sceneGraphInvalidated` retirement in a bounded unfiltered test, then
   narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.
-- [ ] **Global Python cleanup:** both interpreters now report PySide/Qt and all four package pins at 6.11.2.
-  Global pip still sees the old rollback metadata directories `C:\Python311\Lib\site-packages\~yside6_essentials-6.9.1.dist-info`
-  and `C:\Python311\Lib\site-packages\~-side6_essentials-6.9.1.dist-info`; operator may delete those two during maintenance.
-  The correctly named 6.11.2 metadata remains. Global pip also reports the unchanged opencv/numpy version conflict.
-  Cleanup is non-blocking; the project `.venv` passes pip check.
+- [ ] **Global Python cleanup:** Normal-mode `C:\Python311\python.exe` must match the exact current Qt/PySide/shiboken
+  pins in `requirements.txt` before a Normal build is trusted. Remove only stale rollback metadata directories after the
+  interpreter itself is verified, then run `pip check`; keep the unrelated existing opencv/numpy conflict visible rather
+  than hiding it. This maintenance is non-blocking because the project `.venv` is the verified build environment.
 - [ ] **Existing local timezone heuristic:** `widgets/timezone_utils.get_local_timezone()` selects the first named
   zone sharing an offset and uses `time.daylight` rather than the current DST state. Audit its callers and preserve
   local-zone identity before changing it. The asset cleanup retains the existing pytz authority and behavior.
 
-- [ ] **Spectrum extreme-viewport smoothness (pre-existing).** The 2026-09-23 physical run showed reduced Spectrum
+- [ ] **Spectrum extreme-viewport smoothness (pre-existing).** A physical run showed reduced Spectrum
   smoothness at extreme viewport shapes. Keep separate from the modern-GL migration unless a new shared 3D consumer
   provides direct evidence relevant to it.
 

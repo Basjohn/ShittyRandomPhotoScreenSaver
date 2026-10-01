@@ -1,8 +1,8 @@
 # Ordinary Widget Authoring Guide
 
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
-Quick architecture. This guide is based on the landed retained Quick families, including Clock, Weather, Media, Reddit/Reddit2,
-Gmail, FEEDS Custom 1 and the Steam/widget families described by their current references. It also incorporates the shared colour-only
+Quick architecture. This guide is based on the current retained Quick families, including Clock, Weather, Media, Reddit/Reddit2,
+Gmail, the FEEDS family and the Steam/widget families described by their current references. It also incorporates the shared colour-only
 Widget Theme semantics, smart-stacking, global-CUSTOM architecture, optional shared side-axis `content_extent` reflow and
 family-retirement lifetime rules that later slices added across those families.
 
@@ -39,7 +39,7 @@ When adding a semantic Edit child, declare the role independently of provider da
 
 ### Mandatory current Edit, role, and performance checklist
 
-- [ ] **Choose a purposeful editable unit.** System Stats has only header, top separator and one entire painted metric-stack group; it does not expose thin metric-value/accent subhandles. Repeated rows generally keep authored data rows together rather than creating one persisted child per data identity. A repeated **semantic subrole** may still expose one shared geometry record across delegates when that is the real user-facing unit: FEEDS Custom 1 does this for `artwork`, while Reddit/Gmail expose one widget-wide semantic column order. An OSD exposes only meaningful singleton chrome; Games You Follow exposes stable `header`, `refresh`, `story_tiles` (one grouped role), and `overflow_summary`, never per-story free-placement.
+- [ ] **Choose a purposeful editable unit.** System Stats has only header, top separator and one entire painted metric-stack group; it does not expose thin metric-value/accent subhandles. Repeated rows generally keep authored data rows together rather than creating one persisted child per data identity. A repeated **semantic subrole** may still expose one shared geometry record across delegates when that is the real user-facing unit: FEEDS does this for the shared `artwork` role on every card, while Reddit/Gmail expose one widget-wide semantic column order. An OSD exposes only meaningful singleton chrome; Games You Follow exposes stable `header`, `refresh`, `story_tiles` (one grouped role), and `overflow_summary`, never per-story free-placement.
 - [ ] **Declare stable role identity.** `customEditableChildRoles` must not depend on live normalization/preferred dimensions, provider contents or temporary visibility: array reallocation retires a selected QML Repeater delegate and can break a gesture. Use existing retained family `normalizationTarget` and named live properties for *selected-only* reads; readiness and alternate painted-target resolution live inside that delegate. Never replace an unavailable saved role with unrelated status text. Do not add off-Edit observers.
 - [ ] **Map the actual paint, not the model's guess.** Shared selected mapping projects all four corners through inherited QQuickItem geometry and clips against ancestor paint surfaces. For QML `Scale`/`Translate` applied to a target or ancestor, expose `customEditMappingDependency` from the **applied transform object's properties**, not just the upstream source input. Never enumerate non-bindable `QQuickItem.transform` in an active binding or add a per-pointer scene scan. Transparency of a semantic geometry carrier alone does not make its painted descendants unavailable.
 - [ ] **Separate parent and child authority.** Outer handles alone change the parent/custom `content_extent`; child X/Y edits are independent deltas from live family authored rails, not inside-out parent minimums or new persisted layout roots. A child's painted ink must stay inside the actual declared card/accessory surface even when collision is OFF. Test flip and opposite-axis resize in the same unsaved Edit session, Undo/Cancel/Restore/slots/reopen and later display generations.
@@ -77,7 +77,7 @@ No extra accelerated widget window. No `QQuickWidget`.
 
 - **System audio OSD:** independently enabled (on by canonical default) presentation of the existing shared GUI-apartment Core Audio source; no endpoint poll, per-display callback, alternative window or second source. See [current OSD reference](../Reference/System_Volume_OSD.md).
 - **Games You Follow:** linked followed-set membership through the existing Steam credential owner, one generation-shared source/lease/deadline, retained news tiles and four stable grouped CUSTOM roles with independent X/Y and flip. The first complete scan is durable; post-coverage maintenance updates at most eight apps per admitted session. See [current product reference](../Reference/Steam_Games_You_Follow.md).
-- **FEEDS Custom 1:** one admitted retained RSS/Atom widget on the shared source owner, with independent X/Y `content_extent`, shared `BrandedHeader`, and stable `header`/`refresh`/`articles`/repeated `artwork`/`overflow` child roles. Image-less rows are valid content, and repeated artwork shares one geometry record rather than persisting article IDs. See [current Feeds reference](../Reference/Feeds.md).
+- **FEEDS:** ten admitted retained cards on the shared source owner, each with independent X/Y `content_extent`, shared `BrandedHeader`, and stable `header`/`refresh`/`articles`/repeated `artwork`/`overflow` child roles. Image-less rows are valid content, and repeated artwork shares one geometry record rather than persisting article IDs. See [current Feeds reference](../Reference/Feeds.md).
 
 ## 3. Proven ownership patterns
 

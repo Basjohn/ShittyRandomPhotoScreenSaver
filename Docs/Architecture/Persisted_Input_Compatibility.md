@@ -95,7 +95,7 @@ without the safe path below.
   never startup normalization.
 
 - **Melt retired edge directions** (`transitions.melt_drip.direction` values
-  such as `Top to Bottom` from before the 2026-09-23 origin rework;
+  such as `Top to Bottom` from before the origin-driven Melt contract;
   `rendering/quick/transitions/parameter_resolution.py::_resolve_melt_drip`
   and the Melt origin combo in `ui/tabs/transitions_tab.py`). Any value that
   is not an origin label resolves as Random per run and shows as Random in
@@ -142,8 +142,6 @@ without the safe path below.
 Each bridge owns its own input-compat test (and an old-input fixture); the seam
 descriptions above name the wider **same-commit cascade** each retirement must
 rehome/retire/re-floor. A bridge cannot be removed without updating its whole
-named cascade in that one change. Leaving the cascade "for the suite to find
-later" is exactly what produced the 2026-09 broad-suite red storm — tests
-asserting a migration-era shape/owner/threshold/default that production had
-already superseded, surfacing weeks later as expensive "why is this red" work
-that always ended in "production was right."
+named cascade in that one change. Leaving the cascade "for the suite to find later" is a known source of broad-suite drift: tests can keep asserting
+a migration-era shape/owner/threshold/default after production has already superseded it, turning a local owner change
+into delayed unrelated failures. Rehome or retire the whole named cascade in the same change.
