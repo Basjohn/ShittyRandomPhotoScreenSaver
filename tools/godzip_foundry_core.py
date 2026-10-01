@@ -1909,6 +1909,97 @@ def _changed_paths_since(repo_root: Path, source_head: str) -> set[str]:
     return paths
 
 
+def generate_local_diff(repo_root: Path) -> GodzipDiffResult:
+    """Compare the complete current local worktree against Git HEAD.
+
+    This is the agent/operator-facing answer to "what has changed locally?":
+    staged, unstaged, untracked and deleted non-ignored paths are all rendered
+    against the bytes at HEAD.  The index is deliberately not a second baseline;
+    if a file is staged and then edited again, the diff shows HEAD -> the bytes
+    that would actually be handed off now.
+    """
+    root = Path(repo_root).resolve()
+    head = git_head(root)
+    candidates = sorted(
+        {
+            validate_repo_relpath(change.path.replace("\\", "/"))
+            for change in git_changes(root)
+        },
+        key=str.casefold,
+    )
+
+    chunks: list[str] = []
+    added = modified = deleted = binary = 0
+    for rel in candidates:
+        before = _git_blob_at_revision(root, head, rel)
+        after = _current_repo_bytes(root, rel)
+        if before == after:
+            continue
+        if before is None and after is not None:
+            kind = "added"
+            added += 1
+        elif before is not None and after is None:
+            kind = "deleted"
+            deleted += 1
+        else:
+            kind = "modified"
+            modified += 1
+
+        before_text = _decode_diff_text(before) if before is not None else ""
+        after_text = _decode_diff_text(after) if after is not None else ""
+        chunks.append(f"diff --local {kind} {rel}\n")
+        if before_text is None or after_text is None:
+            binary += 1
+            chunks.append(
+                "Binary content differs "
+                f"(HEAD={_bytes_digest(before)} size={len(before) if before is not None else 0}; "
+                f"LOCAL={_bytes_digest(after)} size={len(after) if after is not None else 0})\n\n"
+            )
+            continue
+
+        fromfile = f"HEAD/{rel}" if before is not None else "/dev/null"
+        tofile = f"LOCAL/{rel}" if after is not None else "/dev/null"
+        rendered = "".join(
+            difflib.unified_diff(
+                before_text.splitlines(keepends=True),
+                after_text.splitlines(keepends=True),
+                fromfile=fromfile,
+                tofile=tofile,
+                lineterm="\n",
+            )
+        )
+        chunks.append(rendered)
+        if rendered and not rendered.endswith("\n"):
+            chunks.append("\n")
+        chunks.append("\n")
+
+    current_dirty = git_dirty(root)
+    changed = added + modified + deleted
+    generated = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    header = [
+        "# SRPSS LOCAL DIFF",
+        f"# Baseline: Git HEAD {head}",
+        f"# Current worktree dirty: {'yes' if current_dirty else 'no'}",
+        f"# Generated: {generated}",
+        "# Scope: HEAD -> current staged + unstaged + untracked + deleted non-ignored worktree bytes",
+        f"# Summary: {changed} changed file(s) | {added} added | {modified} modified | {deleted} deleted | {binary} binary",
+        "",
+    ]
+    body = "".join(chunks) if chunks else "# No local differences from Git HEAD.\n"
+    return GodzipDiffResult(
+        text="\n".join(header) + body,
+        changed_files=changed,
+        added=added,
+        modified=modified,
+        deleted=deleted,
+        binary=binary,
+        baseline_head=head,
+        current_head=head,
+        baseline_dirty=False,
+        current_dirty=current_dirty,
+    )
+
+
 def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
     """Compare current repo state against a chosen GODZIP baseline.
 
@@ -2111,6 +2202,7 @@ __all__ = [
     "discover_run_flags",
     "discover_zip_candidates",
     "generate_godzip_diff",
+    "generate_local_diff",
     "git_branch",
     "git_changes",
     "git_commit_all",

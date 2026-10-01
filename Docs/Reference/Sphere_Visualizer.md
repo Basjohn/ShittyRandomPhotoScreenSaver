@@ -24,7 +24,7 @@ Their exact persisted snapshots are golden inputs. A future promotion must prese
 - Sphere currently declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Those omissions are deliberate isolation, not missing wiring to repair.
 - The descriptor currently resolves its hidden technical profile through canonical **Spectrum** technical settings. That resolved technical state is part of the isolated Sphere golden even though Sphere has no generic technical-control UI. Do not casually expose, remap or replace it.
 - Existing BeatEngine spectrum/live-pre-AGC seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
-- Product acceptance does not authorize extracting Sphere internals into shared infrastructure. Reuse/extraction is a future promotion decision requiring explicit operator activation.
+- Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The 2026-09-30 promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
 
 ### What is reusable from the experimental-isolation method
 
@@ -50,7 +50,7 @@ Additional presentation controls expose existing renderer constants rather than 
 
 The current experimental drop-shadow implementation is a **projected voxel silhouette**, not the old circular proxy and not voxel-to-voxel lighting. Shadow and hero compile the same Sphere vertex shader and consume the same rigid rotation, fragmentation, size pulse, tracer-local turns, perspective and intake/outtake cohort transforms. The shadow fragment contributes flat inherited shadow colour only. Sphere-local **Shadow Opacity / Softness / Distance / Size** controls parameterize this pass; softness may add one expanded instanced feather layer, while disabled/zero-opacity shadow adds no second shadow clear/draw. Do not generalize this into shared 3D shadow infrastructure unless another concrete consumer proves the same contract.
 
-## Future promotion golden gate — dormant until explicitly activated
+## Promotion golden gate — ACTIVATED 2026-09-30
 
 Before any architectural promotion into shared/permanent ownership, capture both **Glass Current** and **Voxel Bloom** with:
 
@@ -65,7 +65,11 @@ After the candidate promotion, replay identical evidence. Promotion is rejected 
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 
-Until the operator activates this gate, **do not promote Sphere into shared/permanent owners at all**.
+The operator activated this gate on 2026-09-30 specifically to remove competing low-level 3D architectures. Promotion
+means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
+preserving the complete behavioural golden above. It does **not** authorise retuning, renaming Sphere state, exposing
+hidden technical controls, replacing its logical runtime, or turning Sphere into a base class. See `Current_Plan.md`
+and `Docs/Future_Work/3D_Scene_Foundation.md` S19.
 
 ## Current shared-boundary rule
 

@@ -13,7 +13,7 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=5.0.5
+AppVersion=5.0.6
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -31,7 +31,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\ui\assets\installer\LogoBMP.bmp
-VersionInfoVersion=5.0.5
+VersionInfoVersion=5.0.6
 AllowUNCPath=False
 
 [Languages]

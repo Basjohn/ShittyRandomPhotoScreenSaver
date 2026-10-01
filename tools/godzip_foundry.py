@@ -2713,6 +2713,7 @@ class RunTab(QWidget):
         self._building = False
         self._auto_logzip_process: subprocess.Popen | None = None
         self._auto_logzip_wait_thread: threading.Thread | None = None
+        self._auto_logzip_generation = 0
         self._loaded_once = False
         self.runWaitFinished.connect(self._run_wait_finished)
         self._build_ui()
@@ -2965,8 +2966,15 @@ class RunTab(QWidget):
             self.window.show_error("RUN launch failed", exc)
 
     def _start_auto_logzip_wait(self, process: subprocess.Popen) -> None:
-        """Wait off the UI thread for the actual SRPSS process, without polling."""
+        """Wait off the UI thread for the actual SRPSS process, without polling.
 
+        The watcher is deliberately daemon-owned by Foundry. Closing Foundry may
+        abandon a pending automatic LOGZIP, but must never keep Python alive just
+        to wait for an externally launched SRPSS process.
+        """
+
+        self._auto_logzip_generation += 1
+        generation = self._auto_logzip_generation
         self._auto_logzip_process = process
         self.launch_button.setEnabled(False)
         self.auto_logzip.setEnabled(False)
@@ -2974,13 +2982,13 @@ class RunTab(QWidget):
 
         def wait_for_exit() -> None:
             try:
-                payload: object = ("ok", int(process.wait()))
+                status, detail = "ok", int(process.wait())
             except Exception as exc:  # pragma: no cover - OS/process failure path
-                payload = ("error", str(exc))
+                status, detail = "error", str(exc)
             try:
-                self.runWaitFinished.emit(payload)
+                self.runWaitFinished.emit((generation, status, detail))
             except RuntimeError:
-                # Foundry may have been closed while SRPSS was still running.
+                # Foundry may have been destroyed while SRPSS was still running.
                 pass
 
         self._auto_logzip_wait_thread = threading.Thread(
@@ -2990,17 +2998,36 @@ class RunTab(QWidget):
         )
         self._auto_logzip_wait_thread.start()
 
+    def has_pending_auto_logzip(self) -> bool:
+        return self._auto_logzip_process is not None
+
+    def abandon_auto_logzip_watch(self) -> None:
+        """Detach the GUI from a pending auto-LOGZIP without touching SRPSS.
+
+        Never join the waiter here: it is a daemon blocked only in process.wait().
+        Advancing the generation makes any late completion signal inert while the
+        Foundry window is closing or already gone.
+        """
+
+        if self._auto_logzip_process is None:
+            return
+        self._auto_logzip_generation += 1
+        self._auto_logzip_process = None
+        self._auto_logzip_wait_thread = None
+
     def _run_wait_finished(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or len(payload) != 3:
+            generation, status, detail = -1, "error", "invalid wait result"
+        else:
+            generation, status, detail = payload
+        if generation != self._auto_logzip_generation:
+            return
+
         self._auto_logzip_process = None
         self._auto_logzip_wait_thread = None
         self.auto_logzip.setEnabled(True)
         self.keep_console.setEnabled(True)
 
-        status, detail = (
-            payload
-            if isinstance(payload, tuple) and len(payload) == 2
-            else ("error", "invalid wait result")
-        )
         if status != "ok":
             self._update_preview()
             self.window.show_error("RUN completion watch failed", detail)
@@ -3089,11 +3116,16 @@ def _script_outcome_label(
 class CommandTab(QWidget):
     """Repo-root shell launcher; elevation is explicit because it triggers UAC."""
 
+    stopWaitFinished = Signal(object)
+
     def __init__(self, window: "GodzipFoundryWindow") -> None:
         super().__init__(window)
         self.window = window
         self.repo_root = window.repo_root
         self._process: QProcess | None = None
+        self._stop_process: subprocess.Popen | None = None
+        self._stop_wait_thread: threading.Thread | None = None
+        self._stop_generation = 0
         self._running = False
         self._run_dir: Path | None = None
         self._run_log = None
@@ -3104,6 +3136,7 @@ class CommandTab(QWidget):
         self._run_stopped = False
         self._run_final_logs: dict[str, tuple[int, int]] = {}
         self._cmd_section_settings = _load_local_settings(self.repo_root)
+        self.stopWaitFinished.connect(self._tree_kill_finished)
         self._build_ui()
 
     def _section(self, layout: QVBoxLayout, key: str, title: str) -> QVBoxLayout:
@@ -3470,6 +3503,83 @@ class CommandTab(QWidget):
         if self._process is not None:
             self._process.deleteLater()
             self._process = None
+        # A tree-kill helper should normally have exited before the captured host
+        # reports finished. If not, retire it rather than leaving an unrelated
+        # helper alive after the run has already ended.
+        self._stop_generation += 1
+        helper = self._stop_process
+        self._stop_process = None
+        self._stop_wait_thread = None
+        if helper is not None and helper.poll() is None:
+            try:
+                helper.kill()
+            except OSError:
+                pass
+
+    def _tree_kill_finished(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or len(payload) != 3:
+            generation, returncode, error = -1, None, "invalid taskkill result"
+        else:
+            generation, returncode, error = payload
+        if generation != self._stop_generation:
+            return
+        self._stop_process = None
+        self._stop_wait_thread = None
+        if not self._running or self._process is None:
+            return
+        if self._process.state() == QProcess.ProcessState.NotRunning:
+            self.script_status.setText("Process tree stopped; finalizing captured run…")
+            return
+
+        # taskkill itself failed or returned before Qt observed the target exit.
+        # Restore an explicit escape instead of disabling the only stop control.
+        detail = error or f"taskkill exit code {returncode}"
+        self.script_stop_button.setText("KILL RUN")
+        self.script_stop_button.setEnabled(True)
+        self.script_status.setText(
+            f"Process-tree stop did not finish the run ({detail}). Press KILL RUN to kill the captured host."
+        )
+
+    def _start_windows_tree_kill(self, pid: int) -> None:
+        self._stop_generation += 1
+        generation = self._stop_generation
+        helper = subprocess.Popen(
+            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        self._stop_process = helper
+
+        def wait_for_tree_kill() -> None:
+            error: str | None = None
+            try:
+                returncode = int(helper.wait(timeout=5.0))
+            except subprocess.TimeoutExpired:
+                error = "taskkill timed out after 5 seconds"
+                try:
+                    helper.kill()
+                except OSError:
+                    pass
+                try:
+                    returncode = int(helper.wait(timeout=1.0))
+                except Exception:
+                    returncode = -1
+            except Exception as exc:  # pragma: no cover - OS/process failure path
+                returncode = -1
+                error = str(exc)
+            try:
+                self.stopWaitFinished.emit((generation, returncode, error))
+            except RuntimeError:
+                pass
+
+        self._stop_wait_thread = threading.Thread(
+            target=wait_for_tree_kill,
+            name="GodzipFoundryTreeKillWait",
+            daemon=True,
+        )
+        self._stop_wait_thread.start()
 
     def _stop_run(self) -> None:
         if self._process is None or not self._running:
@@ -3477,27 +3587,35 @@ class CommandTab(QWidget):
         if self._process.state() == QProcess.ProcessState.NotRunning:
             return
         self._run_stopped = True
+
+        if self.script_stop_button.text() == "KILL RUN":
+            self._process.kill()
+            self.script_stop_button.setEnabled(False)
+            self.script_status.setText("Killing the captured run host…")
+            return
+
         if os.name == "nt":
             # Terminating just the PowerShell host leaves pytest/chunk children
-            # alive. taskkill /T /F targets the full run tree, asynchronously.
+            # alive. Own taskkill /T /F and bound its wait so failure can never
+            # leave Foundry with a permanently disabled STOP button.
             pid = int(self._process.processId())
             if pid > 0:
-                subprocess.Popen(
-                    ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
+                try:
+                    self._start_windows_tree_kill(pid)
+                except OSError as exc:
+                    self.script_stop_button.setText("KILL RUN")
+                    self.script_stop_button.setEnabled(True)
+                    self.script_status.setText(
+                        f"Could not start process-tree stop ({exc}). Press KILL RUN to kill the captured host."
+                    )
+                    return
                 self.script_status.setText("Stopping the script and its subprocess tree…")
                 self.script_stop_button.setEnabled(False)
                 return
-        if self.script_stop_button.text() == "KILL RUN":
-            self._process.kill()
-        else:
-            self._process.terminate()
-            self.script_stop_button.setText("KILL RUN")
-            self.script_status.setText("Stop requested. If the command does not exit, press KILL RUN.")
+
+        self._process.terminate()
+        self.script_stop_button.setText("KILL RUN")
+        self.script_status.setText("Stop requested. If the command does not exit, press KILL RUN.")
 
     def has_active_capture(self) -> bool:
         return self._running
@@ -3724,6 +3842,8 @@ class GodzipFoundryWindow(QMainWindow):
         self._task_active = False
         self._task_bridge: _TaskBridge | None = None
         self._task_thread: threading.Thread | None = None
+        self._auto_logzip_close_dialog: FoundryConfirmDialog | None = None
+        self._allow_abandoned_auto_logzip_close = False
         self._native_backdrop_mode: str | None = None
         self._backdrop_applied = False
         self._zip_discovery_cache: dict[tuple[bool, tuple[str, ...]], tuple[Path, ...]] = {}
@@ -3815,6 +3935,35 @@ class GodzipFoundryWindow(QMainWindow):
         except (AttributeError, OSError, ValueError):
             return
 
+    def _confirm_abandon_auto_logzip_close(self) -> None:
+        self.run_tab.abandon_auto_logzip_watch()
+        self._allow_abandoned_auto_logzip_close = True
+        # Finish the confirmation signal stack before closing the parent window.
+        QTimer.singleShot(0, self.close)
+
+    def _warn_auto_logzip_close(self) -> None:
+        if self._auto_logzip_close_dialog is not None:
+            self._auto_logzip_close_dialog.raise_()
+            self._auto_logzip_close_dialog.activateWindow()
+            return
+        dialog = FoundryConfirmDialog(
+            "ABANDON AUTO-LOGZIP?",
+            "SRPSS is still running. Closing GODZIP Foundry will abandon the pending automatic LOGZIP.\n\n"
+            "SRPSS will continue running normally, and Foundry will not remain open in the background.",
+            self,
+            confirm_text="CLOSE FOUNDRY",
+            danger=True,
+        )
+        self._auto_logzip_close_dialog = dialog
+        dialog.accepted.connect(self._confirm_abandon_auto_logzip_close)
+
+        def clear_dialog(_code: int, expected: QDialog = dialog) -> None:
+            if self._auto_logzip_close_dialog is expected:
+                self._auto_logzip_close_dialog = None
+
+        dialog.finished.connect(clear_dialog)
+        self._track_dialog(dialog)
+
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.command_tab.has_active_capture():
             event.ignore()
@@ -3829,6 +3978,11 @@ class GodzipFoundryWindow(QMainWindow):
             event.ignore()
             self.set_status("An operation is still running — wait for it to finish before closing Foundry.")
             QApplication.beep()
+            return
+        if self.run_tab.has_pending_auto_logzip() and not self._allow_abandoned_auto_logzip_close:
+            event.ignore()
+            self.set_status("SRPSS is still running; closing now will abandon the pending automatic LOGZIP.")
+            self._warn_auto_logzip_close()
             return
         try:
             self.push_tab.persist_message()

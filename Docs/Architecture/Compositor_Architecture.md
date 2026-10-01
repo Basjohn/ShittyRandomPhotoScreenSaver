@@ -188,9 +188,10 @@ For current carded modes, custom GL must remain above card fill, below the visib
 inside the rounded inner card path.
 
 The selected clip ownership is **one render-node-local SDF/stencil host** inside the same
-`QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted and failed its
-pinned PySide 6.9.1 bar (rounded cases exposed stencil metadata not matching framebuffer contents;
-rectangular cases could expose an invalid sentinel scissor); it is not a selectable implementation and
+`QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted under PySide 6.9.1
+and failed that runtime's bar (rounded cases exposed stencil metadata not matching framebuffer contents;
+rectangular cases could expose an invalid sentinel scissor). The PySide 6.11.2 upgrade must re-run that proof
+before changing ownership. The failed handoff is not a selectable implementation and
 is not a fallback. The local host still composes with valid inherited scissor/stencil state when it
 genuinely corresponds to real framebuffer contents, and restores every touched state; it does not
 assume it owns a blank stencil buffer.

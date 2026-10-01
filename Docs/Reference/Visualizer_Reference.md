@@ -192,9 +192,10 @@ visually above the fill and below the frame/border.
 Historical R-21 proves that shrinking the content geometry to hide bleed is not acceptable.
 
 The selected Quick implementation is **one render-node-local SDF/stencil clip host** inside the same
-`QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted and **failed**
-its pinned PySide 6.9.1 runtime bar (rounded cases exposed stencil metadata whose framebuffer contents
-did not match; rectangular cases could expose an invalid sentinel scissor). That failed handoff is
+`QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted under PySide 6.9.1
+and **failed** that runtime's bar (rounded cases exposed stencil metadata whose framebuffer contents did not
+match; rectangular cases could expose an invalid sentinel scissor). The PySide 6.11.2 upgrade must re-run that
+proof before changing ownership. That failed handoff is
 **not a selectable implementation** and must not be reopened or kept as a fallback unless new
 contradictory evidence later justifies it.
 

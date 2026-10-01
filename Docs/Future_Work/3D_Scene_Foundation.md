@@ -1,16 +1,20 @@
 # 3D Scene Foundation — decomposition (live checklist)
 
-Promoted by the operator on 2026-09-29 ("I agree with all of these … safer sooner … go ahead"). `Current_Plan.md`
-owns the order; this file owns the detail. Delete it when the last slice closes, leaving the durable contract in
-`Docs/Reference/Transitions.md` (and a Visualizer reference note for the shared option).
+Promoted by the operator on 2026-09-29 ("I agree with all of these … safer sooner … go ahead") and expanded on
+2026-09-30 into a deliberate **PySide 6.11.2 + OpenGL 4.6 + modern GPU foundation** program, including normalisation
+of Voxel Sphere onto the shared 3D substrate and active lightning/particle/smoke work. `Current_Plan.md` owns the
+order; this file owns the technical decomposition. Delete it when the program closes, leaving durable contracts in
+`Docs/Reference/Transitions.md`, `Docs/Reference/Visualizer_Reference.md` and `Docs/Reference/Sphere_Visualizer.md`.
 
 **Rollback / comparison HEAD:** `3185645a` (Exploding Tiles on the first foundation, accepted and closed).
 
 ## Goal
 
-One shared, high-fidelity 3D foundation whose cost is always adjustable, used by every 3D transition and available as
-an **option** to Visualizer modes (none has to use it). Fidelity features live in the foundation, each behind the 3D
-Detail tiers; effects keep their own authored motion, look and state.
+One shared, high-fidelity 3D GPU substrate whose meaningful cost is zero when no consumer uses it. Every 3D transition
+and 3D Visualizer may reuse it; effects keep their own authored motion, reaction, look and state. The 2026-09-30 program
+raises the production floor directly to OpenGL 4.6, then adds DSA, immutable/persistent storage, SSBOs, compute/image
+load-store/atomics, indirect draws and richer active-only scene targets before building vertical high-fidelity effects.
+Voxel Sphere is promoted onto this substrate without genericising or retuning its behavioural model.
 
 ## Current inventory (at the rollback HEAD)
 
@@ -44,7 +48,9 @@ High target ~133 MB per display during a run.
 - **GPU resources:** context-local, owned by the consuming renderer; per-run targets dropped at `park()`
   (transitions) or on mode retirement (Visualizers); failed deletions keep handles for retry; no allocation per
   frame; the fences restore every piece of GL state the foundation touches.
-- **Sphere:** never migrated or used as a base; its promotion gate stands.
+- **Sphere:** its behavioural golden remains private and binding, but the 2026-09-30 operator direction explicitly
+  activates promotion onto the shared low-level scene3d substrate. Share resource/material/post/compute plumbing; never
+  use Sphere as a base class and never rewrite its reaction/cohort/Settings semantics merely to fit shared helpers.
 
 ## Slices, in order
 
@@ -297,6 +303,103 @@ Implemented and regression-validated. `Spec.md` → Accepted runtime presentatio
 contract and actual-context rejection. Maintained diagnostics and shared scene3d fixtures use the same floor.
 Ordinary-use physical validation and operator builds remain non-blocking checklists in `Current_Plan.md`.
 
+### S13 — DSA, immutable storage and multi-bind
+- [ ] New scene3d resources use Direct State Access (`glCreate*`, named buffer/texture/framebuffer operations) and
+  immutable texture/buffer storage where lifetime/size is known. Migrate old shared resources only behind identity tests.
+- [ ] Use multi-bind APIs for repeated texture/buffer range binding where they reduce Python calls; do not batch cheap
+  one-off effects merely for architectural symmetry.
+- [ ] Remove state queries made obsolete by DSA from the shared resource path, while the outer Qt state fences still
+  restore every state actually inherited/touched.
+- **Reward:** fewer Python→driver calls and less bind/query ceremony; simpler resource construction/cleanup.
+- **Hazards:** DSA does not remove Qt's inherited-state contract. Never assume owned state outside the explicit scene.
+- **Bars:** pixel/statistical identity for migrated consumers and measured CPU-submit reduction or no migration.
+
+### S14 — Persistent mapped stream + SSBO foundation
+- [ ] Add one bounded context-local persistent/coherent (or explicitly flushed) mapped ring for small changing frame
+  payloads. Fence/reuse segments safely; no map/unmap/allocation per frame and no busy polling.
+- [ ] Add schema-owned SSBO helpers for structured instance, event, history, material and compact work data. Reflection/
+  layout tests compare Python packing with driver-reported/std430 layout where applicable.
+- [ ] Migrate only data that benefits: large structured arrays, many instances/events or data shared across passes.
+  Tiny fixed frame values may remain uniforms/UBOs if cheaper.
+- **Reward:** removes texture-table contortions and repeated Python uniform calls, enables compute/indirect consumers.
+- **Hazards:** overwrite-in-flight stalls, alignment/stride drift, runaway capacities. Rings/capacities are fixed/bounded.
+- **Bars:** no GPU sync stall in steady traces, exact retirement, no per-frame allocation, CPU submit before/after.
+
+### S15 — Compute, image load/store and atomic primitives
+- [ ] Shared compute program/resource helpers with explicit dispatch dimensions, barriers and deterministic GPU test
+  harnesses. Add image load/store and atomic/atomic-counter wrappers only as concrete consumers need them.
+- [ ] Compute may prepare/compact/evaluate GPU work but may **not** become a second simulation clock. Transition compute
+  derives from run progress/real authored seconds. Visualizer compute consumes logical revision/time and bounded snapshot
+  history; repeated renders of one logical revision cannot advance state again.
+- [ ] Useful first jobs: particle evaluation/compaction, procedural bolt/branch tables, volume injection/advection,
+  post-processing kernels, light/cluster lists, active-piece masks and GPU-generated indirect counts.
+- **Reward:** moves genuinely parallel work away from Python without introducing render-rate semantics.
+- **Hazards:** missing barriers, hidden persistent state, dispatch overprovisioning, readback. No ordinary CPU readbacks.
+- **Bars:** CPU mirror/negative controls where feasible, logical-revision replay determinism, measured dispatch/GPU cost.
+
+### S16 — Indirect/multi-draw and GPU compaction
+- [ ] Allow compute/CPU-once prepared work to produce bounded indirect draw commands and compacted active-instance lists.
+  Use `glMultiDraw*Indirect` only when it replaces material Python submit/draw loops.
+- [ ] Stable instance IDs/seeds survive compaction so authored randomness does not shimmer when population changes.
+- [ ] No CPU readback of the generated count in the ordinary path; the GPU consumes its own bounded command buffer.
+- **Reward:** thousands of active particles/pieces can remain one/few Python submissions.
+- **Bars:** same deterministic population/placement as reference; no overrun beyond allocated command/instance capacity.
+
+### S17 — Active-only high-fidelity scene buffers, lighting and materials
+- [ ] Extend `SceneTarget` with opt-in RGBA16F HDR and optional normal/material/depth/history attachments. Allocation key
+  includes only requested capabilities; ordinary/cheap effects keep the existing minimal target or direct draw.
+- [ ] Shared material/light block: energy-conserving GGX/Cook-Torrance BRDF, roughness, metalness/specular, emissive,
+  bounded directional/point/spot lights, BRDF LUT and photo/environment image-based lighting.
+- [ ] Shared real 3D shadow option: depth map(s), bounded PCF/PCSS-style softness/contact treatment. Keep planar shadows
+  where they are both cheaper and visually appropriate. Optional GTAO/contact AO is active-only.
+- [ ] Shared transparent path: depth-aware soft particles and weighted blended OIT for smoke/spark/glass-heavy consumers.
+- [ ] Shared glass path: thickness/depth-aware screen-space refraction, Fresnel reflection, rough transmission and
+  restrained optional dispersion, using owned scene/environment textures rather than mutating lent presentation images.
+- **Reward:** coherent high-end materials/light interaction rather than bespoke approximations per effect.
+- **Hazards:** full-screen attachment bandwidth/memory. Every attachment/pass has an explicit requesting feature/tier.
+- **Bars:** disabled/cheap path allocates none of the new buffers; exact endpoints and existing looks stay untouched.
+
+### S18 — GPU particles, lightning, smoke/fire and volumetrics
+- [ ] **Particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced draw,
+  soft sprites/streaks/ribbons, optional simple analytic/SDF collision, depth fade and OIT. No CPU object per particle.
+- [ ] **Lightning:** stable seeded branching topology per admitted event, travelling intensity/forks, hot emissive core,
+  bloom, secondary arcs, short afterglow and optional local-light injection into geometry/smoke. Never rerandomise the
+  entire bolt at render cadence.
+- [ ] **Smoke/fog/fire:** active-only half/quarter-resolution density/temperature volume or procedural field; bounded curl
+  noise/advection/vorticity, event injection, depth-aware raymarch, temporal reprojection, absorption/scattering and
+  emissive fire/embers. Quality tiers own volume resolution, ray steps and light samples.
+- [ ] **Energy/field effects:** compute/image-driven shockwaves, plasma/nebula, reaction-diffusion surfaces, heat haze and
+  force fields with deterministic event/history input.
+- **Reward:** the foundation starts producing effects that were awkward or CPU-hostile on the old 4.1-era architecture.
+- **Hazards:** volume memory, temporal ghosting, accidental render-rate simulation. Dormant means no allocation/dispatch.
+- **Bars:** fixed logical replay gives fixed frames, resource retirement to zero, frame/GPU budget measured by tier.
+
+### S19 — Voxel Sphere promotion onto scene3d
+- [ ] Run the existing Sphere promotion golden **before** refactoring: Glass Current + Voxel Bloom persisted snapshots,
+  hidden technical profile, deterministic FeatureFrame replay (silence/flat/vocal/kick/sustained), logical outputs,
+  representative captures and extreme CUSTOM geometry.
+- [ ] Preserve Sphere's descriptor, `sphere_*` state, Settings/presets, logical runtime, section drives, tracer/cohort
+  semantics, authored projection and reactivity. Sphere is not a generic 3D base class.
+- [ ] Replace only duplicate low-level GPU plumbing with scene3d equivalents: resource lifetime/fences, frame/target,
+  DSA buffers, SSBO/instance transport, shared material/light/post pieces and particle/shadow helpers when parity proves
+  they are mathematically/visually identical.
+- [ ] Sphere becomes an ordinary shared-foundation 3D Visualizer consumer with the standard 3D capability/tier lifecycle.
+  Non-selected Sphere remains dormant. After parity, delete superseded Sphere-local low-level infrastructure.
+- [ ] New fidelity options (HDR emissive lighting, better shadow interaction, compute particles, smoke/electric coupling)
+  come **after** the migration golden and are explicit look changes, never smuggled into the refactor.
+- **Bars:** promotion gate in `Docs/Reference/Sphere_Visualizer.md`; zero material change without operator approval.
+
+### S20 — Vertical consumers: make the foundation earn its complexity
+- [ ] Page Curl and Blinds → 3D Slats: adaptive surface/material/shadow proofs.
+- [ ] Extruded Spectrum: first ordinary 3D Visualizer, SSBO instancing + common material/light proof.
+- [ ] Shockwave Grid: displaced grid + bounded event SSBO + emissive/HDR/bloom proof.
+- [ ] Reactive Particle Field: compute/compaction/indirect/OIT proof.
+- [ ] Spectrum Terrain/Skyline/Tunnel, Waveform Ribbon, Deformable Blob Sphere, Accordion Fold, Relief Rise, Cube Turn.
+- [ ] Bubble Depth Field only under Bubble Temporal Fidelity/R-69; depth cannot damp or retime authored response.
+- [ ] Once primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit voxel
+  fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
+- **Rule:** a vertical feature may request foundation extraction, but speculative generic engine layers remain forbidden.
+
 ## Cross-cutting performance hazards
 
 Binding lessons from the landed slices (measuring, rendering, motion, settings) live in
@@ -314,15 +417,15 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 - Time: real seconds only for real-time rates; Visualizers only logical time.
 - R-63: nothing may expose uncovered frame edges.
 
-## Physical acceptance (after the slices land)
+## Physical acceptance (after material slices)
 
-- High / Balanced / Performance on both displays with active Visualizers: freshness and frame-spacing tails;
-  first-use hitch of each 3D transition.
-- Looks of migrated transitions (S5) and bloom/motion blur (S6–S7) on real photos.
+- High / Balanced / Performance on both displays with active Visualizers: freshness/frame-spacing tails, first-use and
+  warm-run cost, parked memory and transition-end behaviour.
+- New lighting/material/particle/volume features on real photos and representative music, including extreme CUSTOM card
+  shapes for Visualizers. Disabled features must be visually and materially cost-neutral.
+- Voxel Sphere migration gets a dedicated before/after golden pass before any new Sphere look option is judged.
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9; also Motion Trails (operator request 2026-09-29:
-  `rendering/quick/scene3d/trails.py`, ghosts from each effect's motion variants; see Transitions.md).
-- Landed: S10 (shader resolve; per-run textures allocated ahead), S11 (gradual warm-up of the next transition).
-- Remaining: none.
+- Landed: S1–S11, plus Motion Trails and the 2026-09-29 high-fidelity shared foundation documented above.
+- Remaining/active: Motion Trails CPU cleanup, S12–S20 under the 2026-09-30 operator promotion.
