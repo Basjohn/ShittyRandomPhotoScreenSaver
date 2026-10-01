@@ -811,6 +811,22 @@ class Scene3DBlockLayout:
             struct.pack_into("<" + fmt, data, offset, *items)
         return bytes(data)
 
+    def pack_fields(self, values) -> tuple[tuple[int, bytes], ...]:
+        """Pack selected named members at their std140 offsets."""
+        import struct
+
+        members = {field: (glsl_type, offset) for (field, glsl_type), offset in zip(self.fields, self.offsets)}
+        packed = []
+        for field, value in values.items():
+            try:
+                glsl_type, offset = members[field]
+            except KeyError as exc:
+                raise KeyError(f"{self.name} has no field {field!r}") from exc
+            fmt = _STD140[glsl_type][2]
+            items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+            packed.append((offset, struct.pack("<" + fmt, *items)))
+        return tuple(packed)
+
 
 # ---- Camera (CPU side: mirrors, overscan and shake) ----
 

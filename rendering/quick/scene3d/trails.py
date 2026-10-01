@@ -79,9 +79,13 @@ class MotionTrails:
         return bool(self._texture or self._fbo)
 
     def draw(self, target, frame, resources, ghosts: Iterable[tuple[float, float]],
-             draw_ghost: Callable[[float, float], None]) -> None:
-        """Inside ``target.scope``: draw each (progress, fade) ghost with ``draw_ghost``, then lay
-        their outlines over what the scene has drawn so far."""
+             draw_ghosts: Callable[[Iterable[tuple[float, float]]], None]) -> None:
+        """Inside ``target.scope``, let an effect draw its ghosts, then lay their outlines over the scene.
+
+        The callback owns one prepared ghost pass: invariant program, geometry, texture and frame uniforms bind
+        once, while its loop changes only each ghost's time and fade.  A multi-program effect may group its
+        ghosts by program; MAX blending makes that ordering pixel-equivalent.
+        """
         self.warm(target)
         width, height = self._size
         scene = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
@@ -94,8 +98,7 @@ class MotionTrails:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         with blend_scope(gl.GL_MAX):
-            for progress, fade in ghosts:
-                draw_ghost(progress, fade)
+            draw_ghosts(ghosts)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, scene)
         gl.glViewport(0, 0, width, height)
         program = resources.program("trail_edges", FULLSCREEN_VERTEX_SOURCE, _EDGE_FRAGMENT)

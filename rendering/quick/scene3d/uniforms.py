@@ -1,4 +1,4 @@
-"""Per-frame uniform blocks: one buffer write per frame, shared by every pass.
+"""Shared per-frame uniform blocks with scoped binding and named partial updates.
 
 A renderer declares its per-frame values once as a ``Scene3DBlockLayout`` (pure,
 in ``rendering.gl_programs.scene3d``), puts ``layout.glsl()`` in each program and
@@ -6,8 +6,11 @@ draws its passes inside ``block.bound(values)``. That replaces a dozen
 ``glUniform*`` calls per pass with one upload and one bind: the render-thread
 Python cost Visualizer modes need to afford 3D.
 
-The buffer is re-specified each frame (orphaning), so the driver never stalls on
-a buffer still in use by the previous frame. The block sits on binding point
+Time-varying ghost passes may update only selected members of their own block.
+Those DSA writes name the owned buffer explicitly and leave generic bindings alone.
+
+Full block uploads re-specify the buffer (orphaning) to avoid reusing the previous
+frame's storage; selected-field updates retain that storage. The block sits on binding point
 ``SCENE3D_UNIFORM_BINDING``; ``bound`` restores that point's previous buffer range
 and the generic uniform-buffer binding, so no host fence has to know about it.
 """
@@ -71,6 +74,13 @@ class UniformBlock:
             else:
                 gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, buffer)
             gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, generic)
+
+    def update_fields(self, values: Mapping[str, object]) -> None:
+        """Update selected fields without relying on the generic uniform-buffer binding."""
+        if not self._buffer:
+            raise RuntimeError(f"{self.label} has no allocated uniform buffer")
+        for offset, data in self.layout.pack_fields(values):
+            gl.glNamedBufferSubData(self._buffer, offset, len(data), data)
 
     def release(self) -> None:
         """Delete the buffer; programs must be re-attached (their names may be reused)."""

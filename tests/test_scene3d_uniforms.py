@@ -125,3 +125,51 @@ def test_binding_the_block_hands_back_the_previous_binding(context):
         gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, 0)
         gl.glDeleteBuffers(2, [sentinel, other])
         block.release()
+
+
+@pytest.mark.qt
+def test_partial_updates_reach_the_allocated_block_even_if_the_generic_binding_changes(context):
+    """Trail ghosts update only their moving fields through DSA, never whichever UBO is generically bound."""
+    layout = EXPLODING_TILES_FRAME_BLOCK
+    program = compile_program(_VERTEX, _reader(layout), label="partial block update probe")
+    block = UniformBlock(layout, "partial block update probe")
+    target, fbo, vao, sentinel = (int(gl.glGenTextures(1)), int(gl.glGenFramebuffers(1)),
+                                  int(gl.glGenVertexArrays(1)), int(gl.glGenBuffers(1)))
+    values = {}
+    try:
+        for position, (field, glsl_type) in enumerate(layout.fields, start=1):
+            width = {"float": 1, "int": 1, "uint": 1, "vec2": 2, "ivec2": 2, "vec3": 3, "vec4": 4,
+                     "mat4": 16}[glsl_type]
+            numbers = [position * 10 + item for item in range(width)]
+            values[field] = numbers[0] if width == 1 else tuple(numbers)
+        updates = {"uProgress": 901.0, "uBlast": (902.0, 903.0), "uShutter": 904.0}
+        expected = {**values, **updates}
+        block.attach(program)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, target)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA32F, len(layout.fields), 1, 0, gl.GL_RGBA, gl.GL_FLOAT, None)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, target, 0)
+        gl.glViewport(0, 0, len(layout.fields), 1)
+        gl.glUseProgram(program)
+        gl.glBindVertexArray(vao)
+        with block.bound(values):
+            gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, sentinel)
+            gl.glBufferData(gl.GL_UNIFORM_BUFFER, 256, None, gl.GL_STATIC_DRAW)
+            block.update_fields(updates)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        pixels = np.asarray(gl.glReadPixels(0, 0, len(layout.fields), 1, gl.GL_RGBA, gl.GL_FLOAT)).reshape(-1, 4)
+        for column, (field, glsl_type) in enumerate(layout.fields):
+            expected_value = expected[field]
+            if glsl_type == "mat4":
+                expected_value = expected_value[12:16]
+            expected_value = np.atleast_1d(np.asarray(expected_value, dtype=np.float64))
+            assert np.allclose(pixels[column, : expected_value.size], expected_value), (field, pixels[column])
+    finally:
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, context.fbo)
+        gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, 0)
+        gl.glDeleteBuffers(1, [sentinel])
+        gl.glDeleteFramebuffers(1, [fbo])
+        gl.glDeleteTextures([target])
+        gl.glDeleteVertexArrays(1, [vao])
+        gl.glDeleteProgram(program)
+        block.release()

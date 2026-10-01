@@ -97,8 +97,7 @@ class QuickGlassShatterRenderer:
         if trails:
             self._trails.draw(self._target, frame, resources,
                               scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
-                              lambda time, fade: self._draw_shards(frame, time, params, False, environment,
-                                                                   (fade, progress)))
+                              lambda ghosts: self._draw_shard_ghosts(frame, ghosts, params, environment, progress))
         resources.begin_depth(frame)
         self._draw_shards(frame, progress, params, motion, environment)
 
@@ -107,17 +106,11 @@ class QuickGlassShatterRenderer:
         "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen", "uEnvironment",
     )
 
-    def _draw_shards(self, frame, progress: float, params, motion: bool, environment: int,
-                     ghost: tuple[float, float] | None = None) -> None:
-        """``ghost``: (fade, the moment now) to draw the shards as a motion-trail ghost."""
+    def _draw_shards(self, frame, progress: float, params, motion: bool, environment: int) -> None:
         resources = self._resources
-        if ghost is not None:
-            program, uniforms = trail_program(resources, "glass", GLASS_MOTION_VERTEX, GLASS_GHOST_FRAGMENT,
-                                              self._SHARD_UNIFORMS + motion_uniform_names())
-        else:
-            program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
-                                               (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), self._SHARD_UNIFORMS,
-                                               motion)
+        program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
+                                           (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), self._SHARD_UNIFORMS,
+                                           motion)
         bind_frame(program, uniforms, frame)
         radial = frame.run.request.direction == "center_out"
         direction = (0.0, 0.0) if radial else direction_vector(frame.run.request.direction)
@@ -131,15 +124,38 @@ class QuickGlassShatterRenderer:
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        if ghost is not None:
-            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
-            set_motion_uniforms(uniforms, frame, ghost[1])
         if motion:
             set_motion_uniforms(uniforms, frame,
                                 max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
         gl.glBindVertexArray(self._vao)
         with self._target.velocity_writes():
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
+
+    def _draw_shard_ghosts(self, frame, ghosts, params, environment: int, now: float) -> None:
+        """Bind invariant glass ghost state once; the ghost loop changes only progress and fade."""
+        program, uniforms = trail_program(
+            self._resources, "glass", GLASS_MOTION_VERTEX, GLASS_GHOST_FRAGMENT,
+            self._SHARD_UNIFORMS + motion_uniform_names(),
+        )
+        bind_frame(program, uniforms, frame)
+        radial = frame.run.request.direction == "center_out"
+        direction = (0.0, 0.0) if radial else direction_vector(frame.run.request.direction)
+        gl.glUniform2f(uniforms["uDirection"], *direction)
+        gl.glUniform1i(uniforms["uRadial"], int(radial))
+        gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
+        for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
+            gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        set_motion_uniforms(uniforms, frame, now)
+        gl.glBindVertexArray(self._vao)
+        with self._target.velocity_writes():
+            for time, fade in ghosts:
+                gl.glUniform1f(uniforms["uProgress"], time)
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
 
     def park(self) -> None:
         """Drop the per-run target, environment and trails; programs and shard geometry stay warm."""

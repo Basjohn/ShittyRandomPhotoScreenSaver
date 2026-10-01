@@ -69,8 +69,6 @@ Detailed decomposition and acceptance bars live in `Docs/Future_Work/3D_Scene_Fo
 when no active transition/Visualizer asks for it, it owns no buffers, targets, compute dispatches, history, workers,
 forced frames or cadence.
 
-- [ ] **Finish Motion Trails CPU cleanup** from the previous foundation plan: set invariant uniforms once per trail pass
-  and vary only ghost time/fade; measure the known +0.5–1.0 ms CPU submit cost before/after.
 - [ ] **Direct State Access + immutable storage + multi-bind.** Remove unnecessary bind/query ceremony from new shared
   resources and migrate existing scene3d owners where identity tests prove no look change. This is especially valuable
   in Python because every avoidable GL call has submission/GIL cost.

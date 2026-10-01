@@ -137,14 +137,11 @@ class QuickExplodingTilesRenderer:
         if detail.shadows:
             self._draw_shadows(frame, tiles)
         if trail_values is not None:
-            def ghost(time, fade):
-                # A negative shutter: the ghost's vertex stage also finds where each tile is now.
-                values = {**trail_values, "uProgress": time, "uBlast": exploding_tiles_blast(time),
-                          "uShutter": time - progress}
-                with self._ghost_block.bound(values):
-                    self._draw_tiles(frame, tiles, environment, fade)
             self._trails.draw(self._target, frame, self._resources,
-                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms), ghost)
+                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
+                              lambda ghosts: self._draw_tile_ghosts(
+                                  frame, ghosts, tiles, environment, trail_values, progress,
+                              ))
         self._resources.begin_depth(frame)
         self._draw_tiles(frame, tiles, environment)
         sparks = particle_budget(EXPLODING_TILES_SPARKS, detail)
@@ -171,17 +168,10 @@ class QuickExplodingTilesRenderer:
 
     _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uEnvironment")
 
-    def _draw_tiles(self, frame, tiles: int, environment: int, ghost: float | None = None) -> None:
-        if ghost is not None:
-            program, uniforms = trail_program(self._resources, "tiles", EXPLODING_TILES_VERTEX_SOURCE,
-                                              EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS)
-            self._frame_block.attach(program)
-            bind_frame(program, uniforms, frame)
-            gl.glUniform1f(uniforms["uGhostFade"], ghost)
-        else:
-            self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-                      self._TILE_UNIFORMS, frame)
-            uniforms = self._resources.uniforms("tiles", self._TILE_UNIFORMS)
+    def _draw_tiles(self, frame, tiles: int, environment: int) -> None:
+        self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
+                  self._TILE_UNIFORMS, frame)
+        uniforms = self._resources.uniforms("tiles", self._TILE_UNIFORMS)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glUniform1i(uniforms["uEnvironment"], 2)
@@ -190,6 +180,31 @@ class QuickExplodingTilesRenderer:
         gl.glBindVertexArray(vao)
         with self._target.velocity_writes():
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
+
+    def _draw_tile_ghosts(self, frame, ghosts, tiles: int, environment: int, values, now: float) -> None:
+        """One prepared tile ghost pass; only the ghost's time-derived block fields and fade change."""
+        program, uniforms = trail_program(
+            self._resources, "tiles", EXPLODING_TILES_VERTEX_SOURCE,
+            EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS,
+        )
+        self._ghost_block.attach(program)
+        bind_frame(program, uniforms, frame)
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
+        gl.glBindVertexArray(vao)
+        with self._ghost_block.bound(values), self._target.velocity_writes():
+            for time, fade in ghosts:
+                # A negative shutter makes the ghost vertex stage find the tile at the moment now.
+                self._ghost_block.update_fields({
+                    "uProgress": time,
+                    "uBlast": exploding_tiles_blast(time),
+                    "uShutter": time - now,
+                })
+                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
 
     def _draw_sparks(self, frame, count: int) -> None:
         self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
