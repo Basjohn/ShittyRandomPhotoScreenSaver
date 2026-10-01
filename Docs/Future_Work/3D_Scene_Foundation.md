@@ -323,11 +323,11 @@ steady-frame speedup: identify removed calls and measure the actual consumer bef
 Durable contracts and the measured submission scope: `Docs/Reference/Scene3D_Resources.md`.
 
 #### S13b — PhotoEnvironment texture and framebuffer construction
-- [ ] In `scene3d/environment.py`, allocate the known-size environment texture with immutable storage for its complete
+- [x] In `scene3d/environment.py`, allocate the known-size environment texture with immutable storage for its complete
   mip chain. Use named texture parameters/mipmap generation and named framebuffer attachment/status operations.
-- [ ] Keep the existing destination-photo copy owner, one copy per run, sampler look and `park()` retirement.
+- [x] Keep the existing destination-photo copy owner, one copy per run, sampler look and `park()` retirement.
   Raster work still binds its drawing framebuffer and restores inherited framebuffer, viewport and scissor state.
-- [ ] Prove reflection pixels, mip levels, lent-photo immutability, allocation reuse, failure cleanup and park retirement.
+- [x] Prove reflection pixels, mip levels, lent-photo immutability, allocation reuse, failure cleanup and park retirement.
   Record construction-call savings; do not advertise an unmeasured steady-frame benefit.
 
 #### S13c — Fixed-size scene and post-process allocations

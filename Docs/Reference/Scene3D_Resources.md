@@ -22,6 +22,20 @@ Two-sampler warm passes remove five Python-to-GL calls. A bounded local measurem
 median per call. This measures only frame binding, not whole-transition FPS or loaded-desktop tails. Static DSA mesh
 construction alone is not claimed to improve steady frames.
 
+## Photo reflection resources
+
+`PhotoEnvironment` owns its photo copy, immutable texture and framebuffer. Named construction allocates the complete
+mip chain (`max(width, height).bit_length()` levels), preserves the existing sampler parameters and generates mipmaps
+on the owned texture. It never alters the lent presentation photo. The existing per-run identity reuses a completed
+copy; `park()` retires it. Actual copy drawing still binds its framebuffer and restores draw/read framebuffer,
+viewport and scissor state.
+
+Allocation and copy failures invalidate the cache identity and retire the incomplete texture. A failed deletion keeps
+its name with this owner for release retry; a partially written image cannot become a valid cached reflection.
+Named construction removes three owned-texture active/bind calls from allocation plus first copy. This is a bounded
+construction saving, with no measured steady-frame FPS claim. Eighteen representative Block Spins / Glass Shatter
+captures matched the preceding implementation byte-for-byte.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
@@ -34,6 +48,8 @@ The expanded fence deliberately pays for the previously missing state; the isola
 
 - `test_scene3d_resources.py`: real static mesh pixels, immutable storage, untouched generic bindings, one sampler
   assignment per linked program, correct multi-bind routing and partial-upload retirement/rebuild.
+- `test_scene3d_environment.py`: complete immutable mip storage, reflection pixels, borrowed-photo immutability,
+  construction state isolation, failed-copy invalidation and allocation/deletion retry.
 - `test_qtquick_transition_state_fence.py`: deliberately non-default state restoration on success/failure, plus real
   reflection and multisample texture sentinels across a scene pass and a thrown renderer.
 - `test_qtquick_bootstrap.py`: each required entry point must resolve on the actual context; no frame-time probing.
