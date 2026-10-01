@@ -12,6 +12,7 @@ import pytest
 from OpenGL import GL as gl
 from PIL import Image
 
+import rendering.quick.scene3d.environment as environment_module
 from rendering.gl_programs import scene3d as lib
 from rendering.quick.scene3d.environment import PhotoEnvironment, environment_size
 from rendering.quick.scene3d.post import FULLSCREEN_VERTEX_SOURCE
@@ -39,6 +40,11 @@ def _pixels(texture: int, width: int, height: int) -> np.ndarray:
     return np.frombuffer(bytes(data), dtype=np.uint8).reshape(height, width, 4).astype(np.int16)
 
 
+def _immutable_levels(texture: int) -> int:
+    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+    return int(gl.glGetTexParameteriv(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_IMMUTABLE_LEVELS))
+
+
 def test_the_copy_is_once_per_run_mipmapped_and_never_touches_the_photographs(qt_app):
     width, height = 320, 180
     capture = TransitionCapture(width, height)
@@ -54,6 +60,7 @@ def test_the_copy_is_once_per_run_mipmapped_and_never_touches_the_photographs(qt
         # The copy is ours, sized from the photograph, with its own mip levels...
         copy_width, copy_height = environment_size((width, height))
         assert _levels(texture) == (copy_width, copy_width // 2)
+        assert _immutable_levels(texture) == max(copy_width, copy_height).bit_length()
         copy = _pixels(texture, copy_width, copy_height)
         photo = np.asarray(capture.images[1], dtype=np.int16)
         assert np.abs(copy[..., :3].mean(axis=(0, 1)) - photo[..., :3].mean(axis=(0, 1))).max() < 3
@@ -62,6 +69,195 @@ def test_the_copy_is_once_per_run_mipmapped_and_never_touches_the_photographs(qt
         again = TransitionRun.start(run_id=run.run_id + 1, request=run.request, start_ns=0)
         environment.texture(capture.frame(again, 0.5), resources)
         assert environment.copies == 2
+        environment.release()
+        assert not environment.has_resources
+    finally:
+        environment.release()
+        resources.release_resources()
+        capture.close()
+
+
+def test_named_environment_construction_uses_immutable_storage_and_only_binds_the_lent_photo(
+    qt_app, monkeypatch,
+):
+    """Named setup removes three owned-texture bind/select calls from the first copy.
+
+    The raster draw still binds its framebuffer and the borrowed photo to unit
+    zero; those are deliberate draw-time state operations and are not counted
+    as construction savings.
+    """
+
+    capture = TransitionCapture(320, 180)
+    resources = MeshResources("environment DSA calls")
+    environment = PhotoEnvironment("environment DSA calls")
+    calls: dict[str, int] = {}
+    names = (
+        "glCreateTextures",
+        "glTextureParameteri",
+        "glTextureStorage2D",
+        "glCreateFramebuffers",
+        "glNamedFramebufferTexture",
+        "glCheckNamedFramebufferStatus",
+        "glGenerateTextureMipmap",
+        "glActiveTexture",
+        "glBindTexture",
+        "glBindFramebuffer",
+    )
+    try:
+        for name in names:
+            original = getattr(environment_module.gl, name)
+
+            def record(*args, _name=name, _original=original, **kwargs):
+                calls[_name] = calls.get(_name, 0) + 1
+                return _original(*args, **kwargs)
+
+            monkeypatch.setattr(environment_module.gl, name, record)
+
+        texture = environment.texture(
+            capture.frame(capture.run("glass_shatter", direction="left"), 0.5),
+            resources,
+        )
+
+        assert texture > 0
+        assert calls["glCreateTextures"] == 1
+        assert calls["glTextureParameteri"] == 4
+        assert calls["glTextureStorage2D"] == 1
+        assert calls["glCreateFramebuffers"] == 1
+        assert calls["glNamedFramebufferTexture"] == 1
+        assert calls["glCheckNamedFramebufferStatus"] == 1
+        assert calls["glGenerateTextureMipmap"] == 1
+        # One active/bind pair samples the lent photo. Legacy construction also
+        # selected/bound the owned texture for allocation and mipmaps, so this
+        # complete first-copy path removes three calls (2 + 1).
+        assert calls["glActiveTexture"] == 1
+        assert calls["glBindTexture"] == 1
+        assert calls["glBindFramebuffer"] >= 1
+    finally:
+        environment.release()
+        resources.release_resources()
+        capture.close()
+
+
+def test_partial_environment_allocation_and_copy_failures_keep_or_retry_ownership(qt_app, monkeypatch):
+    """No texture can become a valid cached environment until its copy succeeds."""
+
+    capture = TransitionCapture(160, 90)
+    resources = MeshResources("environment ownership")
+    environment = PhotoEnvironment("environment ownership")
+    try:
+        with monkeypatch.context() as failed_allocation:
+            def fail_storage(*_args, **_kwargs):
+                raise RuntimeError("injected storage failure")
+
+            failed_allocation.setattr(environment_module.gl, "glTextureStorage2D", fail_storage)
+            with pytest.raises(RuntimeError, match="injected storage failure"):
+                environment._allocate((64, 32))
+        assert not environment.has_resources
+
+        frame = capture.frame(capture.run("glass_shatter", direction="left"), 0.5)
+        with monkeypatch.context() as failed_copy:
+            def fail_attachment(*_args, **_kwargs):
+                raise RuntimeError("injected attachment failure")
+
+            failed_copy.setattr(
+                environment_module.gl,
+                "glNamedFramebufferTexture",
+                fail_attachment,
+            )
+            with pytest.raises(RuntimeError, match="injected attachment failure"):
+                environment.texture(frame, resources)
+        assert environment._textures == {}
+        # The FBO name was created before the named attachment failed, so its
+        # owner retains it until explicit cleanup rather than losing the name.
+        assert environment._fbo > 0 and environment.has_resources
+        environment.release()
+        assert not environment.has_resources
+
+        texture = environment.texture(frame, resources)
+        assert texture > 0 and environment.copies == 1
+        rerun = TransitionRun.start(
+            run_id=frame.run.run_id + 1,
+            request=frame.run.request,
+            start_ns=0,
+        )
+        with monkeypatch.context() as failed_reuse:
+            failed_reuse.setattr(
+                environment_module.gl,
+                "glNamedFramebufferTexture",
+                fail_attachment,
+            )
+            with pytest.raises(RuntimeError, match="injected attachment failure"):
+                environment.texture(capture.frame(rerun, 0.5), resources)
+        # Same-size reuse is invalidated too: a failed raster copy can have
+        # partially replaced its pixels, so no old run key may retain it.
+        assert environment._textures == {}
+        environment.release()
+        assert not environment.has_resources
+    finally:
+        environment.release()
+        resources.release_resources()
+        capture.close()
+
+
+def test_environment_copy_restores_inherited_framebuffer_viewport_and_scissor(qt_app):
+    """Named attachment construction must not weaken the existing raster-state fence."""
+
+    capture = TransitionCapture(160, 90)
+    resources = MeshResources("environment state restore")
+    environment = PhotoEnvironment("environment state restore")
+    read_fbo = int(gl.glGenFramebuffers(1))
+    try:
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, capture.fbo)
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read_fbo)
+        gl.glViewport(7, 9, 111, 61)
+        gl.glEnable(gl.GL_SCISSOR_TEST)
+        gl.glScissor(11, 13, 77, 41)
+        expected = (
+            int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)),
+            int(gl.glGetIntegerv(gl.GL_READ_FRAMEBUFFER_BINDING)),
+            tuple(int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT)),
+            tuple(int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)),
+        )
+
+        frame = capture.frame(capture.run("glass_shatter", direction="left"), 0.5)
+        assert environment.texture(frame, resources) > 0
+
+        actual = (
+            int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)),
+            int(gl.glGetIntegerv(gl.GL_READ_FRAMEBUFFER_BINDING)),
+            tuple(int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT)),
+            tuple(int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)),
+        )
+        assert actual == expected and gl.glIsEnabled(gl.GL_SCISSOR_TEST)
+    finally:
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        gl.glDeleteFramebuffers(1, [read_fbo])
+        environment.release()
+        resources.release_resources()
+        capture.close()
+
+
+def test_environment_release_retries_a_failed_texture_deletion(qt_app, monkeypatch):
+    """Park cleanup retains a live name when a driver deletion attempt fails."""
+
+    capture = TransitionCapture(160, 90)
+    resources = MeshResources("environment release retry")
+    environment = PhotoEnvironment("environment release retry")
+    try:
+        frame = capture.frame(capture.run("glass_shatter", direction="left"), 0.5)
+        environment.texture(frame, resources)
+        original_delete = environment_module.gl.glDeleteTextures
+
+        def fail_delete(*_args, **_kwargs):
+            raise RuntimeError("injected delete failure")
+
+        monkeypatch.setattr(environment_module.gl, "glDeleteTextures", fail_delete)
+        with pytest.raises(RuntimeError, match="injected delete failure"):
+            environment.release()
+        assert environment.has_resources
+
+        monkeypatch.setattr(environment_module.gl, "glDeleteTextures", original_delete)
         environment.release()
         assert not environment.has_resources
     finally:

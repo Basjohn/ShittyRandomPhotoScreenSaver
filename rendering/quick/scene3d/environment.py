@@ -11,6 +11,8 @@ dropped at the host's ``park()`` with the renderer's other per-run resources.
 """
 from __future__ import annotations
 
+import ctypes
+
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import SCENE3D_ENVIRONMENT_SIZE
@@ -50,12 +52,16 @@ class PhotoEnvironment:
     def __init__(self, label: str) -> None:
         self.label = label
         self._textures: dict[str, tuple[int, tuple]] = {}   # role -> (texture, key)
+        # Allocation can fail after the driver assigned a name.  Retain a name
+        # whose immediate cleanup failed so ``release()`` remains its retrying
+        # deletion owner instead of silently leaking it.
+        self._failed_textures: set[int] = set()
         self._fbo = 0
         self.copies = 0   # photographs copied (once per run and role; for tests and traces)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._textures) or bool(self._fbo)
+        return bool(self._textures) or bool(self._failed_textures) or bool(self._fbo)
 
     def texture(self, frame, resources, role: str = "destination") -> int:
         """The run's environment for ``role`` ("destination" or "source"), copied on first use."""
@@ -75,21 +81,57 @@ class PhotoEnvironment:
                 del self._textures[role]
         if not texture:
             texture = self._allocate(size)
+        try:
+            self._copy(lent, texture, size, resources, frame.quad_vao)
+        except Exception:
+            # A failed draw may have written part of a same-size reused copy;
+            # do not leave that old key advertising valid pixels.  Delete it
+            # now or retain its name for ``release()`` retry ownership.
+            if held is not None and held[0] == texture:
+                self._textures.pop(role, None)
+            self._discard_failed_allocation(texture)
+            raise
         self._textures[role] = (texture, key)
-        self._copy(lent, texture, size, resources, frame.quad_vao)
         self.copies += 1
         return texture
 
     def _allocate(self, size: tuple[int, int]) -> int:
-        texture = int(gl.glGenTextures(1))
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-        for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, wrap, gl.GL_CLAMP_TO_EDGE)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, size[0], size[1], 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
-        return texture
+        """Create one known-size, complete immutable mip chain without rebinding texture state."""
+
+        texture = 0
+        try:
+            texture_name = (ctypes.c_uint * 1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, texture_name)
+            texture = int(texture_name[0])
+            if not texture:
+                raise RuntimeError(f"{self.label} photo environment texture allocation failed")
+            gl.glTextureParameteri(
+                texture,
+                gl.GL_TEXTURE_MIN_FILTER,
+                gl.GL_LINEAR_MIPMAP_LINEAR,
+            )
+            gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
+            gl.glTextureStorage2D(
+                texture,
+                max(size).bit_length(),
+                gl.GL_RGBA8,
+                *size,
+            )
+            return texture
+        except Exception:
+            if texture:
+                self._discard_failed_allocation(texture)
+            raise
+
+    def _discard_failed_allocation(self, texture: int) -> None:
+        """Delete an unadmitted texture now, retaining it only for a cleanup retry."""
+
+        try:
+            gl.glDeleteTextures([texture])
+        except Exception:
+            self._failed_textures.add(texture)
 
     def _copy(self, lent: int, texture: int, size: tuple[int, int], resources, vao: int) -> None:
         draw, read = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING), gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING)
@@ -97,10 +139,17 @@ class PhotoEnvironment:
         scissor = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
         try:
             if not self._fbo:
-                self._fbo = int(gl.glGenFramebuffers(1))
+                fbo_name = (ctypes.c_uint * 1)()
+                gl.glCreateFramebuffers(1, fbo_name)
+                self._fbo = int(fbo_name[0])
+                if not self._fbo:
+                    raise RuntimeError(f"{self.label} photo environment framebuffer allocation failed")
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._fbo)
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
-            if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+            gl.glNamedFramebufferTexture(self._fbo, gl.GL_COLOR_ATTACHMENT0, texture, 0)
+            if (
+                gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_FRAMEBUFFER)
+                != gl.GL_FRAMEBUFFER_COMPLETE
+            ):
                 raise RuntimeError(f"{self.label} photo environment incomplete at {size}")
             gl.glViewport(0, 0, *size)
             gl.glDisable(gl.GL_SCISSOR_TEST)
@@ -115,8 +164,7 @@ class PhotoEnvironment:
             gl.glUniform2f(uniforms["uStep"], 0.25 / size[0], 0.25 / size[1])
             gl.glBindVertexArray(vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)       # our own copy gets the mip levels
-            gl.glGenerateMipmap(gl.GL_TEXTURE_2D)
+            gl.glGenerateTextureMipmap(texture)                # only our owned copy gets mip levels
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, draw)
             gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read)
@@ -133,6 +181,13 @@ class PhotoEnvironment:
                 errors.append(f"{role}: {exc}")
             else:
                 del self._textures[role]
+        for texture in tuple(self._failed_textures):
+            try:
+                gl.glDeleteTextures([texture])
+            except Exception as exc:
+                errors.append(f"failed texture: {exc}")
+            else:
+                self._failed_textures.discard(texture)
         if self._fbo:
             try:
                 gl.glDeleteFramebuffers(1, [self._fbo])
