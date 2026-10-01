@@ -14,6 +14,7 @@ is sized from its allocation and dropped with the run.
 """
 from __future__ import annotations
 
+import ctypes
 from typing import Callable, Iterable
 
 from OpenGL import GL as gl
@@ -126,22 +127,22 @@ class MotionTrails:
         return False
 
     def _allocate(self, width: int, height: int) -> None:
-        previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
-        try:
-            self._texture = int(gl.glGenTextures(1))
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture)
-            for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-                gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_NEAREST)
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_R8, width, height, 0, gl.GL_RED, gl.GL_UNSIGNED_BYTE, None)
-            self._fbo = int(gl.glGenFramebuffers(1))
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._fbo)
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, self._texture, 0)
-            if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                raise RuntimeError(f"{self.label} motion trails incomplete at {width}x{height}")
-            self._size = (width, height)
-        finally:
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, previous)
+        texture_name, framebuffer_name = (ctypes.c_uint * 1)(), (ctypes.c_uint * 1)()
+        gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, texture_name)
+        self._texture = int(texture_name[0])
+        if not self._texture:
+            raise RuntimeError(f"{self.label} motion trails texture allocation failed")
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTextureParameteri(self._texture, parameter, gl.GL_NEAREST)
+        gl.glTextureStorage2D(self._texture, 1, gl.GL_R8, width, height)
+        gl.glCreateFramebuffers(1, framebuffer_name)
+        self._fbo = int(framebuffer_name[0])
+        if not self._fbo:
+            raise RuntimeError(f"{self.label} motion trails framebuffer allocation failed")
+        gl.glNamedFramebufferTexture(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, 0)
+        if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+            raise RuntimeError(f"{self.label} motion trails incomplete at {width}x{height}")
+        self._size = (width, height)
 
     def release(self) -> None:
         errors: list[str] = []

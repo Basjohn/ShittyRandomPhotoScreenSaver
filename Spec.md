@@ -167,6 +167,8 @@ solve deleted-object failures with timers, event-loop pumping, leaked hidden sec
 
 SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick scene**; future 3D work must inspect and
 reuse/extend this foundation where appropriate rather than creating a second renderer stack.
+Shared mesh, reflection and scene/post resource ownership, immutable storage, multi-bind and state restoration are
+detailed in `Docs/Reference/Scene3D_Resources.md`.
 
 Current proof points:
 

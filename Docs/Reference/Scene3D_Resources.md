@@ -36,6 +36,28 @@ Named construction removes three owned-texture active/bind calls from allocation
 construction saving, with no measured steady-frame FPS claim. Eighteen representative Block Spins / Glass Shatter
 captures matched the preceding implementation byte-for-byte.
 
+## Fixed-size scene and post-process allocations
+
+The existing target, bloom, motion and trail owners construct named framebuffers and immutable textures at their
+known allocation size. Named attachment/status/draw-buffer operations replace allocation-only framebuffer queries
+and binds; depth renderbuffers also use named storage. Rendering and resolve passes keep their state restoration.
+
+| Owner | Storage and allocation contract |
+| --- | --- |
+| `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets |
+| Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
+| Motion | Three RG16F velocity reduction/neighbour passes and one RGBA8 output, using existing tile and target sizes |
+| Motion Trails | Existing R8 mask, allocated only for its active requesting consumer |
+
+Names enter their current owner before parameter/storage calls so an exception cannot strand an untracked resource.
+Resize and `park()` release the same owned names; size reuse creates no replacement allocations. Features that are
+Off acquire no resources. No second pool, background preparation cadence or binding cache is introduced.
+
+Focused real-context bars cover immutable storage, framebuffer completeness, inherited construction bindings,
+partial-allocation cleanup, resize/reuse and the existing disabled/parked lifecycle. Eighteen representative Block
+Spins / Exploding Tiles captures matched the preceding implementation byte-for-byte. These checks establish the
+allocation and pixel contracts; ordinary two-display loaded-desktop observation remains in `Current_Plan.md`.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
@@ -50,6 +72,8 @@ The expanded fence deliberately pays for the previously missing state; the isola
   assignment per linked program, correct multi-bind routing and partial-upload retirement/rebuild.
 - `test_scene3d_environment.py`: complete immutable mip storage, reflection pixels, borrowed-photo immutability,
   construction state isolation, failed-copy invalidation and allocation/deletion retry.
+- `test_scene3d_dsa_targets.py`: real immutable scene/post storage and completeness, untouched active texture and
+  draw/read framebuffer bindings, and injected partial-allocation failures that leave no owned names behind.
 - `test_qtquick_transition_state_fence.py`: deliberately non-default state restoration on success/failure, plus real
   reflection and multisample texture sentinels across a scene pass and a thrown renderer.
 - `test_qtquick_bootstrap.py`: each required entry point must resolve on the actual context; no frame-time probing.

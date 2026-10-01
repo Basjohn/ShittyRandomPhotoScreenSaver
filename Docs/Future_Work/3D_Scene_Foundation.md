@@ -304,44 +304,13 @@ contract and actual-context rejection. Maintained diagnostics and shared scene3d
 Ordinary-use physical validation and operator builds remain non-blocking checklists in `Current_Plan.md`.
 
 ### S13 — DSA, immutable storage and multi-bind
-Migrate the existing context-local owners in three reviewable slices. Allocation-time DSA is not automatically a
-steady-frame speedup: identify removed calls and measure the actual consumer before claiming a performance gain.
+Implemented and regression-validated across shared static meshes, image bindings, photo reflections, scene targets,
+bloom, motion and trail masks. `Docs/Reference/Scene3D_Resources.md` owns the detailed resource decomposition,
+construction/draw boundaries, failure retirement, measured submission scope and regression routes.
 
-#### S13a — Shared static meshes and source/destination texture binding
-- [x] In `scene3d/resources.py`, allocate static mesh VAOs/VBOs with named DSA setup and immutable buffer storage.
-  The existing mesh record retains handle ownership, partial-failure cleanup and retry; introduce no parallel pool.
-- [x] Replace repeated source/destination texture-unit selection and binds with one multi-bind operation. Assign
-  sampler units once per linked program through its existing program/uniform cache; texture IDs still bind every draw.
-  No texture-state cache may assume Qt left a binding intact. Zero texture IDs must preserve inherited target semantics.
-- [x] Admit every newly called GL entry point through the current-context bootstrap gate. No import-time probing,
-  extension fallback or repeated capability query in render frames.
-- [x] Prove real mesh pixels, unchanged generic VAO/array-buffer bindings during construction, immutable storage,
-  exact sampler routing and untouched active/unrelated texture units. Retain allocation-failure/release-retry tests.
-- [x] Compare all five affected 3D transitions before/after, warm first frames, parked resources and outer state fence.
-  Measure warm submission calls and time separately from one-time mesh construction.
-
-Durable contracts and the measured submission scope: `Docs/Reference/Scene3D_Resources.md`.
-
-#### S13b — PhotoEnvironment texture and framebuffer construction
-- [x] In `scene3d/environment.py`, allocate the known-size environment texture with immutable storage for its complete
-  mip chain. Use named texture parameters/mipmap generation and named framebuffer attachment/status operations.
-- [x] Keep the existing destination-photo copy owner, one copy per run, sampler look and `park()` retirement.
-  Raster work still binds its drawing framebuffer and restores inherited framebuffer, viewport and scissor state.
-- [x] Prove reflection pixels, mip levels, lent-photo immutability, allocation reuse, failure cleanup and park retirement.
-  Record construction-call savings; do not advertise an unmeasured steady-frame benefit.
-
-#### S13c — Fixed-size scene and post-process allocations
-- [ ] Migrate `scene3d/target.py`, `post.py` and `motion.py` separately behind their current real-pixel tests: immutable
-  textures and named framebuffer construction only where allocation size/sample count is already fixed.
-- [ ] Preserve attachment formats, sample counts, size buckets, bloom/velocity writes, exact endpoints and dormant cost.
-  Retain draw-time state restoration; only remove queries made unnecessary by named construction operations.
-- [ ] For each owner, prove repeated size reuse, explicit resize retirement, exception restoration, disabled-feature
-  resource absence and unchanged rendered pixels before proceeding to the next owner.
-
-Changing UBO streams remain under S14: `UniformBlock.bound()` deliberately orphans mutable storage, so immutable
-storage is not a drop-in replacement. Multi-buffer binding is deferred until a real consumer uses multiple points.
-Effect-private dynamic/instanced buffers require their own measured migration; static shared meshes do not authorise
-changing their update policy. DSA never removes Qt's inherited-state contract or creates another render owner.
+Changing UBO streams and effect-private dynamic/instanced transport remain under S14. Existing mutable UBO orphaning
+is not compatible with immutable storage without a separately measured update policy. Multi-buffer binding needs a
+real consumer with multiple binding points. Ordinary-use physical validation remains non-blocking in `Current_Plan.md`.
 
 ### S14 — Persistent mapped stream + SSBO foundation
 - [ ] Add one bounded context-local persistent/coherent (or explicitly flushed) mapped ring for small changing frame
@@ -456,5 +425,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1–S12, Motion Trails with per-variant invariant setup, and the high-fidelity shared foundation above.
-- Remaining/active: S13–S20 under the 2026-09-30 operator promotion.
+- Landed: S1–S13, Motion Trails with per-variant invariant setup, and the high-fidelity shared foundation above.
+- Remaining/active: S14–S20 under the 2026-09-30 operator promotion.
