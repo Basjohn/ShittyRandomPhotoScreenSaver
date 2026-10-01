@@ -395,6 +395,10 @@ The image cache (`utils/image_cache.py`, bounded by `cache.max_items`/`cache.max
 
 One packed shared-memory response carries the batch's derivative manifest and decode/PID attribution. The supervisor's existing single response listener owns completion; no generic executor waiter, per-request thread, polling timer or parent-process fallback exists. Generation clear cancels the correlation and fences cache publication; late/malformed responses retire through the shared-memory transport. Count and RGBA-byte caps apply before dispatch and again before worker decode. Explicit `--frame-trace` records parent handoff intervals; ordinary runtime does not collect those timings.
 
+Every derivative is opaque and exactly the requested canvas size. FILL scales to cover that canvas before cropping;
+an undersized derivative must not be padded to satisfy transport validation. Qt/Pillow conversion honours Qt row stride,
+including RGB888 alignment padding. A rejected manifest reports expected and actual fields while still retiring its mapping.
+
 Foreground and speculative shared-memory RGBA transfers each make one native copy into a Qt-owned image while the transport lease pins the source. The native copy releases the Python GIL; no mapped view escapes completion, and byte layout is validated before copying. Copy wall time and live Visualizer overlap remain separate measurements.
 
 Once a display captures a derivative into its `PresentationImage`, the presentation owns the pixels and the derivative leaves the cache. Foreground ImageWorker results are not cached. Exact reuse happens per foreground batch (`processed_by_transform`), never through the cache. A consumed derivative left at the LRU's recent end displaced the nearer lookahead and doubled the decode/scale work (R-99). The parked transition render node keeps its warm GL programs but no run or frame references. Numpy's OpenBLAS runs one thread in every process (`core/native_threads.py`, R-99).

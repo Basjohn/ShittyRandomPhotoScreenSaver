@@ -188,7 +188,7 @@ class ImagePrefetcher:
         def _on_done(images: dict[str, QImage], error: Exception | None = None) -> None:
             try:
                 if error is not None:
-                    logger.error("[PREFETCH] Worker derivative batch failed path=%s: %s", path, error)
+                    logger.error("[PREFETCH] Worker derivative batch failed\n  path: %s\n  reason: %s", path, error)
                     return
                 with self._lock:
                     if generation != self._prefetch_generation or self._active_batch is not token:

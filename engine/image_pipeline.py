@@ -965,7 +965,7 @@ def derive_prefetch_via_worker(
                         "Prefetch worker derivative count changed"
                     )
                 total_bytes = 0
-                for expected, actual in zip(derivatives, manifest):
+                for index, (expected, actual) in enumerate(zip(derivatives, manifest)):
                     size = expected["width"] * expected["height"] * 4
                     if (
                         not isinstance(actual, dict)
@@ -973,8 +973,14 @@ def derive_prefetch_via_worker(
                         or actual.get("offset") != total_bytes
                         or actual.get("size") != size
                     ):
+                        expected_fields = {**expected, "offset": total_bytes, "size": size}
+                        actual_fields = (
+                            {key: actual.get(key) for key in expected_fields}
+                            if isinstance(actual, dict) else type(actual).__name__
+                        )
                         raise ImageProcessingInfrastructureError(
-                            "Prefetch worker RGBA manifest contract failed"
+                            "Prefetch worker RGBA manifest contract failed "
+                            f"derivative={index} expected={expected_fields!r} actual={actual_fields!r}"
                         )
                     total_bytes += size
                 if (
@@ -1031,7 +1037,7 @@ def derive_prefetch_via_worker(
                     )
         except Exception as exc:
             supervisor.dispose_response(response, reason="prefetch_response_rejected")
-            logger.error("[PREFETCH] Worker batch aborted path=%s: %s", image_path, exc)
+            logger.error("[PREFETCH] Worker batch aborted\n  path: %s\n  reason: %s", image_path, exc)
             if not isinstance(exc, ImageProcessingAbortError):
                 completion_error = ImageProcessingInfrastructureError(
                     f"Prefetch transport/consume failure: {exc}"

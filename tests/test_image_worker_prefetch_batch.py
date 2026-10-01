@@ -77,6 +77,8 @@ def _write_gradient_source(
     ]
     image = Image.new("RGBA", size)
     image.putdata(pixels)
+    if not transparent:
+        image = image.convert("RGB")
     image.save(path)
 
 
@@ -179,6 +181,15 @@ def _consume_batch_payload(payload: dict[str, object]) -> tuple[bytes, SharedMem
                 {"cache_key": "tall-fill", "width": 48, "height": 48, "mode": "fill"},
                 {"cache_key": "tall-fit", "width": 48, "height": 48, "mode": "fit"},
                 {"cache_key": "tall-shrink", "width": 71, "height": 43, "mode": "shrink"},
+            ],
+        ),
+        (
+            (23, 13),
+            False,
+            [
+                {"cache_key": "rounding-fill", "width": 16, "height": 9, "mode": "fill"},
+                {"cache_key": "rounding-fit", "width": 16, "height": 9, "mode": "fit"},
+                {"cache_key": "rounding-portrait", "width": 9, "height": 16, "mode": "fill"},
             ],
         ),
     ],

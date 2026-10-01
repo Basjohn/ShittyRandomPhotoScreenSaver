@@ -5,6 +5,7 @@ import ast
 import gc
 import os
 from pathlib import Path
+import threading
 from types import SimpleNamespace
 import uuid
 import weakref
@@ -184,6 +185,82 @@ def test_bad_response_reclaims_shared_memory_and_never_publishes(mutate):
     finally:
         close_producer_shared_memory(producer, attached=True)
         supervisor.shutdown()
+
+
+def test_manifest_rejection_reports_expected_and_actual_geometry(caplog):
+    from core.logging.logger import ColoredFormatter
+
+    supervisor = _DeliverySupervisor()
+    delivered = []
+    image_path = r"C:\wall papers\photo.png"
+
+    def malformed(payload):
+        payload["path"] = image_path
+        payload["derivatives"][0]["width"] = 1
+
+    producer, response = _response(supervisor, mutate=malformed)
+    try:
+        derive_prefetch_via_worker(
+            _engine(supervisor), image_path, [_request("large", 2), _request("small", 1)], 7,
+            lambda images, error: delivered.append((images, error)),
+        )
+        supervisor.callback(response)
+        images, error = delivered[0]
+        assert images == {} and isinstance(error, ImageProcessingInfrastructureError)
+        expected, actual = str(error).split("actual=", 1)
+        assert "RGBA manifest contract failed derivative=0 expected=" in expected
+        assert "'width': 2" in expected and "'height': 1" in expected
+        assert "'width': 1" in actual and "'height': 1" in actual
+        assert supervisor.get_shared_memory_accounting_snapshot()["segments_live"] == 0
+        record = next(record for record in caplog.records if "Worker batch aborted" in record.getMessage())
+        formatted = ColoredFormatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", use_color=False,
+        ).format(record)
+        assert image_path in formatted  # Spaces must not split the path into unrelated table/prose fields.
+    finally:
+        close_producer_shared_memory(producer, attached=True)
+        supervisor.shutdown()
+
+
+def test_rounding_source_crosses_spawned_worker_and_real_parent_consumer(tmp_path):
+    from PIL import Image
+    from core.process.workers.image_worker import speculative_image_worker_main
+
+    source = tmp_path / "near aspect source.png"
+    Image.new("RGB", (23, 13), (31, 97, 173)).save(source)
+    supervisor = ProcessSupervisor()
+    supervisor.register_worker_factory(WorkerType.IMAGE_PREFETCH, speculative_image_worker_main)
+    completed = threading.Event()
+    delivered = []
+
+    def complete(images, error):
+        delivered.append((images, error))
+        completed.set()
+
+    requests = [
+        {"cache_key": "wide", "width": 16, "height": 9, "display_mode": DisplayMode.FILL},
+        {"cache_key": "tall", "width": 9, "height": 16, "display_mode": DisplayMode.FILL},
+    ]
+    try:
+        assert supervisor.start(WorkerType.IMAGE_PREFETCH)
+        cancel = derive_prefetch_via_worker(_engine(supervisor), str(source), requests, 7, complete)
+        assert completed.wait(15), "Worker callback did not complete"
+        images, error = delivered[0]
+        assert error is None
+        assert set(images) == {"wide", "tall"}
+        assert supervisor.get_shared_memory_accounting_snapshot()["segments_consumed"] == 1
+        assert supervisor.get_shared_memory_accounting_snapshot()["segments_live"] == 0
+        cancel()
+    finally:
+        supervisor.shutdown()
+    # The strict consumer admitted exact canvases, and Qt owns their pixels
+    # after both worker and mappings retire. A padded underfill cannot pass.
+    for request in requests:
+        image = images[request["cache_key"]]
+        assert (image.width(), image.height()) == (request["width"], request["height"])
+        for x in (0, image.width() - 1):
+            for y in (0, image.height() - 1):
+                assert image.pixelColor(x, y).getRgb() == (31, 97, 173, 255)
 
 
 def test_cancelled_or_retired_response_is_reclaimed_before_publication():
