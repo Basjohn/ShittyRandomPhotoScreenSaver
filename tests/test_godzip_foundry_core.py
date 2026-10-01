@@ -404,6 +404,39 @@ def test_logzip_can_share_last_godzip_output_directory(tmp_path: Path) -> None:
     assert not (logs / first.zip_path.name).exists()
 
 
+def test_local_diff_compares_complete_worktree_to_head(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    head = core.git_head(repo)
+    (repo / "tracked.txt").write_text("staged\n", encoding="utf-8")
+    _git(repo, "add", "tracked.txt")
+    # Later unstaged bytes must win over the index: the handoff is HEAD -> disk.
+    (repo / "tracked.txt").write_text("later local\n", encoding="utf-8")
+    (repo / "new.txt").write_text("untracked\n", encoding="utf-8")
+    (repo / "delete_me.txt").write_text("base delete\n", encoding="utf-8")
+    _git(repo, "add", "delete_me.txt")
+    _git(repo, "commit", "-m", "tracked delete fixture")
+    head = core.git_head(repo)
+    (repo / "delete_me.txt").unlink()
+    ignored = repo / ".godzip_foundry" / "settings.json"
+    ignored.parent.mkdir(exist_ok=True)
+    ignored.write_text("{}\n", encoding="utf-8")
+
+    result = core.generate_local_diff(repo)
+
+    assert result.baseline_head == head
+    assert result.current_head == head
+    assert result.current_dirty is True
+    assert result.changed_files == 3
+    assert result.added == 1
+    assert result.modified == 1
+    assert result.deleted == 1
+    assert "+later local" in result.text
+    assert "+staged" not in result.text
+    assert "new.txt" in result.text
+    assert "delete_me.txt" in result.text
+    assert ".godzip_foundry/settings.json" not in result.text
+
+
 def test_godzip_diff_uses_archived_dirty_bytes_and_finds_later_git_and_worktree_changes(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     source_head = core.git_head(repo)
@@ -542,6 +575,12 @@ def test_run_tab_is_last_and_remains_repo_local() -> None:
     assert '"run_flags"' in source
     assert '"run_entrypoint"' in source
     assert "COPY TO CLIPBOARD" in source
+    assert 'QPushButton("LOCAL vs GIT HEAD")' in source
+    assert 'QPushButton("GODZIP vs LOCAL")' in source
+    assert '"--diff-local"' in source
+    assert '"--diff-godzip"' in source
+    assert '"--diff-output"' in source
+    assert "generate_local_diff(self.repo_root)" in source
     assert "refresh_native_taskbar_icon" in source
     assert "WM_SETICON" not in source  # numeric native message kept implementation-local, no shell command fallback
     assert '_load_local_settings(self.repo_root)' in source

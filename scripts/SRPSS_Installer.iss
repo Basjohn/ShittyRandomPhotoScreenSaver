@@ -11,7 +11,7 @@
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=5.0.5
+AppVersion=5.0.6
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
@@ -26,7 +26,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\ui\assets\installer\LogoBMP.bmp
-VersionInfoVersion=5.0.5
+VersionInfoVersion=5.0.6
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
