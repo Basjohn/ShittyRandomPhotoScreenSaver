@@ -23,6 +23,54 @@ from rendering.quick.transitions.render_contract import QuickTransitionRenderFra
 from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("raises", (False, True))
+def test_real_scene_restores_reflection_and_multisample_texture_bindings(qt_app, monkeypatch, raises):
+    """A real scene using reflection and velocity may not leak texture state to Qt."""
+    from OpenGL import GL
+    from tools.transition_contact_sheet import TransitionCapture
+
+    capture = TransitionCapture(160, 90)
+    multisample = [int(name) for name in GL.glGenTextures(2)]
+    try:
+        run = capture.run("exploding_tiles", direction="center_out", settings={"exploding_tiles": {
+            "anti_aliasing": "4x", "motion_blur": "On", "bloom": "On", "motion_trails": "On",
+        }})
+        capture.render(run, .3)  # Admission happens before setting inherited sentinels.
+        if raises:
+            renderer = capture.host._implementations["exploding_tiles"]
+
+            def fail(*_args, **_kwargs):
+                GL.glActiveTexture(GL.GL_TEXTURE2)
+                GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+                GL.glActiveTexture(GL.GL_TEXTURE0)
+                GL.glBindTexture(GL.GL_TEXTURE_2D_MULTISAMPLE, 0)
+                raise RuntimeError("synthetic scene failure")
+
+            monkeypatch.setattr(renderer, "_draw_scene", fail)
+        for unit, texture in enumerate(multisample):
+            GL.glActiveTexture(GL.GL_TEXTURE0 + unit)
+            GL.glBindTexture(GL.GL_TEXTURE_2D_MULTISAMPLE, texture)
+            GL.glTexImage2DMultisample(GL.GL_TEXTURE_2D_MULTISAMPLE, 2, GL.GL_RGBA8, 4, 4, True)
+        GL.glActiveTexture(GL.GL_TEXTURE2)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, capture.textures[2])
+        GL.glActiveTexture(GL.GL_TEXTURE3)
+        if raises:
+            with pytest.raises(RuntimeError, match="synthetic scene failure"):
+                capture.host.render(capture.frame(run, .4))
+        else:
+            capture.host.render(capture.frame(run, .4))
+        assert int(GL.glGetIntegerv(GL.GL_ACTIVE_TEXTURE)) == GL.GL_TEXTURE3
+        for unit, texture in enumerate(multisample):
+            GL.glActiveTexture(GL.GL_TEXTURE0 + unit)
+            assert int(GL.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D_MULTISAMPLE)) == texture
+        GL.glActiveTexture(GL.GL_TEXTURE2)
+        assert int(GL.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D)) == capture.textures[2]
+    finally:
+        GL.glDeleteTextures(multisample)
+        capture.close()
+
+
 _IDENTITY_MATRIX = (
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
@@ -52,6 +100,9 @@ class _FakeGLState:
     GL_SCISSOR_TEST = 114
     GL_TEXTURE0 = 120
     GL_TEXTURE1 = 121
+    GL_TEXTURE2 = 122
+    GL_TEXTURE_BINDING_2D_MULTISAMPLE = 123
+    GL_TEXTURE_2D_MULTISAMPLE = 124
     GL_TEXTURE_2D = 130
     GL_ARRAY_BUFFER = 131
     GL_LESS = 201
@@ -81,7 +132,8 @@ class _FakeGLState:
         self.vao = 0
         self.array_buffer = 0
         self.active_texture = self.GL_TEXTURE0
-        self.tex = {self.GL_TEXTURE0: 0, self.GL_TEXTURE1: 0}
+        self.tex = {self.GL_TEXTURE0: 0, self.GL_TEXTURE1: 0, self.GL_TEXTURE2: 0}
+        self.tex_ms = {self.GL_TEXTURE0: 0, self.GL_TEXTURE1: 0}
         self.enabled = {
             self.GL_BLEND: False,
             self.GL_CULL_FACE: False,
@@ -110,6 +162,8 @@ class _FakeGLState:
             return self.active_texture
         if name == self.GL_TEXTURE_BINDING_2D:
             return self.tex[self.active_texture]
+        if name == self.GL_TEXTURE_BINDING_2D_MULTISAMPLE:
+            return self.tex_ms[self.active_texture]
         if name == self.GL_DEPTH_FUNC:
             return self.depth_func
         if name == self.GL_DRAW_FRAMEBUFFER_BINDING:
@@ -142,8 +196,11 @@ class _FakeGLState:
         self.active_texture = unit
 
     def glBindTexture(self, target, texture):
-        assert target == self.GL_TEXTURE_2D
-        self.tex[self.active_texture] = texture
+        if target == self.GL_TEXTURE_2D_MULTISAMPLE:
+            self.tex_ms[self.active_texture] = texture
+        else:
+            assert target == self.GL_TEXTURE_2D
+            self.tex[self.active_texture] = texture
 
     def glBindVertexArray(self, vao):
         self.vao = vao
@@ -195,6 +252,8 @@ class _FakeGLState:
             "active_texture": self.active_texture,
             "tex0": self.tex[self.GL_TEXTURE0],
             "tex1": self.tex[self.GL_TEXTURE1],
+            "tex2": self.tex[self.GL_TEXTURE2],
+            "tex_ms": dict(self.tex_ms),
             "blend": self.enabled[self.GL_BLEND],
             "cull": self.enabled[self.GL_CULL_FACE],
             "depth": self.enabled[self.GL_DEPTH_TEST],
@@ -216,6 +275,8 @@ def _load_deliberately_non_default(fake: _FakeGLState) -> None:
     fake.active_texture = fake.GL_TEXTURE1
     fake.tex[fake.GL_TEXTURE0] = 21
     fake.tex[fake.GL_TEXTURE1] = 22
+    fake.tex[fake.GL_TEXTURE2] = 23
+    fake.tex_ms = {fake.GL_TEXTURE0: 24, fake.GL_TEXTURE1: 25}
     fake.enabled[fake.GL_BLEND] = True
     fake.enabled[fake.GL_CULL_FACE] = True
     fake.enabled[fake.GL_DEPTH_TEST] = True
@@ -246,8 +307,12 @@ class _MutatingRenderer:
         g.glBindBuffer(g.GL_ARRAY_BUFFER, 777)
         g.glActiveTexture(g.GL_TEXTURE0)
         g.glBindTexture(g.GL_TEXTURE_2D, 66)
+        g.glBindTexture(g.GL_TEXTURE_2D_MULTISAMPLE, 166)
         g.glActiveTexture(g.GL_TEXTURE1)
         g.glBindTexture(g.GL_TEXTURE_2D, 67)
+        g.glBindTexture(g.GL_TEXTURE_2D_MULTISAMPLE, 167)
+        g.glActiveTexture(g.GL_TEXTURE2)
+        g.glBindTexture(g.GL_TEXTURE_2D, 68)
         g.glActiveTexture(g.GL_TEXTURE0)
         g.glViewport(1, 2, 3, 4)
         g.glEnable(g.GL_BLEND)

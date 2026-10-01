@@ -54,6 +54,9 @@ class _InheritedGlState:
     active_texture: int
     texture_0: int
     texture_1: int
+    texture_2: int
+    multisample_texture_0: int
+    multisample_texture_1: int
     draw_framebuffer: int
     read_framebuffer: int
     blend: bool
@@ -72,8 +75,12 @@ class _InheritedGlState:
         try:
             gl.glActiveTexture(gl.GL_TEXTURE0)
             texture_0 = _int_state(gl.GL_TEXTURE_BINDING_2D)
+            multisample_texture_0 = _int_state(gl.GL_TEXTURE_BINDING_2D_MULTISAMPLE)
             gl.glActiveTexture(gl.GL_TEXTURE1)
             texture_1 = _int_state(gl.GL_TEXTURE_BINDING_2D)
+            multisample_texture_1 = _int_state(gl.GL_TEXTURE_BINDING_2D_MULTISAMPLE)
+            gl.glActiveTexture(gl.GL_TEXTURE2)
+            texture_2 = _int_state(gl.GL_TEXTURE_BINDING_2D)
         finally:
             gl.glActiveTexture(active_texture)
         return cls(
@@ -84,6 +91,9 @@ class _InheritedGlState:
             active_texture=active_texture,
             texture_0=texture_0,
             texture_1=texture_1,
+            texture_2=texture_2,
+            multisample_texture_0=multisample_texture_0,
+            multisample_texture_1=multisample_texture_1,
             draw_framebuffer=_int_state(gl.GL_DRAW_FRAMEBUFFER_BINDING),
             read_framebuffer=_int_state(gl.GL_READ_FRAMEBUFFER_BINDING),
             blend=bool(gl.glIsEnabled(gl.GL_BLEND)),
@@ -109,10 +119,16 @@ class _InheritedGlState:
         # A 3D scene target may still be bound after a failure mid-scene.
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self.draw_framebuffer)
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self.read_framebuffer)
+        # Scene reflections/motion use unit 2; resolves sample multisample
+        # textures on 0/1. Preserve every target they touch, including failure.
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture_2)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture_1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, self.multisample_texture_1)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture_0)
+        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, self.multisample_texture_0)
         gl.glActiveTexture(self.active_texture)
         gl.glBindVertexArray(self.vao)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.array_buffer)
