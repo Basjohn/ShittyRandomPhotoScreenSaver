@@ -356,8 +356,9 @@ Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms
 - `test_settings_manager.py::test_settings_reads_leave_no_reference_cycles` The test suite should encode their surviving invariants rather than repeat the incident diary here.
 
 `test_image_prefetcher.py` protects bounded source batching, cooldown, cancellation and stale-cache fencing.
-`test_image_prefetch_transport.py` crosses the production construction/packed-response seam, including detached QImage lifetime and malformed/cancelled shared-memory retirement.
+`test_image_prefetch_transport.py` crosses the production construction/packed-response seam, including a spawned worker's near-aspect FILL request, detached QImage lifetime and malformed/cancelled shared-memory retirement. Manifest rejection retains expected/actual geometry and complete spaced paths in console diagnostics.
 `test_image_worker_prefetch_batch.py` spawns a QImage-only worker, proves Qt byte parity for opaque/transparent FILL/FIT/SHRINK inputs, and rejects repeated source decodes and over-budget batches.
+`test_async_image_processor_current.py` checks exact FILL coverage at near-matching source/target aspect ratios, with no black edge padding for RGB or RGBA, and pixel-exact odd-width Qt/Pillow row-stride conversion.
 `test_frame_trace.py` protects explicit parent-handoff attribution and interval-overlap counting; these automated bars do not close two-display performance acceptance.
 
 ## 7. Test infrastructure rules

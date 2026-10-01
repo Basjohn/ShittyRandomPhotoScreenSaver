@@ -18,7 +18,8 @@ push coherent slices; preserve accepted visual/temporal contracts unless a slice
 
 ## 1. P0 | Awaiting ordinary-use observation, non-blocking
 
-Worker batches and the owned native RGBA copy are implemented and transport/lifetime validated. The latest supplied
+Worker batches, exact FILL canvas coverage and the owned native RGBA copy are transport/lifetime validated, including
+the source that triggered the reported manifest rejection. The latest supplied
 two-display logs are the accepted input; no fixed transition count or 30-transition trace is required.
 Durable ownership is in `Docs/Contracts.md`; probes are routed from `Docs/Reference/Harness_Index.md`.
 
@@ -171,6 +172,10 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 - [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules).
   After P0 proves the new worker derivative path, create a lean worker entry if Nuitka multiprocessing proves it can
   save the measured ~100 MB resident without duplicating worker ownership.
+- [ ] **Lanczos/sharpen prefetch admission.** Enabling either currently disables speculative batches, so the user pays
+  foreground decode/scale latency on each new image. Measure representative large sources, then extend the existing
+  worker batch only with exact foreground-quality parity, bounded memory and foreground priority. Preserve selected
+  quality; never relabel a Qt-scaled derivative as Lanczos or introduce a second cache/worker authority.
 - [ ] **`--usage` sampler diagnostics cost.** Re-evaluate on PySide 6.11.2/current tree; if collection still contaminates
   frame evidence, keep it excluded from acceptance or move remaining Python work out of the GIL-held interval.
 - [ ] **Gmail refresh handle slope.** Classify with `--handle-attribution`, then fix at the owning resource.

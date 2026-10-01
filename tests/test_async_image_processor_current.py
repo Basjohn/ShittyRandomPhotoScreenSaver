@@ -48,6 +48,33 @@ def test_fill_portrait_crops_to_exact_screen() -> None:
     assert result.size() == QSize(1920, 1080)
 
 
+@pytest.mark.parametrize("source_size,target_size", [
+    ((4014, 2258), (3840, 2160)),  # Dimensions from the rejected operator batch.
+    ((2258, 4014), (2160, 3840)),
+    ((23, 13), (16, 9)),
+    ((13, 23), (9, 16)),
+])
+@pytest.mark.parametrize("alpha", (False, True))
+@pytest.mark.parametrize("use_lanczos", (False, True))
+def test_fill_rounding_covers_every_edge_without_padding(source_size, target_size, alpha, use_lanczos):
+    if use_lanczos and not PILLOW_AVAILABLE:
+        pytest.skip("PIL/Pillow not installed")
+    result = AsyncImageProcessor.process_qimage(
+        _image(*source_size, alpha=alpha), QSize(*target_size), DisplayMode.FILL,
+        use_lanczos=use_lanczos, sharpen=False,
+    )
+    assert result.size() == QSize(*target_size)
+    # A solid source must reach every edge; padding a short derivative would
+    # satisfy the byte count but introduce a black strip, especially with alpha.
+    centre = result.pixelColor(result.width() // 2, result.height() // 2)
+    assert centre.alpha() == 255 and centre.blue() > 100
+    for x in (0, result.width() - 1):
+        for y in (0, result.height() - 1):
+            edge = result.pixelColor(x, y)
+            assert edge.alpha() == 255
+            assert max(abs(a - b) for a, b in zip(edge.getRgb(), centre.getRgb())) <= 1
+
+
 def test_shrink_small_image_does_not_upscale_source_pixels() -> None:
     source = _image(200, 160)
     screen = QSize(800, 600)
@@ -104,6 +131,24 @@ def test_lanczos_rgba_path_preserves_alpha_capability() -> None:
     )
     assert not result.isNull()
     assert result.hasAlphaChannel()
+
+
+@pytest.mark.skipif(not PILLOW_AVAILABLE, reason="PIL/Pillow not installed")
+@pytest.mark.parametrize("alpha", (False, True))
+def test_lanczos_preserves_odd_width_rows_and_channel_order(alpha):
+    source = _image(5, 3, alpha=alpha)
+    for y in range(source.height()):
+        for x in range(source.width()):
+            source.setPixelColor(x, y, QColor(10 + x * 20, 30 + y * 60, 200 - x * 13 - y * 7))
+    result = AsyncImageProcessor.process_qimage(
+        source, source.size(), DisplayMode.FIT, use_lanczos=True, sharpen=False,
+    )
+    # No resize: the oracle is the authored source, not a second conversion.
+    # RGB888 rows have one byte of alignment padding at this width.
+    assert result.size() == source.size()
+    for y in range(source.height()):
+        for x in range(source.width()):
+            assert result.pixelColor(x, y) == source.pixelColor(x, y)
 
 
 def test_display_mode_string_contract() -> None:

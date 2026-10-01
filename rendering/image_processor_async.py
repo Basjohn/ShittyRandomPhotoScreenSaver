@@ -102,10 +102,16 @@ class AsyncImageProcessor:
             else:
                 img_data = ptr.tobytes()
 
+            # RGB888 rows are 32-bit aligned in Qt; Pillow must skip that
+            # padding rather than consuming it as the next row's pixels.
             pil_image = Image.frombytes(
                 mode,
                 (qimage.width(), qimage.height()),
                 img_data,
+                "raw",
+                mode,
+                qimage.bytesPerLine(),
+                1,
             )
 
             # Calculate target size preserving aspect ratio (matching Qt's KeepAspectRatio)
@@ -205,18 +211,16 @@ class AsyncImageProcessor:
             result.fill(Qt.GlobalColor.black)
             return result
 
-        screen_ratio = screen_size.width() / screen_size.height()
-        img_ratio = img_size.width() / img_size.height()
-
-        if img_ratio > screen_ratio:
+        # Round the covering extent up before the aspect-preserving scaler.
+        # Rounding down can make it fit *inside* the display by one column
+        # (4014x2258 -> 3839x2160 for a 3840x2160 request), breaking both FILL
+        # coverage and the worker's exact packed-RGBA dimensions.
+        if img_size.width() * screen_size.height() > screen_size.width() * img_size.height():
             scale_height = screen_size.height()
-            scale_width = int(scale_height * img_ratio)
+            scale_width = (scale_height * img_size.width() + img_size.height() - 1) // img_size.height()
         else:
             scale_width = screen_size.width()
-            scale_height = int(scale_width / img_ratio)
-
-        scale_width = max(scale_width, screen_size.width())
-        scale_height = max(scale_height, screen_size.height())
+            scale_height = (scale_width * img_size.height() + img_size.width() - 1) // img_size.width()
 
         if scale_width == img_size.width() and scale_height == img_size.height():
             scaled = image
