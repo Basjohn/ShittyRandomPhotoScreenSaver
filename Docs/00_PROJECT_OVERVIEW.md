@@ -69,7 +69,7 @@ Uniform whole-card scaling remains the default normalization contract for new or
 benefit from presentation reflow may opt into the shared `content_extent` side-axis contract instead of inventing local
 resize persistence: side handles change a logical content box, corners/wheel keep one uniform outer transform, family
 policy may supply bounded logical side-drag floors, and Restore Size returns to separately retained authored geometry
-without changing CUSTOM X/Y/display or waking non-CUSTOM stacking. Admission is descriptor-owned per family; consult the current widget runtime descriptors rather than maintaining a fragile exhaustive consumer list here. FEEDS Custom 1 is one current two-axis consumer. This is an extension of the same normalization/session architecture, not a second layout system.
+without changing CUSTOM X/Y/display or waking non-CUSTOM stacking. Admission is descriptor-owned per family; consult the current widget runtime descriptors rather than maintaining a fragile exhaustive consumer list here. Every FEEDS card is a current two-axis consumer through the shared family descriptor. This is an extension of the same normalization/session architecture, not a second layout system.
 
 Provider/runtime lifetime remains independent from pixels. Shared owners use real consumer cardinality; lazy Settings
 family bodies and retained presentation wrappers must invalidate queued UI work and clear retained QObject references

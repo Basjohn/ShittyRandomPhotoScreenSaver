@@ -10,7 +10,7 @@ exact current source
 -> tests + physical evidence for the claim
 ```
 
-`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the maintained historical authority; there is no other history folder (the legacy `Docs/Fossils/` described outdated architecture and was retired on 2026-09-27; source control keeps it). Ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
+`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the maintained historical authority; there is no other history folder (the legacy `Docs/Fossils/` described outdated architecture and is retired; source control keeps it). Ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
 
 ## Current product and regression references
 

@@ -1,6 +1,6 @@
 # Transition Change Checklist
 
-Quick transition presentation is landed. Use this for future transition changes.
+Quick transition presentation is the current production path. Use this for future transition changes.
 
 ## Canonical flow
 

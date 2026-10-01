@@ -181,8 +181,8 @@ inside rounded inner card path
 Historical R-21 is binding evidence that shrinking the GL render rect to hide bleed is wrong because
 it changes authored content geometry.
 
-The exact PySide 6.9.1 scene-graph clip-node proof failed. The 6.11.2 upgrade must re-run that proof before
-replacing the current clip owner. Current Quick ownership is one render-node-local SDF/stencil host:
+The exact PySide 6.9.1 scene-graph clip-node proof failed. Any proposal to replace the current clip owner must first repeat that proof on the current runtime;
+version advancement by itself does not reopen the failed handoff. Current Quick ownership is one render-node-local SDF/stencil host:
 
 - `CARD_INTERIOR` uses the rounded canonical inner-card geometry;
 - `VIEWPORT_RECT` uses the same host with zero radius;

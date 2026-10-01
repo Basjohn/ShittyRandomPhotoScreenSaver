@@ -225,6 +225,187 @@ function Publish-SRPSSDirectory {
     return $targetFull
 }
 
+function Get-SRPSSDirectoryFootprint {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$LargestFileCount = 40
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "Build footprint root does not exist: $Path"
+    }
+
+    $rootFull = (Resolve-Path -LiteralPath $Path).Path.TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    $files = @(Get-ChildItem -LiteralPath $rootFull -File -Recurse -Force -ErrorAction Stop)
+    [long]$totalBytes = 0
+    $bucketTable = @{}
+
+    foreach ($file in $files) {
+        [long]$bytes = $file.Length
+        $totalBytes += $bytes
+        $relative = [System.IO.Path]::GetRelativePath($rootFull, $file.FullName)
+        $parts = $relative -split '[\\/]'
+        $bucket = if ($parts.Count -gt 1) { $parts[0] } else { '(root)' }
+        if (-not $bucketTable.ContainsKey($bucket)) {
+            $bucketTable[$bucket] = [ordered]@{ file_count = 0; bytes = [long]0 }
+        }
+        $bucketTable[$bucket].file_count = [int]$bucketTable[$bucket].file_count + 1
+        $bucketTable[$bucket].bytes = [long]$bucketTable[$bucket].bytes + $bytes
+    }
+
+    $topLevel = @(
+        foreach ($bucket in $bucketTable.Keys) {
+            [pscustomobject]@{
+                name = [string]$bucket
+                file_count = [int]$bucketTable[$bucket].file_count
+                bytes = [long]$bucketTable[$bucket].bytes
+            }
+        }
+    ) | Sort-Object -Property bytes -Descending
+
+    $largestFiles = @(
+        $files |
+            Sort-Object -Property Length -Descending |
+            Select-Object -First ([Math]::Max(0, $LargestFileCount)) |
+            ForEach-Object {
+                [pscustomobject]@{
+                    path = [System.IO.Path]::GetRelativePath($rootFull, $_.FullName)
+                    bytes = [long]$_.Length
+                }
+            }
+    )
+
+    return [pscustomobject]@{
+        file_count = $files.Count
+        bytes = $totalBytes
+        top_level = $topLevel
+        largest_files = $largestFiles
+    }
+}
+
+function Get-SRPSSQrcSourceMetrics {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$QrcRelativePath,
+        [Parameter(Mandatory = $true)][string]$GeneratedModuleRelativePath
+    )
+
+    $qrcPath = Join-Path $RepoRoot $QrcRelativePath
+    $generatedPath = Join-Path $RepoRoot $GeneratedModuleRelativePath
+    if (-not (Test-Path -LiteralPath $qrcPath -PathType Leaf)) {
+        throw "QRC manifest does not exist: $qrcPath"
+    }
+    if (-not (Test-Path -LiteralPath $generatedPath -PathType Leaf)) {
+        throw "Generated QRC module does not exist: $generatedPath"
+    }
+
+    [xml]$qrc = Get-Content -LiteralPath $qrcPath -Raw
+    $qrcDirectory = Split-Path -Parent $qrcPath
+    $sourceFiles = @()
+    [long]$sourceBytes = 0
+    foreach ($node in @($qrc.SelectNodes('//file'))) {
+        $relativeSource = [string]$node.InnerText
+        if ([string]::IsNullOrWhiteSpace($relativeSource)) { continue }
+        $sourcePath = [System.IO.Path]::GetFullPath((Join-Path $qrcDirectory $relativeSource.Trim()))
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "QRC source file is missing: $sourcePath"
+        }
+        $source = Get-Item -LiteralPath $sourcePath
+        $sourceFiles += $source
+        $sourceBytes += [long]$source.Length
+    }
+
+    $qrcFile = Get-Item -LiteralPath $qrcPath
+    $generatedFile = Get-Item -LiteralPath $generatedPath
+    return [pscustomobject]@{
+        qrc = $QrcRelativePath
+        qrc_manifest_bytes = [long]$qrcFile.Length
+        source_file_count = $sourceFiles.Count
+        source_bytes = $sourceBytes
+        generated_module = $GeneratedModuleRelativePath
+        generated_module_bytes = [long]$generatedFile.Length
+        representation_note = 'Generated *_rc.py bytes are escaped Python source representation, not deployed/frozen payload bytes.'
+    }
+}
+
+function Write-SRPSSBuildFootprintReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ProductName,
+        [Parameter(Mandatory = $true)][string]$PublishedRoot,
+        [Parameter(Mandatory = $true)][string]$PrimaryArtifact,
+        [Parameter(Mandatory = $true)][string]$NuitkaReportPath,
+        [Parameter(Mandatory = $true)][string]$OutputPath
+    )
+
+    if (-not (Test-Path -LiteralPath $PrimaryArtifact -PathType Leaf)) {
+        throw "Build footprint primary artifact is missing: $PrimaryArtifact"
+    }
+    if (-not (Test-Path -LiteralPath $NuitkaReportPath -PathType Leaf)) {
+        throw "Nuitka compilation report is missing: $NuitkaReportPath"
+    }
+
+    $published = Get-SRPSSDirectoryFootprint -Path $PublishedRoot
+    $artifact = Get-Item -LiteralPath $PrimaryArtifact
+    $nuitkaReport = Get-Item -LiteralPath $NuitkaReportPath
+    $resources = @(
+        Get-SRPSSQrcSourceMetrics `
+            -RepoRoot $RepoRoot `
+            -QrcRelativePath 'ui\resources\assets.qrc' `
+            -GeneratedModuleRelativePath 'ui\resources\assets_rc.py'
+        Get-SRPSSQrcSourceMetrics `
+            -RepoRoot $RepoRoot `
+            -QrcRelativePath 'ui\resources\onboarding_assets.qrc' `
+            -GeneratedModuleRelativePath 'ui\resources\onboarding_assets_rc.py'
+    )
+
+    $payload = [ordered]@{
+        schema_version = 1
+        generated_at_utc = [DateTime]::UtcNow.ToString('o')
+        product = $ProductName
+        primary_artifact = [ordered]@{
+            path = [System.IO.Path]::GetRelativePath($RepoRoot, $artifact.FullName)
+            bytes = [long]$artifact.Length
+        }
+        published_payload = $published
+        nuitka_compilation_report = [ordered]@{
+            path = [System.IO.Path]::GetRelativePath($RepoRoot, $nuitkaReport.FullName)
+            bytes = [long]$nuitkaReport.Length
+        }
+        qrc_source_reference = $resources
+        notes = @(
+            'This report describes the current build and current package contents only.',
+            'Generated *_rc.py source size is intentionally not treated as installed/frozen resource size.',
+            'Use the Nuitka XML plus published payload buckets/largest files to identify real dependency/package bloat before adding exclusions.'
+        )
+    }
+
+    $outputDirectory = Split-Path -Parent $OutputPath
+    if ($outputDirectory) {
+        New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+    }
+    $payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputPath -Encoding utf8
+
+    $payloadMiB = [Math]::Round(([double]$published.bytes / 1MB), 2)
+    $artifactMiB = [Math]::Round(([double]$artifact.Length / 1MB), 2)
+    Write-Host "[BUILD] Footprint: artifact=$artifactMiB MiB, published payload=$payloadMiB MiB, files=$($published.file_count)"
+    foreach ($resource in $resources) {
+        $sourceMiB = [Math]::Round(([double]$resource.source_bytes / 1MB), 2)
+        $generatedMiB = [Math]::Round(([double]$resource.generated_module_bytes / 1MB), 2)
+        Write-Host "[BUILD] QRC source reference $($resource.qrc): source=$sourceMiB MiB -> generated Python=$generatedMiB MiB (not frozen-size equivalence)"
+    }
+    Write-Host "[BUILD] Nuitka compilation report: $NuitkaReportPath"
+    Write-Host "[BUILD] Footprint report: $OutputPath"
+
+    return $payload
+}
+
 function Remove-SRPSSLegacyReleasePath {
     [CmdletBinding()]
     param(

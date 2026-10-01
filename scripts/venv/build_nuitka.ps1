@@ -226,6 +226,8 @@ $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path $LogDir ("{0}_{1}.log" -f $LogStem, $Timestamp)
+$NuitkaReportFile = Join-Path $LogDir ("{0}_report_{1}.xml" -f $LogStem, $Timestamp)
+$FootprintReportFile = Join-Path $LogDir ("{0}_footprint_{1}.json" -f $LogStem, $Timestamp)
 
 if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
     throw "Shared build layout helper not found: $BuildLayoutScript"
@@ -242,7 +244,8 @@ foreach ($RequiredBuildCommand in @(
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
     'Assert-SRPSSOnefileQuickPayloadContract',
-    'Assert-SRPSSOnefileVisualizerShaderContract'
+    'Assert-SRPSSOnefileVisualizerShaderContract',
+    'Write-SRPSSBuildFootprintReport'
 )) {
     if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Shared build layout did not load required function: $RequiredBuildCommand"
@@ -291,6 +294,8 @@ New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Rotate-Logs -LogDir $LogDir -Filter ("{0}_*.log" -f $LogStem)
+Rotate-Logs -LogDir $LogDir -Filter ("{0}_report_*.xml" -f $LogStem)
+Rotate-Logs -LogDir $LogDir -Filter ("{0}_footprint_*.json" -f $LogStem)
 
 $Icon = $null
 $PreferredIcon = Join-Path $Root 'SRPSS.ico'
@@ -352,6 +357,7 @@ $argsList = @(
     $consoleArg,
     "--output-dir=$BuildOutputDir",
     "--output-filename=$AppName",
+    "--report=$NuitkaReportFile",
     "--enable-plugin=pyside6",
     "--include-data-dir=presets=presets",
     "--include-data-dir=themes=themes",
@@ -538,6 +544,19 @@ try {
 }
 
 try {
+    Write-SRPSSBuildFootprintReport `
+        -RepoRoot $Root `
+        -ProductName $DistributionName `
+        -PublishedRoot $DistributionDir `
+        -PrimaryArtifact $primaryArtifact.FullName `
+        -NuitkaReportPath $NuitkaReportFile `
+        -OutputPath $FootprintReportFile | Out-Null
+} catch {
+    Write-Host "[BUILD-VENV] Error: failed to write build footprint evidence - $($_.Exception.Message)"
+    exit 1
+}
+
+try {
     Remove-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot
     Write-Host "[BUILD-VENV] Cleaned build directory: $BuildDir"
 } catch {
@@ -547,4 +566,6 @@ try {
 Write-Host "[BUILD-VENV] Build success: $($primaryArtifact.FullName)"
 Write-Host "[BUILD-VENV] Release directory: $DistributionDir"
 Write-Host "[BUILD-VENV] Log: $LogFile"
+Write-Host "[BUILD-VENV] Nuitka report: $NuitkaReportFile"
+Write-Host "[BUILD-VENV] Footprint report: $FootprintReportFile"
 Write-Host "[BUILD-VENV] Venv: $VenvDir"

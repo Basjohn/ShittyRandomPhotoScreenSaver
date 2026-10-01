@@ -8,11 +8,11 @@ Settings remains QWidget-based. Settings-window shadows under `ui/widgets/contro
 
 Settings visual values are owned by schema-v6 `SettingsThemeSpec`; the permanent native/theme architecture is `Docs/Architecture/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows. Acrylic and Glass remain accepted **Settings-window** backdrop modes: Acrylic uses the native tinted composition path, while Glass uses the untinted composition family and semantic Qt RGBA surfaces provide the visible palette/opacity.
 
-Do not use native backdrop changes to compensate for QSS/semantic palette defects. `themes/dark.qss` was legacy structural stylesheet residue, not palette authority; it is now retired and **physically deleted** (operator-accepted 2026-09-14). Settings/tray structure has narrow permanent owners and `SettingsThemeSpec` owns semantic visuals. Do not restore the file, add a fallback stylesheet loader, or introduce a replacement monolithic Settings QSS — even when the asset is absent.
+Do not use native backdrop changes to compensate for QSS/semantic palette defects. `themes/dark.qss` is retired legacy structural stylesheet residue, not palette authority, and is **physically absent**. Settings/tray structure has narrow permanent owners and `SettingsThemeSpec` owns semantic visuals. Do not restore the file, add a fallback stylesheet loader, or introduce a replacement monolithic Settings QSS — even when the asset is absent.
 
 ## Settings and Widget theme selection
 
-The Themes tab has two landed catalogues:
+The Themes tab has two current catalogues:
 
 - **Settings Themes** — `.srtheme`, Settings QWidget/native-window appearance;
 - **Widget Themes** — `.srwtheme`, runtime retained-widget/overlay semantic colours.

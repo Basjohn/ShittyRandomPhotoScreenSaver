@@ -47,7 +47,7 @@ The persisted theme selection is resolved and validated before first Settings co
 
 ## Theme file storage / packaged path authority
 
-Settings Themes and the landed colour-only Widget Themes share one durable **theme root** rather than inventing separate installation trees.
+Settings Themes and the current colour-only Widget Themes share one durable **theme root** rather than inventing separate installation trees.
 
 Installed/frozen Windows builds use the same stable ProgramData base used by other SRPSS curated/runtime assets:
 
@@ -116,7 +116,7 @@ While independent, either catalogue may change without mutating the other. Card 
 
 `Widgets -> General -> Style Overrides` is the single ordinary-widget shared styling surface: Card Surface, Card Border and Header Fill are theme-authoring edits that fork the full resolved palette to Widget `Custom`; **Reset All Colours to Theme** explicitly normalizes ordinary family colour/card-alpha compatibility overrides back to canonical Inherit values; Card Border Width is a global style value outside Widget Theme schema. The reset is operator-invoked, never a startup migration, and excludes Visualizer-authored colours. Runtime Widget Themes are colour/semantic bundles only; Settings-window Glass/Acrylic remains a separate native-window concern.
 
-The curated catalogue currently contains **58 Settings themes and 58 deterministic Widget mirrors**. The 2026-09-02 expansion adds four genuinely light/white-adjacent themes (Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus) and four silver/metal themes (Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues). Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
+The curated catalogue currently contains **58 Settings themes and 58 deterministic Widget mirrors**, including four genuinely light/white-adjacent themes (Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus) and four silver/metal themes (Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues). Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
 
 ## Proven Windows backdrop mapping
 
@@ -232,7 +232,7 @@ original units through `ui/onboarding/common.py`, including Arrange's readable m
 
 ## `dark.qss` status
 
-`themes/dark.qss` is **retired and physically deleted**. The 2026-09-14 operator-accepted retirement removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the narrow Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using ThemeSpec context-menu roles, and the color-picker wrapper owns its residual subsettings chrome. No legacy palette was copied into a replacement monolith.
+`themes/dark.qss` is **retired and physically deleted**. Both runtime loaders are gone after caller-proofing the surviving structure: `ui/settings_theme.py` owns the narrow Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using ThemeSpec context-menu roles, and the color-picker wrapper owns its residual subsettings chrome. No legacy palette was copied into a replacement monolith.
 
 The permanent rule is simple: never restore `dark.qss`, add a fallback stylesheet loader, or replace it with another monolithic Settings QSS. Surviving structure belongs to narrow renderer/component owners; colour, opacity and shadow semantics belong to `SettingsThemeSpec`. Native backdrop code and forged edge geometry remain separate owners unless an independently proven defect requires change. Acceptance evidence is retained in `Docs/TestSuite.md`; the completed execution diary is not a live architecture document.
 

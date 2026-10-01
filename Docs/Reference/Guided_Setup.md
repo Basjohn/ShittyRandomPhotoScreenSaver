@@ -196,48 +196,48 @@ the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guid
 
 Implementation and automated coverage are complete; one operator pass on the real saver remains:
 
-- fresh/no-source automatic Guided Setup; Witch artwork and exact welcome copy;
-- source requirement;
-- Just Make It Work → exact lazy prompt → both choices;
-- Skip from the header with unsaved changes: Keep Changes, Discard Changes (theme reverts), Stay In Setup;
-- nothing is saved before Finish (close Settings mid-way and reopen);
-- Welcome → Import Settings? by category (an import finishes the wizard);
-- Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
-- Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
+- [ ] fresh/no-source automatic Guided Setup; Witch artwork and exact welcome copy;
+- [ ] source requirement;
+- [ ] Just Make It Work → exact lazy prompt → both choices;
+- [ ] Skip from the header with unsaved changes: Keep Changes, Discard Changes (theme reverts), Stay In Setup;
+- [ ] nothing is saved before Finish (close Settings mid-way and reopen);
+- [ ] Welcome → Import Settings? by category (an import finishes the wizard);
+- [ ] Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
+- [ ] Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
   Gmail notification sound + Test;
-- Hide This From Now On (wizard) / Hide Guided Setup From Now On (Quick Start) → old no-source popup;
-- live Theme switch; monitor selection; Interaction demo;
-- widget previews and selections;
-- one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
-- transition and Visualizer mode previews (sharp at your DPR; the transition list does not scroll on hover);
-- saver right-click → Images → Save Image (first save adds Pictures/SRPSS Collections to sources);
-- Arrange geometry: after a full settings delete and the wizard, the boxes match the saver's cards on each display
+- [ ] Hide This From Now On (wizard) / Hide Guided Setup From Now On (Quick Start) → old no-source popup;
+- [ ] live Theme switch; monitor selection; Interaction demo;
+- [ ] widget previews and selections;
+- [ ] one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
+- [ ] transition and Visualizer mode previews (sharp at your DPR; the transition list does not scroll on hover);
+- [ ] saver right-click → Images → Save Image (first save adds Pictures/SRPSS Collections to sources);
+- [ ] Arrange geometry: after a full settings delete and the wizard, the boxes match the saver's cards on each display
   and DPR (sizes, Visualizer docked to Media, stacked cards apart, Weather at its with-data height); move one, Apply,
   and every widget lands where it was drawn; width-only/height-only on a card and on the Visualizer land exactly;
   with two displays and Media on ALL there is one Visualizer; turning a display on while Arrange is open shows it;
-- Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
+- [ ] Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;
-- Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
+- [ ] Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
   Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Quick Start in view; Apply shows the
   move on the saver; Discard drops it. In Guided Setup's Arrange step the same popup appears on Back and on Next;
-- Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the MC Settings launch), from
+- [ ] Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the MC Settings launch), from
   Settings opened on the running saver, and from a saver launch that opened Settings for missing sources: each saves
   and starts (or resumes) the saver with the new settings; Finish only saves;
-- Runtime Edit on first run or offline (Weather still loading): Save without touching Weather; once data arrives,
+- [ ] Runtime Edit on first run or offline (Weather still loading): Save without touching Weather; once data arrives,
   Weather grows to its full card instead of shrinking inside a short box;
-- Ready step: the Settings / Edit Widget Layout menu capture sits beside the summary, sharp at your DPR, with no
+- [ ] Ready step: the Settings / Edit Widget Layout menu capture sits beside the summary, sharp at your DPR, with no
   scrollbar and the Controls block unmoved;
-- Widget Setup → Gmail: labelled rows with Steam's spacing, green "Connected" when a connection is saved, the volume
+- [ ] Widget Setup → Gmail: labelled rows with Steam's spacing, green "Connected" when a connection is saved, the volume
   slider in the Settings style;
-- Reddit narrower than its header plus refresh glyph (a long subreddit name, ~340 px): the ↻ glyph hides instead of
+- [ ] Reddit narrower than its header plus refresh glyph (a long subreddit name, ~340 px): the ↻ glyph hides instead of
   overlapping, and comes back when widened;
-- Arrange sizing matches Runtime Edit: scale a card up with Ctrl+wheel in Edit mode, Save, then one Ctrl+wheel notch
+- [ ] Arrange sizing matches Runtime Edit: scale a card up with Ctrl+wheel in Edit mode, Save, then one Ctrl+wheel notch
   down in Arrange returns it to the same place (top edge and centre fixed); a corner drag scales about the same point;
   the Visualizer's corner changes width and height together; width/height on Reddit, Gmail or Friend Pulse stops where
   the card still fills its box;
-- Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
-- child edits survive parent manipulation;
-- final runtime start;
-- Settings → QUICK START lazy reopen;
-- no network or provider work while Quick Start and Arrange are closed.
+- [ ] Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
+- [ ] child edits survive parent manipulation;
+- [ ] final runtime start;
+- [ ] Settings → QUICK START lazy reopen;
+- [ ] no network or provider work while Quick Start and Arrange are closed.
