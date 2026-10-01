@@ -38,9 +38,10 @@ regression-tested. `Spec.md` → Build control and products owns the durable con
 
 ## 3. Qt 6.11.2 / OpenGL 4.6 | Awaiting physical validation, non-blocking
 
-The actual `.venv` stack, strict 4.6 Core / GLSL 460 startup floor, native image ownership, queued shutdown and
-retained clip/state behavior are validated. Four broad test chunks pass after the resource-path assertion correction;
-focused resource/build/Clock checks and pip check pass. OpenGL remains the only backend; swap interval stays zero.
+The actual `.venv` stack, strict 4.6 Core / GLSL 460 startup floor, diagnostic startup parity, shared shader mirrors,
+native image ownership, queued shutdown and retained clip/state behavior are validated. Focused resource/build/Clock
+checks and pip check pass. OpenGL remains the only backend; swap interval stays zero. The migration sweep leaves
+no source gate before section 4; operator builds remain non-blocking.
 
 - [~] Preserve gentle start, transition endpoints, Bubble reaction, Visualizer freshness and no black flash during
   ordinary two-display use. Compare later supplied logs; no dedicated trace count or agent-run build is a gate.
@@ -181,6 +182,12 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 
 ## Known failing tests and anomalies
 
+- [ ] **Surface-preference authority (pre-existing).** `rendering/gl_format.py` still reads legacy QSettings when
+  bootstrap has no SettingsManager and carries a local coercion fallback. Resolve pre-application preferences through
+  the canonical JSON settings authority, then retire this alternate read path while preserving depth/stencil and pacing.
+- [ ] **Flicker diagnostic controls (pre-existing).** Migrate its environment-variable controls to explicit CLI options
+  and remove the synthetic stylesheet fallback so diagnostic failures stay visible. Its production startup variant
+  now delegates graphics selection to the canonical bootstrap.
 - [ ] **Pre-existing Qt test suppression:** `tests/conftest.py` broadly filters slot-miss AttributeErrors. Reproduce
   cross-generation background/Visualizer `sceneGraphInvalidated` retirement in a bounded unfiltered test, then
   narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.

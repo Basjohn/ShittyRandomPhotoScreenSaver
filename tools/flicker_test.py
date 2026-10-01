@@ -1585,23 +1585,13 @@ def make_dialog(variant: int) -> QDialog:
 
 def _apply_main_py_setup():
     """Reproduce the same setup main.py does before creating any dialogs."""
-    from PySide6.QtCore import QCoreApplication
-    from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
+    from rendering.quick.bootstrap import configure_quick_graphics
 
     # DPI policy
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-    # OpenGL attributes
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL, True)
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-    # Surface format
-    try:
-        from rendering.gl_format import build_surface_format
-        fmt, _ = build_surface_format(reason="flicker_test")
-        QSurfaceFormat.setDefaultFormat(fmt)
-    except Exception as e:
-        print(f"  (surface format setup failed: {e})")
+    configure_quick_graphics(reason="flicker-test")
     return True
 
 

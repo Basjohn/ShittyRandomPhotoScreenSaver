@@ -70,7 +70,7 @@ def test_the_copy_is_once_per_run_mipmapped_and_never_touches_the_photographs(qt
         capture.close()
 
 
-_PROBE_FRAGMENT = """#version 410 core
+_PROBE_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uEnvironment;
 """ + lib.SCENE3D_GLSL + """

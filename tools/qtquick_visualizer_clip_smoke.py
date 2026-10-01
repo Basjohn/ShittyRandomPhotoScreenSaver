@@ -93,7 +93,7 @@ _DRAW_COLOR = (236, 48, 36)
 _SPECTRUM_WINDOW_SIZE = (760, 600)
 _SPECTRUM_ORIGIN = (80.0, 60.0)
 
-_VERTEX_SOURCE = """#version 410 core
+_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
@@ -103,7 +103,7 @@ void main() {
 }
 """
 
-_FRAGMENT_SOURCE = """#version 410 core
+_FRAGMENT_SOURCE = """#version 460 core
 out vec4 fragColor;
 void main() {
     fragColor = vec4(0.92549, 0.18824, 0.14118, 1.0);

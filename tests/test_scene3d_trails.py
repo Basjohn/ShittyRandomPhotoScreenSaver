@@ -30,9 +30,9 @@ def test_ghosts_trail_the_moment_at_a_fixed_real_time_oldest_and_faintest_first(
 
 
 def test_the_ghost_transform_keeps_the_shader_and_writes_only_the_fade_of_moving_pieces():
-    fragment = "#version 410 core\nin vec2 vUv;\nout vec4 FragColor;\nvoid main() { if (vUv.x < 0.1) discard; FragColor = vec4(vUv, 0.0, 1.0); }\n"
+    fragment = "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\nvoid main() { if (vUv.x < 0.1) discard; FragColor = vec4(vUv, 0.0, 1.0); }\n"
     ghost = lib.scene3d_ghost_fragment(lib.scene3d_motion_fragment(fragment))
-    assert ghost.startswith("#version 410 core\n") and "uniform float uGhostFade;" in ghost
+    assert ghost.startswith("#version 460 core\n") and "uniform float uGhostFade;" in ghost
     assert "void sceneTrailMain()" in ghost and "discard" in ghost and ghost.count("void main()") == 1
     # Only a piece that moved further than the trail line reaches leaves a ghost.
     assert "sceneVelocity(vClipNow, vClipBefore, uViewport)" in ghost.split("void main()")[1]
@@ -40,7 +40,7 @@ def test_the_ghost_transform_keeps_the_shader_and_writes_only_the_fade_of_moving
     with pytest.raises(ValueError):   # a fragment that cannot know how far its piece moved
         lib.scene3d_ghost_fragment(fragment)
     with pytest.raises(ValueError):
-        lib.scene3d_ghost_fragment("#version 410 core\nout vec4 Colour;\nvoid main() {}\n")
+        lib.scene3d_ghost_fragment("#version 460 core\nout vec4 Colour;\nvoid main() {}\n")
 
 
 @pytest.mark.qt

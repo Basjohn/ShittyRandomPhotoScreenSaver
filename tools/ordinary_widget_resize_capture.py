@@ -16,10 +16,10 @@ import subprocess
 
 from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QTimer, QSize, QRect, QMetaObject, Qt, qInstallMessageHandler, qVersion
 from PySide6.QtGui import QColor, QImage, QPainter
-from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
 from PySide6.QtWidgets import QApplication
 
 from core.settings.default_contract import require_canonical_default
+from rendering.quick.bootstrap import configure_quick_graphics
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -144,9 +144,9 @@ def build_card(family, variant, host, artwork_path, image):
 
 
 def capture(output, *, families):
+    configure_quick_graphics(reason="ordinary-widget-resize-capture")
     output.mkdir(parents=True, exist_ok=False)
-    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
-    app = QApplication.instance() or QApplication([])
+    app = QApplication([])
     artwork_path = output / "fixture.png"
     image = QImage(180, 240, QImage.Format.Format_ARGB32)
     image.fill(QColor("#3e6685"))

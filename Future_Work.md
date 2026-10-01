@@ -171,6 +171,8 @@ Every entry is a Unique Mode under §2.3.
 
 ## 5. Other dormant work
 
+- **Optional persistent shader/program cache** — consider only for a measured residual cold-compile hitch on current
+  drivers after the existing gradual warm-up. Admission requires improvement beyond the warm-up already implemented.
 - [ ] **Settings FlowContainer polish [LOW]** — only for a demonstrated Settings layout problem; improve alignment and
       space use without restructuring ownership or eagerly building lazy bodies.
 - [ ] **Wallpaper feed consolidation** — reuse FEEDS normalization/image-candidate primitives only where that makes the

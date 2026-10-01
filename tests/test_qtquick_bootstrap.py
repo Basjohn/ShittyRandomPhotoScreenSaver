@@ -56,14 +56,31 @@ def test_main_bootstraps_environment_before_qt_and_graphics_before_application()
     )
 
 
-def test_graphics_bootstrap_selects_proven_opengl_profile_in_clean_process():
+@pytest.mark.parametrize("entrypoint", ["production", "flicker", "resize", "stack"])
+def test_graphics_bootstrap_selects_proven_opengl_profile_in_clean_process(entrypoint):
     script = r'''
 import json
 import os
+import sys
+import tempfile
+from pathlib import Path
 
-from rendering.quick.bootstrap import configure_quick_graphics
+from rendering.quick.bootstrap import configure_quick_graphics, quick_qml_root
 
-state = configure_quick_graphics(reason="a1-subprocess")
+if sys.argv[1] == "flicker":
+    from tools.flicker_test import _apply_main_py_setup
+    _apply_main_py_setup()
+elif sys.argv[1] in ("resize", "stack"):
+    with tempfile.TemporaryDirectory(prefix="srpss-gl46-capture-") as directory:
+        output = Path(directory) / "capture"
+        if sys.argv[1] == "resize":
+            from tools.ordinary_widget_resize_capture import capture
+            capture(output, families=("weather",))
+        else:
+            from tools.ordinary_widget_stack_capture import capture
+            capture(output)
+else:
+    configure_quick_graphics(reason="a1-subprocess")
 
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
@@ -77,19 +94,19 @@ print(json.dumps({
     "profile": fmt.profile().name,
     "renderable": fmt.renderableType().name,
     "swap_interval": fmt.swapInterval(),
-    "qml_root": str(state.qml_root),
+    "qml_root": str(quick_qml_root()),
 }))
 '''
     env = os.environ.copy()
     env["QSG_RENDER_LOOP"] = "basic"
     completed = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", script, entrypoint],
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
         check=False,
-        timeout=30,
+        timeout=45,
     )
 
     assert completed.returncode == 0, completed.stderr
@@ -365,10 +382,10 @@ def test_actual_context_validation_evicts_a_collected_wrapper_before_qt_destruct
     assert context_key not in bootstrap._validated_contexts
 
 
-def test_production_glsl_sources_have_one_460_core_contract():
+def test_runtime_and_diagnostic_glsl_sources_have_one_460_core_contract():
     shader_paths = [
         path
-        for root in (ROOT / "rendering", ROOT / "widgets")
+        for root in (ROOT / "rendering", ROOT / "widgets", ROOT / "tools")
         for path in root.rglob("*")
         if path.suffix in {".py", ".frag", ".vert", ".geom", ".comp", ".glsl"}
     ]
@@ -380,7 +397,12 @@ def test_production_glsl_sources_have_one_460_core_contract():
         ))
 
     assert declared
-    assert all(version == "460" and profile == "core" for _path, version, profile in declared)
+    mismatches = [
+        (str(path.relative_to(ROOT)), version, profile)
+        for path, version, profile in declared
+        if version != "460" or profile != "core"
+    ]
+    assert not mismatches, mismatches
 
 
 

@@ -59,7 +59,7 @@ vec3 sceneDisplace(vec2 uv) {
     return point;
 }
 """
-_PHOTO_FRAGMENT = """#version 410 core
+_PHOTO_FRAGMENT = """#version 460 core
 in vec2 vUv; in vec3 vWorld; in vec3 vNormal;
 out vec4 FragColor;
 uniform sampler2D uImage;

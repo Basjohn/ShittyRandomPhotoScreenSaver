@@ -19,7 +19,7 @@ from rendering.quick.scene3d.uniforms import SCENE3D_UNIFORM_BINDING, UniformBlo
 _MIXED = Scene3DBlockLayout.of("MixedBlock", (
     ("a", "vec2"), ("b", "float"), ("c", "vec3"), ("d", "int"), ("e", "vec2"), ("f", "mat4"), ("g", "vec4"), ("h", "uint"),
 ))
-_VERTEX = """#version 410 core
+_VERTEX = """#version 460 core
 void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }
 """
 
@@ -49,7 +49,7 @@ def _reader(layout: Scene3DBlockLayout) -> str:
             "vec3": f"vec4({field}, 0.0)", "vec4": field, "mat4": f"{field}[3]",
         }[glsl_type]
         lines.append(f"    if (column == {index}) FragColor = {value};")
-    return ("#version 410 core\nout vec4 FragColor;\n" + layout.glsl()
+    return ("#version 460 core\nout vec4 FragColor;\n" + layout.glsl()
             + "void main() {\n    int column = int(gl_FragCoord.x);\n    FragColor = vec4(0.0);\n"
             + "\n".join(lines) + "\n}\n")
 

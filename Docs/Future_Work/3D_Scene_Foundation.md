@@ -55,7 +55,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   and compares them with the CPU mirrors: impulse, departure travel, projection, cast-on-plane, rotation, hash
   determinism and uniformity. Never imported by production.
 - **Reward:** the library can grow (S3–S9) without mirrors and shaders drifting apart; catches GPU precision faults.
-- **Risks:** float32 vs Python doubles need explicit tolerances; RGBA32F targets are required (GL 4.1 has them).
+- **Risks:** float32 vs Python doubles need explicit tolerances; RGBA32F targets are required and available in the 4.6 Core baseline.
 - **Hazards:** none in production.
 - **Bars:** every function within tolerance; a deliberately perturbed mirror fails (negative control).
 - **Landed:** `tests/test_scene3d_glsl_mirrors.py` (every library function, including hash, rotation, shading,
@@ -291,6 +291,11 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
     12-17 ms, Exploding Tiles 36-44 -> 8-30 ms, Crumble 40-51 -> 12-20 ms, Pixel Accretion 28 -> 10 ms. Warmed
     runs compile nothing. What remained was per-run work: the destination upload, the environment copy and the
     scene textures (now allocated ahead, S10).
+
+### S12 — Runtime floor: PySide 6.11.2 + OpenGL 4.6 Core
+Implemented and regression-validated. `Spec.md` → Accepted runtime presentation owns the strict 4.6 Core / GLSL 460
+contract and actual-context rejection. Maintained diagnostics and shared scene3d fixtures use the same floor.
+Ordinary-use physical validation and operator builds remain non-blocking checklists in `Current_Plan.md`.
 
 ## Cross-cutting performance hazards
 
