@@ -40,6 +40,8 @@ The dependency floor is PySide6/Qt 6.11.2. Production requests OpenGL 4.6 Core a
 OpenGL is the sole production graphics API. The existing render-context initialization boundary records actual
 GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to
 context lifetime, with no steady-frame driver queries. The accepted swap interval remains zero.
+Maintained render/capture diagnostics reuse `rendering.quick.bootstrap`; owned offscreen shader contexts request
+and validate the same floor.
 
 Wallpaper lookahead uses bounded source batches in the supervised speculative image worker. The parent caches only
 display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.

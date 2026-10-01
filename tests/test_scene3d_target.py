@@ -193,7 +193,7 @@ def test_motion_blur_leaves_a_still_scene_exact(capture, samples):
         resources.release_resources()
 
 
-_MOVING_FRAGMENT = """#version 410 core
+_MOVING_FRAGMENT = """#version 460 core
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 Motion;
 uniform vec2 uMotion;

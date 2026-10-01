@@ -7,9 +7,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEvent, QMetaObject, Qt, qInstallMessageHandler
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
 from PySide6.QtWidgets import QApplication
 
+from rendering.quick.bootstrap import configure_quick_graphics
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -19,9 +19,9 @@ from tools.ordinary_widget_resize_capture import FAMILIES, build_card, settle, g
 
 
 def capture(output: Path) -> None:
+    configure_quick_graphics(reason="ordinary-widget-stack-capture")
     output.mkdir(parents=True, exist_ok=False)
-    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
-    app = QApplication.instance() or QApplication([])
+    app = QApplication([])
     artwork = QImage(180, 240, QImage.Format.Format_ARGB32)
     artwork.fill(QColor("#3e6685"))
     path = output / "fixture.png"

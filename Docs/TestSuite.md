@@ -40,6 +40,12 @@ the existing Blinds smoke checks source/midpoint/destination patterns and retire
 optional scene3d motion/trail/AA/post variants, proves resource retirement, and renders the actual Spectrum preview
 with the production OpenGL floor. These are bounded admission checks, not aesthetic or long-duration acceptance.
 
+`tests/test_qtquick_bootstrap.py` verifies the strict 4.6 Core / GLSL 460 floor, actual-context admission/retirement,
+and fresh-process startup parity for production, the Settings flicker diagnostic and both ordinary-widget capture
+tools. The capture cases render real retained cards and reject Qt warnings. Its shader-source gate covers runtime
+and maintained diagnostics; shared scene3d GPU mirrors, grid, environment, target, trails and uniform fixtures also
+compile GLSL 460 while retaining their independent pixel, packing, state-restoration and retirement oracles.
+
 Immutable resource ownership is covered by `tests/test_qt_resource_assets.py` (Qt lookup and lazy Guided Setup
 registration), `tests/test_widget_theme_link_and_asset_contract.py` (immutable resources versus editable themes),
 and the retained widget/About tests. `tests/test_qrc_regeneration.py` protects selected-toolchain regeneration,

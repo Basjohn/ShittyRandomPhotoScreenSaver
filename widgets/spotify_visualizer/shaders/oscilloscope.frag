@@ -185,7 +185,7 @@ float sample_waveform(float nx, int offset) {
 
     // Apply sensitivity as amplitude multiplier — soft saturation
     // instead of hard clamp, preserving smooth curve shape
-    // Manual tanh since GLSL 330 doesn't have it
+    // Explicit exponential soft saturation preserves the authored curve.
     float sv = val * u_sensitivity;
     float e2 = exp(2.0 * sv);
     return (e2 - 1.0) / (e2 + 1.0);

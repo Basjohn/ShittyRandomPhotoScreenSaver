@@ -1,15 +1,12 @@
 """
-Utilities for constructing the legacy/generic QSurfaceFormat policy.
+Shared QSurfaceFormat buffer and depth/stencil preferences.
 
-The generic policy remains uncapped for its non-Quick/tool consumers. Production
-Qt Quick overrides the swap interval at ``rendering.quick.bootstrap`` because the
-threaded Quick scene graph owns a different physical-presentation contract.
+``rendering.quick.bootstrap`` owns the OpenGL version/profile, Quick graphics
+API and uncapped swap policy. The display-local Quick pacer and scene demand
+own presentation cadence; this helper does not select a renderer or scheduler.
 
-Centralizes GL surface configuration with VSync completely disabled
-to enable timer-based rendering at display refresh rate for maximum
-performance. Any "prefer triple buffer" setting is now treated as a
-legacy hint and does not change the requested swap behaviour; modern
-drivers control true triple buffering at their own layer.
+The "prefer triple buffer" preference does not change the requested double
+buffering or swap interval. Drivers control true triple buffering themselves.
 """
 from __future__ import annotations
 
