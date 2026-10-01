@@ -11,7 +11,7 @@ from core.sources.folder_paths import contains_folder, display_folder_path, with
 from core.sources.readiness import has_image_sources
 from ui.onboarding.state import is_media_center_profile
 from sources.rss.curated import apply_curated_wallpaper_feeds
-from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, silence_check, text_label, SILENCE_TEXT
+from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, silence_check, text_label, SILENCE_TEXT, font_with_point_delta
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.styled_popup import StyledPopup
 
@@ -254,7 +254,7 @@ class DisplayDiagram(QWidget):
             return value
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        font = self.font(); font.setBold(True); font.setPointSizeF(font.pointSizeF() + 4)
+        font = font_with_point_delta(self, 4); font.setBold(True)
         painter.setFont(font)
         for number, rect in enumerate(self._rects(), 1):
             on = number in self.active
@@ -399,11 +399,11 @@ class _PracticeStoryCard(QWidget):
             painter.drawPixmap(art.topLeft(), self._scaled_art)
             painter.restore()
         text = QRectF(art.right() + 14, rect.top() + 14, rect.right() - art.right() - 26, rect.height() - 28)
-        font = self.font(); font.setBold(True); font.setPointSizeF(font.pointSizeF() + 1.5)
+        font = font_with_point_delta(self, 1.5); font.setBold(True)
         painter.setFont(font); painter.setPen(color("panel.group.text"))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
                          "A Practice Story: The Lighthouse Keeper's Last Night")
-        font.setBold(False); font.setPointSizeF(font.pointSizeF() - 2.5); painter.setFont(font)
+        font = font_with_point_delta(self, -1.0); font.setBold(False); painter.setFont(font)
         painter.setPen(color("control.button.text"))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, "PRACTICE WIRE  ·  2H AGO")
 

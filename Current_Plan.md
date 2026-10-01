@@ -47,6 +47,12 @@ focused resource/build/Clock checks and pip check pass. OpenGL remains the only 
 
 - [~] Preserve gentle start, transition endpoints, Bubble reaction, Visualizer freshness and no black flash during
   ordinary two-display use. Compare later supplied logs; no dedicated trace count or agent-run build is a gate.
+- [~] **Awaiting corrected-run validation:** the latest supplied logs exposed manufacturer-label drift that missed
+  saved CUSTOM geometry and the Clock face override, plus Blinds' reserved GLSL identifier. Identity replay/merge,
+  Arrange parity, registered shader admission/retirement and warning-free ordinary QML construction pass;
+  all three Blinds directions pass the two-display GL smoke. On the next ordinary run, confirm personally placed
+  CUSTOM boxes and Clock faces survive startup/Settings rerun, Blinds looks correct, and Settings combo interaction
+  produces no QFont warning. Auto-arrange remains disabled in global CUSTOM; this is not an intentional geometry reset.
 
 ## 3A. Immutable resources | Awaiting installed measurements, non-blocking
 
@@ -183,13 +189,11 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
   narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.
 - [ ] **Global Python cleanup:** the denied Normal-mode Qt upgrade left pip `~yside6-essentials` rollback metadata;
   the original 6.9.1 modules were restored and verified. Global pip also reports the unchanged opencv/numpy version
-  conflict. Resolve these in operator environment maintenance; the project `.venv` passes pip check.
+  conflict. Operator may delete `C:\Python311\Lib\site-packages\~yside6_essentials-6.9.1.dist-info` during maintenance;
+  the correctly named Qt metadata remains. Cleanup is non-blocking; the project `.venv` passes pip check.
 - [ ] **Existing local timezone heuristic:** `widgets/timezone_utils.get_local_timezone()` selects the first named
   zone sharing an offset and uses `time.daylight` rather than the current DST state. Audit its callers and preserve
   local-zone identity before changing it. The asset cleanup retains the existing pytz authority and behavior.
-
-- [ ] **Temporary validation debris:** `.artifacts/qt611-validation` and `.artifacts/qt-restore` are unused after the
-  actual `.venv` upgrade. Automatic approval review blocked their requested deletion; remove during operator cleanup.
 
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing).** The 2026-09-23 physical run showed reduced Spectrum
   smoothness at extreme viewport shapes. Keep separate from the modern-GL migration unless a new shared 3D consumer

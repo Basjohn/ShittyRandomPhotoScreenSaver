@@ -18,7 +18,7 @@ from core.settings.capability_activation import (
 from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors, resolve_admissible_enabled_modes
 from core.settings.widget_family_catalog import get_widget_family_descriptors, get_widget_member_label
 from rendering.transition_registry import iter_transition_descriptors
-from ui.onboarding.common import Page, ImagePanel, action, asset_bytes, asset_path, checkbox, CheckList, text_label
+from ui.onboarding.common import Page, ImagePanel, action, asset_bytes, asset_path, checkbox, CheckList, text_label, font_with_point_delta
 from ui.onboarding.state import current_setup_summary, saved_account_states
 from ui.settings_theme_catalog import get_current_settings_theme_catalog, read_persisted_theme_id
 from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
@@ -335,9 +335,8 @@ class TransitionStrip(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         left = (self.width() - (frame_width * count + self.GAP * (count - 1))) / 2
         top = max(0.0, (self.height() - frame_height) / 2)
-        font = self.font()
+        font = font_with_point_delta(self, 0.5)
         font.setBold(True)
-        font.setPointSizeF(font.pointSizeF() + 0.5)
         painter.setFont(font)
         metrics = painter.fontMetrics()
         for index, frame in enumerate(self._scaled_frames(frame_width, frame_height)):

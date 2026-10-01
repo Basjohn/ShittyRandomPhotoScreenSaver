@@ -17,6 +17,7 @@ from rendering.custom_layout_contract import (
     PLACEMENT_ANCHOR_PAYLOAD_KEY,
     CustomLayoutEntry,
     canonicalize_screen_layout_bucket,
+    canonicalize_screen_layout_aliases,
     choose_content_placement_anchor,
     clamp_local_rect_to_bounds,
     get_screen_signature_aliases,
@@ -72,28 +73,7 @@ def _canonicalize_alias_bucket(custom_map: dict[str, Any], aliases: tuple[str, .
     Arrange has aliases rather than QScreen wrappers, but must retain the same
     canonical-first merge semantics as the runtime path.
     """
-    canonical = aliases[0]
-    displays = custom_map.setdefault("displays", {})
-    if not isinstance(displays, dict):
-        displays = {}; custom_map["displays"] = displays
-    target = displays.get(canonical, {})
-    target = dict(target) if isinstance(target, Mapping) else {}
-    for alias in aliases[1:]:
-        source = displays.get(alias)
-        if not isinstance(source, Mapping):
-            continue
-        merged: dict[str, Any] = {}
-        for widget_id in set(source) | set(target):
-            source_variants = source.get(widget_id, {})
-            target_variants = target.get(widget_id, {})
-            merged[str(widget_id)] = {
-                **(dict(source_variants) if isinstance(source_variants, Mapping) else {}),
-                **(dict(target_variants) if isinstance(target_variants, Mapping) else {}),
-            }
-        target = merged
-        displays.pop(alias, None)
-    displays[canonical] = target
-    return canonical
+    return canonicalize_screen_layout_aliases(custom_map, aliases) or aliases[0]
 
 
 def _write_item(

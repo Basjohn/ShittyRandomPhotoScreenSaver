@@ -238,7 +238,7 @@ OverlayWidget {
             Item {
                 id: refreshTarget
                 objectName: "redditRefreshTarget"
-                readonly property real implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
                 readonly property bool canActivate: visible
                     && redditRoot.redditModel.interactionEnabled
                     && !redditRoot.customLayoutInputBlocked

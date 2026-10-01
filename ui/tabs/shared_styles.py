@@ -861,6 +861,9 @@ CIRCLE_CHECKBOX_STYLE = _build_circle_checkbox_style()
 
 
 def _build_combobox_style() -> str:
+    # Qt 6.11's Windows 11 menu-indicator metric reads pointSize(), even for a
+    # pixel font. Equivalent point units keep the authored 14/13/12 logical-px
+    # text at Windows' 96 logical DPI and give the native metric a valid size.
     return _theme_qss("""
     /* StyledComboBox base skin */
     QComboBox[customCombo='true'] {
@@ -870,7 +873,7 @@ def _build_combobox_style() -> str:
         margin-bottom: 10px;
         font-family: 'Jost';
         font-weight: 700;
-        font-size: 14px;
+        font-size: 10.5pt;
         letter-spacing: 0.4px;
         color: @@color:control.input.text@@;
         border: 2px solid @@color:control.input.border@@;
@@ -919,7 +922,7 @@ def _build_combobox_style() -> str:
         min-height: 34px;
         padding: 3px 52px 3px 16px;
         border-radius: 17px;
-        font-size: 13px;
+        font-size: 9.75pt;
         margin-top: 2px;
         margin-bottom: 12px;
     }
@@ -929,7 +932,7 @@ def _build_combobox_style() -> str:
         min-height: 32px;
         padding: 2px 46px 2px 14px;
         border-radius: 16px;
-        font-size: 12px;
+        font-size: 9pt;
         margin-top: 2px;
         margin-bottom: 12px;
     }
@@ -940,7 +943,7 @@ def _build_combobox_style() -> str:
         min-height: 38px;
         padding: 3px 54px 5px 20px;
         border-radius: 20px;
-        font-size: 14px;
+        font-size: 10.5pt;
         margin-top: 1px;
         margin-bottom: 10px;
     }
@@ -963,7 +966,7 @@ def _build_combobox_popup_view_style() -> str:
         color: @@color:combo.popup.text@@;
         font-family: 'Jost';
         font-weight: 600;
-        font-size: 14px;
+        font-size: 10.5pt;
         letter-spacing: 0.4px;
     }
     

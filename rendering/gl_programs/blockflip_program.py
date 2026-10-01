@@ -190,9 +190,9 @@ void main() {
 
     // Width of the revealed band within this block.
     float w = clamp(eased, 0.0, 1.0);
-    float half = 0.5 * w;
-    float left = 0.5 - half;
-    float right = 0.5 + half;
+    float halfWidth = 0.5 * w;
+    float left = 0.5 - halfWidth;
+    float right = 0.5 + halfWidth;
 
     // Choose local axis according to the flip direction. For horizontal
     // flips use X inside the block; for vertical flips use Y.

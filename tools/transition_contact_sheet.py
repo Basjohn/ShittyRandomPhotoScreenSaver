@@ -60,6 +60,7 @@ class TransitionCapture:
         import numpy as np
         from OpenGL import GL as gl
         from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+        from rendering.quick.bootstrap import QUICK_OPENGL_VERSION, validate_current_opengl_context
         from rendering.quick.scene3d.resources import MeshResources
         from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
@@ -68,15 +69,16 @@ class TransitionCapture:
         fmt = QSurfaceFormat()
         fmt.setRenderableType(QSurfaceFormat.OpenGL)
         fmt.setProfile(QSurfaceFormat.CoreProfile)
-        fmt.setVersion(4, 1)
+        fmt.setVersion(*QUICK_OPENGL_VERSION)
         fmt.setDepthBufferSize(24)
         self.context = QOpenGLContext()
         self.context.setFormat(fmt)
-        if not self.context.create(): raise RuntimeError("OpenGL 4.1 context unavailable")
+        if not self.context.create(): raise RuntimeError(f"OpenGL {QUICK_OPENGL_VERSION} context unavailable")
         self.surface = QOffscreenSurface()
         self.surface.setFormat(self.context.format())
         self.surface.create()
         if not self.context.makeCurrent(self.surface): raise RuntimeError("offscreen GL admission failed")
+        validate_current_opengl_context(reason="transition-capture", context=self.context)
         self.driver = gl.glGetString(gl.GL_RENDERER).decode()
         self.host = QuickTransitionRenderHost()
         self.mesh = MeshResources("transition diagnostic quad")

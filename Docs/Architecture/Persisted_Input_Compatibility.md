@@ -33,6 +33,11 @@ bridge.
 The blocked shortcut is spelled out so it can be refused on sight; none proceeds
 without the safe path below.
 
+- **Serial-backed display keys** (`rendering/custom_layout_contract.py`). Qt can change an EDID manufacturer
+  label for the same serial/model/name. Read old layout buckets and Clock overrides through this identity authority;
+  merge independent face/widget entries and migrate keys on explicit saves. Runtime and Settings Arrange use the
+  same matching/merge rule. *Blocked:* treating the changed label as a new monitor, discarding old geometry, or
+  guessing a match by monitor index. Serial-less keys still require exact identity/geometry facts.
 - **QSettings → JSON profile** (`core/settings/settings_manager.py`:
   `_run_initial_migration` / `_migrate_from_qsettings`). Fires whenever
   `settings_v2.json` is absent, including after Reset.

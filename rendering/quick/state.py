@@ -8,6 +8,7 @@ from typing import Any
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QScreen
+from rendering.custom_layout_contract import get_screen_signature
 
 
 RectTuple = tuple[int, int, int, int]
@@ -154,29 +155,6 @@ def _rect_tuple(rect: QRect) -> RectTuple:
     )
 
 
-def _screen_key(
-    *,
-    name: str,
-    manufacturer: str,
-    model: str,
-    serial_number: str,
-    geometry: RectTuple,
-) -> str:
-    identity = [
-        part
-        for part in (
-            f"serial:{serial_number}" if serial_number else "",
-            f"manufacturer:{manufacturer}" if manufacturer else "",
-            f"model:{model}" if model else "",
-            f"name:{name}" if name else "",
-        )
-        if part
-    ]
-    if serial_number and identity:
-        return "|".join(identity)
-    return "|".join((*identity, f"geometry:{geometry}"))
-
-
 def capture_display_identity(
     *,
     screen_index: int,
@@ -206,13 +184,7 @@ def capture_display_identity(
     return QuickDisplayIdentity(
         screen_index=index,
         runtime_generation=generation,
-        screen_key=_screen_key(
-            name=name,
-            manufacturer=manufacturer,
-            model=model,
-            serial_number=serial_number,
-            geometry=geometry,
-        ),
+        screen_key=get_screen_signature(screen),
         name=name,
         manufacturer=manufacturer,
         model=model,

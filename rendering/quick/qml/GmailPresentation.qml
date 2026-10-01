@@ -314,7 +314,7 @@ OverlayWidget {
                 objectName: "gmailRefreshTarget"
                 // Preserve the authored bounded edit target and paint slot.
                 clip: true
-                readonly property real implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
                 readonly property bool canActivate: visible
                     && gmailRoot.gmailModel.interactionEnabled
                     && !gmailRoot.customLayoutInputBlocked

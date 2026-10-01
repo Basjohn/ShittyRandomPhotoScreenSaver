@@ -44,7 +44,7 @@ def test_custom_layout_contract_owns_screen_signature_without_legacy_coordinator
     assert "multi_monitor_coordinator" not in source
     assert "MultiMonitorCoordinator" not in source
     assert custom_layout_contract.get_screen_signature(_Screen()) == (
-        "serial:abc|manufacturer:LG|model:TV|name:Living Room"
+        "serial:abc|model:TV|name:Living Room"
     )
 
 
@@ -418,7 +418,7 @@ def test_custom_layout_entries_resolve_legacy_signature_when_screen_geometry_dri
     assert "clock" in entries
 
     canonical = canonicalize_screen_layout_bucket(custom_map, live_screen)
-    assert canonical == "serial:abc|manufacturer:LG|model:TV|name:LG TV"
+    assert canonical == "serial:abc|model:TV|name:LG TV"
     assert canonical in custom_map["displays"]
     assert legacy_signature not in custom_map["displays"]
 
@@ -426,7 +426,7 @@ def test_custom_layout_entries_resolve_legacy_signature_when_screen_geometry_dri
 def test_canonicalizing_screen_bucket_merges_independent_variants():
     custom_map = build_default_custom_layout_map()
     legacy_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV|geom:0_0_1920x1080"
-    canonical_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV"
+    canonical_signature = "serial:abc|model:TV|name:LG TV"
     custom_map["displays"] = {
         legacy_signature: {
             "clock": {
