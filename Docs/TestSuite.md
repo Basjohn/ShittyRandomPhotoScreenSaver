@@ -346,7 +346,9 @@ Shared service tests target current service ownership directly. Old `MediaWidget
 Current injection/admission belongs to `rendering/widget_runtime_services.py`, retained Quick family binders/models and the actual runtime-service implementations. Preserve event-driven media ownership, bounded reconciliation/watchdogs, generation fencing and clean family dormancy/retirement.
 
 Shared scene3d resource regression routes are in `Docs/Reference/Scene3D_Resources.md`: real DSA mesh drawing and
-binding isolation, linked-program sampler lifetime, and real reflection/multisample state restoration on failures.
+binding isolation, linked-program sampler lifetime, immutable reflection/scene/post allocation, partial-failure
+retirement, and real reflection/multisample state restoration on failures. `test_scene3d_environment.py` protects
+the reflection copy; `test_scene3d_dsa_targets.py` checks named target construction and allocation failure cleanup.
 
 ### 6.8 Caches, prefetch and long-lived workers
 

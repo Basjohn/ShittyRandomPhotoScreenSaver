@@ -34,6 +34,7 @@ release: the next transition's warm-up allocates again.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import ctypes
 from typing import Iterator
 
 from OpenGL import GL as gl
@@ -147,25 +148,24 @@ def _bucket(size: int) -> int:
     return max(SCENE_TARGET_BUCKET, -(-int(size) // SCENE_TARGET_BUCKET) * SCENE_TARGET_BUCKET)
 
 
-def _plain_texture(width: int, height: int, internal: int = gl.GL_RGBA8, data_type: int = gl.GL_UNSIGNED_BYTE) -> int:
-    texture = int(gl.glGenTextures(1))
-    gl.glActiveTexture(gl.GL_TEXTURE0)
-    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-    for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_NEAREST)
-    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, internal, width, height, 0, gl.GL_RGBA, data_type, None)
+def _new_texture(target: int, label: str) -> int:
+    """Create one owned texture without changing a Quick texture-unit binding."""
+    name = (ctypes.c_uint * 1)()
+    gl.glCreateTextures(target, 1, name)
+    texture = int(name[0])
+    if not texture:
+        raise RuntimeError(f"{label} texture allocation failed")
     return texture
 
 
-def _attachment(samples: int, width: int, height: int, internal: int, data_type: int) -> tuple[int, int]:
-    """A colour attachment texture, multisampled when ``samples`` > 1. Returns (name, target)."""
-    if samples > 1:
-        texture = int(gl.glGenTextures(1))
-        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, texture)
-        gl.glTexImage2DMultisample(gl.GL_TEXTURE_2D_MULTISAMPLE, samples, internal, width, height, True)
-        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
-        return texture, gl.GL_TEXTURE_2D_MULTISAMPLE
-    return _plain_texture(width, height, internal, data_type), gl.GL_TEXTURE_2D
+def _new_framebuffer(label: str) -> int:
+    """Create one owned framebuffer without replacing Quick's draw/read target."""
+    name = (ctypes.c_uint * 1)()
+    gl.glCreateFramebuffers(1, name)
+    framebuffer = int(name[0])
+    if not framebuffer:
+        raise RuntimeError(f"{label} framebuffer allocation failed")
+    return framebuffer
 
 
 class SceneTarget:
@@ -384,18 +384,18 @@ class SceneTarget:
         """The resolved copies the post effects read (colour, and motion with motion blur)."""
         width, height = self._key[0], self._key[1]
         motion = bool(self._names["velocity"])
-        self._names["resolve_texture"] = _plain_texture(width, height)
-        self._names["resolve_fbo"] = int(gl.glGenFramebuffers(1))
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
-        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D,
-                                  self._names["resolve_texture"], 0)
+        self._allocate_plain_texture("resolve_texture", width, height, gl.GL_RGBA8)
+        self._names["resolve_fbo"] = _new_framebuffer(f"{self.label} scene resolve")
+        gl.glNamedFramebufferTexture(self._names["resolve_fbo"], gl.GL_COLOR_ATTACHMENT0,
+                                     self._names["resolve_texture"], 0)
         if motion:
-            self._names["resolve_velocity"] = _plain_texture(width, height, gl.GL_RG16F, gl.GL_HALF_FLOAT)
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, gl.GL_TEXTURE_2D,
-                                      self._names["resolve_velocity"], 0)
-            gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
-        if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+            self._allocate_plain_texture("resolve_velocity", width, height, gl.GL_RG16F)
+            gl.glNamedFramebufferTexture(self._names["resolve_fbo"], gl.GL_COLOR_ATTACHMENT1,
+                                         self._names["resolve_velocity"], 0)
+            gl.glNamedFramebufferDrawBuffers(self._names["resolve_fbo"], 2,
+                                              [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
+        if (gl.glCheckNamedFramebufferStatus(self._names["resolve_fbo"], gl.GL_FRAMEBUFFER)
+                != gl.GL_FRAMEBUFFER_COMPLETE):
             raise RuntimeError(f"{self.label} scene resolve incomplete at {width}x{height}")
 
     def _restore_inherited(self, frame: SceneFrame) -> None:
@@ -409,38 +409,49 @@ class SceneTarget:
         else:
             gl.glDisable(gl.GL_SCISSOR_TEST)
 
+    def _allocate_plain_texture(self, key: str, width: int, height: int, internal: int) -> None:
+        """Register a plain attachment before configuring immutable storage for cleanup retry."""
+        texture = _new_texture(gl.GL_TEXTURE_2D, f"{self.label} scene target")
+        self._names[key] = texture
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTextureParameteri(texture, parameter, gl.GL_NEAREST)
+        gl.glTextureStorage2D(texture, 1, internal, width, height)
+
+    def _allocate_attachment(self, key: str, samples: int, width: int, height: int, internal: int) -> None:
+        """Register a scene attachment before its immutable storage can fail."""
+        if samples > 1:
+            texture = _new_texture(gl.GL_TEXTURE_2D_MULTISAMPLE, f"{self.label} scene target")
+            self._names[key] = texture
+            gl.glTextureStorage2DMultisample(texture, samples, internal, width, height, True)
+            return
+        self._allocate_plain_texture(key, width, height, internal)
+
     def _allocate(self, width: int, height: int, requested: int, motion_blur: bool = False) -> None:
         samples = min(requested, gl_query.get_int(gl.GL_MAX_SAMPLES),
                       gl_query.get_int(gl.GL_MAX_COLOR_TEXTURE_SAMPLES))
-        renderbuffer = gl_query.get_int(gl.GL_RENDERBUFFER_BINDING)
-        try:
-            self._names["fbo"] = int(gl.glGenFramebuffers(1))
-            self._names["colour"], colour_target = _attachment(samples, width, height, gl.GL_RGBA8,
-                                                               gl.GL_UNSIGNED_BYTE)
-            if motion_blur:
-                self._names["velocity"], _target = _attachment(samples, width, height, gl.GL_RG16F,
-                                                               gl.GL_HALF_FLOAT)
-            self._names["depth"] = int(gl.glGenRenderbuffers(1))
-            gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self._names["depth"])
-            gl.glRenderbufferStorageMultisample(gl.GL_RENDERBUFFER, samples if samples > 1 else 0,
-                                                gl.GL_DEPTH_COMPONENT24, width, height)
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, colour_target,
-                                      self._names["colour"], 0)
-            if motion_blur:
-                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, colour_target,
-                                          self._names["velocity"], 0)
-                gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
-            gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER,
-                                         self._names["depth"])
-            if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                raise RuntimeError(f"{self.label} scene target incomplete at {width}x{height}x{samples}")
-            self._key = (width, height, requested, bool(motion_blur))
-            self._samples = max(1, samples)
-        finally:
-            gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, renderbuffer)
-            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
-            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
+        self._names["fbo"] = _new_framebuffer(f"{self.label} scene target")
+        self._allocate_attachment("colour", samples, width, height, gl.GL_RGBA8)
+        if motion_blur:
+            self._allocate_attachment("velocity", samples, width, height, gl.GL_RG16F)
+        name = (ctypes.c_uint * 1)()
+        gl.glCreateRenderbuffers(1, name)
+        self._names["depth"] = int(name[0])
+        if not self._names["depth"]:
+            raise RuntimeError(f"{self.label} scene depth allocation failed")
+        gl.glNamedRenderbufferStorageMultisample(self._names["depth"], samples if samples > 1 else 0,
+                                                  gl.GL_DEPTH_COMPONENT24, width, height)
+        gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_COLOR_ATTACHMENT0, self._names["colour"], 0)
+        if motion_blur:
+            gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_COLOR_ATTACHMENT1, self._names["velocity"], 0)
+            gl.glNamedFramebufferDrawBuffers(self._names["fbo"], 2,
+                                              [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
+        gl.glNamedFramebufferRenderbuffer(self._names["fbo"], gl.GL_DEPTH_ATTACHMENT,
+                                           gl.GL_RENDERBUFFER, self._names["depth"])
+        if (gl.glCheckNamedFramebufferStatus(self._names["fbo"], gl.GL_FRAMEBUFFER)
+                != gl.GL_FRAMEBUFFER_COMPLETE):
+            raise RuntimeError(f"{self.label} scene target incomplete at {width}x{height}x{samples}")
+        self._key = (width, height, requested, bool(motion_blur))
+        self._samples = max(1, samples)
 
     def release(self) -> None:
         errors: list[str] = []

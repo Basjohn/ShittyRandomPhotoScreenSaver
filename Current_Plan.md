@@ -66,15 +66,15 @@ checks pass. `pytz` remains because Windows Qt/stdlib facilities failed the exis
   frozen binary/install deltas. The old MC image payload was 222 files / 21,924,720 bytes; new packaging removes that
   loose directory. Actual new frozen sizes remain unmeasured. Themes, presets and replaceable sounds remain loose.
 
-## 4. Modern OpenGL 4.6 scene3d expansion | active
+## 4. Modern OpenGL 4.6 scene3d expansion | paused at S13 checkpoint
 
 Detailed decomposition and acceptance bars live in `Docs/Future_Work/3D_Scene_Foundation.md`. Every facility is lazy:
 when no active transition/Visualizer asks for it, it owns no buffers, targets, compute dispatches, history, workers,
 forced frames or cadence.
 
-- [ ] **Direct State Access + immutable storage + multi-bind.** Remove unnecessary bind/query ceremony from new shared
-  resources and migrate existing scene3d owners where identity tests prove no look change. This is especially valuable
-  in Python because every avoidable GL call has submission/GIL cost.
+Operator-requested pause after S13. Resource contracts live in `Docs/Reference/Scene3D_Resources.md`; resume with
+S14 below. No S14 implementation has started.
+
 - [ ] **Persistent mapped ring buffers + fences.** Add a bounded shared stream allocator for genuinely changing small
   frame data; never map/unmap or allocate per frame. Use it only where measurement beats the current orphan/subdata
   path.

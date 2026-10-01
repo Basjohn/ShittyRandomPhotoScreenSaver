@@ -15,9 +15,9 @@ full-screen pass in total; no allocation per frame.
 """
 from __future__ import annotations
 
-from OpenGL import GL as gl
+import ctypes
 
-from rendering.quick import gl_query
+from OpenGL import GL as gl
 
 from .passes import blend_scope
 
@@ -130,27 +130,27 @@ class BloomChain:
         return False
 
     def _allocate(self, width: int, height: int) -> None:
-        previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
-        try:
-            for _level in range(BLOOM_LEVELS):
-                width, height = max(1, width // 2), max(1, height // 2)
-                texture = int(gl.glGenTextures(1))
-                self._levels.append((texture, 0, width, height))
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-                for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_LINEAR)
-                for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, wrap, gl.GL_CLAMP_TO_EDGE)
-                gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA16F, width, height, 0, gl.GL_RGBA, gl.GL_HALF_FLOAT, None)
-                fbo = int(gl.glGenFramebuffers(1))
-                self._levels[-1] = (texture, fbo, width, height)
-                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
-                if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                    raise RuntimeError(f"{self.label} bloom level incomplete at {width}x{height}")
-        finally:
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, previous)
+        for _level in range(BLOOM_LEVELS):
+            width, height = max(1, width // 2), max(1, height // 2)
+            texture_name, framebuffer_name = (ctypes.c_uint * 1)(), (ctypes.c_uint * 1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, texture_name)
+            texture = int(texture_name[0])
+            if not texture:
+                raise RuntimeError(f"{self.label} bloom texture allocation failed")
+            self._levels.append((texture, 0, width, height))
+            for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                gl.glTextureParameteri(texture, parameter, gl.GL_LINEAR)
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
+            gl.glTextureStorage2D(texture, 1, gl.GL_RGBA16F, width, height)
+            gl.glCreateFramebuffers(1, framebuffer_name)
+            fbo = int(framebuffer_name[0])
+            if not fbo:
+                raise RuntimeError(f"{self.label} bloom framebuffer allocation failed")
+            self._levels[-1] = (texture, fbo, width, height)
+            gl.glNamedFramebufferTexture(fbo, gl.GL_COLOR_ATTACHMENT0, texture, 0)
+            if gl.glCheckNamedFramebufferStatus(fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+                raise RuntimeError(f"{self.label} bloom level incomplete at {width}x{height}")
 
     def release(self) -> None:
         errors: list[str] = []

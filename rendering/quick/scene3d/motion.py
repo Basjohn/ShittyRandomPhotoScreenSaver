@@ -21,9 +21,9 @@ dropped with it; no allocation per frame.
 """
 from __future__ import annotations
 
-from OpenGL import GL as gl
+import ctypes
 
-from rendering.quick import gl_query
+from OpenGL import GL as gl
 
 from .post import FULLSCREEN_VERTEX_SOURCE
 
@@ -145,16 +145,6 @@ def motion_blur_tile(height: int) -> int:
     return max(8, round(int(height) / 40))
 
 
-def _texture(width: int, height: int, internal: int, data_type: int) -> int:
-    texture = int(gl.glGenTextures(1))
-    gl.glActiveTexture(gl.GL_TEXTURE0)
-    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-    for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_NEAREST)
-    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, internal, width, height, 0, gl.GL_RGBA, data_type, None)
-    return texture
-
-
 class MotionBlur:
     def __init__(self, label: str) -> None:
         self.label = label
@@ -239,25 +229,36 @@ class MotionBlur:
         self._key = allocation
         return False
 
+    def _allocate_texture(self, width: int, height: int, internal: int) -> int:
+        """Register a pass texture before its named immutable allocation can fail."""
+        texture_name = (ctypes.c_uint * 1)()
+        gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, texture_name)
+        texture = int(texture_name[0])
+        if not texture:
+            raise RuntimeError(f"{self.label} motion blur texture allocation failed")
+        self._passes.append((texture, 0, width, height))
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTextureParameteri(texture, parameter, gl.GL_NEAREST)
+        gl.glTextureStorage2D(texture, 1, internal, width, height)
+        return texture
+
     def _allocate(self, width: int, height: int) -> None:
-        previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
         tile = motion_blur_tile(height)
         tile_w, tile_h = -(-width // tile), -(-height // tile)
-        try:
-            for w, h, internal, data_type in ((tile_w, height, gl.GL_RG16F, gl.GL_HALF_FLOAT),
-                                              (tile_w, tile_h, gl.GL_RG16F, gl.GL_HALF_FLOAT),
-                                              (tile_w, tile_h, gl.GL_RG16F, gl.GL_HALF_FLOAT),
-                                              (width, height, gl.GL_RGBA8, gl.GL_UNSIGNED_BYTE)):
-                texture = _texture(w, h, internal, data_type)
-                self._passes.append((texture, 0, w, h))
-                fbo = int(gl.glGenFramebuffers(1))
-                self._passes[-1] = (texture, fbo, w, h)
-                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
-                if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                    raise RuntimeError(f"{self.label} motion blur pass incomplete at {w}x{h}")
-        finally:
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, previous)
+        for w, h, internal in ((tile_w, height, gl.GL_RG16F),
+                               (tile_w, tile_h, gl.GL_RG16F),
+                               (tile_w, tile_h, gl.GL_RG16F),
+                               (width, height, gl.GL_RGBA8)):
+            texture = self._allocate_texture(w, h, internal)
+            framebuffer_name = (ctypes.c_uint * 1)()
+            gl.glCreateFramebuffers(1, framebuffer_name)
+            fbo = int(framebuffer_name[0])
+            if not fbo:
+                raise RuntimeError(f"{self.label} motion blur framebuffer allocation failed")
+            self._passes[-1] = (texture, fbo, w, h)
+            gl.glNamedFramebufferTexture(fbo, gl.GL_COLOR_ATTACHMENT0, texture, 0)
+            if gl.glCheckNamedFramebufferStatus(fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+                raise RuntimeError(f"{self.label} motion blur pass incomplete at {w}x{h}")
 
     def release(self) -> None:
         errors: list[str] = []
