@@ -8,7 +8,6 @@ Cross-links:
 
 - live sequence/checklists: `Current_Plan.md`
 - global safety priority: `Docs/Guardrails.md`
-- runtime-efficiency rules: `Docs/Guardrails/Runtime_Efficiency.md`
 - Visualizer presentation/reactivity: `Docs/Guardrails/Visualizer_Presentation.md`
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - R-69 failed viewport-compression lesson: `Docs/Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md`
@@ -101,6 +100,24 @@ Track across settings/CUSTOM/runtime recreation and long soak:
 - [ ] attribute CPU work to GUI, Python/GIL, logical runtime, provider, Quick render thread or OS presentation before changing architecture;
 - [ ] attribute GPU cost to actual active presentation/effects rather than blaming the currently visible Visualizer by association;
 - [ ] lower stable CPU/GPU only when the same visible output and reaction/freshness contract is preserved.
+
+### P5 — zero-work, isolation and ownership hygiene
+
+The no-op path must be genuinely quiet. Short-circuit identical state before stable cache rebuild, provider refresh,
+Settings write, geometry replay, fade restart, worker submission, signal fan-out, Quick property churn or GPU resource
+regeneration. Attribute work to its real domain (GUI thread, Quick render thread, Python/GIL, logical runtime, provider,
+or OS presentation) before changing architecture.
+
+The speculative image process remains an approved isolation boundary, not a second presentation owner: foreground image
+work cannot queue behind it; parent-owned generation/byte/backlog bounds admit at most one speculative request at a time;
+late generations are tombstoned; failure skips speculative warm-up rather than falling back into the main-process compute
+pool; and `ProcessSupervisor` remains the single response-queue reader while routing heartbeats, correlations and stale
+completions. Worker retirement cancels callbacks and releases transport/cache candidates without touching Qt/Quick/GPU
+state.
+
+Startup/recreation may prepare deterministic current-generation work while hidden, but reveal is readiness-owned rather
+than fixed-sleep-owned. Native code is admitted only for a measured local bottleneck and remains subordinate to the one
+Quick-window-per-display topology.
 
 ## 4. 2026-09-01 reference envelopes — evidence, not hard SLAs
 

@@ -1,6 +1,7 @@
-"""Registered always-needed Qt resource bundle; onboarding previews stay lazy."""
+"""Registered ordinary Qt resource pack; Guided Setup previews stay lazy."""
 
-# Import generated RCC module to ensure resources are registered.
-from . import assets_rc  # noqa: F401
+from .registration import ensure_core_resources
+
+ensure_core_resources()
 
 __all__: list[str] = []

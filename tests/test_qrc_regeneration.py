@@ -22,7 +22,7 @@ def _qrc_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         "assets/mark.svg</file></qresource></RCC>",
         encoding="utf-8",
     )
-    output = tmp_path / "assets_rc.py"
+    output = tmp_path / "assets.rcc"
     return qrc, output, assets / "mark.svg"
 
 
@@ -62,7 +62,7 @@ def test_regeneration_uses_only_selected_python_and_publishes_atomically(tmp_pat
                 "",
             )
         temporary = Path(command[-1])
-        temporary.write_text("new generated module", encoding="utf-8")
+        temporary.write_bytes(b"new-binary-resource-pack")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     status = regen_qrc.ensure_qrc_current(
@@ -73,13 +73,15 @@ def test_regeneration_uses_only_selected_python_and_publishes_atomically(tmp_pat
     )
 
     assert status.current is True
-    assert output.read_text(encoding="utf-8").endswith("new generated module")
+    assert output.read_bytes() == b"new-binary-resource-pack"
+    assert output.with_name(output.name + ".provenance.json").is_file()
     assert len(calls) == 2
     command, kwargs = calls[1]
-    assert command[:4] == [str(rcc), "-g", "python", str(qrc)]
+    assert command[:3] == [str(rcc), "-binary", str(qrc)]
     assert kwargs["capture_output"] is True
     assert kwargs["text"] is True
     assert not list(tmp_path.glob(".*.qrc.tmp"))
+    assert not list(tmp_path.glob(".*.provenance.json.*.tmp"))
 
     unchanged = regen_qrc.ensure_qrc_current(
         python_executable=python,
@@ -91,11 +93,11 @@ def test_regeneration_uses_only_selected_python_and_publishes_atomically(tmp_pat
     assert len(calls) == 3
 
 
-def test_failed_regeneration_keeps_prior_generated_module(tmp_path: Path) -> None:
+def test_failed_regeneration_keeps_prior_binary_pack(tmp_path: Path) -> None:
     qrc, output, source = _qrc_fixture(tmp_path)
     rcc = tmp_path / "rcc.exe"
     rcc.write_bytes(b"fixture")
-    output.write_text("known good", encoding="utf-8")
+    output.write_bytes(b"known-good-pack")
     os.utime(output, ns=(source.stat().st_atime_ns, source.stat().st_mtime_ns - 1))
 
     with pytest.raises(regen_qrc.QrcRegenerationError, match="exit 9"):
@@ -115,14 +117,14 @@ def test_failed_regeneration_keeps_prior_generated_module(tmp_path: Path) -> Non
                 "bad manifest",
             ),
         )
-    assert output.read_text(encoding="utf-8") == "known good"
+    assert output.read_bytes() == b"known-good-pack"
 
 
-def test_two_target_compile_failure_preserves_every_prior_generated_module(tmp_path: Path) -> None:
+def test_two_target_compile_failure_preserves_every_prior_binary_pack(tmp_path: Path) -> None:
     first_qrc, first_output, _first_source = _qrc_fixture(tmp_path / "first")
     second_qrc, second_output, _second_source = _qrc_fixture(tmp_path / "second")
-    first_output.write_text("first known good", encoding="utf-8")
-    second_output.write_text("second known good", encoding="utf-8")
+    first_output.write_bytes(b"first-known-good")
+    second_output.write_bytes(b"second-known-good")
     rcc = tmp_path / "rcc.exe"
     rcc.write_bytes(b"fixture")
 
@@ -135,9 +137,9 @@ def test_two_target_compile_failure_preserves_every_prior_generated_module(tmp_p
                 f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
                 "",
             )
-        if Path(command[3]) == second_qrc:
+        if Path(command[2]) == second_qrc:
             return subprocess.CompletedProcess(command, 9, "", "second failed")
-        Path(command[-1]).write_text("first replacement", encoding="utf-8")
+        Path(command[-1]).write_bytes(b"first-replacement")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     with pytest.raises(regen_qrc.QrcRegenerationError, match="exit 9"):
@@ -149,13 +151,13 @@ def test_two_target_compile_failure_preserves_every_prior_generated_module(tmp_p
             ),
             run=fail_second_target,
         )
-    assert first_output.read_text(encoding="utf-8") == "first known good"
-    assert second_output.read_text(encoding="utf-8") == "second known good"
+    assert first_output.read_bytes() == b"first-known-good"
+    assert second_output.read_bytes() == b"second-known-good"
 
 
 def test_input_change_during_generation_prevents_any_publish(tmp_path: Path) -> None:
     qrc, output, source = _qrc_fixture(tmp_path)
-    output.write_text("known good", encoding="utf-8")
+    output.write_bytes(b"known-good-pack")
     rcc = tmp_path / "rcc.exe"
     rcc.write_bytes(b"fixture")
 
@@ -168,7 +170,7 @@ def test_input_change_during_generation_prevents_any_publish(tmp_path: Path) -> 
                 f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
                 "",
             )
-        Path(command[-1]).write_text("replacement", encoding="utf-8")
+        Path(command[-1]).write_bytes(b"replacement")
         source.write_text("<svg changed='true'/>", encoding="utf-8")
         return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -179,11 +181,15 @@ def test_input_change_during_generation_prevents_any_publish(tmp_path: Path) -> 
             output_path=output,
             run=mutate_input_after_compile,
         )
-    assert output.read_text(encoding="utf-8") == "known good"
+    assert output.read_bytes() == b"known-good-pack"
 
 
 def test_selected_pyside_rcc_compiles_a_tiny_fixture(tmp_path: Path) -> None:
     """The real 6.11 sidecar works without invoking a build script or GUI."""
+    import importlib.util
+
+    if importlib.util.find_spec("PySide6") is None:
+        pytest.skip("PySide6 is not installed in this test environment")
     qrc, output, source = _qrc_fixture(tmp_path)
     status = regen_qrc.ensure_qrc_current(
         python_executable=Path(sys.executable),
@@ -192,7 +198,8 @@ def test_selected_pyside_rcc_compiles_a_tiny_fixture(tmp_path: Path) -> None:
     )
 
     assert status.current is True
-    assert "SRPSS-QRC-PROVENANCE" in output.read_text(encoding="utf-8")
+    assert output.stat().st_size > 0
+    assert output.with_name(output.name + ".provenance.json").is_file()
     generated_mtime = output.stat().st_mtime_ns
     os.utime(source, ns=(generated_mtime + 1, generated_mtime + 1))
     assert regen_qrc.ensure_qrc_current(
@@ -208,7 +215,7 @@ def test_selected_pyside_rcc_compiles_a_tiny_fixture(tmp_path: Path) -> None:
     source.write_bytes(b"<svg/>")
     os.utime(source, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
     with output.open("ab") as stream:
-        stream.write(b"# modified generated body\n")
+        stream.write(b"modified-pack")
     assert not regen_qrc.qrc_status(qrc, output, toolchain_identity=toolchain.identity).current
 
 
@@ -264,7 +271,7 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
         or (
             regen_qrc.QrcStatus(
                 True,
-                "QRC generated module is current",
+                "QRC binary resource pack is current",
                 (Path("assets.qrc"), Path("asset.svg")),
             ),
         ),

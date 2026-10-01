@@ -12,7 +12,6 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained how-to/change procedures |
 | `Docs/Reference/` | current lookup/reference/harness material |
-| `Docs/Future_Work/` | focused decompositions for promoted work only, created when needed; completed product contracts belong in `Docs/Reference/` or `Spec.md` |
 | `Docs/Historical_Bugs/` | permanent regression, root-cause and failed-method evidence |
 | `Docs/TestSuite.md` | live test inventory/status authority |
 | `Docs/Architecture/Persisted_Input_Compatibility.md` | persisted-input compatibility-bridge guard (user-data protection, horizon-gated — not a backlog) |
@@ -31,7 +30,7 @@ Do **not** create or route new live authority through parallel `Fossils`, `audit
 3. delete the superseded plan/report from the live documentation tree;
 4. rely on source control for the full chronological body.
 
-A closed implementation decomposition must not remain under `Docs/Future_Work/` merely because moving/deleting it is inconvenient. `Future_Work` means future work. If a maintained Guide/Reference already contains the durable contract, delete any byte-identical or superseded Future Work copy rather than keeping two authorities.
+A promoted implementation program belongs in `Current_Plan.md`; dormant ideas belong in the single root `Future_Work.md`. Do not keep a second live decomposition merely because it once carried more detail. If a maintained Guide/Reference already contains the durable contract, delete any byte-identical or superseded planning copy rather than keeping two authorities.
 
 ## These are not changelogs
 
@@ -83,7 +82,7 @@ Capability dormancy includes import boundaries. Current docs must not teach comm
 
 ## Source-of-truth sweep boundaries
 
-A documentation/tool-only pass may read production source and existing evidence to verify contracts, but must not silently modify product runtime, settings, tests or frozen historical records. Route unresolved implementation/acceptance gaps to the appropriate active work owner; do not manufacture source truth or convert an unverified source inspection into operator acceptance. A sweep does not grant permission to overwrite a newer local Foundry with an older checkpoint copy. Prefer a narrow manifest ZIP of the changed docs/tools over replaying the entire source tree.
+A documentation/tool-only pass may read production source and existing evidence to verify contracts, but must not silently modify product runtime, settings, tests or frozen historical records. Route unresolved implementation/acceptance gaps to the appropriate active work owner; do not manufacture source truth or convert an unverified source inspection into operator acceptance. The supplied/latest GODZIP is the working-tree authority for handoff work. Significant slices ship as **full superseding GODZIPs** carrying the complete current replacement set; do not reconstruct the tree from GitHub and do not substitute a narrow patch/diff/manifest-only handoff.
 
 ## Closure check
 

@@ -9,6 +9,7 @@ import gc
 import importlib.util
 from pathlib import Path
 import sys
+import time
 import types
 
 
@@ -49,6 +50,45 @@ def test_runtime_gc_policy_restores_interpreter_thresholds_and_callback():
         policy.stop()
     assert tuple(gc.get_threshold()) == original
     assert policy._gc_callback not in gc.callbacks
+
+
+def test_gc_callback_is_lock_free_and_never_logs(monkeypatch):
+    import core.performance.gc_policy as gc_policy
+
+    policy = gc_policy.RuntimeGCPolicy()
+    logged: list[str] = []
+
+    class ForbiddenLock:
+        def __enter__(self):
+            raise AssertionError("gc callback must never acquire RuntimeGCPolicy._lock")
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            pass
+
+    monkeypatch.setattr(policy, "_lock", ForbiddenLock())
+    monkeypatch.setattr(
+        gc_policy.logger,
+        "warning",
+        lambda *args, **kwargs: logged.append("warning"),
+    )
+    monkeypatch.setattr(
+        gc_policy.logger,
+        "debug",
+        lambda *args, **kwargs: logged.append("debug"),
+    )
+
+    policy._starts_ns[2] = time.perf_counter_ns() - 20_000_000
+    policy._gc_callback(
+        "stop",
+        {"generation": 2, "collected": 7, "uncollectable": 1},
+    )
+
+    assert logged == []
+    assert policy._collections[2] == 1
+    assert policy._collected[2] == 7
+    assert policy._uncollectable[2] == 1
+    assert policy._slow_collections[2] == 1
+    assert policy._duration_max_ms[2] >= policy._WARN_MS
 
 
 def test_runtime_gc_policy_freezes_stable_generation_once_and_unfreezes_on_stop():

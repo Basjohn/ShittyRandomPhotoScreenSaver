@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QFile, QIODevice
 
-# This registers only the ordinary Settings/runtime resource family. Guided
-# Setup previews remain outside this import boundary until they are requested.
-from . import assets_rc  # noqa: F401
+from .registration import ensure_core_resources
+
+# Package import registers the ordinary pack, but keep direct/module-reload use
+# deterministic too. Guided Setup remains outside this boundary.
+ensure_core_resources()
 
 
 _PREFIX = ":/srpss/"

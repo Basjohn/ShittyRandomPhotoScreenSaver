@@ -1,215 +1,142 @@
 # SRPSS | Current Plan
 
-Active development work only. Implemented features keep their open physical acceptance in their own reference
-(`Docs/Reference/Guided_Setup.md`, `Docs/Reference/Feeds.md`, `Docs/Reference/Transitions.md`); closed plans and
-audits are historicalised. Work this file **top to bottom** unless the operator explicitly redirects it. Commit and
-push coherent slices; preserve accepted visual/temporal contracts unless a slice explicitly authorises a look change.
+This file is the **live execution checklist**. The current program is the modern OpenGL 4.6 / shared Scene3D expansion.
+Work it top to bottom unless the operator redirects a slice. Closed build-debloat, installer, QRC and timezone work
+belongs in durable contracts/reference docs, not in this checklist. Reopen package trimming only for a measured
+regression or a newly supplied footprint that exposes a concrete safe target.
 
-## 0. GODZIP Foundry handoff tooling | Windows acceptance only
+This file is the **sole live 3D execution decomposition**. Landed substrate contracts live in
+`Docs/Reference/Scene3D_Resources.md`, `Docs/Reference/Transitions.md`, `Docs/Reference/Visualizer_Reference.md` and
+`Docs/Reference/Sphere_Visualizer.md`. Do not create a second parallel 3D plan while this program is active.
 
-The Foundry owns non-mutating LOCAL-vs-HEAD and GODZIP-vs-LOCAL diff flows in both GUI and headless CLI form. The
-durable command contract is in `Docs/Contracts.md`; completed implementation detail stays in source control.
+## 0. Accepted baseline | do not reopen as work
 
-- [ ] Installed Windows acceptance only: open DIFF, run LOCAL vs GIT HEAD on a deliberately dirty repo, then compare
-  the result to `python tools/godzip_foundry.py --diff-local`. The core unit bars already cover HEAD-to-disk semantics.
+- [x] **S1-S13 scene3d substrate accepted.** Strict OpenGL 4.6 Core / GLSL 460, shared context-local resource ownership,
+  DSA/immutable storage where useful, camera/projection helpers, bounded targets, bloom/motion-blur/trails/photo
+  reflection, next-transition warm-up, state fences and retirement are the starting point. Fix defects at their owner;
+  do not recreate S1-S13 as a historical checklist.
+- [x] **Packaging sanity restored.** WebEngine/world-timezone/generated-Python-QRC bloat is no longer an active project;
+  binary RCC, clean installer replacement, QTimeZone authority and the current Qt/QML denylist are baseline contracts.
+  The modern-GL roadmap is protected from future package pruning: no GL/ARB/KHR capability is removed merely because
+  its first planned 3D consumer has not landed yet.
+- [x] **Rendering ownership remains singular.** Qt Quick owns presentation/scheduling; no QWidget/QPixmap runtime
+  fallback, no mixed presentation authority, no `frameSwapped -> requestUpdate()` loop, no render-rate simulation clock.
 
-## 1. P0 | Awaiting ordinary-use observation, non-blocking
+## 1. S14 | persistent mapped stream + SSBO foundation | **NEXT**
 
-Worker batches, exact FILL canvas coverage and the owned native RGBA copy are transport/lifetime validated, including
-the source that triggered the reported manifest rejection. The latest supplied
-two-display logs are the accepted input; no fixed transition count or 30-transition trace is required.
-Durable ownership is in `Docs/Contracts.md`; probes are routed from `Docs/Reference/Harness_Index.md`.
+- [ ] Add one bounded context-local persistent mapped ring for genuinely changing small frame payloads. Prefer coherent
+  mapping only where measured healthy; otherwise explicit flushes. Fence segment reuse safely with no busy polling,
+  per-frame map/unmap or allocation.
+- [ ] Add schema-owned std430 SSBO helpers for structured instance, event, history, material and compact-work data.
+  Packing/layout tests must compare the Python side with the shader/driver contract where practical.
+- [ ] Migrate only consumers that benefit. Tiny fixed values stay uniforms/UBOs when that is cheaper than forcing them
+  through the new substrate.
+- [ ] Measure before/after CPU submit time, GL-call count and GPU sync tails. A new abstraction does not survive merely
+  because it is modern; it must remove real Python/driver ceremony.
+- [ ] Prove retirement/context-loss: fixed capacities, no overwritten in-flight segment, zero leaked handles and no
+  meaningful dormant cost when no 3D consumer requests the facility.
 
-- [~] Inspect subsequently supplied ordinary-use logs for repeatable post-transition Visualizer handoff overlap.
-  Native copying releases the GIL; a lower copy wall time has not been demonstrated. Continue other work meanwhile.
-- [~] Observe Lanczos/Hamming with sharpening in ordinary use after the processing/lookahead correction. Focused
-  quality, cache, transport and migration bars pass; loaded-desktop transition tails remain an observation, not a gate.
-  Filter ownership and bounded processing measurements live in `Docs/Reference/Image_Quality.md`.
+## 2. S15 | compute, image load/store and atomics
 
-## 2. Build Runner | Awaiting operator build acceptance and package evidence, non-blocking
+- [ ] Add shared compute-program/resource helpers with explicit dispatch dimensions and barrier ownership.
+- [ ] Add image load/store and atomic/atomic-counter support only as concrete consumers require it.
+- [ ] Build deterministic GPU tests/mirrors for first compute jobs. No ordinary CPU readback.
+- [ ] Keep time authority unchanged: transition compute derives from admitted run progress/real authored seconds;
+  Visualizer compute consumes logical revision/time and bounded immutable snapshot/history inputs. Re-rendering one
+  logical revision must not advance state again.
+- [ ] First useful jobs should be concrete: particle evaluation/compaction, bolt/branch tables, volume injection,
+  post kernels, light/cluster lists, active-piece masks or indirect counts.
 
-Emergency Stop, process-tree ownership, Diagnostic SCR, automatic resource regeneration and persistent current-build
-package evidence are implemented. Every runtime build emits a Nuitka XML report plus compact footprint JSON into
-`logs/`; `Spec.md` → Build control and products owns the durable contract.
+## 3. S16 | indirect / multi-draw + GPU compaction
 
-- [~] On the next operator build, exercise Standard/MC/Diagnostic SCR, active-child Emergency Stop, then a clean
-  rerun in the same Foundry session. The agent must not run build scripts. Preserve intentional Jobs=3/4/5.
-- [ ] **Current-build dependency/package trim:** use the new MC Nuitka XML and footprint JSON to identify actual large
-  package/plugin contributors, beginning with any WebEngine/unused Qt payload that is truly present. Do not add
-  exclusions from directory-name suspicion alone; prove the current import/plugin owner or dead payload first, then
-  trim at the canonical worker contract.
+- [ ] Add bounded indirect command buffers and compact active-instance lists only where they replace material Python
+  submit/draw loops.
+- [ ] Preserve stable IDs/seeds through compaction so populations do not shimmer when membership changes.
+- [ ] Keep generated counts GPU-owned in the ordinary path; no CPU count readback loop.
+- [ ] Prove capacity bounds and deterministic population/placement against a reference path before migration.
 
-## 3. Qt 6.11.2 / OpenGL 4.6 | Awaiting physical validation, non-blocking
+## 4. S17 | active-only high-fidelity scene buffers, lighting and materials
 
-The actual `.venv` stack, strict 4.6 Core / GLSL 460 startup floor, diagnostic startup parity, shared shader mirrors,
-native image ownership, queued shutdown and retained clip/state behavior are validated. Focused resource/build/Clock
-checks and pip check pass. OpenGL remains the only backend; swap interval stays zero. The migration sweep leaves
-no source gate before section 4; operator builds remain non-blocking.
+- [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
+  The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
+  or HDR-specific tone-mapping pipeline. A higher-precision internal intermediate is allowed only when a measured effect
+  needs numerical headroom and must still resolve into the ordinary SDR presentation path.
+- [ ] Add a common material/light block: GGX/Cook-Torrance, roughness, metalness/specular, emissive, bounded directional/
+  point/spot lights, BRDF LUT and photo/environment IBL.
+- [ ] Add reusable real-3D shadow facilities with bounded softness/contact treatment. Keep the existing planar shadow
+  wherever it is cheaper and visually correct.
+- [ ] Add active-only GTAO/contact AO where justified by a real consumer.
+- [ ] Add weighted blended OIT/depth-aware soft transparency for smoke/sparks/glass-heavy scenes that would otherwise
+  require CPU sorting.
+- [ ] Add depth/thickness-aware refraction, Fresnel reflection, rough transmission and restrained optional dispersion
+  using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
+- [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-- [~] Preserve gentle start, transition endpoints, Bubble reaction, Visualizer freshness and no black flash during
-  ordinary two-display use. Compare later supplied logs; no dedicated trace count or agent-run build is a gate.
-- [~] **Awaiting corrected-run validation:** the latest supplied logs exposed manufacturer-label drift that missed
-  saved CUSTOM geometry and the Clock face override, plus Blinds' reserved GLSL identifier. Identity replay/merge,
-  Arrange parity, registered shader admission/retirement and warning-free ordinary QML construction pass;
-  all three Blinds directions pass the two-display GL smoke. On the next ordinary run, confirm personally placed
-  CUSTOM boxes and Clock faces survive startup/Settings rerun, Blinds looks correct, and Settings combo interaction
-  produces no QFont warning. Auto-arrange remains disabled in global CUSTOM; this is not an intentional geometry reset.
+## 5. S18 | particles, lightning, smoke/fire and volumetrics
 
-## 3A. Immutable resources | Awaiting installed measurements, non-blocking
+- [ ] **GPU particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced
+  draw, soft sprites/streaks/ribbons, optional simple analytic/SDF collision and OIT. No Python object per particle.
+- [ ] **Lightning/electricity:** stable seeded branching topology per admitted event, travelling intensity/forks,
+  emissive core+bloom, secondary arcs, short afterglow and optional local-light injection. Never rerandomise the entire
+  bolt at render cadence.
+- [ ] **Smoke/fog/fire:** active-only half/quarter-resolution field or procedural volume, bounded advection/vorticity,
+  event injection, depth-aware raymarch, temporal reprojection, absorption/scattering and emissive fire/embers. Quality
+  tiers bound volume resolution/ray steps/light samples; disabled means no allocation or dispatch.
+- [ ] **Energy/field effects:** deterministic shockwaves, force fields, plasma/nebula, reaction-diffusion and heat-haze
+  primitives using compute/image resources rather than parent CPU loops.
+- [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-Immutable imagery uses the canonical QRC namespace, with Guided Setup kept in its own lazy-registration bundle. Build
-Foundry owns toolchain validation, environment preparation, cancellation and content-based regeneration. Generated
-`*_rc.py` files are escaped Python-source representations and therefore may be much larger than the original assets;
-they are not frozen-size evidence. `pytz` remains because the supported named-zone contract still requires it.
+## 6. S19 | Voxel Sphere promotion onto shared Scene3D
 
-- [~] On the next operator build, verify QRC images/fonts/About/Guided Setup in the installed products and use the new
-  footprint/Nuitka reports to record the real frozen/install contribution. The loose runtime `images/` directory is
-  intentionally gone; onboarding QRC is required product content and is **not** a debloat target merely because its
-  generated Python source is large. Themes, presets and replaceable sounds remain loose.
+Sphere promotion is a plumbing migration, **not** a redesign. `Docs/Reference/Sphere_Visualizer.md` is the behavioural
+golden and the Bubble golden remains unrelated and untouchable.
 
-## 4. Modern OpenGL 4.6 scene3d expansion | paused at S13 checkpoint
+- [ ] Capture the promotion golden first: curated presets, hidden technical profile, deterministic FeatureFrame/logical
+  replay, representative renderer captures, extreme CUSTOM geometry and silence/vocal/kick/sustained passages.
+- [ ] Preserve Sphere descriptor, `sphere_*` state, Settings/presets, logical runtime, section drives, cohort/admission,
+  tracer semantics, authored projection and reaction exactly.
+- [ ] Replace only duplicate low-level GPU plumbing with Scene3D equivalents when parity is mathematically/visually
+  proven: lifetime/fences, frame/target, SSBO/instance transport, common material/light/post and shared particle/shadow
+  facilities.
+- [ ] Make Sphere an ordinary shared-foundation 3D Visualizer consumer with the standard capability/tier lifecycle.
+  Non-selected Sphere remains dormant.
+- [ ] Delete superseded Sphere-local low-level infrastructure after parity. Do not keep two implementations “just in
+  case”.
+- [ ] Only after promotion acceptance may Sphere gain explicit new fidelity options such as richer emissive lighting,
+  improved shadows, compute particles or smoke/electric coupling. Output remains SDR-only.
 
-Detailed decomposition and acceptance bars live in `Docs/Future_Work/3D_Scene_Foundation.md`. Every facility is lazy:
-when no active transition/Visualizer asks for it, it owns no buffers, targets, compute dispatches, history, workers,
-forced frames or cadence.
+## 7. S20 | vertical consumers | make the substrate earn its complexity
 
-Operator-requested pause after S13. Resource contracts live in `Docs/Reference/Scene3D_Resources.md`; resume with
-S14 below. No S14 implementation has started.
+Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
-- [ ] **Persistent mapped ring buffers + fences.** Add a bounded shared stream allocator for genuinely changing small
-  frame data; never map/unmap or allocate per frame. Use it only where measurement beats the current orphan/subdata
-  path.
-- [ ] **SSBO foundation.** Structured instance/event/history/material data, generated from one schema where practical;
-  bounded counts and explicit retirement. Prefer SSBOs over texture-table contortions for new structured 3D state.
-- [ ] **Compute + image load/store + atomics.** Shared dispatch helpers, barriers and deterministic test harnesses for
-  GPU procedural preparation, compaction, particles, volume fields and post work. Rendering may never become a second
-  simulation clock: transition compute derives from run time; Visualizer compute consumes logical revision/time and
-  bounded immutable snapshot inputs.
-- [ ] **Indirect/multi-draw path.** GPU-generated instance counts and compacted visible/emissive work may feed indirect
-  draws where it removes Python draw/loop cost. No indirect machinery for effects that are already one cheap draw.
-- [ ] **Diagnostics only:** KHR_debug/debug groups and GPU timer-query helpers under explicit diagnostics. Never add
-  ordinary-runtime readbacks, query polling or logging churn.
-- [ ] **Active-only richer targets:** optional RGBA16F HDR, normal/material/depth attachments, history/velocity and
-  half/quarter-resolution work surfaces. Allocate only when the requesting effect actually enables a feature that uses
-  them; `park()`/mode retirement releases them.
+- [ ] **Page Curl** and **Blinds -> 3D Slats**: adaptive-surface/material/shadow proofs.
+- [ ] **Extruded Spectrum**: first ordinary shared-foundation 3D Visualizer and SSBO-instancing/material-light proof.
+- [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
+- [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
+- [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
+- [ ] **Accordion Fold**, **Relief Rise**, **Cube Turn**.
+- [ ] **Bubble Depth Field** only under Bubble Temporal Fidelity/R-69: depth may not damp, retime or re-author Bubble's
+  accepted amplitude/reaction/ghost/tail cadence.
+- [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
+  voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 5. Shared high-fidelity 3D capabilities | active after the GL substrate
+## 8. Cross-cutting acceptance | applies to every open box above
 
-- [ ] **Lighting/materials:** energy-conserving GGX/Cook-Torrance BRDF, roughness/metalness/specular controls, multiple
-  bounded point/spot/directional lights, emissive contribution, BRDF LUT, photo/environment IBL, optional normal maps,
-  and a common material block. Existing looks remain opt-in/pixel-protected; this does not retroactively relight
-  accepted effects without operator approval.
-- [ ] **Shadows/AO:** reusable depth shadow maps for real 3D scenes, PCF/PCSS-style softening where justified, contact
-  shadows and optional screen-space/GTAO-style ambient occlusion. Keep the existing cheap planar shadow for effects
-  where it is the better tool.
-- [ ] **Glass/refraction:** depth/thickness-aware screen-space refraction, Fresnel reflection, rough transmission and
-  optional restrained dispersion. Never sample or mutate the lent PR-04 presentation texture illegally; use owned
-  scene/environment copies where required.
-- [ ] **Transparent composition:** depth-aware soft particles plus weighted blended order-independent transparency for
-  smoke/sparks/glass-heavy scenes where sorting would otherwise become CPU work.
-- [ ] **Adaptive surfaces:** shared tessellation/displacement hooks or compute-generated surface data for Page Curl,
-  Relief Rise, terrain, ribbons and deformable bodies when they beat a fixed dense grid. Geometry shaders are not a
-  preferred general path; use them only with measured justification.
-- [ ] **Post stack:** HDR tone mapping, bloom improvements, depth of field, heat haze/distortion, chromatic treatment,
-  temporal accumulation/reprojection and compute filters only where the visual feature needs them. Existing exact
-  transition endpoints and still-scene identity remain binding.
+- [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
+  frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.
+- [ ] **Performance:** count Python GL calls and measure CPU submit/GPU cost for every new pass. Render-thread Python GL
+  calls hold the GIL; visual fidelity is not permission to regress Visualizer freshness.
+- [ ] **Time:** no second simulation clock. Real seconds for real-time transition rates; Visualizers use logical time.
+- [ ] **State:** every touched inherited GL state remains fence-restored even when DSA removes bind/query ceremony.
+- [ ] **Memory:** new attachments/volumes are per-active-consumer, tier-bounded and measured on both displays.
+- [ ] **Endpoints:** transition additions remain exact at 0/1 and near-endpoints; R-63 black/uncovered-edge guarantees
+  remain binding.
+- [ ] **Settings:** canonical defaults/descriptor resolution happen before admission; renderers never read Settings.
+- [ ] **Physical acceptance:** High/Balanced/Performance on both displays with active Visualizers, first-use/warm cost,
+  parked memory and representative real photos/music. Sphere gets a dedicated before/after golden before new look work.
 
-## 6. Voxel Sphere promotion onto the shared 3D substrate | active
+## Handoff rules
 
-This is a **yes** to eliminating competing low-level 3D architectures, not permission to redesign Sphere.
-`Docs/Reference/Sphere_Visualizer.md` remains its behavioural golden.
-
-- [ ] Capture the existing Sphere promotion golden first: curated presets, hidden technical profile, deterministic
-  FeatureFrame/logical outputs, representative renderer captures, extreme CUSTOM aspect/scale, silence/vocal/kick/
-  sustained passages and accepted particle/tracer behaviour.
-- [ ] Keep Sphere's `sphere_*` state, Settings, presets, logical runtime, cohort/admission rules, tracer semantics,
-  section drives and authored material choices private. **Do not turn Sphere into a generic base class.**
-- [ ] Move only generic GPU plumbing onto `rendering/quick/scene3d/`: resource allocation/retirement, frame/target,
-  camera/projection helpers where mathematically identical, SSBO/instance transport, common material/light blocks,
-  post stack, shared particle/shadow facilities where they can reproduce the golden exactly.
-- [ ] Make Sphere participate in the ordinary Visualizer 3D capability/tier lifecycle rather than maintaining a second
-  bespoke resource architecture. Dormant/non-selected Sphere still costs nothing meaningful.
-- [ ] After parity is proven, delete superseded Sphere-local low-level resource/fence/utility code. Do not retain two
-  implementations "just in case".
-- [ ] Only after parity may Sphere opt into new high-fidelity features (HDR emissive light, real light interaction,
-  improved shadowing, compute particles, smoke/electric interactions) as explicit settings/preset changes.
-
-## 7. Lightning, particles, smoke and other high-fidelity effect work | active
-
-Build vertical consumers and let them prove which shared primitives deserve permanence. Every item must have an Off/
-quality tier or be confined to a mode/effect that is itself dormant when not selected.
-
-- [ ] **GPU particle system:** SSBO particle pool with deterministic seeded spawn, compute evaluation/compaction,
-  indirect instanced draw, depth-aware soft sprites, streak/ribbon variants, bounded collision against simple analytic
-  planes/spheres/SDFs, and optional OIT. Transition particles derive from run progress; Visualizer particles step only
-  from logical revisions or are analytically reconstructed from bounded event history.
-- [ ] **Lightning/electricity:** seeded branching bolts with stable topology during an admitted event, animated travel/
-  fork intensity, emissive hot core + bloom, secondary arcs between pieces/voxels, short-lived afterglow and optional
-  light injection into nearby geometry/smoke. No CPU object per branch and no random re-topology every render frame.
-- [ ] **Smoke/fog/fire:** active-only half/quarter-resolution density/temperature field or procedural volume, curl-noise
-  advection/vorticity where worthwhile, compute injection from authored events, depth-aware raymarch, temporal
-  reprojection with bounded history, scene-light absorption/scattering and emissive fire/embers. Quality tiers bound
-  volume resolution and ray steps; disabled means no volume allocation/dispatch.
-- [ ] **Volumetric/energy fields:** shockwaves, force fields, heat haze, nebula/plasma and reaction-diffusion style
-  surfaces driven from deterministic event/history inputs; use image load/store/compute rather than parent CPU loops.
-- [ ] **High-fidelity debris/destruction:** GPU compaction for active pieces, per-piece material variation, sparks/dust,
-  contact light/shadow interaction and smoke coupling without increasing dormant cost.
-- [ ] **Screen-space depth effects:** selective SSR/contact reflections, refraction and depth fog only for scenes that
-  produce the needed depth/normal attachments; never turn them into a full-time compositor tax.
-
-### First vertical consumers after the substrate
-
-- [ ] **Page Curl** and **Blinds → 3D Slats** to exercise adaptive surfaces/material/shadow paths.
-- [ ] **Extruded Spectrum** as the first ordinary shared-foundation 3D Visualizer and SSBO-instancing proof.
-- [ ] **Shockwave Grid** to exercise grid displacement + bounded event SSBOs + emissive/bloom.
-- [ ] **Reactive Particle Field** as the particle/compute/OIT proof.
-- [ ] **Spectrum Terrain / Skyline / Tunnel**, **Waveform Ribbon**, **Deformable Blob Sphere**, **Accordion Fold**,
-  **Relief Rise**, **Cube Turn**, then **Bubble Depth Field** subject to Bubble's golden temporal/amplitude contract.
-- [ ] Add deliberately spectacular combinations only after primitive costs are measured: electrical storm over a
-  spectrum terrain, smoke-lit voxel fracture, ember/dust destruction, refractive glass with lightning illumination,
-  volumetric shockwaves and photo-colour environment response.
-
-## 8. Memory, handles and existing non-3D open items
-
-- [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules).
-  After P0 proves the new worker derivative path, create a lean worker entry if Nuitka multiprocessing proves it can
-  save the measured ~100 MB resident without duplicating worker ownership.
-- [ ] **`--usage` sampler diagnostics cost.** Re-evaluate on PySide 6.11.2/current tree; if collection still contaminates
-  frame evidence, keep it excluded from acceptance or move remaining Python work out of the GIL-held interval.
-- [ ] **Gmail refresh handle slope.** Classify with `--handle-attribution`, then fix at the owning resource.
-- [ ] **Widgets-tab stale position estimates.** Move warnings to measured family-QML preferred sizes only if doing so is
-  lazy on the Widgets tab; otherwise retire the QWidget-era formulas.
-- [ ] **Overfull authored display planner.** Reduce/memoize `_free_edge_candidates` while preserving placements.
-- [ ] **Weather child-edit loading height.** Preserve ready/content sizing for child-only edits or reserve the ready
-  height; validate on a never-cached/offline Weather card.
-
-## Known failing tests and anomalies
-
-- [ ] **Surface-preference authority (pre-existing).** `rendering/gl_format.py` still reads legacy QSettings when
-  bootstrap has no SettingsManager and carries a local coercion fallback. Resolve pre-application preferences through
-  the canonical JSON settings authority, then retire this alternate read path while preserving depth/stencil and pacing.
-- [ ] **Flicker diagnostic controls (pre-existing).** Migrate its environment-variable controls to explicit CLI options
-  and remove the synthetic stylesheet fallback so diagnostic failures stay visible. Its production startup variant
-  now delegates graphics selection to the canonical bootstrap.
-- [ ] **Pre-existing Qt test suppression:** `tests/conftest.py` broadly filters slot-miss AttributeErrors. Reproduce
-  cross-generation background/Visualizer `sceneGraphInvalidated` retirement in a bounded unfiltered test, then
-  narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.
-- [ ] **Global Python cleanup:** Normal-mode `C:\Python311\python.exe` must match the exact current Qt/PySide/shiboken
-  pins in `requirements.txt` before a Normal build is trusted. Remove only stale rollback metadata directories after the
-  interpreter itself is verified, then run `pip check`; keep the unrelated existing opencv/numpy conflict visible rather
-  than hiding it. This maintenance is non-blocking because the project `.venv` is the verified build environment.
-- [ ] **Existing local timezone heuristic:** `widgets/timezone_utils.get_local_timezone()` selects the first named
-  zone sharing an offset and uses `time.daylight` rather than the current DST state. Audit its callers and preserve
-  local-zone identity before changing it. The asset cleanup retains the existing pytz authority and behavior.
-
-- [ ] **Spectrum extreme-viewport smoothness (pre-existing).** A physical run showed reduced Spectrum
-  smoothness at extreme viewport shapes. Keep separate from the modern-GL migration unless a new shared 3D consumer
-  provides direct evidence relevant to it.
-
-## Handoff and regression rules
-
-When accepted behaviour changes, select only the relevant targeted tests and physical observations; do not re-accept
-unrelated OSD/Media/widget systems. Significant slices get full superseding GODZIPs. No environment-variable feature
-gates: use existing Settings/descriptor authority or explicit CLI diagnostics. No new scheduler/poller/timer merely to
-feed rendering. Qt Quick remains presentation/scheduling authority; latest-wins/coalesced admission and per-display
-transition gating remain binding.
+Significant slices get full superseding GODZIPs. The supplied/latest GODZIP is the working tree authority for handoff
+work; do not reconstruct the tree from GitHub. No environment-variable feature gates. No speculative generic engine
+layer without a vertical consumer. Rejected experiments are removed rather than kept as fallback architecture.

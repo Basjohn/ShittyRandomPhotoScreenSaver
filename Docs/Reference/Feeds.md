@@ -14,6 +14,20 @@ FEEDS is one bounded widget family of ten cards (`core.feeds.config.FEED_WIDGET_
 
 `widgets/feed_runtime.py` owns generation-scoped scheduling/source leases. `rendering/quick/widgets/feeds.py` owns retained presentation projection/action admission; `FeedPresentation.qml` is presentation only. Its `ShadowedText` instances use the component's supported `wrap` boolean instead of the native `Text.wrapMode` property; a native `QQmlComponent` compile gate is mandatory for any QML property changes because an invalid custom property can prevent the *entire screensaver engine* from initializing. The package root intentionally has no eager parser/network imports. Importing Feed configuration/source in a clean interpreter does not import `requests` or `feedparser`. Cache-only `FeedSource` admission also keeps parser and HTTP transport construction lazy, so a fresh last-good snapshot can paint without creating a network session.
 
+## Article-change presentation
+
+After the first admitted paint, a changed article row set is **staged rather than reset immediately**. The retained
+model emits one `contentTransitionRequested` event; `FeedPresentation.qml` drives a single body-level
+`SequentialAnimation`, fades the article surface to zero, calls `commitPendingContent()` exactly at the midpoint, then
+fades the new rows back in. This applies identically to CUSTOM/NEWS and List/Grid. The card shell/header/footer and the
+shared whole-widget `fadeOpacity` lifecycle gate are not repurposed for refresh polish.
+
+The fade is intentionally sparse and presentation-owned: no `Timer`, polling loop, worker/thread, per-frame Python
+publication or per-delegate animation is added. A newer accepted result simply replaces the pending retained row set;
+restarting the short QML animation remains latest-wins. Geometry-only resize/reflow still performs no source work or
+row publication. Artwork hydration that changes the retained row presentation follows the same article-surface fade,
+so Grid never snaps between image/text layouts.
+
 ## Transport
 
 - HTTP/S only for feed documents; malformed/non-network endpoints are rejected before I/O.

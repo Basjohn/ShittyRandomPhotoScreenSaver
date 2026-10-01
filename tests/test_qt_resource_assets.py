@@ -85,17 +85,16 @@ def test_every_qrc_entry_matches_its_canonical_source_and_locked_image_bytes() -
     assert entries_seen == set(_HASHES)
 
 
-def test_onboarding_pack_is_not_imported_until_an_asset_is_requested() -> None:
+def test_onboarding_pack_is_not_registered_until_an_asset_is_requested() -> None:
     script = """
-import sys
+from ui.resources.registration import onboarding_resources_registered
 from ui.onboarding import common
-assert 'ui.resources.onboarding_assets_rc' not in sys.modules
+assert not onboarding_resources_registered()
 path = common.asset_path('onboarding/widget_weather.png')
 assert path == ':/srpss/onboarding/widget_weather.png'
-assert 'ui.resources.onboarding_assets_rc' in sys.modules
-first = sys.modules['ui.resources.onboarding_assets_rc']
+assert onboarding_resources_registered()
 assert common.asset_path('onboarding/widget_weather.png')
-assert sys.modules['ui.resources.onboarding_assets_rc'] is first
+assert onboarding_resources_registered()
 """
     completed = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, text=True, capture_output=True, check=False,

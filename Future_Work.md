@@ -2,8 +2,7 @@
 
 The single live router for **deferred** features and architectural horizons. `Current_Plan.md` owns active work. The
 OpenGL 4.6 / modern scene3d / Voxel Sphere / high-fidelity effects program is already promoted, so those items no
-longer live here as dormant backlog; their active order is in `Current_Plan.md` and their technical decomposition is
-in `Docs/Future_Work/3D_Scene_Foundation.md`.
+longer live here as dormant backlog; their active sequence and technical decomposition are both in `Current_Plan.md`.
 
 ## 1. Authority and activation
 
@@ -90,8 +89,8 @@ Bubble Depth Field. The following ideas remain future-only until that active wav
   depth/refraction/material work before it is more than a gimmick.
 - **Voxel morph field** — blocks rearrange between deterministic shapes or spectrum topology using SSBO/compute
   compaction. Keep distinct from accepted Voxel Sphere reaction semantics.
-- **Fluid lens transition** — refractive displaced surface with caustic-style highlights; requires active refraction and
-  HDR work to prove quality without excessive full-screen cost.
+- **Fluid lens transition** — refractive displaced surface with caustic-style highlights; requires the active
+  refraction/material-buffer work to prove quality without excessive full-screen cost. Output remains SDR-only.
 - **Holographic depth slices** — photo/spectrum sampled into layered depth planes with scanline/light-volume treatment;
   useful only if it reads as real depth rather than a stack of cards.
 - **Procedural storm scene** — lightning, rain streaks, smoke/fog and reflected light integrated into one Visualizer;
@@ -99,6 +98,12 @@ Bubble Depth Field. The following ideas remain future-only until that active wav
 
 ## 5. Other deferred product work
 
+- **Non-3D maintenance queue migrated from the old Current Plan** — keep these deferred unless a supplied log/physical
+  defect makes one immediately relevant: ImageWorker lean spawn entry (R-99), `--usage` sampler diagnostic cost, Gmail
+  refresh handle slope, Widgets-tab stale position estimates, overfull authored-display planner cost, Weather child-edit
+  loading height, surface-preference SSOT cleanup, flicker diagnostic CLI migration, narrowing the broad Qt-test slot-miss
+  suppression, global Python installation hygiene, Spectrum extreme-viewport smoothness and installed GODZIP Foundry
+  Windows diff acceptance.
 - **Settings FlowContainer polish [LOW]** — only for a demonstrated Settings layout problem; improve alignment/space
   use without restructuring lazy ownership.
 - **Wallpaper feed consolidation** — reuse FEEDS normalization/image-candidate primitives only where that simplifies the

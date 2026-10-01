@@ -379,10 +379,15 @@ round-trip the new enum without retaining a second setting. The mechanism and me
 `tests/test_build_layout.py` protects canonical publication, QRC regeneration/inclusion and the current-build evidence
 contract. Standard, Diagnostic and Media Center workers must request a Nuitka XML report and write one compact
 footprint JSON after publication. The JSON records artifact/published bytes, file count, top-level buckets, largest
-files and QRC source-vs-generated-module reference sizes; generated `*_rc.py` source length is explicitly not treated
-as deployed/frozen payload size. The report files live directly under `logs/`, so ordinary LOGZIP capture includes
+files and QRC source-vs-generated-binary-pack sizes; the `.rcc` bytes are the deployed Qt resource representation and
+generated Python resource modules are explicitly excluded from product workers. The report files live directly under `logs/`, so ordinary LOGZIP capture includes
 them without a second collector or scheduler. Package exclusions require evidence from the **current** build report for the actual import/plugin owner or dead
-payload, not source-directory-name suspicion.
+payload, not source-directory-name suspicion. `test_build_layout.py` also pins the authored QML import allowlist
+and the shared dead-family exclusion surface so a new QML namespace cannot silently ship against a stale prune.
+`test_installer_contract.py` protects the two self-contained Inno 6.7.2+ dark installer contracts, Build Foundry
+Inno 7/6 discovery, pre-compile stale-output retirement, transparent-ICO Setup/Uninstall branding, retired-BMP boundary,
+QRC-owned-image boundary, ICO-first solid-compression ordering and MC single-payload-copy rule. These are static packaging bars; successful Inno 7.1 compilation and eyes-on
+installed wizard/DPI behavior remain operator acceptance.
 
 ## 7. Test infrastructure rules
 

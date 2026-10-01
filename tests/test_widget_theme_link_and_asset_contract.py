@@ -37,7 +37,8 @@ def test_immutable_widget_assets_use_the_canonical_qrc_lane() -> None:
     assert ":/srpss/fonts/Jost-Regular.ttf" in font_registration
     # Circle indicators come from the QRC lane (recoloured copies only for dark-text themes).
     assert 'f":/srpss/ui/icons/circle_checkbox_{name}.svg"' in styles
-    assert "assets_rc" in ui_init
+    assert "ensure_core_resources" in ui_init
+    assert "assets_rc" not in ui_init
 
     # Runtime presenters use QRC URLs and never reintroduce image-root probing.
     achievement = _text(ROOT / "rendering" / "quick" / "widgets" / "achievement_pulse.py")

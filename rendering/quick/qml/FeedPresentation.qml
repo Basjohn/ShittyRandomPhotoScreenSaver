@@ -171,6 +171,41 @@ OverlayWidget {
     // Geometry only changes delegate visibility. No QML -> Python callback,
     // row-model reset, cache access or re-publication occurs during resize.
 
+    // Article refreshes use one event-driven body fade for both List and Grid.
+    // The existing whole-widget fadeOpacity remains lifecycle/startup authority;
+    // using it here would couple refresh polish to admission.  The body animation
+    // runs only when Python stages a changed retained row set, commits at opacity
+    // zero, then stops.  No Timer, poll, thread or per-delegate animation exists.
+    Connections {
+        target: feedRoot.feedModel
+
+        function onContentTransitionRequested() {
+            articleContentFade.restart()
+        }
+    }
+
+    SequentialAnimation {
+        id: articleContentFade
+
+        NumberAnimation {
+            target: body
+            property: "opacity"
+            to: 0.0
+            duration: 160
+            easing.type: Easing.InOutQuad
+        }
+        ScriptAction {
+            script: feedRoot.feedModel.commitPendingContent()
+        }
+        NumberAnimation {
+            target: body
+            property: "opacity"
+            to: 1.0
+            duration: 220
+            easing.type: Easing.InOutQuad
+        }
+    }
+
     Item {
         id: headerArea
         objectName: "feedHeaderArea"

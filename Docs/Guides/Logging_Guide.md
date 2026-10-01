@@ -144,6 +144,7 @@ record. A slow terminal therefore cannot postpone the main/sidecar write for tha
 Requirements:
 
 - caller path is small and normally non-blocking;
+- producer enqueue is a leaf operation: recursive logging from GC/finalizer/allocation callbacks is rejected before any queue/controller lock is touched;
 - bounded queue with high-water/drop telemetry and explicit overload policy;
 - original timestamp plus monotonic/correlation ordering metadata survives;
 - one writer owns normal file rotation/writes;
@@ -157,6 +158,8 @@ Current implementation details:
 - queue capacity is 4096 records;
 - DEBUG/INFO may drop only on saturation/closing and are counted by level;
 - WARNING+ saturation uses the serialized direct-main emergency path and is never silently dropped;
+- producer-side recursive DEBUG/INFO is dropped; recursive WARNING+ gets only a fixed raw-stderr breadcrumb, with no message formatting, handler call, queue mutation or controller lock;
+- GC callbacks collect in-memory counters only: no logging, I/O, Qt work, scheduling or locks. Slow-GC telemetry is reported after the callback is removed at RUN shutdown;
 - shutdown replaces queue ingress with a warning-only closing sink while writer finalization completes;
 - persistent handlers are attempted before optional console output;
 - `flush_logging()` is the bounded visibility barrier used before the exit PERF parser;
@@ -174,7 +177,7 @@ The final `[LOG_QUEUE]` record reports:
 - writer queue-lag average/max;
 - file-commit lag average/max;
 - console emit average/max;
-- emergency/reentry fallback counts;
+- emergency/writer-reentry fallback counts plus producer-reentry fuse activations;
 - snapshot/writer errors;
 - bounded flush duration.
 

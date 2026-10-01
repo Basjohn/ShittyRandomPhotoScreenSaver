@@ -1,0 +1,100 @@
+# Steam Source Contracts
+
+This document is the current supported-source, authentication, privacy and failure-semantics contract for the Steam
+widget family. Achievement Pulse, Abandonment Issues, Friend Pulse and Games You Follow are ordinary registered,
+default-off cards. Product presentation details remain in their family owners; this file owns what Steam evidence may
+mean and which endpoint families are admitted. It is **not** a feasibility backlog.
+
+## Rules
+
+- Achievement Pulse, Abandonment Issues, Friend Pulse, and Steam Settings are visible without a development flag.
+  Games You Follow uses the persisted `steam_progress` identity and is not an unfinished `--devsteam` scaffold.
+- User Steam API keys/profile identifiers are credentials, not settings.
+- Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
+- Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
+- No authenticated Store scraping, cookies, browser automation, Steam Guard handling, or Steam password handling.
+- Public app-news is allowed as app-specific source material, not as a personalized whole-library feed.
+- Persistent Steam caches are last-good evidence, not expiring leases. Freshness windows decide whether refresh is due and whether presentation is marked cached/stale; they do **not** make a successful cache unusable. Failed/private/invalid refreshes never overwrite or freshen last-good cache.
+
+## Authentication Model
+
+- `Connect ID` uses Steam OpenID as the browser identity-linking step. It establishes the user's SteamID64, but it does not by itself grant access to player-data endpoints.
+- `Connect API KEY` opens Steam's Web API key form and captures the user's key through an explicit user-clicked paste action. Steam's form is website-shaped and may ask for a domain label; `localhost` is the intended SRPSS guidance for a local desktop app unless fresh validation proves Steam rejects it.
+- The player-data sources in this document require both a user Web API key and linked SteamID64 before runtime account data is considered available.
+- OAuth exists in Steamworks for some partner-site and partner-application flows, but it is not the baseline contract for the current Steam widget family unless Valve documents the exact needed scope for a later endpoint.
+- Publisher Web API keys remain excluded from client runtime.
+
+## Source Matrix
+
+| Capability | Source | Status | Usable fields | Privacy / failure behavior | Card impact |
+|---|---|---|---|---|---|
+| Recently played games | `IPlayerService/GetRecentlyPlayedGames/v1` | Implemented bounded source | app id, recent playtime, ordered recent app list | Requires user key and profile id; response depends on account visibility and Steam behavior | Achievement Pulse uses this as the bounded candidate source for dynamic recent selection |
+| Owned library | `IPlayerService/GetOwnedGames/v1` | Implemented when visibility permits | app id, title/icon when appinfo is included, playtime forever, `rtime_last_played` when returned | Returns owned games only when owned-game details are visible to caller. Valve's method page does not promise the response field list, so runtime validation remains required | Library index and Abandonment candidate foundation; cannot fabricate missing apps or dates |
+| Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Implemented bounded per-app source | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names/icons; Abandonment ranking reuses bounded cache hints, then its worker may fetch exactly the committed selected app for enabled count/latest-unlock shelves |
+| Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Implemented when visibility permits | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse uses this through cache-first, privacy-aware projection |
+| Followed games | `IStoreService/GetGamesFollowed/v1` | **Implemented linked follow-set source** | followed AppIDs for linked SteamID64 | The existing linked SteamID64 and user Web API key are the implemented account authority; an authentication failure retains last-good state and never triggers a second auth model | Games You Follow follow-set authority; never substitute owned/recent/wishlist semantics |
+| App news | `ISteamNews/GetNewsForApp/v2` | Implemented bounded per-app source; not personalized | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide. Publisher-only `GetNewsForAppAuthed` remains excluded | Games You Follow uses bounded requests for actual followed AppIDs |
+| General per-game last played | `IPlayerService/GetOwnedGames/v1` `rtime_last_played` | Implemented when the field is returned | Unix timestamp plus explicit verified/unknown provenance | A redacted controlled-account probe found the field on every returned owned row and a positive timestamp on every played row. Missing, zero, non-numeric, or future values remain unknown; account privacy/unavailability is not “never played” | Abandonment Issues may make smart age claims only for individually verified rows |
+| Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
+| Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
+
+## Card Gates
+
+### Achievement Pulse
+
+- Proceeds through the implemented cache-first path without `--devsteam` because synthetic fixtures cover recent games, owned games, achievement lists, schema names/totals, private/unavailable states, and empty achievement responses; the card remains disabled by default until the user enables it.
+- Steam exposes per-app achievement records rather than an account-wide unlock activity feed. Dynamic selection therefore treats up to five recent-play rows as a bounded candidate set, ranks candidates with known positive unlock timestamps newest-first, and retains recent-play order as a stable fallback behind timestamped candidates when evidence is missing or zero.
+- Custom selection persists by app id, not title text.
+- `Most Recent`, `Recent #2` through `Recent #5`, Previous, and cached Settings labels consume the same achievement-recency order. A stale or forced refresh may fetch at most five candidate achievement records through existing cache/coalescing/backoff work, then fetch schema only for the selected app. The resolver retains that app's newest five unlocked achievements, ordered by unlock time and mapped through schema display names. Missing schema labels fall back to the achievement row without exposing internal ids when a user-facing name is available.
+- The primary newest unlock may join to its schema `icon`. Only HTTPS URLs on the validated Steam asset allowlist may be fetched; missing, invalid, or failed icon data removes only the optional 40px flair and never the unlock text/card state.
+- The shared Steam freshness window is a non-secret preference with a 5-minute minimum and 6-minute canonical default. It gates bounded startup refresh work; it does not authorize a private polling loop.
+
+### Friend Pulse
+
+- Proceeds through the implemented cache-first path without `--devsteam`; the card remains disabled by default until the user enables it.
+- Maintained fixtures cover private friend list, empty friend list, current-game summaries, missing avatars, and partial player summaries.
+- The 10-minute Friend Pulse source window is **freshness only**. Any coherent last-good FriendList/PlayerSummaries cache remains usable indefinitely as cached/stale data; a failed refresh returns that cache and does not clear or overwrite it. Explicit account/cache reset or cache corruption/schema rejection are separate boundaries.
+- Default display is a complete online-first roster with offline friends filling remaining viewport space; playing/change
+  evidence enriches and orders rows without filtering non-playing friends. Private/unavailable must not be shown as an
+  offline roster.
+
+### Abandonment Issues
+
+- Proceeds through the implemented cache-first path without `--devsteam`; the card remains disabled by default until the user enables it.
+- Smart candidates must be owned, have a displayable title, exceed the configured accidental-launch floor, have an individually verified `rtime_last_played`, exceed the configured minimum inactivity threshold, not appear in the bounded recent list, and not be in Never Show.
+- Default ranking prefers games with 15-119 minutes of play and at least 26 weeks of verified inactivity. An already-existing local Achievement Pulse snapshot may further prefer two or fewer unlocked achievements or demote an all-unlocked snapshot, but this is ranking evidence only and never a claim that the game is finished.
+- Achievement evidence is cache-only while choosing: runtime probes at most 12 exact cache paths on the IO worker, prioritizing current/pinned identity before the shortlist. It does not enumerate cache directories, request candidate achievements, or sweep the library; unknown counts remain neutral. After the selected identity is committed, the same worker may fetch only that app's `GetPlayerAchievements` record when `ACHIEVEMENTS` or `LAST UNLOCK` is enabled. The exact record reuses Achievement Pulse's cache key and process-shared source lock/backoff, remains fresh for 24 hours automatically, enriches only the committed card, and cannot rerank or trigger another candidate request.
+- Missing, zero, malformed, or future timestamps are excluded rather than estimated. Pinned games with unknown provenance render an honest unavailable state instead of a fabricated age or substitute game.
+- The default user ledger is `PLAYED`, `ACHIEVEMENTS`, `LAST UNLOCK`, and exact UTC `LAST PLAYED`; derived `BACKLOG CLASS` is optional and defaults off. The date uses only the selected row's verified `rtime_last_played`; when that evidence is unavailable, no date shelf is drawn. Achievement count/latest unlock require a successful exact selected-app snapshot from cache or the bounded hydration above, and a proven zero-unlock snapshot may say `NO UNLOCKS`; private, failed, or missing evidence removes those shelves. Disabling both dependent shelves suppresses that provider work. Backlog class is engagement-depth copy only and makes no completion claim. Queue/source/selection diagnostics remain optional and default off.
+- Ledger settings are presentation-only. The authored card grows by complete two-column rows for every enabled shelf instead of capping at four, shrinking existing content, or initiating provider/timer/paint work.
+- Profile-private selection, exposure cooldowns, and rotation draw state are shared across displays. Smart rotation draws preference tiers with fixed tier weights and then a candidate within the selected tier, so library size cannot drown out the preferred old/short/low-unlock scope; every tier remains reachable and the current game is excluded when an alternative exists. `BACKLOG N/M` reports the selected candidate's preference-rank position and is not a sequential cursor. `widgets.steam.refresh_minutes` is the sole cadence authority for automatic game changes; no card-specific rotation value may compete with it. Persisted selection age is evaluated against the current shared interval, so a rebuild or setting change arms only the true remaining time and overdue state rotates immediately. A widget-level manual refresh forces one non-repeating cache-backed draw and restarts that shared cadence. Semantic selection reads cache only and cannot request owned/recent/candidate-achievement data. Missing achievement evidence for enabled shelves and a missing allowlisted public asset for the one committed app may hydrate on that existing IO job when automatic updates are allowed; a definitive missing/invalid requested art shape permits one bounded alternate-shape fallback, while transient failures do not fan out. `--noupdates` remains cache-only for automatic evidence/artwork hydration. Rotation defers rather than discards an expiry that collides with a parent transition.
+- Guilt Desaturater is optional presentation only: it prepares bucketed local artwork off the UI thread and never changes eligibility or source meaning.
+
+### Games You Follow
+
+The implemented default-off `steam_progress` card uses linked SteamID64 plus the existing Web API key to retrieve explicit followed AppIDs via `IStoreService/GetGamesFollowed/v1`. It does not infer follows from owned/recent/wishlist data. `ISteamNews/GetNewsForApp/v2` is **per app**, not Steam's personalized What's New feed; the product ranks discovered, validated articles globally by published UTC time after progressive bounded coverage, without claiming exact personalized-feed parity or guaranteed language identification.
+
+The first full followed-set news coverage persists in an account-private last-good cache. Later ordinary maintenance revisits up to eight apps per refresh session using the shared owner and a persisted cursor; membership is normally revalidated daily, not on every news slice. Cache freshness governs work admission, not deletion. Failure does not replace or freshen successful records. Article clicks use the validated source-provided Steam article URL, including Steam-owned `/news/externalpost/` redirects for syndicated sources such as PCGamesN, through the existing action handoff; arbitrary publisher URLs are not independently admitted. The game news index is only a fallback for stories with no validated source URL, including older cached rows until their app receives an ordinary refresh. See [Games You Follow product reference](Steam_Games_You_Follow.md) for precise limits and the retained QML/CUSTOM contract.
+
+Publisher `NEWS_AUTHED` endpoints remain excluded; no QR/Steam Guard auth, second Steam session, Store scraping, cookies, browser automation or implicit semantic substitution is an allowed fallback.
+
+## Implementation Consequences
+
+- `core/steam/backend.py` owns endpoint metadata, source status, redaction, source exclusion, and fixture-safe transport.
+- `core/steam/models.py` owns frozen result/source/view data types.
+- `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache. Successful cache records have no TTL-deletion semantics: age is freshness metadata, not permission to discard last-good evidence.
+- Source refreshes are process-coordinated by opaque profile/cache identity. A successful response authoritatively freshens its source record even when byte-equivalent; immediate followers reuse that fresh record, while unchanged visible models avoid repaint/artwork churn.
+- `core/steam/request_policy.py`, `profile_state.py`, `assets.py`, `events.py`, and `mock_backend.py` form the current non-UI foundation: coalescing, stale-generation drops, bounded backoff, account-private policy state, validated asset cache, narrow data-ready publication, and fixture-only backend injection.
+- `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, up-to-five recent candidate achievement probes followed by selected-schema-only refresh, positive-unlock-time selection order with stable missing-evidence fallback, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, optional measured-text-adjacent primary schema-icon flair, achievement-recency Previous presentation, validated Wide header plus Square/default Portrait library artwork, widened fitted Unlocked geometry, collision-free whole-rail compositions, compact or default-on all-field double capsules with independent font-driven growth, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
+- `core/steam/abandonment_issues.py`, its cache/runtime service owners, and `rendering/quick/widgets/abandonment_issues.py` own the second production card: strict timestamp/latest-unlock provenance, short-start/age/cache-only-achievement ranking tiers, one selected-app-only 24-hour evidence hydration for enabled shelves after identity commit, shared-Steam-refresh-driven profile cooldown rotation with persisted remaining cadence and forced manual draws, worker-prepared selected-art fallback/desaturation, an evidence-gated adaptive backlog ledger with privacy-safe shelf diagnostics, and sparse manager-owned content crossfades.
+- Tests must use injected fake openers and fixtures; no live Steam requests in the suite.
+
+## Primary Source Links
+
+- `IPlayerService`: https://partner.steamgames.com/doc/webapi/IPlayerService
+- `ISteamUserStats`: https://partner.steamgames.com/doc/webapi/ISteamUserStats
+- Steam Achievements: https://partner.steamgames.com/doc/features/achievements
+- `ISteamUser`: https://partner.steamgames.com/doc/webapi/ISteamUser
+- `ISteamNews`: https://partner.steamgames.com/doc/webapi/ISteamNews
+- `IStoreService/GetGamesFollowed` protocol/API inventory: https://github.com/SteamTracking/SteamTracking/blob/master/API/IStoreService.json
+- Steam Library Assets: https://partner.steamgames.com/doc/store/assets/libraryassets

@@ -3,11 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtGui import QFontDatabase, QGuiApplication
 
-# Register the compiled Qt resources without importing Settings/QWidget modules.
-try:  # pragma: no cover - defensive resource import
-    from ui.resources import assets_rc  # noqa: F401
-except Exception:  # pragma: no cover
-    assets_rc = None  # type: ignore
+from ui.resources.registration import ensure_core_resources
 
 
 _JOST_FONT_PATHS = (
@@ -28,6 +24,7 @@ def ensure_custom_fonts() -> None:
     global _FONTS_REGISTERED
     if _FONTS_REGISTERED or QGuiApplication.instance() is None:
         return
+    ensure_core_resources()
     for path in _JOST_FONT_PATHS:
         QFontDatabase.addApplicationFont(path)
     for path in _INTER_FONT_PATHS:

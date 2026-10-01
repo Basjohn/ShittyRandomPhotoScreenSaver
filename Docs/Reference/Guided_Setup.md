@@ -187,8 +187,9 @@ run by onboarding.
   removes generated files the new set no longer contains.
 
 The build resource prerequisite checks the preview sources and operator-provided `ui/assets/onboarding/source/SRPSSWitch.png`,
-then regenerates `onboarding_assets_rc.py` when stale. Runtime reads this bundle through Qt resources; it is registered
-only when Guided Setup explicitly requests an asset. See
+then regenerates the binary `ui/resources/onboarding_assets.rcc` pack when stale. Runtime registers that pack through
+`QResource` only when Guided Setup explicitly requests an asset; its existing `:/srpss/onboarding/...` identities do
+not change. See
 `Docs/Architecture/Persisted_Input_Compatibility.md` for content-sized CUSTOM downgrade behavior. The mechanisms behind
 the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md`.
 

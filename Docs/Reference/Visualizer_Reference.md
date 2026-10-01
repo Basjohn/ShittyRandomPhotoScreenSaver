@@ -416,7 +416,7 @@ A test name does not prove it exercises the real output path.
 
 A mode may build on the shared 3D foundation the transitions use. No Visualizer has completed adoption yet; Voxel
 Sphere is the active promotion target and remains behaviourally private until its S19 golden passes. Plan and hazards:
-`Docs/Future_Work/3D_Scene_Foundation.md`. The binding lessons in
+`Current_Plan.md`. The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,

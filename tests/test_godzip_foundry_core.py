@@ -179,6 +179,7 @@ def test_ui_persists_preferences_repo_locally_not_in_global_appdata() -> None:
     # Git Bash executable; preference persistence remains repository-local.
     assert 'for root_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")' in source
     assert "SRPSSGodZIP.ico" in source
+    assert "not is_generated_qrc_python(payload.path)" in source
     assert "QTimer.singleShot(0, self.refresh)" not in source
     assert "QApplication.processEvents()" not in source
 
@@ -208,6 +209,17 @@ def test_workflow_defaults_keep_docs_and_direct_tests_but_not_payload_trees() ->
     assert core.workflow_default_selected("tests/goldens/frame.png") is False
     assert core.workflow_default_selected("themes/settings/Dark.json") is False
     assert core.workflow_default_selected("images/wallpaper.jpg") is False
+    assert core.workflow_default_selected("ui/resources/assets_rc.py") is False
+    assert core.workflow_default_selected("ui/resources/onboarding_assets_rc.py", "MODIFIED") is False
+    assert core.workflow_default_selected("ui/resources/assets.rcc", "MODIFIED") is False
+    assert core.workflow_default_selected("ui/resources/onboarding_assets.rcc") is False
+    assert core.workflow_default_selected("ui/resources/assets.rcc.provenance.json") is False
+    assert core.workflow_default_selected("ui/resources/assets.py") is True
+    assert core.is_generated_qrc_python("ui/resources/assets_rc.py") is True
+    assert core.is_generated_qrc_python("ui/resources/onboarding_assets_rc.py") is True
+    assert core.is_generated_qrc_python("ui/resources/assets.py") is False
+    assert core.is_generated_qrc_artifact("ui/resources/assets.rcc") is True
+    assert core.is_generated_qrc_artifact("ui/resources/onboarding_assets.rcc.provenance.json") is True
     assert core.workflow_default_selected("core/runtime.py") is True
 
 

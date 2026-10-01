@@ -63,9 +63,13 @@ if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
 foreach ($RequiredBuildCommand in @(
     'Reset-SRPSSBuildDirectory',
     'Remove-SRPSSBuildDirectory',
+    'Clear-SRPSSPublishedProductDirectory',
     'Publish-SRPSSDirectory',
     'Assert-SRPSSDefaultsAuthority',
     'Assert-SRPSSQmlSourceContract',
+    'Assert-SRPSSQmlExternalImportContract',
+    'Get-SRPSSNuitkaQmlPruneArguments',
+    'Assert-SRPSSForbiddenFrozenPayloadAbsent',
     'Invoke-SRPSSQrcRegeneration',
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
@@ -113,6 +117,13 @@ try {
     Assert-SRPSSPythonRuntimeDependencies -PythonExe 'python'
 } catch {
     throw "Runtime dependency preflight failed: $($_.Exception.Message)"
+}
+
+try {
+    Clear-SRPSSPublishedProductDirectory -Path $DistributionDir -ReleaseRoot $ReleaseRoot
+    Write-Host "[BUILD] Cleared previous published payload before compilation: $DistributionDir"
+} catch {
+    throw "Existing published payload is locked; aborting before compilation: $($_.Exception.Message)"
 }
 
 Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
@@ -221,14 +232,16 @@ $argsList = @(
     "--include-module=PySide6.QtMultimedia",
     "--include-module=PySide6.QtQuick",
     "--include-module=PySide6.QtQml",
-    "--include-module=ui.resources.assets_rc",
-    "--include-module=ui.resources.onboarding_assets_rc",
+    "--include-data-files=ui/resources/assets.rcc=ui/resources/assets.rcc",
+    "--include-data-files=ui/resources/onboarding_assets.rcc=ui/resources/onboarding_assets.rcc",
     "--include-module=winrt.windows.media.control",
     "--include-module=winrt.windows.storage.streams",
     "--include-module=winrt.windows.foundation",
     "--include-module=winrt.windows.foundation.collections",
     "--noinclude-default-mode=error"
 )
+
+$argsList += @(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $Root)
 
 if ($Version) {
     $argsList += "--product-version=$Version"
@@ -305,8 +318,10 @@ try {
             -RepoRoot $Root `
             -DistributionRoot $Exe.DirectoryName
     )
+    [void](Assert-SRPSSForbiddenFrozenPayloadAbsent -DistributionRoot $Exe.DirectoryName)
     Write-Host "[BUILD-N-ONEDIR] Qt Quick/QML payload present in onedir output: $($PackagedQuickPayload.Count) files"
     Write-Host "[BUILD-N-ONEDIR] Visualizer shaders present in onedir payload: $($PackagedShaders -join ', ')"
+    Write-Host "[BUILD-N-ONEDIR] Forbidden unused frozen families (including pytz) absent from onedir payload."
 } catch {
     Write-Host "[BUILD-N-ONEDIR] Quick/shader payload validation failed - $($_.Exception.Message)"
     exit 1

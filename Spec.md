@@ -62,11 +62,43 @@ distribution metadata and loaded PySide/Qt/shiboken versions before compilation,
 Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic
 generation to `tools/regen_qrc.py` using the selected mode's interpreter; resource child processes share its existing
 cancellation owner. Direct build scripts invoke the same prerequisite. A generation failure prevents compilation;
-unchanged resources do not recompile for each job. Every Standard, Diagnostic and Media Center runtime build also
+unchanged resources do not recompile for each job. Before any expensive PowerShell product compilation, Build Foundry
+and the direct worker both clear that job's canonical `release/<product>` directory. A locked old artifact therefore
+fails before compilation rather than after a full Nuitka run, and publication retains one bounded four-attempt retry for
+a transient Windows handle race. Every Standard, Diagnostic and Media Center runtime build also
 writes a persistent Nuitka compilation report and a compact footprint JSON into `logs/`: artifact/published bytes,
 file count, largest payload files/top-level buckets, and QRC source-vs-generated-module reference sizes. These reports
 describe the current build only and exist to identify real package/dependency bloat before exclusions are added.
 Themes and presets retain their loose editable packaging.
+
+The frozen QML package contract is evidence-gated rather than `qml`-means-everything. Project-authored QML currently
+imports only `QtQuick` and `QtQuick.Effects`; the shared build-layout authority rejects any new external QML namespace
+until the package contract is deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven
+unused families, including WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, Controls
+families, Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
+the same exclusion authority; Diagnostic inherits it through the Venv Standard worker. Native Qt Multimedia remains
+packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
+context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
+`opengl32sw.dll` is explicitly outside the product contract because the software OpenGL fallback cannot satisfy the
+mandatory hardware OpenGL 4.6 Core floor. `PySide6.QtOpenGL`/QOpenGLWidget are also outside the runtime contract; SRPSS
+uses `QOpenGLContext` from QtGui plus PyOpenGL. Linked framework DLLs belonging solely to QML namespaces rejected by
+the authored-import allowlist are packaging fossils and are denied by the same frozen-payload assertion. WGL remains a
+valid Windows OpenGL platform surface and must not be confused with WebGL. A new dependency cut requires a fresh
+current-build report plus runtime acceptance of the affected surface.
+
+Only Standard and Media Center have installers. Their two canonical `.iss` files are self-contained and each requires
+Inno Setup 6.7.2 or newer, deletes the previous expected `Setup_*.exe` before compilation so failure cannot masquerade
+as success, and owns the same fixed SRPSS installer visual language (`modern dark slate includetitlebar hidebevels` plus
+a charcoal wizard surface). No third installer-visual include is an authority. This is an installer-specific VCL
+presentation contract, not a second Settings Theme renderer and not a user-selectable theme. The existing transparent
+`SRPSS.ico` is the single brand asset: `SetupIconFile` owns the executable/window icon while each installer loads that ICO
+into Setup and Uninstall's small wizard bitmap plane with transparent background handling. The explicit ICO `[Files]`
+entry is first so early extraction does not traverse the solid runtime payload. Build Foundry discovers Inno 7 before 6,
+retains explicit override/PATH fallback, and removes stale expected installer output before invocation. Standard installers
+must not resurrect immutable QRC-owned imagery as loose files; Media Center's recursive release wildcard is the one
+app-payload copy. The obsolete `ui/assets/installer/LogoBMP.bmp` has no remaining installer or Build Foundry owner and is
+retired rather than retained as dead source baggage.
+
 For venv products, the Foundry first invokes the existing worker's preparation-only mode, which returns before
 build-directory mutation or compilation. Diagnostic follows its venv worker even when the Foundry is in Normal mode.
 
@@ -135,18 +167,24 @@ Qt image APIs use that path; QML uses `qrc:/srpss/...`. Consumers must not resol
 resources back to disk. Frozen products do not ship duplicate loose imagery.
 
 Guided Setup previews have one separate `onboarding_assets.qrc`, registered on the first explicit asset request.
-The split follows measured import cost of the consolidated module; importing Settings/onboarding helpers must not
-load the preview module. Both generated Python modules use the selected build toolchain and are maintained by
-Build Runner's automatic resource prerequisite. The generated `*_rc.py` files are an escaped Python-source
-representation of the embedded bytes and may be much larger than the source assets on disk; their source-file size is
-**not** an installed/frozen-size measurement. Build footprint/Nuitka reports are the packaging authority. No external
-RCC artifact, recurring lookup work or eager image decoding is introduced. Themes, presets, user content, caches, credentials and replaceable notification/Jedi sounds
-retain their filesystem ownership. Installer artwork is a compile-time Inno Setup input, not loose runtime imagery.
+The split follows measured import cost of the consolidated resource family; importing Settings/onboarding helpers must
+not register the preview pack. The selected pinned PySide toolchain compiles `assets.qrc` and
+`onboarding_assets.qrc` to raw binary `assets.rcc` / `onboarding_assets.rcc` via `rcc -binary`. Build Foundry and the
+standalone product workers own content-based regeneration and provenance. Runtime registers the ordinary binary pack
+with `QResource` at the resource/UI boundary and registers the onboarding pack lazily. Existing `:/srpss/...` and
+`qrc:/srpss/...` identities are invariant. Frozen products package the `.rcc` files as data and must not rely on
+generated Python resource modules or loose-image fallbacks. Generated `.rcc` packs/provenance are reproducible build
+products and stay opt-in for GODZIP transfer; the `.qrc` manifests plus canonical `ui/assets/` sources are handoff
+authority. Legacy generated Python QRC modules are retired rather than retained as fallback. Themes, presets, user content,
+caches, credentials and replaceable notification/Jedi sounds retain filesystem ownership. Installer artwork is a
+compile-time Inno Setup input, not loose runtime imagery.
 
-Clock's named timezone authority remains `pytz`, including persisted IANA aliases and DST rules. Its bundled world
-database is required payload: Windows Qt timezone data does not preserve the supported identifiers and offsets,
-and this Windows Python runtime has no standalone `zoneinfo` database. A replacement must prove behavior parity
-before removing that payload; local time and explicit UTC offsets remain supported through the existing Clock resolver.
+Clock named-zone authority is `PySide6.QtCore.QTimeZone`, already present through QtCore. SRPSS must not bundle
+`pytz`, `tzdata`, or a loose world `zoneinfo` tree merely for Clock display. Local detection uses Qt's system timezone
+identity rather than offset matching; the bounded Settings/Onboarding catalogue, explicitly persisted SRPSS aliases,
+DST-aware current/future conversion and explicit `UTC±hh[:mm]` values remain supported. On Windows Qt maps the native
+Windows zone through its built-in IANA/CLDR mapping; obscure historical-zone fidelity outside the SRPSS-authored
+catalogue is not a reason to ship a second global timezone database.
 
 ## Capability / ordinary instance state
 
@@ -174,6 +212,11 @@ SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick sc
 reuse/extend this foundation where appropriate rather than creating a second renderer stack.
 Shared mesh, reflection and scene/post resource ownership, immutable storage, multi-bind and state restoration are
 detailed in `Docs/Reference/Scene3D_Resources.md`.
+
+**3D presentation is SDR-only.** Do not add an HDR swapchain, HDR metadata, HDR display/output mode, HDR Settings
+surface or HDR-specific tone-mapping pipeline. Higher-precision internal render targets are admissible only when a
+concrete effect needs numerical headroom; they remain an implementation detail and resolve into the canonical SDR
+Qt Quick presentation path.
 
 Current proof points:
 

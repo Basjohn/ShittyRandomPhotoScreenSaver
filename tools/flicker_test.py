@@ -1081,7 +1081,8 @@ def _observe_then_autoclose(app: QApplication, seconds: float, *, variant: int) 
 def _register_fonts():
     """Same font registration as shared_styles._ensure_jost_registered."""
     try:
-        from ui.resources import assets_rc  # noqa: F401
+        from ui.resources.registration import ensure_core_resources
+        ensure_core_resources()
     except Exception:
         pass
     paths = (
