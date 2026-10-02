@@ -546,3 +546,18 @@ def test_relief_rise_page_round_trips(qapp, settings_manager, qtbot):
     tab.relief_rise_antialiasing_combo.setCurrentText("Off")
     persisted = settings_manager.get("transitions", {})["relief_rise"]
     assert persisted == {"direction": "Diagonal BL-TR", "depth": 0.9, "gloss": 0.1, "antialiasing": "Off"}
+
+
+def test_cube_turn_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Cube Turn"].setChecked(True)
+    tab._on_nav_selected("Cube Turn")
+    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(CUBE_TURN_DIRECTION_CHOICES)
+    tab.direction_combo.setCurrentText("Up")
+    tab.cube_turn_gloss_spin.setValue(0.7)
+    tab.cube_turn_antialiasing_combo.setCurrentText("8x")
+    persisted = settings_manager.get("transitions", {})["cube_turn"]
+    assert persisted == {"direction": "Up", "gloss": 0.7, "antialiasing": "8x"}

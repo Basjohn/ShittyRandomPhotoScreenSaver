@@ -18,6 +18,7 @@ from core.settings.default_contract import require_canonical_default
 from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGES, ACCORDION_PLEATS_RANGE
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -861,6 +862,19 @@ def _resolve_relief_rise(
                                **resolve_scene_quality(settings, cfg, defaults)})
 
 
+def _resolve_cube_turn(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "cube_turn")
+    defaults = _canonical("cube_turn")
+    direction = CUBE_TURN_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if direction is None:
+        direction = str(rng.choice(tuple(CUBE_TURN_DIRECTIONS.values())))
+    return _finish(direction, {**_surface_values(cfg, defaults, ("gloss",)),
+                               **resolve_scene_quality(settings, cfg, defaults)})
+
+
 def _resolve_page_curl(
     settings: Mapping[str, object],
     rng: _RandomSource,
@@ -891,6 +905,7 @@ _RESOLVERS = {
     "disintegrate": _resolve_disintegrate,
     "accordion_fold": _resolve_accordion_fold,
     "relief_rise": _resolve_relief_rise,
+    "cube_turn": _resolve_cube_turn,
 }
 
 

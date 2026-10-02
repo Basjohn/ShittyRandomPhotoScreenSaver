@@ -10,6 +10,7 @@
     <file alias="onboarding/transition_burn.png" compression-algorithm="none">../assets/onboarding/source/transition_burn.png</file>
     <file alias="onboarding/transition_crossfade.png" compression-algorithm="none">../assets/onboarding/source/transition_crossfade.png</file>
     <file alias="onboarding/transition_crumble.png" compression-algorithm="none">../assets/onboarding/source/transition_crumble.png</file>
+    <file alias="onboarding/transition_cube_turn.png" compression-algorithm="none">../assets/onboarding/source/transition_cube_turn.png</file>
     <file alias="onboarding/transition_destination.png" compression-algorithm="none">../assets/onboarding/source/transition_destination.png</file>
     <file alias="onboarding/transition_diffuse.png" compression-algorithm="none">../assets/onboarding/source/transition_diffuse.png</file>
     <file alias="onboarding/transition_disintegrate.png" compression-algorithm="none">../assets/onboarding/source/transition_disintegrate.png</file>

@@ -545,6 +545,29 @@ void main() {
 """
 
 
+# ---- A unit box: solid slabs and boxes (Blinds 3D Slats, Cube Turn) ----
+
+def _scene3d_box() -> tuple[float, ...]:
+    """A unit box (positions in [-0.5, 0.5]^3) as 36 vertices of position + outward normal."""
+    faces = (
+        ((0, 0, 1), (1, 0, 0), (0, 1, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0)),
+        ((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 0, 1), (0, 1, 0)),
+        ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (1, 0, 0), (0, 0, 1)),
+    )
+    values: list[float] = []
+    for normal, a, b in faces:
+        centre = [0.5 * n for n in normal]
+        corners = [[centre[k] + 0.5 * (sa * a[k] + sb * b[k]) for k in range(3)]
+                   for sa, sb in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        for corner in (corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]):
+            values.extend((*corner, *normal))
+    return tuple(float(value) for value in values)
+
+
+SCENE3D_BOX_VERTICES = _scene3d_box()
+SCENE3D_BOX_ATTRIBUTES = (3, 3)   # position, outward normal; counter-clockwise faces
+
+
 # ---- The bendable grid surface (Page Curl, Accordion, Relief Rise, terrains, ribbons) ----
 
 def scene3d_grid_size(detail: Scene3DDetail, aspect: float) -> tuple[int, int]:

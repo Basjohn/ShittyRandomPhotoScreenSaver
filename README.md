@@ -40,6 +40,7 @@ A look at the current features. Developer contracts and work-in-progress details
     - Disintegrate
     - Accordion Fold
     - Relief Rise
+    - Cube Turn
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 
