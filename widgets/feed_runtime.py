@@ -58,6 +58,14 @@ class _SourceState:
     artwork_attempted_at: float | None = None
     # Leading stories covered by the last artwork job (see _artwork_limit).
     artwork_item_limit: int = 0
+    # A manual refresh requested while another source owns the family remote
+    # lane stays queued and retains force semantics until it is admitted.
+    force_refresh_pending: bool = False
+    # False while this source still has immediate work in its current
+    # presentation bundle (cache -> due refresh -> optional artwork). Consumers
+    # may retain the latest intermediate state but should animate only once the
+    # bundle is settled. Later refreshes reopen settlement for the same reason.
+    presentation_settled: bool = False
 
 
 _SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
@@ -67,12 +75,13 @@ def shared_feed_owner_count() -> int:
     return len(_SHARED)
 
 
-# A source due within this share of its interval joins a wake-up early.
-_BATCH_WINDOW_SHARE = 0.25
-
-
-def _batch_window_seconds(refresh_minutes: int) -> float:
-    return max(0.0, float(refresh_minutes) * 60.0 * _BATCH_WINDOW_SHARE)
+# Remote FEEDS work is intentionally serialized across the family.  The old
+# batching policy pulled sources due within 25% of their interval into one
+# simultaneous burst (3m45s on the normal 15-minute NEWS cadence), which made
+# independent HTTP/parse jobs fight for the GIL together.  One source bundle
+# (refresh plus its optional artwork follow-on) now owns the remote lane, then
+# leaves a small event-driven gap before the next source may enter.
+_REMOTE_SOURCE_STAGGER_S = 2.5
 
 
 def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], bool]:
@@ -108,6 +117,8 @@ class _FeedFamilyOwner:
         self._deadline_cancel: Callable[[], None] | None = None
         self._deadline_token = 0
         self._retired = False
+        self._remote_bundle_key: str | None = None
+        self._remote_not_before = 0.0
         # Every local image currently published by any source of this owner.
         # Replaced whole on the GUI thread; artwork workers read it when they
         # evict, so a source that publishes meanwhile is protected too.
@@ -215,7 +226,6 @@ class _FeedFamilyOwner:
                 if state.due_at <= self._now() + 0.001:
                     self._admit_due_work()
                 elif self._artwork_needed(state):
-                    state.artwork_attempted_at = state.last_result.snapshot.fetched_at
                     self._submit(state, cache_only=False, force=False, artwork_only=True)
         self._reschedule()
         return True
@@ -228,6 +238,10 @@ class _FeedFamilyOwner:
                 # The cancellation token belongs to this endpoint's current
                 # job, not the whole generation or another active source.
                 state.work_cancel.set()
+                # A manual refresh request is meaningful only while this source
+                # has an active consumer. Do not let it survive dormancy and
+                # fire unexpectedly on a later reactivation.
+                state.force_refresh_pending = False
             self._recompute_state_cadence(state)
             self._release_source_if_idle(state)
         if not self._active:
@@ -248,6 +262,8 @@ class _FeedFamilyOwner:
         if self._retired:
             return
         self._retired = True
+        self._remote_bundle_key = None
+        self._remote_not_before = 0.0
         self._deadline_token += 1
         self._cancel_deadline()
         for state in self._states.values():
@@ -286,11 +302,17 @@ class _FeedFamilyOwner:
             return False
         state = self._state_for(lease)
         self._recompute_state_cadence(state)
+        # A second click on this source while its own work is already active is
+        # not another admission.  A click while a *different* source owns the
+        # family lane is accepted and queued without creating parallel work.
         if state.in_flight:
             return False
-        state.due_at = 0.0
+        state.force_refresh_pending = True
+        state.due_at = self._now()
+        state.due_is_backoff = False
         self._cancel_deadline()
-        self._submit(state, cache_only=False, force=True)
+        self._admit_due_work()
+        self._reschedule()
         return True
 
     def _source_for(self, state: _SourceState):
@@ -340,8 +362,17 @@ class _FeedFamilyOwner:
         state = self._states.get(lease.config.source_spec.cache_key)
         if state is None or state.in_flight or not self._artwork_needed(state):
             return
-        state.artwork_attempted_at = state.last_result.snapshot.fetched_at
-        self._submit(state, cache_only=False, force=False, artwork_only=True)
+        state.presentation_settled = False
+        # A stale/due source refresh outranks artwork. NEWS discovers publisher
+        # artwork shares while cache callbacks are still unwinding; without
+        # this guard that callback could seize the remote lane for stale artwork
+        # just before cache completion admits the due text refresh.
+        if state.due_at <= self._now() + 0.001:
+            self._admit_due_work()
+            self._reschedule()
+            return
+        if not self._submit(state, cache_only=False, force=False, artwork_only=True):
+            self._reschedule()
 
     def _artwork_needed(self, state: _SourceState) -> bool:
         snapshot = state.last_result.snapshot if state.last_result is not None else None
@@ -400,20 +431,32 @@ class _FeedFamilyOwner:
         return replace(result, local_artwork_by_item=tuple(warm.local_by_item.items()))
 
     def _submit(self, state: _SourceState, *, cache_only: bool, force: bool,
-                artwork_only: bool = False) -> None:
+                artwork_only: bool = False) -> bool:
         if self._retired or state.in_flight or not self._active_leases_for_state(state):
-            return
+            return False
+        remote_work = not cache_only
+        cache_key = state.spec.cache_key
+        if remote_work:
+            # A source bundle owns refresh + optional artwork as one serialized
+            # remote transaction.  No other source may overlap it.
+            if self._remote_bundle_key not in (None, cache_key):
+                return False
+            if self._remote_bundle_key is None and self._now() < self._remote_not_before:
+                return False
+            self._remote_bundle_key = cache_key
+            state.presentation_settled = False
         state.in_flight = True
         state.work_cancel = Event()
         state.work_token += 1
         token = state.work_token
         cancel = state.work_cancel
-        cache_key = state.spec.cache_key
         owner_ref = weakref.ref(self)
         base_artwork_result = state.last_result if artwork_only else None
         artwork_limit = self._artwork_limit(state) if artwork_only else 0
         if artwork_only:
             state.artwork_item_limit = artwork_limit
+            if state.last_result is not None and state.last_result.snapshot is not None:
+                state.artwork_attempted_at = state.last_result.snapshot.fetched_at
         # Eviction protection is read when the worker prunes, from the owner's
         # immutable published set (replaced whole on the GUI thread): never a
         # submit-time copy that misses another source publishing meanwhile,
@@ -481,8 +524,18 @@ class _FeedFamilyOwner:
             )
         except Exception:
             state.in_flight = False
+            if remote_work and self._remote_bundle_key == cache_key:
+                self._finish_remote_bundle(cache_key)
             state.due_at = self._now() + 60.0
             self._reschedule()
+            return False
+        return True
+
+    def _finish_remote_bundle(self, cache_key: str) -> None:
+        if self._remote_bundle_key != cache_key:
+            return
+        self._remote_bundle_key = None
+        self._remote_not_before = self._now() + _REMOTE_SOURCE_STAGGER_S
 
     def _complete(
         self,
@@ -498,9 +551,14 @@ class _FeedFamilyOwner:
         if self._retired:
             return
         state = self._states.get(cache_key)
+        remote_work = not cache_only
         if (state is not submitted_state or token != state.work_token
             or not state.in_flight):
             self._release_source(submitted_state)
+            if remote_work:
+                self._finish_remote_bundle(cache_key)
+                self._admit_due_work()
+                self._reschedule()
             return
         state.in_flight = False
         if cancel.is_set():
@@ -520,6 +578,9 @@ class _FeedFamilyOwner:
                     self._admit_due_work()
             else:
                 self._release_source_if_idle(state)
+            if remote_work:
+                self._finish_remote_bundle(cache_key)
+                self._admit_due_work()
             self._reschedule()
             return
         if isinstance(result, FeedRefreshResult):
@@ -544,20 +605,49 @@ class _FeedFamilyOwner:
                     state.artwork_attempted_at = result.snapshot.fetched_at
                 else:
                     state.artwork_attempted_at = None
-            for lease in self._active_leases_for_state(state):
-                lease._accept(result, from_cache=cache_only)
             if not artwork_only:
                 self._update_due(state, result)
+
+            # Settlement belongs to the whole source bundle, not each callback.
+            # Cache publication may still have an immediate due network refresh
+            # or artwork pass. A remote text refresh likewise remains unsettled
+            # until any admitted artwork follow-on completes.
+            artwork_needed = self._artwork_needed(state)
+            if artwork_only:
+                state.presentation_settled = True
+            elif cache_only:
+                state.presentation_settled = bool(
+                    state.due_at > self._now() + 0.001 and not artwork_needed
+                )
+            else:
+                state.presentation_settled = not artwork_needed
+
+            result = replace(
+                result, presentation_settled=bool(state.presentation_settled)
+            )
+            state.last_result = result
+            self._refresh_published_artwork()
+            for lease in self._active_leases_for_state(state):
+                lease._accept(result, from_cache=cache_only)
         elif not artwork_only:
             state.due_at = self._now() + 60.0
+            state.presentation_settled = True
 
-        if cache_only and self._active_leases_for_state(state) and state.due_at <= self._now() + 0.001:
-            # Publish last-good text first; fetch due source before its imagery.
-            self._submit(state, cache_only=False, force=False)
+        if cache_only:
+            # Cache-first publication never bypasses the shared remote lane.
+            # A due source joins the serialized admission queue instead of
+            # launching beside another source that happened to wake with it.
+            self._admit_due_work()
         elif not artwork_only and self._artwork_needed(state):
-            snapshot = state.last_result.snapshot
-            state.artwork_attempted_at = snapshot.fetched_at
-            self._submit(state, cache_only=False, force=False, artwork_only=True)
+            # Keep this source's artwork in the same owned bundle. Only after
+            # the bundle finishes does the next source receive admission.
+            if not self._submit(state, cache_only=False, force=False, artwork_only=True):
+                self._finish_remote_bundle(cache_key)
+                self._admit_due_work()
+        else:
+            if remote_work:
+                self._finish_remote_bundle(cache_key)
+                self._admit_due_work()
         self._release_source_if_idle(state)
         self._reschedule()
 
@@ -581,35 +671,70 @@ class _FeedFamilyOwner:
         state.due_at = now
 
     def _admit_due_work(self) -> None:
-        """Submit every due source, plus any ordinary one due within the batch window.
+        """Admit at most one due remote source bundle.
 
-        Sources whose refreshes drifted apart (a new card, a slow endpoint, a
-        cache-first start) would otherwise each wake the family separately.
-        Taking a source a little early joins it to this wake-up, and since all
-        of them then succeed together they stay aligned: one burst of
-        conditional fetches per interval, not one wake-up per source.
+        Remote source work is intentionally family-serialized. Sources are
+        never pulled early to align cadences; after one refresh (+ optional
+        artwork) completes, a small single-shot cooldown separates the next
+        source.  Successful timestamps therefore remain naturally phase-shifted
+        rather than collapsing back into one 15-minute contention burst.
         """
+        if self._retired or self._remote_bundle_key is not None:
+            return
         now = self._now()
-        for state in tuple(self._states.values()):
-            if state.in_flight or not self._active_leases_for_state(state):
-                continue
-            window = 0.0 if state.due_is_backoff else _batch_window_seconds(state.refresh_minutes)
-            if state.due_at <= now + window:
-                self._submit(state, cache_only=False, force=False)
+        if now < self._remote_not_before:
+            return
+
+        candidates = [
+            state for state in self._states.values()
+            if (not state.in_flight
+                and self._active_leases_for_state(state)
+                and state.due_at <= now + 0.001)
+        ]
+        if candidates:
+            state = min(candidates, key=lambda item: (item.due_at, item.spec.cache_key))
+            force = bool(state.force_refresh_pending)
+            if self._submit(state, cache_only=False, force=force):
+                state.force_refresh_pending = False
+            return
+
+        # Optional artwork also uses the same remote lane, but never outranks a
+        # due text/source refresh. Activation or a newly enlarged card can leave
+        # an artwork request pending here without introducing another timer.
+        artwork_candidates = [
+            state for state in self._states.values()
+            if (not state.in_flight
+                and self._active_leases_for_state(state)
+                and self._artwork_needed(state))
+        ]
+        if artwork_candidates:
+            state = min(
+                artwork_candidates,
+                key=lambda item: (item.due_at, item.spec.cache_key),
+            )
+            self._submit(state, cache_only=False, force=False, artwork_only=True)
 
     def _reschedule(self) -> None:
         self._cancel_deadline()
-        if self._retired or not self._active:
+        if self._retired or not self._active or self._remote_bundle_key is not None:
             return
+        now = self._now()
         candidates = [
             state.due_at
             for state in self._states.values()
             if self._active_leases_for_state(state) and not state.in_flight and state.due_at > 0
         ]
+        if any(
+            not state.in_flight
+            and self._active_leases_for_state(state)
+            and self._artwork_needed(state)
+            for state in self._states.values()
+        ):
+            candidates.append(now)
         if not candidates:
             return
-        due_at = min(candidates)
-        delay_ms = max(1, int(round(max(0.001, due_at - self._now()) * 1000.0)))
+        due_at = max(self._remote_not_before, min(candidates))
+        delay_ms = max(1, int(round(max(0.001, due_at - now) * 1000.0)))
         self._deadline_token += 1
         token = self._deadline_token
         owner_ref = weakref.ref(self)
@@ -736,6 +861,14 @@ class FeedRuntimeLease:
         accept = getattr(consumer, "on_feed_runtime_result", None)
         if callable(accept):
             accept(result, from_cache=bool(from_cache))
+
+    @property
+    def presentation_settled(self) -> bool:
+        owner = self._owner
+        if self._retired or not self._running or owner is None or owner.is_retired:
+            return False
+        state = owner._states.get(self.config.source_spec.cache_key)
+        return bool(state is not None and state.presentation_settled and not state.in_flight)
 
     def request_refresh(self) -> bool:
         return bool(self._running and self._owner and self._owner.request_refresh(self))
@@ -915,10 +1048,22 @@ class NewsRuntimeService:
             self.config.providers,
             {pid: accepted for pid, (accepted, _cached) in self._results.items()},
         )
-        self._publish(consumer, merged)
-        # After publishing: a share that grows may warm art at once, and that
-        # publishes a newer merge, which must not be overtaken by this one.
+
+        # Do not paint a publisher-by-publisher cache parade at startup. Wait
+        # until every provider has answered its cache admission before showing
+        # the first aggregate. A brand-new card with no cached stories remains
+        # loading until the first remote provider produces usable content.
+        if len(self._results) < len(self._leases):
+            return
+
+        # Determine visible publisher shares before publishing settlement. This
+        # may immediately admit artwork for one or more providers and therefore
+        # reopen their source bundle. Presentation stays on its last settled
+        # aggregate until every provider's current immediate work is done.
         self._limit_artwork_to_visible_rows(merged)
+        settled = all(lease.presentation_settled for _pid, lease in self._leases)
+        merged = replace(merged, presentation_settled=bool(settled))
+        self._publish(consumer, merged)
 
     def _publish(self, consumer: object, merged: FeedRefreshResult) -> None:
         if merged.snapshot is None and (

@@ -119,3 +119,10 @@ class FeedRefreshResult:
     # Worker-only local file URIs; never persisted with the article snapshot.
     # Immutable so two retained consumers share exactly one accepted generation.
     local_artwork_by_item: tuple[tuple[str, str], ...] = ()
+    # Presentation settlement is runtime-only coordination metadata. FeedSource
+    # itself returns a complete text snapshot, so standalone results default to
+    # settled. The shared FEEDS owner temporarily projects False while one
+    # source bundle still has immediate remote/artwork follow-on work. NEWS then
+    # combines provider settlement so presentation never animates each hydration
+    # step as a separate content replacement. This field is never persisted.
+    presentation_settled: bool = True

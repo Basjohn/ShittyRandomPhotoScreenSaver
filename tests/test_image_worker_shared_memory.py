@@ -71,12 +71,27 @@ def test_parent_consumes_once_and_returns_live_accounting_to_zero() -> None:
             "live_bytes": 0,
             "segments_consumed": 1,
             "segments_reclaimed_late": 0,
+            "close_failures": 0,
             "unlink_failures": 0,
         }
     finally:
         close_producer_shared_memory(producer, attached=True)
         supervisor.shutdown()
     _assert_mapping_gone(descriptor.name)
+
+
+def test_accounting_exposes_mapping_close_failures_separately() -> None:
+    accounting = SharedMemoryAccounting()
+    descriptor = SharedMemoryDescriptor(
+        name="srpss_img_00000000c10e",
+        data_size=32,
+    )
+    accounting.register(descriptor)
+    accounting.finalize(descriptor, consumed=True, close_failed=True)
+    snapshot = accounting.snapshot()
+    assert snapshot["segments_consumed"] == 1
+    assert snapshot["close_failures"] == 1
+    assert snapshot["unlink_failures"] == 0
 
 
 def test_accounting_does_not_retain_completed_transfer_names() -> None:
@@ -98,6 +113,7 @@ def test_accounting_does_not_retain_completed_transfer_names() -> None:
         "live_bytes": 0,
         "segments_consumed": 1000,
         "segments_reclaimed_late": 0,
+        "close_failures": 0,
         "unlink_failures": 0,
     }
 
@@ -132,6 +148,7 @@ def test_malformed_descriptor_is_reclaimed_and_accounted(
             "live_bytes": 0,
             "segments_consumed": 0,
             "segments_reclaimed_late": 1,
+            "close_failures": 0,
             "unlink_failures": 0,
         }
     finally:

@@ -502,6 +502,21 @@ class FeedPresentationModel(QObject):
         # QML performs the sparse content fade.  No timer/thread owns this edge:
         # the runtime result is the event, and QML commits it at opacity zero.
         self._pending_content: tuple[FeedDisplay, str, str, bool] | None = None
+        # Body transitions are deliberately disarmed until the first complete
+        # presentation bundle settles.  Startup cache -> network -> artwork
+        # hydration belongs to initial admission/lifecycle reveal, not to a
+        # parade of article-change fades.  Once that first bundle is settled,
+        # later refresh/manual replacements use the ordinary slow body fade.
+        self._content_transitions_armed = False
+        # A settled replacement may be republished while QML is still fading
+        # the old body out.  Keep one latest-wins request in flight instead of
+        # restarting the 900 ms fade for every equivalent publication.
+        self._content_transition_requested = False
+        # Startup/cache/network/artwork hydration is one presentation bundle.
+        # Keep the latest intermediate result retained but do not animate each
+        # hydration step. Once the runtime reports a settled bundle, at most one
+        # body fade commits the latest replacement; later bundles use the same
+        # rule, so text + artwork cannot become two separate fades.
         self._snapshot = None
         self._local_artwork_by_item: dict[str, str] = {}
         self._content_extent: tuple[float, float] | None = None
@@ -554,6 +569,7 @@ class FeedPresentationModel(QObject):
                 detach(self)
         self._rows.replace_rows(())
         self._pending_content = None
+        self._content_transition_requested = False
         self._snapshot = None
         self._local_artwork_by_item.clear()
 
@@ -598,6 +614,7 @@ class FeedPresentationModel(QObject):
         if not self.is_feed_consumer_alive() or pending is None:
             return False
         self._pending_content = None
+        self._content_transition_requested = False
         display, view_state, status_text, refreshing = pending
         self._commit_display_state(
             display,
@@ -629,23 +646,68 @@ class FeedPresentationModel(QObject):
                 status_text = ""
 
             # First paint is admitted immediately; startup/lifecycle reveal owns
-            # that appearance.  Subsequent article-set mutations are staged and
-            # committed only at the midpoint of one QML-owned body fade.  This
-            # keeps Grid and List identical, avoids per-delegate animation cost,
-            # and adds no timer, poll, worker or Python per-frame publication.
+            # that appearance. Runtime cache/network/artwork work may then emit
+            # several *intermediate* accepted generations, especially NEWS where
+            # several publishers contribute one card. Those are latest-wins
+            # retained state only: never animate them independently. The runtime
+            # marks the aggregate settled only when the current source/provider
+            # bundle has no immediate follow-on, at which point at most one slow
+            # body fade commits the final replacement. No timer/poll owns this.
+            settled = bool(getattr(result, "presentation_settled", True))
             content_changed = (
                 self._display is not None
                 and tuple(display.rows) != tuple(self._display.rows)
             )
-            if content_changed:
-                self._pending_content = (display, view_state, status_text, False)
-                self.contentTransitionRequested.emit()
+
+            if self._display is None:
+                self._pending_content = None
+                self._commit_display_state(
+                    display,
+                    view_state=view_state,
+                    status_text=status_text,
+                    refreshing=False,
+                )
+                if settled:
+                    self._content_transitions_armed = True
                 return
 
-            # A later result can converge back to the currently painted rows
-            # while a fade is in flight. Cancel the staged content in that case;
-            # the QML ScriptAction becomes a harmless no-op and fades back in.
+            if not settled:
+                # Hold the latest hydration/refresh intermediate without
+                # disturbing the currently painted body. A settled result will
+                # either replace this staged state with the final aggregate or
+                # cancel it if the bundle converged back to current content.
+                self._pending_content = (display, view_state, status_text, False)
+                return
+
+            if not self._content_transitions_armed:
+                # The first complete startup bundle is not an article-change
+                # transition.  Commit its latest retained state quietly, then
+                # arm the slow fade contract for all subsequent replacements.
+                # This prevents staggered source/artwork hydration from turning
+                # startup into a sequence of 5-20 slow fade-out/fade-in cycles.
+                self._pending_content = None
+                self._content_transition_requested = False
+                self._commit_display_state(
+                    display,
+                    view_state=view_state,
+                    status_text=status_text,
+                    refreshing=False,
+                )
+                self._content_transitions_armed = True
+                return
+
+            if content_changed:
+                self._pending_content = (display, view_state, status_text, False)
+                if not self._content_transition_requested:
+                    self._content_transition_requested = True
+                    self.contentTransitionRequested.emit()
+                return
+
+            # A settled result can converge back to the currently painted rows
+            # while intermediate work was staged. Cancel that staged content; a
+            # QML ScriptAction already in flight becomes a harmless no-op.
             self._pending_content = None
+            self._content_transition_requested = False
             self._commit_display_state(
                 display,
                 view_state=view_state,

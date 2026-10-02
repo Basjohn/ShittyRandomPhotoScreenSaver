@@ -388,7 +388,7 @@ Memory evidence comes from the existing `--usage` (plus `--life` for generation 
 warm-plateau slopes of private commit, USS, RSS, handles, image-cache bytes and VRAM, and each replacement's
 settled step. A step that repeats on equivalent rebuilds is retention; one bounded step is first use. Growth in
 private commit that USS does not share is committed memory that is no longer resident (R-97).
-`--handle-attribution` adds the Windows handle-type sidecar.
+`--handle-attribution` adds the Windows handle-type sidecar in ordinary runs. The dedicated Diagnostic product admits the same existing helper automatically at 30-second cadence so bounded frozen-runtime runs can resolve per-event handle growth without another long soak.
 
 Which kind of memory grows is answered from outside the process: `python tools/win_memory_map.py capture --wait
 --at 20 60 --trace 5` waits for the saver, takes a VMMap-style map at each minute mark (image, mapped, heap with

@@ -166,6 +166,12 @@ def test_feed_article_refresh_fade_is_body_scoped_event_driven_and_timerless():
     assert "contentTransitionRequested = Signal()" in source
     assert "def commitPendingContent(" in source
     assert "self.contentTransitionRequested.emit()" in source
+    assert 'settled = bool(getattr(result, "presentation_settled", True))' in source
+    assert "if not settled:" in source
+    assert "self._content_transitions_armed = False" in source
+    assert "if not self._content_transitions_armed:" in source
+    assert "self._content_transitions_armed = True" in source
+    assert "self._content_transition_requested" in source
     assert "function onContentTransitionRequested()" in qml
     assert "id: articleContentFade" in qml
     assert 'target: body' in qml

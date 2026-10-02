@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from core import build_profile
 from core.logging import crash_capture
+from core.logging import logger as logging_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,3 +165,22 @@ def test_diagnostic_entrypoint_defaults_to_run_without_overriding_explicit_mode(
     source = Path(main_diagnostic.__file__).read_text(encoding="utf-8")
     assert "rendering.display_widget" not in source
     assert "DisplayWidget" not in source
+
+
+def test_source_diagnostic_reuses_normal_source_log_directory(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(logging_config, "_BASE_DIR", tmp_path)
+    monkeypatch.setattr(logging_config, "_ACTIVE_LOG_DIR", None)
+
+    chosen = logging_config._select_diagnostic_log_dir(None)
+
+    assert chosen == tmp_path / "logs"
+
+
+def test_frozen_diagnostic_prefers_its_adjacent_log_directory(tmp_path, monkeypatch) -> None:
+    exe = tmp_path / "diagnostic" / "SRPSS_Diagnostic.exe"
+    exe.parent.mkdir(parents=True)
+    monkeypatch.setattr(logging_config, "_ACTIVE_LOG_DIR", None)
+
+    chosen = logging_config._select_diagnostic_log_dir(exe)
+
+    assert chosen == exe.parent / "logs"

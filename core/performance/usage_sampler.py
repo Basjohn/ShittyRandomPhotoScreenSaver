@@ -823,7 +823,7 @@ class UsageTelemetryService:
                 "image_prefetch_worker_vms_mb=%s shm_segments_created=%s "
                 "shm_segments_live=%s shm_live_bytes=%s "
                 "shm_segments_consumed=%s shm_segments_reclaimed_late=%s "
-                "shm_unlink_failures=%s "
+                "shm_close_failures=%s shm_unlink_failures=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d "
@@ -900,6 +900,7 @@ class UsageTelemetryService:
                 _fmt(resources.get("live_bytes")),
                 _fmt(resources.get("segments_consumed")),
                 _fmt(resources.get("segments_reclaimed_late")),
+                _fmt(resources.get("close_failures")),
                 _fmt(resources.get("unlink_failures")),
                 threads["tm_active"],
                 threads["tm_io_max"],

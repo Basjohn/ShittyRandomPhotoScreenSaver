@@ -104,6 +104,18 @@ def _worker_memory(
     }
 
 
+def _parent_handle_count() -> int | None:
+    """Return this harness process's Windows handle count when available."""
+    try:
+        process = psutil.Process(os.getpid())
+        getter = getattr(process, "num_handles", None)
+        if callable(getter):
+            return int(getter())
+    except (psutil.Error, OSError, ValueError):
+        pass
+    return None
+
+
 def _mapping_exists(name: str) -> bool:
     try:
         mapping = SharedMemory(name=name, create=False)
@@ -532,7 +544,12 @@ def run_harness(
 
                 accounting = supervisor.get_shared_memory_accounting_snapshot()
                 memory = _worker_memory(supervisor, worker_type)
-                sample: dict[str, Any] = {"cycle": cycle, **memory, **accounting}
+                sample: dict[str, Any] = {
+                    "cycle": cycle,
+                    "parent_handles": _parent_handle_count(),
+                    **memory,
+                    **accounting,
+                }
                 if prefetch and parent_handoffs:
                     handoff = parent_handoffs[-1]
                     sample.update(
@@ -626,6 +643,16 @@ def run_harness(
         max(end_window) - max(head_window) if head_window and end_window else 0.0
     )
     accounting = supervisor.get_shared_memory_accounting_snapshot()
+    parent_handle_values = [
+        float(sample["parent_handles"])
+        for sample in samples[warmup_cycles:]
+        if isinstance(sample.get("parent_handles"), (int, float))
+    ]
+    parent_handle_slope = _linear_slope(parent_handle_values)
+    parent_handle_growth = (
+        parent_handle_values[-1] - parent_handle_values[0]
+        if len(parent_handle_values) >= 2 else 0.0
+    )
     parent_handoff_durations_ns = [record["duration_ns"] for record in parent_handoffs]
     isolated_worker = all(pid > 0 and pid != os.getpid() for pid in worker_pids)
     one_persistent_worker_pid = len(set(worker_pids)) == 1 if worker_pids else False
@@ -638,7 +665,11 @@ def run_harness(
             accounting["segments_created"]
             == accounting["segments_consumed"] + accounting["segments_reclaimed_late"]
         ),
+        "no_close_failures": accounting["close_failures"] == 0,
         "no_unlink_failures": accounting["unlink_failures"] == 0,
+        "parent_handle_slope_bounded": (
+            not parent_handle_values or parent_handle_slope <= 0.25
+        ),
         "no_orphans_before_shutdown": not orphans_before_shutdown,
         "no_orphans_after_shutdown": not orphans_after_shutdown,
         "worker_shutdown_transfer_reclaimed": (
@@ -685,6 +716,9 @@ def run_harness(
         "exercise_shutdown_transfer": effective_shutdown_transfer,
         "duration_s": time.monotonic() - started_at,
         "accounting": accounting,
+        "parent_handle_samples": len(parent_handle_values),
+        "parent_handle_tail_slope_per_cycle": parent_handle_slope,
+        "parent_handle_tail_growth": parent_handle_growth,
         "worker_rss_tail_slope_mb_per_cycle": tail_slope,
         "worker_rss_tail_high_water_growth_mb": tail_high_water_growth,
         "worker_rss_min_mb": min(rss_values) if rss_values else None,
