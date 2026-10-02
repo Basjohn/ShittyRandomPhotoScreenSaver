@@ -46,19 +46,19 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   (pixel-identical, fewer calls, lower trails submit). `Scene3DStorageLayout` + ring binding are the storage-buffer
   substrate; its first consumers arrive with S15-S19. Contract, measurements and bars:
   `Docs/Reference/Scene3D_Resources.md`.
+- [x] **S15 compute seam accepted.** `scene3d/compute.py` (explicit dispatch groups, writer-owned barriers, scoped
+  image units) plus compute programs in the shared cache and gradual warm-up. First consumer chosen by measurement:
+  motion blur's tile max (three fragment passes -> one dispatch; byte-identical; -14 GL calls and two fewer textures per
+  motion-blurred frame; lower CPU and GPU in frame-alternating A/B). Atomics/atomic counters arrive with their first
+  consumer. Candidate survey, measurements and bars: `Docs/Reference/Scene3D_Resources.md`.
 
-## 1. S15 | compute, image load/store and atomics | **NEXT**
+## 1. S16 | indirect / multi-draw + GPU compaction | **BLOCKED: no consumer yet**
 
-- [ ] Add shared compute-program/resource helpers with explicit dispatch dimensions and barrier ownership.
-- [ ] Add image load/store and atomic/atomic-counter support only as concrete consumers require it.
-- [ ] Build deterministic GPU tests/mirrors for first compute jobs. No ordinary CPU readback.
-- [ ] Keep time authority unchanged: transition compute derives from admitted run progress/real authored seconds;
-  Visualizer compute consumes logical revision/time and bounded immutable snapshot/history inputs. Re-rendering one
-  logical revision must not advance state again.
-- [ ] First useful jobs should be concrete: particle evaluation/compaction, bolt/branch tables, volume injection,
-  post kernels, light/cluster lists, active-piece masks or indirect counts.
-
-## 2. S16 | indirect / multi-draw + GPU compaction
+Measured 2026-10-02 (S15 survey): no current path qualifies. Every 3D transition draws each population with one
+instanced call culled analytically in the vertex shader (whole-frame GPU at most 0.3 ms median at 1440p); the only
+Python draw loops are the three-ghost Motion Trails passes (2-3 calls per ghost); the S15 tile max needs no
+compaction (the gather's still-pixel early-out is ~0.03 ms). The first real consumer is the S18 GPU particle pool
+(bounded SSBO population, compute evaluation, varying live membership); build S16 with it, not before.
 
 - [ ] Add bounded indirect command buffers and compact active-instance lists only where they replace material Python
   submit/draw loops.
@@ -66,7 +66,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [ ] Keep generated counts GPU-owned in the ordinary path; no CPU count readback loop.
 - [ ] Prove capacity bounds and deterministic population/placement against a reference path before migration.
 
-## 3. S17 | active-only high-fidelity scene buffers, lighting and materials
+## 2. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
 
 - [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
@@ -83,7 +83,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
 - [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-## 4. S18 | particles, lightning, smoke/fire and volumetrics
+## 3. S18 | particles, lightning, smoke/fire and volumetrics
 
 - [ ] **GPU particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced
   draw, soft sprites/streaks/ribbons, optional simple analytic/SDF collision and OIT. No Python object per particle.
@@ -97,7 +97,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   primitives using compute/image resources rather than parent CPU loops.
 - [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-## 5. S19 | Voxel Sphere promotion onto shared Scene3D
+## 4. S19 | Voxel Sphere promotion onto shared Scene3D
 
 Sphere is the legacy exception that predates the shared Scene3D foundation. Promotion removes its duplicate low-level
 GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
@@ -131,7 +131,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   dormancy. Whether it remains default-disabled or loses the Experimental label after acceptance is a separate product
   admission decision, not another renderer migration.
 
-## 6. S20 | vertical consumers | make the substrate earn its complexity
+## 5. S20 | vertical consumers | make the substrate earn its complexity
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
@@ -146,7 +146,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 7. Cross-cutting acceptance | applies to every open box above
+## 6. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
   frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.
