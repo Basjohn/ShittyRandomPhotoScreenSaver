@@ -16,6 +16,8 @@ The expansion capabilities remain **deactivated by default** unless explicitly a
 
 **Slide -> Motion Style -> Perspective Push** is an option in the existing Slide identity. It uses an aspect-correct view-ray/tilted-plane intersection for the outgoing image, with shallow translation/tilt/depth and the existing sealed coverage partition. Linear, Elastic, Wobble and Flex keep their existing authored math. Perspective Push does not add a scene, mesh owner, transition ID or clock.
 
+**Blinds -> Style -> 3D Slats** (`transitions.blinds.style`: Flat, 3D Slats; Flat by default and pixel-identical to the authored bands) turns each stripe into a solid slat: the old picture on its front, the new one on its back and a thin laminated edge. Slats (6-48, default 16) turn over about their long axis one after another, from the top (lying slats, direction Vertical) or the left (upright slats, Horizontal: the same stripe orientation as the flat style); each turns for half the run, eased. The axis runs through the middle of the slat's thickness, so a front rests exactly on the photograph and a turned slat's back rests exactly there too. Through the gap a turning slat opens, the new picture shows, darkened by the slat. While turning, slats are lit by the shared physically based material and reflect the new picture (Slat Gloss 0-1); the light is blended in by each slat's lift (4e(1-e) of its eased turn), so slats at rest and both ends are the photographs exactly. Slats turn only about horizontal or vertical axes: with 3D Slats, Diagonal and Random pick one of the two per run. Anti-aliasing follows the shared Advanced bucket. Measured at 2560x1440 (RTX 4090): High (4x) 0.58 ms CPU submit and 0.073 ms GPU per frame (median); Balanced 0.43 ms and 0.033 ms. The Flat style never loads the slats shader module or allocates scene resources.
+
 ## Implementation contracts
 
 Detailed shared resource ownership, DSA/immutable allocation, multi-bind and GL state-restoration contracts live in
@@ -40,6 +42,7 @@ Detailed shared resource ownership, DSA/immutable allocation, multi-bind and GL 
 - **Scene target resolve:** the target's colour is a texture that the composite reads directly, averaging the samples itself. With bloom, one shader pass resolves the allocation first. A single-sample target (bloom without anti-aliasing) draws exactly like a direct draw. See the lessons below.
 - **3D Detail** (`transitions.detail_3d`, Transitions -> SETUP -> 3D Rendering) is the default every Auto choice follows: **High** renders into a 4x multisampled `SceneTarget` with soft shadows and every spark; **Balanced** draws straight into Quick's target with shadows and 60% of the sparks; **Performance** skips the shadow pass and keeps 30%. The tier also sets the bendable grid's density (192 / 128 / 64 cells along the longer side). An unknown stored value uses the canonical default. Measured at 2560x1440 on an RTX 4090 (Exploding Tiles, warm, GPU median per frame with a per-frame flush): 0.129 / 0.099 / 0.014 ms for High / Balanced / Performance. The High target is ~120 MB of VRAM per display at that size, plus ~25 MB with bloom. High and Balanced admit post effects (Auto Bloom on); Performance does not.
 - **Camera.** Effects project through `sceneProjectAt` (their authored resting distance) or `sceneProjectCamera` (offset, tilt, zoom). A camera that moves must draw the photograph through it (`MeshResources.draw_camera_plane`) with the zoom from `scene3d_camera_overscan`, so no frame edge is ever exposed (R-63); shake comes from `scene3d_camera_shake` at real-time rates.
+- **Materials (S17).** `SceneMaterial` (albedo, perceptual roughness, metalness, dielectric specular, emissive) and `SceneLight` (directional, point or spot with a smooth range window and cone) feed one GGX/Cook-Torrance BRDF with Smith-Schlick visibility and Schlick Fresnel (`sceneBrdfLight`, `sceneMaterialLit` for the key light plus ambient and emission, `sceneMaterialLight` per local light). Photo-environment light uses the split-sum approximation with Karis' analytic environment BRDF (`sceneMaterialEnvironment`), so no BRDF lookup texture is allocated. Every function has a CPU mirror checked on the GPU; a rough white dielectric lit head-on reflects between 80% and 100% of the incoming light. Blinds 3D Slats is the first consumer; `sceneShade` stays for the existing effects.
 - **Per-frame CPU.** Shared per-frame values travel in one std140 uniform block (`rendering/quick/scene3d/uniforms.py`, layout from `Scene3DBlockLayout`), written into a persistently mapped, fenced stream ring (`stream.py`); the fence and 3D helpers read GL state through `rendering/quick/gl_query.py` (raw getters, ~5x cheaper than PyOpenGL's checked ones). Exploding Tiles: warm CPU submit ~0.9 ms per frame.
 - **Per-run memory.** `QuickTransitionRenderHost.park()` runs when the background node parks after every run (`release_presentation_textures`); renderers drop per-run targets there (the `SceneTarget`) and keep programs and meshes warm. The host fence now also restores draw/read framebuffer bindings and the blend equation and function, so a renderer that fails mid-scene cannot leave Quick drawing into its target.
 - The mesh effects draw the destination (departure effects) or source (accretion) beneath the pieces. Exact full-image endpoint draws are supplemented by near-endpoint continuity tests so endpoint branches cannot hide pops.
@@ -157,6 +160,14 @@ Each foundation slice adds what it learned here.
   so test the dispatch -> barrier -> reader order and bits, not pixels alone.
 - Image units are not fenced by the host: bind them through `bound_image`, which hands the unit back.
 
+**Materials and new looks on old transitions (S17)**
+- Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,
+  4e(1-e)), never by a separate endpoint branch, so rest, ends and near-ends are exact by construction.
+- A new style on an existing transition keeps the old style untouched and dormant: its shader module loads, and its
+  scene resources allocate, only when the style is used (the lazy-import bar caught the first draft importing it).
+- Prefer analytic approximations to lookup textures when they cost a few ALU instructions (the environment BRDF):
+  nothing to allocate, warm or release.
+
 **Preparing runs (S11)**
 - A run's first frames compile and allocate nothing they could have prepared. Every renderer lists the programs
   a run with given parameters uses in `warm(parameters, size)` and then allocates its scene textures through
@@ -208,4 +219,6 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
 - [ ] Exploding Tiles: build-up, rumble and detonation timing, burst and drift pacing (debris clears by ~65-80%), side colour, sparks, shadows and flash strength on several photos and directions; 3D Detail High vs Balanced vs Performance on both displays, including cost with active Visualizers;
 - [ ] both displays with active music and representative heavy load: Visualizer freshness, frame-spacing tails and
   transition first use;
+- [ ] Blinds 3D Slats on real photos in both orientations at its default 4000 ms and longer: the wave's pace, slat
+  lighting and Slat Gloss, the shade through the gaps, 6 vs 48 slats, High vs Balanced;
 - [ ] the installed/frozen build: activation and Settings round-trip, repeated switch/interrupt/retire.

@@ -447,3 +447,36 @@ def test_block_spins_edge_glass_round_trips_on_its_page(qapp, settings_manager, 
     qapp.processEvents()
     assert combo.currentText() == canonical["edge_glass"]
 
+
+
+def test_blinds_style_shows_its_own_controls_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.blinds_options import BLINDS_STYLE_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    canonical = get_default_settings()["transitions"]["blinds"]
+    tab._activation_checkboxes["Blinds"].setChecked(True)
+    tab._on_nav_selected("Blinds")
+    combo = tab.blinds_style_combo
+    assert combo.currentText() == canonical["style"]
+    for choice in BLINDS_STYLE_CHOICES:
+        combo.setCurrentText(choice)
+        slats = choice != BLINDS_STYLE_CHOICES[0]
+        assert tab.blinds_slats_box.isVisibleTo(tab.blinds_group) is slats
+        assert tab.blinds_flat_box.isVisibleTo(tab.blinds_group) is not slats
+        assert settings_manager.get("transitions", {})["blinds"]["style"] == choice
+    tab.blinds_slats_spin.setValue(tab.blinds_slats_spin.maximum())
+    tab.blinds_gloss_spin.setValue(0.25)
+    tab.blinds_antialiasing_combo.setCurrentText("Off")
+    persisted = settings_manager.get("transitions", {})["blinds"]
+    assert persisted["slats"] == tab.blinds_slats_spin.maximum()
+    assert persisted["gloss"] == 0.25 and persisted["antialiasing"] == "Off"
+    assert {"direction", "feather"} <= set(persisted)
+    assert tab.blinds_advanced_body.isAncestorOf(tab.blinds_antialiasing_combo)
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["blinds"].update({"style": "Hologram", "slats": 999})
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert combo.currentText() == canonical["style"]
+    assert tab.blinds_slats_spin.value() == tab.blinds_slats_spin.maximum()

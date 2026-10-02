@@ -51,6 +51,10 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   motion blur's tile max (three fragment passes -> one dispatch; byte-identical; -14 GL calls and two fewer textures per
   motion-blurred frame; lower CPU and GPU in frame-alternating A/B). Atomics/atomic counters arrive with their first
   consumer. Candidate survey, measurements and bars: `Docs/Reference/Scene3D_Resources.md`.
+- [x] **S17 material/light block accepted** with its first consumer, **Blinds -> 3D Slats** (S20). GGX/Cook-Torrance,
+  roughness/metalness/specular/emissive, directional/point/spot lights and photo-environment light through an analytic
+  split-sum BRDF (no LUT texture), GPU-mirrored. Flat Blinds stays byte-identical and dormant. Contracts, cost and
+  open physical checks: `Docs/Reference/Transitions.md`.
 
 ## 1. S16 | indirect / multi-draw + GPU compaction | **BLOCKED: no consumer yet**
 
@@ -72,8 +76,6 @@ compaction (the gather's still-pixel early-out is ~0.03 ms). The first real cons
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
   or HDR-specific tone-mapping pipeline. A higher-precision internal intermediate is allowed only when a measured effect
   needs numerical headroom and must still resolve into the ordinary SDR presentation path.
-- [ ] Add a common material/light block: GGX/Cook-Torrance, roughness, metalness/specular, emissive, bounded directional/
-  point/spot lights, BRDF LUT and photo/environment IBL.
 - [ ] Add reusable real-3D shadow facilities with bounded softness/contact treatment. Keep the existing planar shadow
   wherever it is cheaper and visually correct.
 - [ ] Add active-only GTAO/contact AO where justified by a real consumer.
@@ -135,7 +137,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
-- [ ] **Page Curl** and **Blinds -> 3D Slats**: adaptive-surface/material/shadow proofs.
+- [ ] **Page Curl**: adaptive-surface/material/shadow proof (Blinds -> 3D Slats landed with S17).
 - [ ] **Extruded Spectrum**: first ordinary shared-foundation 3D Visualizer and SSBO-instancing/material-light proof.
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.

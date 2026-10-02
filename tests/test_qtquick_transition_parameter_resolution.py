@@ -40,7 +40,7 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
         random_source=rng,
     )
     assert resolved.direction == "diagonal"
-    assert resolved.parameter_dict() == {"feather": pytest.approx(0.04)}
+    assert resolved.parameter_dict() == {"feather": pytest.approx(0.04), "style": "flat"}
 
 
 @pytest.mark.parametrize(

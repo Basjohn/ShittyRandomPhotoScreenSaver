@@ -7,6 +7,7 @@ and is compared with its mirror. Test-only: production never imports this.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 import random
 
@@ -358,3 +359,101 @@ void main() {
             lib.scene3d_motion_vertex(broken)
     with pytest.raises(ValueError):
         lib.scene3d_motion_fragment("#version 460 core\nout vec4 Colour;\nvoid main() {}\n")
+
+
+def _material(rng: random.Random) -> lib.Scene3DMaterial:
+    return lib.Scene3DMaterial((rng.random(), rng.random(), rng.random()), rng.uniform(0.05, 1.0),
+                               rng.choice((0.0, 0.0, 1.0, rng.random())), rng.uniform(0.0, 1.0))
+
+
+def _facing(rng: random.Random, normal) -> tuple[float, float, float]:
+    """A random unit vector on the normal's side."""
+    while True:
+        value = _unit(rng)
+        if lib._dot(value, normal) > 0.05:
+            return value
+
+
+_MATERIAL_HEAD = ("vec4 a = arg(0), b = arg(1);"
+                  "SceneMaterial m = SceneMaterial(a.rgb, a.w, b.x, b.y, vec3(b.z, b.w, 0.25));")
+
+
+def _material_rows(material: lib.Scene3DMaterial) -> list[tuple[float, ...]]:
+    return [(*material.albedo, material.roughness), (material.metalness, material.specular, 0.0, 0.0)]
+
+
+def test_physically_based_material_terms_match(probe):
+    rng = random.Random(17)
+    cases = []
+    for _ in range(160):
+        normal = _unit(rng)
+        cases.append((_material(rng), normal, _facing(rng, normal), _unit(rng), (rng.uniform(0, 3), rng.uniform(0, 3), rng.uniform(0, 3))))
+    rows = [[*_material_rows(m), n, v, l, r] for m, n, v, l, r in cases]
+    gpu = probe.run(_MATERIAL_HEAD + "FragColor = vec4(sceneBrdfLight(m, arg(2).xyz, arg(3).xyz, arg(4).xyz, arg(5).rgb), 0.0);",
+                    rows)
+    _check(gpu, [lib.scene3d_brdf_light(m, n, v, l, r) for m, n, v, l, r in cases], tolerance=1e-3)
+
+    terms = [(rng.random(), rng.uniform(0.045, 1.0), rng.random(), rng.random()) for _ in range(128)]
+    gpu = probe.run("vec4 a = arg(0); FragColor = vec4(sceneGgx(a.x, a.y), sceneSmith(a.z, a.w, a.y), 0.0, 0.0);",
+                    [[t] for t in terms])
+    _check(gpu, [(lib.scene3d_ggx(nh, r), lib.scene3d_smith(nv, nl, r)) for nh, r, nv, nl in terms], tolerance=1e-3)
+
+    environment = [((rng.random(), rng.random(), rng.random()), rng.random(), rng.uniform(1e-4, 1.0)) for _ in range(96)]
+    gpu = probe.run("vec4 a = arg(0), b = arg(1); FragColor = vec4(sceneEnvironmentBrdf(a.rgb, b.x, b.y), 0.0);",
+                    [[f0, (r, nv)] for f0, r, nv in environment])
+    _check(gpu, [lib.scene3d_environment_brdf(*e) for e in environment])
+
+    lit = [(_material(rng), _unit(rng), (rng.uniform(-1, 1), rng.uniform(-0.5, 0.5), rng.uniform(-0.3, 1.0)),
+            (rng.uniform(0, 3),) * 3, (rng.uniform(0, 0.4),) * 3) for _ in range(96)]
+    lit = [(dataclasses.replace(m, emissive=(0.0, 0.0, 0.25)), n, w, k, am) for m, n, w, k, am in lit]
+    gpu = probe.run(_MATERIAL_HEAD + "FragColor = vec4(sceneMaterialLit(m, arg(2).xyz, arg(3).xyz, arg(4).rgb, arg(5).rgb), 0.0);",
+                    [[*_material_rows(m), n, w, k, am] for m, n, w, k, am in lit])
+    _check(gpu, [lib.scene3d_material_lit(m, n, w, k, am) for m, n, w, k, am in lit], tolerance=1e-3)
+
+
+def test_lights_match_and_end_where_they_should(probe):
+    rng = random.Random(23)
+    lights = []
+    for _ in range(120):
+        kind = rng.choice((0, 1, 2))
+        inner = rng.uniform(0.6, 0.95)
+        lights.append((lib.Scene3DLight(kind, (rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(0.2, 2.0)),
+                                        (rng.uniform(0, 2), rng.uniform(0, 2), rng.uniform(0, 2)), rng.uniform(0.5, 3.0),
+                                        _unit(rng), inner, inner - rng.uniform(0.05, 0.4)),
+                       (rng.uniform(-1, 1), rng.uniform(-0.5, 0.5), rng.uniform(-0.2, 0.5))))
+    body = ("vec4 a = arg(0), b = arg(1), c = arg(2), d = arg(3);"
+            "SceneLight light = SceneLight(int(a.w + 0.5), a.xyz, b.rgb, b.w, c.xyz, c.w, d.w);"
+            "vec3 l; vec3 radiance = sceneLightAt(light, d.xyz, l);")
+    rows = [[(*light.vector, light.kind), (*light.colour, light.range), (*light.axis, light.cos_inner),
+             (*world, light.cos_outer)] for light, world in lights]
+    expected = [lib.scene3d_light_at(light, world) for light, world in lights]
+    _check(probe.run(body + "FragColor = vec4(radiance, 0.0);", rows), [r for _l, r in expected], tolerance=1e-3)
+    _check(probe.run(body + "FragColor = vec4(l, 0.0);", rows), [l for l, _r in expected])
+
+    point = lib.Scene3DLight(1, (0.0, 0.0, 1.0), (1.0, 1.0, 1.0), 0.5)
+    assert lib.scene3d_light_at(point, (0.0, 0.0, 0.4))[1] == (0.0, 0.0, 0.0)          # beyond range: nothing
+    spot = lib.Scene3DLight(2, (0.0, 0.0, 1.0), (1.0, 1.0, 1.0), 4.0, (0.0, 0.0, -1.0), 0.95, 0.9)
+    assert lib.scene3d_light_at(spot, (0.9, 0.0, 0.0))[1] == (0.0, 0.0, 0.0)          # outside the cone
+    assert lib.scene3d_light_at(spot, (0.0, 0.0, 0.0))[1][0] > 0.5                     # on its axis
+
+
+def test_materials_behave_physically():
+    n, v = (0.0, 0.0, 1.0), lib._normalize((0.3, 0.0, 1.0))
+    l = lib._normalize((-0.3, 0.0, 1.0))                                                 # the mirror direction
+    rough = lib.scene3d_brdf_light(lib.Scene3DMaterial((0.5,) * 3, 0.8, 0.0), n, v, l, (1.0,) * 3)
+    glossy = lib.scene3d_brdf_light(lib.Scene3DMaterial((0.5,) * 3, 0.2, 0.0), n, v, l, (1.0,) * 3)
+    assert glossy[0] > rough[0]                                                          # a sharper highlight peak
+    metal = lib.Scene3DMaterial((0.9, 0.5, 0.2), 0.5, 1.0)
+    away = lib.scene3d_brdf_light(metal, n, v, lib._normalize((0.9, 0.0, 0.2)), (1.0,) * 3)
+    assert away[0] > away[2]                                                             # a metal's tint is its colour
+    assert lib.scene3d_brdf_light(metal, n, v, (0.0, 0.0, -1.0), (1.0,) * 3) == (0.0, 0.0, 0.0)  # lit from behind
+    # A white, rough dielectric lit head-on reflects most of what arrives and never more.
+    white = lib.Scene3DMaterial((1.0,) * 3, 1.0, 0.0)
+    total = 0.0
+    for i in range(64):
+        for j in range(16):
+            theta, phi = (i + 0.5) / 64 * math.pi / 2, (j + 0.5) / 16 * 2 * math.pi
+            direction = (math.sin(theta) * math.cos(phi), math.sin(theta) * math.sin(phi), math.cos(theta))
+            total += lib.scene3d_brdf_light(white, n, direction, n, (1.0,) * 3)[0] * math.cos(theta) * math.sin(theta) \
+                * (math.pi / 2 / 64) * (2 * math.pi / 16)
+    assert 0.8 < total < 1.0

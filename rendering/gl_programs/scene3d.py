@@ -17,6 +17,10 @@ What an effect gets from ``SCENE3D_GLSL``:
   so departing pieces leave by construction rather than by tuning;
 * ``sceneShade`` / ``scenePointLight`` / ``sceneEmber`` -- one key light with
   Blinn-Phong highlights and a Fresnel rim, local lights, hot-material colour;
+* ``SceneMaterial`` / ``SceneLight`` / ``sceneMaterialLit`` / ``sceneMaterialEnvironment`` --
+  physically based shading: GGX/Cook-Torrance with Smith-Schlick visibility and Schlick
+  Fresnel for directional, point and spot lights, plus photo-environment light through an
+  analytic split-sum BRDF (no lookup texture to allocate);
 * ``sceneCastOnPlane`` / ``sceneSoftRect`` -- soft planar shadows on the photograph;
   ``ScenePiece`` / ``scenePiecePoint`` / ``scenePieceShadow`` -- any rigid piece and its shadow,
   drawn by ``rendering.quick.scene3d.shadows``;
@@ -270,6 +274,103 @@ vec3 sceneEnvironmentLight(sampler2D environment, vec3 normal, vec3 view, float 
     vec3 ray = reflect(-view, normal);
     float fresnel = reflectance + (1.0 - reflectance) * pow(1.0 - max(dot(normal, view), 0.0), 5.0);
     return sceneEnvironment(environment, sceneReflectionUv(ray), roughness) * fresnel;
+}}
+
+// Physically based materials. specular scales a dielectric's reflectance at normal incidence
+// (0.5 -> 4%, the common default); metalness moves it to the albedo and removes the diffuse.
+// Roughness is perceptual (squared for GGX) and floored so highlights never become infinite.
+struct SceneMaterial {{
+    vec3 albedo; float roughness; float metalness; float specular; vec3 emissive;
+}};
+// kind 0: directional (vector is the direction toward the light); 1: point and 2: spot (vector
+// is the position, range ends the light smoothly). A spot also has its axis (from the light)
+// and the cosines of its full-strength and outer cone angles.
+struct SceneLight {{
+    int kind; vec3 vector; vec3 colour; float range; vec3 axis; float cosInner; float cosOuter;
+}};
+
+const float SCENE_PI = 3.14159265;
+
+vec3 sceneMaterialF0(SceneMaterial m) {{
+    return mix(vec3(0.08 * m.specular), m.albedo, m.metalness);
+}}
+float sceneMaterialRoughness(SceneMaterial m) {{
+    return clamp(m.roughness, 0.045, 1.0);
+}}
+float sceneGgx(float nh, float roughness) {{
+    float a2 = roughness * roughness * roughness * roughness;
+    float d = nh * nh * (a2 - 1.0) + 1.0;
+    return a2 / (SCENE_PI * d * d);
+}}
+float sceneSmith(float nv, float nl, float roughness) {{
+    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    return nv / (nv * (1.0 - k) + k) * nl / (nl * (1.0 - k) + k);
+}}
+vec3 sceneSchlick(vec3 f0, float cosine) {{
+    return f0 + (1.0 - f0) * pow(1.0 - clamp(cosine, 0.0, 1.0), 5.0);
+}}
+
+// Radiance a light of the given (already attenuated) radiance, arriving along l, reflects
+// toward the viewer along v: Lambert diffuse plus the GGX specular lobe, times n.l.
+vec3 sceneBrdfLight(SceneMaterial m, vec3 n, vec3 v, vec3 l, vec3 radiance) {{
+    float nl = dot(n, l);
+    if (nl <= 0.0) return vec3(0.0);
+    float nv = max(dot(n, v), 1e-4);
+    vec3 h = normalize(l + v);
+    float roughness = sceneMaterialRoughness(m);
+    vec3 fresnel = sceneSchlick(sceneMaterialF0(m), dot(v, h));
+    vec3 specular = fresnel * (sceneGgx(max(dot(n, h), 0.0), roughness) * sceneSmith(nv, nl, roughness)
+                               / (4.0 * nv * nl));
+    vec3 diffuse = (1.0 - fresnel) * (1.0 - m.metalness) * m.albedo / SCENE_PI;
+    return (diffuse + specular) * radiance * nl;
+}}
+
+// Where a light's light arrives from at world (l, toward the light) and its radiance there.
+vec3 sceneLightAt(SceneLight light, vec3 world, out vec3 l) {{
+    if (light.kind == 0) {{
+        l = normalize(light.vector);
+        return light.colour;
+    }}
+    vec3 toLight = light.vector - world;
+    float distance2 = max(dot(toLight, toLight), 1e-8);
+    l = toLight * inversesqrt(distance2);
+    float ratio = distance2 / (light.range * light.range);
+    float window = clamp(1.0 - ratio * ratio, 0.0, 1.0);
+    float strength = window * window / max(distance2, 1e-4);
+    if (light.kind == 2) strength *= smoothstep(light.cosOuter, light.cosInner, dot(-l, normalize(light.axis)));
+    return light.colour * strength;
+}}
+
+// The material lit by one light, seen from the scene camera.
+vec3 sceneMaterialLight(SceneMaterial m, vec3 n, vec3 world, SceneLight light) {{
+    vec3 l;
+    vec3 radiance = sceneLightAt(light, world, l);
+    return sceneBrdfLight(m, n, normalize(vec3(0.0, 0.0, SCENE_CAMERA) - world), l, radiance);
+}}
+
+// The material under the scene's key light (radiance key) and a flat ambient, plus its
+// emission: the common case. Effects with local lights add sceneMaterialLight per light.
+vec3 sceneMaterialLit(SceneMaterial m, vec3 n, vec3 world, vec3 key, vec3 ambient) {{
+    vec3 v = normalize(vec3(0.0, 0.0, SCENE_CAMERA) - world);
+    return sceneBrdfLight(m, n, v, SCENE_KEY, key) + ambient * m.albedo * (1.0 - m.metalness) + m.emissive;
+}}
+
+// The split-sum environment BRDF, analytically (Karis 2014): the scale and bias applied to F0
+// for light reflected from a whole environment at this roughness and viewing angle.
+vec3 sceneEnvironmentBrdf(vec3 f0, float roughness, float nv) {{
+    vec4 r = roughness * vec4(-1.0, -0.0275, -0.572, 0.022) + vec4(1.0, 0.0425, 1.04, -0.04);
+    float a004 = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+    vec2 scaleBias = vec2(-1.04, 1.04) * a004 + r.zw;
+    return f0 * scaleBias.x + scaleBias.y;
+}}
+
+// Light the material reflects from a photo environment: the blurred reflection where its
+// reflected ray points, weighted by the environment BRDF.
+vec3 sceneMaterialEnvironment(sampler2D environment, SceneMaterial m, vec3 n, vec3 world) {{
+    vec3 v = normalize(vec3(0.0, 0.0, SCENE_CAMERA) - world);
+    float roughness = sceneMaterialRoughness(m);
+    vec3 reflected = sceneEnvironment(environment, sceneReflectionUv(reflect(-v, n)), roughness);
+    return reflected * sceneEnvironmentBrdf(sceneMaterialF0(m), roughness, max(dot(n, v), 1e-4));
 }}
 
 // A local light with smooth distance falloff; returns the added radiance.
@@ -657,6 +758,113 @@ def scene3d_shade(albedo: Vec3, normal: Vec3, world: Vec3, ambient: float, specu
     fresnel = (1.0 - max(_dot(normal, view), 0.0)) ** 5.0
     extra = specular * highlight + rim * fresnel
     return tuple(a * (ambient + (1.0 - ambient) * diffuse) + extra for a in albedo)
+
+
+@dataclass(frozen=True, slots=True)
+class Scene3DMaterial:
+    """CPU mirror of ``SceneMaterial``."""
+
+    albedo: Vec3
+    roughness: float
+    metalness: float
+    specular: float = 0.5
+    emissive: Vec3 = (0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True, slots=True)
+class Scene3DLight:
+    """CPU mirror of ``SceneLight`` (kind 0 directional, 1 point, 2 spot)."""
+
+    kind: int
+    vector: Vec3
+    colour: Vec3
+    range: float = 1.0
+    axis: Vec3 = (0.0, 0.0, -1.0)
+    cos_inner: float = 1.0
+    cos_outer: float = 0.0
+
+
+def scene3d_material_f0(material: Scene3DMaterial) -> Vec3:
+    """CPU mirror of ``sceneMaterialF0``."""
+    return _mix((0.08 * material.specular,) * 3, material.albedo, material.metalness)
+
+
+def _material_roughness(material: Scene3DMaterial) -> float:
+    return max(0.045, min(1.0, material.roughness))
+
+
+def scene3d_ggx(nh: float, roughness: float) -> float:
+    """CPU mirror of ``sceneGgx``."""
+    a2 = roughness ** 4
+    d = nh * nh * (a2 - 1.0) + 1.0
+    return a2 / (math.pi * d * d)
+
+
+def scene3d_smith(nv: float, nl: float, roughness: float) -> float:
+    """CPU mirror of ``sceneSmith``."""
+    k = (roughness + 1.0) ** 2 / 8.0
+    return nv / (nv * (1.0 - k) + k) * nl / (nl * (1.0 - k) + k)
+
+
+def scene3d_schlick(f0: Vec3, cosine: float) -> Vec3:
+    """CPU mirror of ``sceneSchlick``."""
+    weight = (1.0 - max(0.0, min(1.0, cosine))) ** 5
+    return tuple(f + (1.0 - f) * weight for f in f0)
+
+
+def scene3d_brdf_light(material: Scene3DMaterial, n: Vec3, v: Vec3, l: Vec3, radiance: Vec3) -> Vec3:
+    """CPU mirror of ``sceneBrdfLight``."""
+    nl = _dot(n, l)
+    if nl <= 0.0:
+        return (0.0, 0.0, 0.0)
+    nv = max(_dot(n, v), 1e-4)
+    h = _normalize(tuple(a + b for a, b in zip(l, v)))
+    roughness = _material_roughness(material)
+    fresnel = scene3d_schlick(scene3d_material_f0(material), _dot(v, h))
+    lobe = scene3d_ggx(max(_dot(n, h), 0.0), roughness) * scene3d_smith(nv, nl, roughness) / (4.0 * nv * nl)
+    return tuple((((1.0 - f) * (1.0 - material.metalness) * a / math.pi) + f * lobe) * r * nl
+                 for f, a, r in zip(fresnel, material.albedo, radiance))
+
+
+def scene3d_light_at(light: Scene3DLight, world: Vec3) -> tuple[Vec3, Vec3]:
+    """CPU mirror of ``sceneLightAt``: (direction toward the light, radiance)."""
+    if light.kind == 0:
+        return _normalize(light.vector), light.colour
+    to_light = tuple(a - b for a, b in zip(light.vector, world))
+    distance2 = max(_dot(to_light, to_light), 1e-8)
+    direction = tuple(value / math.sqrt(distance2) for value in to_light)
+    ratio = distance2 / (light.range * light.range)
+    window = max(0.0, min(1.0, 1.0 - ratio * ratio))
+    strength = window * window / max(distance2, 1e-4)
+    if light.kind == 2:
+        strength *= _smoothstep(light.cos_outer, light.cos_inner,
+                                _dot(tuple(-value for value in direction), _normalize(light.axis)))
+    return direction, tuple(c * strength for c in light.colour)
+
+
+def _camera_view(world: Vec3) -> Vec3:
+    return _normalize((-world[0], -world[1], SCENE3D_CAMERA - world[2]))
+
+
+def scene3d_material_light(material: Scene3DMaterial, n: Vec3, world: Vec3, light: Scene3DLight) -> Vec3:
+    """CPU mirror of ``sceneMaterialLight``."""
+    direction, radiance = scene3d_light_at(light, world)
+    return scene3d_brdf_light(material, n, _camera_view(world), direction, radiance)
+
+
+def scene3d_material_lit(material: Scene3DMaterial, n: Vec3, world: Vec3, key: Vec3, ambient: Vec3) -> Vec3:
+    """CPU mirror of ``sceneMaterialLit``."""
+    lit = scene3d_brdf_light(material, n, _camera_view(world), SCENE3D_KEY_LIGHT, key)
+    return tuple(value + am * a * (1.0 - material.metalness) + e
+                 for value, am, a, e in zip(lit, ambient, material.albedo, material.emissive))
+
+
+def scene3d_environment_brdf(f0: Vec3, roughness: float, nv: float) -> Vec3:
+    """CPU mirror of ``sceneEnvironmentBrdf``."""
+    r = [roughness * c0 + c1 for c0, c1 in zip((-1.0, -0.0275, -0.572, 0.022), (1.0, 0.0425, 1.04, -0.04))]
+    a004 = min(r[0] * r[0], 2.0 ** (-9.28 * nv)) * r[0] + r[1]
+    scale, bias = -1.04 * a004 + r[2], 1.04 * a004 + r[3]
+    return tuple(f * scale + bias for f in f0)
 
 
 def scene3d_point_light(normal: Vec3, world: Vec3, light: Vec3, colour: Vec3, falloff: float) -> Vec3:
