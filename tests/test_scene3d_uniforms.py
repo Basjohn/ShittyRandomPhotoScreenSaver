@@ -173,3 +173,49 @@ def test_partial_updates_reach_the_allocated_block_even_if_the_generic_binding_c
         gl.glDeleteVertexArrays(1, [vao])
         gl.glDeleteProgram(program)
         block.release()
+
+
+@pytest.mark.qt
+def test_draws_before_an_update_keep_their_values_and_the_scope_exit_drops_the_updates(context):
+    """Each trail ghost draws with its own rebound copy; earlier draws are never rewritten."""
+    layout = EXPLODING_TILES_FRAME_BLOCK
+    program = compile_program(_VERTEX, _reader(layout), label="ghost copy probe")
+    block = UniformBlock(layout, "ghost copy probe")
+    target, fbo, vao = int(gl.glGenTextures(1)), int(gl.glGenFramebuffers(1)), int(gl.glGenVertexArrays(1))
+    column = [field for field, _type in layout.fields].index("uProgress")
+    widths = {"vec2": 2, "ivec2": 2, "vec3": 3, "vec4": 4, "mat4": 16}
+    values = {field: 0 if widths.get(kind, 1) == 1 else (0,) * widths[kind] for field, kind in layout.fields}
+    values["uProgress"] = 0.25
+    try:
+        block.attach(program)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, target)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA32F, len(layout.fields), 3, 0, gl.GL_RGBA, gl.GL_FLOAT, None)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, target, 0)
+        gl.glViewport(0, 0, len(layout.fields), 3)
+        gl.glUseProgram(program)
+        gl.glBindVertexArray(vao)
+        gl.glEnable(gl.GL_SCISSOR_TEST)
+        with block.bound(values):
+            gl.glScissor(0, 0, len(layout.fields), 1)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            block.update_fields({"uProgress": 0.5})
+            gl.glScissor(0, 1, len(layout.fields), 1)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with block.bound(values):  # a nested bind hands back the updated copy
+                pass
+            gl.glScissor(0, 2, len(layout.fields), 1)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        pixels = np.asarray(gl.glReadPixels(0, 0, len(layout.fields), 3, gl.GL_RGBA, gl.GL_FLOAT)).reshape(3, -1, 4)
+        assert [float(pixels[row, column, 0]) for row in range(3)] == [0.25, 0.5, 0.5]
+        with pytest.raises(RuntimeError, match="not bound"):
+            block.update_fields({"uProgress": 1.0})
+    finally:
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, context.fbo)
+        gl.glDeleteFramebuffers(1, [fbo])
+        gl.glDeleteTextures([target])
+        gl.glDeleteVertexArrays(1, [vao])
+        gl.glDeleteProgram(program)
+        block.release()

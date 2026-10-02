@@ -44,19 +44,21 @@ class _Compiles:
 
 
 class _Work(_Compiles):
-    """Counts program compiles and per-run texture allocations (S10), the units a warm-up
-    step may do one of."""
+    """Counts program compiles, per-run texture allocations (S10) and stream-ring allocations
+    (S14), the units a warm-up step may do one of."""
 
     def __init__(self, monkeypatch) -> None:
         super().__init__(monkeypatch)
         from rendering.quick.scene3d.motion import MotionBlur
         from rendering.quick.scene3d.post import BloomChain
+        from rendering.quick.scene3d.stream import StreamRing
         from rendering.quick.scene3d.target import SceneTarget
         from rendering.quick.scene3d.trails import MotionTrails
 
         self.allocations = []
         for owner, name in ((SceneTarget, "_allocate"), (SceneTarget, "_allocate_resolve"),
-                            (MotionBlur, "_allocate"), (BloomChain, "_allocate"), (MotionTrails, "_allocate")):
+                            (MotionBlur, "_allocate"), (BloomChain, "_allocate"), (MotionTrails, "_allocate"),
+                            (StreamRing, "_allocate")):
             original = getattr(owner, name)
 
             def counted(*args, _original=original, _label=f"{owner.__name__}.{name}", **kwargs):
@@ -87,7 +89,7 @@ def test_after_warming_a_runs_first_frames_compile_and_allocate_nothing(qt_app, 
         warmed, allocated = work.total, list(work.allocations)
         for progress in (0.0, 0.3):              # an endpoint frame and a mid-run frame
             capture.render(run, progress)
-        assert work.allocations == allocated, "the warmed run's first frames allocated textures"
+        assert work.allocations == allocated, "the warmed run's first frames allocated textures or buffers"
         assert work.total == warmed, "the warmed run's first frames compiled a program"
         assert capture.host.warm_step(run.request.transition_id, parameters, size)   # nothing left
         capture.host.park()

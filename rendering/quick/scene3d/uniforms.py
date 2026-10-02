@@ -3,16 +3,18 @@
 A renderer declares its per-frame values once as a ``Scene3DBlockLayout`` (pure,
 in ``rendering.gl_programs.scene3d``), puts ``layout.glsl()`` in each program and
 draws its passes inside ``block.bound(values)``. That replaces a dozen
-``glUniform*`` calls per pass with one upload and one bind: the render-thread
+``glUniform*`` calls per pass with one packed write and one bind: the render-thread
 Python cost Visualizer modes need to afford 3D.
 
-Time-varying ghost passes may update only selected members of their own block.
-Those DSA writes name the owned buffer explicitly and leave generic bindings alone.
+The bytes travel through a ``StreamRing`` (persistently mapped, fenced; see
+``stream.py``). A renderer with several blocks hands them one shared ring and
+releases it itself; a block given none owns a private one. Time-varying ghost passes
+update selected members with ``update_fields``: a patched copy of the block is written
+and rebound, so draws already submitted keep reading the values they were given.
 
-Full block uploads re-specify the buffer (orphaning) to avoid reusing the previous
-frame's storage; selected-field updates retain that storage. The block sits on binding point
-``SCENE3D_UNIFORM_BINDING``; ``bound`` restores that point's previous buffer range
-and the generic uniform-buffer binding, so no host fence has to know about it.
+The block sits on binding point ``SCENE3D_UNIFORM_BINDING``; ``bound`` restores that
+point's previous buffer range and never touches the generic uniform-buffer binding,
+so no host fence has to know about it.
 """
 from __future__ import annotations
 
@@ -22,22 +24,24 @@ from typing import Iterator, Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
-from rendering.quick import gl_query
+from rendering.quick.scene3d.stream import StreamRing
 
 # Well clear of the points Qt Quick's own shaders use; restored after every use anyway.
 SCENE3D_UNIFORM_BINDING = 15
 
 
 class UniformBlock:
-    def __init__(self, layout: Scene3DBlockLayout, label: str) -> None:
+    def __init__(self, layout: Scene3DBlockLayout, label: str, stream: StreamRing | None = None) -> None:
         self.layout = layout
         self.label = label
-        self._buffer = 0
+        self._owns_stream = stream is None
+        self._stream = stream if stream is not None else StreamRing(label)
         self._attached: set[int] = set()
+        self._packed: bytes | None = None
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._buffer)
+        return self._stream.has_resources
 
     def attach(self, program: int) -> None:
         """Point ``program``'s block at the shared binding (once per program)."""
@@ -52,39 +56,25 @@ class UniformBlock:
     @contextmanager
     def bound(self, values: Mapping[str, object]) -> Iterator[None]:
         data = self.layout.pack(values)
-        generic = gl_query.get_int(gl.GL_UNIFORM_BUFFER_BINDING)
-        previous = (
-            gl_query.get_indexed_int(gl.GL_UNIFORM_BUFFER_BINDING, SCENE3D_UNIFORM_BINDING),
-            gl_query.get_indexed_int64(gl.GL_UNIFORM_BUFFER_START, SCENE3D_UNIFORM_BINDING),
-            gl_query.get_indexed_int64(gl.GL_UNIFORM_BUFFER_SIZE, SCENE3D_UNIFORM_BINDING),
-        )
-        try:
-            if not self._buffer:
-                self._buffer = int(gl.glGenBuffers(1))
-                if not self._buffer:
-                    raise RuntimeError(f"{self.label} uniform buffer allocation failed")
-            gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, self._buffer)
-            gl.glBufferData(gl.GL_UNIFORM_BUFFER, len(data), data, gl.GL_STREAM_DRAW)
-            gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, self._buffer)
-            yield
-        finally:
-            buffer, start, size = previous
-            if buffer and size:
-                gl.glBindBufferRange(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, buffer, start, size)
-            else:
-                gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, buffer)
-            gl.glBindBuffer(gl.GL_UNIFORM_BUFFER, generic)
+        with self._stream.bound(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, data):
+            outer, self._packed = self._packed, data
+            try:
+                yield
+            finally:
+                self._packed = outer
 
     def update_fields(self, values: Mapping[str, object]) -> None:
-        """Update selected fields without relying on the generic uniform-buffer binding."""
-        if not self._buffer:
-            raise RuntimeError(f"{self.label} has no allocated uniform buffer")
-        for offset, data in self.layout.pack_fields(values):
-            gl.glNamedBufferSubData(self._buffer, offset, len(data), data)
+        """Rebind the block with selected fields changed (inside ``bound``)."""
+        if self._packed is None:
+            raise RuntimeError(f"{self.label} is not bound")
+        data = bytearray(self._packed)
+        for offset, part in self.layout.pack_fields(values):
+            data[offset:offset + len(part)] = part
+        self._packed = bytes(data)
+        self._stream.rebind(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, self._packed)
 
     def release(self) -> None:
-        """Delete the buffer; programs must be re-attached (their names may be reused)."""
+        """Forget attached programs (their names may be reused); release an owned ring."""
         self._attached.clear()
-        if self._buffer:
-            gl.glDeleteBuffers(1, [self._buffer])
-            self._buffer = 0
+        if self._owns_stream:
+            self._stream.release()

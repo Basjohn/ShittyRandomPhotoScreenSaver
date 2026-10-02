@@ -53,6 +53,14 @@ _REQUIRED_GL_ENTRY_POINTS: dict[str, tuple[str, ...]] = {
     ),
     "immutable_storage": ("glTexStorage2D", "glBufferStorage"),
     "shader_storage_buffers": ("glBindBufferBase",),
+    "persistent_streaming": (
+        "glMapNamedBufferRange",
+        "glBindBuffersRange",
+        "glBindBuffersBase",
+        "glFenceSync",
+        "glClientWaitSync",
+        "glDeleteSync",
+    ),
     "compute": ("glDispatchCompute", "glMemoryBarrier"),
     "multi_draw_indirect": ("glMultiDrawArraysIndirect",),
 }
