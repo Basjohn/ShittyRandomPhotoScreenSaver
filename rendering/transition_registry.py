@@ -124,6 +124,12 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
+        setting_name="Disintegrate",
+        stable_id="disintegrate",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Page Curl",
         stable_id="page_curl",
         easing_curve=EasingCurve.LINEAR,

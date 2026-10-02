@@ -90,4 +90,5 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "ink_bloom": EasingCurve.LINEAR,
         "melt_drip": EasingCurve.LINEAR,
         "page_curl": EasingCurve.LINEAR,   # eases its own curl line
+        "disintegrate": EasingCurve.LINEAR,
     }
