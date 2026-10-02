@@ -76,8 +76,12 @@ def test_fixed_scene_allocations_are_immutable_and_preserve_unrelated_host_bindi
 
         for fbo in (target._names["fbo"], target._names["resolve_fbo"], trails._fbo):
             _complete(fbo)
-        for _texture, fbo, _width, _height in target._bloom._levels + target._motion._passes:
+        for _texture, fbo, _width, _height in target._bloom._levels:
             _complete(fbo)
+        # Motion blur's tile max is a compute-written image with no framebuffer; the blurred scene has one.
+        (_tiles, tiles_fbo, _w, _h), (_blurred, blurred_fbo, _bw, _bh) = target._motion._passes
+        assert tiles_fbo == 0
+        _complete(blurred_fbo)
     finally:
         trails.release()
         target.release()

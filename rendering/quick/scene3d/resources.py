@@ -12,7 +12,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick import gl_query as _query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_compute_program, compile_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
 
 
@@ -72,15 +72,19 @@ def _create_one(create) -> int:
 
 
 def warm_programs(entries) -> bool:
-    """One step of a gradual warm-up over (resources, key, vertex, fragment) entries: compile
-    the first program not yet compiled, and only that one. True once all are compiled.
+    """One step of a gradual warm-up over (resources, key, vertex, fragment) entries, or
+    (resources, key, compute) for a compute program: compile the first program not yet
+    compiled, and only that one. True once all are compiled.
 
     An ordinary synchronous compile on the calling (render) thread: no driver compile threads,
     no status polling, nothing left running between steps."""
-    for resources, key, vertex, fragment in entries:
+    for resources, key, *sources in entries:
         if resources.has_program(key):
             continue
-        resources.program(key, vertex, fragment)
+        if len(sources) == 1:
+            resources.compute_program(key, sources[0])
+        else:
+            resources.program(key, *sources)
         return False
     return True
 
@@ -145,6 +149,11 @@ class MeshResources:
     def program(self, key: str, vertex_source: str, fragment_source: str) -> int:
         if key not in self._programs:
             self._programs[key] = compile_program(vertex_source, fragment_source, label=f"{self.label} {key}")
+        return self._programs[key]
+
+    def compute_program(self, key: str, source: str) -> int:
+        if key not in self._programs:
+            self._programs[key] = compile_compute_program(source, label=f"{self.label} {key}")
         return self._programs[key]
 
     def has_program(self, key: str) -> bool:

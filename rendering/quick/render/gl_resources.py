@@ -14,13 +14,21 @@ def _info_text(value: object) -> str:
 def compile_program(vertex_source: str, fragment_source: str, *, label: str) -> int:
     """Compile and link one program in the caller's current GL context."""
 
+    return _link(((gl.GL_VERTEX_SHADER, vertex_source, "vertex"),
+                  (gl.GL_FRAGMENT_SHADER, fragment_source, "fragment")), label)
+
+
+def compile_compute_program(source: str, *, label: str) -> int:
+    """Compile and link one compute program in the caller's current GL context."""
+
+    return _link(((gl.GL_COMPUTE_SHADER, source, "compute"),), label)
+
+
+def _link(stages, label: str) -> int:
     shaders: list[int] = []
     program = 0
     try:
-        for shader_type, source, stage in (
-            (gl.GL_VERTEX_SHADER, vertex_source, "vertex"),
-            (gl.GL_FRAGMENT_SHADER, fragment_source, "fragment"),
-        ):
+        for shader_type, source, stage in stages:
             shader = int(gl.glCreateShader(shader_type))
             if not shader:
                 raise RuntimeError(f"{label} {stage} shader creation failed")

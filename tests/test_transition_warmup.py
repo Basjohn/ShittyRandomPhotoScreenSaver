@@ -29,18 +29,19 @@ _SETUPS = (
 
 
 class _Compiles:
-    """Counts every program compile."""
+    """Counts every program compile, graphics or compute."""
 
     def __init__(self, monkeypatch) -> None:
         self.total = 0
-        original = gl_resources.compile_program
+        for name in ("compile_program", "compile_compute_program"):
+            original = getattr(gl_resources, name)
 
-        def compile_program(*args, **kwargs):
-            self.total += 1
-            return original(*args, **kwargs)
+            def counted(*args, _original=original, **kwargs):
+                self.total += 1
+                return _original(*args, **kwargs)
 
-        for module in (gl_resources, scene_resources):
-            monkeypatch.setattr(module, "compile_program", compile_program)
+            for module in (gl_resources, scene_resources):
+                monkeypatch.setattr(module, name, counted)
 
 
 class _Work(_Compiles):

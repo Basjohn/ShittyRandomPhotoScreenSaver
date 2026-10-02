@@ -46,7 +46,7 @@ and binds; depth renderbuffers also use named storage. Rendering and resolve pas
 | --- | --- |
 | `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets |
 | Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
-| Motion | Three RG16F velocity reduction/neighbour passes and one RGBA8 output, using existing tile and target sizes |
+| Motion | One RG16F compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
 | Motion Trails | Existing R8 mask, allocated only for its active requesting consumer |
 
 Names enter their current owner before parameter/storage calls so an exception cannot strand an untracked resource.
@@ -90,6 +90,47 @@ Trails; CPU submit median 1.19-1.26 -> 1.23-1.27 ms by default (neutral), 1.80-1
 2.09-2.15 -> 1.94 ms with trails and motion blur (p90 2.79-2.97 -> 2.33-2.38 ms). The removed work is the per-frame
 buffer re-specification, the generic-binding query/restore and three sub-data writes per trail ghost.
 
+## Compute seam and first consumer (S15)
+
+`compute.py` is the whole seam: `dispatch(groups, barriers)` takes explicit workgroup counts and the barrier bits its
+readers need, and issues that barrier straight after the dispatch (the writer owns it; readers never know a writer
+exists). `bound_image(unit, texture, access, format)` binds level 0 of an owned texture for the scope and hands the unit's
+previous binding back (name, level, layering, access, format), because the transition host does not fence image units.
+`MeshResources.compute_program` compiles through `compile_compute_program` (shared link/cleanup with graphics programs)
+and `warm_programs` accepts `(resources, key, compute_source)` entries, so compute programs are gradual warm-up steps.
+No queue, scheduler, worker, readback or polling exists: work runs on the owning render thread in the frame that uses it.
+
+**First consumer: motion blur's tile max.** The candidates were measured first (2560x1440 offscreen, RTX 4090):
+
+- Particles: Exploding Tiles' 480 sparks are analytic and culled in the vertex shader; compute evaluation would add a
+  dispatch and a barrier to an already cheap pass.
+- Active-piece compaction / indirect counts: every 3D transition is at most 0.3 ms whole-frame GPU (median), its
+  instanced populations are single draws, and per-frame CPU (0.6-1.6 ms) is state save/restore, not draw loops.
+- Exploding Tiles' dominant body colour (0.93 ms of render-thread Python per run per display): a GPU result must be
+  bound every frame (about 8-15 us), more total CPU per run than the scan it removes.
+- Bloom: still one pass per level with a barrier each, so compute removes no calls.
+- Motion blur's separable tile max (two fragment passes into two targets) and neighbour max (a third) were the one
+  consumer where compute removes passes, targets and calls, shared by all five 3D transitions.
+
+The tile max is one dispatch, one workgroup per K x K tile: an invocation per tile row finds the first strictly longest
+motion left to right, then the first invocation takes the first strictly longest row top to bottom, which is exactly
+the separable column-then-row scan (ties and partial edge tiles included). The gather takes the 3 x 3 neighbourhood
+maximum of the tile image itself (same scan order). Values are RG16F velocity texels stored back unchanged. Tile
+rows are held in a fixed 256-row shared array; a target needing larger tiles (over ~10,000 px high) is a loud error.
+The dispatch issues `GL_TEXTURE_FETCH_BARRIER_BIT` for the gather's sampled read. Motion Blur Off compiles, allocates
+and dispatches nothing.
+
+Measured: 84 frames across five transitions, two sizes (2560x1440; 1366x768 with partial tiles) and Exploding
+Tiles' High/Balanced/trails setups are byte-identical to the fragment passes. GL calls per frame with Motion Blur fall
+by 14 (Tiles 260 -> 246, Glass 191 -> 177, Crumble 199 -> 185, Accretion 183 -> 169, Block Spins 182 -> 168). Owned
+memory per motion target falls by two textures and three framebuffers (about 0.42 MB at 2560x1440). Separate-process
+timing was dominated by GPU clock state, so the accepted comparison alternates old and new reductions frame by frame
+on one renderer (two runs of 480 frames per transition): CPU submit median -0.05 to -0.07 ms (p90 -0.05 to -0.09),
+reduction stage GPU -0.006 to -0.022 ms, whole-frame GPU -0.006 to -0.020 ms with lower p90.
+
+On this driver, dropping the barrier changed none of 30 frames: the hazard is not observable here, so the bar is the
+recorded dispatch -> barrier(texture fetch) -> gather order rather than a pixel failure.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
@@ -119,4 +160,11 @@ The expanded fence deliberately pays for the previously missing state; the isola
   leaves no buffer.
 - `test_scene3d_uniforms.py`: std140 layout and values, previous binding handed back, and draws before an
   `update_fields` keep their values.
-- `test_transition_warmup.py`: counts ring allocation as a warm-up unit, so a run's first frame cannot allocate it.
+- `test_transition_warmup.py`: counts ring allocation as a warm-up unit, so a run's first frame cannot allocate it;
+  it counts compute compiles too (leaving the tile-max program out of warm-up fails ten motion-blur cases).
+- `test_scene3d_compute.py`: the compute tile max equals the column-then-row reference exactly on random, tied,
+  single-texel and still fields with partial edge tiles (a non-strict tie rule fails it); the dispatch is followed by a
+  texture-fetch barrier before the gather; dispatches name groups and barriers; image units come back (bound or
+  unbound, after a failure, and across a real motion-blurred frame); runs without Motion Blur compile and dispatch no
+  compute on all five transitions; fixed loud tile capacity; release returns to zero and rebuilds; failed compute
+  compiles/links leave no shader or program.

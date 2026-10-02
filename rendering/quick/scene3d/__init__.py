@@ -15,6 +15,8 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``environment`` -- photo reflections: per-run, renderer-owned mipmapped photo copies;
 * ``trails`` -- motion trails: fading outlines of where pieces just were;
 * ``uniforms`` -- per-frame uniform blocks;
+* ``stream`` -- the fenced persistently mapped ring per-frame buffer bytes travel through;
+* ``compute`` -- compute dispatch with explicit groups and writer-owned barriers, scoped image units;
 * ``passes`` -- blend scopes.
 
 Nothing here owns a clock, state or Settings; every GL handle belongs to the

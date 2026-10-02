@@ -40,6 +40,7 @@ _REQUIRED_GL_ENTRY_POINTS: dict[str, tuple[str, ...]] = {
         "glTextureStorage2D",
         "glProgramUniform1i",
         "glBindTextures",
+        "glBindTextureUnit",
         "glTextureStorage2DMultisample",
         "glTextureParameteri",
         "glGenerateTextureMipmap",
@@ -61,7 +62,7 @@ _REQUIRED_GL_ENTRY_POINTS: dict[str, tuple[str, ...]] = {
         "glClientWaitSync",
         "glDeleteSync",
     ),
-    "compute": ("glDispatchCompute", "glMemoryBarrier"),
+    "compute": ("glDispatchCompute", "glMemoryBarrier", "glBindImageTexture"),
     "multi_draw_indirect": ("glMultiDrawArraysIndirect",),
 }
 _validated_contexts_lock = threading.Lock()
