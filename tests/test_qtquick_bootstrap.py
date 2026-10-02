@@ -316,6 +316,7 @@ def test_actual_context_validation_logs_capabilities_once_and_revalidates_after_
         "direct_state_access": True,
         "immutable_storage": True,
         "shader_storage_buffers": True,
+        "persistent_streaming": True,
         "compute": True,
         "multi_draw_indirect": True,
     }

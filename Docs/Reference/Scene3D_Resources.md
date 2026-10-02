@@ -58,6 +58,38 @@ partial-allocation cleanup, resize/reuse and the existing disabled/parked lifecy
 Spins / Exploding Tiles captures matched the preceding implementation byte-for-byte. These checks establish the
 allocation and pixel contracts; ordinary two-display loaded-desktop observation remains in `Current_Plan.md`.
 
+## Per-frame stream ring and std430 storage (S14)
+
+`StreamRing` (`stream.py`) carries small payloads that change every frame. One immutable buffer is created with
+`glNamedBufferStorage` and mapped once, write-persistent-coherent; a payload is one `memmove` into the mapping and one
+raw `glBindBuffersRange` of its aligned range (uniform alignment 256, storage 16 on the RTX 4090). Multi-bind never
+changes the generic buffer binding, so `bound` saves and restores only the indexed point (its range, or a whole-buffer
+binding). Coherent mapping needs no flush call; explicit flushes would add one call per write and were not adopted.
+
+Capacity is fixed: four 16 KiB slots, at most 4 KiB per outermost `bound`. Writes advance through the current slot;
+slots rotate only when every `bound` has exited, because each exit restores the previous binding and no later command
+can read the ring. Rotation places one fence on the slot it leaves and, before writing a slot again, waits on that
+slot's fence (one bounded blocking `glClientWaitSync`, never a poll; a second's wait is a loud error). At Exploding
+Tiles' sizes a fence is placed every few dozen frames. Exceeding the per-frame capacity raises; nothing is overwritten
+silently and nothing grows.
+
+`UniformBlock` streams through a ring: a renderer passes its blocks one shared ring and releases it itself (a block
+without one owns a private ring). `update_fields` writes a patched copy and rebinds it, so draws already submitted keep
+their values. Exploding Tiles' frame and ghost blocks share one ring, allocated by its gradual warm-up rather than its
+first frame, kept warm across `park()` and released with the renderer. A ring nobody writes allocates nothing.
+
+`Scene3DStorageLayout` (import-safe, `rendering/gl_programs/scene3d.py`) declares one std430 record array: GLSL struct and
+buffer block, member offsets, record stride (rounded to the largest member alignment only, so three floats stride 12),
+`pack(records)` and an equivalent numpy structured `dtype()`. Records bind through the same ring at a consumer-chosen
+storage binding. No current consumer moves to storage buffers: a two-array Visualizer upload would trade two calls for
+four, and Sphere's eight cohort arrays plus section drives belong to its S19 promotion; S15-S18 consumers use it first.
+
+Measured (960x540 offscreen Exploding Tiles, three interleaved HEAD/new process pairs, 210 warm frames each, flush per
+frame; 28 frames across four setups byte-identical): GL calls per frame 215 -> 211 by default and 281 -> 267 with Motion
+Trails; CPU submit median 1.19-1.26 -> 1.23-1.27 ms by default (neutral), 1.80-1.84 -> 1.70-1.72 ms with trails and
+2.09-2.15 -> 1.94 ms with trails and motion blur (p90 2.79-2.97 -> 2.33-2.38 ms). The removed work is the per-frame
+buffer re-specification, the generic-binding query/restore and three sub-data writes per trail ghost.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
@@ -80,6 +112,11 @@ The expanded fence deliberately pays for the previously missing state; the isola
 - Existing transition warm-up, scene foundation, target, environment and Motion Trails tests protect pixels,
   gradual preparation, parked resources and disabled-feature dormancy across the five shared 3D transitions.
 
-Changing uniform streams still use the existing mutable/orphaned UBO owner. Immutable static storage is not a
-drop-in replacement for that update policy. Persistent mapped streaming, multiple buffer-range binding and effect-
-private dynamic/instanced transport are tracked by the live S14 checklist in `Current_Plan.md`.
+- `test_scene3d_stream.py`: driver-reported std430 offsets/strides equal the layout and values arrive through the
+  ring; indexed ranges restored and generic bindings untouched for uniform and storage targets; every reused slot
+  waited on its fence with each of 48 unsynchronised frames reading its own values; fixed loud capacity; a dormant
+  ring makes no GL call; failed deletion keeps its handle, release returns to zero and rebuilds; a failed mapping
+  leaves no buffer.
+- `test_scene3d_uniforms.py`: std140 layout and values, previous binding handed back, and draws before an
+  `update_fields` keep their values.
+- `test_transition_warmup.py`: counts ring allocation as a warm-up unit, so a run's first frame cannot allocate it.

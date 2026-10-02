@@ -37,6 +37,7 @@ from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, b
 from rendering.quick.scene3d.shadows import draw_planar_shadows
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
@@ -50,16 +51,18 @@ class QuickExplodingTilesRenderer:
         self._target = SceneTarget("Quick Exploding Tiles")
         self._environment = PhotoEnvironment("Quick Exploding Tiles")   # photo reflections
         self._trails = MotionTrails("Quick Exploding Tiles")
-        # The ghosts' frame values (their own buffer, so the real tiles keep theirs).
-        self._ghost_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles ghosts")
-        self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles")
+        # Both blocks stream through one ring; the ghosts' values are rebound copies, so the
+        # real tiles keep theirs.
+        self._stream = StreamRing("Quick Exploding Tiles")
+        self._ghost_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles ghosts", self._stream)
+        self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles", self._stream)
         self._body_key: tuple[int, str] | None = None
         self._body = (0.15, 0.15, 0.15)
 
     @property
     def has_resources(self) -> bool:
-        return (self._resources.has_resources or self._target.has_resources or self._frame_block.has_resources
-                or self._environment.has_resources or self._trails.has_resources or self._ghost_block.has_resources)
+        return (self._resources.has_resources or self._target.has_resources or self._stream.has_resources
+                or self._environment.has_resources or self._trails.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -125,7 +128,7 @@ class QuickExplodingTilesRenderer:
                         (r, *TRAIL_EDGES_PROGRAM)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, bloom > 0.0, motion_blur)]
-        if not warm_programs(entries):
+        if not warm_programs(entries) or not self._stream.warm():
             return False
         return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion_blur,
                                   bloom=bloom > 0.0, with_trails=trails)
@@ -221,7 +224,7 @@ class QuickExplodingTilesRenderer:
         return self._body
 
     def park(self) -> None:
-        """Drop the per-run target, environment and trails; programs, the slab mesh and the block stay warm."""
+        """Drop the per-run target, environment and trails; programs, the slab mesh and the stream ring stay warm."""
         self._target.release()
         self._environment.release()
         self._trails.release()
@@ -229,7 +232,8 @@ class QuickExplodingTilesRenderer:
     def release_resources(self) -> None:
         errors: list[str] = []
         for release in (self._target.release, self._environment.release, self._trails.release,
-                        self._frame_block.release, self._ghost_block.release, self._resources.release_resources):
+                        self._frame_block.release, self._ghost_block.release, self._stream.release,
+                        self._resources.release_resources):
             try:
                 release()
             except Exception as exc:

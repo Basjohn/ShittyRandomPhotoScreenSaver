@@ -828,6 +828,67 @@ class Scene3DBlockLayout:
         return tuple(packed)
 
 
+@dataclass(frozen=True)
+class Scene3DStorageLayout:
+    """One std430 shader-storage array of records (instances, events, history, materials).
+
+    The GLSL struct and buffer declaration, member offsets, record stride and packing all
+    come from one field list, like ``Scene3DBlockLayout``. Members are scalars, vectors
+    and mat4 (std430 aligns them as std140 does); a record's stride is its size rounded to
+    its largest member alignment, without std140's rounding to 16.
+    """
+
+    name: str
+    record: str
+    array: str
+    fields: tuple[tuple[str, str], ...]
+    offsets: tuple[int, ...]
+    stride: int
+
+    @classmethod
+    def of(cls, name: str, record: str, fields: tuple[tuple[str, str], ...],
+           array: str = "records") -> "Scene3DStorageLayout":
+        offsets, cursor, largest = [], 0, 1
+        for _field, glsl_type in fields:
+            alignment, size, _format = _STD140[glsl_type]
+            largest = max(largest, alignment)
+            cursor = -(-cursor // alignment) * alignment
+            offsets.append(cursor)
+            cursor += size
+        return cls(name, record, array, tuple(fields), tuple(offsets), -(-cursor // largest) * largest)
+
+    def glsl(self, binding: int, qualifier: str = "readonly") -> str:
+        members = "".join(f"    {glsl_type} {field};\n" for field, glsl_type in self.fields)
+        return (f"struct {self.record} {{\n{members}}};\n"
+                f"layout(std430, binding = {binding}) {qualifier} buffer {self.name} {{\n"
+                f"    {self.record} {self.array}[];\n}};\n")
+
+    def pack(self, records) -> bytes:
+        import struct
+
+        data = bytearray(self.stride * len(records))
+        for index, values in enumerate(records):
+            base = index * self.stride
+            for (field, glsl_type), offset in zip(self.fields, self.offsets):
+                value = values[field]
+                items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+                struct.pack_into("<" + _STD140[glsl_type][2], data, base + offset, *items)
+        return bytes(data)
+
+    def dtype(self):
+        """The record as a numpy structured dtype, for packing many records without a loop."""
+        import numpy as np
+
+        kinds = {"f": "<f4", "i": "<i4", "I": "<u4"}
+        formats = []
+        for _field, glsl_type in self.fields:
+            fmt = _STD140[glsl_type][2]
+            count, kind = (int(fmt[:-1]), fmt[-1]) if len(fmt) > 1 else (1, fmt)
+            formats.append(kinds[kind] if count == 1 else (kinds[kind], (count,)))
+        return np.dtype({"names": [field for field, _type in self.fields], "formats": formats,
+                         "offsets": list(self.offsets), "itemsize": self.stride})
+
+
 # ---- Camera (CPU side: mirrors, overscan and shake) ----
 
 def scene3d_screen_uv_at(world: Vec3, aspect: float, distance: float) -> tuple[float, float]:
