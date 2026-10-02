@@ -156,6 +156,9 @@ class MeshResources:
             self._programs[key] = compile_compute_program(source, label=f"{self.label} {key}")
         return self._programs[key]
 
+    def has_mesh(self, key: str) -> bool:
+        return key in self._meshes
+
     def has_program(self, key: str) -> bool:
         return key in self._programs
 

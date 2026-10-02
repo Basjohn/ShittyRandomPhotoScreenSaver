@@ -480,3 +480,20 @@ def test_blinds_style_shows_its_own_controls_and_round_trips(qapp, settings_mana
     qapp.processEvents()
     assert combo.currentText() == canonical["style"]
     assert tab.blinds_slats_spin.value() == tab.blinds_slats_spin.maximum()
+
+
+def test_page_curl_page_offers_origins_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Page Curl"].setChecked(True)
+    tab._on_nav_selected("Page Curl")
+    items = [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())]
+    assert items == list(PAGE_CURL_ORIGIN_CHOICES)
+    tab.direction_combo.setCurrentText("Top Left")
+    tab.page_curl_gloss_spin.setValue(0.8)
+    tab.page_curl_antialiasing_combo.setCurrentText("8x")
+    persisted = settings_manager.get("transitions", {})["page_curl"]
+    assert persisted == {"direction": "Top Left", "gloss": 0.8, "antialiasing": "8x"}
+    assert tab.page_curl_advanced_body.isAncestorOf(tab.page_curl_antialiasing_combo)

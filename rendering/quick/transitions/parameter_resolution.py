@@ -17,6 +17,7 @@ from typing import Protocol
 from core.settings.default_contract import require_canonical_default
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_TRAIL_CHOICES,
@@ -801,6 +802,20 @@ def _resolve_melt_drip(
     )
 
 
+def _resolve_page_curl(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "page_curl")
+    defaults = _canonical("page_curl")
+    origin = PAGE_CURL_ORIGINS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if origin is None:
+        # "Random" (and anything unknown) picks a corner or edge per run.
+        origin = str(rng.choice(tuple(PAGE_CURL_ORIGINS.values())))
+    return _finish(origin, {**_surface_values(cfg, defaults, ("gloss",)),
+                            **resolve_scene_quality(settings, cfg, defaults)})
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -813,6 +828,7 @@ _RESOLVERS = {
     "pixel_accretion": _resolve_pixel_accretion,
     "ink_bloom": lambda settings, rng: _resolve_organic("ink_bloom", settings, rng),
     "melt_drip": _resolve_melt_drip,
+    "page_curl": _resolve_page_curl,
 }
 
 

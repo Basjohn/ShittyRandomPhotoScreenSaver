@@ -31,6 +31,7 @@ class TransitionType(Enum):
     PIXEL_ACCRETION = "Directional Pixel Accretion"
     INK_BLOOM = "Ink Bloom"
     MELT_DRIP = "Melt Drip"
+    PAGE_CURL = "Page Curl"
 
 
 class WidgetPosition(Enum):

@@ -55,6 +55,9 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   roughness/metalness/specular/emissive, directional/point/spot lights and photo-environment light through an analytic
   split-sum BRDF (no LUT texture), GPU-mirrored. Flat Blinds stays byte-identical and dormant. Contracts, cost and
   open physical checks: `Docs/Reference/Transitions.md`.
+- [x] **Page Curl landed (S20)**, the bendable grid's first consumer: an isometric cylinder curl with a folded paper
+  back, material lighting only on bent paper and an analytic shade that ends at zero. Deactivated by default; physical
+  checks in `Docs/Reference/Transitions.md`.
 
 ## 1. S16 | indirect / multi-draw + GPU compaction | **BLOCKED: no consumer yet**
 
@@ -137,7 +140,6 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
-- [ ] **Page Curl**: adaptive-surface/material/shadow proof (Blinds -> 3D Slats landed with S17).
 - [ ] **Extruded Spectrum**: first ordinary shared-foundation 3D Visualizer and SSBO-instancing/material-light proof.
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.

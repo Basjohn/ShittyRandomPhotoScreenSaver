@@ -52,17 +52,18 @@ void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Positio
         self.programs: dict[str, int] = {}
         self.names: list[tuple[str, int]] = []
 
-    def run(self, body: str, samples: list[list[tuple[float, ...]]]) -> np.ndarray:
+    def run(self, body: str, samples: list[list[tuple[float, ...]]], declarations: str = "") -> np.ndarray:
         from rendering.quick.render.gl_resources import compile_program
 
         gl = self.gl
         count, rows = len(samples), len(samples[0])
-        if body not in self.programs:
-            fragment = ("#version 460 core\nout vec4 FragColor;\nuniform sampler2D uArgs;\n" + lib.SCENE3D_GLSL
+        key = declarations + body
+        if key not in self.programs:
+            fragment = ("#version 460 core\nout vec4 FragColor;\nuniform sampler2D uArgs;\n" + lib.SCENE3D_GLSL + declarations
                         + "vec4 arg(int row) { return texelFetch(uArgs, ivec2(int(gl_FragCoord.x), row), 0); }\n"
                         + f"const mat4 MATRIX = {_MATRIX_GLSL};\nconst vec2 ITEM = vec2({_ITEM[0]:.1f}, {_ITEM[1]:.1f});\n"
                         + "void main() {\n" + body + "\n}\n")
-            self.programs[body] = compile_program(self._VERTEX, fragment, label="scene3d mirror probe")
+            self.programs[key] = compile_program(self._VERTEX, fragment, label="scene3d mirror probe")
         data = np.zeros((rows, count, 4), dtype=np.float32)
         for column, sample in enumerate(samples):
             for row, values in enumerate(sample):
@@ -79,10 +80,10 @@ void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Positio
             gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, target, 0)
             assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
             gl.glViewport(0, 0, count, 1)
-            gl.glUseProgram(self.programs[body])
+            gl.glUseProgram(self.programs[key])
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindTexture(gl.GL_TEXTURE_2D, args)
-            gl.glUniform1i(gl.glGetUniformLocation(self.programs[body], "uArgs"), 0)
+            gl.glUniform1i(gl.glGetUniformLocation(self.programs[key], "uArgs"), 0)
             gl.glBindVertexArray(self.vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             pixels = gl.glReadPixels(0, 0, count, 1, gl.GL_RGBA, gl.GL_FLOAT)

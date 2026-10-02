@@ -27,6 +27,7 @@ from core.settings.capability_activation import (
 from core.logging.logger import get_logger
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_DETAIL_NAMES,
@@ -102,6 +103,7 @@ class TransitionsTab(QWidget):
                 "exploding_tiles",
                 "pixel_accretion",
                 "melt_drip",
+                "page_curl",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -588,6 +590,7 @@ class TransitionsTab(QWidget):
         "Directional Pixel Accretion": "_build_pixel_accretion_group",
         "Ink Bloom": "_build_ink_bloom_group",
         "Melt Drip": "_build_melt_drip_group",
+        "Page Curl": "_build_page_curl_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -605,6 +608,7 @@ class TransitionsTab(QWidget):
         "Directional Pixel Accretion": "pixel_accretion_group",
         "Ink Bloom": "ink_bloom_group",
         "Melt Drip": "melt_drip_group",
+        "Page Curl": "page_curl_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -615,6 +619,7 @@ class TransitionsTab(QWidget):
             "Exploding Tiles",
             "Directional Pixel Accretion",
             "Melt Drip",
+            "Page Curl",
         }
     )
 
@@ -1080,6 +1085,9 @@ class TransitionsTab(QWidget):
         "blinds": (
             ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
         ),
+        "page_curl": (
+            ("gloss", "Paper Gloss:", 0., 1., "Shine and reflections of the next image on the curling page."),
+        ),
         "melt_drip": (
             ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
@@ -1108,6 +1116,7 @@ class TransitionsTab(QWidget):
         "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "blinds": (_ANTIALIASING_CONTROL,),
+        "page_curl": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1298,6 +1307,15 @@ class TransitionsTab(QWidget):
         detail_row.addStretch()
         self._build_surface_controls(layout, "melt_drip")
         self._specific_group_host_layout.addWidget(self.melt_drip_group)
+
+    def _build_page_curl_group(self) -> None:
+        self.page_curl_group = QGroupBox("Page Curl Settings")
+        self._style_group_box(self.page_curl_group)
+        layout = QVBoxLayout(self.page_curl_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        self._build_surface_controls(layout, "page_curl")
+        self._build_scene3d_choices(layout, "page_curl")
+        self._specific_group_host_layout.addWidget(self.page_curl_group)
 
     def _build_blockspin_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -2150,7 +2168,7 @@ class TransitionsTab(QWidget):
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
-            for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip"):
+            for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2287,6 +2305,13 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Page Curl":
+                    # Where the page starts to peel: a corner or an edge.
+                    self.direction_combo.addItems(list(PAGE_CURL_ORIGIN_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["page_curl"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
 
@@ -2401,6 +2426,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["pixel_accretion"] = cur_dir
         elif cur_type == "Melt Drip":
             self._direction_by_type["melt_drip"] = cur_dir
+        elif cur_type == "Page Curl":
+            self._direction_by_type["page_curl"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2541,11 +2568,15 @@ class TransitionsTab(QWidget):
             }
         else:
             melt_drip = _existing_subdict('melt_drip')
+        if hasattr(self, 'page_curl_group'):
+            page_curl = {'direction': self._direction_by_type['page_curl']}
+        else:
+            page_curl = {**_existing_subdict('page_curl'), 'direction': self._direction_by_type['page_curl']}
 
         for section, values in (("blinds", blinds), ("crumble", crumble), ("glass_shatter", glass_shatter),
                                 ("exploding_tiles", exploding_tiles),
                                 ("ink_bloom", ink_bloom),
-                                ("melt_drip", melt_drip)):
+                                ("melt_drip", melt_drip), ("page_curl", page_curl)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2587,6 +2618,7 @@ class TransitionsTab(QWidget):
             'pixel_accretion': pixel_accretion,
             'ink_bloom': ink_bloom,
             'melt_drip': melt_drip,
+            'page_curl': page_curl,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):
