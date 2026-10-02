@@ -15,23 +15,14 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   DSA/immutable storage where useful, camera/projection helpers, bounded targets, bloom/motion-blur/trails/photo
   reflection, next-transition warm-up, state fences and retirement are the starting point. Fix defects at their owner;
   do not recreate S1-S13 as a historical checklist.
-- [x] **Packaging sanity restored.** WebEngine/world-timezone/generated-Python-QRC bloat is no longer an active project;
-  binary RCC, clean installer replacement, QTimeZone authority and the current Qt/QML denylist are baseline contracts.
-  The modern-GL roadmap is protected from future package pruning: no GL/ARB/KHR capability is removed merely because
-  its first planned 3D consumer has not landed yet.
+- [x] **Packaging sanity restored (R-102).** WebEngine/world-timezone/generated-Python-QRC bloat is no longer an active
+  project; binary RCC, clean installer replacement, QTimeZone authority and the current Qt/QML denylist are baseline
+  contracts. PySide6.QtQuick's binding-level dependency on `PySide6.QtOpenGL` is explicitly retained in every runtime
+  build even though application source does not import it directly; `Qt6OpenGLWidgets` remains separately unused. The
+  modern-GL roadmap is protected from future package pruning: no GL/ARB/KHR capability is removed merely because its
+  first planned 3D consumer has not landed yet.
 - [x] **Rendering ownership remains singular.** Qt Quick owns presentation/scheduling; no QWidget/QPixmap runtime
   fallback, no mixed presentation authority, no `frameSwapped -> requestUpdate()` loop, no render-rate simulation clock.
-- [x] **FEEDS content transition contract.** Every CUSTOM and NEWS feed card uses the shared `FeedPresentation.qml`
-  event-driven body transition for retained content changes: gently fade old content fully out, commit the latest staged
-  rows only at opacity zero, then gently fade the replacement in. No Timer, poll, worker or per-delegate animation owns
-  the effect; current authored timing is 900 ms out / 1200 ms in with sine easing. **Cache/network/artwork hydration is one
-  latest-wins presentation bundle:** intermediate accepted generations stay retained without starting a fade and NEWS waits
-  for the family-wide initial admission barrier. If cache-first content is already painted, closing that barrier may own
-  **exactly one** gentle body transition to the final hydrated aggregate; it must never become one fade per provider/source.
-  Artwork replacement itself uses the retained two-buffer `ArtworkFadeImage` path with the same 900/1200 ms gentle timing,
-  so a late local image URI cannot snap into a fully opaque raw `Image`. Once armed, equivalent settled publications update
-  the latest pending target without restarting an in-flight fade. Do not shorten this into a refresh blink, commit hydrated
-  content at full opacity, or animate publisher-by-publisher/cache/artwork startup events.
 - [x] **Diagnostic logging hygiene.** Dedicated family sidecars own routine diagnostics; expected lifecycle cancellation
   is a cancelled task outcome, not a failed task traceback. Diagnostic-only WARNING records may be explicitly sidecar-only
   and disappear from main/console only while their declared sidecar is active; real degradation and ERROR/CRITICAL remain
@@ -39,40 +30,19 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   land in the correct sidecar. PERF threshold diagnostics may use the same sidecar-only contract. **Log locations are not
   a scavenger hunt:** source Diagnostic reuses the normal source-tree `logs/`; frozen Diagnostic uses the Diagnostic
   executable's adjacent `logs/`; LocalAppData/Temp are fallback-only when the preferred location is not writable.
+- [x] **FEEDS refresh/durability incident closed (R-104).** Remote document examination is isolated in one lazy
+  family-owned parser process, warm cache state restores validated local artwork bindings before network construction,
+  source refreshes remain staggered, and presentation consumes coherent latest-wins bundles. Thirteen focused product
+  gates pass. A two-display source run with active Bubble and a real FEEDS refresh removed the former 180-350 ms
+  cadence hitch; the observed refresh window peaked at 63 ms only while the lazy parser child first appeared, then
+  returned to ordinary low tails. Cached-art startup restored local files with zero fetch attempts. No live FEEDS
+  archaeology remains in this plan.
+- [x] **Media/GSMTC query-context handle churn closed (R-103).** The Media affinity lane retains one Proactor event
+  loop and one GSMTC manager instead of creating them per query, and tears them down on the owning thread. The 100-query
+  reuse and real Windows 200-query handle gates pass; subsequent runtime evidence shows the pre-parser Semaphore baseline
+  flat rather than ratcheting. This is distinct from R-84's older replacement-generation question.
 
-## 1. 2026-10-02 diagnostic-soak defects | **BOUNDED ACCEPTANCE BEFORE S14**
-
-This lane is deliberately finite. Prefer deterministic/focused tests and short local source runs over repeated frozen builds or long soaks. Do not expand it into a second roadmap: once the two checks below are accepted, continue directly into **S14** and the preserved S15-S20 shared-3D programme.
-
-- [ ] **Frozen Diagnostic semaphore accumulation: one environment confirmation remains; do not spend a dedicated build on it.**
-  The original frozen/Winlogon soak appeared image-shaped (~**+1.045 handles per image handoff**), but later attribution
-  disproved SHM/Section ownership and identified the growing kernel class as `Semaphore`: in the reproducing frozen run
-  (`16:54:01 -> 17:06:32`) **410 -> 467 (+57, ~4.6/min)** while `Section` stayed essentially flat (`383 -> 386`), including
-  30-second windows with zero image transition. The owner matched Media/GSMTC churn: 224 Media affinity-lane jobs and 225
-  fresh `IocpProactor` loops in ~14 minutes. Media now retains one lazy Proactor loop plus one GSMTC manager on its affinity
-  thread and closes them there at retirement. The focused suite has passed **100 repeated owner-thread queries** and a
-  Windows-only **200-query real GSMTC/Proactor handle check**. The 2026-10-02 source Diagnostic follow-up also plateaus after
-  warm-up at roughly **411-417 Semaphores** (Section ~389-390) for ~16 minutes rather than ratcheting. Because the historic
-  observable leak reproduced only in frozen Diagnostic, final closure should piggyback the **next otherwise-justified frozen
-  build** and needs only 5-10 minutes of handle evidence. Do not build or soak solely for this check.
-- [ ] **FEEDS periodic GIL hitch + startup/artwork presentation: finish bounded acceptance.** Deliberate source bunching is
-  already removed: the old 25%-of-interval early-join window is gone and periodic remote work is family-serialized with a
-  **2.5 s event-driven cooldown**, no polling/sleep loop/extra worker. The 5-minute physical run proves that serialization
-  works, but it also disproves full performance acceptance: event-loop maxima repeat at the FEEDS cadence (**352, 240, 180,
-  221, 356 ms** at ~5-minute intervals). Providers are no longer colliding, so the remaining stall is consistent with one
-  heavy Python feed parse/normalization monopolizing the GIL; PC Gamer was ~403 KB and Crunchyroll ~144 KB in the sample.
-  Bound needless work now: CUSTOM and each NEWS provider normalize only `max(12, item_limit)` stories instead of the historic
-  fixed 40, and Diagnostic FEEDS logging records per-parse payload/feedparser/normalization timings without exposing URLs.
-  Presentation is also corrected: the family startup barrier coalesces cache/network/artwork churn into **at most one** slow
-  body transition, and FEEDS artwork uses `ArtworkFadeImage` at 900 ms out / 1200 ms in rather than snapping a raw `Image`
-  into full opacity. Focused tests must prove the one-transition barrier, retained artwork fade, parser cap and no-early-batch
-  behavior. One short source run at the existing **5-minute minimum** is sufficient physical acceptance; if a cadence hitch
-  remains, use the new `[FEEDS][PARSE]` timings to fix the measured parser stage rather than adding another soak/build.
-- [x] **Topology memory high-water is not active work.** The operator intentionally rushed topology during this soak. Do
-  not reopen the one observed high-water retention unless it reproduces independently in normal use or another targeted
-  lifecycle check.
-
-## 2. S14 | persistent mapped stream + SSBO foundation | **NEXT, IMMEDIATELY AFTER BOUNDED ACCEPTANCE**
+## 1. S14 | persistent mapped stream + SSBO foundation | **NEXT**
 
 - [ ] Add one bounded context-local persistent mapped ring for genuinely changing small frame payloads. Prefer coherent
   mapping only where measured healthy; otherwise explicit flushes. Fence segment reuse safely with no busy polling,
@@ -86,7 +56,7 @@ This lane is deliberately finite. Prefer deterministic/focused tests and short l
 - [ ] Prove retirement/context-loss: fixed capacities, no overwritten in-flight segment, zero leaked handles and no
   meaningful dormant cost when no 3D consumer requests the facility.
 
-## 3. S15 | compute, image load/store and atomics
+## 2. S15 | compute, image load/store and atomics
 
 - [ ] Add shared compute-program/resource helpers with explicit dispatch dimensions and barrier ownership.
 - [ ] Add image load/store and atomic/atomic-counter support only as concrete consumers require it.
@@ -97,7 +67,7 @@ This lane is deliberately finite. Prefer deterministic/focused tests and short l
 - [ ] First useful jobs should be concrete: particle evaluation/compaction, bolt/branch tables, volume injection,
   post kernels, light/cluster lists, active-piece masks or indirect counts.
 
-## 4. S16 | indirect / multi-draw + GPU compaction
+## 3. S16 | indirect / multi-draw + GPU compaction
 
 - [ ] Add bounded indirect command buffers and compact active-instance lists only where they replace material Python
   submit/draw loops.
@@ -105,7 +75,7 @@ This lane is deliberately finite. Prefer deterministic/focused tests and short l
 - [ ] Keep generated counts GPU-owned in the ordinary path; no CPU count readback loop.
 - [ ] Prove capacity bounds and deterministic population/placement against a reference path before migration.
 
-## 5. S17 | active-only high-fidelity scene buffers, lighting and materials
+## 4. S17 | active-only high-fidelity scene buffers, lighting and materials
 
 - [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
@@ -122,7 +92,7 @@ This lane is deliberately finite. Prefer deterministic/focused tests and short l
   using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
 - [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-## 6. S18 | particles, lightning, smoke/fire and volumetrics
+## 5. S18 | particles, lightning, smoke/fire and volumetrics
 
 - [ ] **GPU particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced
   draw, soft sprites/streaks/ribbons, optional simple analytic/SDF collision and OIT. No Python object per particle.
@@ -136,26 +106,41 @@ This lane is deliberately finite. Prefer deterministic/focused tests and short l
   primitives using compute/image resources rather than parent CPU loops.
 - [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-## 7. S19 | Voxel Sphere promotion onto shared Scene3D
+## 6. S19 | Voxel Sphere promotion onto shared Scene3D
 
-Sphere promotion is a plumbing migration, **not** a redesign. `Docs/Reference/Sphere_Visualizer.md` is the behavioural
-golden and the Bubble golden remains unrelated and untouchable.
+Sphere is the legacy exception that predates the shared Scene3D foundation. Promotion removes its duplicate low-level
+GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
+`Docs/Reference/Sphere_Visualizer.md` owns the behavioural golden and the Bubble golden remains unrelated and untouchable.
 
-- [ ] Capture the promotion golden first: curated presets, hidden technical profile, deterministic FeatureFrame/logical
-  replay, representative renderer captures, extreme CUSTOM geometry and silence/vocal/kick/sustained passages.
-- [ ] Preserve Sphere descriptor, `sphere_*` state, Settings/presets, logical runtime, section drives, cohort/admission,
-  tracer semantics, authored projection and reaction exactly.
-- [ ] Replace only duplicate low-level GPU plumbing with Scene3D equivalents when parity is mathematically/visually
-  proven: lifetime/fences, frame/target, SSBO/instance transport, common material/light/post and shared particle/shadow
-  facilities.
-- [ ] Make Sphere an ordinary shared-foundation 3D Visualizer consumer with the standard capability/tier lifecycle.
-  Non-selected Sphere remains dormant.
-- [ ] Delete superseded Sphere-local low-level infrastructure after parity. Do not keep two implementations “just in
-  case”.
-- [ ] Only after promotion acceptance may Sphere gain explicit new fidelity options such as richer emissive lighting,
-  improved shadows, compute particles or smoke/electric coupling. Output remains SDR-only.
+- [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
+  profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
+  silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
+  evidence so a prettier renderer is not mistaken for a reaction regression.
+- [ ] **Behavioural parity is hard.** Preserve Sphere's authored timing, event admission, section drives, cohort identity,
+  tracer semantics, size/rotation response, intake/outtake semantics, stable voxel identity and source-freshness contract.
+  Default/new-profile resolution must reproduce today's behaviour before any user-authored technical change is applied.
+- [ ] **Visual parity is a floor, not a ceiling.** Preserve the recognisable stepped-voxel/preset identity and authored
+  colour/alpha intent, but shared Scene3D may improve antialiasing, lighting, materials, depth readability, shadows,
+  reflection/refraction treatment or other presentation quality during the migration. A deliberate visual difference is
+  accepted when it is demonstrably better and does not weaken musical response, silhouette/voxel identity or preset intent;
+  the before/after golden exists to catch regressions, not to freeze every pixel.
+- [ ] Replace duplicate low-level GPU plumbing with Scene3D equivalents: lifetime/fences, frame/target, persistent-stream
+  and SSBO transport, common material/light/post, shared particle/shadow facilities and the common 3D quality resolver.
+  Delete superseded Sphere-local low-level infrastructure after acceptance; do not retain a fallback engine.
+- [ ] **Give Sphere deliberate technical controls instead of permanently borrowing Spectrum invisibly.** Inventory the
+  actual analysis seams Sphere consumes, then replace the single `technical_controls=False` / whole-Spectrum-profile
+  borrow with descriptor-owned per-control capability metadata and a Sphere-owned resolved technical profile. Source/capture
+  controls such as input gain, audio block size, sensitivity and noise-floor handling are candidates only where tests prove
+  they affect Sphere's pre-AGC/analysis inputs. AGC, dynamic-range, bar-count and transient controls must not be exposed
+  merely because the established modes have them: Sphere deliberately consumes pre-AGC/event-owned lanes and dead sliders
+  are forbidden. Existing installations missing Sphere technical keys resolve to values equivalent to today's hidden
+  Spectrum-backed profile; curated/Custom preset ownership then follows the normal per-mode contract without cross-mode
+  bleed.
+- [ ] Make Sphere an ordinary shared-foundation 3D Visualizer consumer with the standard capability/tier lifecycle and
+  dormancy. Whether it remains default-disabled or loses the Experimental label after acceptance is a separate product
+  admission decision, not another renderer migration.
 
-## 8. S20 | vertical consumers | make the substrate earn its complexity
+## 7. S20 | vertical consumers | make the substrate earn its complexity
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
@@ -170,7 +155,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 9. Cross-cutting acceptance | applies to every open box above
+## 8. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
   frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.
@@ -182,8 +167,10 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] **Endpoints:** transition additions remain exact at 0/1 and near-endpoints; R-63 black/uncovered-edge guarantees
   remain binding.
 - [ ] **Settings:** canonical defaults/descriptor resolution happen before admission; renderers never read Settings.
-- [ ] **Physical acceptance:** High/Balanced/Performance on both displays with active Visualizers, first-use/warm cost,
-  parked memory and representative real photos/music. Sphere gets a dedicated before/after golden before new look work.
+- [ ] **Physical acceptance:** exercise the shared 3D quality vocabulary (`Auto / High / Balanced / Performance / KAK`)
+  on both displays with active Visualizers, first-use/warm cost, parked memory and representative real photos/music. `KAK`
+  means minimum viable base geometry/effect only: optional expensive 3D features are effectively off and essential densities
+  use their lowest bounded setting. Sphere gets a dedicated before/after behavioural + visual golden during S19.
 
 ## Handoff rules
 

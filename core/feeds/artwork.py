@@ -7,7 +7,7 @@ may be projected into retained presentation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -23,7 +23,6 @@ from core.logging.tags import LOG_FAMILY_FEEDS, LOG_FAMILY_FIELD
 from urllib.parse import urlsplit
 
 from .models import FeedItem
-from .parser import article_share_image_url
 from .projection import ranked_image_candidates
 
 logger = logging.getLogger(__name__)
@@ -121,6 +120,10 @@ class ArtworkWarmResult:
     local_by_item: Mapping[str, str]
     attempts: int
     newly_cached: int
+    # Cache-owned filenames backing each accepted local URI.  Keeping this at
+    # the cache owner avoids fragile URI -> path reverse engineering later and
+    # lets the durable feed record remember a validated warm-start binding.
+    files_by_item: Mapping[str, str] = field(default_factory=dict)
 
 
 class FeedArtworkCache:
@@ -167,6 +170,21 @@ class FeedArtworkCache:
         """Validate an existing local file; never open a transport or write."""
         path = self._cached_path(url)
         return path.as_uri() if path is not None else ""
+
+    def cached_filename(self, filename: str) -> str:
+        """Resolve one cache-owned durable binding to a validated local URI.
+
+        Feed cache records may persist only ``<sha256>.png`` names.  A missing
+        or evicted file is an ordinary image miss: it never invalidates the
+        article snapshot that referred to it.
+        """
+        value = str(filename or "")
+        stem, dot, suffix = value.partition(".")
+        if (dot != "." or suffix != "png" or len(stem) != 64
+                or any(ch not in "0123456789abcdef" for ch in stem)):
+            return ""
+        path = self.directory / value
+        return path.as_uri() if self._valid(path) else ""
 
     @staticmethod
     def _content_digest(path: Path) -> bytes:
@@ -468,6 +486,7 @@ class FeedArtworkCache:
             attempts += 1
             page_lookups += 1
             try:
+                from .parser import article_share_image_url
                 image = safe_artwork_url(article_share_image_url(fetch_page(page), base_url=page))
             except ArtworkCancelled:
                 raise
@@ -550,4 +569,9 @@ class FeedArtworkCache:
                 attempts, page_lookups, created, len(local), len(set(local.values())),
                 extra={LOG_FAMILY_FIELD: (LOG_FAMILY_FEEDS,)},
             )
-        return ArtworkWarmResult(local, attempts, created)
+        files_by_item = {
+            item_id: self._file(url).name
+            for item_id, url in selected_url.items()
+            if item_id in local
+        }
+        return ArtworkWarmResult(local, attempts, created, files_by_item)

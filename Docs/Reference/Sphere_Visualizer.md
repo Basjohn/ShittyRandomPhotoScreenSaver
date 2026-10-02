@@ -1,4 +1,4 @@
-# Voxel Sphere — accepted experimental preservation and isolation contract
+# Voxel Sphere — experimental preservation and shared-Scene3D promotion contract
 
 Status: **ACCEPTED EXPERIMENTAL — LOW-LEVEL SUBSTRATE PROMOTION ACTIVE.** Sphere remains independently removable, lazy and mode-owned while S19 moves only its duplicate GPU/resource plumbing onto the shared scene3d substrate. Visual/product acceptance does **not** promote Sphere reaction/state semantics into shared Visualizer architecture or make Sphere a permanent default mode.
 
@@ -21,14 +21,14 @@ Their exact persisted snapshots are golden inputs. The active substrate promotio
 
 - The descriptor remains an independently disabled experimental mode with lazy Settings builder, capture, frame runtime and renderer. Heavy resources stay dormant while disabled and retire through the existing render-context lifecycle.
 - Canonical persisted state remains in the existing `sphere_*` namespace. Do not invent a private Settings manager/default store, and do not promote Sphere into shared setting families merely for tidiness.
-- Sphere currently declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Those omissions are deliberate isolation, not missing wiring to repair.
-- The descriptor currently resolves its hidden technical profile through canonical **Spectrum** technical settings. That resolved technical state is part of the isolated Sphere golden even though Sphere has no generic technical-control UI. Do not casually expose, remap or replace it.
+- **Pre-S19 current state:** Sphere declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Capture that current state before migration; do not reinterpret it as the final desired technical-control model.
+- **Pre-S19 current state:** the descriptor resolves its hidden technical profile through canonical **Spectrum** technical settings. Those exact resolved values are behavioural golden input for the migration. S19 explicitly replaces this hidden whole-profile borrowing with a Sphere-owned resolved technical profile and per-control capability metadata, exposing only controls that demonstrably affect Sphere's analysis inputs. Dead controls are forbidden.
 - Existing BeatEngine spectrum/live-pre-AGC seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
 - Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The active promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
 
 ### What is reusable from the experimental-isolation method
 
-The **boundary mechanism** is valuable architecture for future experiments: descriptor-driven lazy Settings/runtime/renderer/capture resolution, independent enable/disable/dormancy, a private persisted prefix, explicit opt-out from shared setting families, and normal renderer retirement. Future experimental modes should reuse that pattern rather than contaminating accepted-mode owners.
+The **boundary mechanism** remains valuable: descriptor-driven lazy Settings/runtime/renderer/capture resolution, independent enable/disable/dormancy, a private persisted prefix where behaviour is mode-specific, explicit capability metadata and normal renderer retirement. Sphere itself is a legacy exception because it was built before shared Scene3D. **Future experimental modes must use the canonical shared low-level Scene3D/compute/resource/material/quality substrate from their first implementation.** Experimental status may keep them default-off and behaviorally private; it must not create a private GPU engine that later requires a second "promotion" job.
 
 Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. The active substrate promotion does not authorize extracting or refactoring those behavioural owners into a shared experimental framework. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
 
@@ -61,15 +61,15 @@ Before any architectural promotion into shared/permanent ownership, capture both
 - representative renderer captures at ordinary and extreme CUSTOM aspect/scale where the existing capture seam can provide deterministic evidence;
 - baseline replay evidence for the five accepted permanent modes over the same shared-analysis change boundary.
 
-After the candidate promotion, replay identical evidence. Promotion is rejected if either Sphere golden materially changes without explicit approval **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Technical controls require particular caution: their current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
+After the candidate promotion, replay identical evidence. Promotion is rejected if Sphere's **behavioural** golden materially changes without explicit approval, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 
 This gate removes competing low-level 3D architectures. Promotion
 means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
-preserving the complete behavioural golden above. It does **not** authorise retuning, renaming Sphere state, exposing
-hidden technical controls, replacing its logical runtime, or turning Sphere into a base class. See `Current_Plan.md`
-and `Current_Plan.md` S19.
+preserving the complete behavioural golden above. It does **not** authorise retuning/renaming Sphere behavioural state, replacing its logical runtime, or turning Sphere
+into a base class. S19 **does** authorise replacing the hidden Spectrum-profile borrow with deliberate Sphere-owned
+technical-control resolution after the current values are captured as the migration golden. See `Current_Plan.md` S19.
 
 ## Current shared-boundary rule
 

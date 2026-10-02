@@ -918,3 +918,39 @@ def test_initial_admission_barrier_waits_for_every_active_source(monkeypatch):
 
     first.retire()
     second.retire()
+
+
+def test_last_active_feed_lease_closes_lazy_parse_process(monkeypatch):
+    """Dormant FEEDS owns no resident parser process."""
+    manager = _Manager()
+    source = _Source(_result())
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    lease = FeedRuntimeLease(
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
+        generation=909,
+        manager=manager,
+        ui_dispatch=lambda fn: fn(),
+        schedule=lambda _ms, _fn: (lambda: None),
+        task_priority=0,
+    )
+    lease.attach_consumer(_Consumer(909))
+    assert lease.start()
+    owner = lease._owner
+
+    class Parser:
+        def __init__(self):
+            self.closed = 0
+        def close(self):
+            self.closed += 1
+
+    parser = Parser()
+    owner._parse_process = parser
+    lease.stop()
+    assert parser.closed == 1
+    assert owner._parse_process is None
+    lease.retire()

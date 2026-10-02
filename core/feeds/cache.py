@@ -113,6 +113,38 @@ def _document(row: Mapping[str, Any]) -> FeedDocument:
     )
 
 
+
+def _artwork_files(value: object) -> tuple[tuple[str, str], ...]:
+    """Validated item -> cache-owned PNG filename bindings.
+
+    This is deliberately an optional schema-1 field: existing caches remain
+    readable, while new caches can restore a complete last-good presentation
+    without rediscovering which already-cached image belonged to each story.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list) or len(value) > 200:
+        raise ValueError("invalid artwork binding list")
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row in value:
+        if not isinstance(row, (list, tuple)) or len(row) != 2:
+            raise ValueError("invalid artwork binding row")
+        item_id = _required_str(row[0], max_len=128)
+        filename = _required_str(row[1], max_len=68)
+        stem, dot, suffix = filename.partition(".")
+        if dot != "." or suffix != "png" or len(stem) != 64:
+            raise ValueError("invalid artwork cache filename")
+        try:
+            int(stem, 16)
+        except ValueError as exc:
+            raise ValueError("invalid artwork cache filename") from exc
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        result.append((item_id, filename))
+    return tuple(result)
+
 def _resolved_url(value: object) -> str:
     """A stored feed resolution; an unusable one is dropped, never fatal."""
     if type(value) is not str or not value:
@@ -159,6 +191,7 @@ def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
         last_modified=_optional_str(payload.get("last_modified"), max_len=1024),
         schema_version=SCHEMA_VERSION,
         resolved_url=_resolved_url(payload.get("resolved_url")),
+        artwork_files_by_item=_artwork_files(payload.get("artwork_files_by_item")),
     )
 
 

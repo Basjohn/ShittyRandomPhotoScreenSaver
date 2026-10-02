@@ -45,6 +45,8 @@ class FeedSource:
         should_continue: Callable[[], bool] | None = None,
         now=time.time,
         document_adapter: Callable[[bytes, str, int], object] | None = None,
+        document_parser: Callable[[bytes, str, int], object] | None = None,
+        response_examiner: Callable[[object, str, int], object] | None = None,
     ) -> None:
         if transport is not None and transport_factory is not None:
             raise ValueError("provide transport or transport_factory, not both")
@@ -60,6 +62,15 @@ class FeedSource:
         # Optional reader for structured non-feed sources (wallpaper image
         # listings); FEEDS widgets never pass one.
         self._document_adapter = document_adapter
+        # FEEDS widgets inject one family-owned isolated parser.  Other source
+        # users retain the direct parser path.  Keeping the dependency injected
+        # preserves cache-only startup neutrality and avoids importing
+        # feedparser merely because a source object exists.
+        self._document_parser = document_parser
+        # FEEDS runtime may isolate the whole pure document-examination step
+        # (RSS/Atom/JSON parsing plus HTML feed discovery/h-feed parsing) in its
+        # family parser child.  Wallpaper/adapter callers leave this unset.
+        self._response_examiner = response_examiner
 
     def _ensure_needed(self) -> None:
         if self._should_continue is not None and not self._should_continue():
@@ -82,12 +93,83 @@ class FeedSource:
         record = self._load_compatible_record()
         if record is None:
             return FeedRefreshResult("unavailable", None, FeedHealth(), failure="no_cache")
-        return FeedRefreshResult(
-            "available" if record.snapshot is not None else "unavailable",
-            record.snapshot,
-            record.health,
+        return self._result_from_record(
+            record,
+            status="available" if record.snapshot is not None else "unavailable",
             failure=record.health.last_failure,
         )
+
+    def _artwork_cache(self):
+        root = getattr(self.cache, "root", None)
+        if root is None:
+            return None
+        from .artwork import FeedArtworkCache
+        return FeedArtworkCache(root / "artwork")
+
+    def _restored_artwork(
+        self, record: FeedCacheRecord
+    ) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
+        """Validated local artwork for one durable last-good record.
+
+        Missing/evicted images are dropped individually.  They never quarantine
+        or invalidate the article cache that referred to them.
+        """
+        if record.snapshot is None or not record.artwork_files_by_item:
+            return (), ()
+        cache = self._artwork_cache()
+        if cache is None:
+            return (), ()
+        valid_item_ids = {item.item_id for item in record.snapshot.document.items}
+        local: list[tuple[str, str]] = []
+        files: list[tuple[str, str]] = []
+        for item_id, filename in record.artwork_files_by_item:
+            if item_id not in valid_item_ids:
+                continue
+            uri = cache.cached_filename(filename)
+            if not uri:
+                continue
+            local.append((item_id, uri))
+            files.append((item_id, filename))
+        return tuple(local), tuple(files)
+
+    def _result_from_record(
+        self, record: FeedCacheRecord, *, status: str, changed: bool = False, failure: str = ""
+    ) -> FeedRefreshResult:
+        local, files = self._restored_artwork(record)
+        return FeedRefreshResult(
+            status, record.snapshot, record.health, changed=changed, failure=failure,
+            local_artwork_by_item=local, artwork_files_by_item=files,
+        )
+
+    def persist_artwork_bindings(self, result: FeedRefreshResult) -> FeedRefreshResult:
+        """Persist accepted item -> artwork-file bindings beside last-good text.
+
+        Called from the existing FEEDS IO worker after an artwork batch.  The
+        feed cache remains authoritative and atomic; QML never sees filenames.
+        If the underlying article generation changed before this write, the
+        binding is rejected rather than being attached to the wrong snapshot.
+        """
+        if result.snapshot is None:
+            return result
+        record = self._load_compatible_record()
+        if (record is None or record.snapshot is None
+                or record.snapshot.document != result.snapshot.document):
+            return result
+        cache = self._artwork_cache()
+        if cache is None:
+            return result
+        allowed = {item.item_id for item in record.snapshot.document.items}
+        merged: dict[str, str] = {}
+        for item_id, filename in (*record.artwork_files_by_item, *result.artwork_files_by_item):
+            if item_id not in allowed:
+                continue
+            if cache.cached_filename(filename):
+                merged[item_id] = filename
+        updated = replace(record, artwork_files_by_item=tuple(merged.items()))
+        if self._persist_best_effort(updated):
+            local, files = self._restored_artwork(updated)
+            return replace(result, local_artwork_by_item=local, artwork_files_by_item=files)
+        return result
 
     def refresh(self, *, force: bool = False) -> FeedRefreshResult:
         self._ensure_needed()
@@ -98,10 +180,9 @@ class FeedSource:
         self._ensure_needed()
         health = record.health
         if not force and health.backoff_until is not None and now < health.backoff_until:
-            return FeedRefreshResult(
-                "backoff_cache" if record.snapshot is not None else "unavailable",
-                record.snapshot,
-                health,
+            return self._result_from_record(
+                record,
+                status="backoff_cache" if record.snapshot is not None else "unavailable",
                 failure=health.last_failure or "backoff_active",
             )
 
@@ -132,6 +213,8 @@ class FeedSource:
                 max_items=self.spec.max_items,
                 should_continue=self._should_continue,
                 document_adapter=self._document_adapter,
+                document_parser=self._document_parser,
+                response_examiner=self._response_examiner,
             )
             self._ensure_needed()
             response = resolution.response
@@ -149,7 +232,7 @@ class FeedSource:
                     ),
                 )
                 self._persist_best_effort(updated)
-                return FeedRefreshResult("not_modified", updated.snapshot, updated.health, changed=False)
+                return self._result_from_record(updated, status="not_modified", changed=False)
 
             document = resolution.document
             if document is None or not document.items:
@@ -173,9 +256,17 @@ class FeedSource:
                 etag=response.etag,
                 last_modified=response.last_modified,
                 resolved_url="" if resolution.feed_url == self.spec.url else resolution.feed_url,
+                # An unchanged document keeps its already-validated artwork
+                # association. A changed document starts with no binding and the
+                # ordinary optional artwork follow-on repopulates it.
+                artwork_files_by_item=(
+                    record.artwork_files_by_item
+                    if record.snapshot is not None and record.snapshot.document == document
+                    else ()
+                ),
             )
             self._persist_best_effort(updated)
-            return FeedRefreshResult("available", snapshot, updated.health, changed=changed)
+            return self._result_from_record(updated, status="available", changed=changed)
         except (FeedTransportError, FeedParseError, ValueError, OSError) as exc:
             self._ensure_needed()
             return self._failure(record, now, type(exc).__name__)
@@ -214,10 +305,9 @@ class FeedSource:
         )
         updated = replace(record, health=health)
         self._persist_best_effort(updated)
-        return FeedRefreshResult(
-            "stale_cache" if record.snapshot is not None else "unavailable",
-            record.snapshot,
-            health,
+        return self._result_from_record(
+            updated,
+            status="stale_cache" if record.snapshot is not None else "unavailable",
             changed=False,
             failure=health.last_failure,
         )

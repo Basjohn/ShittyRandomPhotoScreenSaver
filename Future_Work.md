@@ -41,6 +41,13 @@ Each mode has one descriptor, one lazy logical/runtime/renderer/Settings impleme
 simulation cadence. History remains bounded and restartable from the immutable logical snapshot contract. Bubble's
 temporal/amplitude golden remains binding even when shared 3D presentation is used.
 
+**Experimental is a product-admission state, not permission to build a second renderer.** Sphere is the legacy exception
+because it predates the shared Scene3D program. Any new experimental mode created after that foundation exists must join
+the canonical mode registry, logical snapshot contract, shared Scene3D/compute/resource/material/quality substrate,
+retirement and dormancy machinery from its first implementation. Its reaction model, private settings namespace and
+user-facing admission may remain isolated/default-off while it matures. Promotion to stable should therefore be a
+status/default-admission/acceptance change, not a later low-level renderer migration that repeats the work.
+
 ### 2.4 Shared 3D foundation
 
 The shared foundation is now active work, not future work. The durable architectural rule remains:
@@ -55,6 +62,28 @@ The shared foundation is now active work, not future work. The durable architect
 - no timer/poller/forced frame to service graphics work.
 
 Voxel Sphere promotion is active: share the GPU substrate, not the Sphere behavioural model.
+
+### 2.5 Shared 3D Settings control plane — deferred product surface
+
+Once S17/S18 have enough optional 3D facilities to justify a coherent user surface, add a dedicated **3D Settings**
+section rather than scattering capability switches across transitions and Visualizer pages. The UI vocabulary is:
+
+- one quick global profile: **Auto / High / Balanced / Performance / KAK**;
+- every optional expensive facility has an explicit disable path and, where meaningful, an explicit enable/quality
+  override rather than being silently forced by the profile;
+- `KAK` is the hard minimum-viable ceiling: keep the base geometry/effect needed for the consumer to remain itself,
+  disable optional expensive 3D features, and resolve essential densities/sample counts to their lowest bounded values;
+- leaving `KAK` restores the user's stored overrides rather than destroying them;
+- `Auto` resolves once at configuration/admission from hardware/display/effect context. It is **not** a dynamic per-frame
+  quality governor; no FPS chasing, polling or mid-effect quality oscillation;
+- transitions and continuously-running Visualizers may share the same UI profile names while resolving through separate
+  internal budget tables, because a one-shot transition and a 24/7 Visualizer do not have the same sustainable cost;
+- all resolution happens before renderer admission. Renderers receive resolved capability/quality state and never read
+  Settings per frame. A disabled feature allocates zero owned targets/buffers/volumes/history.
+
+Sphere's S19 migration and every post-foundation experimental mode should use this capability metadata instead of
+private one-off quality switches where a shared 3D facility is genuinely being controlled. Mode-specific artistic
+parameters remain mode-owned.
 
 ## 3. Graphics API horizon after OpenGL 4.6
 
@@ -91,6 +120,16 @@ Bubble Depth Field. The following ideas remain future-only until that active wav
   compaction. Keep distinct from accepted Voxel Sphere reaction semantics.
 - **Fluid lens transition** — refractive displaced surface with caustic-style highlights; requires the active
   refraction/material-buffer work to prove quality without excessive full-screen cost. Output remains SDR-only.
+- **Reactive Liquid / Audio Melt Pool Visualizer — distant goal.** Revisit the failed old liquid experiment only after
+  compute, refraction, material and shared 3D quality work are mature. **Do not start from SDFs.** A credible first
+  architecture is a bounded 2D/2.5D height+velocity field (shallow-water/stable-fluid style) or a bounded deformable
+  surface/particle sheet: audio events inject impulses/vorticity, compute advances on Visualizer logical cadence, and
+  rendering derives normals, viscosity-like deformation, Fresnel/refraction, wet highlights and restrained caustic
+  treatment. The existing Melt transition is useful visual-language evidence that SRPSS can render convincing viscous
+  smear/liquid highlights, even though Melt deforms a source texture; a liquid Visualizer may instead use palette colour,
+  photo/environment IBL or a deliberately abstract material. Avoid full 3D SPH/fluid simulation unless a later measured
+  need justifies the cost. Disabled/dormant means no simulation field allocation or dispatch. This sits **behind** the
+  current S14-S20 3D program and is not an admission to implement it early.
 - **Holographic depth slices** — photo/spectrum sampled into layered depth planes with scanline/light-volume treatment;
   useful only if it reads as real depth rather than a stack of cards.
 - **Procedural storm scene** — lightning, rain streaks, smoke/fog and reflected light integrated into one Visualizer;

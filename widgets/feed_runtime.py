@@ -133,6 +133,10 @@ class _FeedFamilyOwner:
         # Replaced whole on the GUI thread; artwork workers read it when they
         # evict, so a source that publishes meanwhile is protected too.
         self._published_artwork: frozenset[str] = frozenset()
+        # One lazy child parser belongs to the active FEEDS family.  It owns no
+        # cadence/network/cache/presentation authority; it exists only to keep
+        # feedparser + normalization outside the Qt/main-process GIL domain.
+        self._parse_process: object | None = None
 
     def _maybe_complete_initial_admission(self) -> None:
         """Close the family startup barrier once every active source is settled.
@@ -205,6 +209,31 @@ class _FeedFamilyOwner:
             and left.max_items == right.max_items
             and left.allow_endpoint_migration == right.allow_endpoint_migration
         )
+
+    def _parser(self):
+        parser = self._parse_process
+        if parser is None:
+            from core.feeds.process_parser import FeedParseProcess
+            parser = FeedParseProcess()
+            self._parse_process = parser
+        return parser
+
+    def _parse_document(self, payload: bytes, source_url: str, max_items: int):
+        return self._parser().parse(payload, source_url=source_url, max_items=max_items)
+
+    def _examine_response(self, response: object, request_url: str, max_items: int):
+        return self._parser().examine(
+            response, request_url=request_url, max_items=max_items,
+        )
+
+    def _close_parse_process(self) -> None:
+        parser, self._parse_process = self._parse_process, None
+        close = getattr(parser, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
 
     @staticmethod
     def _release_source(state: _SourceState) -> None:
@@ -304,6 +333,9 @@ class _FeedFamilyOwner:
             self._release_source_if_idle(state)
         if not self._active:
             self._cancel_deadline()
+            # Dormant FEEDS retains immutable last-good data only.  The parser
+            # child is recreated lazily on the next real remote parse.
+            self._close_parse_process()
         else:
             self._reschedule()
 
@@ -324,6 +356,7 @@ class _FeedFamilyOwner:
         self._remote_not_before = 0.0
         self._deadline_token += 1
         self._cancel_deadline()
+        self._close_parse_process()
         for state in self._states.values():
             state.work_cancel.set()
             state.work_token += 1
@@ -391,9 +424,23 @@ class _FeedFamilyOwner:
                 from core.feeds.transport import FeedHttpTransport
                 return FeedHttpTransport(should_continue=_still_needed)
 
+            def _parse_document(payload: bytes, source_url: str, max_items: int):
+                owner = owner_ref()
+                if owner is None or owner._retired or state.work_cancel.is_set():
+                    raise FeedRefreshCancelled("feed source no longer active")
+                return owner._parse_document(payload, source_url, max_items)
+
+            def _examine_response(response: object, request_url: str, max_items: int):
+                owner = owner_ref()
+                if owner is None or owner._retired or state.work_cancel.is_set():
+                    raise FeedRefreshCancelled("feed source no longer active")
+                return owner._examine_response(response, request_url, max_items)
+
             state.source = FeedSource(
                 state.spec, transport_factory=_make_transport,
                 should_continue=_still_needed,
+                document_parser=_parse_document,
+                response_examiner=_examine_response,
             )
         return state.source
 
@@ -486,7 +533,11 @@ class _FeedFamilyOwner:
             raise
         except (OSError, ValueError):
             return result  # Images cannot invalidate established article text.
-        return replace(result, local_artwork_by_item=tuple(warm.local_by_item.items()))
+        return replace(
+            result,
+            local_artwork_by_item=tuple(warm.local_by_item.items()),
+            artwork_files_by_item=tuple(warm.files_by_item.items()),
+        )
 
     def _submit(self, state: _SourceState, *, cache_only: bool, force: bool,
                 artwork_only: bool = False) -> bool:
@@ -533,9 +584,18 @@ class _FeedFamilyOwner:
                     raise RuntimeError("missing accepted feed artwork source")
                 from core.feeds.artwork import ArtworkCancelled
                 try:
-                    return owner._warm_artwork(base_artwork_result, cancel=cancel,
-                                               protected=protected, item_limit=artwork_limit)
-                except ArtworkCancelled:
+                    warmed = owner._warm_artwork(
+                        base_artwork_result, cancel=cancel,
+                        protected=protected, item_limit=artwork_limit,
+                    )
+                    # Persist the accepted item -> cache-file association on the
+                    # same IO worker that owns artwork work. Warm startup can
+                    # then publish cached stories *with cached images* before
+                    # any network refresh or rediscovery.
+                    source = owner._source_for(state)
+                    persist = getattr(source, "persist_artwork_bindings", None)
+                    return persist(warmed) if callable(persist) else warmed
+                except (ArtworkCancelled, FeedRefreshCancelled):
                     raise ExpectedTaskCancellation("feed artwork no longer active") from None
             source = owner._source_for(state)
             try:
@@ -649,7 +709,11 @@ class _FeedFamilyOwner:
                 and previous.snapshot is not None
                 and previous.snapshot.document == result.snapshot.document
                 and previous.local_artwork_by_item):
-                result = replace(result, local_artwork_by_item=previous.local_artwork_by_item)
+                result = replace(
+                    result,
+                    local_artwork_by_item=previous.local_artwork_by_item,
+                    artwork_files_by_item=previous.artwork_files_by_item,
+                )
             state.last_result = result
             self._refresh_published_artwork()
             if not artwork_only and not cache_only:

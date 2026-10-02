@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-27
+Last updated: 2026-10-02
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -40,6 +40,9 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Pure-Python remote parsing moved to one lazy spawned family process; durable warm artwork bindings and coherent presentation states restore cache-first startup and remove the recurring parser/GIL hitch.
+- [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](Historical_Bugs/R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. One retained Media-owner Proactor loop/manager replaces per-query kernel-object churn; deterministic reuse and real Windows handle gates pass.
+- [R-102 — Frozen Qt Quick Runtime Pruned PySide6.QtOpenGL](Historical_Bugs/R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) — **SOLVED**. Frozen dependency pruning now respects Qt Quick's binding/runtime graph while the unrelated OpenGLWidgets layer stays pruned.
 - [R-101 — Guided Setup / Settings Review 2026-09-27](Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md) — **SOLVED IN CODE**. The wizard persisted every click (now a draft saved on Finish), Arrange lost updates, hover-focus list scrolling, QSS rounded-border seams, unthemed popups, light-theme indicators, blurry previews, a lost edit on close, and generated defaults copies; mechanisms and negative controls.
 - [R-100 — Runtime Audit 2026-09-22: Outcomes, Rejections and Closure](Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md) — **CLOSED**. Accepted items with commits and bars; every item left watched/parked was rejected by the operator (2026-09-27); the considered-and-rejected list stays binding.
 - [R-99 — Memory Footprint Audit (2026-09-25)](Historical_Bugs/R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.

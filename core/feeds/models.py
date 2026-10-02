@@ -88,6 +88,10 @@ class FeedCacheRecord:
     # Last-Modified belong to this URL. An optional field inside schema 1:
     # older records read as ``""`` and older readers ignore it.
     resolved_url: str = ""
+    # Durable accepted artwork binding for warm-start presentation. Values are
+    # cache-owned PNG filenames, never arbitrary paths or remote URLs. Older
+    # schema-1 records omit this optional field and read as empty.
+    artwork_files_by_item: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -116,9 +120,14 @@ class FeedRefreshResult:
     health: FeedHealth
     changed: bool = False
     failure: str = ""
-    # Worker-only local file URIs; never persisted with the article snapshot.
+    # Accepted local file URIs projected from the durable artwork binding.
     # Immutable so two retained consumers share exactly one accepted generation.
     local_artwork_by_item: tuple[tuple[str, str], ...] = ()
+    # Cache-owned filenames backing ``local_artwork_by_item``.  These are never
+    # exposed to QML; they travel with the immutable accepted generation so an
+    # artwork worker can atomically persist the item -> file association into
+    # the durable last-good feed record without reverse-engineering file URIs.
+    artwork_files_by_item: tuple[tuple[str, str], ...] = ()
     # Presentation settlement is runtime-only coordination metadata. FeedSource
     # itself returns a complete text snapshot, so standalone results default to
     # settled. The shared FEEDS owner temporarily projects False while one

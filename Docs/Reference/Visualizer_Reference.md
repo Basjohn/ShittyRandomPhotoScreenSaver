@@ -15,8 +15,7 @@ Canonical current mode ids remain owned by the settings/mode registry:
 - `devcurve`
 - `sphere` — experimental, FRAMELESS, dormant by default
 
-The first five are the established carded technical modes. Sphere is a registered experimental mode with separate frameless presentation policy and no technical-controls profile. The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
-heavy implementation imports into it.
+The first five are the established carded technical modes. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
 
 ## 1A. Registered modes vs enabled modes
 
@@ -31,6 +30,15 @@ currently enabled modes
 ```
 
 Disabled modes retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any registered mode may be the sole enabled mode when explicitly admitted. The default enabled-mode set intentionally excludes experimental Sphere, so Sphere remains dormant until the user enables it. Admission must remain behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
+
+### 1B. Experimental mode policy after the shared Scene3D foundation
+
+Sphere is the legacy migration case, **not** the template for building another private renderer stack. A new experimental
+mode created after shared Scene3D exists joins the canonical registry, logical snapshot/cadence contract, shared
+Scene3D/compute/resource/material/quality substrate, lifecycle and dormancy owners immediately. "Experimental" means
+default-off/not-yet-product-accepted and permits private reaction semantics and mode-owned settings; it does not mean
+private scheduling/presentation authority or a disposable GPU engine. Promotion to stable should normally change
+admission/status/defaults and close acceptance gates, not require reimplementing the mode on a second substrate.
 
 ## 2. Capability model
 
@@ -432,9 +440,11 @@ Sphere is the active promotion target and remains behaviourally private until it
 - **Resources:** owned by the mode renderer, reused while the card fits its 64 px allocation bucket (a CUSTOM resize
   drag does not reallocate per frame), released in the renderer's `release_resources` when the mode retires or is
   disabled. Nothing is allocated per frame.
-- **Cost:** a Visualizer detail tier arrives with the first consumer, separate from `transitions.detail_3d` because a
-  mode draws continuously; each mode's own quality choices then override it the same way transitions do ("Auto"
-  follows the tier, one resolver combines them). Per-frame Python GL calls are the main CPU hazard (plan slice S3, uniform blocks).
+- **Cost / quality:** continuous Visualizers and one-shot transitions retain separate internal budget tables because
+  their sustainable cost differs, but the eventual user-facing 3D Settings surface uses one vocabulary: **Auto / High /
+  Balanced / Performance / KAK** plus explicit per-feature disable/override controls. `Auto` resolves before admission,
+  never per frame; `KAK` is the minimum-viable base effect with optional expensive facilities off. Each mode may still
+  own artistic parameters and explicit overrides. Per-frame Python GL calls remain the primary CPU hazard.
 - **Motion blur:** a mode may pass `motion_blur=True` to `scope` and write its screen motion inside
   `velocity_writes()`, evaluating its points at the snapshot's logical t and t - shutter (never real time).
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
