@@ -7,6 +7,7 @@ from __future__ import annotations
 from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from pathlib import Path
+from time import time
 
 import pytest
 from PySide6.QtCore import QUrl
@@ -30,8 +31,6 @@ def test_feed_presentation_qml_component_compiles_with_shadowed_text_contract(qt
 
 def test_feed_article_change_defers_row_reset_until_fade_midpoint(qt_app):
     """A post-first-paint article mutation is event-staged, not abruptly reset."""
-    from time import time
-
     from core.feeds.models import FeedDocument, FeedHealth, FeedItem, FeedRefreshResult, FeedSnapshot
     from rendering.quick.widgets.feeds import (
         FeedPresentationConfig, FeedPresentationModel, FeedPresentationStyle,
@@ -86,7 +85,12 @@ def test_feed_article_change_defers_row_reset_until_fade_midpoint(qt_app):
 
 
 
-def test_feed_startup_hydration_settles_quietly_then_arms_later_fades(qt_app):
+def test_feed_startup_hydration_coalesces_to_one_transition_then_arms_later_fades(qt_app):
+    from core.feeds.models import FeedDocument, FeedHealth, FeedItem, FeedRefreshResult, FeedSnapshot
+    from rendering.quick.widgets.feeds import (
+        FeedPresentationConfig, FeedPresentationModel, FeedPresentationStyle,
+    )
+
     values = {"feeds_custom_1": {
         "enabled": True,
         "feed_url": "https://example.test/feed.xml",
@@ -103,7 +107,9 @@ def test_feed_startup_hydration_settles_quietly_then_arms_later_fades(qt_app):
     )
     model._active = True
 
-    def result(item_id: str, title: str, *, settled: bool) -> FeedRefreshResult:
+    def result(
+        item_id: str, title: str, *, settled: bool, initial_complete: bool = False
+    ) -> FeedRefreshResult:
         now = time()
         return FeedRefreshResult(
             "available",
@@ -116,35 +122,56 @@ def test_feed_startup_hydration_settles_quietly_then_arms_later_fades(qt_app):
             ),
             FeedHealth(last_success_at=now),
             presentation_settled=settled,
+            initial_admission_complete=initial_complete,
         )
 
     transition_spy = QSignalSpy(model.contentTransitionRequested)
-    model.on_feed_runtime_result(result("cache", "Cached", settled=False), from_cache=True)
+    model.on_feed_runtime_result(result("cache", "Cached", settled=True), from_cache=True)
     assert model.rowModel.rows[0].title == "Cached"
 
-    model.on_feed_runtime_result(result("network", "Network", settled=False), from_cache=False)
-    model.on_feed_runtime_result(result("art", "Final", settled=False), from_cache=False)
+    # Even a source-level settled cache must not arm the card while the shared
+    # family startup barrier is open. This is the exact staggered-startup
+    # regression: otherwise each source's later network/artwork bundle becomes
+    # its own 2.1-second fade.
+    model.on_feed_runtime_result(result("network", "Network", settled=True), from_cache=False)
+    model.on_feed_runtime_result(result("art", "Final", settled=True), from_cache=False)
     assert transition_spy.count() == 0
     assert model.rowModel.rows[0].title == "Cached"
     assert model.has_pending_content_transition is True
 
-    model.on_feed_runtime_result(result("final", "Settled", settled=True), from_cache=False)
-    # Startup cache/network/artwork hydration belongs to initial admission.
-    # The first settled aggregate commits quietly and only arms later article
-    # replacements for the deliberately slow body transition.
-    assert transition_spy.count() == 0
+    model.on_feed_runtime_result(
+        result("final", "Settled", settled=True, initial_complete=True),
+        from_cache=False,
+    )
+    # Closing the family-wide startup barrier admits exactly ONE slow body
+    # transition from the retained cache-first body to the final hydrated
+    # aggregate.  The final rows must not snap in at full opacity, and each
+    # staggered source must not own its own fade.
+    assert transition_spy.count() == 1
+    assert model.rowModel.rows[0].title == "Cached"
+    assert model.has_pending_content_transition is True
+
+    # QML commits the startup target only at the fade midpoint (opacity zero).
+    # That commit arms ordinary later article transitions.
+    assert model.commitPendingContent() is True
     assert model.rowModel.rows[0].title == "Settled"
     assert model.has_pending_content_transition is False
 
-    model.on_feed_runtime_result(result("later", "Later", settled=True), from_cache=False)
-    assert transition_spy.count() == 1
+    model.on_feed_runtime_result(
+        result("later", "Later", settled=True, initial_complete=True),
+        from_cache=False,
+    )
+    assert transition_spy.count() == 2
     assert model.rowModel.rows[0].title == "Settled"
     assert model.has_pending_content_transition is True
 
     # An equivalent settled publication while QML is still fading out updates
     # the latest retained target but must not restart the 900 ms fade.
-    model.on_feed_runtime_result(result("later", "Later", settled=True), from_cache=False)
-    assert transition_spy.count() == 1
+    model.on_feed_runtime_result(
+        result("later", "Later", settled=True, initial_complete=True),
+        from_cache=False,
+    )
+    assert transition_spy.count() == 2
     assert model.commitPendingContent() is True
     assert model.rowModel.rows[0].title == "Later"
 

@@ -494,7 +494,7 @@ OverlayWidget {
                         // Artwork-frame contract: inside the outline's stroke on a
                         // concentric rounded mask; the outline paints on top.
                         readonly property real imageInset: feedRoot.scaleAwareStrokeWidth(0.75)
-                        Image {
+                        ArtworkFadeImage {
                             objectName: "feedListArtwork" + index
                             anchors.fill: parent
                             anchors.margins: listArtworkFrame.imageInset
@@ -502,6 +502,8 @@ OverlayWidget {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
+                            fadeOutDuration: feedRoot.contentFadeOutDuration
+                            fadeInDuration: feedRoot.contentFadeInDuration
                             layer.enabled: listArtworkFrame.visible
                             layer.effect: MultiEffect {
                                 maskEnabled: true
@@ -758,7 +760,7 @@ OverlayWidget {
                         // Artwork-frame contract: inside the outline's stroke on a
                         // concentric rounded mask; the outline paints on top.
                         readonly property real imageInset: feedRoot.scaleAwareStrokeWidth(0.75)
-                        Image {
+                        ArtworkFadeImage {
                             objectName: "feedGridArtwork" + index
                             anchors.fill: parent
                             anchors.margins: gridArtworkFrame.imageInset
@@ -766,6 +768,8 @@ OverlayWidget {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
+                            fadeOutDuration: feedRoot.contentFadeOutDuration
+                            fadeInDuration: feedRoot.contentFadeInDuration
                             layer.enabled: gridArtworkFrame.visible
                             layer.effect: MultiEffect {
                                 maskEnabled: true

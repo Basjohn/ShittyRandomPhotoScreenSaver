@@ -155,6 +155,16 @@ class BaseMediaController:
         self._command_result_handler = None
         self._work_executor = None
 
+    def close_work_context(self) -> bool:
+        """Release any retained transport/query context on its owner thread.
+
+        Controllers without a thread-affine transport context have nothing to
+        release. Windows GSMTC overrides this for its retained asyncio/WinRT
+        query context.
+        """
+
+        return True
+
     # ------------------------------------------------------------------
     # Event observation contract (presentation-neutral).
     #
@@ -296,6 +306,14 @@ class WindowsGlobalMediaController(BaseMediaController):
         # on one explicit ThreadManager-owned affinity lane, never on the Qt UI
         # thread or an arbitrary IO-pool worker.
         self._observation_lane = None
+        # High-frequency GSMTC queries/commands already run on one retained
+        # Media affinity lane. Keep their asyncio Proactor loop and manager on
+        # that same OS thread instead of creating/destroying both every few
+        # seconds. The frozen Diagnostic handle classifier showed Semaphore
+        # growth tracking this churn, not image transitions.
+        self._work_loop = None
+        self._work_loop_thread_id: int | None = None
+        self._work_manager = None
         self._init_winrt()
 
     def _init_winrt(self) -> None:
@@ -670,13 +688,40 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _run_coro_in_isolated_loop(self, coro_factory, *, on_error=None) -> object:
-        """Run one coroutine to completion in its own event loop; return result.
+    @staticmethod
+    def _run_coro_with_loop(loop, coro_factory, *, on_error=None) -> object:
+        """Run one bounded GSMTC coroutine on an already-owned event loop."""
 
-        Shared by the blocking query path (`_run_coroutine`) and the
-        non-blocking command path (`_submit_command`). Never raises: WinRT awaits
-        that stall are bounded by an internal timeout and all failures resolve to
-        None.
+        import asyncio
+
+        async def _runner():
+            try:
+                coro = coro_factory()
+                return await asyncio.wait_for(coro, timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.debug("[MEDIA] Coroutine timed out, returning None")
+                if callable(on_error):
+                    on_error("timeout")
+                return None
+            except MemoryError:
+                logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
+                if callable(on_error):
+                    on_error("MemoryError")
+                return None
+            except Exception as exc:
+                logger.debug("[MEDIA] GSMTC coroutine failed", exc_info=True)
+                if callable(on_error):
+                    on_error(f"{type(exc).__name__}: {exc}")
+                return None
+
+        return loop.run_until_complete(_runner())
+
+    def _run_coro_in_isolated_loop(self, coro_factory, *, on_error=None) -> object:
+        """Run a one-off coroutine on a temporary loop.
+
+        This path remains for standalone/tool callers and the one-time retained
+        observation setup. The high-frequency Media runtime path uses
+        ``_run_coro_on_work_loop`` instead.
         """
 
         import asyncio
@@ -685,32 +730,12 @@ class WindowsGlobalMediaController(BaseMediaController):
             loop = asyncio.new_event_loop()
             try:
                 asyncio.set_event_loop(loop)
-
-                async def _runner():
-                    try:
-                        # Create fresh coroutine inside the loop to avoid reuse errors
-                        coro = coro_factory()
-                        # Best-effort timeout (WinRT awaits do not always
-                        # honour cancellation).
-                        return await asyncio.wait_for(coro, timeout=2.0)
-                    except asyncio.TimeoutError:
-                        logger.debug("[MEDIA] Coroutine timed out, returning None")
-                        if callable(on_error):
-                            on_error("timeout")
-                        return None
-                    except MemoryError:
-                        logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
-                        if callable(on_error):
-                            on_error("MemoryError")
-                        return None
-                    except Exception as exc:
-                        logger.debug("[MEDIA] GSMTC coroutine failed", exc_info=True)
-                        if callable(on_error):
-                            on_error(f"{type(exc).__name__}: {exc}")
-                        return None
-
-                return loop.run_until_complete(_runner())
+                return self._run_coro_with_loop(loop, coro_factory, on_error=on_error)
             finally:
+                try:
+                    asyncio.set_event_loop(None)
+                except Exception:
+                    pass
                 try:
                     loop.close()
                 except Exception:
@@ -725,6 +750,85 @@ class WindowsGlobalMediaController(BaseMediaController):
             if callable(on_error):
                 on_error(f"{type(exc).__name__}: {exc}")
             return None
+
+    def _run_coro_on_work_loop(self, coro_factory, *, on_error=None) -> object:
+        """Run on the retained Media-lane loop, creating it exactly once."""
+
+        import asyncio
+
+        thread_id = threading.get_ident()
+        loop = getattr(self, "_work_loop", None)
+        if loop is None:
+            loop = asyncio.new_event_loop()
+            self._work_loop = loop
+            self._work_loop_thread_id = thread_id
+        elif getattr(self, "_work_loop_thread_id", None) != thread_id:
+            logger.error(
+                "[MEDIA] retained GSMTC work loop used from wrong thread "
+                "owner=%s current=%s",
+                self._work_loop_thread_id,
+                thread_id,
+            )
+            if callable(on_error):
+                on_error("wrong_thread")
+            return None
+        try:
+            asyncio.set_event_loop(loop)
+            return self._run_coro_with_loop(loop, coro_factory, on_error=on_error)
+        except Exception as exc:
+            logger.debug("[MEDIA] retained GSMTC work loop failed", exc_info=True)
+            if callable(on_error):
+                on_error(f"{type(exc).__name__}: {exc}")
+            return None
+
+    async def _request_media_manager(self, *, retain_work_manager: bool):
+        if retain_work_manager:
+            thread_id = threading.get_ident()
+            if getattr(self, "_work_loop_thread_id", None) != thread_id:
+                raise RuntimeError("retained GSMTC manager requested off Media owner thread")
+            manager = getattr(self, "_work_manager", None)
+            if manager is None:
+                manager = await self._MediaManager.request_async()
+                self._work_manager = manager
+            return manager
+        return await self._MediaManager.request_async()
+
+    def close_work_context(self) -> bool:
+        """Release retained Media-lane GSMTC objects on their creating thread."""
+
+        import asyncio
+
+        loop = getattr(self, "_work_loop", None)
+        if loop is None:
+            self._work_manager = None
+            self._work_loop_thread_id = None
+            return True
+        thread_id = threading.get_ident()
+        if self._work_loop_thread_id != thread_id:
+            logger.error(
+                "[MEDIA] refusing wrong-thread GSMTC work-context teardown "
+                "owner=%s current=%s",
+                self._work_loop_thread_id,
+                thread_id,
+            )
+            return False
+        # Drop the WinRT manager on its owner thread before the Proactor closes.
+        self._work_manager = None
+        try:
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                logger.debug("[MEDIA] GSMTC work-loop asyncgen shutdown failed", exc_info=True)
+            loop.close()
+        finally:
+            try:
+                asyncio.set_event_loop(None)
+            except Exception:
+                pass
+            self._work_loop = None
+            self._work_loop_thread_id = None
+        return True
 
     def _submit_command(
         self,
@@ -769,7 +873,12 @@ class WindowsGlobalMediaController(BaseMediaController):
         def _run_and_clear() -> None:
             error_holder: list[str] = []
             try:
-                raw_result = self._run_coro_in_isolated_loop(
+                runner = (
+                    self._run_coro_on_work_loop
+                    if self._work_executor is not None
+                    else self._run_coro_in_isolated_loop
+                )
+                raw_result = runner(
                     coro_factory,
                     on_error=lambda error: error_holder.append(str(error)),
                 )
@@ -861,7 +970,12 @@ class WindowsGlobalMediaController(BaseMediaController):
         holder: dict[str, object] = {"result": None}
 
         def _run_in_loop() -> object:
-            return self._run_coro_in_isolated_loop(coro_factory)
+            runner = (
+                self._run_coro_on_work_loop
+                if already_on_io_worker
+                else self._run_coro_in_isolated_loop
+            )
+            return runner(coro_factory)
 
         _run_in_loop._srpss_runtime_generation = getattr(
             self, "_runtime_generation", None
@@ -1180,7 +1294,9 @@ class WindowsGlobalMediaController(BaseMediaController):
             return None, None
 
         async def _query():
-            mgr = await self._MediaManager.request_async()
+            mgr = await self._request_media_manager(
+                retain_work_manager=already_on_io_worker,
+            )
             if mgr is None:
                 return None
 
@@ -1431,7 +1547,9 @@ class WindowsGlobalMediaController(BaseMediaController):
             return False
 
         async def _act():
-            mgr = await self._MediaManager.request_async()
+            mgr = await self._request_media_manager(
+                retain_work_manager=self._work_executor is not None,
+            )
             if mgr is None:
                 return False
 

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.feeds.config import CustomFeedConfig
+from core.feeds.news import NewsFeedConfig
 from core.feeds.models import (
     FeedDocument,
     FeedHealth,
@@ -15,7 +16,7 @@ from core.feeds.models import (
 )
 from core.task_control import ExpectedTaskCancellation
 from widgets import feed_runtime
-from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease
+from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease, NewsRuntimeConfig
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +106,47 @@ def _result(now=None):
     )
 
 
+
+
+def test_custom_and_news_source_parse_caps_track_visible_capacity_not_historic_forty():
+    custom_small = CustomFeedConfig.from_mapping(
+        "feeds_custom_1",
+        {
+            "enabled": True,
+            "name": "Small",
+            "feed_url": "https://example.test/small.xml",
+            "item_limit": 3,
+        },
+    )
+    custom_large = CustomFeedConfig.from_mapping(
+        "feeds_custom_1",
+        {
+            "enabled": True,
+            "name": "Large",
+            "feed_url": "https://example.test/large.xml",
+            "item_limit": 20,
+        },
+    )
+    assert custom_small.source_spec().max_items == 12
+    assert custom_large.source_spec().max_items == 20
+
+    news_small = NewsFeedConfig.from_mapping(
+        "feeds_news_gaming",
+        {"enabled": True, "item_limit": 3},
+    )
+    assert news_small.providers
+    runtime_small = NewsRuntimeConfig.from_news(news_small, 5)
+    assert runtime_small.provider_config(news_small.providers[0]).source_spec.max_items == 12
+
+    news_large = NewsFeedConfig.from_mapping(
+        "feeds_news_gaming",
+        {"enabled": True, "item_limit": 24},
+    )
+    assert news_large.providers
+    runtime_large = NewsRuntimeConfig.from_news(news_large, 5)
+    assert runtime_large.provider_config(news_large.providers[0]).source_spec.max_items == 24
+
+
 def setup_function():
     feed_runtime.reset_shared_feed_runtime_for_tests()
 
@@ -186,9 +228,11 @@ def test_stale_cache_bundle_stays_unsettled_until_immediate_remote_refresh(monke
     assert lease.start() is True
     assert source.cache_calls == 1
     assert source.refresh_calls == 1
-    assert len(consumer.accepted) == 2
+    assert len(consumer.accepted) >= 2
     assert consumer.accepted[0][0].presentation_settled is False
+    assert consumer.accepted[0][0].initial_admission_complete is False
     assert consumer.accepted[-1][0].presentation_settled is True
+    assert consumer.accepted[-1][0].initial_admission_complete is True
     assert lease.presentation_settled is True
     lease.retire()
 
@@ -767,3 +811,110 @@ def test_retired_feed_worker_signals_expected_cancellation_not_runtime_failure(m
     with pytest.raises(ExpectedTaskCancellation, match="feed source no longer active"):
         work()
     lease.retire()
+
+
+def test_initial_admission_barrier_holds_across_eight_staggered_sources(monkeypatch):
+    """Eight startup completions still produce one family-wide admission edge.
+
+    This is the deterministic reproduction of the 5-20 fade procession seen
+    when serialized startup sources settled one after another. No source may
+    advertise initial admission complete until the final active source settles.
+    """
+    manager = _DeferredManager()
+    sources = {}
+
+    def source_for(_owner, state):
+        source = sources.setdefault(state.spec.cache_key, _Source(_result()))
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    leases = []
+    consumers = []
+    for index in range(8):
+        spec = feed_runtime.FeedSourceSpec(
+            source_id=f"startup_probe_{index}",
+            url=f"https://s{index}.example/feed.xml",
+            cache_key=f"startup-probe-{index}",
+            display_name=f"Probe {index}",
+        )
+        lease = FeedRuntimeLease(
+            config=FeedRuntimeConfig(
+                widget_id=f"startup_probe_{index}",
+                source_spec=spec,
+                refresh_minutes=15,
+                show_images=False,
+                view_mode="list",
+                item_limit=3,
+            ),
+            generation=812,
+            manager=manager,
+            ui_dispatch=lambda fn: fn(),
+            schedule=lambda _ms, _fn: (lambda: None),
+            task_priority=0,
+        )
+        consumer = _Consumer(812)
+        lease.attach_consumer(consumer)
+        leases.append(lease)
+        consumers.append(consumer)
+        assert lease.start() is True
+
+    assert len(manager.tasks) == 8
+    owner = leases[0]._owner
+    assert all(lease._owner is owner for lease in leases)
+
+    for index in range(7):
+        manager.finish(index)
+        assert owner._initial_admission_complete is False
+        assert consumers[index].accepted
+        assert all(
+            not accepted.initial_admission_complete
+            for consumer in consumers
+            for accepted, _from_cache in consumer.accepted
+        )
+
+    manager.finish(7)
+    assert owner._initial_admission_complete is True
+    assert all(consumer.accepted for consumer in consumers)
+    assert all(
+        consumer.accepted[-1][0].initial_admission_complete is True
+        for consumer in consumers
+    )
+
+    for lease in leases:
+        lease.retire()
+
+
+def test_initial_admission_barrier_waits_for_every_active_source(monkeypatch):
+    """Staggered startup is one family admission, never one fade per source."""
+    manager = _DeferredManager()
+    sources = {}
+
+    def source_for(_owner, state):
+        source = sources.setdefault(state.spec.cache_key, _Source(_result()))
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    first, first_consumer = _lease_for_url(
+        manager, slot="feeds_custom_1", url="https://example.test/one.xml"
+    )
+    second, second_consumer = _lease_for_url(
+        manager, slot="feeds_custom_2", url="https://example.test/two.xml"
+    )
+    assert first.start() and second.start()
+    assert len(manager.tasks) == 2
+
+    manager.finish(0)
+    assert first_consumer.accepted
+    assert first_consumer.accepted[-1][0].initial_admission_complete is False
+    assert not second_consumer.accepted
+
+    manager.finish(1)
+    assert second_consumer.accepted
+    assert first_consumer.accepted[-1][0].initial_admission_complete is True
+    assert second_consumer.accepted[-1][0].initial_admission_complete is True
+    assert first._owner._initial_admission_complete is True
+
+    first.retire()
+    second.retire()

@@ -185,5 +185,10 @@ def test_feed_article_refresh_fade_is_body_scoped_event_driven_and_timerless():
     assert "duration: feedRoot.contentFadeOutDuration" in qml
     assert "duration: feedRoot.contentFadeInDuration" in qml
     assert qml.count("easing.type: Easing.InOutSine") >= 2
+    # Artwork hydration is a retained two-buffer fade as well.  A late local
+    # artwork URI must never make the image snap into a fully opaque raw Image.
+    assert qml.count("ArtworkFadeImage {") >= 2
+    assert qml.count("fadeOutDuration: feedRoot.contentFadeOutDuration") >= 2
+    assert qml.count("fadeInDuration: feedRoot.contentFadeInDuration") >= 2
     assert "Timer {" not in qml
     assert "Thread(" not in source

@@ -494,6 +494,9 @@ def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
         encoding="utf-8",
     )
     (repo / "main_mc.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
+    (repo / "main_diagnostic.py").write_text(
+        "from main import parse_screensaver_args\n", encoding="utf-8"
+    )
     python_exe = (
         repo / ".venv" / "Scripts" / "python.exe"
         if windows_venv
@@ -530,6 +533,19 @@ def test_run_command_defaults_to_repo_venv_and_rejects_unknown_flags(tmp_path: P
     assert tuple(command[2:]) == core.RUN_DEFAULT_FLAGS
     with pytest.raises(core.GodzipError, match="not accepted"):
         core.build_run_command(repo, "main.py", ["--made-up-goblin-flag"])
+
+
+
+
+def test_run_command_accepts_first_class_diagnostic_entrypoint(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _add_runtime_surface(repo)
+
+    command = core.build_run_command(repo, "main_diagnostic.py", core.RUN_DEFAULT_FLAGS)
+
+    assert Path(command[0]) == core.repo_venv_python(repo)
+    assert Path(command[1]) == repo / "main_diagnostic.py"
+    assert tuple(command[2:]) == core.RUN_DEFAULT_FLAGS
 
 
 def test_windows_run_console_auto_closes_unless_keep_open_is_explicit(monkeypatch, tmp_path: Path) -> None:
