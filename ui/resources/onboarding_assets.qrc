@@ -20,6 +20,7 @@
     <file alias="onboarding/transition_page_curl.png" compression-algorithm="none">../assets/onboarding/source/transition_page_curl.png</file>
     <file alias="onboarding/transition_particle.png" compression-algorithm="none">../assets/onboarding/source/transition_particle.png</file>
     <file alias="onboarding/transition_pixel_accretion.png" compression-algorithm="none">../assets/onboarding/source/transition_pixel_accretion.png</file>
+    <file alias="onboarding/transition_relief_rise.png" compression-algorithm="none">../assets/onboarding/source/transition_relief_rise.png</file>
     <file alias="onboarding/transition_ripple.png" compression-algorithm="none">../assets/onboarding/source/transition_ripple.png</file>
     <file alias="onboarding/transition_slide.png" compression-algorithm="none">../assets/onboarding/source/transition_slide.png</file>
     <file alias="onboarding/transition_source.png" compression-algorithm="none">../assets/onboarding/source/transition_source.png</file>

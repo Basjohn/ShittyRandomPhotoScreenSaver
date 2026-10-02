@@ -34,6 +34,7 @@ class TransitionType(Enum):
     PAGE_CURL = "Page Curl"
     DISINTEGRATE = "Disintegrate"
     ACCORDION_FOLD = "Accordion Fold"
+    RELIEF_RISE = "Relief Rise"
 
 
 class WidgetPosition(Enum):

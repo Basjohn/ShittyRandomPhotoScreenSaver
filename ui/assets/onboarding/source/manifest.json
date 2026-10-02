@@ -374,6 +374,23 @@
       ]
     },
     {
+      "transition_id": "relief_rise",
+      "path": "transition_relief_rise.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
       "transition_id": "accordion_fold",
       "path": "transition_accordion_fold.png",
       "size": [
@@ -479,5 +496,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 19440010
+  "total_bytes": 20146758
 }

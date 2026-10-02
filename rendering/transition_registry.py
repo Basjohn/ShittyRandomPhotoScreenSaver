@@ -124,6 +124,12 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
+        setting_name="Relief Rise",
+        stable_id="relief_rise",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Accordion Fold",
         stable_id="accordion_fold",
         easing_curve=EasingCurve.LINEAR,
