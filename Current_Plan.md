@@ -141,6 +141,14 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
 - [ ] **Extruded Spectrum**: first ordinary shared-foundation 3D Visualizer and SSBO-instancing/material-light proof.
+  Wiring map (surveyed 2026-10-03, nothing written yet): experimental `extruded_spectrum` descriptor borrowing Spectrum's
+  frame runtime, technical profile and shared-bar profile; generalise `_capture_spectrum` (mode id + frame type) and
+  add an `ExtrudedSpectrumFrame(SpectrumFrame)` in `render_state.py`; presentation-only keys (depth/tilt/gloss) through
+  defaults, `models/_spotify_visualizer.py` (specs, fields, clamps, serializers, `preset_` field),
+  `config_applier.apply_presentation_vis_mode_kwargs` and a small builder + settings binding
+  (`widgets_tab_media`, `visualizers_tab._MODE_NORMAL_ATTR`, `visualizer_settings_context` roots); `mode_capabilities`
+  sets like Spectrum; a curated preset file + manifest; a Guided Setup preview PNG; renderer on SceneTarget with
+  per-bar std430 records on the stream ring and the S17 material.
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
