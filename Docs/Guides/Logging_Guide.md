@@ -247,8 +247,11 @@ Do not change sidecar schemas merely to make the main log prettier.
 
 ## Diagnostic Runtime
 
-Diagnostic remains an opt-in frozen-runtime attribution product. It may enable all
-families automatically and retain longer bounded usage/lifecycle/main history.
+Diagnostic remains an opt-in frozen-runtime attribution product. It enables all ordinary
+diagnostic families automatically, including the out-of-process Windows handle-type attribution
+sidecar (30-second cadence), and retains longer bounded usage/lifecycle/main history. Ordinary
+`--usage` still does **not** imply handle attribution; outside Diagnostic the helper remains owned
+only by explicit `--handle-attribution`.
 
 It is not a performance baseline, and ordinary work must not trigger a Diagnostic rebuild
 unless a specific frozen-only failure requires it.

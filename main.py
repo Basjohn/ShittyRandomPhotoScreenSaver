@@ -584,7 +584,12 @@ def run_screensaver(
                         WindowsHandleAttributionSidecar,
                     )
 
-                    handle_sidecar = WindowsHandleAttributionSidecar(get_log_dir())
+                    handle_sidecar = WindowsHandleAttributionSidecar(
+                        get_log_dir(),
+                        # Diagnostic runs need enough type samples to explain a
+                        # ~one-handle-per-image leak in minutes, not another soak.
+                        interval_s=30.0 if is_diagnostic_build() else 60.0,
+                    )
 
                 if engine.thread_manager is None:
                     raise RuntimeError("ThreadManager unavailable after engine start")
@@ -759,6 +764,7 @@ def main(*, entrypoint: str = "main"):
         verbose=verbose_mode,
         perf=perf_mode,
         usage=usage_mode,
+        handle_attribution=handle_attribution_mode,
         viz=logging_profile.viz,
         geo=logging_profile.geo,
         settings_trace=logging_profile.settings_trace,

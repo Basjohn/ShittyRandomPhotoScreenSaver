@@ -344,6 +344,7 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
             "live_bytes": 0,
             "segments_consumed": 3,
             "segments_reclaimed_late": 1,
+            "close_failures": 0,
             "unlink_failures": 0,
         },
     )
@@ -388,6 +389,7 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "shm_segments_live=0" in sample
     assert "shm_live_bytes=0" in sample
     assert "shm_segments_reclaimed_late=1" in sample
+    assert "shm_close_failures=0" in sample
     assert "tm_active=1" in sample
     assert '"visualizer.audio_analysis":{"active":1' in sample
     assert "tm_delivery={}" in sample

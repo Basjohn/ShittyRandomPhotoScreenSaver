@@ -84,6 +84,71 @@ def test_feed_article_change_defers_row_reset_until_fade_midpoint(qt_app):
     assert model.commitPendingContent() is False
 
 
+
+
+def test_feed_startup_hydration_settles_quietly_then_arms_later_fades(qt_app):
+    values = {"feeds_custom_1": {
+        "enabled": True,
+        "feed_url": "https://example.test/feed.xml",
+        "view_mode": "grid",
+        "show_images": False,
+        "item_limit": 3,
+    }}
+    config = FeedPresentationConfig.from_widgets_mapping(values, widget_id="feeds_custom_1")
+    model = FeedPresentationModel(
+        config,
+        FeedPresentationStyle.project(
+            config, dict(require_canonical_default("widgets.shadows"))
+        ),
+    )
+    model._active = True
+
+    def result(item_id: str, title: str, *, settled: bool) -> FeedRefreshResult:
+        now = time()
+        return FeedRefreshResult(
+            "available",
+            FeedSnapshot(
+                FeedDocument(
+                    "Example", "https://example.test", "rss20",
+                    (FeedItem(item_id, title, f"https://example.test/{item_id}"),),
+                ),
+                now,
+            ),
+            FeedHealth(last_success_at=now),
+            presentation_settled=settled,
+        )
+
+    transition_spy = QSignalSpy(model.contentTransitionRequested)
+    model.on_feed_runtime_result(result("cache", "Cached", settled=False), from_cache=True)
+    assert model.rowModel.rows[0].title == "Cached"
+
+    model.on_feed_runtime_result(result("network", "Network", settled=False), from_cache=False)
+    model.on_feed_runtime_result(result("art", "Final", settled=False), from_cache=False)
+    assert transition_spy.count() == 0
+    assert model.rowModel.rows[0].title == "Cached"
+    assert model.has_pending_content_transition is True
+
+    model.on_feed_runtime_result(result("final", "Settled", settled=True), from_cache=False)
+    # Startup cache/network/artwork hydration belongs to initial admission.
+    # The first settled aggregate commits quietly and only arms later article
+    # replacements for the deliberately slow body transition.
+    assert transition_spy.count() == 0
+    assert model.rowModel.rows[0].title == "Settled"
+    assert model.has_pending_content_transition is False
+
+    model.on_feed_runtime_result(result("later", "Later", settled=True), from_cache=False)
+    assert transition_spy.count() == 1
+    assert model.rowModel.rows[0].title == "Settled"
+    assert model.has_pending_content_transition is True
+
+    # An equivalent settled publication while QML is still fading out updates
+    # the latest retained target but must not restart the 900 ms fade.
+    model.on_feed_runtime_result(result("later", "Later", settled=True), from_cache=False)
+    assert transition_spy.count() == 1
+    assert model.commitPendingContent() is True
+    assert model.rowModel.rows[0].title == "Later"
+
+
 def test_f3_feed_grid_uses_local_artwork_and_geometry_visible_admission(qt_app, tmp_path):
     """Load the real component, then resize a retained three-story Grid.
 

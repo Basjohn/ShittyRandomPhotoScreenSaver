@@ -789,9 +789,10 @@ def resolve_logging_bootstrap_profile(
             verbose=True,
             perf=True,
             usage=True,
-            # Deep Windows handle-type attribution is intentionally not part of
-            # diagnostic-all; it owns a helper process and must be explicit.
-            handle_attribution=False,
+            # Diagnostic builds exist to explain long-lived runtime failures.
+            # The handle sidecar is out-of-process, low-cadence and excluded
+            # from app aggregates, so diagnostic-all owns it automatically.
+            handle_attribution=True,
             viz=True,
             geo=True,
             settings_trace=True,
@@ -2664,6 +2665,10 @@ def _select_diagnostic_log_dir(exe_path: Path | None) -> Path:
     global _ACTIVE_LOG_DIR
     candidates = (
         exe_path.parent / "logs" if exe_path is not None else None,
+        # Source Diagnostic is still a source run. Keep its logs beside every
+        # other source-run log instead of inventing a third hidden location in
+        # LocalAppData. Frozen Diagnostic remains isolated beside its exe.
+        _BASE_DIR / "logs" if exe_path is None else None,
         _candidate_localappdata_diagnostic_dir(),
         _candidate_temp_diagnostic_dir(),
     )
@@ -2711,6 +2716,7 @@ def setup_logging(
     verbose: bool = False,
     perf: bool = False,
     usage: bool = False,
+    handle_attribution: bool = False,
     viz: bool = False,
     geo: bool = False,
     settings_trace: bool = False,
@@ -2730,6 +2736,9 @@ def setup_logging(
             etc.). Verbose mode also implies debug-level logging.
         perf: Enables performance/PERF logging families.
         usage: Enables low-cadence whole-process resource telemetry.
+        handle_attribution: Declares that the Windows handle-type attribution
+            sidecar is part of this logging session. Diagnostic builds enable
+            it automatically; ordinary runs require --handle-attribution.
         viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
             [SPOTIFY_VOL]) and visualizer diagnostics.
         geo: Enables geometry/z-order/CUSTOM-layout sidecar diagnostics.
@@ -2763,6 +2772,7 @@ def setup_logging(
         verbose = diagnostic_profile.verbose
         perf = diagnostic_profile.perf
         usage = diagnostic_profile.usage
+        handle_attribution = diagnostic_profile.handle_attribution
         viz = diagnostic_profile.viz
         geo = diagnostic_profile.geo
         settings_trace = diagnostic_profile.settings_trace
@@ -3190,11 +3200,12 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s, feeds=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, handles=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s, feeds=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
         _USAGE_LOGGING_ENABLED,
+        bool(handle_attribution),
         _VIZ_LOGGING_ENABLED,
         _GEOMETRY_LOGGING_ENABLED,
         _SETTINGS_LOGGING_ENABLED,
@@ -3210,7 +3221,9 @@ def setup_logging(
     if _PERF_METRICS_ENABLED:
         active_specific_logs.append("perf=screensaver_perf.log")
     if _USAGE_LOGGING_ENABLED:
-        active_specific_logs.append("usage=screensaver_usage.log+screensaver_handles.log")
+        active_specific_logs.append("usage=screensaver_usage.log")
+    if handle_attribution:
+        active_specific_logs.append("handles=screensaver_handles.log")
     if _VIZ_LOGGING_ENABLED:
         active_specific_logs.append("viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log")
     if _GEOMETRY_LOGGING_ENABLED:

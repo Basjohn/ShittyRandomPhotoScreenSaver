@@ -851,6 +851,7 @@ class ProcessSupervisor:
             self._shared_memory_accounting.finalize(
                 descriptor,
                 consumed=consumed,
+                close_failed=lease.close_failed,
                 unlink_failed=lease.unlink_failed,
             )
 
@@ -997,12 +998,13 @@ class ProcessSupervisor:
                 "[PERF] [WORKER] shared_memory_final "
                 "segments_created=%d segments_live=%d live_bytes=%d "
                 "segments_consumed=%d segments_reclaimed_late=%d "
-                "unlink_failures=%d",
+                "close_failures=%d unlink_failures=%d",
                 shared["segments_created"],
                 shared["segments_live"],
                 shared["live_bytes"],
                 shared["segments_consumed"],
                 shared["segments_reclaimed_late"],
+                shared["close_failures"],
                 shared["unlink_failures"],
             )
         logger.info("ProcessSupervisor shutdown complete")

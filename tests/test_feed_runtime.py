@@ -152,6 +152,47 @@ def test_leases_share_one_generation_owner_and_cache_first_source(monkeypatch):
     assert feed_runtime.shared_feed_owner_count() == 0
 
 
+
+
+def test_stale_cache_bundle_stays_unsettled_until_immediate_remote_refresh(monkeypatch):
+    manager = _Manager()
+    now = time.time()
+    cached = _result(now - 3600.0)
+    fresh = _result(now)
+
+    class StaleThenFresh(_Source):
+        def load_cached(self):
+            self.cache_calls += 1
+            return cached
+
+        def refresh(self, *, force=False):
+            self.refresh_calls += 1
+            return fresh
+
+    source = StaleThenFresh(cached)
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    lease = FeedRuntimeLease(
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
+        generation=88, manager=manager, ui_dispatch=lambda fn: fn(),
+        schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
+    )
+    consumer = _Consumer(88)
+    lease.attach_consumer(consumer)
+    assert lease.start() is True
+    assert source.cache_calls == 1
+    assert source.refresh_calls == 1
+    assert len(consumer.accepted) == 2
+    assert consumer.accepted[0][0].presentation_settled is False
+    assert consumer.accepted[-1][0].presentation_settled is True
+    assert lease.presentation_settled is True
+    lease.retire()
+
+
 def test_manual_refresh_is_generation_owned_and_bounded_to_one_inflight(monkeypatch):
     manager = _Manager()
     source = _Source(_result())
@@ -627,20 +668,33 @@ def _batch_owner(monkeypatch, ages_s, *, backoff=None):
     return owner, leases, sources, now
 
 
-def test_sources_due_close_together_share_one_wake_up(monkeypatch):
-    # 15 min cadence, so a 225 s batch window. Due in 300 s, 480 s and 800 s:
-    # nothing is due at start; when the first falls due, the second (180 s
-    # later) joins its wake-up and the third (500 s later) does not.
+def test_sources_due_close_together_are_not_pulled_into_one_burst(monkeypatch):
+    # 15 min cadence. Due in 300 s, 480 s and 800 s: when the first falls due,
+    # only that source is admitted. The old 25%-of-interval batch window would
+    # have pulled the second source 180 s early and made their HTTP/parse work
+    # collide every cycle.
     owner, leases, sources, now = _batch_owner(monkeypatch, (600, 420, 100))
     assert all(source.refresh_calls == 0 for source in sources.values())
     first_due = min(state.due_at for state in owner._states.values())
     owner._now = lambda: first_due
     owner._admit_due_work()
     calls = [sources[f"s{i}.example"].refresh_calls for i in range(3)]
-    assert calls == [1, 1, 0]
-    # Having succeeded together, the two now fall due together.
-    due = {state.spec.url.split("/")[2]: state.due_at for state in owner._states.values()}
-    assert abs(due["s0.example"] - due["s1.example"]) < 1.0
+    assert calls == [1, 0, 0]
+
+    # The small family cooldown is event-driven through the existing
+    # single-shot deadline. It must not turn into an early-admission window.
+    owner._now = lambda: first_due + feed_runtime._REMOTE_SOURCE_STAGGER_S
+    owner._admit_due_work()
+    assert [sources[f"s{i}.example"].refresh_calls for i in range(3)] == [1, 0, 0]
+
+    second_due = min(
+        state.due_at
+        for state in owner._states.values()
+        if state.spec.url.split("/")[2] == "s1.example"
+    )
+    owner._now = lambda: second_due
+    owner._admit_due_work()
+    assert [sources[f"s{i}.example"].refresh_calls for i in range(3)] == [1, 1, 0]
     for lease in leases:
         lease.retire()
 
@@ -650,7 +704,7 @@ def test_a_backing_off_source_is_never_pulled_early_into_a_wake_up(monkeypatch):
         monkeypatch, (15 * 60, 15 * 60), backoff={1: 60.0})
     assert sources["s0.example"].refresh_calls == 1  # due at start
     assert sources["s1.example"].refresh_calls == 0
-    owner._now = lambda: now + 30.0  # backoff ends in 30 s: inside any batch window
+    owner._now = lambda: now + 30.0  # persisted backoff still has 30 s remaining
     owner._admit_due_work()
     assert sources["s1.example"].refresh_calls == 0
     owner._now = lambda: now + 60.0

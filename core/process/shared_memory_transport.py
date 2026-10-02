@@ -328,6 +328,7 @@ class SharedMemoryAccounting:
         self._segments_created = 0
         self._segments_consumed = 0
         self._segments_reclaimed_late = 0
+        self._close_failures = 0
         self._unlink_failures = 0
 
     def register(self, descriptor: SharedMemoryDescriptor) -> None:
@@ -342,6 +343,7 @@ class SharedMemoryAccounting:
         descriptor: SharedMemoryDescriptor,
         *,
         consumed: bool,
+        close_failed: bool = False,
         unlink_failed: bool = False,
     ) -> None:
         with self._lock:
@@ -355,6 +357,8 @@ class SharedMemoryAccounting:
                     self._segments_consumed += 1
                 else:
                     self._segments_reclaimed_late += 1
+            if close_failed:
+                self._close_failures += 1
             if unlink_failed:
                 self._unlink_failures += 1
 
@@ -366,5 +370,6 @@ class SharedMemoryAccounting:
                 "live_bytes": sum(self._live.values()),
                 "segments_consumed": self._segments_consumed,
                 "segments_reclaimed_late": self._segments_reclaimed_late,
+                "close_failures": self._close_failures,
                 "unlink_failures": self._unlink_failures,
             }

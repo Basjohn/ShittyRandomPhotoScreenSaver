@@ -24,14 +24,48 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [x] **FEEDS content transition contract.** Every CUSTOM and NEWS feed card uses the shared `FeedPresentation.qml`
   event-driven body transition for retained content changes: gently fade old content fully out, commit the latest staged
   rows only at opacity zero, then gently fade the replacement in. No Timer, poll, worker or per-delegate animation owns
-  the effect; current authored timing is 900 ms out / 1200 ms in with sine easing. Do not shorten this into a refresh blink.
+  the effect; current authored timing is 900 ms out / 1200 ms in with sine easing. **Cache/network/artwork hydration is one
+  latest-wins presentation bundle:** intermediate accepted generations stay retained without starting a fade, NEWS waits
+  for every provider's cache admission before its first aggregate, and **startup hydration owns no body fade at all**. The
+  first settled bundle commits quietly and only arms the slow body transition for later periodic/manual article changes.
+  Once armed, equivalent settled publications update the latest pending target without restarting an in-flight fade. Do
+  not shorten this into a refresh blink or animate publisher-by-publisher/cache/artwork startup hydration.
 - [x] **Diagnostic logging hygiene.** Dedicated family sidecars own routine diagnostics; expected lifecycle cancellation
   is a cancelled task outcome, not a failed task traceback. Diagnostic-only WARNING records may be explicitly sidecar-only
   and disappear from main/console only while their declared sidecar is active; real degradation and ERROR/CRITICAL remain
   central. ThreadManager task failures inherit stable category-to-family ownership so FEEDS/other categorized failures also
-  land in the correct sidecar. PERF threshold diagnostics may use the same sidecar-only contract.
+  land in the correct sidecar. PERF threshold diagnostics may use the same sidecar-only contract. **Log locations are not
+  a scavenger hunt:** source Diagnostic reuses the normal source-tree `logs/`; frozen Diagnostic uses the Diagnostic
+  executable's adjacent `logs/`; LocalAppData/Temp are fallback-only when the preferred location is not writable.
 
-## 1. S14 | persistent mapped stream + SSBO foundation | **NEXT**
+## 1. 2026-10-02 diagnostic-soak defects | **ACTIVE BEFORE S14**
+
+- [ ] **Main-process handle accumulation: root-cause and repair without another long soak.** The original frozen/Winlogon
+  single-display window `06:00:14 -> 12:56:59` gained **653 main-process handles** across **624** ImageWorker SHM creations
+  / **625** image submissions: ~**94.1 handles/hour / 1.57 per minute**, superficially ~**+1.045 per image handoff**. The
+  new 2026-10-02 source Diagnostic discriminator **does not reproduce that image-shaped slope**: from `14:32:03 -> 14:42:48`
+  SHM creations rose **11 -> 48 (+37)** while main handles only moved **1870 -> 1883 (+13)** with ordinary up/down noise and
+  `shm_close_failures=0`; the handle classifier shows no monotonic Section growth. At `14:43:03` Spotify playback/audio
+  capture starts and produces a separate ~**+64** broad handle step with **zero new SHM segments**, then plateaus. Therefore
+  do **not** keep probing source runs for a per-image leak: the remaining defect is now narrowed to a frozen/Winlogon or
+  other runtime-condition-specific owner. Piggyback the next frozen Diagnostic build and use only **20-30 image changes**
+  with `screensaver_handles.log` to classify it. **No unattended/long soak is a discovery gate.** Address the concrete
+  growing handle type/owner before any longer confirmation run.
+- [x] **FEEDS 15-minute contention burst: remove deliberate cadence bunching.** The old owner admitted every source due
+  within 25% of its interval, creating a 3m45s early-join window on the normal 15-minute cadence and intentionally
+  realigning independent publishers into one HTTP/parse burst. Periodic remote FEEDS work is now family-serialized: one
+  source owns refresh plus its optional artwork follow-on, then a **2.5 s event-driven cooldown** separates the next source.
+  Sources are never pulled early, manual refreshes queue behind an occupied lane, and cache-first disk publication remains
+  local. No recurring timer, poll, sleep loop or extra worker was added. Startup/provider hydration is additionally
+  fade-disarmed until the first settled presentation bundle commits, so serialization cannot turn into a 5-20-fade startup
+  procession. Confirm the old
+  ~280-360 ms quarter-hour event-loop spikes disappear in a bounded run; do not tune around them while concurrent source
+  admission still exists.
+- [x] **Topology memory high-water is not active work.** The operator intentionally rushed topology during this soak. Do
+  not reopen the one observed high-water retention unless it reproduces independently in normal use or another targeted
+  lifecycle check.
+
+## 2. S14 | persistent mapped stream + SSBO foundation | **NEXT AFTER ACTIVE SOAK DEFECTS**
 
 - [ ] Add one bounded context-local persistent mapped ring for genuinely changing small frame payloads. Prefer coherent
   mapping only where measured healthy; otherwise explicit flushes. Fence segment reuse safely with no busy polling,
@@ -45,7 +79,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [ ] Prove retirement/context-loss: fixed capacities, no overwritten in-flight segment, zero leaked handles and no
   meaningful dormant cost when no 3D consumer requests the facility.
 
-## 2. S15 | compute, image load/store and atomics
+## 3. S15 | compute, image load/store and atomics
 
 - [ ] Add shared compute-program/resource helpers with explicit dispatch dimensions and barrier ownership.
 - [ ] Add image load/store and atomic/atomic-counter support only as concrete consumers require it.
@@ -56,7 +90,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [ ] First useful jobs should be concrete: particle evaluation/compaction, bolt/branch tables, volume injection,
   post kernels, light/cluster lists, active-piece masks or indirect counts.
 
-## 3. S16 | indirect / multi-draw + GPU compaction
+## 4. S16 | indirect / multi-draw + GPU compaction
 
 - [ ] Add bounded indirect command buffers and compact active-instance lists only where they replace material Python
   submit/draw loops.
@@ -64,7 +98,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [ ] Keep generated counts GPU-owned in the ordinary path; no CPU count readback loop.
 - [ ] Prove capacity bounds and deterministic population/placement against a reference path before migration.
 
-## 4. S17 | active-only high-fidelity scene buffers, lighting and materials
+## 5. S17 | active-only high-fidelity scene buffers, lighting and materials
 
 - [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
@@ -81,7 +115,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
 - [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-## 5. S18 | particles, lightning, smoke/fire and volumetrics
+## 6. S18 | particles, lightning, smoke/fire and volumetrics
 
 - [ ] **GPU particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced
   draw, soft sprites/streaks/ribbons, optional simple analytic/SDF collision and OIT. No Python object per particle.
@@ -95,7 +129,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   primitives using compute/image resources rather than parent CPU loops.
 - [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-## 6. S19 | Voxel Sphere promotion onto shared Scene3D
+## 7. S19 | Voxel Sphere promotion onto shared Scene3D
 
 Sphere promotion is a plumbing migration, **not** a redesign. `Docs/Reference/Sphere_Visualizer.md` is the behavioural
 golden and the Bubble golden remains unrelated and untouchable.
@@ -114,7 +148,7 @@ golden and the Bubble golden remains unrelated and untouchable.
 - [ ] Only after promotion acceptance may Sphere gain explicit new fidelity options such as richer emissive lighting,
   improved shadows, compute particles or smoke/electric coupling. Output remains SDR-only.
 
-## 7. S20 | vertical consumers | make the substrate earn its complexity
+## 8. S20 | vertical consumers | make the substrate earn its complexity
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
@@ -129,7 +163,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 8. Cross-cutting acceptance | applies to every open box above
+## 9. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
   frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.

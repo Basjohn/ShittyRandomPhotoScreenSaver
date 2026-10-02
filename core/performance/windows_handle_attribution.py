@@ -280,6 +280,9 @@ def run_handle_attribution_sidecar(
             return
 
         type_names: dict[int, str] = {}
+        previous_type_counts: dict[str, int] | None = None
+        previous_total: int | None = None
+        previous_elapsed: float | None = None
         started = time.monotonic()
         sequence = 0
         try:
@@ -309,20 +312,52 @@ def run_handle_attribution_sidecar(
                         type_names,
                     )
                     type_counts, index_names = summarize_handle_types(pairs, type_names)
+                    elapsed = time.monotonic() - started
+                    total = len(pairs)
+                    delta_handles = (
+                        None if previous_total is None else total - previous_total
+                    )
+                    delta_elapsed = (
+                        None if previous_elapsed is None else elapsed - previous_elapsed
+                    )
+                    per_minute = (
+                        None
+                        if delta_handles is None or not delta_elapsed or delta_elapsed <= 0.0
+                        else delta_handles * 60.0 / delta_elapsed
+                    )
+                    previous_counts = previous_type_counts or {}
+                    type_deltas = {
+                        name: int(count) - int(previous_counts.get(name, 0))
+                        for name, count in type_counts.items()
+                        if previous_type_counts is not None
+                        and int(count) != int(previous_counts.get(name, 0))
+                    }
+                    if previous_type_counts is not None:
+                        for name, count in previous_counts.items():
+                            if name not in type_counts and count:
+                                type_deltas[name] = -int(count)
                     _write_json_line(
                         stream,
                         {
                             "event": "sample",
                             "utc": _utc_now(),
-                            "elapsed_s": round(time.monotonic() - started, 3),
+                            "elapsed_s": round(elapsed, 3),
                             "sequence": sequence,
                             "target_pid": target_pid,
-                            "snapshot_handles": len(pairs),
+                            "snapshot_handles": total,
+                            "delta_handles": delta_handles,
+                            "delta_handles_per_minute": (
+                                None if per_minute is None else round(per_minute, 3)
+                            ),
                             "collect_ms": round((time.perf_counter() - sample_started) * 1000.0, 3),
                             "type_counts": type_counts,
+                            "type_deltas": dict(sorted(type_deltas.items())),
                             "type_indices": index_names,
                         },
                     )
+                    previous_type_counts = dict(type_counts)
+                    previous_total = total
+                    previous_elapsed = elapsed
                 except Exception as exc:
                     _write_json_line(
                         stream,
