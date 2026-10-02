@@ -255,6 +255,7 @@ TRANSITION_COPY = {
     "ripple": "Water-like ripples blend the two pictures.",
     "page_curl": "The picture peels away like a page.",
     "disintegrate": "The picture crumbles into dust that blows away.",
+    "accordion_fold": "The picture folds up like an accordion and slides away.",
 }
 
 

@@ -251,6 +251,7 @@ def resolve_quick_transition_spec(
         "melt_drip",
         "page_curl",
         "disintegrate",
+        "accordion_fold",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,
