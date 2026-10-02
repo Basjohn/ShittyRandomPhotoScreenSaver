@@ -35,6 +35,11 @@ from PySide6.QtCore import QBuffer, QByteArray
 from PySide6.QtGui import QImage, QImageReader
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.tags import (
+    LOG_FAMILY_FIELD,
+    LOG_FAMILY_PERF,
+    LOG_SIDECAR_ONLY_FIELD,
+)
 from core.media.media_controller import (
     BaseMediaController,
     MediaCommandResult,
@@ -1285,6 +1290,10 @@ class _SharedMediaRuntimeOwner:
                     elapsed_ms,
                     worker_ms,
                     self._provider,
+                    extra={
+                        LOG_FAMILY_FIELD: (LOG_FAMILY_PERF,),
+                        LOG_SIDECAR_ONLY_FIELD: True,
+                    },
                 )
 
     def _has_fresh_info(self) -> bool:

@@ -171,5 +171,13 @@ def test_feed_article_refresh_fade_is_body_scoped_event_driven_and_timerless():
     assert 'target: body' in qml
     assert 'script: feedRoot.feedModel.commitPendingContent()' in qml
     assert 'property: "fadeOpacity"' not in qml[qml.index("id: articleContentFade"):qml.index("Item {", qml.index("id: articleContentFade") + 1)]
+    # Feed content transitions are intentionally unmistakable and gentle, not
+    # a sub-quarter-second flicker. Both values are shared by CUSTOM and NEWS
+    # because the whole FEEDS family uses this one presentation component.
+    assert "readonly property int contentFadeOutDuration: 900" in qml
+    assert "readonly property int contentFadeInDuration: 1200" in qml
+    assert "duration: feedRoot.contentFadeOutDuration" in qml
+    assert "duration: feedRoot.contentFadeInDuration" in qml
+    assert qml.count("easing.type: Easing.InOutSine") >= 2
     assert "Timer {" not in qml
     assert "Thread(" not in source

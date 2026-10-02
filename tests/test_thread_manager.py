@@ -26,6 +26,7 @@ from core.threading.manager import (
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from PySide6.QtCore import QObject, QThread
+from core.task_control import ExpectedTaskCancellation
 
 
 class TestThreadManagerInit:
@@ -1140,4 +1141,34 @@ def test_retiring_a_recurring_timer_releases_its_owner_before_deferred_deletion(
     finally:
         if was_enabled:
             gc.enable()
+        manager.shutdown()
+
+
+def test_expected_task_cancellation_is_accounted_as_cancelled_not_failed():
+    class InlineExecutor:
+        def submit(self, fn):
+            future = Future()
+            future.set_result(fn())
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            return None
+
+    manager = ThreadManager()
+    original_executor = manager._executors[ThreadPoolType.IO]
+    manager._executors[ThreadPoolType.IO] = InlineExecutor()
+    callback_results = []
+    try:
+        manager.submit_io_task(
+            lambda: (_ for _ in ()).throw(ExpectedTaskCancellation("retired")),
+            task_id="expected_cancel",
+            category="feeds",
+            callback=lambda result: callback_results.append(result),
+        )
+        assert callback_results and callback_results[0].success is False
+        assert isinstance(callback_results[0].error, ExpectedTaskCancellation)
+        assert manager.get_task_category_stats()["feeds"]["cancelled"] == 1
+        assert manager.get_task_category_stats()["feeds"]["failed"] == 0
+    finally:
+        original_executor.shutdown(wait=False, cancel_futures=True)
         manager.shutdown()

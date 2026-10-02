@@ -171,11 +171,16 @@ OverlayWidget {
     // Geometry only changes delegate visibility. No QML -> Python callback,
     // row-model reset, cache access or re-publication occurs during resize.
 
-    // Article refreshes use one event-driven body fade for both List and Grid.
-    // The existing whole-widget fadeOpacity remains lifecycle/startup authority;
-    // using it here would couple refresh polish to admission.  The body animation
-    // runs only when Python stages a changed retained row set, commits at opacity
-    // zero, then stops.  No Timer, poll, thread or per-delegate animation exists.
+    // Article refreshes use one event-driven, deliberately slow body fade for
+    // every FEEDS card (CUSTOM and NEWS, List and Grid).  The existing whole-
+    // widget fadeOpacity remains lifecycle/startup authority; using it here would
+    // couple refresh polish to admission.  Python stages the latest retained row
+    // set, QML gently fades the old content fully out, commits only at opacity
+    // zero, then gently reveals the replacement.  No Timer, poll, thread or
+    // per-delegate animation exists.  These durations are intentionally long
+    // enough to read as a transition rather than a refresh flicker.
+    readonly property int contentFadeOutDuration: 900
+    readonly property int contentFadeInDuration: 1200
     Connections {
         target: feedRoot.feedModel
 
@@ -191,8 +196,8 @@ OverlayWidget {
             target: body
             property: "opacity"
             to: 0.0
-            duration: 160
-            easing.type: Easing.InOutQuad
+            duration: feedRoot.contentFadeOutDuration
+            easing.type: Easing.InOutSine
         }
         ScriptAction {
             script: feedRoot.feedModel.commitPendingContent()
@@ -201,8 +206,8 @@ OverlayWidget {
             target: body
             property: "opacity"
             to: 1.0
-            duration: 220
-            easing.type: Easing.InOutQuad
+            duration: feedRoot.contentFadeInDuration
+            easing.type: Easing.InOutSine
         }
     }
 

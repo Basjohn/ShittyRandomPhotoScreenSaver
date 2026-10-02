@@ -616,3 +616,38 @@ def test_spaced_log_formatter_adds_blank_line_between_records():
 
     assert formatted.endswith("\n")
     assert "[SPOTIFY_VIS] Example" in formatted
+
+
+def test_geometry_filter_owns_quick_window_geometry_diagnostics():
+    filter_obj = GeometryLogFilter()
+    for token in ("[QUICK_GEOMETRY]", "[QUICK_NATIVE_GEOMETRY]"):
+        record = logging.LogRecord(
+            "rendering.quick.window", logging.INFO, __file__, 1,
+            f"{token} screen=1 dpr=1.5", (), None,
+        )
+        assert filter_obj.filter(record) is True
+
+
+def test_lifecycle_filter_owns_quick_surface_native_media_and_barrier_diagnostics():
+    filter_obj = LifecycleLogFilter()
+    records = (
+        logging.LogRecord("rendering.quick.scene_controller", logging.INFO, __file__, 1,
+                          "[QUICK_SURFACE] event=scene_graph_initialized", (), None),
+        logging.LogRecord("core.media.media_native_trace", logging.INFO, __file__, 1,
+                          "[MEDIA_NATIVE][H1] component=media stage=activate", (), None),
+        logging.LogRecord("engine.runtime_destruction", logging.INFO, __file__, 1,
+                          "[LIFECYCLE_BARRIER] armed", (), None),
+        logging.LogRecord("widgets.media_runtime", logging.INFO, __file__, 1,
+                          "[MEDIA_EVENT] observation active", (), None),
+        logging.LogRecord("widgets.clock_ticker", logging.INFO, __file__, 1,
+                          "[CLOCK_TICKER] Started", (), None),
+    )
+    assert all(filter_obj.filter(record) for record in records)
+
+
+def test_cache_filter_owns_rss_cache_diagnostics():
+    record = logging.LogRecord(
+        "sources.rss.cache", logging.INFO, __file__, 1,
+        "[RSS_CACHE] Loaded 30 cached images", (), None,
+    )
+    assert CacheLogFilter().filter(record) is True

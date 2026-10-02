@@ -20,6 +20,12 @@ from core.logging.logger import (
     is_usage_logging_enabled,
     is_verbose_logging,
 )
+from core.logging.tags import (
+    KNOWN_LOG_FAMILIES,
+    LOG_FAMILY_FIELD,
+    LOG_SIDECAR_ONLY_FIELD,
+)
+from core.task_control import ExpectedTaskCancellation
 
 logger = get_logger(__name__)
 
@@ -43,6 +49,23 @@ _ui_diagnostics: Dict[str, Any] = {
     "scheduled_single_shots": 0,
     "scheduled_single_shots_by_generation": {},
 }
+
+
+def _task_log_extra(category: str, *, sidecar_only: bool = False) -> dict[str, object]:
+    """Route task-manager evidence back to a declared subsystem sidecar.
+
+    Task execution is centralized in this module, so logger-name matching cannot
+    identify the originating family.  Stable task categories restore that
+    ownership without coupling the scheduler to subsystem implementations.
+    """
+
+    family = str(category or "").strip().lower().split(".", 1)[0]
+    if family not in KNOWN_LOG_FAMILIES:
+        return {}
+    extra: dict[str, object] = {LOG_FAMILY_FIELD: (family,)}
+    if sidecar_only:
+        extra[LOG_SIDECAR_ONLY_FIELD] = True
+    return extra
 
 
 def _qt_dispatch_available() -> bool:
@@ -771,6 +794,24 @@ class ThreadManager:
                     task_id=task.task_id
                 )
                 outcome = "completed"
+            except ExpectedTaskCancellation as e:
+                execution_time = time.time() - start_time
+                task_result = TaskResult(
+                    success=False,
+                    error=e,
+                    execution_time=execution_time,
+                    task_id=task.task_id
+                )
+                logger.warning(
+                    "Task %s cancelled by lifecycle: %s (pool=%s category=%s func=%s)",
+                    task.task_id,
+                    e,
+                    pool_type.value,
+                    task.category,
+                    _callable_debug_name(task.func),
+                    extra=_task_log_extra(task.category, sidecar_only=True),
+                )
+                outcome = "cancelled"
             except Exception as e:
                 execution_time = time.time() - start_time
                 task_result = TaskResult(
@@ -787,6 +828,7 @@ class ThreadManager:
                     task.category,
                     _callable_debug_name(task.func),
                     exc_info=True,
+                    extra=_task_log_extra(task.category),
                 )
                 outcome = "failed"
             finally:

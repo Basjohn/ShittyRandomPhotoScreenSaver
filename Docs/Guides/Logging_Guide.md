@@ -12,7 +12,8 @@ The human console may be fancy. The diagnostic record must remain boringly trust
 `screensaver.log` contains:
 
 - high-level runtime narrative useful to an operator;
-- **every WARNING, ERROR and CRITICAL from every family**;
+- every ERROR and CRITICAL from every family;
+- WARNING records that represent product degradation or operator action;
 - only routine INFO that genuinely belongs in the general sequence.
 
 The main file is human-readable and may use aligned columns or framed severity cards.
@@ -20,8 +21,12 @@ That presentation layer must preserve the record's timestamp, logger, message pa
 visible tags and `key=value` content.
 
 When a dedicated family sidecar is enabled, routine family INFO/DEBUG belongs in that
-sidecar and should not duplicate into main. Sidecars retain the compact canonical
-machine-oriented format.
+sidecar and should not duplicate into main. Expected lifecycle cancellation and other
+diagnostic-only WARNING records may explicitly carry `srpss_sidecar_only=True`; those
+stay in an active declared-family sidecar and are omitted from main/console/verbose. If
+the matching sidecar is disabled, the central stream keeps the record so evidence is
+never silently discarded. Genuine WARNING degradation is not marked sidecar-only and
+therefore remains central. Sidecars retain the compact canonical machine-oriented format.
 
 `screensaver_verbose.log` remains the broad debug fallback, not the place agents should
 read first when a dedicated sidecar exists.
@@ -75,7 +80,7 @@ Existing sidecars remain the first destinations for their domains:
 - `--viz` → `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log`
 - `--geo` → `screensaver_geometry.log`
 - `--set` → `screensaver_settings.log`
-- `--life` → `screensaver_lifecycle.log`
+- `--life` → `screensaver_lifecycle.log` (engine/worker retirement plus Quick surface and bounded Media-native lifecycle breadcrumbs)
 - `--cache` → `screensaver_cache.log`
 - `--steam` → `screensaver_steam.log`
 - `--feeds` → `screensaver_feeds.log`
@@ -120,7 +125,8 @@ The GL program-cache producer declares structured `cache` ownership. Its visible
 `[GL CACHE]` text remains for people and parsers, but no longer controls routing.
 
 Routine `[GL CACHE]` INFO belongs in `screensaver_cache.log` and is absent from main when
-that sidecar is active. `[GL CACHE]` WARNING+ remains visible in both.
+that sidecar is active. Genuine `[GL CACHE]` WARNING+ remains visible in both unless a
+producer deliberately classifies a warning as diagnostic-only with the sidecar-only marker.
 
 Unmigrated cache producers retain compatible token/name fallback. Do not regress them by
 lowering useful records to DEBUG or deleting evidence.

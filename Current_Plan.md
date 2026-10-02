@@ -21,6 +21,15 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   its first planned 3D consumer has not landed yet.
 - [x] **Rendering ownership remains singular.** Qt Quick owns presentation/scheduling; no QWidget/QPixmap runtime
   fallback, no mixed presentation authority, no `frameSwapped -> requestUpdate()` loop, no render-rate simulation clock.
+- [x] **FEEDS content transition contract.** Every CUSTOM and NEWS feed card uses the shared `FeedPresentation.qml`
+  event-driven body transition for retained content changes: gently fade old content fully out, commit the latest staged
+  rows only at opacity zero, then gently fade the replacement in. No Timer, poll, worker or per-delegate animation owns
+  the effect; current authored timing is 900 ms out / 1200 ms in with sine easing. Do not shorten this into a refresh blink.
+- [x] **Diagnostic logging hygiene.** Dedicated family sidecars own routine diagnostics; expected lifecycle cancellation
+  is a cancelled task outcome, not a failed task traceback. Diagnostic-only WARNING records may be explicitly sidecar-only
+  and disappear from main/console only while their declared sidecar is active; real degradation and ERROR/CRITICAL remain
+  central. ThreadManager task failures inherit stable category-to-family ownership so FEEDS/other categorized failures also
+  land in the correct sidecar. PERF threshold diagnostics may use the same sidecar-only contract.
 
 ## 1. S14 | persistent mapped stream + SSBO foundation | **NEXT**
 

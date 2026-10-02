@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 from core.feeds.config import CustomFeedConfig
 from core.feeds.models import FeedRefreshResult, FeedSourceSpec
+from core.feeds.source import FeedRefreshCancelled
+from core.task_control import ExpectedTaskCancellation
 from core.feeds.news import NewsFeedConfig, NewsProvider, merge_news_results
 
 
@@ -424,14 +426,21 @@ class _FeedFamilyOwner:
         def _work() -> FeedRefreshResult:
             owner = owner_ref()
             if owner is None or owner._retired or cancel.is_set():
-                raise RuntimeError("feed source no longer active")
+                raise ExpectedTaskCancellation("feed source no longer active")
             if artwork_only:
                 if base_artwork_result is None:
                     raise RuntimeError("missing accepted feed artwork source")
-                return owner._warm_artwork(base_artwork_result, cancel=cancel,
-                                           protected=protected, item_limit=artwork_limit)
+                from core.feeds.artwork import ArtworkCancelled
+                try:
+                    return owner._warm_artwork(base_artwork_result, cancel=cancel,
+                                               protected=protected, item_limit=artwork_limit)
+                except ArtworkCancelled:
+                    raise ExpectedTaskCancellation("feed artwork no longer active") from None
             source = owner._source_for(state)
-            return source.load_cached() if cache_only else source.refresh(force=force)
+            try:
+                return source.load_cached() if cache_only else source.refresh(force=force)
+            except FeedRefreshCancelled as exc:
+                raise ExpectedTaskCancellation(str(exc) or "feed source no longer active") from None
 
         _work._srpss_runtime_generation = self._generation
 

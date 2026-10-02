@@ -17,6 +17,11 @@ from typing import Iterable
 # record may intentionally belong to more than one sidecar family (for
 # example, a PERF cache summary belongs to both ``perf`` and ``cache``).
 LOG_FAMILY_FIELD = "srpss_log_families"
+# Explicit opt-in for diagnostic records that should remain in an active
+# dedicated sidecar even when their severity is WARNING.  Central handlers
+# only suppress this marker when at least one declared family sidecar is live,
+# so evidence is never discarded when the sidecar is disabled.
+LOG_SIDECAR_ONLY_FIELD = "srpss_sidecar_only"
 
 LOG_FAMILY_PERF = "perf"
 LOG_FAMILY_WIDGET_PERF = "widget_perf"
@@ -169,6 +174,7 @@ TAG_GL_PBO = "[GL PBO]"
 __all__ = [
     # Structured record family metadata
     "LOG_FAMILY_FIELD",
+    "LOG_SIDECAR_ONLY_FIELD",
     "LOG_FAMILY_PERF",
     "LOG_FAMILY_WIDGET_PERF",
     "LOG_FAMILY_USAGE",
