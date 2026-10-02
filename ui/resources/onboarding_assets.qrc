@@ -11,6 +11,7 @@
     <file alias="onboarding/transition_crumble.png" compression-algorithm="none">../assets/onboarding/source/transition_crumble.png</file>
     <file alias="onboarding/transition_destination.png" compression-algorithm="none">../assets/onboarding/source/transition_destination.png</file>
     <file alias="onboarding/transition_diffuse.png" compression-algorithm="none">../assets/onboarding/source/transition_diffuse.png</file>
+    <file alias="onboarding/transition_disintegrate.png" compression-algorithm="none">../assets/onboarding/source/transition_disintegrate.png</file>
     <file alias="onboarding/transition_exploding_tiles.png" compression-algorithm="none">../assets/onboarding/source/transition_exploding_tiles.png</file>
     <file alias="onboarding/transition_glass_shatter.png" compression-algorithm="none">../assets/onboarding/source/transition_glass_shatter.png</file>
     <file alias="onboarding/transition_ink_bloom.png" compression-algorithm="none">../assets/onboarding/source/transition_ink_bloom.png</file>

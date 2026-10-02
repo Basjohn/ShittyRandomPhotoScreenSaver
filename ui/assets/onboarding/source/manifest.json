@@ -374,6 +374,23 @@
       ]
     },
     {
+      "transition_id": "disintegrate",
+      "path": "transition_disintegrate.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
       "transition_id": "page_curl",
       "path": "transition_page_curl.png",
       "size": [
@@ -445,5 +462,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 17978129
+  "total_bytes": 18805312
 }

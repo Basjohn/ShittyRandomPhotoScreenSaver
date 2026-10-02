@@ -254,6 +254,7 @@ TRANSITION_COPY = {
     "particle": "Particles carry the image into the next scene.", "pixel_accretion": "Small pieces assemble the new picture.",
     "ripple": "Water-like ripples blend the two pictures.",
     "page_curl": "The picture peels away like a page.",
+    "disintegrate": "The picture crumbles into dust that blows away.",
 }
 
 

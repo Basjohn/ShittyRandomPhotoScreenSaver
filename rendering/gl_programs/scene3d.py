@@ -978,7 +978,7 @@ def scene3d_particle_streak(matrix: tuple[float, ...], item_size: tuple[float, f
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {
     "float": (4, 4, "f"), "int": (4, 4, "i"), "uint": (4, 4, "I"),
-    "vec2": (8, 8, "2f"), "ivec2": (8, 8, "2i"),
+    "vec2": (8, 8, "2f"), "ivec2": (8, 8, "2i"), "uvec2": (8, 8, "2I"),
     "vec3": (16, 12, "3f"), "vec4": (16, 16, "4f"),
     "mat4": (16, 64, "16f"),
 }

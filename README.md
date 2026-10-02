@@ -37,6 +37,7 @@ A look at the current features. Developer contracts and work-in-progress details
     - Ink Bloom
     - Melt Drip
     - Page Curl
+    - Disintegrate
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 

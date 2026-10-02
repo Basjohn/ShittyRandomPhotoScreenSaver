@@ -131,6 +131,51 @@ reduction stage GPU -0.006 to -0.022 ms, whole-frame GPU -0.006 to -0.020 ms wit
 On this driver, dropping the barrier changed none of 30 frames: the hazard is not observable here, so the bar is the
 recorded dispatch -> barrier(texture fetch) -> gather order rather than a pixel failure.
 
+## Compacted GPU populations (S16/S18)
+
+`CompactedPopulation` (`population.py`) holds a large deterministic pool whose live members change every frame. A
+consumer supplies two GLSL hooks over a member id, `populationActive` and `populationState` (one `vec4` per live
+member), reading its own uniforms. Each frame, three dispatches run:
+
+- **count:** each 256-member workgroup counts its live members.
+- **scan:** one 1024-invocation workgroup turns the counts into each group's first slot and writes the indirect command
+  (vertices, live count, 0, 0) itself.
+- **scatter:** a workgroup prefix sum gives each live member its slot; the member writes its id and its state there.
+
+The draw is one `glDrawArraysIndirect` reading `populationIds` and `populationStates` (`POPULATION_DRAW_GLSL`).
+Properties:
+
+- **No readback:** the live count never returns to the CPU.
+- **Stable order:** slots follow id order (no atomic append), so membership changes never reorder survivors and
+  order-dependent blending is identical every frame and on every GPU.
+- **Writer-owned barriers:** each dispatch issues the barrier its reader needs: storage reads for the next pass, and
+  storage plus command reads for the draw.
+- **Fixed capacity:** five immutable buffers (counts, offsets, command, ids, 16-byte states) per allocation. A larger
+  population is a loud error.
+- **Bindings restored:** `bound` binds the five storage points from 3 and the indirect buffer with one multi-bind, and
+  restores them, querying a point's range only when something is bound to it.
+- **Uniforms:** the population's own uniforms are set only when they change; the consumer's frame values stay its own
+  (Disintegrate streams them as one uniform block).
+- **Dormancy:** nothing is allocated before a consumer warms it; consumers release it at `park()`.
+
+**First consumer: Disintegrate** (up to 600,000 grains). The alternative that already-shipped effects use is to draw
+the whole pool and evaluate each grain in the vertex shader, culling dead ones. The comparison below alternated that
+reference path with the compacted path frame by frame on one renderer (RTX 4090, pixels equal apart from isolated
+edge pixels in one Balanced case, where compute and vertex arithmetic round differently):
+
+| Size, grains | GPU, compacted / reference (median) | CPU submit, compacted / reference |
+| --- | --- | --- |
+| 2560x1440, 410k, High | 0.154 / 0.245 ms | 0.68 / 0.57 ms |
+| 2560x1440, 410k, Balanced | 0.130 / 0.224 ms | 0.49 / 0.39 ms |
+| 3840x2160, 518k, High | 0.244 / 0.342 ms | 0.66 / 0.55 ms |
+| 1920x1080, 518k, Balanced | 0.137 / 0.266 ms | 0.49 / 0.39 ms |
+
+Compaction removes 29-49% of the GPU work: each live grain is evaluated once instead of once per vertex, and dead
+grains never reach the vertex stage. That saving grows with the population and on GPUs where vertex work is
+expensive. It costs a fixed ~0.1 ms of CPU submit (about 20 calls: three dispatches, barriers, bindings). On this
+GPU the two paths are close in total; the decision rests on the GPU side scaling with hardware and population while
+the CPU side stays constant. A future consumer with a smaller pool should be measured the same way before using it.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
@@ -162,6 +207,10 @@ The expanded fence deliberately pays for the previously missing state; the isola
   `update_fields` keep their values.
 - `test_transition_warmup.py`: counts ring allocation as a warm-up unit, so a run's first frame cannot allocate it;
   it counts compute compiles too (leaving the tile-max program out of warm-up fails ten motion-blur cases).
+- `test_scene3d_population.py`: live ids, slots, states and the indirect count equal a CPU reference exactly from 1 to
+  300,000 members (a broken scan fails), survivors keep their order when membership changes, the indirect draw draws
+  exactly the live members, barrier order and bits, fixed loud capacity with bindings restored, a dormant pool makes no
+  GL call, release/rebuild.
 - `test_scene3d_compute.py`: the compute tile max equals the column-then-row reference exactly on random, tied,
   single-texel and still fields with partial edge tiles (a non-strict tie rule fails it); the dispatch is followed by a
   texture-fetch barrier before the gather; dispatches name groups and barriers; image units come back (bound or

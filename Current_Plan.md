@@ -58,22 +58,13 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 - [x] **Page Curl landed (S20)**, the bendable grid's first consumer: an isometric cylinder curl with a folded paper
   back, material lighting only on bent paper and an analytic shade that ends at zero. Deactivated by default; physical
   checks in `Docs/Reference/Transitions.md`.
+- [x] **S16 + S18 GPU population accepted** with its first consumer, **Disintegrate** (a new transition, deactivated by
+  default): bounded per-run SSBO pool, compute evaluation of live members only, order-preserving prefix-sum compaction,
+  a GPU-written indirect command (no count readback) and one indirect draw. Against per-vertex evaluation of the whole
+  pool: -29% to -49% GPU, +0.1 ms fixed CPU submit (`Docs/Reference/Scene3D_Resources.md`). Remaining S18 primitives
+  (lightning, smoke/fire volumes, energy fields, collision, OIT, ribbons) arrive with their own consumers below.
 
-## 1. S16 | indirect / multi-draw + GPU compaction | **BLOCKED: no consumer yet**
-
-Measured 2026-10-02 (S15 survey): no current path qualifies. Every 3D transition draws each population with one
-instanced call culled analytically in the vertex shader (whole-frame GPU at most 0.3 ms median at 1440p); the only
-Python draw loops are the three-ghost Motion Trails passes (2-3 calls per ghost); the S15 tile max needs no
-compaction (the gather's still-pixel early-out is ~0.03 ms). The first real consumer is the S18 GPU particle pool
-(bounded SSBO population, compute evaluation, varying live membership); build S16 with it, not before.
-
-- [ ] Add bounded indirect command buffers and compact active-instance lists only where they replace material Python
-  submit/draw loops.
-- [ ] Preserve stable IDs/seeds through compaction so populations do not shimmer when membership changes.
-- [ ] Keep generated counts GPU-owned in the ordinary path; no CPU count readback loop.
-- [ ] Prove capacity bounds and deterministic population/placement against a reference path before migration.
-
-## 2. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
+## 1. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
 
 - [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
@@ -88,10 +79,11 @@ compaction (the gather's still-pixel early-out is ~0.03 ms). The first real cons
   using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
 - [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-## 3. S18 | particles, lightning, smoke/fire and volumetrics
+## 2. S18 | particles, lightning, smoke/fire and volumetrics
 
-- [ ] **GPU particles:** bounded SSBO pool, deterministic seeded spawn, compute evaluation/compaction, indirect instanced
-  draw, soft sprites/streaks/ribbons, optional simple analytic/SDF collision and OIT. No Python object per particle.
+- [ ] **GPU particles, remaining:** soft sprites/streaks/ribbons over `CompactedPopulation`, optional simple analytic/SDF
+  collision and OIT, each with a consumer that needs it. (Pool, seeded spawn, compute evaluation/compaction and
+  indirect draw landed with Disintegrate.)
 - [ ] **Lightning/electricity:** stable seeded branching topology per admitted event, travelling intensity/forks,
   emissive core+bloom, secondary arcs, short afterglow and optional local-light injection. Never rerandomise the entire
   bolt at render cadence.
@@ -102,7 +94,7 @@ compaction (the gather's still-pixel early-out is ~0.03 ms). The first real cons
   primitives using compute/image resources rather than parent CPU loops.
 - [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-## 4. S19 | Voxel Sphere promotion onto shared Scene3D
+## 3. S19 | Voxel Sphere promotion onto shared Scene3D
 
 Sphere is the legacy exception that predates the shared Scene3D foundation. Promotion removes its duplicate low-level
 GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
@@ -136,7 +128,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   dormancy. Whether it remains default-disabled or loses the Experimental label after acceptance is a separate product
   admission decision, not another renderer migration.
 
-## 5. S20 | vertical consumers | make the substrate earn its complexity
+## 4. S20 | vertical consumers | make the substrate earn its complexity
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
@@ -150,7 +142,14 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 6. Cross-cutting acceptance | applies to every open box above
+## Side defect to decide
+
+- [ ] **Horizontal direction labels of Glass Shatter, Directional Pixel Accretion (and likely Exploding Tiles) are
+  reversed on screen.** The shared `_DIRECTION_MAP` sends "Left to Right" to `left`, so pieces move right-to-left,
+  while its vertical labels match what is seen (measured 2026-10-03). Flipping the map changes accepted looks of
+  several transitions, so it is an operator decision; Disintegrate already maps its labels truthfully.
+
+## 5. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
   frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.

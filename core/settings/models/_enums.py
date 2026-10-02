@@ -32,6 +32,7 @@ class TransitionType(Enum):
     INK_BLOOM = "Ink Bloom"
     MELT_DRIP = "Melt Drip"
     PAGE_CURL = "Page Curl"
+    DISINTEGRATE = "Disintegrate"
 
 
 class WidgetPosition(Enum):

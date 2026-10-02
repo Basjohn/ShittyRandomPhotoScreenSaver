@@ -90,6 +90,10 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),
     QuickTransitionImplementationDescriptor(
+        transition_id="disintegrate",
+        module_name="rendering.quick.transitions.implementations.disintegrate",
+    ),
+    QuickTransitionImplementationDescriptor(
         transition_id="page_curl",
         module_name="rendering.quick.transitions.implementations.page_curl",
     ),

@@ -612,6 +612,11 @@ _PIXEL_DIRECTIONS = (
 )
 
 
+# Where the wind blows, as the labels say: unlike the shared map (whose horizontal codes name the
+# side a motion starts from), "Left to Right" blows toward the right.
+_WIND_DIRECTION_MAP = {**_PIXEL_DIRECTION_MAP, "Left to Right": "right", "Right to Left": "left"}
+
+
 def _seed(rng: _RandomSource) -> int:
     """Generate one deterministic per-request seed; it is never persisted."""
 
@@ -802,6 +807,26 @@ def _resolve_melt_drip(
     )
 
 
+def _resolve_disintegrate(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "disintegrate")
+    defaults = _canonical("disintegrate")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_PIXEL_DIRECTIONS,
+        mapping=_WIND_DIRECTION_MAP,
+        rng=rng,
+    )
+    return _finish(direction, {
+        "seed": _seed(rng),
+        "grain_size": max(2, min(8, _integer(_value(cfg, defaults, "grain_size"), int(defaults["grain_size"])))),
+        "wind": max(0.5, min(2.0, _number(_value(cfg, defaults, "wind"), float(defaults["wind"])))),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
+
+
 def _resolve_page_curl(
     settings: Mapping[str, object],
     rng: _RandomSource,
@@ -829,6 +854,7 @@ _RESOLVERS = {
     "ink_bloom": lambda settings, rng: _resolve_organic("ink_bloom", settings, rng),
     "melt_drip": _resolve_melt_drip,
     "page_curl": _resolve_page_curl,
+    "disintegrate": _resolve_disintegrate,
 }
 
 

@@ -497,3 +497,23 @@ def test_page_curl_page_offers_origins_and_round_trips(qapp, settings_manager, q
     persisted = settings_manager.get("transitions", {})["page_curl"]
     assert persisted == {"direction": "Top Left", "gloss": 0.8, "antialiasing": "8x"}
     assert tab.page_curl_advanced_body.isAncestorOf(tab.page_curl_antialiasing_combo)
+
+
+def test_disintegrate_page_round_trips_its_controls(qapp, settings_manager, qtbot):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Disintegrate"].setChecked(True)
+    tab._on_nav_selected("Disintegrate")
+    assert "Diagonal BR-TL" in [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())]
+    tab.direction_combo.setCurrentText("Right to Left")
+    tab.disintegrate_grain_spin.setValue(6)
+    tab.disintegrate_wind_spin.setValue(1.5)
+    tab.disintegrate_antialiasing_combo.setCurrentText("Off")
+    persisted = settings_manager.get("transitions", {})["disintegrate"]
+    assert persisted == {"direction": "Right to Left", "grain_size": 6, "wind": 1.5, "antialiasing": "Off"}
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["disintegrate"]["grain_size"] = 99
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert tab.disintegrate_grain_spin.value() == tab.disintegrate_grain_spin.maximum()
