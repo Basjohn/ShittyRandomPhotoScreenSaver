@@ -15,6 +15,7 @@
     <file alias="onboarding/transition_glass_shatter.png" compression-algorithm="none">../assets/onboarding/source/transition_glass_shatter.png</file>
     <file alias="onboarding/transition_ink_bloom.png" compression-algorithm="none">../assets/onboarding/source/transition_ink_bloom.png</file>
     <file alias="onboarding/transition_melt_drip.png" compression-algorithm="none">../assets/onboarding/source/transition_melt_drip.png</file>
+    <file alias="onboarding/transition_page_curl.png" compression-algorithm="none">../assets/onboarding/source/transition_page_curl.png</file>
     <file alias="onboarding/transition_particle.png" compression-algorithm="none">../assets/onboarding/source/transition_particle.png</file>
     <file alias="onboarding/transition_pixel_accretion.png" compression-algorithm="none">../assets/onboarding/source/transition_pixel_accretion.png</file>
     <file alias="onboarding/transition_ripple.png" compression-algorithm="none">../assets/onboarding/source/transition_ripple.png</file>

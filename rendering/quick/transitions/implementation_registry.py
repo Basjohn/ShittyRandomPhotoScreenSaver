@@ -89,6 +89,10 @@ _IMPLEMENTATIONS = (
         transition_id="melt_drip",
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="page_curl",
+        module_name="rendering.quick.transitions.implementations.page_curl",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

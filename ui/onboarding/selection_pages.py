@@ -253,6 +253,7 @@ TRANSITION_COPY = {
     "ink_bloom": "Organic ink shapes spread across the picture.", "melt_drip": "The image melts into falling drips.",
     "particle": "Particles carry the image into the next scene.", "pixel_accretion": "Small pieces assemble the new picture.",
     "ripple": "Water-like ripples blend the two pictures.",
+    "page_curl": "The picture peels away like a page.",
 }
 
 

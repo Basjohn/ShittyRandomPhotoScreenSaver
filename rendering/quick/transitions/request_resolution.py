@@ -249,6 +249,7 @@ def resolve_quick_transition_spec(
         "pixel_accretion",
         "ink_bloom",
         "melt_drip",
+        "page_curl",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,
