@@ -66,6 +66,11 @@ class _SourceState:
     # may retain the latest intermediate state but should animate only once the
     # bundle is settled. Later refreshes reopen settlement for the same reason.
     presentation_settled: bool = False
+    # Needed only when the family startup barrier republishes the accepted
+    # result with ``initial_admission_complete=True``. Preserve whether the last
+    # accepted generation was cache-origin so its status label does not change
+    # merely because startup coordination completed.
+    last_from_cache: bool = False
 
 
 _SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
@@ -119,10 +124,63 @@ class _FeedFamilyOwner:
         self._retired = False
         self._remote_bundle_key: str | None = None
         self._remote_not_before = 0.0
+        # Startup is one family-wide presentation admission. Individual cards
+        # must not arm body fades while serialized source/artwork jobs are still
+        # arriving one after another. The barrier flips only when every active
+        # source is settled; later refreshes never reopen it.
+        self._initial_admission_complete = False
         # Every local image currently published by any source of this owner.
         # Replaced whole on the GUI thread; artwork workers read it when they
         # evict, so a source that publishes meanwhile is protected too.
         self._published_artwork: frozenset[str] = frozenset()
+
+    def _maybe_complete_initial_admission(self) -> None:
+        """Close the family startup barrier once every active source is settled.
+
+        FEEDS source work is intentionally staggered. Without one family-level
+        barrier each card can independently decide that its cache is "done" and
+        then animate again when another startup source/artwork bundle arrives.
+        That produced the visible 5-20 fade procession. Completion is derived
+        entirely from source/job events; there is no polling or presentation
+        timer.
+        """
+
+        if self._retired or self._initial_admission_complete:
+            return
+        active_states = {
+            id(state): state
+            for lease in self._active
+            if lease._running
+            for state in [self._states.get(lease.config.source_spec.cache_key)]
+            if state is not None
+        }.values()
+        states = tuple(active_states)
+        if not states or self._remote_bundle_key is not None:
+            return
+        now = self._now()
+        for state in states:
+            if (
+                state.last_result is None
+                or state.in_flight
+                or not state.presentation_settled
+                or state.force_refresh_pending
+                or self._artwork_needed(state)
+                or state.due_at <= now + 0.001
+            ):
+                return
+
+        self._initial_admission_complete = True
+        # Republish metadata only. Every consumer has already retained at least
+        # one source result; this final event quietly commits the latest startup
+        # body and arms future fades without another network/cache operation.
+        for state in states:
+            accepted = state.last_result
+            if accepted is None:
+                continue
+            accepted = replace(accepted, initial_admission_complete=True)
+            state.last_result = accepted
+            for lease in self._active_leases_for_state(state):
+                lease._accept(accepted, from_cache=state.last_from_cache)
 
     def _refresh_published_artwork(self) -> None:
         self._published_artwork = frozenset(
@@ -623,8 +681,11 @@ class _FeedFamilyOwner:
                 state.presentation_settled = not artwork_needed
 
             result = replace(
-                result, presentation_settled=bool(state.presentation_settled)
+                result,
+                presentation_settled=bool(state.presentation_settled),
+                initial_admission_complete=bool(self._initial_admission_complete),
             )
+            state.last_from_cache = bool(cache_only)
             state.last_result = result
             self._refresh_published_artwork()
             for lease in self._active_leases_for_state(state):
@@ -648,6 +709,7 @@ class _FeedFamilyOwner:
             if remote_work:
                 self._finish_remote_bundle(cache_key)
                 self._admit_due_work()
+        self._maybe_complete_initial_admission()
         self._release_source_if_idle(state)
         self._reschedule()
 
@@ -931,9 +993,19 @@ class NewsRuntimeConfig:
 
     def provider_config(self, provider: NewsProvider) -> FeedRuntimeConfig:
         # Any one publisher may supply every visible row of the merged card.
+        source_spec = replace(
+            provider.source_spec(),
+            # NEWS used to normalize forty stories from every selected
+            # publisher even though the card ordinarily shows twelve.  That
+            # multiplied pure-Python feedparser/HTML-normalization GIL work
+            # across the whole family cadence.  Retain a twelve-story floor,
+            # and grow only when the card is explicitly configured to show
+            # more rows.
+            max_items=max(12, int(self.item_limit)),
+        )
         return FeedRuntimeConfig(
             widget_id=f"{self.widget_id}:{provider.provider_id}",
-            source_spec=provider.source_spec(),
+            source_spec=source_spec,
             refresh_minutes=self.refresh_minutes,
             show_images=self.show_images,
             view_mode=self.view_mode,
@@ -1062,7 +1134,18 @@ class NewsRuntimeService:
         # aggregate until every provider's current immediate work is done.
         self._limit_artwork_to_visible_rows(merged)
         settled = all(lease.presentation_settled for _pid, lease in self._leases)
-        merged = replace(merged, presentation_settled=bool(settled))
+        initial_complete = bool(
+            len(self._results) >= len(self._leases)
+            and all(
+                accepted.initial_admission_complete
+                for accepted, _cached in self._results.values()
+            )
+        )
+        merged = replace(
+            merged,
+            presentation_settled=bool(settled),
+            initial_admission_complete=initial_complete,
+        )
         self._publish(consumer, merged)
 
     def _publish(self, consumer: object, merged: FeedRefreshResult) -> None:

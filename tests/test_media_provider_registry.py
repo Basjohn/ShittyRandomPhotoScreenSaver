@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
+import gc
+import os
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 import core.media.provider_registry as provider_registry
 from core.media.media_controller import (
@@ -333,6 +338,133 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
     assert info.can_pause is True
     assert browser.timeline_reads == 1
     assert _MediaManager.requests == 1
+
+    # High-frequency runtime queries execute on one Media affinity thread. The
+    # controller must retain that thread's Proactor loop + GSMTC manager rather
+    # than creating fresh kernel/WinRT infrastructure on every dirty edge.
+    retained_loop = controller._work_loop
+    provider2, info2 = controller.get_current_track_from_io_worker(
+        ("spotify_browser", "musicbee")
+    )
+    assert provider2 == "spotify_browser"
+    assert info2 is not None and info2.title == "Browser Track"
+    assert controller._work_loop is retained_loop
+    assert _MediaManager.requests == 1
+    assert controller.close_work_context() is True
+    assert controller._work_loop is None
+    assert controller._work_manager is None
+
+
+def test_io_worker_reuses_one_gsmtc_loop_and_manager_across_100_queries() -> None:
+    """Simulate the high-frequency dirty-edge path without kernel churn.
+
+    The frozen Diagnostic regression created roughly one fresh IocpProactor
+    loop/manager transaction per Media job. One hundred repeated queries on the
+    same Media owner thread must retain exactly one loop and request one manager.
+    """
+    class _MediaManager:
+        requests = 0
+        manager = _Manager([], None)
+
+        @classmethod
+        async def request_async(cls):
+            cls.requests += 1
+            return cls.manager
+
+    controller = _controller("spotify")
+    controller._available = True
+    controller._MediaManager = _MediaManager
+    controller._thread_manager = object()  # direct IO-worker path only checks ownership is injected
+    controller._gsmc_inflight = False
+    controller._last_valid_info = None
+    controller._last_valid_info_ts = 0.0
+    controller._timeout_cache_ttl = 30.0
+
+    retained_loop = None
+    for _index in range(100):
+        provider, info = controller.get_current_track_from_io_worker(())
+        assert provider is None and info is None
+        if retained_loop is None:
+            retained_loop = controller._work_loop
+            assert retained_loop is not None
+        else:
+            assert controller._work_loop is retained_loop
+
+    assert _MediaManager.requests == 1
+    assert controller._work_manager is _MediaManager.manager
+    assert controller.close_work_context() is True
+    assert controller._work_loop is None
+    assert controller._work_manager is None
+
+
+def _win32_process_handle_count() -> int:
+    if os.name != "nt":
+        raise OSError("Windows-only process handle counter")
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessHandleCount.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetProcessHandleCount.restype = wintypes.BOOL
+    count = wintypes.DWORD(0)
+    if not kernel32.GetProcessHandleCount(kernel32.GetCurrentProcess(), ctypes.byref(count)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int(count.value)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="real Proactor/GSMTC handle check is Windows-only")
+def test_windows_200_retained_gsmtc_queries_do_not_ratchet_process_handles() -> None:
+    """Short local discriminator for the frozen Semaphore-handle regression.
+
+    The real runtime owns GSMTC on a retained Media affinity worker, never the
+    Qt/UI thread. Keep construction, all WinRT requests, handle measurements and
+    teardown on one dedicated worker thread so COM apartment ownership matches
+    production. After warm-up, 200 retained queries must not resemble the old
+    monotonic one-handle-per-query ratchet.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _exercise_on_media_owner() -> int:
+        controller = WindowsGlobalMediaController(app_filter="spotify")
+        controller._thread_manager = object()  # already_on_io_worker path executes inline
+        if not controller._available or controller._MediaManager is None:
+            return -1
+
+        # Keep the test about manager/Proactor lifetime, not current player state.
+        controller._select_media_session_for_providers = (
+            lambda _mgr, _providers: (None, None)
+        )
+
+        try:
+            for _index in range(10):
+                controller.get_current_track_from_io_worker(())
+            gc.collect()
+            before = _win32_process_handle_count()
+
+            for _index in range(200):
+                provider, info = controller.get_current_track_from_io_worker(())
+                assert provider is None and info is None
+
+            gc.collect()
+            after = _win32_process_handle_count()
+            return after - before
+        finally:
+            # Must execute on the same Media/COM owner thread that created the
+            # retained WinRT manager and Proactor loop.
+            assert controller.close_work_context() is True
+            del controller
+            gc.collect()
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="media_test_affinity") as pool:
+        delta = pool.submit(_exercise_on_media_owner).result(timeout=30.0)
+
+    if delta < 0:
+        pytest.skip("Windows GSMTC/WinRT is unavailable")
+    assert delta <= 12, (
+        f"200 retained GSMTC queries grew process handles by {delta}; "
+        "old Diagnostic failure behaved like an ongoing per-query ratchet"
+    )
 
 
 def test_gsmtc_timeline_normalization_rejects_invalid_duration_and_clamps_position() -> None:

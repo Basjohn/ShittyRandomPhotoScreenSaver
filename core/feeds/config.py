@@ -130,7 +130,12 @@ class CustomFeedConfig:
             url=url,
             cache_key=f"custom_endpoint_{fingerprint}",
             display_name=self.name,
-            max_items=max(40, self.item_limit),
+            # Parsing/normalizing forty stories for a card that can only show a
+            # dozen is pure GIL work.  Keep a modest twelve-story floor for
+            # cache usefulness, but never normalize more than the configured
+            # presentation can consume merely because the parser historically
+            # used the global 40-item ceiling.
+            max_items=max(12, self.item_limit),
         )
 
 

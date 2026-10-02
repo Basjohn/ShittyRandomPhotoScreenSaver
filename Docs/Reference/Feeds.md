@@ -26,19 +26,23 @@ gate are not repurposed for refresh polish.
 
 **Settlement is bundle-scoped, not callback-scoped.** Cache admission, a due network refresh and its optional artwork
 follow-on are one latest-wins presentation bundle. Intermediate accepted generations may update retained runtime state,
-but they do not each start a fade. NEWS additionally waits until every selected publisher has answered its first cache
-admission before painting the startup aggregate, and the aggregate is `presentation_settled` only when every provider's
-current immediate work is settled. **Startup hydration never owns the article-body fade:** the first settled aggregate is
-committed quietly and arms the transition contract for later changes. This prevents serialized source/artwork admission
-from becoming a 5-20-cycle fade procession immediately after launch. A later ordinary refresh reopens settlement until
-that source's text + optional artwork bundle completes, then emits at most one replacement fade. Equivalent settled
-publications update the latest retained target without restarting an already-requested fade-out.
+but they do not each start a fade. Startup also has one **family-wide event-driven admission barrier**: it remains open
+until every currently active FEEDS source has completed its first cache -> due network -> optional artwork chain. NEWS
+additionally waits until every selected publisher has answered its first cache admission before painting the startup
+aggregate, and the aggregate is `presentation_settled` only when every provider's current immediate work is settled. If a
+cache-first body is already painted when the family barrier closes, the final hydrated startup aggregate owns **exactly
+one** slow body transition; it is never committed as a full-opacity snap and never becomes one transition per staggered
+provider/source. The startup barrier is sticky for that runtime family; later source additions or ordinary refreshes do
+not globally disarm already-settled cards. A later ordinary refresh reopens only that source's settlement until its text +
+optional artwork bundle completes, then emits at most one replacement fade. Equivalent settled publications update the
+latest retained target without restarting an already-requested fade-out.
 
-The fade is intentionally sparse and presentation-owned: no `Timer`, polling loop, worker/thread, per-frame Python
-publication or per-delegate animation is added. A newer accepted intermediate simply replaces the pending retained row
-set; the finite QML animation begins only for a settled replacement and remains latest-wins. Geometry-only resize/reflow
-still performs no source work or row publication. Artwork hydration is therefore visually atomic with the article refresh
-that admitted it, so Grid never repeatedly fades through text-only/image-ready intermediate states.
+The body fade is intentionally sparse and presentation-owned: no `Timer`, polling loop, worker/thread, per-frame Python
+publication or per-delegate row animation is added. A newer accepted intermediate simply replaces the pending retained row
+set; the finite QML animation begins only for a settled replacement and remains latest-wins. Dynamic artwork uses the
+shared retained two-buffer `ArtworkFadeImage` primitive, with FEEDS' same 900 ms out / 1200 ms in timings, so a late local
+artwork URI cannot flash into a raw fully opaque `Image`. Geometry-only resize/reflow still performs no source work or row
+publication.
 
 ## Transport
 
@@ -144,7 +148,7 @@ Publisher choice rules: no API keys, sign-in, third-party RSS reconstruction, pa
 
 ## Runtime ownership
 
-The runtime uses one `_FeedFamilyOwner` per active runtime generation (or helper-manager fallback in isolated tests). Retained cards hold lightweight leases. The whole family refreshes on one cadence, `widgets.feeds.refresh_minutes` (5 to 1440, default 15), rather than a period per card. The owner keeps one earliest-due deadline across active sources, but **never pulls a source early to align it with another publisher**. Remote work is family-serialized: one source owns its network/parse refresh and optional artwork follow-on as one bundle, then a 2.5-second event-driven cooldown separates the next source admission. This prevents simultaneous publisher refreshes from bunching into the old quarter-interval burst while successful completion timestamps naturally keep publishers phase-separated on later cycles. A source in persisted failure backoff remains an absolute floor. Manual refresh queues behind an occupied source bundle instead of bypassing the lane. Cache-first local publication does not construct network transport until refresh is actually due and remains independent of the remote lane. Fetches run on the shared IO pool at LOW priority; serialization is admission policy, not a new worker, poll, recurring timer or sleep loop. The owner deduplicates CUSTOM acquisition by endpoint fingerprint, so the same feed used on multiple displays or future CUSTOM slots shares last-good state and network cadence while each card keeps independent presentation settings.
+The runtime uses one `_FeedFamilyOwner` per active runtime generation (or helper-manager fallback in isolated tests). Retained cards hold lightweight leases. The whole family refreshes on one cadence, `widgets.feeds.refresh_minutes` (5 to 1440, default 15), rather than a period per card. The owner keeps one earliest-due deadline across active sources, but **never pulls a source early to align it with another publisher**. Remote work is family-serialized: one source owns its network/parse refresh and optional artwork follow-on as one bundle, then a 2.5-second event-driven cooldown separates the next source admission. This prevents simultaneous publisher refreshes from bunching into the old quarter-interval burst while successful completion timestamps naturally keep publishers phase-separated on later cycles. A source in persisted failure backoff remains an absolute floor. Manual refresh queues behind an occupied source bundle instead of bypassing the lane. Cache-first local publication does not construct network transport until refresh is actually due and remains independent of the remote lane. Fetches run on the shared IO pool at LOW priority; serialization is admission policy, not a new worker, poll, recurring timer or sleep loop. Parsing/normalization is bounded to the rows a card can actually consume: CUSTOM and each NEWS provider use `max(12, item_limit)` rather than the historical fixed 40-item normalization ceiling. Diagnostic FEEDS logging records payload size plus raw-markup/feedparser/normalization timing without recording the feed URL, so any remaining GIL-heavy source can be identified directly. The owner deduplicates CUSTOM acquisition by endpoint fingerprint, so the same feed used on multiple displays or future CUSTOM slots shares last-good state and network cadence while each card keeps independent presentation settings.
 
 Cadence is projected from **currently active** leases; retiring a short fast lease cannot permanently ratchet the shared source. An idle source releases its HTTP transport state while retaining the immutable accepted result. Reactivation before the next due time reuses that result without rereading disk merely to recreate source state. Cache-only admission is first; a fresh cache schedules the future due deadline without importing/constructing the HTTP stack, while an empty cache proceeds to one bounded refresh. Persisted backoff owns subsequent failure timing.
 

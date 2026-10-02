@@ -512,6 +512,12 @@ class FeedPresentationModel(QObject):
         # the old body out.  Keep one latest-wins request in flight instead of
         # restarting the 900 ms fade for every equivalent publication.
         self._content_transition_requested = False
+        # The family startup barrier may close after a cache-first body is
+        # already visible.  That final cache -> network/artwork replacement is
+        # one deliberate startup transition, not a quiet full-opacity swap.
+        # Arm ordinary later transitions only after QML commits that staged
+        # startup target at opacity zero.
+        self._arm_transitions_after_commit = False
         # Startup/cache/network/artwork hydration is one presentation bundle.
         # Keep the latest intermediate result retained but do not animate each
         # hydration step. Once the runtime reports a settled bundle, at most one
@@ -570,6 +576,7 @@ class FeedPresentationModel(QObject):
         self._rows.replace_rows(())
         self._pending_content = None
         self._content_transition_requested = False
+        self._arm_transitions_after_commit = False
         self._snapshot = None
         self._local_artwork_by_item.clear()
 
@@ -622,6 +629,9 @@ class FeedPresentationModel(QObject):
             status_text=status_text,
             refreshing=refreshing,
         )
+        if self._arm_transitions_after_commit:
+            self._arm_transitions_after_commit = False
+            self._content_transitions_armed = True
         return True
 
     def on_feed_runtime_result(self, result: FeedRefreshResult, *, from_cache: bool) -> None:
@@ -654,6 +664,9 @@ class FeedPresentationModel(QObject):
             # bundle has no immediate follow-on, at which point at most one slow
             # body fade commits the final replacement. No timer/poll owns this.
             settled = bool(getattr(result, "presentation_settled", True))
+            initial_complete = bool(
+                getattr(result, "initial_admission_complete", True)
+            )
             content_changed = (
                 self._display is not None
                 and tuple(display.rows) != tuple(self._display.rows)
@@ -667,8 +680,18 @@ class FeedPresentationModel(QObject):
                     status_text=status_text,
                     refreshing=False,
                 )
-                if settled:
+                if settled and initial_complete:
                     self._content_transitions_armed = True
+                return
+
+            if not initial_complete:
+                # Startup is one family-wide admission, not one transition per
+                # staggered source. Keep the first cache/available body painted
+                # and retain only the latest startup target until the runtime
+                # closes its event-driven family barrier. No opacity animation
+                # is admitted while that barrier is open.
+                self._pending_content = (display, view_state, status_text, False)
+                self._content_transition_requested = False
                 return
 
             if not settled:
@@ -680,20 +703,30 @@ class FeedPresentationModel(QObject):
                 return
 
             if not self._content_transitions_armed:
-                # The first complete startup bundle is not an article-change
-                # transition.  Commit its latest retained state quietly, then
-                # arm the slow fade contract for all subsequent replacements.
-                # This prevents staggered source/artwork hydration from turning
-                # startup into a sequence of 5-20 slow fade-out/fade-in cycles.
-                self._pending_content = None
-                self._content_transition_requested = False
-                self._commit_display_state(
-                    display,
-                    view_state=view_state,
-                    status_text=status_text,
-                    refreshing=False,
-                )
-                self._content_transitions_armed = True
+                # The family barrier has closed.  Startup is allowed exactly
+                # one body transition from whatever cache-first body was
+                # already admitted to the final network/artwork aggregate.  A
+                # quiet full-opacity commit makes hydrated rows/images visibly
+                # pop; independently fading every source makes a 5-20-fade
+                # procession.  Stage one latest-wins target and arm ordinary
+                # later transitions only after QML commits it at opacity zero.
+                if content_changed:
+                    self._pending_content = (display, view_state, status_text, False)
+                    self._arm_transitions_after_commit = True
+                    if not self._content_transition_requested:
+                        self._content_transition_requested = True
+                        self.contentTransitionRequested.emit()
+                else:
+                    self._pending_content = None
+                    self._content_transition_requested = False
+                    self._arm_transitions_after_commit = False
+                    self._commit_display_state(
+                        display,
+                        view_state=view_state,
+                        status_text=status_text,
+                        refreshing=False,
+                    )
+                    self._content_transitions_armed = True
                 return
 
             if content_changed:

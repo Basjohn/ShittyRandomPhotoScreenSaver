@@ -81,7 +81,7 @@ HEAVY_DEFAULT_PREFIXES = (
 )
 FORBIDDEN_TARGET_PREFIXES = (".git/", ".godzip/", ".godzip_foundry/", "deleteme/")
 
-RUN_ENTRYPOINTS = ("main.py", "main_mc.py")
+RUN_ENTRYPOINTS = ("main.py", "main_mc.py", "main_diagnostic.py")
 RUN_DEFAULT_FLAGS = (
     "--debug",
     "--set",

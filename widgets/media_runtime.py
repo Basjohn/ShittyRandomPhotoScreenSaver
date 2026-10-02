@@ -671,6 +671,40 @@ class _SharedMediaRuntimeOwner:
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] Controller retirement failed", exc_info=True)
 
+    def _close_controller_work_context(
+        self, controller: BaseMediaController | None
+    ) -> None:
+        """Close retained query/command context on the Media lane thread."""
+
+        if controller is None:
+            return
+        close = getattr(controller, "close_work_context", None)
+        if not callable(close):
+            return
+        lane = self._media_lane
+        if lane is None or lane.is_stopped:
+            # No retained Media lane means there should be no retained work
+            # context. The controller method is safe here only when empty.
+            try:
+                close()
+            except Exception:
+                logger.debug(
+                    "[MEDIA_RUNTIME] Controller work-context close failed",
+                    exc_info=True,
+                )
+            return
+        try:
+            closed = lane.call(close, timeout=2.0)
+            if closed is False:
+                logger.error(
+                    "[MEDIA_RUNTIME] Controller work context refused owner-lane teardown"
+                )
+        except Exception:
+            logger.error(
+                "[MEDIA_RUNTIME] Controller work context did not close on Media lane",
+                exc_info=True,
+            )
+
     def set_provider(
         self,
         provider: object,
@@ -702,6 +736,7 @@ class _SharedMediaRuntimeOwner:
             self._artwork = PreparedMediaArtwork((0, ""), None, 0.0)
         else:
             self._artwork = accepted_artwork
+        self._close_controller_work_context(old_controller)
         self._retire_controller(old_controller)
         self._controller = None
         if self._running:
@@ -1587,8 +1622,10 @@ class _SharedMediaRuntimeOwner:
             return
         self.stop()
         self._retired = True
-        self._retire_controller(self._controller)
+        controller = self._controller
         self._controller = None
+        self._close_controller_work_context(controller)
+        self._retire_controller(controller)
         self._stop_media_lane()
         self._active_leases.clear()
         self._leases.clear()

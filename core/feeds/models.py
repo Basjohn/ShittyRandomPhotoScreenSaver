@@ -126,3 +126,11 @@ class FeedRefreshResult:
     # combines provider settlement so presentation never animates each hydration
     # step as a separate content replacement. This field is never persisted.
     presentation_settled: bool = True
+    # Runtime-only startup barrier. The shared FEEDS owner keeps this False
+    # until *all currently active sources* have completed their first cache ->
+    # due network -> optional artwork admission. Presentation may retain one
+    # cache-first body while False, but must not arm article-change fades. Once
+    # True it is sticky for the accepted source generation and later ordinary
+    # refreshes are eligible for the slow body transition. Standalone results
+    # default True so non-runtime projection/tests keep their historical meaning.
+    initial_admission_complete: bool = True
