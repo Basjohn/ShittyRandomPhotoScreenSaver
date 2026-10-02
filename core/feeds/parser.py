@@ -12,7 +12,6 @@ from __future__ import annotations
 import calendar
 import logging
 import mimetypes
-from time import perf_counter
 from html.parser import HTMLParser
 from typing import Any, Iterable, Mapping
 from xml.etree import ElementTree
@@ -406,16 +405,9 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
         raise FeedParseError("feed payload is empty")
     limit = max(1, min(200, int(max_items)))
     payload_bytes = bytes(payload)
-    parse_started = perf_counter()
     if _is_json_document(payload_bytes):
         from .json_feed import parse_json_feed_bytes
-        document = parse_json_feed_bytes(payload_bytes, source_url=source_url, max_items=limit)
-        logger.debug(
-            "[FEEDS][PARSE] format=json bytes=%d limit=%d items=%d total_ms=%.3f",
-            len(payload_bytes), limit, len(document.items),
-            (perf_counter() - parse_started) * 1000.0,
-        )
-        return document
+        return parse_json_feed_bytes(payload_bytes, source_url=source_url, max_items=limit)
     # Most feeds do not need a second XML pass. Only invoke the bounded raw
     # companion when the payload advertises image attributes that feedparser's
     # sanitizer may remove; ordinary normalized feed parsing remains the hot
@@ -424,14 +416,10 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
     needs_raw_image_markup = any(marker in image_markup_probe for marker in (
         b"srcset", b"data-src", b"data-lazy-src", b"data-original",
     ))
-    raw_started = perf_counter()
     raw_entry_markup = (
         _raw_entry_image_markup(payload_bytes) if needs_raw_image_markup else ()
     )
-    raw_ms = (perf_counter() - raw_started) * 1000.0
-    feedparser_started = perf_counter()
     parsed = feedparser.parse(payload_bytes)
-    feedparser_ms = (perf_counter() - feedparser_started) * 1000.0
     raw_entries = getattr(parsed, "entries", ())
     if not raw_entries:
         bozo = getattr(parsed, "bozo_exception", None)
@@ -440,7 +428,6 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
             raise FeedEmptyError(f"feed has no usable entries ({detail})")
         raise FeedParseError(f"feed has no usable entries ({detail})")
 
-    normalize_started = perf_counter()
     items: list[FeedItem] = []
     seen: set[str] = set()
     for raw_index, raw in enumerate(raw_entries):
@@ -490,12 +477,5 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
         home_url=home_url,
         format=format_name,
         items=tuple(items),
-    )
-    normalize_ms = (perf_counter() - normalize_started) * 1000.0
-    logger.debug(
-        "[FEEDS][PARSE] format=%s bytes=%d limit=%d raw_entries=%d items=%d "
-        "raw_markup_ms=%.3f feedparser_ms=%.3f normalize_ms=%.3f total_ms=%.3f",
-        format_name, len(payload_bytes), limit, len(raw_entries), len(items),
-        raw_ms, feedparser_ms, normalize_ms, (perf_counter() - parse_started) * 1000.0,
     )
     return document

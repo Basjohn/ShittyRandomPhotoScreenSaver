@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-27
+Last updated: 2026-10-02
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -42,6 +42,9 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Parser-process isolation, durable warm artwork identity and coherent presentation-state ownership.
+- [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. Retained Media affinity context; no per-query Proactor/manager churn.
+- [R-102 — Frozen Qt Quick Runtime Pruned PySide6.QtOpenGL](R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) — **SOLVED**. Frozen QtQuick binding dependency restored without reviving OpenGLWidgets.
 - [R-101 — Guided Setup / Settings Review 2026-09-27](R-101_Guided_Setup_Settings_Review_2026-09-27.md) — **SOLVED IN CODE**. Mechanisms and negative controls from the 2026-09-27 review.
 - [R-100 — Runtime Audit 2026-09-22: Outcomes, Rejections and Closure](R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md) — **CLOSED**. Accepted items; leftovers rejected 2026-09-27; binding rejected-ideas list.
 - [R-99 — Memory Footprint Audit (2026-09-25)](R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.

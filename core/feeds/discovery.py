@@ -363,11 +363,14 @@ def _is_html(response: FeedHttpResponse) -> bool:
 
 
 DocumentAdapter = Callable[[bytes, str, int], "FeedDocument | None"]
+DocumentParser = Callable[[bytes, str, int], "FeedDocument"]
+ResponseExaminer = Callable[[FeedHttpResponse, str, int], tuple["FeedDocument | None", tuple["FeedCandidate", ...]]]
 
 
 def _examine(
     response: FeedHttpResponse, *, url: str, max_items: int,
     document_adapter: DocumentAdapter | None = None,
+    document_parser: DocumentParser | None = None,
 ) -> tuple[FeedDocument | None, list[FeedCandidate]]:
     """What a fetched response offers: a feed, or the candidates a page points at.
 
@@ -381,8 +384,12 @@ def _examine(
     """
     if not _is_html(response):
         try:
-            document = parse_feed_bytes(
-                response.payload, source_url=response.final_url or url, max_items=max_items)
+            parser = document_parser or (
+                lambda payload, source_url, max_items: parse_feed_bytes(
+                    payload, source_url=source_url, max_items=max_items
+                )
+            )
+            document = parser(response.payload, response.final_url or url, max_items)
             return document, []
         except FeedEmptyError:
             raise
@@ -445,6 +452,8 @@ def resolve_feed(
     should_continue: Callable[[], bool] | None = None,
     clock: Callable[[], float] = time.monotonic,
     document_adapter: DocumentAdapter | None = None,
+    document_parser: DocumentParser | None = None,
+    response_examiner: ResponseExaminer | None = None,
 ) -> FeedResolution:
     """Fetch ``url``; when it is not a feed, discover and verify one.
 
@@ -466,6 +475,15 @@ def resolve_feed(
     primary = validate_feed_url(url)
     configured = configured_url or primary
     is_stored_resolution = primary != configured
+
+    def _inspect(response: FeedHttpResponse, target_url: str):
+        if response_examiner is not None and document_adapter is None:
+            document, candidates = response_examiner(response, target_url, max_items)
+            return document, list(candidates)
+        return _examine(
+            response, url=target_url, max_items=max_items,
+            document_adapter=document_adapter, document_parser=document_parser,
+        )
 
     def _alive() -> bool:
         return True if should_continue is None else bool(should_continue())
@@ -494,8 +512,7 @@ def resolve_feed(
     else:
         if response.status == "not_modified":
             return FeedResolution(response, None, primary, "direct", attempts)
-        document, found = _examine(response, url=primary, max_items=max_items,
-                                   document_adapter=document_adapter)
+        document, found = _inspect(response, primary)
         if document is not None:
             return FeedResolution(response, document, primary, "direct", attempts)
         html_pages += 1
@@ -535,8 +552,7 @@ def resolve_feed(
         if response.status != "ok":
             continue
         try:
-            document, found = _examine(response, url=candidate.url, max_items=max_items,
-                                       document_adapter=document_adapter)
+            document, found = _inspect(response, candidate.url)
         except FeedEmptyError:
             continue
         if document is not None:
