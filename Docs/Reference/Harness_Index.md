@@ -75,7 +75,7 @@ Focused capture validation: `pytest tests/test_qt_message_capture_contract.py te
 
 Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling a runtime/physical claim GREEN. Use `Docs/Guides/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
 
-For FEEDS source/artwork identity investigations, add `--feeds`. This opts into the bounded `screensaver_feeds.log` sidecar; FEEDS diagnostic INFO/DEBUG does not belong in the ordinary main/verbose logs. The sidecar is event-emitted by admitted FEEDS work only and creates no diagnostic polling cadence. Contract coverage lives in `tests/test_feed_diagnostics_sidecar.py`; current Custom reflow and cross-family clickable-affordance guards live in `tests/test_feed_custom_reflow_contract.py` and `tests/test_external_link_hover_affordance.py`.
+For FEEDS source/artwork identity investigations, add `--feeds`. This opts into the bounded `screensaver_feeds.log` sidecar; FEEDS diagnostic INFO/DEBUG does not belong in the ordinary main/verbose logs. Expected source/artwork retirement is scheduler cancellation, not a task failure, and its diagnostic WARNING is sidecar-only while the FEEDS sidecar is active. Genuine FEEDS failures remain ERROR evidence in both central logging and the FEEDS sidecar. The sidecar is event-emitted by admitted FEEDS work only and creates no diagnostic polling cadence. Contract coverage lives in `tests/test_feed_diagnostics_sidecar.py`; current Custom reflow and cross-family clickable-affordance guards live in `tests/test_feed_custom_reflow_contract.py` and `tests/test_external_link_hover_affordance.py`.
 
 ## 1B. Tooling authority
 

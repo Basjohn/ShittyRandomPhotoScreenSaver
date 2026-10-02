@@ -13,6 +13,7 @@ from core.feeds.models import (
     FeedRefreshResult,
     FeedSnapshot,
 )
+from core.task_control import ExpectedTaskCancellation
 from widgets import feed_runtime
 from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease
 
@@ -692,3 +693,23 @@ def test_linked_text_only_story_gets_one_artwork_pass_that_reads_its_page(monkey
         assert pages == ["https://example.test/one"]
     finally:
         lease.retire()
+
+
+def test_retired_feed_worker_signals_expected_cancellation_not_runtime_failure(monkeypatch):
+    manager = _DeferredManager()
+    source = _Source(_result())
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    lease, _consumer = _lease_for_url(
+        manager, slot="feeds_custom_1", url="https://example.test/cancel.xml"
+    )
+    assert lease.start() and len(manager.tasks) == 1
+    lease.stop()
+    work, _callback = manager.tasks[0]
+    with pytest.raises(ExpectedTaskCancellation, match="feed source no longer active"):
+        work()
+    lease.retire()

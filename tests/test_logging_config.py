@@ -10,6 +10,7 @@ from core.logging.tags import (
     LOG_FAMILY_FEEDS,
     LOG_FAMILY_FIELD,
     LOG_FAMILY_PERF,
+    LOG_SIDECAR_ONLY_FIELD,
 )
 
 
@@ -550,3 +551,45 @@ def test_script_mode_retains_main_log_only_without_diagnostic_flags(
     }
     assert logger_mod.is_perf_metrics_enabled() is False
     assert logger_mod.is_usage_logging_enabled() is False
+
+
+def test_sidecar_only_warning_stays_out_of_central_logs_when_family_sink_is_active(tmp_path, monkeypatch):
+    monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", tmp_path)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
+    logger_mod.setup_logging(debug=True, verbose=True, feeds_trace=True)
+
+    logging.getLogger("core.feeds.source").warning(
+        "[FEEDS] expected retirement warning",
+        extra={
+            LOG_FAMILY_FIELD: (LOG_FAMILY_FEEDS,),
+            LOG_SIDECAR_ONLY_FIELD: True,
+        },
+    )
+    logger_mod.flush_and_close_logging()
+
+    sidecar = (tmp_path / "screensaver_feeds.log").read_text(encoding="utf-8")
+    main = (tmp_path / "screensaver.log").read_text(encoding="utf-8")
+    verbose = (tmp_path / "screensaver_verbose.log").read_text(encoding="utf-8")
+    assert "expected retirement warning" in sidecar
+    assert "expected retirement warning" not in main
+    assert "expected retirement warning" not in verbose
+
+
+def test_sidecar_only_warning_falls_back_to_main_if_sidecar_is_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", tmp_path)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
+    logger_mod.setup_logging(debug=True, verbose=True, feeds_trace=False)
+
+    logging.getLogger("core.feeds.source").warning(
+        "[FEEDS] evidence must not disappear",
+        extra={
+            LOG_FAMILY_FIELD: (LOG_FAMILY_FEEDS,),
+            LOG_SIDECAR_ONLY_FIELD: True,
+        },
+    )
+    logger_mod.flush_and_close_logging()
+
+    assert "evidence must not disappear" in (tmp_path / "screensaver.log").read_text(encoding="utf-8")
+    assert not (tmp_path / "screensaver_feeds.log").exists()

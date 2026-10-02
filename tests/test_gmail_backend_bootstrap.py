@@ -459,3 +459,19 @@ def test_settings_shutdown_cannot_cancel_process_owned_bootstrap(
         later_callbacks.append,
     )
     assert later_callbacks == [True]
+
+
+def test_imap_bootstrap_does_not_report_missing_oauth_client_secrets_as_error(tmp_path, monkeypatch, caplog):
+    app_data = tmp_path / "gmail"
+    app_data.mkdir()
+    (app_data / "gmail_backend.json").write_text('{"mode":"imap"}', encoding="utf-8")
+    monkeypatch.setattr(gmail_bootstrap_module, "load_encrypted", lambda _path: None)
+
+    with caplog.at_level("DEBUG"):
+        snapshot = prepare_gmail_backend_bootstrap(app_data_path=app_data)
+
+    assert snapshot.backend_mode == "imap"
+    missing = [record for record in caplog.records if "client_secrets.json not found" in record.getMessage()]
+    assert missing
+    assert all(record.levelno < 30 for record in missing)
+    assert "OAuth backend inactive" in missing[-1].getMessage()

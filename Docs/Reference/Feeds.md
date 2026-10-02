@@ -18,13 +18,15 @@ FEEDS is one bounded widget family of ten cards (`core.feeds.config.FEED_WIDGET_
 
 After the first admitted paint, a changed article row set is **staged rather than reset immediately**. The retained
 model emits one `contentTransitionRequested` event; `FeedPresentation.qml` drives a single body-level
-`SequentialAnimation`, fades the article surface to zero, calls `commitPendingContent()` exactly at the midpoint, then
-fades the new rows back in. This applies identically to CUSTOM/NEWS and List/Grid. The card shell/header/footer and the
-shared whole-widget `fadeOpacity` lifecycle gate are not repurposed for refresh polish.
+`SequentialAnimation`, gently fades the article surface fully to zero over 900 ms, calls `commitPendingContent()`
+exactly at the midpoint, then gently fades the new rows back in over 1200 ms. Both legs use `InOutSine`. This applies
+identically to CUSTOM/NEWS and List/Grid. The timings are deliberately slow enough to read as an authored content
+transition rather than a refresh blink. The card shell/header/footer and the shared whole-widget `fadeOpacity` lifecycle
+gate are not repurposed for refresh polish.
 
 The fade is intentionally sparse and presentation-owned: no `Timer`, polling loop, worker/thread, per-frame Python
 publication or per-delegate animation is added. A newer accepted result simply replaces the pending retained row set;
-restarting the short QML animation remains latest-wins. Geometry-only resize/reflow still performs no source work or
+restarting the finite QML animation remains latest-wins. Geometry-only resize/reflow still performs no source work or
 row publication. Artwork hydration that changes the retained row presentation follows the same article-surface fade,
 so Grid never snaps between image/text layouts.
 

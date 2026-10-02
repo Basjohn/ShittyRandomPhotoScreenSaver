@@ -86,14 +86,25 @@ def _credentials_to_mapping(
     }
 
 
-def prepare_oauth_client_config(path: Path) -> PreparedOAuthClientConfig:
-    """Read one OAuth client-secrets file without touching Qt objects."""
+def prepare_oauth_client_config(
+    path: Path, *, required: bool = True
+) -> PreparedOAuthClientConfig:
+    """Read OAuth client secrets without touching Qt objects.
+
+    Missing OAuth bootstrap material is only an error when OAuth is the active
+    backend.  IMAP users do not need ``client_secrets.json`` at runtime.
+    """
 
     target = Path(path)
     try:
         payload = target.read_text(encoding="utf-8")
     except FileNotFoundError:
-        logger.error("[GMAIL_OAUTH] client_secrets.json not found at %s", target)
+        log = logger.error if required else logger.debug
+        log(
+            "[GMAIL_OAUTH] client_secrets.json not found at %s%s",
+            target,
+            "" if required else " (OAuth backend inactive)",
+        )
         return PreparedOAuthClientConfig(None, None)
     except OSError as exc:
         logger.error("[GMAIL_OAUTH] Failed to read client_secrets.json: %s", exc)
@@ -277,17 +288,20 @@ def prepare_gmail_backend_bootstrap(
         _remove_legacy_oauth_token(legacy_token_path)
 
     imap_email, imap_password = _load_imap_credentials(imap_credentials_path)
+    backend_mode = _load_backend_mode(backend_config_path)
     return PreparedGmailBootstrap(
         app_data_path=app_data,
         backend_config_path=backend_config_path,
         imap_credentials_path=imap_credentials_path,
-        backend_mode=_load_backend_mode(backend_config_path),
+        backend_mode=backend_mode,
         imap_email=imap_email,
         imap_password=imap_password,
         oauth_credentials_path=credentials_path,
         oauth_token_path=token_path,
         oauth_legacy_token_path=legacy_token_path,
-        oauth_client_config=prepare_oauth_client_config(credentials_path),
+        oauth_client_config=prepare_oauth_client_config(
+            credentials_path, required=(backend_mode == "oauth")
+        ),
         oauth_credentials=oauth_credentials,
     )
 

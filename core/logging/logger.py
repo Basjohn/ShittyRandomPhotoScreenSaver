@@ -29,6 +29,7 @@ from core.logging.tags import (
     LOG_FAMILY_LIFECYCLE,
     LOG_FAMILY_PERF,
     LOG_FAMILY_SETTINGS,
+    LOG_SIDECAR_ONLY_FIELD,
     LOG_FAMILY_STEAM,
     LOG_FAMILY_USAGE,
     LOG_FAMILY_VISUALIZER,
@@ -2049,6 +2050,8 @@ class GeometryLogFilter(logging.Filter):
         "[MENU_OPEN]",
         "[ZORDER]",
         "[REFRESH_DIAG]",
+        "[QUICK_GEOMETRY]",
+        "[QUICK_NATIVE_GEOMETRY]",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
@@ -2098,12 +2101,20 @@ class LifecycleLogFilter(logging.Filter):
 
     _NAME_PREFIXES = (
         "core.process.supervisor",
+        "core.media.media_native_trace",
         "engine.engine_lifecycle",
+        "engine.runtime_destruction",
+        "rendering.quick.scene_controller",
         "rendering.widget_setup_all",
         "rendering.display_setup",
     )
     _MESSAGE_TOKENS = (
         "[LIFECYCLE]",
+        "[LIFECYCLE_BARRIER]",
+        "[QUICK_SURFACE]",
+        "[MEDIA_NATIVE]",
+        "[MEDIA_EVENT]",
+        "[CLOCK_TICKER]",
         "ProcessSupervisor initialized",
         "ProcessSupervisor shutting down",
         "ProcessSupervisor shutdown complete",
@@ -2133,6 +2144,7 @@ class CacheLogFilter(logging.Filter):
     _MESSAGE_TOKENS = (
         "[CACHE]",
         "[GL CACHE]",
+        "[RSS_CACHE]",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
@@ -2208,8 +2220,43 @@ class FeedsLogFilter(logging.Filter):
         return any(token in msg for token in self._MESSAGE_TOKENS)
 
 
+def _family_sidecar_enabled(family: str) -> bool:
+    """Return whether the dedicated persistent sink for ``family`` is active."""
+
+    return {
+        LOG_FAMILY_PERF: _PERF_METRICS_ENABLED,
+        LOG_FAMILY_WIDGET_PERF: _PERF_METRICS_ENABLED,
+        LOG_FAMILY_USAGE: _USAGE_LOGGING_ENABLED,
+        LOG_FAMILY_VISUALIZER: _VIZ_LOGGING_ENABLED,
+        LOG_FAMILY_VISUALIZER_VOLUME: _VIZ_LOGGING_ENABLED,
+        LOG_FAMILY_GEOMETRY: _GEOMETRY_LOGGING_ENABLED,
+        LOG_FAMILY_SETTINGS: _SETTINGS_LOGGING_ENABLED,
+        LOG_FAMILY_LIFECYCLE: _LIFECYCLE_LOGGING_ENABLED,
+        LOG_FAMILY_CACHE: _CACHE_LOGGING_ENABLED,
+        LOG_FAMILY_STEAM: _STEAM_LOGGING_ENABLED,
+        LOG_FAMILY_FEEDS: _FEEDS_LOGGING_ENABLED,
+    }.get(str(family or ""), False)
+
+
+class SidecarOnlyCentralFilter(logging.Filter):
+    """Keep explicitly sidecar-only diagnostics out of central logs/views.
+
+    The marker is deliberately conditional on a live declared-family sidecar.
+    If a caller emits such a record without the corresponding sidecar enabled,
+    the central stream keeps it rather than silently losing evidence.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        if not bool(getattr(record, LOG_SIDECAR_ONLY_FIELD, False)):
+            return True
+        families = normalize_log_families(getattr(record, LOG_FAMILY_FIELD, None))
+        if not families:
+            return True
+        return not any(_family_sidecar_enabled(family) for family in families)
+
+
 class DedicatedFamilySuppressFilter(logging.Filter):
-    """Suppress INFO/DEBUG records from a family when its sidecar log is active."""
+    """Suppress routine INFO/DEBUG records from a family when its sidecar is active."""
 
     def __init__(self, family_filter: logging.Filter, enabled_getter):
         super().__init__()
@@ -2847,6 +2894,7 @@ def setup_logging(
     # PERF-tagged records are redirected to the dedicated PERF log, so we
     # drop them from the main screensaver.log to reduce noise and keep
     # per-run logs smaller and easier to inspect.
+    main_handler.addFilter(SidecarOnlyCentralFilter())
     main_handler.addFilter(NonPerfFilter())
     main_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
@@ -2866,6 +2914,7 @@ def setup_logging(
     )
     console_handler.setFormatter(console_formatter)
     console_handler.setLevel(main_level)
+    console_handler.addFilter(SidecarOnlyCentralFilter())
     console_handler.addFilter(NonPerfFilter())
     console_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
@@ -3049,6 +3098,7 @@ def setup_logging(
         )
         verbose_handler.setFormatter(formatter)
         verbose_handler.setLevel(logging.DEBUG)
+        verbose_handler.addFilter(SidecarOnlyCentralFilter())
         verbose_handler.addFilter(VerboseLogFilter())
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
