@@ -63,6 +63,8 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   a GPU-written indirect command (no count readback) and one indirect draw. Against per-vertex evaluation of the whole
   pool: -29% to -49% GPU, +0.1 ms fixed CPU submit (`Docs/Reference/Scene3D_Resources.md`). Remaining S18 primitives
   (lightning, smoke/fire volumes, energy fields, collision, OIT, ribbons) arrive with their own consumers below.
+- [x] **Accordion Fold landed (S20)**: isometric pleats on a crease-aligned grid with flat material shading and an
+  exact slide-out. Deactivated by default.
 
 ## 1. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
 
@@ -136,7 +138,8 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
-- [ ] **Accordion Fold**, **Relief Rise**, **Cube Turn**.
+- [ ] **Relief Rise**, **Cube Turn**. (Accordion Fold landed; transitions were taken ahead of the Visualizer verticals
+  because a new Visualizer mode first needs its logical-capture/onboarding-preview wiring designed.)
 - [ ] **Bubble Depth Field** only under Bubble Temporal Fidelity/R-69: depth may not damp, retime or re-author Bubble's
   accepted amplitude/reaction/ghost/tail cadence.
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit

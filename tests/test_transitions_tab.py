@@ -517,3 +517,19 @@ def test_disintegrate_page_round_trips_its_controls(qapp, settings_manager, qtbo
     settings_manager.set("transitions", external)
     qapp.processEvents()
     assert tab.disintegrate_grain_spin.value() == tab.disintegrate_grain_spin.maximum()
+
+
+def test_accordion_fold_page_offers_edges_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGE_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Accordion Fold"].setChecked(True)
+    tab._on_nav_selected("Accordion Fold")
+    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(ACCORDION_EDGE_CHOICES)
+    tab.direction_combo.setCurrentText("Top")
+    tab.accordion_pleats_spin.setValue(12)
+    tab.accordion_fold_gloss_spin.setValue(0.6)
+    tab.accordion_fold_antialiasing_combo.setCurrentText("2x")
+    persisted = settings_manager.get("transitions", {})["accordion_fold"]
+    assert persisted == {"direction": "Top", "pleats": 12, "gloss": 0.6, "antialiasing": "2x"}

@@ -38,6 +38,7 @@ A look at the current features. Developer contracts and work-in-progress details
     - Melt Drip
     - Page Curl
     - Disintegrate
+    - Accordion Fold
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 

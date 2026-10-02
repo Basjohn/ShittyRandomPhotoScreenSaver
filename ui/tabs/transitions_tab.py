@@ -25,6 +25,7 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
+from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGE_CHOICES, ACCORDION_PLEATS_RANGE
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
@@ -105,6 +106,7 @@ class TransitionsTab(QWidget):
                 "melt_drip",
                 "page_curl",
                 "disintegrate",
+                "accordion_fold",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -593,6 +595,7 @@ class TransitionsTab(QWidget):
         "Melt Drip": "_build_melt_drip_group",
         "Page Curl": "_build_page_curl_group",
         "Disintegrate": "_build_disintegrate_group",
+        "Accordion Fold": "_build_accordion_fold_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -612,6 +615,7 @@ class TransitionsTab(QWidget):
         "Melt Drip": "melt_drip_group",
         "Page Curl": "page_curl_group",
         "Disintegrate": "disintegrate_group",
+        "Accordion Fold": "accordion_fold_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -624,6 +628,7 @@ class TransitionsTab(QWidget):
             "Melt Drip",
             "Page Curl",
             "Disintegrate",
+            "Accordion Fold",
         }
     )
 
@@ -832,6 +837,12 @@ class TransitionsTab(QWidget):
                 cfg, 'detail', 'melt_drip', canonical['detail'], self.melt_drip_detail_spin, float,
             ))
 
+        if hasattr(self, 'accordion_fold_group'):
+            canonical = canonical_transitions['accordion_fold']
+            cfg = self._new_transition_section(transitions_config, 'accordion_fold', canonical)
+            self.accordion_pleats_spin.setValue(self._new_transition_number(
+                cfg, 'pleats', 'accordion_fold', canonical['pleats'], self.accordion_pleats_spin, int,
+            ))
         if hasattr(self, 'disintegrate_group'):
             canonical = canonical_transitions['disintegrate']
             cfg = self._new_transition_section(transitions_config, 'disintegrate', canonical)
@@ -1099,6 +1110,9 @@ class TransitionsTab(QWidget):
         "page_curl": (
             ("gloss", "Paper Gloss:", 0., 1., "Shine and reflections of the next image on the curling page."),
         ),
+        "accordion_fold": (
+            ("gloss", "Paper Gloss:", 0., 1., "Shine and reflections of the next image on the folds."),
+        ),
         "disintegrate": (
             ("wind", "Wind:", .5, 2., "How hard the wind blows the grains away: their speed and how far they fly."),
         ),
@@ -1132,6 +1146,7 @@ class TransitionsTab(QWidget):
         "blinds": (_ANTIALIASING_CONTROL,),
         "page_curl": (_ANTIALIASING_CONTROL,),
         "disintegrate": (_ANTIALIASING_CONTROL,),
+        "accordion_fold": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1322,6 +1337,23 @@ class TransitionsTab(QWidget):
         detail_row.addStretch()
         self._build_surface_controls(layout, "melt_drip")
         self._specific_group_host_layout.addWidget(self.melt_drip_group)
+
+    def _build_accordion_fold_group(self) -> None:
+        self.accordion_fold_group = QGroupBox("Accordion Fold Settings")
+        self._style_group_box(self.accordion_fold_group)
+        layout = QVBoxLayout(self.accordion_fold_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        pleats_row = self._aligned_row(layout, "Pleats:")
+        self.accordion_pleats_spin = QSpinBox()
+        self.accordion_pleats_spin.setRange(*ACCORDION_PLEATS_RANGE)
+        self.accordion_pleats_spin.setValue(int(_transition_default("accordion_fold.pleats")))
+        self.accordion_pleats_spin.setToolTip("How many folds the picture makes.")
+        self.accordion_pleats_spin.valueChanged.connect(self._save_settings)
+        pleats_row.addWidget(self.accordion_pleats_spin)
+        pleats_row.addStretch()
+        self._build_surface_controls(layout, "accordion_fold")
+        self._build_scene3d_choices(layout, "accordion_fold")
+        self._specific_group_host_layout.addWidget(self.accordion_fold_group)
 
     def _build_disintegrate_group(self) -> None:
         self.disintegrate_group = QGroupBox("Disintegrate Settings")
@@ -2077,6 +2109,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'blinds_style_combo', None),
             getattr(self, 'blinds_slats_spin', None),
             getattr(self, 'disintegrate_grain_spin', None),
+            getattr(self, 'accordion_pleats_spin', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
@@ -2204,7 +2237,7 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate"):
+                            "disintegrate", "accordion_fold"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2342,6 +2375,13 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Accordion Fold":
+                    # The edge the picture folds up against.
+                    self.direction_combo.addItems(list(ACCORDION_EDGE_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["accordion_fold"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "Page Curl":
                     # Where the page starts to peel: a corner or an edge.
                     self.direction_combo.addItems(list(PAGE_CURL_ORIGIN_CHOICES))
@@ -2467,6 +2507,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["page_curl"] = cur_dir
         elif cur_type == "Disintegrate":
             self._direction_by_type["disintegrate"] = cur_dir
+        elif cur_type == "Accordion Fold":
+            self._direction_by_type["accordion_fold"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2607,6 +2649,12 @@ class TransitionsTab(QWidget):
             }
         else:
             melt_drip = _existing_subdict('melt_drip')
+        if hasattr(self, 'accordion_fold_group'):
+            accordion_fold = {'direction': self._direction_by_type['accordion_fold'],
+                              'pleats': self.accordion_pleats_spin.value()}
+        else:
+            accordion_fold = {**_existing_subdict('accordion_fold'),
+                              'direction': self._direction_by_type['accordion_fold']}
         if hasattr(self, 'disintegrate_group'):
             disintegrate = {'direction': self._direction_by_type['disintegrate'],
                             'grain_size': self.disintegrate_grain_spin.value()}
@@ -2621,7 +2669,7 @@ class TransitionsTab(QWidget):
                                 ("exploding_tiles", exploding_tiles),
                                 ("ink_bloom", ink_bloom),
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
-                                ("disintegrate", disintegrate)):
+                                ("disintegrate", disintegrate), ("accordion_fold", accordion_fold)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2665,6 +2713,7 @@ class TransitionsTab(QWidget):
             'melt_drip': melt_drip,
             'page_curl': page_curl,
             'disintegrate': disintegrate,
+            'accordion_fold': accordion_fold,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):
