@@ -25,6 +25,7 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
+from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -881,6 +882,13 @@ class TransitionsTab(QWidget):
                 blinds = {}
             self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds['feather'])))
             self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+            style = blinds.get('style', canonical_blinds['style'])
+            self.blinds_style_combo.setCurrentText(
+                str(style if style in BLINDS_STYLE_CHOICES else canonical_blinds['style']))
+            self._sync_blinds_style()
+            self.blinds_slats_spin.setValue(self._new_transition_number(
+                blinds, 'slats', 'blinds', canonical_blinds['slats'], self.blinds_slats_spin, int,
+            ))
             blinds_dir = blinds.get('direction', canonical_blinds['direction'])
             try:
                 idx = self.blinds_direction_combo.findText(str(blinds_dir))
@@ -1069,6 +1077,9 @@ class TransitionsTab(QWidget):
             ("depth", "Liquid Depth:", 0., 1., "Height and surface relief of the spreading pigment."),
             ("gloss", "Wet Gloss:", 0., 1., "Wet reflections on the ink surface."),
         ),
+        "blinds": (
+            ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
+        ),
         "melt_drip": (
             ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
@@ -1096,6 +1107,7 @@ class TransitionsTab(QWidget):
         "glass_shatter": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
+        "blinds": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1312,6 +1324,12 @@ class TransitionsTab(QWidget):
 
         self._specific_group_host_layout.addWidget(self.blockspin_group)
 
+    def _sync_blinds_style(self, *_args) -> None:
+        """Show the controls of the chosen Blinds style only."""
+        slats = self.blinds_style_combo.currentText() == "3D Slats"
+        self.blinds_flat_box.setVisible(not slats)
+        self.blinds_slats_box.setVisible(slats)
+
     def _build_blinds_group(self) -> None:
         _aligned_row = self._aligned_row
         self.blinds_group = QGroupBox("Blinds Settings")
@@ -1319,14 +1337,33 @@ class TransitionsTab(QWidget):
         blinds_layout = QVBoxLayout(self.blinds_group)
         blinds_layout.setContentsMargins(0, 12, 0, 0)
 
+        style_row = _aligned_row(blinds_layout, "Style:")
+        self.blinds_style_combo = StyledComboBox(size_variant="compact")
+        self.blinds_style_combo.addItems(list(BLINDS_STYLE_CHOICES))
+        self.blinds_style_combo.setCurrentText(str(_transition_default("blinds.style")))
+        self.blinds_style_combo.setToolTip(
+            "Flat: soft bands open over the picture. 3D Slats: solid slats turn over one after "
+            "another, the next image on their backs.")
+        self.blinds_style_combo.currentTextChanged.connect(self._sync_blinds_style)
+        self.blinds_style_combo.currentTextChanged.connect(self._save_settings)
+        style_row.addWidget(self.blinds_style_combo)
+        style_row.addStretch()
+
         blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
         self.blinds_direction_combo = StyledComboBox(size_variant="compact")
         self.blinds_direction_combo.addItems(["Horizontal", "Vertical", "Diagonal", "Random"])
+        self.blinds_direction_combo.setToolTip(
+            "Horizontal: upright stripes. Vertical: lying stripes. 3D Slats turn only these two "
+            "ways; Diagonal or Random picks one of them per transition.")
         self.blinds_direction_combo.currentTextChanged.connect(self._save_settings)
         blinds_dir_row.addWidget(self.blinds_direction_combo)
         blinds_dir_row.addStretch()
 
-        blinds_feather_row = _aligned_row(blinds_layout, "Edge Softness:")
+        self.blinds_flat_box = QWidget()
+        flat_layout = QVBoxLayout(self.blinds_flat_box)
+        flat_layout.setContentsMargins(0, 0, 0, 0)
+        blinds_layout.addWidget(self.blinds_flat_box)
+        blinds_feather_row = _aligned_row(flat_layout, "Edge Softness:")
         self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.blinds_feather_slider.setRange(0, 25)
         self.blinds_feather_slider.setSingleStep(1)
@@ -1335,6 +1372,22 @@ class TransitionsTab(QWidget):
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
         self.blinds_feather_label = self._add_value_label(blinds_feather_row, "2")
         blinds_feather_row.addStretch()
+
+        self.blinds_slats_box = QWidget()
+        slats_layout = QVBoxLayout(self.blinds_slats_box)
+        slats_layout.setContentsMargins(0, 0, 0, 0)
+        blinds_layout.addWidget(self.blinds_slats_box)
+        slats_row = _aligned_row(slats_layout, "Slats:")
+        self.blinds_slats_spin = QSpinBox()
+        self.blinds_slats_spin.setRange(*BLINDS_SLATS_RANGE)
+        self.blinds_slats_spin.setValue(int(_transition_default("blinds.slats")))
+        self.blinds_slats_spin.setToolTip("How many slats cover the picture.")
+        self.blinds_slats_spin.valueChanged.connect(self._save_settings)
+        slats_row.addWidget(self.blinds_slats_spin)
+        slats_row.addStretch()
+        self._build_surface_controls(slats_layout, "blinds")
+        self._build_scene3d_choices(slats_layout, "blinds")
+        self._sync_blinds_style()
 
         self._specific_group_host_layout.addWidget(self.blinds_group)
 
@@ -1969,6 +2022,8 @@ class TransitionsTab(QWidget):
             # Blinds widgets
             getattr(self, 'blinds_direction_combo', None),
             getattr(self, 'blinds_feather_slider', None),
+            getattr(self, 'blinds_style_combo', None),
+            getattr(self, 'blinds_slats_spin', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
@@ -2379,6 +2434,8 @@ class TransitionsTab(QWidget):
             blinds = {
                 'feather': self.blinds_feather_slider.value(),
                 'direction': self.blinds_direction_combo.currentText(),
+                'style': self.blinds_style_combo.currentText(),
+                'slats': self.blinds_slats_spin.value(),
             }
         else:
             blinds = _existing_subdict('blinds')
@@ -2485,7 +2542,7 @@ class TransitionsTab(QWidget):
         else:
             melt_drip = _existing_subdict('melt_drip')
 
-        for section, values in (("crumble", crumble), ("glass_shatter", glass_shatter),
+        for section, values in (("blinds", blinds), ("crumble", crumble), ("glass_shatter", glass_shatter),
                                 ("exploding_tiles", exploding_tiles),
                                 ("ink_bloom", ink_bloom),
                                 ("melt_drip", melt_drip)):

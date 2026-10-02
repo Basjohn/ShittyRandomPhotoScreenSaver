@@ -15,6 +15,7 @@ import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
+from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -142,8 +143,12 @@ def _resolve_blinds(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "blinds")
     defaults = _canonical("blinds")
+    style = BLINDS_STYLE_CODES[_scene_choice(cfg, defaults, "style", BLINDS_STYLE_CHOICES)]
     default_direction = str(defaults["direction"])
     raw_direction = str(_value(cfg, defaults, "direction") or default_direction)
+    if style == "slats" and raw_direction not in ("Horizontal", "Vertical"):
+        # Slats turn about horizontal or vertical axes: Random and Diagonal pick one per run.
+        raw_direction = rng.choice(("Horizontal", "Vertical"))
     if raw_direction == "Random":
         raw_direction = rng.choice(("Horizontal", "Vertical", "Diagonal"))
     direction = {
@@ -156,7 +161,15 @@ def _resolve_blinds(
     ui_feather = _number(_value(cfg, defaults, "feather"), default_feather)
     # Preserve TransitionFactory's UI-scale -> shader-scale conversion.
     feather = max(0.001, min(0.5, (ui_feather / 25.0) * 0.5))
-    return _finish(direction, {"feather": feather})
+    if style == "flat":
+        return _finish(direction, {"feather": feather, "style": style})
+    low, high = BLINDS_SLATS_RANGE
+    return _finish(direction, {
+        "feather": feather, "style": style,
+        "slats": max(low, min(high, _integer(_value(cfg, defaults, "slats"), int(defaults["slats"])))),
+        **_surface_values(cfg, defaults, ("gloss",)),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
 
 
 def _resolve_diffuse(

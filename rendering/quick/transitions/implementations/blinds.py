@@ -1,4 +1,4 @@
-"""Lazy Quick renderer for the canonical authored Blinds shader."""
+"""Lazy Quick renderer for Blinds: the canonical authored flat shader, or 3D Slats."""
 
 from __future__ import annotations
 
@@ -8,7 +8,12 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.blinds_program import blinds_program
+from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
     QuickTransitionRenderFrame,
@@ -71,22 +76,55 @@ def _blinds_grid(logical_size: tuple[float, float]) -> tuple[int, int]:
     return cols, rows
 
 
+def _slats_parameters(parameters: Mapping[str, object]) -> tuple[int, float]:
+    """The resolved 3D Slats count and gloss, validated before any GL state changes."""
+    slats, gloss = parameters.get("slats"), parameters.get("gloss")
+    if isinstance(slats, bool) or not isinstance(slats, int) or not 6 <= slats <= 48:
+        raise ValueError("Blinds 3D Slats needs a resolved slat count between 6 and 48")
+    if isinstance(gloss, bool) or not isinstance(gloss, (int, float)) or not 0.0 <= float(gloss) <= 1.0:
+        raise ValueError("Blinds 3D Slats needs a resolved gloss between 0 and 1")
+    return slats, float(gloss)
+
+
+def _slats_style(parameters: Mapping[str, object]) -> bool:
+    return parameters.get("style", "flat") == "slats"
+
+
+def _slats_program():
+    """The 3D Slats shader module, loaded the first time the style is used (Flat never loads it)."""
+    from rendering.gl_programs import blinds_slats_program
+
+    return blinds_slats_program
+
+
 class QuickBlindsRenderer:
     transition_id = "blinds"
+
+    _SLAT_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uEnvironment", "uProgress", "uCount",
+                      "uVertical", "uGloss")
+    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uProgress", "uCount", "uVertical")
 
     def __init__(self) -> None:
         self._program = 0
         self._uniforms: dict[str, int] = {}
+        # 3D Slats only: nothing below is touched by the flat style.
+        self._resources = MeshResources("Quick Blinds 3D Slats")
+        self._target = SceneTarget("Quick Blinds 3D Slats")
+        self._environment = PhotoEnvironment("Quick Blinds 3D Slats")
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._program)
+        return bool(self._program or self._resources.has_resources or self._target.has_resources
+                    or self._environment.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
+        parameters = frame.run.request.parameter_dict()
+        if _slats_style(parameters):
+            self._render_slats(frame, parameters)
+            return
         if not self._program:
             self._initialize()
         uniforms = self._uniforms
-        parameters = frame.run.request.parameter_dict()
         feather = _blinds_feather(parameters)
         direction = _blinds_direction_mode(frame.run.request.direction)
         cols, rows = _blinds_grid(frame.logical_size)
@@ -115,12 +153,105 @@ class QuickBlindsRenderer:
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
+        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
+        between runs). The flat style is one small program compiled on first use."""
+        if not _slats_style(parameters):
+            return True
+        samples = scene3d_request_samples(parameters)
+        r, shaders = self._resources, _slats_program()
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+                   (r, "backdrop", ITEM_QUAD_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE),
+                   (r, "slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE)]
+        if samples:
+            entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
+        if not warm_programs(entries):
+            return False
+        return warm_run_resources(self._target, None, size, samples)
+
+    def park(self) -> None:
+        """Drop the per-run target and environment; programs and the slat mesh stay warm."""
+        self._target.release()
+        self._environment.release()
+
+    def _render_slats(self, frame: QuickTransitionRenderFrame, parameters: Mapping[str, object]) -> None:
+        count, gloss = _slats_parameters(parameters)
+        mode = _blinds_direction_mode(frame.run.request.direction)
+        if mode == 2:
+            raise ValueError("Blinds 3D Slats turn about horizontal or vertical axes only")
+        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
+        try:
+            if progress <= 0.0:
+                self._resources.draw_image(frame, frame.source_texture_id)
+                return
+            if progress >= 1.0:
+                self._resources.draw_image(frame, frame.destination_texture_id)
+                return
+            # Direction "Horizontal" keeps the flat style's vertical stripes: columns.
+            columns = 1 if mode == 0 else 0
+            samples = scene3d_request_samples(parameters)
+            environment = self._environment.texture(frame, self._resources)
+            if samples:
+                with self._target.scope(frame, samples, self._resources):
+                    self._draw_slats(frame, progress, count, columns, gloss, environment)
+            else:
+                self._draw_slats(frame, progress, count, columns, gloss, environment)
+        except Exception:
+            self._release_slats()
+            raise
+
+    def _draw_slats(self, frame, progress: float, count: int, columns: int, gloss: float,
+                    environment: int) -> None:
+        r, shaders = self._resources, _slats_program()
+        program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("backdrop", self._BACKDROP_UNIFORMS)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glDepthMask(gl.GL_FALSE)
+        bind_frame(program, uniforms, frame)
+        gl.glUniform1f(uniforms["uProgress"], progress)
+        gl.glUniform1i(uniforms["uCount"], count)
+        gl.glUniform1i(uniforms["uVertical"], columns)
+        gl.glBindVertexArray(frame.quad_vao)
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+
+        r.begin_depth(frame)
+        program = r.program("slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("slats", self._SLAT_UNIFORMS)
+        bind_frame(program, uniforms, frame)
+        gl.glUniform1f(uniforms["uProgress"], progress)
+        gl.glUniform1i(uniforms["uCount"], count)
+        gl.glUniform1i(uniforms["uVertical"], columns)
+        gl.glUniform1f(uniforms["uGloss"], gloss)
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        vao, vertices = r.mesh("slat", shaders.BLINDS_SLAT_BOX_VERTICES, shaders.BLINDS_SLAT_BOX_ATTRIBUTES)
+        gl.glBindVertexArray(vao)
+        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+
     def release_resources(self) -> None:
-        if not self._program:
-            return
-        gl.glDeleteProgram(self._program)
-        self._program = 0
-        self._uniforms.clear()
+        errors: list[str] = []
+        try:
+            self._release_slats()
+        except Exception as exc:
+            errors.append(str(exc))
+        if self._program:
+            gl.glDeleteProgram(self._program)
+            self._program = 0
+            self._uniforms.clear()
+        if errors:
+            raise RuntimeError(" | ".join(errors))
+
+    def _release_slats(self) -> None:
+        errors: list[str] = []
+        for release in (self._target.release, self._environment.release, self._resources.release_resources):
+            try:
+                release()
+            except Exception as exc:
+                errors.append(str(exc))
+        if errors:
+            raise RuntimeError(" | ".join(errors))
 
     def _initialize(self) -> None:
         program = compile_program(
