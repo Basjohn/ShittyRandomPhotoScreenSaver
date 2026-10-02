@@ -67,6 +67,9 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   exact slide-out. Deactivated by default.
 - [x] **Relief Rise landed (S20)**: a height-field wave from the mipmapped photo copies, lit by the S17 material with
   the first contact-occlusion term (S17), exact ahead of and behind the wave. Deactivated by default.
+- [x] **Cube Turn landed (S20)**: a quarter-turning box on the shared box mesh with a dolly that returns home,
+  material-lit faces and a blurred backdrop. Deactivated by default. The S20 transition verticals are complete; the
+  Visualizer verticals follow (a new mode first needs its logical-capture and Guided Setup preview wiring designed).
 
 ## 1. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
 
@@ -141,8 +144,6 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
-- [ ] **Cube Turn**. (Accordion Fold and Relief Rise landed; transitions were taken ahead of the Visualizer verticals
-  because a new Visualizer mode first needs its logical-capture/onboarding-preview wiring designed.)
 - [ ] **Bubble Depth Field** only under Bubble Temporal Fidelity/R-69: depth may not damp, retime or re-author Bubble's
   accepted amplitude/reaction/ghost/tail cadence.
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit

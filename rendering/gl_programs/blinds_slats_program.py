@@ -15,7 +15,7 @@ slat not yet turning or done are the photographs exactly.
 
 from __future__ import annotations
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, SCENE3D_GLSL
 
 # Each slat's share of the run, and its thickness as a share of its width.
 BLINDS_SLAT_TURN = 0.5
@@ -37,25 +37,8 @@ def blinds_slat_lift(progress: float, index: int, count: int) -> float:
     return 4.0 * e * (1.0 - e)
 
 
-def _box() -> tuple[float, ...]:
-    """A unit box (positions in [-0.5, 0.5]^3) as 36 vertices of position + outward normal."""
-    faces = (
-        ((0, 0, 1), (1, 0, 0), (0, 1, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0)),
-        ((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 0, 1), (0, 1, 0)),
-        ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (1, 0, 0), (0, 0, 1)),
-    )
-    values: list[float] = []
-    for normal, a, b in faces:
-        centre = [0.5 * n for n in normal]
-        corners = [[centre[k] + 0.5 * (sa * a[k] + sb * b[k]) for k in range(3)]
-                   for sa, sb in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-        for corner in (corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]):
-            values.extend((*corner, *normal))
-    return tuple(float(value) for value in values)
-
-
-BLINDS_SLAT_BOX_VERTICES = _box()
-BLINDS_SLAT_BOX_ATTRIBUTES = (3, 3)
+BLINDS_SLAT_BOX_VERTICES = SCENE3D_BOX_VERTICES
+BLINDS_SLAT_BOX_ATTRIBUTES = SCENE3D_BOX_ATTRIBUTES
 
 _SCHEDULE_GLSL = f"""
 const float SLAT_TURN = {BLINDS_SLAT_TURN:.6f};

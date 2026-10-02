@@ -257,6 +257,7 @@ TRANSITION_COPY = {
     "disintegrate": "The picture crumbles into dust that blows away.",
     "accordion_fold": "The picture folds up like an accordion and slides away.",
     "relief_rise": "A wave of relief carries one picture into the next.",
+    "cube_turn": "The picture turns like a cube to show the next one.",
 }
 
 
