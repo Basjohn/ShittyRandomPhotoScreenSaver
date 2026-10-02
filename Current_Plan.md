@@ -65,6 +65,8 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   (lightning, smoke/fire volumes, energy fields, collision, OIT, ribbons) arrive with their own consumers below.
 - [x] **Accordion Fold landed (S20)**: isometric pleats on a crease-aligned grid with flat material shading and an
   exact slide-out. Deactivated by default.
+- [x] **Relief Rise landed (S20)**: a height-field wave from the mipmapped photo copies, lit by the S17 material with
+  the first contact-occlusion term (S17), exact ahead of and behind the wave. Deactivated by default.
 
 ## 1. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
 
@@ -74,7 +76,8 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   needs numerical headroom and must still resolve into the ordinary SDR presentation path.
 - [ ] Add reusable real-3D shadow facilities with bounded softness/contact treatment. Keep the existing planar shadow
   wherever it is cheaper and visually correct.
-- [ ] Add active-only GTAO/contact AO where justified by a real consumer.
+- [ ] Add active-only GTAO where a consumer with real occluding geometry justifies it (Relief Rise's height-field
+  contact occlusion is analytic and needs no buffer).
 - [ ] Add weighted blended OIT/depth-aware soft transparency for smoke/sparks/glass-heavy scenes that would otherwise
   require CPU sorting.
 - [ ] Add depth/thickness-aware refraction, Fresnel reflection, rough transmission and restrained optional dispersion
@@ -138,7 +141,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
-- [ ] **Relief Rise**, **Cube Turn**. (Accordion Fold landed; transitions were taken ahead of the Visualizer verticals
+- [ ] **Cube Turn**. (Accordion Fold and Relief Rise landed; transitions were taken ahead of the Visualizer verticals
   because a new Visualizer mode first needs its logical-capture/onboarding-preview wiring designed.)
 - [ ] **Bubble Depth Field** only under Bubble Temporal Fidelity/R-69: depth may not damp, retime or re-author Bubble's
   accepted amplitude/reaction/ghost/tail cadence.

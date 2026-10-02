@@ -845,6 +845,22 @@ def _resolve_accordion_fold(
     })
 
 
+def _resolve_relief_rise(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "relief_rise")
+    defaults = _canonical("relief_rise")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_PIXEL_DIRECTIONS,
+        mapping=_WIND_DIRECTION_MAP,      # the sweep travels the way its label says
+        rng=rng,
+    )
+    return _finish(direction, {**_surface_values(cfg, defaults, ("depth", "gloss")),
+                               **resolve_scene_quality(settings, cfg, defaults)})
+
+
 def _resolve_page_curl(
     settings: Mapping[str, object],
     rng: _RandomSource,
@@ -874,6 +890,7 @@ _RESOLVERS = {
     "page_curl": _resolve_page_curl,
     "disintegrate": _resolve_disintegrate,
     "accordion_fold": _resolve_accordion_fold,
+    "relief_rise": _resolve_relief_rise,
 }
 
 

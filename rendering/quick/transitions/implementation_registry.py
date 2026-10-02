@@ -90,6 +90,10 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),
     QuickTransitionImplementationDescriptor(
+        transition_id="relief_rise",
+        module_name="rendering.quick.transitions.implementations.relief_rise",
+    ),
+    QuickTransitionImplementationDescriptor(
         transition_id="accordion_fold",
         module_name="rendering.quick.transitions.implementations.accordion_fold",
     ),

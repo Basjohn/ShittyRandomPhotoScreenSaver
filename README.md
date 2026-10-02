@@ -39,6 +39,7 @@ A look at the current features. Developer contracts and work-in-progress details
     - Page Curl
     - Disintegrate
     - Accordion Fold
+    - Relief Rise
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 

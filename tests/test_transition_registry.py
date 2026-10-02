@@ -92,4 +92,5 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "page_curl": EasingCurve.LINEAR,   # eases its own curl line
         "disintegrate": EasingCurve.LINEAR,
         "accordion_fold": EasingCurve.LINEAR,
+        "relief_rise": EasingCurve.LINEAR,
     }

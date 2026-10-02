@@ -533,3 +533,16 @@ def test_accordion_fold_page_offers_edges_and_round_trips(qapp, settings_manager
     tab.accordion_fold_antialiasing_combo.setCurrentText("2x")
     persisted = settings_manager.get("transitions", {})["accordion_fold"]
     assert persisted == {"direction": "Top", "pleats": 12, "gloss": 0.6, "antialiasing": "2x"}
+
+
+def test_relief_rise_page_round_trips(qapp, settings_manager, qtbot):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Relief Rise"].setChecked(True)
+    tab._on_nav_selected("Relief Rise")
+    tab.direction_combo.setCurrentText("Diagonal BL-TR")
+    tab.relief_rise_depth_spin.setValue(0.9)
+    tab.relief_rise_gloss_spin.setValue(0.1)
+    tab.relief_rise_antialiasing_combo.setCurrentText("Off")
+    persisted = settings_manager.get("transitions", {})["relief_rise"]
+    assert persisted == {"direction": "Diagonal BL-TR", "depth": 0.9, "gloss": 0.1, "antialiasing": "Off"}
