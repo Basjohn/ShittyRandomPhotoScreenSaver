@@ -1,0 +1,8 @@
+{
+  "facial_details_HEAD_only": true,
+  "ROOT_non_deforming": true,
+  "opposite_side_weight_leakage": 0,
+  "opposite_ear_displacement_with_left_MID": 0.0,
+  "upper_attachment_displacement_with_left_MID": 0.0,
+  "master_placement_max_evaluated_error": 3.754619538312822e-06
+}

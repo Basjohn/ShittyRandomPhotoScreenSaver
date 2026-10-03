@@ -1,0 +1,331 @@
+{
+  "approved_static_sha256": "6e3c29130f4a8f8408f6babe352db1a6f439b3e64437c8b519b475df039cf2b1",
+  "geometry_changes": false,
+  "surfaces": {
+    "Usu_Body_And_Arms": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 2.4027400458748785e-07,
+      "weight_sum_range": [
+        0.9999999552965164,
+        1.0000000447034836
+      ]
+    },
+    "Usu_Foot_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 1.4901161193847656e-08,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Foot_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 1.4901161193847656e-08,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Head_And_Ears": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 3.6568311810917775e-06,
+      "weight_sum_range": [
+        0.9999999552965164,
+        1.0000000400468707
+      ]
+    },
+    "Usu_Eye_Outline_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Iris_Rim_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Iris_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Glint_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Brow_L": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Outline_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Iris_Rim_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Iris_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Eye_Glint_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    },
+    "Usu_Brow_R": {
+      "cage_geometry_identical": true,
+      "evaluated_rest_max_deviation": 0.0,
+      "weight_sum_range": [
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "hierarchy": [
+    {
+      "bone": "ROOT",
+      "parent": null,
+      "deform": false,
+      "head": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tail": [
+        0.0,
+        0.0,
+        0.550000011920929
+      ]
+    },
+    {
+      "bone": "BODY_ROOT",
+      "parent": "ROOT",
+      "deform": true,
+      "head": [
+        0.0,
+        0.07999999821186066,
+        1.0499999523162842
+      ],
+      "tail": [
+        0.0,
+        0.07999999821186066,
+        1.649999976158142
+      ]
+    },
+    {
+      "bone": "BODY",
+      "parent": "BODY_ROOT",
+      "deform": true,
+      "head": [
+        0.0,
+        0.07999999821186066,
+        1.649999976158142
+      ],
+      "tail": [
+        0.0,
+        0.07999999821186066,
+        2.950000047683716
+      ]
+    },
+    {
+      "bone": "HEAD",
+      "parent": "BODY",
+      "deform": true,
+      "head": [
+        0.0,
+        0.07999999821186066,
+        2.950000047683716
+      ],
+      "tail": [
+        0.0,
+        0.07999999821186066,
+        4.349999904632568
+      ]
+    },
+    {
+      "bone": "EAR_L_ROOT",
+      "parent": "HEAD",
+      "deform": true,
+      "head": [
+        0.8199999928474426,
+        0.5699999928474426,
+        4.400000095367432
+      ],
+      "tail": [
+        0.949999988079071,
+        0.6800000071525574,
+        2.9000000953674316
+      ]
+    },
+    {
+      "bone": "EAR_L_MID",
+      "parent": "EAR_L_ROOT",
+      "deform": true,
+      "head": [
+        0.949999988079071,
+        0.6800000071525574,
+        2.9000000953674316
+      ],
+      "tail": [
+        1.0199999809265137,
+        0.7200000286102295,
+        2.4000000953674316
+      ]
+    },
+    {
+      "bone": "EAR_L_TIP",
+      "parent": "EAR_L_MID",
+      "deform": true,
+      "head": [
+        1.0199999809265137,
+        0.7200000286102295,
+        2.4000000953674316
+      ],
+      "tail": [
+        1.0399999618530273,
+        0.7200000286102295,
+        2.0999999046325684
+      ]
+    },
+    {
+      "bone": "EAR_R_ROOT",
+      "parent": "HEAD",
+      "deform": true,
+      "head": [
+        -0.8199999928474426,
+        0.5699999928474426,
+        4.400000095367432
+      ],
+      "tail": [
+        -0.949999988079071,
+        0.6800000071525574,
+        2.9000000953674316
+      ]
+    },
+    {
+      "bone": "EAR_R_MID",
+      "parent": "EAR_R_ROOT",
+      "deform": true,
+      "head": [
+        -0.949999988079071,
+        0.6800000071525574,
+        2.9000000953674316
+      ],
+      "tail": [
+        -1.0199999809265137,
+        0.7200000286102295,
+        2.4000000953674316
+      ]
+    },
+    {
+      "bone": "EAR_R_TIP",
+      "parent": "EAR_R_MID",
+      "deform": true,
+      "head": [
+        -1.0199999809265137,
+        0.7200000286102295,
+        2.4000000953674316
+      ],
+      "tail": [
+        -1.0399999618530273,
+        0.7200000286102295,
+        2.0999999046325684
+      ]
+    },
+    {
+      "bone": "ARM_L",
+      "parent": "BODY",
+      "deform": true,
+      "head": [
+        0.47999998927116394,
+        0.17000000178813934,
+        2.619999885559082
+      ],
+      "tail": [
+        0.8299999833106995,
+        0.11999999731779099,
+        1.4800000190734863
+      ]
+    },
+    {
+      "bone": "ARM_R",
+      "parent": "BODY",
+      "deform": true,
+      "head": [
+        -0.47999998927116394,
+        0.17000000178813934,
+        2.619999885559082
+      ],
+      "tail": [
+        -0.8299999833106995,
+        0.11999999731779099,
+        1.4800000190734863
+      ]
+    },
+    {
+      "bone": "LEG_L",
+      "parent": "BODY_ROOT",
+      "deform": true,
+      "head": [
+        0.46000000834465027,
+        0.10999999940395355,
+        0.9200000166893005
+      ],
+      "tail": [
+        0.46000000834465027,
+        0.10999999940395355,
+        0.12999999523162842
+      ]
+    },
+    {
+      "bone": "LEG_R",
+      "parent": "BODY_ROOT",
+      "deform": true,
+      "head": [
+        -0.46000000834465027,
+        0.10999999940395355,
+        0.9200000166893005
+      ],
+      "tail": [
+        -0.46000000834465027,
+        0.10999999940395355,
+        0.12999999523162842
+      ]
+    }
+  ],
+  "transforms_or_modifiers_applied": false
+}

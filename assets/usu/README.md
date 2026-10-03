@@ -2,13 +2,13 @@
 
 `Usu_Static_Approval.blend` is the editable, unrigged character source. This
 directory is authoring/review material and has no SRPSS runtime consumer.
-Modelling review notes belong in this asset directory, never in the SRPSS
-runtime plan. The filename does not assert visual acceptance.
+Asset review notes belong in this asset directory, never in the SRPSS runtime
+plan. The user explicitly approved this static model before requesting rigging.
 
-The rear head and ear attachments have been reshaped and saved for visual
-review. The posterior surface is fuller and rounder, the upper ear rail has a
-gentler slope, and two folded lower cheek/ear patches were repaired. No visual
-acceptance is implied.
+`Usu_Rig_Validation.blend` is the separate rigged review copy. The approved
+static file is byte-for-byte unchanged. Its geometry, facial styling and
+unapplied subdivision were retained in the rigged copy. See `RIG_REVIEW.md`
+for the exact hierarchy, controlled weights, validation and approval gate.
 
 The art direction is the asset section and approval gates in
 `../../Docs/Future_Work/Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`.
@@ -45,10 +45,11 @@ drawings were available during this session.
 - Z is up; front faces -Y; height is about five arbitrary authoring units.
   Final engine units and export conventions have not been established here.
 
-Edit the `.blend` directly; it is the single modelling source. The rejected
-procedural builder has been retired. `source/review_static_usu.py`, executed
-through Blender MCP from this open file, checks the principal surfaces,
-renders all nine views, and saves the `.blend`. It does not replace geometry.
+The `.blend` files are the authoring sources. The rejected procedural builder
+has been retired. `source/review_static_usu.py` is for the static file only: it
+checks the principal surfaces, renders the static views and saves the static
+`.blend`. Never run it as a rig review helper. Rig validation uses
+`source/validate_rig_usu.py`, which guards the separate rigged filepath.
 
 ## Review images
 
@@ -88,22 +89,21 @@ body/arm and foot cage coordinates and connectivity are unchanged. All face
 detail coordinates are unchanged. The head topology was refined and locally repaired.
 This geometric comparison measures preservation, not artistic acceptance.
 
-## Before rigging
+## Rig review
 
-User visual approval is mandatory. Review the ear slope and roundness of the
-rear head in SIDE, HIGH SIDE and HIGH REAR, then inspect the lower cheek/ear
-transition in the enlarged 3/4 view. A small crease remains at that transition;
-it should be assessed before accepting the static form. Compare the updated
-views with `renders/CORRECTIONS.png` and the supplied turnaround. Also review
-the open eye arcs in FRONT and 3/4 and their stronger foreshortening in SIDE.
+Static approval was given on 2026-10-03. The resulting 14-bone FK rig, manual
+weights and rough validation actions are ready for user review. Polished
+animation requires further approval. No runtime format or export was selected.
 
-The profile eye still reads narrower than the drawn side eye. Ear/shoulder
-deformation and the feet's hidden root overlaps have not been tested; static
-acceptance must precede rigging. A single welded whole-character mesh is not assumed.
+`renders/rig_validation/` contains plain six-angle pose renders, labeled review
+sheets, and two-angle rough motion previews. The arm/body welded join required
+a gradual lateral weight blend; rigidly weighting the entire dark hand created
+folds. The accepted technical pass keeps the skull/upper ear attachment rigid
+and confines ear follow-through to the lower lobes. Review the amount of that
+bend and the strongly folded compact rest pose before choosing animation style.
 
-`source/mesh_validation.json` records direct Blender checks of the principal
-surfaces: closed/manifold edges, no loose vertices, zero-area faces or
-nonadjacent self-intersections in the cages or evaluated subdivision, and no
-armatures, armature modifiers or animation actions. These checks do not prove
-visual likeness or future deformation quality. No rig, animation or engine
-asset export has been created.
+`source/mesh_validation.json` is evidence for the unrigged static source.
+`source/rig_validation.json` compares the separate rigged copy with that source.
+`renders/rig_validation/subdivision_metrics.json` covers 39 posed states with
+zero detected self-intersections or zero-area faces. Numerical checks support
+the rig review; they do not grant artistic approval.

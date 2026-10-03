@@ -1,0 +1,5 @@
+# Raw motion frames can be regenerated from the saved validation actions.
+motion_frames/
+# Superseded local pose exploration; final collapsed/ folder is reviewed.
+collapsed_candidate/
+run_opposite/
