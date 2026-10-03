@@ -3,17 +3,27 @@
     2000,
     2400
   ],
-  "silhouette_intersection_over_union": 0.9901445166625054,
-  "changed_silhouette_pixels": 14684,
-  "changed_fraction_of_union": 0.009855483337494596,
+  "silhouette_intersection_over_union": 0.9931662685063299,
+  "changed_silhouette_pixels": 10092,
+  "changed_fraction_of_union": 0.006833731493670063,
   "cage_changes": {
+    "Usu_Body_And_Arms": {
+      "max_abs_xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "changed_vertices": 0,
+      "same_faces": true
+    },
     "Usu_Foot_L": {
       "max_abs_xyz": [
         0.0,
         0.0,
         0.0
       ],
-      "changed_vertices": 0
+      "changed_vertices": 0,
+      "same_faces": true
     },
     "Usu_Foot_R": {
       "max_abs_xyz": [
@@ -21,22 +31,21 @@
         0.0,
         0.0
       ],
-      "changed_vertices": 0
+      "changed_vertices": 0,
+      "same_faces": true
     },
     "Usu_Head_And_Ears": {
       "max_abs_xyz": [
-        0.060221850872039795,
-        0.2847535014152527,
-        0.07242155075073242
+        0.09351903200149536,
+        0.158613383769989,
+        0.28435778617858887
       ],
-      "changed_vertices": 2619
+      "changed_vertices": 1809,
+      "same_faces": true
     }
   },
-  "baseline_blend_sha256": "13cf606581afc25532fad2a1ed0c835babd19fb88a165e02c7b909feff817d0d",
-  "baseline_commit": "a5048260",
-  "method": "Union of evaluated principal-mesh front projections at 2000x2400; same original subdivision levels on the baseline. This measures silhouette preservation, not likeness or approval.",
-  "face_detail_max_abs_coordinate_change": 0.0,
-  "feet_coordinates_unchanged": true,
-  "body_cage_rebuilt_locally_at_arm_joins": true,
-  "reviewed_blend_sha256": "87600538d8e36538ebde7ee3c824b5c49fae5fc7a008909ef43c2662ea437934"
+  "baseline_commit": "68943262",
+  "baseline_blend_sha256": "87600538d8e36538ebde7ee3c824b5c49fae5fc7a008909ef43c2662ea437934",
+  "reviewed_blend_sha256": "34043da2e31173d1e6fb5ff16d630377d9d1cc69480ba6d88c40846a66d5d9f6",
+  "scope": "Geometric preservation only; visual approval pending; residual root dimples remain"
 }

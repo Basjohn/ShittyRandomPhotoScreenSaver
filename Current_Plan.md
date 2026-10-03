@@ -14,13 +14,13 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 Asset creation only, independent of runtime admission. `assets/usu/README.md` routes
 the editable Blender source, supplied art reference and review renders.
 
-- [ ] Review the constrained Usu correction in FRONT, SIDE, BACK, 3/4 and the
-  five perspective checks in `assets/usu/renders/Usu_Free_Angles.png`. Preserve
-  the front anchor, broad upper attachments, gentle flop and thick lower ears.
-  Resolve the residual side-temple indentation, shallow rear-root banding and
-  upper rear crown contour in HIGH SIDE;
-  check cheek/profile-eye readability and the repaired arm transitions before
-  treating the static modelling brief as complete.
+- [ ] Review the saved Usu open eye-border styling and constrained root/crown
+  repair against `assets/usu/renders/CORRECTIONS.png`. Use the plain FRONT,
+  SIDE, BACK, 3/4 and five free-angle renders linked in `assets/usu/README.md`.
+  Preserve the front charm, broad upper attachments, gentle flop and thick ears.
+  Resolve the remaining temple dimples and pinched rear-root depressions visible
+  in SIDE / HIGH SIDE / HIGH REAR; review the eye arcs' side foreshortening.
+  The mesh checks pass, but the full visual correction brief remains incomplete.
 - [ ] Obtain explicit user acceptance of the static silhouette before admitting
   any rigging. Animation, engine export and SRPSS integration remain outside this slice.
 

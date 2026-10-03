@@ -49,5 +49,6 @@
   "armatures": 0,
   "armature_modifiers": 0,
   "scene_object_actions": 0,
-  "packed_reference": true
+  "packed_reference": true,
+  "validation_shading": "Workbench material colors; fixed paint studio; no shadows, cavity, specular or outline"
 }
