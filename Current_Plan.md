@@ -157,16 +157,6 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## Operator transition requests (2026-10-03) | before Extruded Spectrum
-
-- [x] **Page Curl rework landed**: a growing laminate roll at an even pace, the print's colour kept under a clear
-  coat (physical check in Transitions.md).
-- [x] **Accordion Fold rework landed**: fold, flip over, unfold as the new picture on the sheet's back, over a
-  frosted backdrop (physical check in Transitions.md).
-- [x] **Beam landed**: a steady lightsaber-like blade with sparks and a curing scorch, colour from Settings
-  (physical check in Transitions.md).
-- [x] **Burn effects landed**: optional Flames and Ember Veins, off by default (physical check in Transitions.md).
-
 ## 5. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
