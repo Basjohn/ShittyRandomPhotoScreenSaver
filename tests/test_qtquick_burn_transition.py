@@ -40,6 +40,8 @@ def _params(**updates):
         "smoke_density": 0.5,
         "ash_enabled": True,
         "ash_density": 0.5,
+        "flames": False,
+        "ember_veins": False,
         "seed": 321.25,
     }
     values.update(updates)
@@ -174,3 +176,53 @@ def test_burn_quick_renderer_has_no_wall_clock_or_legacy_presenter_dependency():
     assert "GLCompositorWidget" not in source
     assert "DisplayWidget" not in source
     assert "QWidget" not in source
+
+
+def test_burn_requires_resolved_flame_and_vein_switches():
+    params = _burn_parameters(_params(flames=True))
+    assert params.flames is True and params.ember_veins is False
+    with pytest.raises(ValueError, match="resolved boolean parameter 'flames'"):
+        _burn_parameters(_params(flames=1))
+    with pytest.raises(ValueError, match="resolved boolean parameter 'ember_veins'"):
+        _burn_parameters(_params(ember_veins=None))
+
+
+def _burn_frames(capture, progress, **switches):
+    import numpy as np
+
+    settings = {"burn": {"direction": "Top to Bottom", "smoke_enabled": False, "ash_enabled": False,
+                         "char_width": 0.8, **switches}}
+    run = capture.run("burn", settings=settings, duration_ms=8000)
+    return np.asarray(capture.render(run, progress)[0].convert("RGB"), dtype=np.int16)
+
+
+@pytest.mark.qt
+def test_flames_rise_from_the_burning_edge_and_veins_glow_only_in_the_char(qt_app):
+    import numpy as np
+    from tools.transition_contact_sheet import TransitionCapture
+
+    capture = TransitionCapture(320, 180)
+    try:
+        source, destination = (np.asarray(image.convert("RGB"), dtype=np.int16) for image in capture.images)
+        plain = _burn_frames(capture, 0.45)
+        # The burning band: neither picture (glow, line and char).
+        band = (np.abs(plain - source).max(axis=2) > 2) & (np.abs(plain - destination).max(axis=2) > 2)
+        rows = np.nonzero(band.any(axis=1))[0]
+        assert rows.size
+        flames = _burn_frames(capture, 0.45, flames=True)
+        changed = np.abs(flames - plain).max(axis=2) > 0
+        assert changed.any()
+        # Top to Bottom: flames rise from the edge into the burned picture above it, never
+        # below the burning band; and they reach above the band.
+        changed_rows = np.nonzero(changed.any(axis=1))[0]
+        assert changed_rows.max() <= rows.max() + 2
+        assert changed_rows.min() < rows.min()
+        veins = _burn_frames(capture, 0.45, ember_veins=True)
+        vein_changes = np.abs(veins - plain).max(axis=2) > 0
+        assert vein_changes.any() and not (vein_changes & ~band).any()
+        for progress in (0.002, 0.998):
+            both = _burn_frames(capture, progress, flames=True, ember_veins=True)
+            target = source if progress < 0.5 else destination
+            assert np.abs(both - target).mean() < 0.5
+    finally:
+        capture.close()

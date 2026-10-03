@@ -1044,6 +1044,8 @@ class TransitionsTab(QWidget):
             ash_d = int(round(burn.get('ash_density', canonical_burn['ash_density']) * 100))
             self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
             self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
+            self.burn_flames_check.setChecked(bool(burn.get('flames', canonical_burn['flames'])))
+            self.burn_veins_check.setChecked(bool(burn.get('ember_veins', canonical_burn['ember_veins'])))
 
     def _build_flip_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -1901,6 +1903,24 @@ class TransitionsTab(QWidget):
         burn_ash_row.addWidget(self.burn_ash_check)
         burn_ash_row.addStretch()
 
+        burn_flames_row = _aligned_row(burn_layout, "", wrap=False)
+        self.burn_flames_check = QCheckBox("Flames")
+        self.burn_flames_check.setProperty("circleIndicator", True)
+        self.burn_flames_check.setChecked(bool(_transition_default("burn.flames")))
+        self.burn_flames_check.setToolTip("Flames licking up from the burning edge, in the glow and ember colours.")
+        self.burn_flames_check.stateChanged.connect(self._save_settings)
+        burn_flames_row.addWidget(self.burn_flames_check)
+        burn_flames_row.addStretch()
+
+        burn_veins_row = _aligned_row(burn_layout, "", wrap=False)
+        self.burn_veins_check = QCheckBox("Ember Veins")
+        self.burn_veins_check.setProperty("circleIndicator", True)
+        self.burn_veins_check.setChecked(bool(_transition_default("burn.ember_veins")))
+        self.burn_veins_check.setToolTip("Thin glowing cracks crawling through the fresh char.")
+        self.burn_veins_check.stateChanged.connect(self._save_settings)
+        burn_veins_row.addWidget(self.burn_veins_check)
+        burn_veins_row.addStretch()
+
         burn_ash_density_row = _aligned_row(burn_layout, "Ash Density:")
         self.burn_ash_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_ash_density_slider.setRange(0, 100)
@@ -2224,6 +2244,8 @@ class TransitionsTab(QWidget):
             getattr(self, 'burn_smoke_check', None),
             getattr(self, 'burn_smoke_density_slider', None),
             getattr(self, 'burn_ash_check', None),
+            getattr(self, 'burn_flames_check', None),
+            getattr(self, 'burn_veins_check', None),
             getattr(self, 'burn_ash_density_slider', None),
             # Future transition pages (lazy; absent until selected)
             getattr(self, 'glass_shards_spin', None),
@@ -2710,6 +2732,8 @@ class TransitionsTab(QWidget):
                 'smoke_density': self.burn_smoke_density_slider.value() / 100.0,
                 'ash_enabled': self.burn_ash_check.isChecked(),
                 'ash_density': self.burn_ash_density_slider.value() / 100.0,
+                'flames': self.burn_flames_check.isChecked(),
+                'ember_veins': self.burn_veins_check.isChecked(),
             }
         else:
             burn = _existing_subdict('burn')

@@ -572,6 +572,8 @@ def _resolve_burn(
                     ),
                 ),
             ),
+            "flames": _bool(_value(cfg, defaults, "flames"), bool(defaults["flames"])),
+            "ember_veins": _bool(_value(cfg, defaults, "ember_veins"), bool(defaults["ember_veins"])),
             "seed": float(rng.random()) * 1000.0,
         },
     )
