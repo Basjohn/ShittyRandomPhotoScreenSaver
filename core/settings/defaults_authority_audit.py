@@ -40,6 +40,17 @@ _SCAN_EXCLUDED_PARTS = frozenset({
     "tests",
     "venv",
 })
+# Git-ignored top-level scratch and build-output trees (copies, other sessions' tools, foreign
+# Python versions): not source this repository authors. A scipy copy for Python 3.13 under tmp/
+# once failed to parse and turned the audit red (2026-10-03).
+_SCAN_EXCLUDED_ROOTS = frozenset({
+    "build",
+    "release",
+    "temp",
+    "tests_tmp_appdata",
+    "tests_tmp_localappdata",
+    "tmp",
+})
 
 _DIRECT_DEFAULT_AUTHORITY_IMPORT_ALLOWLIST = frozenset({
     "core/settings/default_contract.py",
@@ -79,7 +90,7 @@ def _iter_python_files(root: Path) -> Iterable[Path]:
 
     for path in root.rglob("*.py"):
         relative = path.relative_to(root)
-        if any(part in _SCAN_EXCLUDED_PARTS for part in relative.parts):
+        if relative.parts[0] in _SCAN_EXCLUDED_ROOTS or any(part in _SCAN_EXCLUDED_PARTS for part in relative.parts):
             continue
         yield path
 
