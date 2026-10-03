@@ -230,6 +230,7 @@ def resolve_visualizer_activation_payload(
     normalized_live["mode"] = mode_key
     preset_index = resolve_preset_index_from_mapping(mode_key, normalized_live, prefix=prefix)
     resolved_config = apply_preset_to_config(mode_key, preset_index, dict(normalized_live))
+    resolved_config = apply_lender_presets_to_config(mode_key, resolved_config, prefix=prefix)
     resolved_config["mode"] = mode_key
     resolved_config = normalize_visualizer_section_mapping(
         resolved_config,
@@ -1065,6 +1066,26 @@ def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dic
         cleaned[key] = deepcopy(value)
     
     return cleaned
+
+
+def apply_lender_presets_to_config(
+    mode: str,
+    config: Dict[str, Any],
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Resolve the modes ``mode`` borrows from (its technical and shared-bar profile lenders)
+    through their own active presets, exactly as each lender resolves when it is active.
+
+    Without this a borrower read the lender's raw stored keys, or the lender's factory defaults
+    where none were stored, whatever preset the lender showed.
+    """
+    from core.settings.visualizer_mode_registry import get_profile_lender_modes
+
+    for lender in get_profile_lender_modes(mode):
+        index = resolve_preset_index_from_mapping(lender, config, prefix=prefix)
+        config = apply_preset_to_config(lender, index, config)
+    return config
 
 
 def switch_to_custom_if_needed(settings: "SettingsManager", mode: str) -> bool:

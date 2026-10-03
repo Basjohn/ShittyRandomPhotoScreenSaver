@@ -1668,10 +1668,14 @@ class SpotifyVisualizerSettings:
         )
         bubble_gradient_semantics_version = get_bubble_gradient_semantics_version(_raw, prefix=prefix)
         if apply_preset_overlay:
-            from core.settings.visualizer_presets import apply_preset_to_config
+            from core.settings.visualizer_presets import (
+                apply_lender_presets_to_config,
+                apply_preset_to_config,
+            )
 
             _preset_idx = resolve_preset_index_from_mapping(str(_mode), _raw, prefix=prefix)
             _raw = apply_preset_to_config(str(_mode), _preset_idx, _raw)
+            _raw = apply_lender_presets_to_config(str(_mode), _raw, prefix=prefix)
         _get, _get_mode_value, _get_per_mode_value = _build_mapping_readers(
             _raw,
             prefix=prefix,

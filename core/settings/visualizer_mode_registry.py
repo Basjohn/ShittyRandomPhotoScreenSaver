@@ -97,6 +97,10 @@ class VisualizerModeDescriptor:
     # Modes without their own technical controls may explicitly borrow one
     # canonical technical profile. Empty means the mode owns its own profile.
     technical_profile_mode: str = ""
+    # A borrower sees the lender (technical / shared-bar profile mode) as the lender itself
+    # shows: resolved through the lender's own active preset. False keeps the raw stored
+    # lender keys; only Sphere, whose S19 golden must reproduce today's hidden profile exactly.
+    lender_preset_resolved: bool = True
     # Optional renderer-only overflow wiring. Empty means the mode can never
     # bypass the canonical local visualizer clip. This is capability/routing
     # metadata only; the boolean value itself remains a canonical persisted
@@ -200,6 +204,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         shared_bar_appearance=False,
         shared_bar_profile_mode="spectrum",
         technical_profile_mode="spectrum",
+        lender_preset_resolved=False,
         renderer_overflow_setting="sphere_allow_overflow",
         guided_setup_offered=False,
     ),
@@ -329,6 +334,21 @@ def get_technical_profile_mode(mode_id: str) -> str:
     return profile
 
 
+
+
+def get_profile_lender_modes(mode_id: str) -> tuple[str, ...]:
+    """The other modes whose settings ``mode_id`` borrows, each to be resolved through the
+    lender's own active preset (empty for a mode that owns its profiles, and for Sphere)."""
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if not descriptor.lender_preset_resolved:
+        return ()
+    lenders: list[str] = []
+    for lender in (descriptor.technical_profile_mode, descriptor.shared_bar_profile_mode):
+        lender = str(lender or "").strip().lower()
+        if lender and lender != descriptor.mode_id and lender not in lenders:
+            lenders.append(lender)
+    return tuple(lenders)
 
 
 _MODE_SETTING_FAMILY_SUFFIXES: dict[str, tuple[str, ...]] = {

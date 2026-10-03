@@ -77,14 +77,9 @@ Operator direction (2026-10-03, after testing Extruded Spectrum and Shockwave Gr
 fall behind the features built on it. Every infrastructure item below is **measured before and after** (TIME_ELAPSED +
 per-frame flush, median/p90, CPU submit and Python GL-call count, both displays where relevant). Work in this order:
 
-- [ ] **H0. Borrowed technical profile ignores the lender's preset (defect, found in the 2026-10-03 logs).** Extruded
-  Spectrum and Shockwave Grid borrow Spectrum's technical profile, bar colours and frame-runtime source settings, but
-  `resolve_visualizer_activation_payload` applies only the *active* mode's preset. With Spectrum on a curated preset the
-  borrower read the raw stored `spectrum_*` keys, or Spectrum's factory defaults where none were stored (sensitivity
-  0.4, adaptive, AGC 0.5, block 512): the bars sat pinned at 1.0 ("stuck, unreactive") until a later Settings pass
-  happened to store the preset's values and the next generation looked fine. Fix at the activation owner: resolve the
-  lender through its own active preset, so a borrower always sees what the lender shows. Sphere keeps today's raw-key
-  resolution until its S19 golden is captured (its plan item requires today's hidden profile reproduced exactly).
+- [x] **H0. Borrowed technical profile ignored the lender's preset** (the "pinned, unreactive" Extruded Spectrum of
+  2026-10-03): fixed at the activation owner, bars `tests/test_visualizer_profile_lender_presets.py`. Sphere keeps its
+  raw-key resolution until S19 captures its golden (S19 item: replace it with Sphere's own profile).
 - [ ] **H1. First use of a 3D Visualizer: verify the reveal hides it, don't preload.** Operator position: not loading
   everything at all times is deliberate as the modes get ambitious; a one-time hitch on first activation is acceptable
   **only if** the mode's content fade-in starts after it, it does not stop the world, and it does not poison later frames
