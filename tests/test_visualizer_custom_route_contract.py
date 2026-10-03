@@ -108,6 +108,7 @@ def _manager(position: str) -> DisplayManager:
     from core.settings.models import ShadowSettings
 
     manager._shadow_values_snapshot = asdict(ShadowSettings())
+    manager.settings_manager = None        # 3D Detail tiers then resolve from General's Auto
     manager.displays = []
     manager._widgets_config_snapshot = {
         "family_activation": {"media": True, "visualizers": True},

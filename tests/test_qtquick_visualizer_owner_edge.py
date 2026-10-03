@@ -265,9 +265,14 @@ def test_display_transfer_moves_publication_edge_without_recreating_controller()
             self.sinks = []
             self.double = []
             self.middle = []
+            self.image_listeners = []
+            self.presentation_image = None
 
         def set_visualizer_viewport_config_sink(self, sink):
             self.sinks.append(sink)
+
+        def set_presentation_image_listener(self, listener):
+            self.image_listeners.append(listener)
 
         def set_visualizer_double_click_admission(self, value):
             self.double.append(value)
@@ -317,6 +322,9 @@ def test_display_transfer_moves_publication_edge_without_recreating_controller()
     assert owner._runtime is target
     assert wake.requests == 1
     assert source.scene_controller.sinks[-1] is None
+    # The reflected wallpaper follows the photograph of the display the Visualizer is on.
+    assert source.scene_controller.image_listeners[-1] is None
+    assert target.scene_controller.image_listeners[-1] == owner._refresh_backdrop
     assert target.scene_controller.sinks[-1] == controller.set_custom_viewport_override
 
     assert owner.retire() is True
