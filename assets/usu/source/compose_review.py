@@ -44,3 +44,14 @@ for i,(label,stem) in enumerate(free_views):
 free_draw.multiline_text((1304,900),"STATIC SHAPE REVIEW\n\nSame geometry in every view.\nVisual approval pending.",
                          fill=(25,25,25),font=font,spacing=12)
 free_sheet.save(ASSET/"renders"/"Usu_Free_Angles.png")
+
+details=Image.new("RGB",(2000,2100),(244,244,244))
+detail_draw=ImageDraw.Draw(details)
+for i,(label,stem) in enumerate([("3/4 ATTACHMENT","three_quarter"),("SIDE SLOPE","side"),
+                                ("REAR HEAD","back"),("HIGH REAR","high_rear")]):
+    x,y=(i%2)*1000,(i//2)*1050
+    detail_draw.text((x+24,y+10),label,fill=(25,25,25),font=font)
+    detail=Image.open(ASSET/"renders"/f"Usu_detail_{stem}.png").convert("RGB")
+    assert detail.size==(1000,1000)
+    details.paste(detail,(x,y+50))
+details.save(ASSET/"renders"/"Usu_Attachment_Details.png")

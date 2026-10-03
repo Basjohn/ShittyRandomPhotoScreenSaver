@@ -1,51 +1,68 @@
 {
-  "front_mask_resolution": [
-    2000,
-    2400
-  ],
-  "silhouette_intersection_over_union": 0.9931662685063299,
-  "changed_silhouette_pixels": 10092,
-  "changed_fraction_of_union": 0.006833731493670063,
-  "cage_changes": {
+  "baseline_commit": "710cd414",
+  "unchanged_surfaces": {
     "Usu_Body_And_Arms": {
-      "max_abs_xyz": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "changed_vertices": 0,
+      "same_vertex_count": true,
+      "max_abs_coordinate_change": 0.0,
       "same_faces": true
     },
     "Usu_Foot_L": {
-      "max_abs_xyz": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "changed_vertices": 0,
+      "same_vertex_count": true,
+      "max_abs_coordinate_change": 0.0,
       "same_faces": true
     },
     "Usu_Foot_R": {
-      "max_abs_xyz": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "changed_vertices": 0,
-      "same_faces": true
-    },
-    "Usu_Head_And_Ears": {
-      "max_abs_xyz": [
-        0.09351903200149536,
-        0.158613383769989,
-        0.28435778617858887
-      ],
-      "changed_vertices": 1809,
+      "same_vertex_count": true,
+      "max_abs_coordinate_change": 0.0,
       "same_faces": true
     }
   },
-  "baseline_commit": "68943262",
-  "baseline_blend_sha256": "87600538d8e36538ebde7ee3c824b5c49fae5fc7a008909ef43c2662ea437934",
-  "reviewed_blend_sha256": "34043da2e31173d1e6fb5ff16d630377d9d1cc69480ba6d88c40846a66d5d9f6",
-  "scope": "Geometric preservation only; visual approval pending; residual root dimples remain"
+  "face_details": [
+    {
+      "object": "Usu_Eye_Outline_L",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Iris_Rim_L",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Iris_L",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Glint_L",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Brow_L",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Outline_R",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Iris_Rim_R",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Iris_R",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Eye_Glint_R",
+      "max_abs_coordinate_change": 0.0
+    },
+    {
+      "object": "Usu_Brow_R",
+      "max_abs_coordinate_change": 0.0
+    }
+  ],
+  "front_silhouette_intersection_over_union": 0.9837820672433267,
+  "raster_size": [
+    2000,
+    2400
+  ],
+  "interpretation": "Preservation measurement only; user visual approval remains required."
 }

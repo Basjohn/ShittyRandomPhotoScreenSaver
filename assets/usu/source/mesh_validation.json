@@ -35,10 +35,10 @@
       "nonadjacent_subdivision_self_intersections": 0
     },
     "Usu_Head_And_Ears": {
-      "vertices": 4393,
-      "faces": 4392,
-      "quads": 4390,
-      "triangles": 2,
+      "vertices": 17568,
+      "faces": 17566,
+      "quads": 17566,
+      "triangles": 0,
       "nonmanifold_edges": 0,
       "loose_vertices": 0,
       "zero_area_faces": 0,
