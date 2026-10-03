@@ -17,6 +17,34 @@ from widgets.spotify_visualizer.transient_bus import (
 )
 
 
+def test_the_frame_musical_level_is_what_an_onset_there_carries(monkeypatch):
+    """``musical_level`` (Sphere's per-frame read) and ``MusicalOnset`` (Shockwave's) are one
+    measurement: an onset's loudness/presence equal the bus's level on its frame; a frame
+    without a loudness leaves the level as it was."""
+    from widgets.spotify_visualizer import transient_bus
+    from widgets.spotify_visualizer.transient_bus import musical_weight
+
+    clock = [100.0]
+
+    def tick():
+        clock[0] += 0.01
+        return clock[0]
+
+    monkeypatch.setattr(transient_bus.time, "time", tick)
+    tb = TransientBus(threshold_k=1.0, transient_decay=0.3)
+    assert tb.musical_level == (0.0, 0.0)
+    for _ in range(20):
+        tb.update(0.1, 0.1, 0.1, loudness=0.3)
+    quiet = tb.musical_level
+    assert quiet[0] == 0.3 and quiet[1] > 0.0
+    tb.update(0.9, 0.1, 0.1, loudness=2.4)
+    onset = tb.recent_onsets[-1]
+    assert tb.musical_level == (onset.loudness, onset.presence)
+    assert onset.presence > quiet[1] and musical_weight(*tb.musical_level) > musical_weight(*quiet)
+    tb.update(0.1, 0.1, 0.1)
+    assert tb.musical_level == (onset.loudness, onset.presence)
+
+
 class TestTransientBusBasic:
     """Core spectral flux and onset detection."""
 

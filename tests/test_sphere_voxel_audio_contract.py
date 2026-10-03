@@ -4,9 +4,6 @@ from core.settings.defaults_snapshot_builder import build_defaults_snapshot, bui
 
 import ast
 import re
-import importlib.util
-import sys
-import types
 
 import pytest
 from dataclasses import dataclass
@@ -17,47 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_plain_visualizer_modules():
-    root_text = str(ROOT)
-    if root_text not in sys.path:
-        sys.path.insert(0, root_text)
-    for name in (
-        "widgets.spotify_visualizer.sphere_frame_runtime",
-        "widgets.spotify_visualizer.render_state",
-        "widgets.spotify_visualizer.frame_runtime_lifecycle",
-    ):
-        sys.modules.pop(name, None)
+    # The real modules, imported normally: re-executing them (this loader once popped and
+    # reloaded render_state) gave every later test in the process a second copy of the frame
+    # classes, failing their isinstance checks.
+    from widgets.spotify_visualizer import render_state, sphere_frame_runtime
 
-    widgets_pkg = sys.modules.setdefault("widgets", types.ModuleType("widgets"))
-    widgets_pkg.__path__ = [str(ROOT / "widgets")]
-    vis_pkg = sys.modules.setdefault(
-        "widgets.spotify_visualizer", types.ModuleType("widgets.spotify_visualizer")
-    )
-    vis_pkg.__path__ = [str(ROOT / "widgets/spotify_visualizer")]
-
-    def load(name: str, relative: str):
-        if name in sys.modules:
-            return sys.modules[name]
-        path = ROOT / relative
-        spec = importlib.util.spec_from_file_location(name, path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-        return module
-
-    render_state = load(
-        "widgets.spotify_visualizer.render_state",
-        "widgets/spotify_visualizer/render_state.py",
-    )
-    load(
-        "widgets.spotify_visualizer.frame_runtime_lifecycle",
-        "widgets/spotify_visualizer/frame_runtime_lifecycle.py",
-    )
-    sphere_runtime = load(
-        "widgets.spotify_visualizer.sphere_frame_runtime",
-        "widgets/spotify_visualizer/sphere_frame_runtime.py",
-    )
-    return render_state, sphere_runtime
+    return render_state, sphere_frame_runtime
 
 
 def _params(
@@ -113,7 +75,12 @@ def _resolve(
     source_active=True,
     scheduler=None,
     params=None,
+    musical=None,
 ):
+    live = presence or reactive or render_state.VisualizerEnergyState()
+    if musical is None:
+        # The bus's loudness is the peak band's unclamped level; at the track's usual presence.
+        musical = (max(live.bass, live.mid, live.high), 1.0)
     return runtime.resolve(
         now_ts=ts,
         runtime_generation=1,
@@ -122,12 +89,18 @@ def _resolve(
         source_active=source_active,
         energy=energy or render_state.VisualizerEnergyState(),
         reactive_energy=reactive or render_state.VisualizerEnergyState(),
-        presence_energy=presence or reactive or render_state.VisualizerEnergyState(),
+        presence_energy=live,
+        musical_level=tuple(float(value) for value in musical),
         transient=transient or render_state.VisualizerTransientState(),
         analysis_spectrum=tuple(spectrum) if spectrum is not None else tuple(0.10 for _ in range(64)),
         event_scheduler=scheduler,
         parameters=params or _params(render_state),
     )
+
+
+# Ordinary music for fixtures whose small band values stand for a normal passage, not quietness:
+# loudness well above the near-silence edge, at the track's usual presence.
+_ORDINARY_MUSIC = (1.0, 1.0)
 
 
 def test_voxel_renderer_is_sectional_audio_geometry_not_time_motion() -> None:
@@ -438,10 +411,10 @@ def test_section_attack_is_aggressive_and_fallout_is_gentle() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     runtime = sphere_runtime.SphereFrameRuntime()
     base = render_state.VisualizerEnergyState(bass=0.25, mid=0.25, high=0.20, overall=0.24)
-    _resolve(runtime, render_state, ts=4.0, reactive=base)
+    _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=4.0, reactive=base)
     hit = _resolve(
         runtime,
-        render_state,
+        render_state, musical=_ORDINARY_MUSIC,
         ts=4.02,
         reactive=base,
         scheduler=_Scheduler(kick=_Event(1.0)),
@@ -452,13 +425,13 @@ def test_section_attack_is_aggressive_and_fallout_is_gentle() -> None:
 
     after_250ms = hit
     for step in range(1, 6):
-        after_250ms = _resolve(runtime, render_state, ts=4.02 + step * 0.05, reactive=base)
+        after_250ms = _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=4.02 + step * 0.05, reactive=base)
     assert after_250ms is not None
     assert max(after_250ms.section_drives) > peak * 0.45
 
     late = after_250ms
     for step in range(6, 70):
-        late = _resolve(runtime, render_state, ts=4.02 + step * 0.05, reactive=base)
+        late = _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=4.02 + step * 0.05, reactive=base)
     assert late is not None
     assert max(late.section_drives) < 0.03
 
@@ -473,24 +446,24 @@ def test_low_band_spectral_onset_fragments_and_held_spectrum_does_not_repeat() -
         kick_spectrum[index] = 0.80
 
     runtime = sphere_runtime.SphereFrameRuntime()
-    _resolve(runtime, render_state, ts=5.0, reactive=energy, presence=energy, spectrum=quiet)
-    _resolve(runtime, render_state, ts=5.02, reactive=energy, presence=energy, spectrum=kick_spectrum)
-    hit = _resolve(runtime, render_state, ts=5.04, reactive=energy, presence=energy, spectrum=quiet)
+    _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=5.0, reactive=energy, presence=energy, spectrum=quiet)
+    _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=5.02, reactive=energy, presence=energy, spectrum=kick_spectrum)
+    hit = _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=5.04, reactive=energy, presence=energy, spectrum=quiet)
     assert hit is not None
     assert max(hit.section_drives) > 0.70
     assert runtime._packet_sources_since_diag["spectral"] == 1
 
     for step in range(1, 18):
         _resolve(
-            runtime, render_state, ts=5.04 + step * 0.04,
+            runtime, render_state, musical=_ORDINARY_MUSIC, ts=5.04 + step * 0.04,
             reactive=energy, presence=energy, spectrum=quiet,
         )
     assert runtime._packet_sources_since_diag["spectral"] == 1
 
     kick_runtime = sphere_runtime.SphereFrameRuntime()
-    _resolve(kick_runtime, render_state, ts=6.0, reactive=energy, presence=energy)
+    _resolve(kick_runtime, render_state, musical=_ORDINARY_MUSIC, ts=6.0, reactive=energy, presence=energy)
     kick_frame = _resolve(
-        kick_runtime, render_state, ts=6.04, reactive=energy, presence=energy,
+        kick_runtime, render_state, musical=_ORDINARY_MUSIC, ts=6.04, reactive=energy, presence=energy,
         scheduler=_Scheduler(kick=_Event(1.0)),
     )
     assert kick_frame is not None
@@ -731,9 +704,9 @@ def test_incoming_blocks_are_event_owned_and_decay_instead_of_spawning_ambiently
 
     # Generic percussion may now author one event-owned sparse arrival packet too.
     kick_runtime = sphere_runtime.SphereFrameRuntime()
-    _resolve(kick_runtime, render_state, ts=20.0, reactive=quiet, presence=quiet)
+    _resolve(kick_runtime, render_state, musical=_ORDINARY_MUSIC, ts=20.0, reactive=quiet, presence=quiet)
     kick = _resolve(
-        kick_runtime, render_state, ts=20.02, reactive=quiet, presence=quiet,
+        kick_runtime, render_state, musical=_ORDINARY_MUSIC, ts=20.02, reactive=quiet, presence=quiet,
         scheduler=_Scheduler(kick=_Event(1.0), snare=_Event(1.0)),
     )
     assert kick is not None
@@ -742,9 +715,9 @@ def test_incoming_blocks_are_event_owned_and_decay_instead_of_spawning_ambiently
 
     # A vocal swell still owns a strong sparse arrival packet.
     vocal_runtime = sphere_runtime.SphereFrameRuntime()
-    _resolve(vocal_runtime, render_state, ts=21.0, reactive=quiet, presence=quiet)
+    _resolve(vocal_runtime, render_state, musical=_ORDINARY_MUSIC, ts=21.0, reactive=quiet, presence=quiet)
     vocal = _resolve(
-        vocal_runtime, render_state, ts=21.02, reactive=quiet, presence=quiet,
+        vocal_runtime, render_state, musical=_ORDINARY_MUSIC, ts=21.02, reactive=quiet, presence=quiet,
         scheduler=_Scheduler(vocal_swell=_Event(0.8)),
     )
     assert vocal is not None
@@ -752,7 +725,7 @@ def test_incoming_blocks_are_event_owned_and_decay_instead_of_spawning_ambiently
     assert 0 <= vocal.incoming_section < 8
 
     # Arrival is event-owned with gentle fallout rather than ambient spawning.
-    later = _resolve(vocal_runtime, render_state, ts=21.52, reactive=quiet, presence=quiet)
+    later = _resolve(vocal_runtime, render_state, musical=_ORDINARY_MUSIC, ts=21.52, reactive=quiet, presence=quiet)
     assert later is not None
     assert 0.0 < later.incoming_drive < vocal.incoming_drive
 
@@ -1740,7 +1713,11 @@ def test_rejected_three_band_rise_packet_authority_is_absent_from_sphere_runtime
 
 
 def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -> None:
-    """Only admission changes; qualified packet/cohort strength remains owned by events."""
+    """The two floors gate admission on the musical weight (``musical_weight``), each its own
+    path: an event in a passage well below the track's running level (weight ~0.45) passes a
+    low floor and is refused by a higher one; what an admitted event earns is unchanged."""
+    from widgets.spotify_visualizer.transient_bus import musical_weight
+
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     reactive = render_state.VisualizerEnergyState(
         bass=0.45, mid=0.52, high=0.28, overall=0.44,
@@ -1748,6 +1725,9 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
     presence = render_state.VisualizerEnergyState(
         bass=0.50, mid=0.55, high=0.35, overall=0.50,
     )
+    quiet_passage = (1.0, 0.45)
+    weight = musical_weight(*quiet_passage)
+    low, high = weight - 0.2, weight + 0.2
 
     def event_at(fragment_floor: float | None, particle_floor: float | None):
         runtime = sphere_runtime.SphereFrameRuntime()
@@ -1759,12 +1739,12 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
         parameters = render_state.FrozenFields(tuple(sorted(settings.items())))
         _resolve(
             runtime, render_state, ts=10.0, reactive=reactive,
-            presence=presence, params=parameters,
+            presence=presence, params=parameters, musical=quiet_passage,
         )
         frame = _resolve(
             runtime, render_state, ts=10.05, reactive=reactive,
             presence=presence, scheduler=_Scheduler(kick=_Event(1.0)),
-            params=parameters,
+            params=parameters, musical=quiet_passage,
         )
         assert frame is not None
         return frame, runtime._packet_sources_since_diag["kick"]
@@ -1775,21 +1755,83 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
     assert baseline.section_drives == defaults.section_drives
     assert baseline.particle_cohorts == defaults.particle_cohorts
     assert len(defaults.particle_cohorts) == 1
+    passed, packet_count = event_at(low, low)
+    assert packet_count == 1 and passed.section_drives == baseline.section_drives
+    assert passed.particle_cohorts == baseline.particle_cohorts
 
-    no_fragments, packet_count = event_at(0.99, 0.075)
+    no_fragments, packet_count = event_at(high, 0.075)
     assert packet_count == 0
     assert not any(no_fragments.section_drives)
     assert len(no_fragments.particle_cohorts) == 1  # separate particle gate
 
-    no_particles, packet_count = event_at(0.0, 0.99)
+    no_particles, packet_count = event_at(0.0, high)
     assert packet_count == 1
     assert no_particles.section_drives == baseline.section_drives
     assert no_particles.particle_cohorts == ()  # separate fragment gate
 
-    both_filtered, packet_count = event_at(0.99, 0.99)
+    both_filtered, packet_count = event_at(high, high)
     assert packet_count == 0
     assert not any(both_filtered.section_drives)
     assert both_filtered.particle_cohorts == ()
+
+
+def _kick_at(sphere_runtime, render_state, musical, *, live=None):
+    """One kick + vocal swell after an ordinary preroll, at the given (loudness, presence)."""
+    runtime = sphere_runtime.SphereFrameRuntime()
+    reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
+    lane = live or render_state.VisualizerEnergyState(bass=2.5, mid=2.5, high=1.2, overall=2.0)
+    params = _params(render_state, incoming_density_response=True, incoming_transient_velocity=True)
+    _resolve(runtime, render_state, ts=30.0, reactive=reactive, presence=lane, params=params,
+             musical=_ORDINARY_MUSIC)
+    frame = _resolve(runtime, render_state, ts=30.05, reactive=reactive, presence=lane, params=params,
+                     musical=musical, scheduler=_Scheduler(kick=_Event(1.0), vocal_swell=_Event(0.9)))
+    assert frame is not None
+    return frame
+
+
+def test_near_silence_earns_nothing_and_a_full_blast_the_full_reaction() -> None:
+    """Operator 2026-10-03: near-silence fragmented and threw particles as fully as a full blast,
+    whatever the floors. The same typed events now earn by the shared musical rule: nothing in
+    near-silence (the clamped live lane can sit at its cap regardless), less in a passage quieter
+    than the track's running level, the full reaction at the usual level and above."""
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+
+    def reaction(musical):
+        frame = _kick_at(sphere_runtime, render_state, musical)
+        cohort = max((c.strength for c in frame.particle_cohorts), default=0.0)
+        return max(frame.section_drives), cohort, frame
+
+    silent_fragment, silent_cohort, _ = reaction((0.05, 0.1))      # under the near-silence edge
+    faint_fragment, faint_cohort, _ = reaction((0.19, 0.25))       # first frame back from a pause
+    quiet_fragment, quiet_cohort, _ = reaction((1.0, 0.5))          # a quiet passage of a loud track
+    usual_fragment, usual_cohort, usual = reaction(_ORDINARY_MUSIC)
+    loud_fragment, loud_cohort, loud = reaction((2.0, 1.6))         # louder than usual
+    assert silent_fragment == 0.0 and silent_cohort == 0.0
+    assert faint_fragment < 0.1 * usual_fragment and faint_cohort == 0.0
+    assert 0.0 < quiet_fragment < usual_fragment and 0.0 < quiet_cohort < usual_cohort
+    assert usual_fragment > 0.9 and usual.particle_cohorts
+    assert loud_fragment >= usual_fragment and loud_cohort >= usual_cohort
+    assert loud.incoming_density >= usual.incoming_density
+
+
+def test_the_usual_level_is_learned_from_the_music_so_a_loud_track_does_not_mute_itself() -> None:
+    """Events clearly part of the music teach Sphere the track's usual presence (from a neutral
+    1.0); a track whose events sit above 1 then earns the full reward at its own usual level."""
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    runtime = sphere_runtime.SphereFrameRuntime()
+    reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
+    ts = 40.0
+    _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=_ORDINARY_MUSIC)
+    for _ in range(40):
+        ts += 0.3
+        _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=(1.5, 1.4),
+                 scheduler=_Scheduler(kick=_Event(1.0)))
+    assert runtime._usual_presence == pytest.approx(1.4, abs=0.02)
+    # Near-silence teaches nothing.
+    usual = runtime._usual_presence
+    _resolve(runtime, render_state, ts=ts + 0.3, reactive=reactive, musical=(0.05, 0.1),
+             scheduler=_Scheduler(kick=_Event(1.0)))
+    assert runtime._usual_presence == usual
 
 
 def test_sphere_energy_floor_persistence_and_preset_parity() -> None:

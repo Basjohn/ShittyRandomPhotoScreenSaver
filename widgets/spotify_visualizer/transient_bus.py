@@ -75,6 +75,41 @@ _ONSET_SERIALS = itertools.count(1)
 # Time constant of the running loudness ``presence`` compares an onset with (seconds).
 LOUDNESS_REFERENCE_SECONDS = 6.0
 
+# How much an onset counts musically, for every consumer that rewards onsets (Shockwave Grid's
+# waves, Voxel Sphere's fragments and particles): an absolute loudness below MUSICAL_QUIET's
+# first edge counts for nothing (near-silence), and so does a presence below MUSICAL_PRESENCE's
+# (a quiet passage inside a loud track). Against the track's usual onset presence, learned at
+# MUSICAL_USUAL_RATE from onsets clearly part of the music, a louder onset stands out and a
+# softer one recedes.
+MUSICAL_QUIET = (0.08, 0.6)
+MUSICAL_PRESENCE = (0.15, 0.8)
+MUSICAL_USUAL_RATE = 0.12
+
+
+def _smoothstep(edge0: float, edge1: float, value: float) -> float:
+    t = max(0.0, min(1.0, (float(value) - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def musical_weight(loudness: float, presence: float) -> float:
+    """0..1: how much an onset at ``loudness`` and ``presence`` (``MusicalOnset``) counts at all."""
+    return (_smoothstep(MUSICAL_QUIET[0], MUSICAL_QUIET[1], loudness)
+            * _smoothstep(MUSICAL_PRESENCE[0], MUSICAL_PRESENCE[1], presence))
+
+
+def musical_emphasis(presence: float, usual: float) -> float:
+    """How far an onset stands out against the track's ``usual`` onset presence: 1 for a usual
+    one, up to 2^1.5 for a much louder one, down to 0.5^1.5 for a much softer one."""
+    return max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
+
+
+def learn_usual_presence(usual: float, presence: float) -> float:
+    """The track's usual onset presence after an onset at ``presence`` (start from 1.0, neutral):
+    only an onset clearly part of the music moves it."""
+    if float(presence) >= MUSICAL_PRESENCE[1]:
+        return float(usual) + (float(presence) - float(usual)) * MUSICAL_USUAL_RATE
+    return float(usual)
+
 
 @dataclass(slots=True)
 class OnsetEvent:
@@ -147,6 +182,8 @@ class TransientBus:
         # Published onsets (replaced, never mutated) and the running loudness.
         self._recent_onsets: tuple[MusicalOnset, ...] = ()
         self._loudness_reference: float = 0.0
+        # The latest frame's (loudness, presence), replaced whole (readers never see half).
+        self._musical_level: tuple[float, float] = (0.0, 0.0)
 
         # Timing
         self._last_onset_ts: float = 0.0
@@ -185,6 +222,8 @@ class TransientBus:
             else:
                 alpha = 1.0 - math.exp(-min(elapsed, 1.0) / LOUDNESS_REFERENCE_SECONDS)
                 self._loudness_reference += (level - self._loudness_reference) * alpha
+            reference = self._loudness_reference
+            self._musical_level = (level, level / reference if reference > 1e-6 else 0.0)
 
         if not self._has_prev:
             # First frame — seed previous values, no flux yet
@@ -290,7 +329,7 @@ class TransientBus:
                     ) % self._RING_CAPACITY
 
                     # Publish it (one tuple replacement: readers never see a partial event).
-                    level = 0.0 if loudness is None else max(0.0, float(loudness))
+                    level, presence = self._musical_level if loudness is not None else (0.0, 0.0)
                     self._recent_onsets = self._recent_onsets[1 - self.PUBLISHED_ONSETS:] + (MusicalOnset(
                         serial=next(_ONSET_SERIALS),
                         timestamp=now,
@@ -298,8 +337,7 @@ class TransientBus:
                         strength=self._onset_strength,
                         magnitude=max_t,
                         loudness=level,
-                        presence=(level / self._loudness_reference
-                                  if loudness is not None and self._loudness_reference > 1e-6 else 0.0),
+                        presence=presence,
                     ),)
 
                     # Feed event micro-scheduler (§2.4)
@@ -347,6 +385,11 @@ class TransientBus:
     def recent_onsets(self) -> tuple[MusicalOnset, ...]:
         """The last ``PUBLISHED_ONSETS`` onsets, oldest first (an immutable tuple)."""
         return self._recent_onsets
+
+    @property
+    def musical_level(self) -> tuple[float, float]:
+        """The latest frame's (loudness, presence), as an onset there would carry them."""
+        return self._musical_level
 
     def get_scheduler(self) -> "TransientEventScheduler":
         """Return the event micro-scheduler, creating it on first access."""

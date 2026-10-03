@@ -19,7 +19,14 @@ The response hierarchy is intentionally split by timescale:
 * optional fragment interpolation is visual-only: audio packets still land on the
   exact event frame while rendered displacement remains position/velocity-continuous;
 * whole-shell rotation follows current articulation with a short release rather than
-  holding near maximum for the duration of active playback.
+  holding near maximum for the duration of active playback;
+* what an admitted event earns (fragment amplitude, cohort travel/population/velocity,
+  tracer travel) follows the shared musical rule of the transient bus (``musical_weight`` x
+  ``musical_emphasis``): nothing in near-silence or in a passage far quieter than the track's
+  running level, the full reward at the track's usual level and above. The live pre-AGC lane is
+  clamped at 2.5 and sits at that cap through ordinary music, so it can no longer tell those
+  apart (operator 2026-10-03: near-silence fragmented as fully as a full blast). The two energy
+  floors apply to this 0..1 musical weight.
 
 The accepted stable-face/bevel renderer contract is independent of all of this and
 must remain anchored to each cube's unrotated local face identity.
@@ -37,6 +44,11 @@ from widgets.spotify_visualizer.render_state import (
     SphereParticleCohort,
     VisualizerEnergyState,
     VisualizerTransientState,
+)
+from widgets.spotify_visualizer.transient_bus import (
+    learn_usual_presence,
+    musical_emphasis,
+    musical_weight,
 )
 
 logger = get_logger(__name__)
@@ -161,6 +173,9 @@ _FLUX_EVENT_REFRACTORY_S = 0.15
 # rise latches as counterfeit event authorities. Crest remains diagnostic /
 # whole-shell articulation only; generic packet authority is spectral peak-picking.
 _PACKET_MIN_INTERVAL_S = 0.16
+# A packet whose musically weighted amplitude falls below this is not emitted (no flicker of
+# barely-moved sections in near-silence).
+_PACKET_MIN_AMPLITUDE = 0.05
 _TRANSIENT_BASELINE_S = 0.42
 _TYPED_VOCAL_MIN_STRENGTH = 0.12
 _TYPED_KICK_MIN_STRENGTH = 0.16
@@ -417,6 +432,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         self._fullness_initialized = False
         self._last_packet_ts = -1.0e9
         self._source_active = False
+        # The track's usual event presence (``learn_usual_presence``), from a neutral 1.0.
+        self._usual_presence = 1.0
+        self._last_reward = 0.0
 
         self._last_diag_ts = 0.0
         self._packets_since_diag = 0
@@ -802,11 +820,14 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         energy: VisualizerEnergyState,
         reactive_energy: VisualizerEnergyState,
         presence_energy: VisualizerEnergyState,
+        musical_level: tuple[float, float],
         transient: VisualizerTransientState,
         analysis_spectrum: tuple[float, ...],
         event_scheduler: Any,
         parameters: FrozenFields,
     ) -> SphereResolvedFrame | None:
+        """``musical_level`` is the transient bus's (loudness, presence) for this frame
+        (``BeatEngine.get_musical_level``)."""
         if not isinstance(parameters, FrozenFields):
             raise TypeError("Sphere runtime requires configure-owned FrozenFields")
         for value, name in (
@@ -820,6 +841,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             raise TypeError("Sphere runtime requires VisualizerTransientState")
         if not isinstance(analysis_spectrum, tuple):
             raise TypeError("Sphere runtime requires immutable pre-AGC analysis spectrum tuple")
+        if not isinstance(musical_level, tuple) or len(musical_level) != 2:
+            raise TypeError("Sphere runtime requires the (loudness, presence) musical level")
 
         now = float(now_ts)
         active = bool(source_active)
@@ -894,6 +917,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._fullness_initialized = bool(active)
             self._last_packet_ts = -1.0e9
             self._source_active = active
+            self._usual_presence = 1.0
+            self._last_reward = 0.0
             self._last_diag_ts = now
             self._packets_since_diag = 0
             for key in self._packet_sources_since_diag:
@@ -938,6 +963,14 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             live_mid * 0.70,
             live_high * 0.70,
         ) if active else 0.0
+        # What an admitted event earns this frame (0..1): the shared musical rule.
+        level_loudness, level_presence = (
+            (_bounded_nonnegative(musical_level[0], 1.0e6), _bounded_nonnegative(musical_level[1], 1.0e6))
+            if active else (0.0, 0.0)
+        )
+        musical = musical_weight(level_loudness, level_presence)
+        reward = _clamp01(musical * musical_emphasis(level_presence, self._usual_presence))
+        self._last_reward = reward
         if not active:
             self._incoming_gate_open = False
         elif self._incoming_gate_open:
@@ -1111,21 +1144,23 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             # Authored acoustic floors are post-qualification admission gates.
             # With their defaults, the accepted typed/onset event contract is identical.
             fragment_energy_floor = _clamp01(float(parameters.get("sphere_fragment_energy_floor", 0.0)))
-            if candidates and intake_energy >= fragment_energy_floor:
+            if candidates and musical > 0.0 and musical >= fragment_energy_floor:
                 _priority, packet_source, packet_amplitude = max(candidates, key=lambda item: item[0])
-                packet_section = self._section_for_change(
-                    bass=bass_now,
-                    mid=mid_now,
-                    high=high_now,
-                    source=packet_source,
-                )
-                emitted = self._emit_packet(
-                    now=now,
-                    source=packet_source,
-                    section=packet_section,
-                    amplitude=packet_amplitude,
-                )
-                _ = emitted
+                packet_amplitude *= reward
+                if packet_amplitude >= _PACKET_MIN_AMPLITUDE:
+                    packet_section = self._section_for_change(
+                        bass=bass_now,
+                        mid=mid_now,
+                        high=high_now,
+                        source=packet_source,
+                    )
+                    emitted = self._emit_packet(
+                        now=now,
+                        source=packet_source,
+                        section=packet_section,
+                        amplitude=packet_amplitude,
+                    )
+                    _ = emitted
 
             # Density and velocity are captured per cohort on its event frame.
             # They do not continuously modulate already travelling voxels.
@@ -1193,20 +1228,21 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             particle_energy_floor = _clamp01(float(parameters.get(
                 "sphere_particle_energy_floor", _INCOMING_AUTHOR_FLOOR
             )))
-            # Even at the minimum slider value, real PCM silence cannot
-            # author a detached cohort. The existing release floor is the
-            # absolute presence guard; above it the authored floor may tune
-            # cohort admission independently of fragmentation.
-            effective_particle_floor = max(_INCOMING_GATE_CLOSE + 1.0e-6, particle_energy_floor)
-            typed_force_gate = bool(
-                incoming_candidates and intake_energy >= effective_particle_floor
-            )
-            authoring_presence = intake_energy >= effective_particle_floor
-            if incoming_candidates and authoring_presence and (self._incoming_gate_open or typed_force_gate):
+            # Real PCM silence cannot author a detached cohort whatever the slider: the live
+            # lane's absolute authoring floor stays the presence guard. The authored floor
+            # tunes cohort admission on the musical weight, independently of fragmentation.
+            authoring_presence = intake_energy >= _INCOMING_AUTHOR_FLOOR
+            typed_force_gate = bool(incoming_candidates and authoring_presence)
+            musically_present = musical > 0.0 and musical >= particle_energy_floor
+            if (incoming_candidates and authoring_presence and musically_present
+                    and (self._incoming_gate_open or typed_force_gate)):
                 _incoming_priority, incoming_source, incoming_section, incoming_strength, event_confidence = max(
                     incoming_candidates, key=lambda item: item[0]
                 )
-                motion_intensity = _incoming_motion_intensity(event_confidence, acoustic_impact)
+                # A softer-than-usual event earns a smaller, sparser, slower cohort.
+                incoming_strength *= reward
+                event_confidence *= reward
+                motion_intensity = _incoming_motion_intensity(event_confidence, acoustic_impact * reward)
                 self._last_intake_motion_intensity = motion_intensity
                 if density_enabled:
                     incoming_density = _incoming_density_from_event(
@@ -1276,8 +1312,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 _event_packet(snare_event_strength) * 0.94,
                 onset_strength * 0.92,
             ))
+            tracer_event_strength *= reward
             if tracer_enabled and tracer_event_strength > 0.0:
                 self._trigger_tracer(now=now, strength=tracer_event_strength)
+            if candidates or incoming_candidates:
+                self._usual_presence = learn_usual_presence(self._usual_presence, level_presence)
 
             rotation_target = _clamp01(max(
                 articulation_score * 0.76,
@@ -1437,7 +1476,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             logger.debug(
                 "[SPHERE_AUDIO] active=%s reactive=%.3f/%.3f/%.3f live=%.3f/%.3f/%.3f presence=%.3f/%.3f "
                 "activity=%.3f/%.3f spectrum=%.5f flux=%.4f threshold=%.4f spectral_evt=%.3f/%d crest=%.3f crest_bmh=%.3f/%.3f/%.3f shape=%.3f envelope=%.3f "
-                "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f intake=%.3f gate=%s density=%.3f impact=%.3f motion=%.3f cohorts=%d in/out=%d/%d progress=%.3f-%.3f cohort_v=%.3f-%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d",
+                "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f intake=%.3f gate=%s density=%.3f impact=%.3f motion=%.3f cohorts=%d in/out=%d/%d progress=%.3f-%.3f cohort_v=%.3f-%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d "
+                "musical=%.3f/%.3f usual=%.3f reward=%.3f",
                 active,
                 bass_now,
                 mid_now,
@@ -1504,6 +1544,10 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 self._packet_sources_since_diag["kick"],
                 self._packet_sources_since_diag["snare"],
                 self._packet_sources_since_diag["onset"],
+                level_loudness,
+                level_presence,
+                self._usual_presence,
+                reward,
             )
             self._last_diag_ts = now
             self._packets_since_diag = 0

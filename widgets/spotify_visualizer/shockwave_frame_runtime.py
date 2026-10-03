@@ -18,13 +18,12 @@ from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_LIFETIME,
     SHOCKWAVE_MIN_GAP,
     SHOCKWAVE_MIN_STRENGTH,
-    SHOCKWAVE_PRESENCE,
-    SHOCKWAVE_USUAL_RATE,
     shockwave_origin,
     shockwave_strength,
 )
 from widgets.spotify_visualizer.frame_runtime_lifecycle import retirement_fenced
 from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
+from widgets.spotify_visualizer.transient_bus import learn_usual_presence
 
 # One admitted shockwave: (birth time, x as a share of the half width, z, strength).
 _Event = tuple[float, float, float, float]
@@ -73,8 +72,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
                 continue
             presence = float(onset.presence)
             strength = shockwave_strength(onset.magnitude, onset.loudness, presence, self._usual_presence)
-            if presence >= SHOCKWAVE_PRESENCE[1]:           # a real onset of the music: learn its level
-                self._usual_presence += (presence - self._usual_presence) * SHOCKWAVE_USUAL_RATE
+            self._usual_presence = learn_usual_presence(self._usual_presence, presence)
             if strength < SHOCKWAVE_MIN_STRENGTH:
                 continue
             x, z = shockwave_origin(self._event_serial, str(onset.kind))

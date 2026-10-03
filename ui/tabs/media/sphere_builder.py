@@ -351,9 +351,9 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Particle Energy Floor:", 1000, "", 1000.0,
     )
     particle_energy_floor_control.setToolTip(
-        "Minimum live pre-AGC acoustic energy for a qualified intake/outtake cohort. "
-        "The default 0.075 preserves the existing authoring floor. The typed/onset "
-        "qualifiers and hysteretic presence gate remain authoritative."
+        "How much the music must count for a qualified event to launch a particle cohort: "
+        "0 is near-silence or a passage far quieter than the track, 1 the track's usual level. "
+        "Raise it to keep particles for the louder moments. Real silence never launches particles."
     )
     particle_amount_control.setToolTip(
         "Scales the number of voxels selected after a qualified cohort has already been admitted. It never changes onset thresholds, event qualification, acoustic impact or particle velocity."
@@ -381,9 +381,9 @@ def build_sphere_ui(tab, parent_layout) -> None:
     )
     slider(reaction, "sphere_fragment_energy_floor", "sphere_fragment_energy_floor", "Fragment Energy Floor:", 1000, "", 1000.0)
     tab.sphere_fragment_energy_floor.setToolTip(
-        "Minimum live pre-AGC acoustic energy required to admit a qualified "
-        "fragmentation packet. 0.00 preserves the existing typed/onset thresholds. "
-        "Does not change packet amplitude, particle qualification, or tracer travel."
+        "How much the music must count for a qualified event to fragment the sphere: "
+        "0 is near-silence or a passage far quieter than the track, 1 the track's usual level. "
+        "Raise it to keep fragmentation for the louder moments. Does not change particles or the tracer."
     )
     slider(reaction, "sphere_fragment_strength", "sphere_fragment_strength", "Fragment Strength:", 900, "", 100.0)
     tab.sphere_fragment_strength.setToolTip(

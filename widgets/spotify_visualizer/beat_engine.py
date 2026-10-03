@@ -1662,6 +1662,13 @@ class _SpotifyBeatEngine(QObject):
         events = getattr(self._audio_worker, '_onset_events', ())
         return tuple(event for event in events if event.serial > after_serial)
 
+    def get_musical_level(self) -> tuple[float, float]:
+        """The latest analysis frame's (loudness, presence) as the transient bus measures them
+        for onsets (``MusicalOnset``): unclamped absolute level, and that level against the
+        recent running level. (0, 0) before any analysis."""
+        bus = getattr(self._audio_worker, '_transient_bus', None)
+        return bus.musical_level if bus is not None else (0.0, 0.0)
+
     def get_event_scheduler(self) -> "TransientEventScheduler | None":
         """Return the event micro-scheduler (§2.4) if the transient bus exists.
 
