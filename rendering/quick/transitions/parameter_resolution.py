@@ -47,9 +47,11 @@ class ResolvedPhaseCInputs:
         return dict(self.parameters)
 
 
+# A Settings label names the way the motion travels, and so does the resolved code:
+# "Left to Right" is ``right``.
 _DIRECTION_MAP = {
-    "Left to Right": "left",
-    "Right to Left": "right",
+    "Left to Right": "right",
+    "Right to Left": "left",
     "Top to Bottom": "down",
     "Bottom to Top": "up",
     "Diagonal TL-BR": "diag_tl_br",
@@ -614,10 +616,6 @@ _PIXEL_DIRECTIONS = (
 )
 
 
-# Where the wind blows, as the labels say: unlike the shared map (whose horizontal codes name the
-# side a motion starts from), "Left to Right" blows toward the right.
-_WIND_DIRECTION_MAP = {**_PIXEL_DIRECTION_MAP, "Left to Right": "right", "Right to Left": "left"}
-
 
 def _seed(rng: _RandomSource) -> int:
     """Generate one deterministic per-request seed; it is never persisted."""
@@ -818,7 +816,7 @@ def _resolve_disintegrate(
     direction = _resolve_direction(
         _value(cfg, defaults, "direction"),
         choices=_PIXEL_DIRECTIONS,
-        mapping=_WIND_DIRECTION_MAP,
+        mapping=_PIXEL_DIRECTION_MAP,
         rng=rng,
     )
     return _finish(direction, {
@@ -855,7 +853,7 @@ def _resolve_relief_rise(
     direction = _resolve_direction(
         _value(cfg, defaults, "direction"),
         choices=_PIXEL_DIRECTIONS,
-        mapping=_WIND_DIRECTION_MAP,      # the sweep travels the way its label says
+        mapping=_PIXEL_DIRECTION_MAP,
         rng=rng,
     )
     return _finish(direction, {**_surface_values(cfg, defaults, ("depth", "gloss")),

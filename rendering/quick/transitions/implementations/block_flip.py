@@ -14,8 +14,8 @@ from ..render_contract import (
 
 
 _DIRECTION_VECTORS = {
-    "left": (1.0, 0.0),
-    "right": (-1.0, 0.0),
+    "left": (-1.0, 0.0),
+    "right": (1.0, 0.0),
     "up": (0.0, -1.0),
     "down": (0.0, 1.0),
     "diag_tl_br": (1.0, 1.0),

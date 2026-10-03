@@ -404,18 +404,19 @@ print(json.dumps({
 @pytest.mark.parametrize(
     ("direction", "vector"),
     (
-        ("left", (1.0, 0.0)),
-        ("right", (-1.0, 0.0)),
+        ("left", (-1.0, 0.0)),
+        ("right", (1.0, 0.0)),
         ("up", (0.0, -1.0)),
         ("down", (0.0, 1.0)),
         ("diag_tl_br", (1.0, 1.0)),
         ("diag_tr_bl", (-1.0, 1.0)),
     ),
 )
-def test_block_flip_preserves_cardinal_and_diagonal_directions(
+def test_block_flip_vectors_point_the_way_the_flip_travels(
     direction,
     vector,
 ):
+    # Screen axes: x grows right, y grows down. Labels on screen: test_transition_direction_labels.
     assert _block_flip_direction_vector(direction) == vector
 
 
@@ -439,22 +440,12 @@ def test_block_flip_shader_is_strip_slab_authoritative_with_clean_endpoints():
     assert "hash1" not in _BLOCK_FLIP_FRAGMENT_SOURCE
 
 
-@pytest.mark.parametrize(
-    ("direction", "state"),
-    (
-        ("left", (0, 1.0)),
-        ("right", (0, -1.0)),
-        ("up", (1, 1.0)),
-        ("down", (1, -1.0)),
-        ("diag_tl_br", (2, 1.0)),
-        ("diag_tr_bl", (3, -1.0)),
-    ),
-)
-def test_block_spins_preserves_all_authored_axis_and_spin_directions(
-    direction,
-    state,
-):
-    assert _block_spin_direction_state(direction) == state
+def test_block_spins_gives_every_authored_direction_its_own_axis_and_spin():
+    # Which way each one turns on screen: test_transition_direction_labels.
+    directions = ("left", "right", "up", "down", "diag_tl_br", "diag_tr_bl")
+    states = [_block_spin_direction_state(direction) for direction in directions]
+    assert len(set(states)) == len(directions)
+    assert all(axis in (0, 1, 2, 3) and spin in (-1.0, 1.0) for axis, spin in states)
 
 
 def test_block_spins_rejects_an_unresolved_random_direction():

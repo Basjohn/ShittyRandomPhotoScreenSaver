@@ -36,8 +36,8 @@ _DIRECTION_STATES = {
     "right": (0, -1.0),
     "up": (1, 1.0),
     "down": (1, -1.0),
-    "diag_tl_br": (2, 1.0),
-    "diag_tr_bl": (3, -1.0),
+    "diag_tl_br": (3, 1.0),
+    "diag_tr_bl": (2, 1.0),
 }
 
 
