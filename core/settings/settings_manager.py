@@ -23,6 +23,11 @@ from core.settings.legacy_setting_aliases import (
     RETIRED_SETTING_KEYS,
     is_legacy_setting_alias,
 )
+from core.settings.scene3d_detail_input_compat import (
+    LEGACY_TRANSITIONS_DETAIL_KEY,
+    SCENE3D_TRANSITIONS_DETAIL_KEY,
+    migrate_legacy_transitions_detail,
+)
 from core.settings.resample_filter_input_compat import (
     LEGACY_USE_LANCZOS_KEY,
     RESAMPLE_FILTER_KEY,
@@ -148,6 +153,12 @@ class SettingsManager(QObject):
             self._migrate_legacy_resample_filter_before_defaults()
         except Exception:
             logger.exception("Legacy resample-filter migration failed; refusing to replace the selected quality")
+            raise
+
+        try:
+            self._migrate_legacy_transitions_detail_before_defaults()
+        except Exception:
+            logger.exception("Legacy 3D Detail migration failed; refusing to replace the selected tier")
             raise
 
         # Upgrade the retired Visualizer enabled-id list *before* current defaults
@@ -345,7 +356,7 @@ class SettingsManager(QObject):
             raise KeyError(
                 f"Retired setting key {text!r}; use current key {canonical!r}"
             )
-        if text == LEGACY_USE_LANCZOS_KEY:
+        if text in (LEGACY_USE_LANCZOS_KEY, LEGACY_TRANSITIONS_DETAIL_KEY):
             raise KeyError(f"Retired setting key {text!r}")
         return text
 
@@ -392,6 +403,31 @@ class SettingsManager(QObject):
                 "Migrated retired %s to %s",
                 LEGACY_USE_LANCZOS_KEY,
                 RESAMPLE_FILTER_KEY,
+            )
+
+    def _migrate_legacy_transitions_detail_before_defaults(self) -> None:
+        """Promote the retired Transitions 3D Detail before current defaults can mask it."""
+
+        migrated = None
+        with self._lock:
+            if not self._settings.contains(LEGACY_TRANSITIONS_DETAIL_KEY):
+                return
+            legacy_value = self._settings.value(LEGACY_TRANSITIONS_DETAIL_KEY)
+            tier = migrate_legacy_transitions_detail(legacy_value)
+            if tier is not None and not self._settings.contains(SCENE3D_TRANSITIONS_DETAIL_KEY):
+                self._settings.setValue(SCENE3D_TRANSITIONS_DETAIL_KEY, tier)
+            self._settings.remove(LEGACY_TRANSITIONS_DETAIL_KEY)
+            self._settings.sync()
+            self._clear_cache_locked()
+            migrated = (legacy_value, tier)
+
+        if migrated is not None:
+            logger.info(
+                "Migrated retired %s=%r to %s=%r",
+                LEGACY_TRANSITIONS_DETAIL_KEY,
+                migrated[0],
+                SCENE3D_TRANSITIONS_DETAIL_KEY,
+                migrated[1] or "General",
             )
 
     def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:

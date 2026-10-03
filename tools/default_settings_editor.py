@@ -210,6 +210,7 @@ _SECTION_DESCRIPTIONS = {
     "input": "interaction and pointer behavior",
     "mc": "Media Center window behavior",
     "queue": "image queue behavior",
+    "scene3d": "3D detail tiers for 3D transitions and Visualizers",
     "sources": "local and feed source selection",
     "timing": "screensaver timing and cadence",
     "transitions": "transition selection and rendering",

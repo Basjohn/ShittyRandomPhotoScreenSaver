@@ -70,6 +70,15 @@ _validated_contexts: dict[
     int,
     tuple[weakref.ReferenceType[Any], "QuickOpenGLRuntimeInfo"],
 ] = {}
+# (vendor, renderer) of the last validated production context. Unlike the context cache it
+# outlives the windows, so Settings (opened after they close) and the 3D Detail ``Auto``
+# resolution still know the GPU. One reference assignment; readers take it as is.
+_last_validated_gpu: tuple[str, str] | None = None
+
+
+def last_validated_gpu() -> tuple[str, str] | None:
+    """(GL vendor, GL renderer) of the last validated context, or None before the first."""
+    return _last_validated_gpu
 
 
 @dataclass(frozen=True)
@@ -229,6 +238,8 @@ def validate_current_opengl_context(
         renderer=renderer,
         capabilities=capabilities,
     )
+    global _last_validated_gpu
+    _last_validated_gpu = (vendor, renderer)
     if can_cache:
         # Both callbacks capture only the weak reference and integer key. Their
         # identity check prevents a delayed former wrapper/context callback from

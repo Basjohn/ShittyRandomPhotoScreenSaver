@@ -11,15 +11,18 @@ from rendering.quick.transitions.request_resolution import (
 
 
 class _Settings:
-    def __init__(self, transitions: dict, *, hw_accel: bool = False) -> None:
+    def __init__(self, transitions: dict, *, hw_accel: bool = False, scene3d: dict | None = None) -> None:
         self.transitions = transitions
         self.hw_accel = hw_accel
+        self.scene3d = dict(scene3d or {})
 
     def get(self, key: str, default=None):
         if key == "transitions":
             return self.transitions
         if key == "display.hw_accel":
             return self.hw_accel
+        if key.startswith("scene3d.") and key[len("scene3d."):] in self.scene3d:
+            return self.scene3d[key[len("scene3d."):]]
         return default
 
     def get_bool(self, key: str, default: bool = False) -> bool:
@@ -259,15 +262,17 @@ def test_new_transition_ids_resolve_through_manual_and_random_admission(
 
 @pytest.mark.parametrize("stored", ["Performance", None])
 def test_every_3d_transition_request_carries_the_3d_detail_tier(stored) -> None:
-    from core.settings.default_contract import require_canonical_default
+    from core.settings.scene3d_quality import resolve_scene3d_tier
+    from rendering.quick.bootstrap import last_validated_gpu
 
-    expected = stored or require_canonical_default("transitions.detail_3d")
+    expected = stored or resolve_scene3d_tier(None, "transitions", gpu=last_validated_gpu())
     for name, stable_id in (("3D Block Spins", "block_spins"), ("Glass Shatter", "glass_shatter"),
                             ("Exploding Tiles", "exploding_tiles"), ("Directional Pixel Accretion", "pixel_accretion"),
                             ("Crumble", "crumble")):
         transitions = {"type": name, "random_always": False, "activation": {name: True}}
-        if stored:
-            transitions["detail_3d"] = stored
-        spec = resolve_quick_transition_spec(_Settings(transitions), random_source=_Rng("left"))
+        # The 3D Transitions tier from the 3D Settings; a retired Transitions leaf is ignored.
+        transitions["detail_3d"] = "KAK"
+        scene3d = {"transitions_detail": stored} if stored else {}
+        spec = resolve_quick_transition_spec(_Settings(transitions, scene3d=scene3d), random_source=_Rng("left"))
         assert spec is not None and spec.transition_id == stable_id
         assert dict(spec.parameters)["detail"] == expected, stable_id

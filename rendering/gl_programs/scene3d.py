@@ -54,9 +54,13 @@ class Scene3DDetail:
     """One 3D Detail tier: multisampling, shadow pass, particle share, post effects, grid density.
 
     ``post_effects`` admits a transition's own post-effect settings (Bloom and
-    Motion Blur on its Settings page); a tier without multisampling then renders
-    through a single-sample scene target only while one is in use. ``grid_cells``
-    is the bendable grid's cells along the photograph's longer side.
+    Motion Blur on its Settings page) and a Visualizer's glow; a tier without
+    multisampling then renders through a single-sample scene target only while one
+    is in use. ``grid_cells`` is the bendable grid's cells along the longer side.
+    For Visualizers, which draw over the wallpaper through an overlay target:
+    ``overlay_samples`` (their multisampling; 0 draws single-sampled) and
+    ``backdrop_refresh`` (rendered frames between wallpaper copies for reflections;
+    0 turns the reflections off).
     """
 
     name: str
@@ -65,15 +69,22 @@ class Scene3DDetail:
     particles: float
     post_effects: bool = False
     grid_cells: int = 64
+    overlay_samples: int = 0
+    backdrop_refresh: int = 0
 
 
-# The canonical ``transitions.detail_3d`` values, cheapest last. High renders the
-# scene into a 4x multisampled target; the others draw straight into Quick's.
-# High and Balanced honour each transition's post-effect settings; Performance none.
+# The 3D Detail tiers, cheapest last (``core/settings/scene3d_quality.py`` resolves which
+# one applies). High renders a transition's scene into a 4x multisampled target; the others
+# draw straight into Quick's. High and Balanced honour each transition's post-effect
+# settings; Performance and KAK none. KAK keeps only the essential: no optional effect, and
+# every density at its lowest bounded setting.
 SCENE3D_DETAIL_TIERS: dict[str, Scene3DDetail] = {
-    "High": Scene3DDetail("High", 4, True, 1.0, post_effects=True, grid_cells=192),
-    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6, post_effects=True, grid_cells=128),
-    "Performance": Scene3DDetail("Performance", 0, False, 0.3, grid_cells=64),
+    "High": Scene3DDetail("High", 4, True, 1.0, post_effects=True, grid_cells=192,
+                          overlay_samples=4, backdrop_refresh=6),
+    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6, post_effects=True, grid_cells=128,
+                              overlay_samples=2, backdrop_refresh=12),
+    "Performance": Scene3DDetail("Performance", 0, False, 0.3, grid_cells=64, backdrop_refresh=24),
+    "KAK": Scene3DDetail("KAK", 0, False, 0.15, grid_cells=48),
 }
 SCENE3D_DETAIL_NAMES = tuple(SCENE3D_DETAIL_TIERS)
 

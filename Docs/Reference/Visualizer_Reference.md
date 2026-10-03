@@ -499,6 +499,10 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   stand-in (`_PREVIEW_ONSETS`).
 - **Cost** at a card filling a 2560x1440 display (RTX 4090), median: 0.6 ms CPU submit and 0.07 ms GPU without glow;
   1.0 ms and 0.16 ms with glow (the bloom passes), 3 or 16 live waves alike.
+- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `shockwave_quality`): High 4x multisampling,
+  Glow, a 180x120 grid; Balanced 2x, Glow, 128x85; Performance single-sampled, no Glow, 64x43; KAK the same at 48x32
+  (`shockwave_grid_cells`). Measured as above with Glow 0.8: GPU median 0.17 / 0.13 / 0.04 / 0.04 ms, CPU 1.0 / 1.2 /
+  0.65 / 0.67 ms (the bloom chain's calls go with the Glow).
 - **Physical checks (open):** wave timing against real music (kicks vs. snares, busy tracks hitting the 16-event cap),
   the presets on both displays, glow strength, the horizon ridge, orbiting, and Allow Overflow near screen edges.
 
@@ -518,8 +522,13 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
   pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line
   instead of one foreshortened below a pixel (the jagged edges reported 2026-10-03); head-on (Glass Floor) the lines
-  are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also renders the scene at 8x multisampling
-  instead of 4x (+0.035 ms GPU at a full 2560x1440 card).
+  are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also doubles the tier's multisampling
+  (High 8x instead of 4x: +0.035 ms GPU at a full 2560x1440 card).
+- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling and
+  the wallpaper copy for Mirror Faces every 6 frames, Balanced 2x and every 12, Performance single-sampled and every
+  24, KAK single-sampled with Mirror Faces off. Measured at a full 2560x1440 card (Smooth Edges and Mirror Faces on,
+  RTX 4090), GPU median (p90) High 0.10 (0.60) ms -> Balanced 0.07 (0.30) -> Performance 0.06 (0.06) -> KAK 0.05
+  (0.05): the p90 is the copy's stall, rarer down the tiers. CPU stays ~0.7 ms (H7 targets it).
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
   the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). What Quick drew under the
   Visualizer (wallpaper, and widgets beneath it) is copied from the render target into a small mipmapped texture

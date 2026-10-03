@@ -72,10 +72,20 @@ def test_detail_tiers_trade_cost_monotonically():
     assert [tier.name for tier in tiers] == list(SCENE3D_DETAIL_NAMES)
     assert tiers[0].samples > 1 and tiers[0].shadows
     assert tiers[-1].samples == 0 and not tiers[-1].shadows
-    # Post effects (each transition's Bloom, Motion Blur) run on every tier but the cheapest.
-    assert all(tier.post_effects for tier in tiers[:-1]) and not tiers[-1].post_effects
-    particles = [tier.particles for tier in tiers]
-    assert particles == sorted(particles, reverse=True) and particles[-1] > 0.0
+    # Every cost lever only falls from tier to tier: post effects (Bloom, Motion Blur, a
+    # Visualizer's glow), particles, grid density, overlay multisampling; the best tier has
+    # them all and the cheapest none of the optional ones.
+    post = [tier.post_effects for tier in tiers]
+    assert post == sorted(post, reverse=True) and post[0] and not post[-1]
+    for lever in ("particles", "grid_cells", "overlay_samples"):
+        values = [getattr(tier, lever) for tier in tiers]
+        assert values == sorted(values, reverse=True), lever
+    assert tiers[-1].particles > 0.0 and tiers[-1].grid_cells >= 2
+    assert tiers[0].overlay_samples > 1 and tiers[-1].overlay_samples == 0
+    # Reflections refresh less often down the tiers and are off at the cheapest.
+    refresh = [tier.backdrop_refresh for tier in tiers]
+    assert all(value > 0 for value in refresh[:-1]) and refresh[:-1] == sorted(refresh[:-1])
+    assert refresh[-1] == 0
     with pytest.raises(ValueError):
         scene3d_detail("Ultra")
 

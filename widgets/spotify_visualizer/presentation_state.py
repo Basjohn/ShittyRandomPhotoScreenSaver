@@ -40,6 +40,12 @@ def install_default_presentation_state(state: VisualizerPresentationState) -> No
                 f"{persisted_key!r} for mode {mode_id!r}"
             )
         defaults[shared_key] = defaults[persisted_key]
+    # The 3D Detail tier, as the canonical 3D Settings resolve it for this mode (the runtime's
+    # activation passes the stored settings' tier through the same key).
+    from core.settings.scene3d_quality import resolve_visualizer_tier
+    from rendering.quick.bootstrap import last_validated_gpu
+
+    defaults["scene3d_detail"] = resolve_visualizer_tier(None, mode_id, gpu=last_validated_gpu())
     apply_presentation_vis_mode_kwargs(state, defaults)
 
 

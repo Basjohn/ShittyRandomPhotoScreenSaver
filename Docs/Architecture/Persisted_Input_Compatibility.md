@@ -42,6 +42,16 @@ without the safe path below.
   retired `display.use_lanczos` boolean to `display.resample_filter` before defaults merge, then removes the old leaf.
   Explicit current choices win. Runtime/UI/export use only the enum. *Blocked:* default-merging first and losing an
   authored Lanczos selection, or keeping the old checkbox as a second quality authority.
+- **3D Detail tier** (`core/settings/scene3d_detail_input_compat.py`). Profile/SST input promotes the retired
+  `transitions.detail_3d` (High / Balanced / Performance on the old Transitions Setup page) to the 3D Transitions family
+  tier `scene3d.transitions_detail` before defaults merge, then removes the old leaf: Balanced and Performance (a
+  choice someone made) carry over; High (the old default) and anything else follow General. An explicit current family
+  tier wins. *Blocked:* default-merging first and losing a Balanced/Performance choice, or reading the old leaf as a
+  second tier authority.
+- **Extruded Spectrum view units (no bridge, recorded).** On 2026-10-03 the Turn/Tilt settings became a full circle
+  (`turn` -1..1 = +-180 degrees) and level-to-straight-down (`tilt` 0..1 = 0..90 degrees); curated presets were
+  rescaled (tilt x40/90, turn x40/180). Stored values were not migrated: the mode was then dormant by default and only
+  the operator had saved views, which now show steeper/wider angles until re-orbited.
 - **QSettings → JSON profile** (`core/settings/settings_manager.py`:
   `_run_initial_migration` / `_migrate_from_qsettings`). Fires whenever
   `settings_v2.json` is absent, including after Reset.

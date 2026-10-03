@@ -1296,7 +1296,7 @@ class DisplayManager(QObject):
                 resolved_activation=activation,
                 technical_cache=technical_cache,
                 logical_kwargs=asdict(model),
-                presentation_kwargs=asdict(model),
+                presentation_kwargs=self._visualizer_presentation_kwargs(model, target),
                 on_complete=on_complete,
             )
         )
@@ -1373,7 +1373,7 @@ class DisplayManager(QObject):
                 resolved_activation=activation,
                 technical_cache=technical_cache,
                 logical_kwargs=asdict(model),
-                presentation_kwargs=asdict(model),
+                presentation_kwargs=self._visualizer_presentation_kwargs(model, target.mode),
                 on_complete=(
                     lambda completed_mode, expected_owner=owner, resolved=target:
                     self._complete_quick_visualizer_preset_change(
@@ -1387,6 +1387,16 @@ class DisplayManager(QObject):
 
     def _cycle_quick_visualizer_preset(self) -> None:
         self._request_quick_visualizer_preset_change()
+
+    def _visualizer_presentation_kwargs(self, model: Any, mode_id: str) -> dict[str, Any]:
+        """The activation's presentation values: the model's, plus the 3D Detail tier the 3D
+        Settings resolve for ``mode_id`` (renderers never read Settings themselves)."""
+        from core.settings.scene3d_quality import read_scene3d_section, resolve_visualizer_tier
+        from rendering.quick.bootstrap import last_validated_gpu
+
+        section = None if self.settings_manager is None else read_scene3d_section(self.settings_manager.get)
+        return {**asdict(model),
+                "scene3d_detail": resolve_visualizer_tier(section, str(mode_id), gpu=last_validated_gpu())}
 
     def _complete_quick_visualizer_mode_change(self, mode_id: str) -> None:
         """Persist one fully presented target activation and refresh menu truth."""
@@ -2651,7 +2661,7 @@ class DisplayManager(QObject):
             )
             owner.configure(
                 logical_kwargs=asdict(model),
-                presentation_kwargs=asdict(model),
+                presentation_kwargs=self._visualizer_presentation_kwargs(model, mode),
                 technical_config=resolve_technical_config(technical_cache, mode),
                 thread_manager=self._thread_manager,
                 process_supervisor=self._process_supervisor,

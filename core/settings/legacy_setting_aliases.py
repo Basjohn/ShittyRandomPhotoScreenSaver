@@ -17,6 +17,7 @@ LEGACY_DOTTED_SETTING_ALIASES = {
 # feed core), and no FFT worker ever existed.
 RETIRED_SETTING_KEYS = frozenset({
     "display.use_lanczos",
+    "transitions.detail_3d",
     "workers.rss.enabled",
     "workers.fft.enabled",
 })

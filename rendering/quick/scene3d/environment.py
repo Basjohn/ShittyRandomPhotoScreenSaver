@@ -238,10 +238,10 @@ class BackdropEnvironment:
     def has_resources(self) -> bool:
         return bool(self._texture or self._fbo or self._resolve)
 
-    def texture(self, viewport: tuple[int, int, int, int]) -> int:
+    def texture(self, viewport: tuple[int, int, int, int], refresh: int = BACKDROP_REFRESH_FRAMES) -> int:
         """The backdrop for this frame: a fresh capture when one is due (the first frame, a new
-        viewport size, or every ``BACKDROP_REFRESH_FRAMES`` frames), else the last one."""
-        due = (not self._texture or self._frames_since >= BACKDROP_REFRESH_FRAMES - 1
+        viewport size, or every ``refresh`` frames: the consumer's 3D Detail tier), else the last."""
+        due = (not self._texture or self._frames_since >= max(1, int(refresh)) - 1
                or self._size != environment_size(tuple(viewport)[2:]))
         if due:
             self.capture(viewport)

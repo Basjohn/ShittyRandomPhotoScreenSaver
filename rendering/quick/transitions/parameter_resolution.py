@@ -633,13 +633,22 @@ def _resolve_detail(
     return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
 
 
-def resolve_scene_detail(settings: Mapping[str, object]) -> str:
-    """The run's 3D Detail tier; an unknown persisted value uses the canonical default."""
+# The request-time field carrying the run's resolved 3D Transitions tier. Never persisted:
+# ``resolve_quick_transition_spec`` resolves it once from the 3D Settings and adds it to the
+# Transitions mapping the per-transition resolvers read.
+SCENE_DETAIL_FIELD = "detail_3d"
 
-    value = settings.get("detail_3d")
+
+def resolve_scene_detail(settings: Mapping[str, object]) -> str:
+    """The run's 3D Detail tier: the request's resolved tier, else the canonical 3D Settings'."""
+
+    value = settings.get(SCENE_DETAIL_FIELD)
     if isinstance(value, str) and value in SCENE3D_DETAIL_NAMES:
         return value
-    return str(require_canonical_default("transitions.detail_3d"))
+    from core.settings.scene3d_quality import resolve_scene3d_tier
+    from rendering.quick.bootstrap import last_validated_gpu
+
+    return resolve_scene3d_tier(None, "transitions", gpu=last_validated_gpu())
 
 
 def _scene_choice(cfg: Mapping[str, object], defaults: Mapping[str, object], field: str,

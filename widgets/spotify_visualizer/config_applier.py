@@ -658,6 +658,10 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._extruded_spectrum_allow_overflow = bool(kwargs['extruded_spectrum_allow_overflow'])
     if 'extruded_spectrum_smooth_edges' in kwargs:
         host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
+    if 'scene3d_detail' in kwargs:
+        from rendering.gl_programs.scene3d import scene3d_detail
+
+        host._scene3d_detail = scene3d_detail(kwargs['scene3d_detail']).name   # resolved upstream
 
     # --- Shockwave Grid presentation ----------------------------------
     for key, (low, high) in _SHOCKWAVE_GRID_KEYS.items():
@@ -716,6 +720,7 @@ def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[
     for key in _SHOCKWAVE_GRID_COLOURS:
         values[key] = tuple(getattr(pres, f"_{key}"))
     values["shockwave_grid_allow_overflow"] = bool(pres._shockwave_grid_allow_overflow)
+    values["scene3d_detail"] = str(pres._scene3d_detail)
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
 
@@ -731,6 +736,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
+    values["scene3d_detail"] = str(pres._scene3d_detail)
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
 

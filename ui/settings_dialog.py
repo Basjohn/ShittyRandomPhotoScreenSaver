@@ -40,6 +40,7 @@ from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.visualizers_tab import VisualizersTab
 from ui.tabs.display_tab import DisplayTab
 from ui.tabs.accessibility_tab import AccessibilityTab
+from ui.tabs.scene3d_tab import Scene3DTab
 from ui.tabs.themes_tab import ThemesTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
@@ -292,6 +293,17 @@ class _SettingsTabVectorIcon(QWidget):
             height = max(4.0, rect.height() * factor)
             painter.drawRoundedRect(QRectF(x, base - height, bar_w, height), 1.1, 1.1)
 
+    def _draw_scene3d(self, painter: QPainter, rect: QRectF) -> None:
+        # A wireframe cube: front square, back square up and right, joined at the corners.
+        size = rect.width() * 0.62
+        depth = rect.width() * 0.26
+        front = QRectF(rect.left() + 1.5, rect.bottom() - 1.5 - size, size, size)
+        back = front.translated(depth, -depth)
+        painter.drawRect(front)
+        painter.drawRect(back)
+        for corner in ("topLeft", "topRight", "bottomLeft", "bottomRight"):
+            painter.drawLine(getattr(front, corner)(), getattr(back, corner)())
+
     def _draw_accessibility(self, painter: QPainter, rect: QRectF) -> None:
         center_x = rect.center().x()
         head_center = QPointF(center_x, rect.top() + 4.5)
@@ -383,6 +395,8 @@ class _SettingsTabVectorIcon(QWidget):
             self._draw_widgets(painter, rect)
         elif icon_name == "visualizers":
             self._draw_visualizers(painter, rect)
+        elif icon_name == "scene3d":
+            self._draw_scene3d(painter, rect)
         elif icon_name == "accessibility":
             self._draw_accessibility(painter, rect)
         elif icon_name == "themes":
@@ -662,7 +676,7 @@ class SettingsDialog(QDialog):
         # runtime -> Settings -> runtime round-trip is deterministic even after
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about", "quick_start"]
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -981,6 +995,7 @@ class SettingsDialog(QDialog):
         self.transitions_tab_btn = TabButton("Transitions", "transitions")
         self.widgets_tab_btn = TabButton("Widgets", "widgets")
         self.visualizers_tab_btn = TabButton("Visualizers", "visualizers")
+        self.scene3d_tab_btn = TabButton("3D", "scene3d")
         self.accessibility_tab_btn = TabButton("Accessibility", "accessibility")
         self.themes_tab_btn = TabButton("Themes", "themes")
         self.about_tab_btn = TabButton("About", "about")
@@ -993,6 +1008,7 @@ class SettingsDialog(QDialog):
             "transitions": self.transitions_tab_btn,
             "widgets": self.widgets_tab_btn,
             "visualizers": self.visualizers_tab_btn,
+            "scene3d": self.scene3d_tab_btn,
             "accessibility": self.accessibility_tab_btn,
             "themes": self.themes_tab_btn,
             "about": self.about_tab_btn,
@@ -1028,6 +1044,7 @@ class SettingsDialog(QDialog):
                 self._settings,
                 parent=self.content_stack,
             ),
+            "scene3d": lambda: Scene3DTab(self._settings, parent=self.content_stack),
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
@@ -1707,6 +1724,7 @@ class SettingsDialog(QDialog):
             "transitions",
             "widgets",
             "visualizers",
+            "scene3d",
             "accessibility",
         ):
             tab = self.__dict__.get(f"{key}_tab")
