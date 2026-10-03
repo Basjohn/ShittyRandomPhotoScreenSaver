@@ -101,9 +101,8 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   orbits), through Edit's own session code with no chrome, one commit through Edit's Save at the gesture's end, nothing
   held between gestures. Contract: `Docs/Reference/Visualizer_Reference.md` 16A "Alt + right drag / Alt + wheel".
   Physical check open: both displays, Alt behaviour with the OS (no stray menu), anchored vs. Custom placement.
-- [ ] **H6. Shared Visualizer 3D camera, fit and line helpers.** Extruded and Shockwave each carry their own projection,
-  pivot, fit and fwidth-line code with CPU mirrors. Extract one shared helper (GLSL + CPU mirror) before the next 3D
-  mode copies it again.
+- [x] **H6. Shared 3D view and line helpers** (`SCENE3D_ORBIT_GLSL` / `scene3d_orbit_project`, `sceneLineCoverage`):
+  both modes moved onto them without visible change. Fit policies stay per mode (they genuinely differ).
 - [ ] **H7. Per-pass uniform blocks for 3D Visualizers.** Each mode spends 0.6-1.0 ms render-thread CPU per frame,
   mostly individual uniform calls holding the GIL and stalling the Python logical producer. Pack per-pass uniforms into
   one block on the S14 stream (as Exploding Tiles did); measure GL calls and CPU submit before/after.
