@@ -555,11 +555,8 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   instead of one foreshortened below a pixel (the jagged edges reported 2026-10-03); head-on (Glass Floor) the lines
   are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also doubles the tier's multisampling
   (High 8x instead of 4x: +0.035 ms GPU at a full 2560x1440 card).
-- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling and
-  the wallpaper copy for Mirror Faces every 6 frames, Balanced 2x and every 12, Performance single-sampled and every
-  24, KAK single-sampled with Mirror Faces off. Measured at a full 2560x1440 card (Smooth Edges and Mirror Faces on,
-  RTX 4090), GPU median (p90) High 0.10 (0.60) ms -> Balanced 0.07 (0.30) -> Performance 0.06 (0.06) -> KAK 0.05
-  (0.05): the p90 is the copy's stall, rarer down the tiers. CPU stays ~0.7 ms (H7 targets it).
+- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling,
+  Balanced 2x, Performance single-sampled; Mirror Faces on those, off at KAK (the tier's `reflections`).
 - **Translucent order** (ghost columns, floor reflection): exact for any view without OIT. The bar records reach the
   shader in a painter's order (`extruded_draw_order`: farthest from the orbit's eye along the row first, the eye from
   `scene3d_orbit_eye`; the boxes occupy disjoint x slabs, so that order is exact and two bars on opposite sides of the
@@ -568,15 +565,17 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   once; its alpha becomes the opacity its front and back faces used to add up to, a(2 - a), clamped first (the
   reflection's authored alpha exceeds 1 above the floor line).
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
-  the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). What Quick drew under the
-  Visualizer (wallpaper, and widgets beneath it) is copied from the render target into a small mipmapped texture
-  (`BackdropEnvironment`, 512 on the longer side); a face shows it where the pixel sits, displaced by the reflected
-  ray toward a near virtual eye (so it varies across the row and slides as the view turns), sharper with Gloss.
-  Reading the target being drawn costs a fixed GPU stall (~0.55 ms at any region size, RTX 4090), so the copy is
-  refreshed every 6 rendered frames and reused between (reflections may trail the wallpaper by a few frames; about
-  0.1 ms per frame on average). With Mirror Faces at 0 nothing is copied or held. The Visualizer is lent no
-  presentation texture: borrowing the background node's would couple its PR-04 lend/reclaim lifetime to a second
-  node and still not match fit/crop or widgets. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
+  the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). The displayed photograph is
+  downsampled once per image change (`widgets/spotify_visualizer/backdrop.py`, 512 on the longer side, ~1.3 ms on
+  the GUI thread at 4K) by the Visualizer's owner, only while the mode reflects (the descriptor's
+  `backdrop_setting` above zero on a tier with reflections; the scene tells the owner when the photograph changes),
+  carried in the mode's parameters (`backdrop`, immutable bytes) and uploaded once into the renderer's own
+  mipmapped texture (`BackdropEnvironment`); a face shows it where the pixel sits, displaced by the reflected ray
+  toward a near virtual eye (so it varies across the row and slides as the view turns), sharper with Gloss. It
+  replaced reading back the target being drawn every 6th frame (a ~0.55 ms GPU stall each): at a full 2560x1440 card
+  GPU median (p90) is now 0.097 (0.098) ms with Mirror Faces on, against 0.10 (0.60) before. No GL texture is
+  shared with the background, so PR-04's lend/reclaim lifetime is untouched; widgets beneath are no longer
+  reflected, only the wallpaper. With Mirror Faces at 0, or no reflections, nothing is made or held. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
   reflection.
 - **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
   binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor

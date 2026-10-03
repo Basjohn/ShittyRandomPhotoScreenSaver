@@ -1,8 +1,7 @@
 """Photo reflections: a per-run, renderer-owned, mipmapped copy of a photograph.
 
-``BackdropEnvironment`` is the same idea for a Visualizer, which is lent no photograph: what
-Quick has already drawn under it (the wallpaper and anything beneath) is copied, per frame it
-is used, from the render target into a small owned mipmapped texture.
+``BackdropEnvironment`` is the same idea for a Visualizer: the displayed photograph, downsampled
+once per image change by the Visualizer's owner, uploaded into a small owned mipmapped texture.
 
 Glossy pieces reflect the picture's colours through ``sceneEnvironment`` (blurred by
 roughness from the copy's mip levels) at ``sceneReflectionUv`` (the reflected ray's
@@ -206,93 +205,49 @@ class PhotoEnvironment:
 PHOTO_ENVIRONMENT_PROGRAM = ("photo_environment", FULLSCREEN_VERTEX_SOURCE, _COPY_FRAGMENT)
 
 
-# How often (in rendered frames) a backdrop is captured afresh; see BackdropEnvironment.
-BACKDROP_REFRESH_FRAMES = 6
-
-
 class BackdropEnvironment:
-    """What Quick has drawn so far across the viewport, as a small mipmapped environment.
+    """The wallpaper a Visualizer reflects, as a small mipmapped texture this object owns.
 
-    ``capture`` blits the render target Quick is drawing into (resolving it first if it is
-    multisampled) into a texture of the viewport's aspect, ``SCENE3D_ENVIRONMENT_SIZE`` on the
-    longer side, and builds its mip levels: one blit (two when multisampled) and one mip build,
-    no draw and no binding change. The caller captures before drawing over it and owns the
-    texture until ``release`` (nothing is held while the consumer does not use it).
-
-    Reading the target being drawn costs a fixed GPU stall (measured ~0.55 ms at any region
-    size, RTX 4090: the driver settles the whole surface), so ``texture`` refreshes the copy
-    only every ``BACKDROP_REFRESH_FRAMES`` rendered frames and reuses it in between: a
-    reflection of the wallpaper may trail what is shown by a few frames, at a tenth the cost.
+    ``texture`` uploads a ``VisualizerBackdrop`` (``widgets/spotify_visualizer/backdrop.py``: the
+    displayed photograph, downsampled once per image change on the GUI thread, bottom row first)
+    when its identity changes, builds its mip levels, and reuses it until the next one: one ~0.6 MB
+    upload per wallpaper. Nothing reads back the target being drawn (which stalled the GPU ~0.55 ms
+    per copy) and no GL texture is shared with the background. Pixel-unpack state and the
+    unpack-buffer binding are handed back as found. Nothing is held once ``release`` runs.
     """
 
     def __init__(self, label: str) -> None:
         self.label = label
         self._texture = 0
-        self._fbo = 0
         self._size: tuple[int, int] | None = None
-        self._resolve: tuple[int, int, tuple[int, int]] | None = None   # (fbo, renderbuffer, size)
-        self._frames_since = 0
-        self.captures = 0
+        self._identity: str | None = None
+        self.uploads = 0
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._texture or self._fbo or self._resolve)
+        return bool(self._texture)
 
-    def texture(self, viewport: tuple[int, int, int, int], refresh: int = BACKDROP_REFRESH_FRAMES) -> int:
-        """The backdrop for this frame: a fresh capture when one is due (the first frame, a new
-        viewport size, or every ``refresh`` frames: the consumer's 3D Detail tier), else the last."""
-        due = (not self._texture or self._frames_since >= max(1, int(refresh)) - 1
-               or self._size != environment_size(tuple(viewport)[2:]))
-        if due:
-            self.capture(viewport)
-            self._frames_since = 0
-        else:
-            self._frames_since += 1
-        return self._texture
-
-    def warm(self, viewport: tuple[int, int, int, int]) -> bool:
-        """One unit of allocating ahead what ``texture`` will use for ``viewport`` (the copy, then
-        a resolve target when the target Quick draws into is multisampled); True once done. The
-        first ``texture`` after a warm-up still captures."""
-        vx, vy, vw, vh = (int(v) for v in viewport)
-        size = environment_size((vw, vh))
+    def warm(self, backdrop) -> bool:
+        """Allocate ahead (one unit) what ``texture`` will use for ``backdrop``; True once done.
+        The first ``texture`` still uploads."""
+        size = tuple(int(value) for value in backdrop["size"])
         if self._size != size:
-            self._release_texture()
+            self.release()
             self._allocate(size)
-            self._frames_since = BACKDROP_REFRESH_FRAMES      # allocated, never captured: due
-            return False
-        source = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
-        samples = ctypes.c_int(0)
-        gl.glGetNamedFramebufferParameteriv(source, gl.GL_SAMPLES, ctypes.byref(samples))
-        if samples.value > 1 and (self._resolve is None or self._resolve[2] != (vw, vh)):
-            self._resolve_target((vw, vh))
             return False
         return True
 
-    def capture(self, viewport: tuple[int, int, int, int]) -> int:
-        vx, vy, vw, vh = (int(v) for v in viewport)
-        size = environment_size((vw, vh))
-        source = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
-        samples = ctypes.c_int(0)
-        gl.glGetNamedFramebufferParameteriv(source, gl.GL_SAMPLES, ctypes.byref(samples))
-        scissor = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
-        try:
-            if self._size != size:
-                self._release_texture()
-                self._allocate(size)
-            gl.glDisable(gl.GL_SCISSOR_TEST)                # a blit's destination obeys the scissor
-            if samples.value > 1:
-                resolve = self._resolve_target((vw, vh))
-                gl.glBlitNamedFramebuffer(source, resolve, vx, vy, vx + vw, vy + vh, 0, 0, vw, vh,
-                                          gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
-                source, vx, vy = resolve, 0, 0
-            gl.glBlitNamedFramebuffer(source, self._fbo, vx, vy, vx + vw, vy + vh, 0, 0, *size,
-                                      gl.GL_COLOR_BUFFER_BIT, gl.GL_LINEAR)
-            gl.glGenerateTextureMipmap(self._texture)
-        finally:
-            if scissor:
-                gl.glEnable(gl.GL_SCISSOR_TEST)
-        self.captures += 1
+    def texture(self, backdrop) -> int:
+        """The texture holding ``backdrop`` (uploaded when it is a new one)."""
+        size = tuple(int(value) for value in backdrop["size"])
+        if self._size != size:
+            self.release()
+            self._allocate(size)
+        identity = str(backdrop["identity"])
+        if identity != self._identity:
+            self._upload(backdrop["rgba"], size)
+            self._identity = identity
+            self.uploads += 1
         return self._texture
 
     def _allocate(self, size: tuple[int, int]) -> None:
@@ -306,51 +261,35 @@ class BackdropEnvironment:
         for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
             gl.glTextureParameteri(self._texture, wrap, gl.GL_CLAMP_TO_EDGE)
         gl.glTextureStorage2D(self._texture, max(size).bit_length(), gl.GL_RGBA8, *size)
-        gl.glCreateFramebuffers(1, name)
-        self._fbo = int(name[0])
-        if not self._fbo:
-            raise RuntimeError(f"{self.label} backdrop framebuffer allocation failed")
-        gl.glNamedFramebufferTexture(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, 0)
-        if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_DRAW_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-            raise RuntimeError(f"{self.label} backdrop framebuffer incomplete at {size}")
         self._size = size
+        self._identity = None
 
-    def _resolve_target(self, size: tuple[int, int]) -> int:
-        if self._resolve is not None and self._resolve[2] == size:
-            return self._resolve[0]
-        self._release_resolve()
-        name = (ctypes.c_uint * 1)()
-        gl.glCreateRenderbuffers(1, name)
-        renderbuffer = int(name[0])
-        gl.glNamedRenderbufferStorage(renderbuffer, gl.GL_RGBA8, *size)
-        gl.glCreateFramebuffers(1, name)
-        fbo = int(name[0])
-        self._resolve = (fbo, renderbuffer, size)
-        gl.glNamedFramebufferRenderbuffer(fbo, gl.GL_COLOR_ATTACHMENT0, gl.GL_RENDERBUFFER, renderbuffer)
-        return fbo
-
-    def _release_texture(self) -> None:
-        if self._fbo:
-            gl.glDeleteFramebuffers(1, [self._fbo])
-            self._fbo = 0
-        if self._texture:
-            gl.glDeleteTextures([self._texture])
-            self._texture = 0
-        self._size = None
-
-    def _release_resolve(self) -> None:
-        if self._resolve is not None:
-            fbo, renderbuffer, _size = self._resolve
-            self._resolve = None
-            gl.glDeleteFramebuffers(1, [fbo])
-            gl.glDeleteRenderbuffers(1, [renderbuffer])
+    def _upload(self, rgba: bytes, size: tuple[int, int]) -> None:
+        if len(rgba) != size[0] * size[1] * 4:
+            raise ValueError(f"{self.label} backdrop has {len(rgba)} bytes for {size}")
+        prior = {name: gl_query.get_int(name) for name in (
+            gl.GL_PIXEL_UNPACK_BUFFER_BINDING, gl.GL_UNPACK_ALIGNMENT, gl.GL_UNPACK_ROW_LENGTH,
+            gl.GL_UNPACK_SKIP_ROWS, gl.GL_UNPACK_SKIP_PIXELS)}
+        try:
+            gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+            gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
+            for name in (gl.GL_UNPACK_ROW_LENGTH, gl.GL_UNPACK_SKIP_ROWS, gl.GL_UNPACK_SKIP_PIXELS):
+                gl.glPixelStorei(name, 0)
+            gl.glTextureSubImage2D(self._texture, 0, 0, 0, size[0], size[1], gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
+                                   rgba)
+            gl.glGenerateTextureMipmap(self._texture)
+        finally:
+            gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, prior[gl.GL_PIXEL_UNPACK_BUFFER_BINDING])
+            for name in (gl.GL_UNPACK_ALIGNMENT, gl.GL_UNPACK_ROW_LENGTH, gl.GL_UNPACK_SKIP_ROWS,
+                         gl.GL_UNPACK_SKIP_PIXELS):
+                gl.glPixelStorei(name, prior[name])
 
     def release(self) -> None:
-        errors: list[str] = []
-        for release in (self._release_resolve, self._release_texture):
+        if self._texture:
             try:
-                release()
+                gl.glDeleteTextures([self._texture])
             except Exception as exc:
-                errors.append(str(exc))
-        if errors:
-            raise RuntimeError(f"{self.label} backdrop cleanup incomplete: {' | '.join(errors)}")
+                raise RuntimeError(f"{self.label} backdrop cleanup incomplete: {exc}") from exc
+            self._texture = 0
+        self._size = None
+        self._identity = None

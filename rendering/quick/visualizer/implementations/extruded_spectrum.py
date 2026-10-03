@@ -46,14 +46,16 @@ _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "u
              "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap")
 
 
-def extruded_quality(parameters) -> tuple[int, float, int]:
-    """(samples, Mirror Faces strength, backdrop refresh frames) for the activation's 3D Detail
-    tier: the tier's overlay multisampling, doubled by Smooth Edges; Mirror Faces at the tier's
-    wallpaper refresh, off where the tier has none."""
+def extruded_quality(parameters) -> tuple[int, float]:
+    """(samples, Mirror Faces strength) for the activation's 3D Detail tier: the tier's overlay
+    multisampling, doubled by Smooth Edges; Mirror Faces off where the tier has no reflections or
+    no wallpaper is there to reflect (the ``backdrop`` parameter)."""
     detail = scene3d_detail(parameter(parameters, "scene3d_detail"))
     smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
-    mirror = float(parameter(parameters, "extruded_spectrum_face_mirror")) if detail.backdrop_refresh else 0.0
-    return detail.overlay_samples * (2 if smooth else 1), mirror, detail.backdrop_refresh
+    mirror = float(parameter(parameters, "extruded_spectrum_face_mirror")) if detail.reflections else 0.0
+    if parameter(parameters, "backdrop") is None:
+        mirror = 0.0
+    return detail.overlay_samples * (2 if smooth else 1), mirror
 
 
 def extruded_bar_records(levels, peaks, count: int, order=None) -> bytes:
@@ -94,7 +96,7 @@ class QuickExtrudedSpectrumRenderer:
         hidden frame; True once nothing is left."""
         parameters = frame.snapshot.logical.mode_state.parameters
         overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
-        samples, mirror, _refresh = extruded_quality(parameters)
+        samples, mirror = extruded_quality(parameters)
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
         r = self._resources
@@ -110,7 +112,7 @@ class QuickExtrudedSpectrumRenderer:
         if not self._target.warm(item_pixel_rect(target_frame)[2:], samples, overlay=True):
             return False
         if mirror > 0.0:
-            return self._backdrop.warm(frame.viewport)
+            return self._backdrop.warm(parameter(parameters, "backdrop"))
         return True
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
@@ -170,10 +172,10 @@ class QuickExtrudedSpectrumRenderer:
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
         smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
-        samples, mirror, refresh = extruded_quality(parameters)
+        samples, mirror = extruded_quality(parameters)
         backdrop = 0
         if mirror > 0.0:
-            backdrop = self._backdrop.texture(frame.viewport, refresh)   # before anything is drawn over it
+            backdrop = self._backdrop.texture(parameter(parameters, "backdrop"))   # the displayed wallpaper
         elif self._backdrop.has_resources:
             self._backdrop.release()                                # Mirror Faces off: hold nothing
         origin = item_pixel_rect(target_frame)

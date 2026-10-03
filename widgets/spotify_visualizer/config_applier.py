@@ -738,6 +738,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
     values["scene3d_detail"] = str(pres._scene3d_detail)
+    values["backdrop"] = getattr(pres, "_backdrop", None)    # the reflected wallpaper, when it reflects
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
 

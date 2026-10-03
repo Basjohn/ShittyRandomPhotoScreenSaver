@@ -228,15 +228,18 @@ def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
     from rendering.gl_programs.scene3d import scene3d_detail
     from rendering.gl_programs.shockwave_grid_program import shockwave_grid_cells
 
+    from tests.test_qtquick_extruded_spectrum import _wallpaper
+
     target, host = render_rig
     detail = scene3d_detail(tier)
+    wallpaper = _wallpaper("tier", (200, 120, 40))
     for smooth in (False, True):
         target.render(host, _snapshot("extruded_spectrum", scene3d_detail=tier, extruded_spectrum_smooth_edges=smooth,
-                                      extruded_spectrum_face_mirror=0.6))
+                                      extruded_spectrum_face_mirror=0.6, backdrop=wallpaper))
         extruded = host._implementations["extruded_spectrum"]
         expected = max(1, detail.overlay_samples * (2 if smooth else 1))
         assert extruded._target.allocation[2] == expected, (tier, smooth)
-        assert extruded._backdrop.has_resources == bool(detail.backdrop_refresh)   # Mirror Faces off at KAK
+        assert extruded._backdrop.has_resources == detail.reflections   # Mirror Faces off at KAK
     target.render(host, _snapshot("shockwave_grid", scene3d_detail=tier, shockwave_grid_glow=0.8))
     shockwave = host._implementations["shockwave_grid"]
     assert shockwave._target.allocation[2] == max(1, detail.overlay_samples)

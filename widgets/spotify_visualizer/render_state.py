@@ -126,8 +126,8 @@ def freeze_render_value(value: object) -> object:
     keeping this contract usable by presentation-neutral tests and owners.
     """
 
-    if value is None or isinstance(value, (bool, int, str)):
-        return value
+    if value is None or isinstance(value, (bool, int, str, bytes)):
+        return value                      # bytes: immutable pixels (a reflected wallpaper)
     if isinstance(value, float):
         return _finite(value, name="render value")
     if isinstance(value, FrozenFields):
