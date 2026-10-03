@@ -22,6 +22,8 @@ The expansion capabilities remain **deactivated by default** unless explicitly a
 
 **Slide -> Motion Style -> Perspective Push** is an option in the existing Slide identity. It uses an aspect-correct view-ray/tilted-plane intersection for the outgoing image, with shallow translation/tilt/depth and the existing sealed coverage partition. Linear, Elastic, Wobble and Flex keep their existing authored math. Perspective Push does not add a scene, mesh owner, transition ID or clock.
 
+**Burn -> Flames and Ember Veins** (`transitions.burn.flames`, `transitions.burn.ember_veins`; both off by default, so the accepted look is pixel-identical; operator request 2026-10-03). Flames are tongues of fire rising up the screen from the burning edge, whichever way it travels: from a horizontal or diagonal edge they rise above it (into the burned picture for Top to Bottom, over the old one for Bottom to Top); along a vertical edge they stand as a wall of fire on both sides. Their shape is value-noise scrolling up the screen on the run's own clock, cut off by height above the edge (0.07-0.16 of the picture's height with Glow Intensity), coloured from the ember colour through the glow colour to white-hot, and they fade with the burn. Ember Veins are thin glowing ridged-noise cracks through the fresh char, in a mix of the ember and glow colours, cooling as the char ages; they draw only inside the char. Cost at 2560x1440 (RTX 4090): Flames +0.012 ms GPU per frame, Ember Veins +0.002 ms.
+
 **Blinds -> Style -> 3D Slats** (`transitions.blinds.style`: Flat, 3D Slats; Flat by default and pixel-identical to the authored bands) turns each stripe into a solid slat: the old picture on its front, the new one on its back and a thin laminated edge. Slats (6-48, default 16) turn over about their long axis one after another, from the top (lying slats, direction Vertical) or the left (upright slats, Horizontal: the same stripe orientation as the flat style); each turns for half the run, eased. The axis runs through the middle of the slat's thickness, so a front rests exactly on the photograph and a turned slat's back rests exactly there too. Through the gap a turning slat opens, the new picture shows, darkened by the slat. While turning, slats are lit by the shared physically based material and reflect the new picture (Slat Gloss 0-1); the light is blended in by each slat's lift (4e(1-e) of its eased turn), so slats at rest and both ends are the photographs exactly. Slats turn only about horizontal or vertical axes: with 3D Slats, Diagonal and Random pick one of the two per run. Anti-aliasing follows the shared Advanced bucket. Measured at 2560x1440 (RTX 4090): High (4x) 0.58 ms CPU submit and 0.073 ms GPU per frame (median); Balanced 0.43 ms and 0.033 ms. The Flat style never loads the slats shader module or allocates scene resources.
 
 ## Implementation contracts
@@ -260,6 +262,9 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
 - [ ] Beam on real photos in several directions and colours at its default 3500 ms and longer: the blade's look
   (core, band, halo), the light it casts, steadiness (no flicker anywhere), spark density and fall, the scorch's
   strength and how it cures, Glow and Scorch at both ends;
+- [ ] Burn's Flames and Ember Veins (off by default) on real photos in every direction: flame height and colour
+  with Glow Intensity and the two colours, the wall of fire along a vertical edge, how visible the veins are at
+  different Char Widths;
 - [ ] Cube Turn on real photos in every direction at 4000 ms: turn pace, how far the camera draws back, the
   backdrop's dimness, Gloss;
 - [ ] Relief Rise on real photos in several directions at 6000 ms: relief height (Relief Depth), the colour crossing

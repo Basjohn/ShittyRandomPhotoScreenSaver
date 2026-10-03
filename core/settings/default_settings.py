@@ -87,6 +87,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                           'char_width': 0.1,
                           'direction': 'Random',
                           'ember_color': [230, 64, 13, 255],
+                          'ember_veins': False,
+                          'flames': False,
                           'glow_color': [255, 162, 0, 255],
                           'glow_intensity': 1.0,
                           'jaggedness': 1.0,

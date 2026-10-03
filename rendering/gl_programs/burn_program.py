@@ -2,7 +2,8 @@
 
 Simulates a burning-paper effect: a noisy jagged edge eats across the screen,
 leaving a warm glow zone and a charred black zone before revealing the new image.
-Optional smoke puffs and falling ash particles add to the effect.
+Optional smoke puffs and falling ash particles add to the effect, and optionally (both off by
+default) flames licking up from the burning edge and glowing ember veins crawling through the char.
 """
 
 from __future__ import annotations
@@ -60,6 +61,8 @@ uniform int   u_smoke_enabled;  // 1 = sparks + smoke on
 uniform float u_smoke_density;  // smoke/spark intensity multiplier
 uniform int   u_ash_enabled;    // 1 = falling ash on
 uniform float u_ash_density;    // ash quantity multiplier
+uniform int   u_flames;         // 1 = flames rise from the burning edge
+uniform int   u_ember_veins;    // 1 = glowing veins crawl through the char
 uniform float u_time;           // wall-clock seconds
 uniform float u_seed;           // per-transition random seed
 
@@ -262,11 +265,39 @@ void main() {
         smoulder *= 0.8 + 0.2 * sin(u_time * 3.0 + perp * 20.0);
         ember_col += u_glow_color.rgb * smoulder;
 
+        // Ember veins: thin glowing cracks through the fresh char, cooling as it chars.
+        if (u_ember_veins == 1) {
+            float ridge = 1.0 - abs(2.0 * fbm4(uv * 16.0 + vec2(u_seed * 0.37, 3.1)) - 1.0);
+            float vein = smoothstep(0.9, 0.985, ridge) * pow(1.0 - ct, 1.5) * thermite;
+            ember_col += mix(u_ember_color.rgb, u_glow_color.rgb, 0.55) * vein * 1.7;
+        }
+
         out_rgb = ember_col;
 
     } else {
         // ---- Fully burned: new image ----
         out_rgb = new_col.rgb;
+    }
+
+    // =================================================================
+    //  Flames licking up from the burning edge (rising in screen space)
+    // =================================================================
+    if (u_flames == 1 && move_t < 0.97) {
+        // uv.y grows down the screen. How fast the sweep coordinate changes going down:
+        // the burning edge lies below this point at height -sd / slope.
+        float slope = u_direction == 2 ? 1.0 : (u_direction == 3 ? -1.0
+                    : (u_direction >= 4 ? 0.5 : 0.0));
+        float height = abs(slope) > 0.01 ? -sd / slope : abs(sd) * 3.0;
+        float reach = 0.07 + 0.09 * u_glow_intensity;
+        if (height > -0.01 && height < reach * 1.3) {
+            // Tongues: noise scrolling up the screen, cut off by height above the edge.
+            float n = fbm4(vec2(uv.x * 14.0, uv.y * 7.0 + u_time * 1.7) + u_seed);
+            float tongue = n * 1.3 - max(height, 0.0) / reach;
+            float body = smoothstep(0.0, 0.35, tongue);
+            vec3 fire = mix(u_ember_color.rgb, u_glow_color.rgb, smoothstep(0.1, 0.5, tongue));
+            fire = mix(fire, vec3(1.0, 0.95, 0.8), smoothstep(0.55, 0.95, tongue));
+            out_rgb += fire * body * thermite * (1.0 - tail_fade) * 0.9;
+        }
     }
 
     // =================================================================
@@ -384,6 +415,7 @@ void main() {
             "u_glow_color", "u_ember_color", "u_char_width",
             "u_smoke_enabled", "u_smoke_density",
             "u_ash_enabled", "u_ash_density",
+            "u_flames", "u_ember_veins",
             "u_time", "u_seed",
         ]
         return {n: gl.glGetUniformLocation(program, n) for n in names}

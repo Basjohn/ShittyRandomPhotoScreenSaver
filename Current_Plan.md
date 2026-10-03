@@ -165,7 +165,7 @@ Implement vertical features in this order unless evidence from a preceding slice
   frosted backdrop (physical check in Transitions.md).
 - [x] **Beam landed**: a steady lightsaber-like blade with sparks and a curing scorch, colour from Settings
   (physical check in Transitions.md).
-- [ ] **Burn**: optional new fire effects (operator open to enhancement; keep the current look as the default).
+- [x] **Burn effects landed**: optional Flames and Ember Veins, off by default (physical check in Transitions.md).
 
 ## 5. Cross-cutting acceptance | applies to every open box above
 

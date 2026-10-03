@@ -28,6 +28,8 @@ class _BurnParameters:
     smoke_density: float
     ash_enabled: bool
     ash_density: float
+    flames: bool
+    ember_veins: bool
     seed: float
 
 
@@ -104,6 +106,8 @@ def _burn_parameters(parameters: Mapping[str, object]) -> _BurnParameters:
         smoke_density=smoke_density,
         ash_enabled=_boolean(parameters, "ash_enabled"),
         ash_density=ash_density,
+        flames=_boolean(parameters, "flames"),
+        ember_veins=_boolean(parameters, "ember_veins"),
         seed=seed,
     )
 
@@ -149,6 +153,8 @@ class QuickBurnRenderer:
         gl.glUniform1f(uniforms["u_smoke_density"], params.smoke_density)
         gl.glUniform1i(uniforms["u_ash_enabled"], 1 if params.ash_enabled else 0)
         gl.glUniform1f(uniforms["u_ash_density"], params.ash_density)
+        gl.glUniform1i(uniforms["u_flames"], 1 if params.flames else 0)
+        gl.glUniform1i(uniforms["u_ember_veins"], 1 if params.ember_veins else 0)
         gl.glUniform1f(uniforms["u_time"], _burn_effect_time_seconds(frame))
         gl.glUniform1f(uniforms["u_seed"], params.seed)
 
@@ -181,6 +187,7 @@ class QuickBurnRenderer:
                 "u_direction", "u_jaggedness", "u_glow_intensity",
                 "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
                 "u_smoke_density", "u_ash_enabled", "u_ash_density",
+                "u_flames", "u_ember_veins",
                 "u_time", "u_seed",
             )
             uniforms = {
