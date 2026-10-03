@@ -308,6 +308,22 @@ Voxel Sphere is accepted experimental architecture with an active low-level scen
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
 
+3D Visualizers (Extruded Spectrum, Shockwave Grid) and the shared 3D Detail tiers:
+
+- `tests/test_qtquick_extruded_spectrum.py`, `tests/test_qtquick_shockwave_grid.py` — renders through the production
+  host on an offscreen context: projections against their GPU mirrors, Smooth Edges, Mirror Faces reflecting the
+  displayed wallpaper (uploaded once per photograph), translucent painter's order, onset events taken once by serial,
+  reactivity (quiet gating, big vs. medium hits, echo, idle swell), glow that only adds light;
+- `tests/test_visualizer_prepared_reveal.py` — first use prepares on hidden frames, the reveal waits (with a deadline);
+- `tests/test_visualizer_view_orbit.py`, `tests/test_visualizer_direct_gestures.py` — W/A/S/D and Alt + left orbit;
+  Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
+- `tests/test_scene3d_quality_settings.py` — the 3D Settings tab, the tier resolver (General / family / entry, Auto by
+  GPU), the `transitions.detail_3d` bridge, each tier's levers in the renderers;
+- `tests/test_visualizer_profile_lender_presets.py` — a borrowed Spectrum profile resolves through Spectrum's preset;
+- `tests/test_gl_error_policy.py` — per-call PyOpenGL error checking off at every entry, one check per node frame.
+
+Cost: `tools/visualizer_cost_probe.py` (offscreen, production host; median/p90 CPU submit and GPU, GL-call counts).
+
 ### 6.5 Visualizer performance/trace authority
 
 R-87 is closed and **CHK26 / `a0bf70932c` is the accepted performance/freshness GOLDEN**. The frame-trace sidecar remains useful diagnostic authority and must not be removed merely because the investigation closed.
