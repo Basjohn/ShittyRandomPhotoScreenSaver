@@ -2,15 +2,16 @@
 
 A straight beam of light, like a lightsaber's blade with no hilt, crosses the picture
 (``direction``, world units, y up, the picture one unit high) at a steady pace over the first
-``BEAM_SWEEP_END`` of the run, starting and ending a full glow reach off the picture. Ahead of it
+part of the run (``beam_sweep_end``), starting and ending a full glow reach off the picture. Ahead of it
 the old picture, behind it the new one. The beam is a white-hot core in a saturated band of its
 colour inside a soft halo, and lights the picture near it; it never flickers, only brightening
 slightly as it goes. Every glow term is windowed to exactly nothing at ``BEAM_REACH``, so the
 pictures beyond it are exact.
 
 Where it has passed, the new picture is lightly scorched (darker, warmer, with a brief hot rim in
-the beam's colour) and cures back to the clean picture, unevenly as if drying, within
-``BEAM_CURE_SPAN`` of the run; the last point it crosses is cured before the run ends.
+the beam's colour) and cures back to the clean picture, unevenly as if drying. Cure Time sets how
+long that takes (``beam_cure``); the sweep shortens to match, so the last point the beam crosses is
+cured before the run ends.
 Sparks (instanced streaks, nothing stored) spray from the cutting line, fall and fade from white
 to the beam's colour; all are gone before the run ends.
 """
@@ -19,11 +20,12 @@ from __future__ import annotations
 
 import math
 
-BEAM_SWEEP_END = 0.72
-BEAM_CURE = 0.22
-# The cure's unevenness: each point cures over BEAM_CURE times a factor in this range.
+# The share of the run a point takes to cure, from Cure Time's quickest to its slowest.
+BEAM_CURE_RANGE = (0.22, 0.55)
+# The cure's unevenness: each point cures over the cure time times a factor in this range.
 BEAM_CURE_SPREAD = (0.8, 1.25)
-BEAM_CURE_SPAN = BEAM_CURE * BEAM_CURE_SPREAD[1]
+# The last point crossed has cured by this much of the run.
+BEAM_SETTLED = 0.995
 BEAM_CORE = 0.0035
 BEAM_HEAT = 0.04
 BEAM_SPARKS = 900
@@ -33,7 +35,22 @@ _DIRECTIONS = {
     "diag_tl_br": (1.0, -1.0), "diag_tr_bl": (-1.0, -1.0), "diag_bl_tr": (1.0, 1.0), "diag_br_tl": (-1.0, 1.0),
 }
 
-assert BEAM_SWEEP_END + BEAM_CURE_SPAN < 1.0, "the last point crossed must cure before the run ends"
+
+def beam_cure(cure_time: float) -> float:
+    """The share of the run a point takes to cure (before its unevenness) at Cure Time
+    ``cure_time`` (0 quickest, 1 slowest)."""
+    lo, hi = BEAM_CURE_RANGE
+    return lo + (hi - lo) * max(0.0, min(1.0, float(cure_time)))
+
+
+def beam_cure_span(cure: float) -> float:
+    """The longest any point takes to cure, as a share of the run."""
+    return cure * BEAM_CURE_SPREAD[1]
+
+
+def beam_sweep_end(cure: float) -> float:
+    """When the beam leaves the picture: early enough that the last point it crosses cures in time."""
+    return BEAM_SETTLED - beam_cure_span(cure)
 
 
 def beam_direction(code: str, aspect: float) -> tuple[float, float]:
@@ -61,28 +78,28 @@ def beam_path(near: float, far: float, reach: float) -> tuple[float, float]:
     return near - reach, far + reach
 
 
-def beam_line(progress: float, start: float, end: float) -> float:
+def beam_line(progress: float, start: float, end: float, sweep_end: float) -> float:
     """The beam's position at ``progress``: a steady pace over the sweep, then gone."""
-    return start + (end - start) * max(0.0, min(1.0, float(progress) / BEAM_SWEEP_END))
+    return start + (end - start) * max(0.0, min(1.0, float(progress) / sweep_end))
 
 
-def beam_passed_at(along, start: float, end: float):
+def beam_passed_at(along, start: float, end: float, sweep_end: float):
     """The progress at which the beam crossed the point ``along`` (arrays welcome)."""
-    return BEAM_SWEEP_END * (along - start) / (end - start)
+    return sweep_end * (along - start) / (end - start)
 
 
-def beam_intensity(progress: float) -> float:
+def beam_intensity(progress: float, sweep_end: float) -> float:
     """The beam's steady brightness, gaining slightly as it goes; it never flickers."""
-    return 0.9 + 0.25 * max(0.0, min(1.0, float(progress) / BEAM_SWEEP_END))
+    return 0.9 + 0.25 * max(0.0, min(1.0, float(progress) / sweep_end))
 
 
-def beam_spark_life_limit(duration_s: float) -> float:
+def beam_spark_life_limit(duration_s: float, sweep_end: float) -> float:
     """The longest a spark may live (seconds) so the last one is gone before the run ends."""
-    return min(BEAM_SPARK_LIFE[1], 0.9 * (1.0 - BEAM_SWEEP_END) * duration_s)
+    return min(BEAM_SPARK_LIFE[1], 0.9 * (1.0 - sweep_end) * duration_s)
 
 
 _COMMON = f"""
-const float SWEEP_END = {BEAM_SWEEP_END:.6f};
+uniform float uSweepEnd;     // when the beam leaves the picture (beam_sweep_end)
 uniform vec2 uItemSize;
 uniform vec2 uDirection;
 uniform float uProgress;
@@ -104,7 +121,7 @@ float beamRandom(uint id, uint salt) {{
 
 BEAM_FRAGMENT_SOURCE = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
-    "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform float uScorch;\n"
+    "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform float uScorch;\nuniform float uCure;\n"
     + _COMMON
     + f"""
 float beamNoise(vec2 p) {{
@@ -126,10 +143,10 @@ void main() {{
         color = texture(uOldTex, uv).rgb;
     }} else {{
         vec3 fresh = texture(uNewTex, uv).rgb;
-        float age = uProgress - SWEEP_END * (along - uPath.x) / (uPath.y - uPath.x);
+        float age = uProgress - uSweepEnd * (along - uPath.x) / (uPath.y - uPath.x);
         // Scorched, then cured back to the clean picture, unevenly as if drying.
-        float cure = {BEAM_CURE:.6f} * mix({BEAM_CURE_SPREAD[0]:.6f}, {BEAM_CURE_SPREAD[1]:.6f},
-                                           beamNoise(p * 9.0) * 0.6 + beamNoise(p * 23.0) * 0.4);
+        float cure = uCure * mix({BEAM_CURE_SPREAD[0]:.6f}, {BEAM_CURE_SPREAD[1]:.6f},
+                                 beamNoise(p * 9.0) * 0.6 + beamNoise(p * 23.0) * 0.4);
         float scorch = uScorch * (1.0 - smoothstep(0.0, cure, age));
         float heat = uScorch * (1.0 - smoothstep(0.0, {BEAM_HEAT:.6f}, age));
         color = mix(fresh, fresh * vec3(0.5, 0.37, 0.27) + vec3(0.03, 0.012, 0.0), scorch)
@@ -161,10 +178,10 @@ void main() {{
     float aspect = uItemSize.x / uItemSize.y;
     vec2 across = vec2(-uDirection.y, uDirection.x);
     // Born where the beam cuts the picture, at a moment it is on it.
-    float first = SWEEP_END * (uSpan.x - uPath.x) / (uPath.y - uPath.x);
-    float last = SWEEP_END * (uSpan.y - uPath.x) / (uPath.y - uPath.x);
+    float first = uSweepEnd * (uSpan.x - uPath.x) / (uPath.y - uPath.x);
+    float last = uSweepEnd * (uSpan.y - uPath.x) / (uPath.y - uPath.x);
     float born = mix(first, last, beamRandom(id, 1u));
-    float at = uPath.x + (uPath.y - uPath.x) * born / SWEEP_END;
+    float at = uPath.x + (uPath.y - uPath.x) * born / uSweepEnd;
     float reach = 0.5 * sqrt(aspect * aspect + 1.0);
     vec2 origin = uDirection * at + across * mix(-reach, reach, beamRandom(id, 2u));
     float age = (uProgress - born) * uDurationS;

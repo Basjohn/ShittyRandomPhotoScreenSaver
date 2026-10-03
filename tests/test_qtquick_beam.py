@@ -11,9 +11,10 @@ import numpy as np
 import pytest
 
 from rendering.gl_programs.beam_program import (
-    BEAM_CURE_SPAN,
+    BEAM_HEAT,
     BEAM_SPARK_LIFE,
-    BEAM_SWEEP_END,
+    beam_cure,
+    beam_cure_span,
     beam_direction,
     beam_intensity,
     beam_line,
@@ -22,6 +23,7 @@ from rendering.gl_programs.beam_program import (
     beam_reach,
     beam_span,
     beam_spark_life_limit,
+    beam_sweep_end,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
 from tools.transition_contact_sheet import TransitionCapture
@@ -33,24 +35,35 @@ ASPECT = W / H
 CODES = ("left", "right", "up", "down", "diag_tl_br", "diag_tr_bl", "diag_bl_tr", "diag_br_tl")
 
 
-def test_the_beam_starts_and_ends_off_the_picture_and_everything_settles_in_time():
+@pytest.mark.parametrize("cure_time", (0.0, 0.5, 1.0))
+def test_the_beam_starts_and_ends_off_the_picture_and_everything_settles_in_time(cure_time):
+    cure = beam_cure(cure_time)
+    sweep_end = beam_sweep_end(cure)
     for code in CODES:
         direction = beam_direction(code, ASPECT)
         near, far = beam_span(direction, ASPECT)
         for glow in (0.0, 0.6, 1.0):
             reach = beam_reach(glow)
             start, end = beam_path(near, far, reach)
-            assert beam_line(0.0, start, end) == start == near - reach
-            assert beam_line(BEAM_SWEEP_END, start, end) == end == far + reach
+            assert beam_line(0.0, start, end, sweep_end) == start == near - reach
+            assert beam_line(sweep_end, start, end, sweep_end) == end == far + reach
             # The last point it crosses has cured before the run ends.
-            assert beam_passed_at(far, start, end) + BEAM_CURE_SPAN < 1.0
-    speeds = np.diff([beam_line(t, -1.0, 1.0) for t in np.linspace(0.1, 0.6, 11)])
+            assert beam_passed_at(far, start, end, sweep_end) + beam_cure_span(cure) < 1.0
+    speeds = np.diff([beam_line(t, -1.0, 1.0, sweep_end) for t in np.linspace(0.02, 0.9 * sweep_end, 11)])
     assert speeds.max() - speeds.min() < 1e-12                      # a steady pace
-    levels = [beam_intensity(t) for t in np.linspace(0.0, 1.0, 50)]
+    levels = [beam_intensity(t, sweep_end) for t in np.linspace(0.0, 1.0, 50)]
     assert all(b >= a for a, b in zip(levels, levels[1:])) and levels[-1] > levels[0]   # never flickers
     for duration in (1.0, 3.5, 10.0):
-        assert beam_spark_life_limit(duration) <= (1.0 - BEAM_SWEEP_END) * duration
-        assert beam_spark_life_limit(duration) <= BEAM_SPARK_LIFE[1]
+        assert beam_spark_life_limit(duration, sweep_end) <= (1.0 - sweep_end) * duration
+        assert beam_spark_life_limit(duration, sweep_end) <= BEAM_SPARK_LIFE[1]
+
+
+def test_a_longer_cure_takes_longer_and_the_beam_crosses_sooner():
+    cures = [beam_cure(t) for t in np.linspace(0.0, 1.0, 11)]
+    assert np.all(np.diff(cures) > 0)
+    assert cures[-1] > 2 * cures[0]                                 # a cure slow enough to watch
+    assert np.all(np.diff([beam_sweep_end(cure) for cure in cures]) < 0)
+    assert beam_cure(-3.0) == cures[0] and beam_cure(3.0) == cures[-1]
 
 
 @pytest.fixture
@@ -70,34 +83,47 @@ def _along(direction) -> np.ndarray:
     return direction[0] * xs[None, :] + direction[1] * ys[:, None]
 
 
-def _geometry(code, glow):
+def _geometry(code, run):
+    parameters = run.request.parameter_dict()
     direction = beam_direction(code, ASPECT)
     near, far = beam_span(direction, ASPECT)
-    reach = beam_reach(glow)
-    return _along(direction), beam_path(near, far, reach), reach
+    reach = beam_reach(parameters["glow"])
+    cure = beam_cure(parameters["cure"])
+    return _along(direction), (*beam_path(near, far, reach), beam_sweep_end(cure)), reach, cure
 
 
+@pytest.mark.parametrize("cure_time", (0.0, 1.0))
 @pytest.mark.parametrize("code", ("right", "down", "diag_tl_br", "diag_br_tl"))
-def test_both_pictures_are_exact_beyond_the_beam_and_the_new_one_once_cured(capture, code):
-    run = capture.run("beam", direction=code, settings={"beam": {"sparks": False}}, duration_ms=3500)
+def test_both_pictures_are_exact_beyond_the_beam_and_the_new_one_once_cured(capture, code, cure_time):
+    run = capture.run("beam", direction=code, settings={"beam": {"sparks": False, "cure": cure_time}},
+                      duration_ms=3500)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
     assert np.array_equal(_pixels(capture.render(run, 0.0)[0]), source)
     assert np.array_equal(_pixels(capture.render(run, 1.0)[0]), destination)
-    along, path, reach = _geometry(code, run.request.parameter_dict()["glow"])
+    along, path, reach, cure = _geometry(code, run)
     pixel = 2.0 / H
-    for progress in (0.3, 0.45, 0.6):
+    saw_cured = False
+    for progress in (0.15, 0.3, 0.45, 0.6, 0.8, 0.95):
         frame = _pixels(capture.render(run, progress)[0])
         line = beam_line(progress, *path)
         ahead = along > line + reach + pixel
-        cured = (along < line - reach - pixel) & (progress - beam_passed_at(along, *path) > BEAM_CURE_SPAN + 0.01)
-        assert ahead.any() or cured.any()
+        cured = (along < line - reach - pixel) & (progress - beam_passed_at(along, *path) > beam_cure_span(cure) + 0.01)
+        saw_cured |= bool(cured.any())
         assert np.abs(frame[ahead] - source[ahead]).max(initial=0) <= 1, progress
         assert np.abs(frame[cured] - destination[cured]).max(initial=0) <= 1, progress
         # Where it has just passed, the new picture shows (scorched); ahead, the old one.
-        behind = (along < line - reach - pixel) & (along > line - reach - 0.1)
+        # (past the brief hot rim, which a quicker sweep spreads further behind the beam)
+        behind = ((along < line - reach - pixel) & (along > line - reach - 0.1)
+                  & (progress - beam_passed_at(along, *path) > BEAM_HEAT))
         if behind.any():
-            assert (np.abs(frame[behind] - destination[behind]).mean()
-                    < np.abs(frame[behind] - source[behind]).mean())
+            # The new picture, scorched by some amount up to the setting (the shader's scorch tint).
+            fresh = destination[behind].astype(np.float64)
+            burnt = fresh * np.array([0.5, 0.37, 0.27]) + np.array([0.03, 0.012, 0.0]) * 255
+            scorch = run.request.parameter_dict()["scorch"]
+            best = min(np.abs(frame[behind] - (fresh + (burnt - fresh) * amount)).mean()
+                       for amount in np.linspace(0.0, scorch, 11))
+            assert best < np.abs(frame[behind] - source[behind]).mean()
+    assert saw_cured
 
 
 def test_ends_are_continuous(capture):
@@ -113,7 +139,7 @@ def test_scorch_darkens_only_what_the_beam_just_crossed(capture):
         run = capture.run("beam", direction="right", settings={"beam": {"scorch": scorch, "sparks": False}},
                           duration_ms=3500)
         frames[scorch] = _pixels(capture.render(run, 0.45)[0])
-    along, path, reach = _geometry("right", run.request.parameter_dict()["glow"])
+    along, path, reach, _cure = _geometry("right", run)
     line = beam_line(0.45, *path)
     changed = np.abs(frames[0.0] - frames[1.0]).max(axis=2) > 0
     assert not changed[along > line].any()                          # never ahead of the beam
@@ -131,7 +157,7 @@ def test_the_colour_tints_only_the_beam_and_its_light(capture):
                                                                        "scorch": 0.0}}, duration_ms=3500)
         frames[color] = _pixels(capture.render(run, 0.4)[0])
     red, green = frames.values()
-    along, path, reach = _geometry("left", run.request.parameter_dict()["glow"])
+    along, path, reach, _cure = _geometry("left", run)
     line = beam_line(0.4, *path)
     changed = np.abs(red - green).max(axis=2) > 0
     assert changed.any() and not changed[np.abs(along - line) > reach + 2.0 / H].any()
@@ -181,9 +207,10 @@ def test_the_resolver_picks_directions_and_repairs_values():
     assert seen == set(CODES)
     resolved = resolve_parameterized_phase_c_inputs(
         "beam", {"beam": {"direction": "Left to Right", "color": [255, 0, 128, 255], "glow": 4, "scorch": -1,
-                          "sparks": False}}, random_source=random.Random(1))
+                          "cure": 7, "sparks": False}}, random_source=random.Random(1))
     parameters = resolved.parameter_dict()
     assert resolved.direction == "right"
     assert parameters["color"] == pytest.approx((1.0, 0.0, 128 / 255))
     assert parameters["glow"] == 1.0 and parameters["scorch"] == 0.0 and parameters["sparks"] is False
+    assert parameters["cure"] == 1.0
     assert isinstance(parameters["seed"], int)

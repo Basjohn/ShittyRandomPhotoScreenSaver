@@ -879,7 +879,7 @@ def _resolve_beam(
         "seed": _seed(rng),
         "color": tuple(min(1.0, channel) for channel in color[:3]),
         "sparks": _bool(_value(cfg, defaults, "sparks"), bool(defaults["sparks"])),
-        **_surface_values(cfg, defaults, ("glow", "scorch")),
+        **_surface_values(cfg, defaults, ("glow", "scorch", "cure")),
     })
 
 
@@ -906,7 +906,7 @@ def _resolve_page_curl(
     if origin is None:
         # "Random" (and anything unknown) picks a corner or edge per run.
         origin = str(rng.choice(tuple(PAGE_CURL_ORIGINS.values())))
-    return _finish(origin, {**_surface_values(cfg, defaults, ("gloss",)),
+    return _finish(origin, {**_surface_values(cfg, defaults, ("gloss", "size")),
                             **resolve_scene_quality(settings, cfg, defaults)})
 
 
