@@ -4,7 +4,7 @@ from typing import Any
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.feature_frame import FeatureFrame
-from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEnergyBands, TransientEventScheduler
 
 def _bands(source: Any) -> EnergyBands:
     return EnergyBands(
@@ -22,6 +22,10 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         self._replay_pre_agc = EnergyBands()
         self._replay_bubble = EnergyBands()
         self._replay_transient = TransientEnergyBands()
+        # Schema 2 real-scale lanes of the current frame, and the production event scheduler fed
+        # with each frame's typed events at the replay clock (consumed once, aged as live).
+        self._replay_real = None
+        self._replay_scheduler = TransientEventScheduler()
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
@@ -46,6 +50,11 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             onset_type=onset_map.get(str(transient.onset_type), "") if transient.onset_detected else "",
             onset_strength=float(transient.onset_strength),
         )
+        self._replay_real = frame.real
+        if frame.real is not None:
+            for event in frame.real.events:
+                self._replay_scheduler.feed(OnsetEvent(
+                    timestamp=frame.timestamp_us / 1_000_000.0, event_type=event.kind, strength=event.strength))
         waveform = list(frame.waveform)
         raw_bars = list(frame.raw_bars)
         if len(raw_bars) != self._bar_count:
@@ -90,7 +99,20 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def get_transient_energy_bands(self) -> TransientEnergyBands:
         return self._replay_transient
 
+    def get_live_pre_agc_energy_bands(self) -> EnergyBands:
+        real = self._replay_real
+        return super().get_live_pre_agc_energy_bands() if real is None else EnergyBands(*real.live)
+
+    def get_musical_level(self) -> tuple[float, float]:
+        real = self._replay_real
+        return super().get_musical_level() if real is None else tuple(real.musical_level)
+
+    def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
+        real = self._replay_real
+        return () if real is None else tuple(real.analysis_spectrum)
+
     def get_event_scheduler(self):
-        # Exact onset authority is carried by the immutable transient frame.
-        # Returning no scheduler avoids replaying stale live-worker events.
-        return None
+        # Schema 1: exact onset authority is carried by the immutable transient frame, and no
+        # scheduler avoids replaying stale live-worker events. Schema 2 frames carry their typed
+        # events, served through the production scheduler.
+        return None if self._replay_real is None else self._replay_scheduler

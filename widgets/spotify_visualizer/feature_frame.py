@@ -1,4 +1,11 @@
-"""Immutable post-DSP inputs for deterministic visualizer replay."""
+"""Immutable post-DSP inputs for deterministic visualizer replay.
+
+Schema 1 carries the normalised lanes only, each validated into ``0..1``. Real music is far
+louder than that (``Docs/Guides/Visualizer_Reactivity_Authoring.md`` 2A: transient-bus loudness
+3-17, the live pre-AGC lane pinned at its 2.5 clamp), so schema 2 adds optional ``RealScaleLanes``
+in the units production reads them in, finite and non-negative but never capped, plus the seams
+Voxel Sphere consumes. A schema 1 frame serialises exactly as before.
+"""
 
 from __future__ import annotations
 
@@ -12,13 +19,19 @@ from typing import Any, Iterable, Mapping
 
 
 SCHEMA_VERSION = 1
+REAL_SCALE_SCHEMA_VERSION = 2          # frames that carry RealScaleLanes
+SUPPORTED_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION, REAL_SCALE_SCHEMA_VERSION})
 TIMESTAMP_UNIT = "us"
 RAW_BAR_COUNT = 32
 WAVEFORM_COUNT = 64
 
 SUPPORTED_MODES = frozenset(
-    {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"}
+    {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere"}
 )
+# Modes whose inputs exist only in the real-scale lanes (schema 2).
+REAL_SCALE_MODES = frozenset({"sphere"})
+TYPED_EVENT_KINDS = frozenset({"kick", "snare", "vocal_swell"})
+LIVE_LANE_CLAMP = 2.5          # get_live_pre_agc_energy_bands' bound
 CONTROL_EVENTS = frozenset({"none", "mode_switch", "visibility_toggle"})
 ONSET_TYPES = frozenset({"bass", "mid", "high", "broadband"})
 
@@ -55,6 +68,79 @@ def _fixed_tuple(
     if len(result) != count:
         raise ValueError(f"{name} must contain exactly {count} values")
     return result
+
+
+def _finite_non_negative(value: float, name: str, *, maximum: float | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError(f"{name} must be a real number")
+    result = float(value)
+    if not math.isfinite(result) or result < 0.0 or (maximum is not None and result > maximum):
+        bound = "" if maximum is None else f" and <= {maximum}"
+        raise ValueError(f"{name} must be finite, >= 0{bound}")
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class TypedEvent:
+    """One scheduler event (``kick``, ``snare``, ``vocal_swell``) available on its frame."""
+
+    kind: str
+    strength: float
+
+    def __post_init__(self) -> None:
+        if self.kind not in TYPED_EVENT_KINDS:
+            raise ValueError(f"unsupported typed event kind: {self.kind}")
+        object.__setattr__(self, "strength", _finite_unit_value(self.strength, "strength"))
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "TypedEvent":
+        return cls(kind=payload["kind"], strength=payload["strength"])
+
+
+@dataclass(frozen=True, slots=True)
+class RealScaleLanes:
+    """Production-unit inputs (schema 2): the live pre-AGC bands as
+    ``get_live_pre_agc_energy_bands`` returns them (0..2.5), the transient bus's
+    (loudness, presence) as ``get_musical_level`` does (unbounded), the raw pre-shape/pre-AGC
+    analysis spectrum (``get_pre_agc_analysis_spectrum``) and the typed scheduler events
+    available on this frame."""
+
+    live: tuple[float, float, float, float]
+    musical_level: tuple[float, float]
+    analysis_spectrum: tuple[float, ...]
+    events: tuple[TypedEvent, ...] = ()
+
+    def __post_init__(self) -> None:
+        live = tuple(self.live)
+        if len(live) != 4:
+            raise ValueError("live must be (bass, mid, high, overall)")
+        object.__setattr__(self, "live", tuple(
+            _finite_non_negative(v, f"live[{i}]", maximum=LIVE_LANE_CLAMP) for i, v in enumerate(live)))
+        level = tuple(self.musical_level)
+        if len(level) != 2:
+            raise ValueError("musical_level must be (loudness, presence)")
+        object.__setattr__(self, "musical_level", tuple(
+            _finite_non_negative(v, f"musical_level[{i}]") for i, v in enumerate(level)))
+        spectrum = tuple(_finite_non_negative(v, f"analysis_spectrum[{i}]")
+                         for i, v in enumerate(self.analysis_spectrum))
+        if spectrum and not 8 <= len(spectrum) <= 1024:
+            raise ValueError("analysis_spectrum must be empty or hold 8..1024 bands")
+        object.__setattr__(self, "analysis_spectrum", spectrum)
+        events = tuple(self.events)
+        if any(not isinstance(event, TypedEvent) for event in events):
+            raise TypeError("events must be TypedEvent instances")
+        if len({event.kind for event in events}) != len(events):
+            raise ValueError("at most one event of each kind per frame")
+        object.__setattr__(self, "events", events)
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "RealScaleLanes":
+        return cls(
+            live=tuple(payload["live"]),
+            musical_level=tuple(payload["musical_level"]),
+            analysis_spectrum=tuple(payload["analysis_spectrum"]),
+            events=tuple(TypedEvent.from_dict(event) for event in payload.get("events", ())),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,14 +256,21 @@ class FeatureFrame:
     mode: str
     control_event: str = "none"
     schema_version: int = SCHEMA_VERSION
+    real: RealScaleLanes | None = None
 
     def __post_init__(self) -> None:
         if type(self.timestamp_us) is not int or self.timestamp_us < 0:
             raise ValueError("timestamp_us must be a non-negative integer")
-        if self.schema_version != SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
             raise ValueError(
                 f"unsupported feature schema version: {self.schema_version}"
             )
+        if self.real is not None and not isinstance(self.real, RealScaleLanes):
+            raise TypeError("real must be RealScaleLanes")
+        if (self.real is not None) != (self.schema_version == REAL_SCALE_SCHEMA_VERSION):
+            raise ValueError("real-scale lanes and schema 2 go together")
+        if self.mode in REAL_SCALE_MODES and self.real is None:
+            raise ValueError(f"{self.mode} replay needs the real-scale lanes (schema 2)")
         if not isinstance(self.energy, EnergyLanes):
             raise TypeError("energy must be EnergyLanes")
 
@@ -207,10 +300,14 @@ class FeatureFrame:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if self.real is None:
+            del payload["real"]          # a schema 1 frame serialises exactly as before
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "FeatureFrame":
+        real = payload.get("real")
         return cls(
             timestamp_us=payload["timestamp_us"],
             energy=EnergyLanes.from_dict(payload["energy"]),
@@ -221,6 +318,7 @@ class FeatureFrame:
             mode=payload["mode"],
             control_event=payload.get("control_event", "none"),
             schema_version=payload.get("schema_version", SCHEMA_VERSION),
+            real=None if real is None else RealScaleLanes.from_dict(real),
         )
 
 
