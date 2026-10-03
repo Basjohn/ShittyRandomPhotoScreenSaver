@@ -9,6 +9,19 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 `Docs/Reference/Scene3D_Resources.md`, `Docs/Reference/Transitions.md`, `Docs/Reference/Visualizer_Reference.md` and
 `Docs/Reference/Sphere_Visualizer.md`. Do not create a second parallel 3D plan while this program is active.
 
+## Operator-directed asset work | Usu | Static modelling / Awaiting Validation
+
+Asset creation only, independent of runtime admission. `assets/usu/README.md` routes
+the editable Blender source, supplied art reference and review renders.
+
+- [ ] Review the revised static Usu source and reference comparison in FRONT,
+  SIDE, BACK and 3/4; confirm broad upper ear attachments, smooth gentle flop,
+  thick rounded lower ears, cheek depth/bump and undistorted profile feet.
+  Resolve remaining identity drift, including rear root transitions and profile
+  eye readability, while preserving the front silhouette.
+- [ ] Obtain explicit user acceptance of the static silhouette before admitting
+  any rigging. Animation, engine export and SRPSS integration remain outside this slice.
+
 ## 0. Accepted baseline | do not reopen as work
 
 - [x] **S1-S13 scene3d substrate accepted.** Strict OpenGL 4.6 Core / GLSL 460, shared context-local resource ownership,
