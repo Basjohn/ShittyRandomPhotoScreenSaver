@@ -132,6 +132,7 @@ class QuickDisplayRuntime(QObject):
             parent=self,
         )
         self._scene.bind_context_menu_model(self._context_menu)
+        self._input.set_view_orbit_hit_test(self._scene.visualizer_contains_scene_position)
         self._pacer: QuickFramePacer | None = QuickFramePacer(
             self._window,
             refresh_rate,
@@ -703,6 +704,7 @@ class QuickDisplayRuntime(QObject):
             self._context_menu = None
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
+            self._input.set_view_orbit_hit_test(None)          # drop the retiring scene's hit test
             self._input.deleteLater()
             self._input = None
         self._set_phase(QuickRuntimePhase.RETIRED)

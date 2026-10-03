@@ -14,17 +14,17 @@ _SHAPE_SLIDERS = (
     ("extruded_spectrum_depth", "Bar Depth:", 25, 300,
      "How deep each bar is, as a multiple of its width."),
     ("extruded_spectrum_tilt", "Tilt:", 0, 100,
-     "How far the view looks down onto the bars: more shows more of their tops."),
+     "How far the view looks down onto the bars, from level to straight down (W and S while it shows)."),
     ("extruded_spectrum_turn", "Turn:", -100, 100,
-     "Turns the row of bars to either side, so it is seen at an angle."),
+     "Turns the row of bars a full circle, so it is seen at an angle or from behind (A and D while it shows)."),
 )
 _FINISH_SLIDERS = (
     ("extruded_spectrum_hue_drift", "Hue Drift:", 0, 100,
      "How fast spectral colours drift around the colour wheel; zero holds them still."),
     ("extruded_spectrum_gloss", "Gloss:", 0, 100, "Shine on the bars' faces."),
     ("extruded_spectrum_face_mirror", "Mirror Faces:", 0, 100,
-     "Gives the bars' faces (not their edges) a polished, reflective surface that catches a "
-     "studio's lights as the bars move; zero leaves them plain."),
+     "Gives the bars' faces (not their edges) a polished, mirror surface reflecting the wallpaper, "
+     "sharper with Gloss; zero leaves them plain."),
     ("extruded_spectrum_reflection", "Reflection:", 0, 100,
      "How strongly the bars reflect in the floor beneath them; zero shows no floor."),
 )

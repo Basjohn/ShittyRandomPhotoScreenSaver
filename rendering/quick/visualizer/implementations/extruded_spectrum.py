@@ -27,6 +27,8 @@ from rendering.gl_programs.extruded_spectrum_program import (
     extruded_overflow_frame,
 )
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES
+from rendering.quick.scene3d.environment import BackdropEnvironment
+from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget
@@ -37,11 +39,13 @@ from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import compute_quick_spectrum_layout, prepare_spectrum_shader_levels
 
 _MAX_BARS = 64
+# Multisampling of the 3D target: Smooth Edges also doubles it (measured: no visible GPU cost).
 _SAMPLES = 4
+_SMOOTH_SAMPLES = 8
 _BAR_BINDING = 3
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
-             "uGhostAlpha", "uReflection", "uSmooth", "uMirror")
+             "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap")
 
 
 def extruded_bar_records(levels, peaks, count: int) -> bytes:
@@ -59,12 +63,14 @@ class QuickExtrudedSpectrumRenderer:
         self._resources = MeshResources("Quick Extruded Spectrum")
         self._target = SceneTarget("Quick Extruded Spectrum")
         self._stream = StreamRing("Quick Extruded Spectrum")
+        self._backdrop = BackdropEnvironment("Quick Extruded Spectrum")
         self._fit_key: tuple | None = None
         self._fit = (1.0, 0.0)
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources or self._stream.has_resources
+        return (self._resources.has_resources or self._target.has_resources or self._stream.has_resources
+                or self._backdrop.has_resources)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -120,7 +126,16 @@ class QuickExtrudedSpectrumRenderer:
         records = extruded_bar_records(levels, peaks, count)
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
-        with self._target.scope(target_frame, _SAMPLES, r, overlay=presentation.content_fade):
+        smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
+        mirror = float(parameter(parameters, "extruded_spectrum_face_mirror"))
+        backdrop = 0
+        if mirror > 0.0:
+            backdrop = self._backdrop.texture(frame.viewport)      # before anything is drawn over it
+        elif self._backdrop.has_resources:
+            self._backdrop.release()                                # Mirror Faces off: hold nothing
+        origin = item_pixel_rect(target_frame)
+        with self._target.scope(target_frame, _SMOOTH_SAMPLES if smooth else _SAMPLES, r,
+                                overlay=presentation.content_fade):
             gl.glUseProgram(program)
             gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
             gl.glUniform4f(uniforms["uField"], *field)
@@ -141,8 +156,15 @@ class QuickExtrudedSpectrumRenderer:
             gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
             gl.glUniform1f(uniforms["uGhostAlpha"], ghost_alpha)
             gl.glUniform1f(uniforms["uReflection"], reflection)
-            gl.glUniform1f(uniforms["uSmooth"], 1.0 if parameter(parameters, "extruded_spectrum_smooth_edges") else 0.0)
-            gl.glUniform1f(uniforms["uMirror"], float(parameter(parameters, "extruded_spectrum_face_mirror")))
+            gl.glUniform1f(uniforms["uSmooth"], 1.0 if smooth else 0.0)
+            gl.glUniform1f(uniforms["uMirror"], mirror)
+            if backdrop:
+                vx, vy, vw, vh = frame.viewport
+                gl.glUniform4f(uniforms["uBackdropMap"], origin[0] - vx, origin[1] - vy, vw, vh)
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, backdrop)
+                gl.glUniform1i(uniforms["uBackdrop"], 1)
+                gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_TRUE)
@@ -159,7 +181,8 @@ class QuickExtrudedSpectrumRenderer:
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._stream.release, self._resources.release_resources):
+        for release in (self._target.release, self._stream.release, self._backdrop.release,
+                        self._resources.release_resources):
             try:
                 release()
             except Exception as exc:

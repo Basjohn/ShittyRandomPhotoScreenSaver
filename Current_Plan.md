@@ -165,6 +165,14 @@ Implement vertical features in this order unless evidence from a preceding slice
   means minimum viable base geometry/effect only: optional expensive 3D features are effectively off and essential densities
   use their lowest bounded setting. Sphere gets a dedicated before/after behavioural + visual golden during S19.
 
+## Side defects (found in passing)
+
+- [ ] `tests/test_feed_runtime.py`: 3 reds on `HEAD` (2026-10-03, found while gating Extruded Spectrum; also red on a
+  clean worktree): `test_retiring_one_endpoint_cancels_only_its_queued_work_and_prunes_state`,
+  `test_shared_endpoint_is_cancelled_only_after_its_last_active_lease` and
+  `test_cancelled_inflight_source_never_publishes_on_reactivation` see two source cache calls where one is expected
+  (`widgets/feed_runtime.py` after the 5.0.6 Feeds commits). Decide whether the runtime or the tests are stale.
+
 ## Handoff rules
 
 Significant slices get full superseding GODZIPs. The supplied/latest GODZIP is the working tree authority for handoff

@@ -9,12 +9,12 @@
       "spotify_visualizer": {
         "mode": "extruded_spectrum",
         "extruded_spectrum_depth": 2.2,
-        "extruded_spectrum_tilt": 0.65,
+        "extruded_spectrum_tilt": 0.2889,
         "extruded_spectrum_gloss": 0.3,
         "extruded_spectrum_reflection": 0.0,
         "extruded_spectrum_allow_overflow": true,
         "extruded_spectrum_colouring": "Bar Colours",
-        "extruded_spectrum_turn": 0.45,
+        "extruded_spectrum_turn": 0.1,
         "extruded_spectrum_hue_drift": 0.0
       }
     }

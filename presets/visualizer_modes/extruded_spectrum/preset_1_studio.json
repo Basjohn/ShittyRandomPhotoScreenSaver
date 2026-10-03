@@ -9,7 +9,7 @@
       "spotify_visualizer": {
         "mode": "extruded_spectrum",
         "extruded_spectrum_depth": 1.0,
-        "extruded_spectrum_tilt": 0.35,
+        "extruded_spectrum_tilt": 0.1556,
         "extruded_spectrum_gloss": 0.5,
         "extruded_spectrum_reflection": 0.35,
         "extruded_spectrum_allow_overflow": true,
