@@ -106,9 +106,11 @@ class VisualizerModeDescriptor:
     # Experimental modes are kept out of first-run choices.
     guided_setup_offered: bool = True
     # 3D freeform modes name their (turn, tilt) presentation settings here, and W/A/S/D then
-    # orbit the view live (widgets/spotify_visualizer/view_orbit.py). Empty: the keys keep
-    # their ordinary meaning (any key exits).
+    # orbit the view live (widgets/spotify_visualizer/view_orbit.py). Turn spans -1..1 as a full
+    # circle and wraps; ``view_orbit_steps`` is one key event's (turn, tilt) step in setting
+    # units. Empty: the keys keep their ordinary meaning (any key exits).
     view_orbit_settings: tuple[str, ...] = ()
+    view_orbit_steps: tuple[float, ...] = ()
 
     @property
     def preset_key(self) -> str:
@@ -228,6 +230,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         technical_profile_mode="spectrum",
         renderer_overflow_setting="extruded_spectrum_allow_overflow",
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
+        view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
     ),
 )
 

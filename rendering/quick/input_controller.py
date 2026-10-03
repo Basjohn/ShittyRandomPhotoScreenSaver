@@ -70,6 +70,8 @@ class QuickInputController(RuntimeInputOwner):
         """Whether pointer motion can still trigger the non-interaction exit gesture."""
 
         state = self._state
+        if state.admission_open and self._view_orbit_drag is not None:
+            return True                       # an Alt-drag orbit follows the pointer in any mode
         return bool(
             state.admission_open
             and not state.exiting

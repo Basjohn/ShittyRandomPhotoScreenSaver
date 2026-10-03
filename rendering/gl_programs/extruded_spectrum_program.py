@@ -26,10 +26,16 @@ nothing at the bar field's bottom.
 Edge lines are drawn by the shader along each face's border, sized as if seen head-on. Smooth
 Edges measures them in screen pixels (``fwidth`` of the face coordinates) and keeps each at
 least 1.2 smoothed pixels wide, so a face seen at an angle keeps a ramped line instead of one
-foreshortened below a pixel; head-on nothing changes. Mirror Faces gives the faces (never the edge lines) a polished, faintly brushed
-chrome surface reflecting a fixed studio (``extrudedStudio``: a bright sky over a dark ground
-at a crisp horizon, and two softbox strips) toward a near virtual eye, so the horizon crosses
-the bars and the lights sweep across them as the view turns.
+foreshortened below a pixel; head-on nothing changes.
+
+Mirror Faces gives the faces (never the edge lines) a polished, faintly brushed
+mirror surface reflecting the wallpaper: what Quick drew under the Visualizer, captured each
+frame into a small mipmapped texture (``BackdropEnvironment``). A face shows the wallpaper
+around it displaced by its reflected ray (taken toward a near virtual eye, so it varies across
+the row), sharper with Gloss, so the picture slides across the bars as the view turns.
+
+The view turns a full circle (``turn`` -1..1 is -180..180 degrees and wraps when orbiting) and
+tilts from level to straight down (``tilt`` 0..1 is 0..90 degrees).
 """
 
 from __future__ import annotations
@@ -38,14 +44,17 @@ import math
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, Scene3DStorageLayout
 
-EXTRUDED_MAX_TILT = math.radians(40.0)
-EXTRUDED_MAX_TURN = math.radians(40.0)
+EXTRUDED_MAX_TILT = math.radians(90.0)
+EXTRUDED_MAX_TURN = math.radians(180.0)
 # Farther than the transitions' camera: a row of bars spans the whole width, and a near
 # camera makes the outer bars lean out like a wide-angle lens.
 EXTRUDED_CAMERA = 6.0
 EXTRUDED_MAX_DEPTH = 0.6          # a bar's depth never exceeds this many bar-field heights
 EXTRUDED_CEILING = 0.95           # Spectrum's tallest bar, in bar-field heights
 EXTRUDED_REFLECTION_SPACE = 0.22  # floor lift (bar-field heights) a full reflection reserves
+# The view tilts about the bars' mid-height, so orbiting circles the middle of the scene (level
+# views are unchanged; looking straight down keeps the tops where the bars' middle was).
+EXTRUDED_PIVOT = 0.5 * EXTRUDED_CEILING
 # How far (in item heights) an overflowing scene may reach beyond the item on every side.
 EXTRUDED_OVERFLOW_PAD = 0.5
 EXTRUDED_HUE_DRIFT_RATE = 0.15    # hue turns per authored second at full drift
@@ -60,7 +69,8 @@ def extruded_project(point: tuple[float, float, float], tilt: float,
     ct, st = math.cos(turn), math.sin(turn)
     x, z = x * ct + z * st, -x * st + z * ct
     c, s = math.cos(tilt), math.sin(tilt)
-    raised, toward = y * c - z * s, y * s + z * c
+    y -= EXTRUDED_PIVOT
+    raised, toward = y * c - z * s + EXTRUDED_PIVOT, y * s + z * c
     scale = EXTRUDED_CAMERA / (EXTRUDED_CAMERA - toward)
     return x * scale, raised * scale, toward
 
@@ -117,16 +127,22 @@ uniform float uHeightScale;
 _PROJECTION_GLSL = f"""
 const float EXTRUDED_CEILING = {EXTRUDED_CEILING:.6f};
 const float EXTRUDED_CAMERA = {EXTRUDED_CAMERA:.6f};
-// A world point or direction turned about the vertical axis, then tilted toward the camera.
+const float EXTRUDED_PIVOT = {EXTRUDED_PIVOT:.6f};
+// A world direction turned about the vertical axis, then tilted toward the camera.
 vec3 extrudedView(vec3 p, vec2 view) {{
     float ct = cos(view.y), st = sin(view.y);
     p = vec3(p.x * ct + p.z * st, p.y, -p.x * st + p.z * ct);
     float c = cos(view.x), s = sin(view.x);
     return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
 }}
+// A world point the same way, the tilt pivoting about the bars' mid-height.
+vec3 extrudedViewPoint(vec3 p, vec2 view) {{
+    vec3 pivot = vec3(0.0, EXTRUDED_PIVOT, 0.0);
+    return extrudedView(p - pivot, view) + pivot;
+}}
 // (screen x, screen y up, view depth) of a world point, as the CPU mirror.
 vec3 extrudedProject(vec3 p, vec2 view) {{
-    vec3 v = extrudedView(p, view);
+    vec3 v = extrudedViewPoint(p, view);
     float scale = EXTRUDED_CAMERA / (EXTRUDED_CAMERA - v.z);
     return vec3(v.x * scale, v.y * scale, v.z);
 }}
@@ -141,7 +157,7 @@ vec4 extrudedClip(vec3 world, out float itemY) {{
                      uField.y + uField.w - (uFit.y + screen.y * uFit.x) * h);
     itemY = item.y;
     vec4 clip = uMatrix * vec4(item, 0.0, 1.0);
-    clip.z = clamp(-screen.z * 0.4, -1.0, 1.0) * clip.w;
+    clip.z = clamp(-screen.z / EXTRUDED_CAMERA, -1.0, 1.0) * clip.w;   // nearer than the camera, so inside
     return clip;
 }}
 """
@@ -176,7 +192,7 @@ void main() {
         world.y = -world.y;
         normal.y = -normal.y;
     }
-    vWorld = extrudedView(world, uView);          // lit in the frame the camera sees
+    vWorld = extrudedViewPoint(world, uView);     // lit in the frame the camera sees
     vNormal = extrudedView(normal, uView);
     vLocal = local;
     vSize = vec3(2.0 * uBarGeometry.z, top - bottom, uBarGeometry.w) * uField.w * uFit.x;   // box size in pixels
@@ -196,21 +212,10 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform vec2 uFloorSpan;   // item y of the floor line and of the bar field's bottom\n"
     "uniform float uSmooth;     // 1: edge lines measured in screen pixels (anti-aliased at any angle)\n"
     "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
+    "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
+    "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
     + SCENE3D_GLSL
     + """
-// A chrome studio around the bars, by reflected direction in the camera's frame: a bright sky
-// falling to a grey ground at a crisp horizon set low (the view looks down on the bars, so their
-// faces mostly mirror what lies below eye level), and two softbox strips above it.
-vec3 extrudedStudio(vec3 r) {
-    float h = r.y + 0.3;
-    vec3 sky = mix(vec3(0.95, 0.97, 1.0), vec3(0.3, 0.36, 0.48), smoothstep(0.0, 0.8, h));
-    vec3 ground = mix(vec3(0.32, 0.3, 0.29), vec3(0.06), smoothstep(0.0, -0.5, h));
-    vec3 env = mix(ground, sky, smoothstep(-0.004, 0.004, h));
-    float above = smoothstep(0.0, 0.08, h);
-    env += vec3(1.5) * smoothstep(0.05, 0.0, abs(r.x - 0.24)) * above;
-    env += vec3(1.0) * smoothstep(0.035, 0.0, abs(r.x + 0.3)) * above;
-    return env;
-}
 void main() {
     vec3 n = normalize(vNormal);
     // Distance to the nearest edge of this face, per face axis. The face is the box axis whose
@@ -242,18 +247,23 @@ void main() {
                                       uColouring == 1 ? trim * rim * 0.8 : vec3(0.0));
     vec3 lit = sceneMaterialLit(bar, n, vWorld, vec3(2.3), vec3(0.45));
     if (uMirror > 0.0) {
-        // Polished faces: the studio reflected toward a near virtual eye at mid-bar height (the
-        // real camera is far, so a flat face would mirror one flat colour), so the studio's
-        // horizon and lights cross the bars and sweep as the view turns. Faintly brushed,
-        // tinted by the face's colour, stronger at grazing angles. Edge lines stay as they are.
+        // Polished faces reflecting the wallpaper around them: the backdrop where this pixel
+        // sits, displaced by the reflected ray toward a near virtual eye at mid-bar height (the
+        // real camera is far, so a flat face would mirror one patch), mirrored past the screen's
+        // edges, sharper with Gloss. The picture slides across the bars as the view turns.
+        // Faintly brushed, lightly tinted by the face's colour, stronger at grazing angles.
+        // Edge lines stay as they are.
         vec3 v = normalize(vec3(0.0, 0.4, 1.6) - vWorld);
         vec3 r = reflect(-v, n);
+        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + vec2(r.x, r.y) * 0.35;
+        uv = 1.0 - abs(1.0 - mod(uv, 2.0));
+        vec3 seen = textureLod(uBackdrop, uv, mix(3.0, 0.4, uGloss)).rgb;
         vec2 grainAt = floor(vec2(vLocal.x * vSize.x + vLocal.z * vSize.z, vLocal.y * vSize.y * 0.02) * 0.7);
         float grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))) * 43758.5453);
-        vec3 tint = mix(vec3(1.0), body * 1.35, 0.6);
-        vec3 mirror = extrudedStudio(r) * tint * (0.92 + 0.16 * grain);
-        float fresnel = 0.75 + 0.25 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
-        lit = mix(lit, mirror + lit * 0.2, uMirror * fresnel * (1.0 - rim * trimAlpha));
+        vec3 tint = mix(vec3(1.0), body * 1.35, 0.25);
+        vec3 mirror = seen * tint * (0.94 + 0.12 * grain) + lit * 0.15;
+        float fresnel = 0.8 + 0.2 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+        lit = mix(lit, mirror, uMirror * fresnel * (1.0 - rim * trimAlpha));
     }
     float alpha = 1.0;
     if (uPass == 1) alpha = uGhostAlpha * mix(0.45, 1.0, rim);

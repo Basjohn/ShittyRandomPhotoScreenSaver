@@ -1025,7 +1025,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_spectrum_hue_drift': 0.25,
                                     'extruded_spectrum_reflection': 0.35,
                                     'extruded_spectrum_smooth_edges': True,
-                                    'extruded_spectrum_tilt': 0.5,
+                                    'extruded_spectrum_tilt': 0.2222,
                                     'extruded_spectrum_turn': 0.0,
                                     'mode': 'bubble',
                                     'mode_activation': {'bubble': True,

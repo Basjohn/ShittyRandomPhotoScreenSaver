@@ -13,7 +13,6 @@ from PySide6.QtGui import QKeyEvent
 from core.settings.default_contract import get_raw_default_settings
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
 from widgets.spotify_visualizer.view_orbit import (
-    VIEW_ORBIT_STEP,
     orbit_visualizer_view,
     view_orbit_settings,
     view_orbit_values,
@@ -48,25 +47,28 @@ def test_only_3d_freeform_modes_orbit_through_their_own_view_settings():
 
 
 @pytest.mark.parametrize("mode", _ORBITING)
-def test_a_step_moves_the_live_view_and_the_settings_clamp_it(mode):
+def test_turn_goes_round_a_full_circle_and_tilt_stops_at_its_ends(mode):
     turn, tilt = view_orbit_settings(mode)
-    bounds = _host()                                              # find each setting's range by orbiting
-    for _ in range(400):
-        orbit_visualizer_view(bounds, mode, 1, 1)
-    high = view_orbit_values(bounds, mode)
-    for _ in range(800):
-        orbit_visualizer_view(bounds, mode, -1, -1)
-    low = view_orbit_values(bounds, mode)
-    for key in (turn, tilt):
-        assert low[key] < high[key]                               # bounded both ways
-        assert orbit_visualizer_view(bounds, mode, -1, -1)[key] == low[key]
-
+    turn_step, tilt_step = get_visualizer_mode_descriptor(mode).view_orbit_steps
     host = _host()
     before = view_orbit_values(host, mode)
-    after = orbit_visualizer_view(host, mode, 1, -1)
+    after = orbit_visualizer_view(host, mode, 1, 0)
     assert after == view_orbit_values(host, mode)                 # the live state the capture reads
-    assert after[turn] == pytest.approx(min(high[turn], before[turn] + VIEW_ORBIT_STEP))
-    assert after[tilt] == pytest.approx(max(low[tilt], before[tilt] - VIEW_ORBIT_STEP))
+    assert after[turn] == pytest.approx((before[turn] + turn_step + 1.0) % 2.0 - 1.0)
+    # Turning on and on goes round and comes back: a whole circle is 2 in setting units.
+    steps = round(2.0 / turn_step)
+    seen = [orbit_visualizer_view(host, mode, 1, 0)[turn] for _ in range(steps)]
+    assert min(seen) < -0.9 and max(seen) > 0.9 and all(-1.0 <= value <= 1.0 for value in seen)
+    assert seen[-1] == pytest.approx(after[turn], abs=1e-6)
+    # Tilt stops at its ends.
+    for _ in range(round(2.0 / tilt_step)):
+        orbit_visualizer_view(host, mode, 0, 1)
+    high = view_orbit_values(host, mode)[tilt]
+    assert orbit_visualizer_view(host, mode, 0, 1)[tilt] == high
+    for _ in range(round(2.0 / tilt_step)):
+        orbit_visualizer_view(host, mode, 0, -1)
+    low = view_orbit_values(host, mode)[tilt]
+    assert low < high and orbit_visualizer_view(host, mode, 0, -1)[tilt] == low
 
 
 def test_a_mode_without_a_view_ignores_orbiting():
@@ -189,3 +191,76 @@ def test_orbiting_a_curated_preset_moves_the_mode_to_custom_holding_what_was_sho
                                                   {}, mode=mode, values={turn: -0.3, tilt: 0.9})
     assert config[f"preset_{mode}"] == get_custom_preset_index(mode)
     assert (config[turn], config[tilt]) == (-0.3, 0.9) and cache == {}
+
+
+def _mouse(kind, x, y, *, button=Qt.MouseButton.LeftButton, alt=True):
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    modifiers = Qt.KeyboardModifier.AltModifier if alt else Qt.KeyboardModifier.NoModifier
+    buttons = button if kind != QEvent.Type.MouseButtonRelease else Qt.MouseButton.NoButton
+    return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), button, buttons, modifiers)
+
+
+def _quick_owner(*, interaction=True, on_visualizer=lambda point: point.x() < 500):
+    from rendering.quick.input_controller import QuickInputController
+    from rendering.runtime_input import clear_runtime_pointer_input_suppression
+
+    clear_runtime_pointer_input_suppression()
+    owner = QuickInputController(screen_index=0, runtime_generation=1, interaction_mode_enabled=interaction)
+    steps, finished, exits = [], [], []
+    owner.view_orbit_requested.connect(lambda turn, tilt: steps.append((turn, tilt)))
+    owner.view_orbit_finished.connect(lambda: finished.append(True))
+    owner.exit_requested.connect(lambda: exits.append(True))
+    owner.set_view_orbit_enabled(True)
+    owner.set_view_orbit_hit_test(on_visualizer)
+    return owner, steps, finished, exits
+
+
+def test_alt_drag_on_the_visualizer_orbits_it_in_interaction_mode(qt_app):
+    owner, steps, finished, exits = _quick_owner()
+    assert owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, 100, 100)) is True
+    assert owner.passive_mouse_move_requires_routing                 # routed even in interaction mode
+    owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, 108, 100))  # right: the scene turns toward it
+    owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, 108, 96))   # up: the camera lowers
+    step = owner.VIEW_ORBIT_DRAG_PIXELS_PER_STEP
+    assert steps == [(8 / step, 0.0), (0.0, -4 / step)] and finished == []
+    assert owner.handle_mouse_release(_mouse(QEvent.Type.MouseButtonRelease, 108, 96)) is True
+    assert finished == [True] and exits == []
+    assert not owner.passive_mouse_move_requires_routing             # back to interaction routing
+    owner.deleteLater()
+
+
+def test_alt_drag_needs_interaction_alt_and_the_visualizer_under_the_pointer(qt_app):
+    for kwargs, event in ((dict(), _mouse(QEvent.Type.MouseButtonPress, 700, 100)),        # off the Visualizer
+                          (dict(), _mouse(QEvent.Type.MouseButtonPress, 100, 100, alt=False)),
+                          (dict(), _mouse(QEvent.Type.MouseButtonPress, 100, 100,
+                                          button=Qt.MouseButton.RightButton))):
+        owner, steps, finished, exits = _quick_owner(**kwargs)
+        handled = owner.handle_mouse_press(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            assert handled is False                                 # the widgets get it as before
+        owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, 150, 120))
+        assert steps == [] and finished == []
+        owner.deleteLater()
+    # Outside interaction mode a click still exits, Alt or not.
+    owner, steps, _finished, exits = _quick_owner(interaction=False)
+    owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, 100, 100))
+    assert steps == [] and exits == [True]
+    owner.deleteLater()
+
+
+def test_orbiting_finishes_once_after_both_keys_and_drag_end_and_retirement_drops_the_drag(qt_app):
+    owner, steps, finished, _exits = _quick_owner()
+    owner.handle_key_press(_key(QEvent.Type.KeyPress, Qt.Key.Key_W))
+    owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, 100, 100))
+    owner.handle_key_release(_key(QEvent.Type.KeyRelease, Qt.Key.Key_W))
+    assert finished == []                                            # still dragging
+    owner.handle_mouse_release(_mouse(QEvent.Type.MouseButtonRelease, 100, 100))
+    assert finished == [True]
+    owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, 100, 100))
+    owner.set_view_orbit_hit_test(None)                              # the display's runtime retires
+    assert not owner.passive_mouse_move_requires_routing
+    owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, 140, 100))
+    assert len(steps) == 1                                           # only W's step; the drag is gone
+    owner.deleteLater()

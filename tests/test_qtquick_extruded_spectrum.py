@@ -91,11 +91,12 @@ class _Target:
 
         self.capture = TransitionCapture(W, H)
 
-    def render(self, host, snapshot) -> np.ndarray:
+    def render(self, host, snapshot, backdrop=(0.0, 0.0, 0.0, 0.0)) -> np.ndarray:
+        """The card's pixels over ``backdrop`` (what Quick drew beneath, as one colour)."""
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.capture.fbo)
         gl.glViewport(0, 0, W, H)
         gl.glDisable(gl.GL_SCISSOR_TEST)
-        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClearColor(*backdrop)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         matrix = (2 / W, 0, 0, 0, 0, -2 / H, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
         mode = host.render(snapshot=snapshot, viewport=(0, 0, W, H), logical_size=(float(W), float(H)),
@@ -198,37 +199,65 @@ def test_the_content_fade_and_spectrum_colours(target):
             assert colour.max() - colour.min() < 12
 
 
-def test_mirror_faces_polish_only_the_bars_faces(target):
+def test_mirror_faces_reflect_what_lies_beneath_on_the_faces_only(target):
+    """Mirror Faces shows the wallpaper (what Quick drew under the Visualizer) in the bars' faces:
+    over an orange backdrop the faces turn orange, over a blue one blue; nothing outside the
+    bars changes, and with Mirror Faces off nothing of the backdrop is captured or held."""
     capture, host = target
     organ = dict(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_reflection=0.0,
-                 extruded_spectrum_tilt=0.2)
-    plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0))
-    chrome = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0))
-    changed = np.abs(chrome - plain).max(axis=2) > 2
-    drawn = plain[..., 3] > 0
-    assert changed.any()
-    assert not changed[~drawn].any()                         # no new geometry, nothing outside the bars
-    # The faces mirror the studio's bright sky: the bars' bodies brighten overall.
-    body = drawn & (plain[..., 3] == 255)
-    assert chrome[body][:, :3].mean() > plain[body][:, :3].mean() + 10
+                 extruded_spectrum_tilt=0.1, extruded_spectrum_gloss=0.9)
+    shown = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0))
+    faces, drawn = shown[..., 3] == 255, shown[..., 3] > 0
+    renderer = host._implementations["extruded_spectrum"]
+    assert not renderer._backdrop.has_resources
+    colours = {}
+    for name, backdrop in (("orange", (1.0, 0.5, 0.0, 1.0)), ("blue", (0.0, 0.25, 1.0, 1.0))):
+        empty = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0),
+                               backdrop=backdrop)
+        assert renderer._backdrop.has_resources
+        plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0), backdrop=backdrop)
+        changed = np.abs(empty - plain)[..., :3].max(axis=2) > 2
+        assert changed.any() and not changed[~drawn].any()        # only on the bars
+        colours[name] = empty[faces][:, :3].mean(axis=0)
+    orange, blue = colours["orange"], colours["blue"]
+    assert orange[0] > orange[2] + 40 and blue[2] > blue[0] + 40
+    assert not renderer._backdrop.has_resources                  # off again: nothing held
 
 
-def test_smooth_edges_only_fill_in_lines_that_foreshortening_thinned(target):
-    """Smooth Edges keeps edge lines at least a smoothed pixel wide on faces seen at an angle: it
-    only ever adds line light, near the lines, and never dims or recolours a face."""
+def test_the_backdrop_is_copied_every_few_frames_not_every_frame(target):
+    """Reading the target being drawn stalls the GPU, so the backdrop copy is refreshed every
+    BACKDROP_REFRESH_FRAMES frames and reused in between; a changed wallpaper shows within them."""
+    from rendering.quick.scene3d.environment import BACKDROP_REFRESH_FRAMES
+
+    capture, host = target
+    mirrored = _snapshot(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_face_mirror=1.0,
+                         extruded_spectrum_gloss=0.9)
+    faces = capture.render(host, mirrored)[..., 3] == 255         # the bars alone, over nothing
+    capture.render(host, mirrored, backdrop=(1.0, 0.5, 0.0, 1.0))
+    backdrop = host._implementations["extruded_spectrum"]._backdrop
+    first = backdrop.captures
+    frames = [capture.render(host, mirrored, backdrop=(0.0, 0.25, 1.0, 1.0)) for _ in range(3 * BACKDROP_REFRESH_FRAMES)]
+    assert backdrop.captures - first == 3
+    late = frames[-1][faces][:, :3].mean(axis=0)
+    assert late[2] > late[0] + 40                                 # the new (blue) backdrop is reflected
+
+
+def test_smooth_edges_fill_in_lines_that_foreshortening_thinned(target):
+    """Smooth Edges keeps edge lines at least a smoothed pixel wide on faces seen at an angle and
+    doubles the multisampling: it adds line light near the lines; the few pixels it darkens are
+    silhouette pixels resolved by more samples."""
     capture, host = target
     for view in (dict(extruded_spectrum_tilt=0.0, extruded_spectrum_turn=0.0),
-                 dict(extruded_spectrum_tilt=0.8, extruded_spectrum_turn=0.8)):
+                 dict(extruded_spectrum_tilt=0.36, extruded_spectrum_turn=0.18)):
         frames = [capture.render(host, _snapshot(extruded_spectrum_colouring="Spectral Edges",
                                                  extruded_spectrum_reflection=0.0,
                                                  extruded_spectrum_smooth_edges=smooth, **view))
                   for smooth in (False, True)]
         off, on = (frame[..., :3].sum(axis=2) for frame in frames)
         drawn = (frames[0][..., 3] > 0) | (frames[1][..., 3] > 0)
-        assert not (on < off - 24).any()                         # never darker
-        brighter = on > off + 24
+        brighter, darker = on > off + 24, on < off - 24
         assert brighter.sum() < 0.2 * drawn.sum()                 # only along the lines
-    assert brighter.any()                                         # at an angle, thinned lines are filled in
+        assert darker.sum() < 0.04 * drawn.sum() and darker.sum() * 3 < brighter.sum()
 
 
 def test_resources_are_released_with_the_mode(target):

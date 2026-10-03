@@ -812,7 +812,7 @@ class DisplayManager(QObject):
                 # A replacement generation can retire between snapshot and push.
                 continue
 
-    def _orbit_quick_visualizer_view(self, turn_steps: int, tilt_steps: int) -> None:
+    def _orbit_quick_visualizer_view(self, turn_steps: float, tilt_steps: float) -> None:
         """Step the shown 3D Visualizer's view live; nothing is saved until orbiting stops."""
 
         owner = self._quick_visualizer_owner

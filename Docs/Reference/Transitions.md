@@ -230,10 +230,12 @@ Each foundation slice adds what it learned here.
 - Lines a shader draws on a face (rims, edge lines) are measured in screen pixels (`fwidth` of the face
   coordinates), not in face units times a head-on size: foreshortened faces otherwise thin them below a pixel and
   they alias, and MSAA only smooths geometry edges (Extruded Spectrum's Smooth Edges, 2026-10-03).
-- A flat face under a distant camera mirrors a distant environment as one flat colour. Take a mirror's reflection
-  toward a near virtual eye, and put the environment's features where the view really looks: a view tilted down
-  onto the scene mirrors what lies below the horizon, so a dark ground there hides the whole effect (Extruded
-  Spectrum's Mirror Faces).
+- A flat face under a distant camera mirrors a distant environment as one flat colour: take a mirror's reflection
+  toward a near virtual eye. Reflect real content (the photo, or for a Visualizer what Quick drew beneath it);
+  an invented studio reads as washout (Extruded Spectrum's Mirror Faces, 2026-10-03).
+- Reading the render target Quick is drawing into (a blit of what is beneath) stalls the GPU for a fixed ~0.55 ms
+  at 2560x1440 whatever the region size; the same blit alone costs ~0.03 ms. Refresh such a copy every few frames,
+  never every frame.
 
 **Settings**
 - A transition's quality choices (Anti-aliasing, Bloom, and future ones such as Motion Blur) live on its own page.

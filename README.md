@@ -107,6 +107,7 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
   -  'X'             - Next image
   -  'C'             - Cycle transition type
   -  'W/A/S/D'       - With a 3D Visualizer showing (Extruded Spectrum): orbit its view live; saved when you let go
+                       (or hold Alt and drag it with the left mouse button in Interaction mode)
   -  'PgUp/PgDown'   - Global Volume Up/Down
   -  'Spacebar'      - Play/Pause
   -  'Home'          - Global Media Play Pause

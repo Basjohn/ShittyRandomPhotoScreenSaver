@@ -469,12 +469,19 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
   pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line
   instead of one foreshortened below a pixel (the jagged edges reported 2026-10-03); head-on (Glass Floor) the lines
-  are unchanged. Off, lines are sized as if seen head-on.
-- **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed chrome surface reflecting
-  a fixed studio (`extrudedStudio`: bright sky over a grey ground at a crisp, low horizon, two softbox strips). The
-  reflection is taken toward a near virtual eye at mid-bar height, since the real camera is far and a flat face
-  would mirror one flat colour: the horizon crosses the bars and the strips sweep across them as the view turns.
-  Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor reflection.
+  are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also renders the scene at 8x multisampling
+  instead of 4x (+0.035 ms GPU at a full 2560x1440 card).
+- **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
+  the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). What Quick drew under the
+  Visualizer (wallpaper, and widgets beneath it) is copied from the render target into a small mipmapped texture
+  (`BackdropEnvironment`, 512 on the longer side); a face shows it where the pixel sits, displaced by the reflected
+  ray toward a near virtual eye (so it varies across the row and slides as the view turns), sharper with Gloss.
+  Reading the target being drawn costs a fixed GPU stall (~0.55 ms at any region size, RTX 4090), so the copy is
+  refreshed every 6 rendered frames and reused between (reflections may trail the wallpaper by a few frames; about
+  0.1 ms per frame on average). With Mirror Faces at 0 nothing is copied or held. The Visualizer is lent no
+  presentation texture: borrowing the background node's would couple its PR-04 lend/reclaim lifetime to a second
+  node and still not match fit/crop or widgets. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
+  reflection.
 - **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
   binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor
   reflection (fades to zero at the field bottom), translucent ghost columns for the peaks. S17 material lighting.
@@ -485,15 +492,24 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 - **Live view orbit (W/A/S/D):** a 3D freeform mode names its (turn, tilt) settings in the descriptor's
   `view_orbit_settings`; DisplayManager publishes "a 3D view is shown" to every display's input owner on owner
   creation/retirement and mode completion (an event fact, no provider read per key). While it is shown, W/S tilt the
-  camera up/down and A/D move it left/right, one `VIEW_ORBIT_STEP` (0.05, 2 degrees) per press or OS key repeat,
-  applied straight to the presentation state the next logical capture reads (no new clock, timer or poll). Nothing
+  camera up/down and A/D move it left/right, one step (the descriptor's `view_orbit_steps`: 2 degrees each way) per
+  press or OS key repeat. Turn goes a full circle and wraps (-1..1 is -180..180 degrees); tilt runs from level to
+  straight down (0..1 is 0..90 degrees) about the bars' mid-height, so the camera circles the scene's middle. Steps
+  are applied straight to the presentation state the next logical capture reads (no new clock, timer or poll). Nothing
   is saved per step: the result is written once, through the atomic runtime-preset persistence, when the last held
   key is really released (repeat release/press pairs ignored), when the Visualizer retires mid-orbit, or never if a
   preset change replaced the view. On a curated preset the edit moves the mode to Custom holding what was shown
   (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. With no 3D view shown W/A/S/D exit like any
   other key. The S key no longer opens Settings (the context menu does).
-- **Cost** at a 1400x520 card (RTX 4090), median (p90): 0.7-0.9 (1.0-1.1) ms CPU submit and 0.019-0.022 (0.025) ms
-  GPU per frame across the presets; Smooth Edges and Mirror Faces cost nothing measurable.
+- **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it the same way: 4 pixels per
+  step, the scene turning toward the drag and the camera rising as you drag down. The display runtime gives its own
+  input owner the scene's `visualizer_contains_scene_position` hit test (cleared when the runtime retires); while a
+  drag is on, pointer motion is routed to the input owner even in interaction mode, and orbiting finishes (one
+  save) only once no key is held and no drag is on. Without Alt, off the Visualizer or outside interaction/Ctrl
+  mode, pointer behaviour is unchanged.
+- **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
+  submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
+  backdrop copy.
 - **Physical checks (open):** each preset with live music on both displays (Visualizer freshness alongside 3D
   transitions); edge lines at strong tilt/turn with Smooth Edges on and off; Mirror Faces' horizon and softboxes
   while orbiting; W/A/S/D feel (step size, key-repeat pace), the view surviving a restart, and a curated preset

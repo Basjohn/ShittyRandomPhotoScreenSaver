@@ -6,7 +6,7 @@ from collections.abc import Callable
 import math
 import time
 
-from PySide6.QtCore import QObject, QPoint, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from core.logging.logger import get_logger
@@ -91,10 +91,12 @@ class RuntimeInputOwner(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
-    # W/A/S/D while a 3D freeform Visualizer is shown: one step per press or key repeat
-    # (turn steps, tilt steps), and the end of orbiting once the last held key is released.
-    view_orbit_requested = Signal(int, int)
+    # W/A/S/D while a 3D freeform Visualizer is shown (one step per press or key repeat), or
+    # Alt + left drag on it in interaction/Ctrl mode (a step per DRAG_PIXELS_PER_STEP pixels):
+    # (turn steps, tilt steps); then the end of orbiting once no key is held and no drag is on.
+    view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
+    VIEW_ORBIT_DRAG_PIXELS_PER_STEP = 4.0
 
     MOUSE_EXIT_THRESHOLD = 10
     # The camera moves around the scene: W up over it, S down, A left, D right.
@@ -127,6 +129,9 @@ class RuntimeInputOwner(QObject):
         self._context_menu_active = False
         self._view_orbit_enabled = False
         self._view_orbit_held: set[Qt.Key] = set()
+        # Whether a scene point lies on the shown Visualizer (set by the display's runtime).
+        self._view_orbit_hit_test: Callable[[QPointF], bool] | None = None
+        self._view_orbit_drag: QPointF | None = None      # the last drag position while dragging
 
     def is_interaction_mode_enabled(self) -> bool:
         provider = self._interaction_mode_provider
@@ -175,10 +180,35 @@ class RuntimeInputOwner(QObject):
     def set_view_orbit_enabled(self, enabled: bool) -> None:
         """Event-published fact: a 3D freeform Visualizer is shown, so W/A/S/D orbit it."""
         enabled = bool(enabled)
-        if not enabled and self._view_orbit_held:
+        if not enabled and self._view_orbiting():
             self._view_orbit_held.clear()
+            self._view_orbit_drag = None
             self.view_orbit_finished.emit()
         self._view_orbit_enabled = enabled
+
+    def set_view_orbit_hit_test(self, hit_test: Callable[[QPointF], bool] | None) -> None:
+        """The display runtime's test for a scene point on its shown Visualizer (None at retirement)."""
+        self._view_orbit_hit_test = hit_test
+        if hit_test is None:
+            self._view_orbit_drag = None
+
+    def _view_orbiting(self) -> bool:
+        return bool(self._view_orbit_held) or self._view_orbit_drag is not None
+
+    def _finish_view_orbit_if_idle(self) -> None:
+        if not self._view_orbiting():
+            self.view_orbit_finished.emit()
+
+    def _starts_view_orbit_drag(self, event: QMouseEvent, ctrl_mode_active: bool) -> bool:
+        hit_test = self._view_orbit_hit_test
+        return bool(
+            self._view_orbit_enabled
+            and hit_test is not None
+            and event.button() == Qt.MouseButton.LeftButton
+            and event.modifiers() & Qt.KeyboardModifier.AltModifier
+            and (self.is_interaction_mode_enabled() or ctrl_mode_active)
+            and hit_test(event.position())
+        )
 
     def is_view_orbit_enabled(self) -> bool:
         return self._view_orbit_enabled
@@ -295,8 +325,7 @@ class RuntimeInputOwner(QObject):
             # only on the real release of the last held key, so the result is saved once.
             if not event.isAutoRepeat() and orbit_key in self._view_orbit_held:
                 self._view_orbit_held.discard(orbit_key)
-                if not self._view_orbit_held:
-                    self.view_orbit_finished.emit()
+                self._finish_view_orbit_if_idle()
             return True
         return False
 
@@ -308,6 +337,9 @@ class RuntimeInputOwner(QObject):
         if self._should_suppress_runtime_pointer_input("mousePressEvent"):
             return True
         ctrl_mode_active = self.is_ctrl_mode_active() or bool(global_ctrl_held)
+        if self._starts_view_orbit_drag(event, ctrl_mode_active):
+            self._view_orbit_drag = QPointF(event.position())
+            return True
         self._mouse_press_pos = self._local_mouse_point(event)
         self._mouse_press_time = time.time()
 
@@ -329,6 +361,16 @@ class RuntimeInputOwner(QObject):
         global_ctrl_held: bool = False,
     ) -> bool:
         if self._should_suppress_runtime_pointer_input("mouseMoveEvent"):
+            return True
+        if self._view_orbit_drag is not None:
+            # Dragging right moves the camera left round the scene (it turns toward the drag);
+            # dragging down raises the camera over it.
+            position = QPointF(event.position())
+            delta = position - self._view_orbit_drag
+            self._view_orbit_drag = position
+            step = self.VIEW_ORBIT_DRAG_PIXELS_PER_STEP
+            if delta.x() or delta.y():
+                self.view_orbit_requested.emit(delta.x() / step, delta.y() / step)
             return True
         if self._context_menu_active:
             return False
@@ -357,6 +399,10 @@ class RuntimeInputOwner(QObject):
         if self._should_suppress_runtime_pointer_input("mouseReleaseEvent"):
             return True
         del global_ctrl_held
+        if self._view_orbit_drag is not None and _event.button() == Qt.MouseButton.LeftButton:
+            self._view_orbit_drag = None
+            self._finish_view_orbit_if_idle()
+            return True
         self._mouse_press_pos = None
         self._mouse_press_time = 0.0
         return False
