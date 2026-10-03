@@ -2,8 +2,8 @@
 
 `Usu_Static_Approval.blend` is the editable, unrigged character source. This
 directory is authoring/review material and has no SRPSS runtime consumer.
-The live approval checklist is in `../../Current_Plan.md`; the filename does
-not assert visual acceptance.
+Modelling review notes belong in this asset directory, never in the SRPSS
+runtime plan. The filename does not assert visual acceptance.
 
 The corrected eye linework and a constrained crown/root repair are saved.
 The ear roots still do not fully satisfy the correction sheet; the remaining

@@ -62,7 +62,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | transitions and material surfaces (open physical acceptance at the end of the reference) | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
-| Usu character authoring source and static review renders | `assets/usu/README.md`; visual approval debt in `Current_Plan.md` |
+| Usu character authoring source and static review renders | `assets/usu/README.md`; all modelling review notes remain inside the asset directory |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md` |
 | current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |

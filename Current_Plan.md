@@ -9,21 +9,6 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 `Docs/Reference/Scene3D_Resources.md`, `Docs/Reference/Transitions.md`, `Docs/Reference/Visualizer_Reference.md` and
 `Docs/Reference/Sphere_Visualizer.md`. Do not create a second parallel 3D plan while this program is active.
 
-## Operator-directed asset work | Usu | Static modelling / In progress
-
-Asset creation only, independent of runtime admission. `assets/usu/README.md` routes
-the editable Blender source, supplied art reference and review renders.
-
-- [ ] Review the saved Usu open eye-border styling and constrained root/crown
-  repair against `assets/usu/renders/CORRECTIONS.png`. Use the plain FRONT,
-  SIDE, BACK, 3/4 and five free-angle renders linked in `assets/usu/README.md`.
-  Preserve the front charm, broad upper attachments, gentle flop and thick ears.
-  Resolve the remaining temple dimples and pinched rear-root depressions visible
-  in SIDE / HIGH SIDE / HIGH REAR; review the eye arcs' side foreshortening.
-  The mesh checks pass, but the full visual correction brief remains incomplete.
-- [ ] Obtain explicit user acceptance of the static silhouette before admitting
-  any rigging. Animation, engine export and SRPSS integration remain outside this slice.
-
 ## 0. Accepted baseline | do not reopen as work
 
 - [x] **S1-S13 scene3d substrate accepted.** Strict OpenGL 4.6 Core / GLSL 460, shared context-local resource ownership,

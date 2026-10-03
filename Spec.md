@@ -215,8 +215,8 @@ solve deleted-object failures with timers, event-loop pumping, leaked hidden sec
 
 Usu character authoring material lives under `assets/usu/` (see its `README.md`).
 The Blender source and review renders are authoring assets; they do not admit a
-runtime Visualizer, rig, animation or engine export. `Current_Plan.md` owns any
-active asset approval work, while the deferred mode remains future work.
+runtime Visualizer, rig, animation or engine export. Asset modelling and approval
+notes stay in `assets/usu/README.md`; they do not belong in `Current_Plan.md`.
 
 SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick scene**; future 3D work must inspect and
 reuse/extend this foundation where appropriate rather than creating a second renderer stack.
