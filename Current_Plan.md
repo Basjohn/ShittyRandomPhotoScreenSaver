@@ -71,7 +71,65 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   material-lit faces and a blurred backdrop. Deactivated by default. The S20 transition verticals are complete; the
   Visualizer verticals follow (a new mode first needs its logical-capture and Guided Setup preview wiring designed).
 
-## 1. S17 | active-only high-fidelity scene buffers, lighting and materials | **NEXT**
+## 1. Visualizer 3D hardening and direct controls | **NEXT**
+
+Operator direction (2026-10-03, after testing Extruded Spectrum and Shockwave Grid): this part of the codebase must not
+fall behind the features built on it. Every infrastructure item below is **measured before and after** (TIME_ELAPSED +
+per-frame flush, median/p90, CPU submit and Python GL-call count, both displays where relevant). Work in this order:
+
+- [ ] **H0. Borrowed technical profile ignores the lender's preset (defect, found in the 2026-10-03 logs).** Extruded
+  Spectrum and Shockwave Grid borrow Spectrum's technical profile, bar colours and frame-runtime source settings, but
+  `resolve_visualizer_activation_payload` applies only the *active* mode's preset. With Spectrum on a curated preset the
+  borrower read the raw stored `spectrum_*` keys, or Spectrum's factory defaults where none were stored (sensitivity
+  0.4, adaptive, AGC 0.5, block 512): the bars sat pinned at 1.0 ("stuck, unreactive") until a later Settings pass
+  happened to store the preset's values and the next generation looked fine. Fix at the activation owner: resolve the
+  lender through its own active preset, so a borrower always sees what the lender shows. Sphere keeps today's raw-key
+  resolution until its S19 golden is captured (its plan item requires today's hidden profile reproduced exactly).
+- [ ] **H1. First use of a 3D Visualizer: verify the reveal hides it, don't preload.** Operator position: not loading
+  everything at all times is deliberate as the modes get ambitious; a one-time hitch on first activation is acceptable
+  **only if** the mode's content fade-in starts after it, it does not stop the world, and it does not poison later frames
+  or Visualizer latency. Verify that 3D Visualizers are reveal/fade-gated like the others, measure the first-activation
+  cost (shader compile + allocation) and the frames after it; fix only what fails those conditions (e.g. gate the fade
+  on the first real draw, or spread allocation). No preload of every mode's programs.
+- [ ] **H2. 3D quality tiers in a 3D Settings tab.** One tab with pills **General**, **3D Transitions**,
+  **3D Visualizers**. General owns the shared `Auto / High / Balanced / Performance / KAK` vocabulary (the SSOT); the two
+  family pills may override it per family, and individual entries (a transition or a Visualizer mode) may override
+  their family, without becoming a second source of truth: each level stores only "inherit" or an explicit tier, and
+  one resolver produces the effective tier. Visualizer consumers first: Extruded Spectrum's MSAA/Smooth Edges samples
+  and backdrop refresh, Shockwave Grid's grid density and bloom levels. Existing transition quality settings move under
+  the same resolver rather than beside it.
+- [ ] **H3. Exact musical events for event-driven modes.** Shockwave Grid samples the transient bus's onset flag per
+  tick, so two onsets inside one tick merge and a very short one can be missed. Expose the bus's timestamped onset
+  events with sequence numbers and consume them exactly once on the logical clock; this becomes the shared event
+  primitive for Reactive Particle Field and lightning (S18: "never rerandomise per frame").
+- [ ] **H4. Shockwave Grid reactivity tuning (visually accepted; operator feedback 2026-10-03).** (a) It reacts too
+  much at near-silence: gate/scale wave admission and amplitude by real loudness. (b) The biggest sounds have nothing
+  that sets them apart from medium ones, so they get drowned out: make strength non-linear and give big hits something
+  of their own (stronger, wider, brighter crest). (c) Slight idle energy travelling gradually from one side to the
+  other when quiet. (d) Glow brighter at the loudest sounds in their own area (local crest/ridge glow, ~15% is already
+  visible); today glow strength is uniform. Built on H3's events.
+- [ ] **H5. Direct 3D Visualizer controls outside Edit/Arrange.** Alt + left drag orbits (landed). Add **Alt + right
+  drag** to move the 3D Visualizer and **Alt + scroll wheel** to resize it uniformly, both outside Edit mode, with no
+  Edit-mode UI. Suppress the context menu while Alt is held; if Alt + right click cannot be made reliable, switch the
+  move to middle-drag. Must not conflict with Arrange/Edit, must not create a second geometry authority (persist through
+  the same owner Edit/Arrange commit through, once at gesture end, never per movement), zero cost when settled, minimal
+  cost while held. Ownership and lifecycle stay pristine (cleanup on input close, as orbit).
+- [ ] **H6. Shared Visualizer 3D camera, fit and line helpers.** Extruded and Shockwave each carry their own projection,
+  pivot, fit and fwidth-line code with CPU mirrors. Extract one shared helper (GLSL + CPU mirror) before the next 3D
+  mode copies it again.
+- [ ] **H7. Per-pass uniform blocks for 3D Visualizers.** Each mode spends 0.6-1.0 ms render-thread CPU per frame,
+  mostly individual uniform calls holding the GIL and stalling the Python logical producer. Pack per-pass uniforms into
+  one block on the S14 stream (as Exploding Tiles did); measure GL calls and CPU submit before/after.
+- [ ] **H8. Ghost-column transparency order.** Extruded's translucent ghost columns can mis-order at strong angles.
+  Solve with S17's weighted blended OIT when that lands (first consumer), or an exact ordering if cheaper.
+- [ ] **H9. Lend the displayed wallpaper to Visualizers.** Mirror Faces copies the framebuffer every 6th frame
+  (~0.55 ms stall each). Define a legal lend of the background's current texture to Visualizers (as transitions are
+  lent theirs under PR-04, never mutated or sampled illegally), shared by every reflective mode. Before S19.
+- [ ] **Loose ends:** document the Extruded turn/tilt unit change (tilt x40/90, turn x40/180, no migration; only
+  operator-saved views affected) in `Docs/Architecture/Persisted_Input_Compatibility.md`; list the new 3D test files
+  in `Docs/TestSuite.md`; the side defects below.
+
+## 2. S17 | active-only high-fidelity scene buffers, lighting and materials
 
 - [ ] Extend `SceneTarget` only with the normal/material/depth/history attachments a concrete consumer actually needs.
   The canonical product/output path is **SDR-only**: no HDR swapchain, HDR metadata, HDR display mode, HDR output setting
@@ -87,7 +145,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   using owned scene/environment textures. Never mutate or illegally sample the lent PR-04 presentation texture.
 - [ ] Every extra full-screen attachment/pass must prove disabled-path allocation = zero and exact transition endpoints.
 
-## 2. S18 | particles, lightning, smoke/fire and volumetrics
+## 3. S18 | particles, lightning, smoke/fire and volumetrics
 
 - [ ] **GPU particles, remaining:** soft sprites/streaks/ribbons over `CompactedPopulation`, optional simple analytic/SDF
   collision and OIT, each with a consumer that needs it. (Pool, seeded spawn, compute evaluation/compaction and
@@ -102,7 +160,7 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
   primitives using compute/image resources rather than parent CPU loops.
 - [ ] Measure each primitive independently before spectacular combinations are allowed.
 
-## 3. S19 | Voxel Sphere promotion onto shared Scene3D
+## 4. S19 | Voxel Sphere promotion onto shared Scene3D
 
 Sphere is the legacy exception that predates the shared Scene3D foundation. Promotion removes its duplicate low-level
 GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
@@ -136,7 +194,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   dormancy. Whether it remains default-disabled or loses the Experimental label after acceptance is a separate product
   admission decision, not another renderer migration.
 
-## 4. S20 | vertical consumers | make the substrate earn its complexity
+## 5. S20 | vertical consumers | make the substrate earn its complexity
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
@@ -150,7 +208,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## 5. Cross-cutting acceptance | applies to every open box above
+## 6. Cross-cutting acceptance | applies to every open box above
 
 - [ ] **Dormancy:** an inactive capability owns no buffers/targets/volumes/history, compute dispatches, workers, forced
   frames, recurring timers or polls. `park()` / mode retirement returns transient resources to zero.
@@ -162,7 +220,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] **Endpoints:** transition additions remain exact at 0/1 and near-endpoints; R-63 black/uncovered-edge guarantees
   remain binding.
 - [ ] **Settings:** canonical defaults/descriptor resolution happen before admission; renderers never read Settings.
-- [ ] **Physical acceptance:** exercise the shared 3D quality vocabulary (`Auto / High / Balanced / Performance / KAK`)
+- [ ] **Physical acceptance:** exercise the shared 3D quality vocabulary (resolver and tab: H2) (`Auto / High / Balanced / Performance / KAK`)
   on both displays with active Visualizers, first-use/warm cost, parked memory and representative real photos/music. `KAK`
   means minimum viable base geometry/effect only: optional expensive 3D features are effectively off and essential densities
   use their lowest bounded setting. Sphere gets a dedicated before/after behavioural + visual golden during S19.
