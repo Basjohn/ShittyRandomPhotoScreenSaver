@@ -81,6 +81,7 @@ _MODE_NORMAL_ATTR = {
     "devcurve": "_devcurve_normal",
     "sphere": "_sphere_normal",
     "extruded_spectrum": "_extruded_spectrum_normal",
+    "shockwave_grid": "_shockwave_grid_normal",
 }
 
 

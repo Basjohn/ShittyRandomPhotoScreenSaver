@@ -308,6 +308,19 @@ class ExtrudedSpectrumFrame(SpectrumFrame):
 
 
 @dataclass(frozen=True, slots=True)
+class ShockwaveGridFrame(SpectrumFrame):
+    """Spectrum's authored payload plus the live shockwave events for the Shockwave Grid
+    renderer: (age in seconds, origin x as a share of the grid's half width, origin z, strength),
+    aged on the logical clock at capture, oldest first, at most ``SHOCKWAVE_CAPACITY``."""
+
+    events: tuple[tuple[float, float, float, float], ...] = ()
+
+    @property
+    def mode_id(self) -> str:
+        return "shockwave_grid"
+
+
+@dataclass(frozen=True, slots=True)
 class SphereParticleCohort:
     """Immutable Sphere-only detached voxel travel cohort.
 

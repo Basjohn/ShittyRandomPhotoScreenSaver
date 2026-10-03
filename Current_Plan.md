@@ -140,7 +140,9 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
-- [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
+- [x] **Shockwave Grid landed** (dormant by default): displaced grid + bounded onset-event SSBO + emissive/bloom on the
+  SDR presentation path, via the new overlay bloom of `SceneTarget`. Contract, cost and physical checks:
+  `Docs/Reference/Visualizer_Reference.md` 16B.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.
 - [ ] **Bubble Depth Field** only under Bubble Temporal Fidelity/R-69: depth may not damp, retime or re-author Bubble's
@@ -166,6 +168,10 @@ Implement vertical features in this order unless evidence from a preceding slice
   use their lowest bounded setting. Sphere gets a dedicated before/after behavioural + visual golden during S19.
 
 ## Side defects (found in passing)
+
+- [ ] `tools` defaults-authority audit (`tests/test_defaults_schema_authority.py`, two tests) parses every `.py` under
+  the working tree, including untracked scratch: a Python 3.13 scipy copy in `tmp/Usu_Markup_Correction/py313libs`
+  fails to parse and turns both tests red (2026-10-03). The audit should skip ignored/untracked trees such as `tmp/`.
 
 - [ ] `tests/test_feed_runtime.py`: 3 reds on `HEAD` (2026-10-03, found while gating Extruded Spectrum; also red on a
   clean worktree): `test_retiring_one_endpoint_cancels_only_its_queued_work_and_prunes_state`,

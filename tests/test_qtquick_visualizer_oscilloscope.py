@@ -326,6 +326,7 @@ def test_quick_oscilloscope_registry_is_static_lazy_and_resource_dormant(
         "devcurve",
         "sphere",
         "extruded_spectrum",
+        "shockwave_grid",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
 

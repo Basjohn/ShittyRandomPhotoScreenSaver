@@ -988,7 +988,23 @@ _WIDGET_PREVIEWS: Final = {
 # Modes the operator's Visualizer screenshot sheet does not cover, rendered through their
 # production capture and renderer (Spectrum-runtime modes only). They are frameless, so like
 # the sheet's Sphere they sit on a dark backdrop inside a drawn frame.
-_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum",)
+_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid")
+# Modes whose picture comes from musical onsets get a few fixture onsets (time, type, strength)
+# through a minimal transient-bus stand-in before the settled captures at 1.0 and 1.12 s.
+_PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 1.0), (0.55, "snare", 0.8), (0.8, "kick", 0.9))}
+
+
+class _PreviewOnsets:
+    """The one engine call an onset-driven capture makes: the transient bus's latest state."""
+
+    def __init__(self) -> None:
+        self.onset: tuple[str, float] | None = None
+
+    def get_transient_energy_bands(self):
+        from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+
+        kind, strength = self.onset or ("", 0.0)
+        return TransientEnergyBands(onset_detected=self.onset is not None, onset_type=kind, onset_strength=strength)
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
 
 
@@ -1160,6 +1176,15 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     state._display_bars_source_activation = 1
     state._last_engine_generation_seen = 1
     state._last_engine_activation_seen = 1
+    onsets = _PREVIEW_ONSETS.get(mode, ())
+    if onsets:
+        engine = _PreviewOnsets()
+        state._engine = engine
+        for time, kind, strength in onsets:
+            for onset, at in (((kind, strength), time), (None, time + 0.02)):
+                engine.onset = onset
+                capture_visualizer_logical_frame(state, now_ts=at, changed=True, mode_reveal_ready=True)
+        engine.onset = None
     first = capture_visualizer_logical_frame(
         state,
         now_ts=1.0,

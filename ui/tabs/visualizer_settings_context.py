@@ -64,6 +64,7 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
     "sphere": ("_sphere_normal", "_sphere_advanced", "_sphere_advanced_host"),
     "extruded_spectrum": ("_extruded_spectrum_advanced", "_extruded_spectrum_advanced_host"),
+    "shockwave_grid": ("_shockwave_grid_advanced", "_shockwave_grid_advanced_host"),
 }
 
 

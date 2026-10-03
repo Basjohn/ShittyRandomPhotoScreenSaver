@@ -50,7 +50,7 @@ A look at the current features. Developer contracts and work-in-progress details
   - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
   - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), Extruded Spectrum (Spectrum's bars as lit 3D columns, orbit with W/A/S/D), an optional isolated experimental Sphere and a preset/Custom system.
+  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), Extruded Spectrum (Spectrum's bars as lit 3D columns, orbit with W/A/S/D), Shockwave Grid (a neon grid floor that beats send shockwaves across), an optional isolated experimental Sphere and a preset/Custom system.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
   - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
   - **FEEDS** Ten retained feed cards: four Custom RSS/Atom/JSON/h-feed slots plus six News categories, with List/Grid/Compact layouts, optional locally cached article artwork, clickable HTTP/S stories and validated magnet actions.

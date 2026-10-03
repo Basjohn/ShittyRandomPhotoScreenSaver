@@ -1,0 +1,36 @@
+{
+  "mode": "shockwave_grid",
+  "name": "Preset 3 (Blueprint)",
+  "preset_index": 2,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "shockwave_grid",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "mode": "shockwave_grid",
+        "shockwave_grid_allow_overflow": true,
+        "shockwave_grid_crest_color": [
+          120,
+          200,
+          255,
+          255
+        ],
+        "shockwave_grid_density": 0.8,
+        "shockwave_grid_floor": 0.0,
+        "shockwave_grid_glow": 0.3,
+        "shockwave_grid_horizon": 0.8,
+        "shockwave_grid_line_color": [
+          200,
+          230,
+          255,
+          255
+        ],
+        "shockwave_grid_scroll": 0.0,
+        "shockwave_grid_tilt": 0.55,
+        "shockwave_grid_turn": 0.0,
+        "shockwave_grid_wave_height": 0.45,
+        "shockwave_grid_wave_speed": 0.35
+      }
+    }
+  }
+}

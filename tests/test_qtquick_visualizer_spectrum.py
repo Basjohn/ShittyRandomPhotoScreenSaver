@@ -625,6 +625,7 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
         "devcurve",
         "sphere",
         "extruded_spectrum",
+        "shockwave_grid",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")

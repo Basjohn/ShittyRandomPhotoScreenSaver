@@ -51,3 +51,16 @@ def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
     right = min(vx + vw, math.ceil(max(xs) - 1e-6))
     top = min(vy + vh, math.ceil(max(ys) - 1e-6))
     return left, bottom, max(0, right - left), max(0, top - bottom)
+
+
+def padded_item_frame(frame: SceneFrame, pad: float):
+    """A frame like ``frame`` whose item reaches ``pad`` item-local units further on every side
+    (its matrix shifted to match): the target rect for a scene allowed to leave its item."""
+    from types import SimpleNamespace
+
+    m = list(frame.matrix_values)
+    for row in range(4):
+        m[12 + row] -= pad * (m[row] + m[4 + row])
+    width, height = frame.logical_size
+    return SimpleNamespace(viewport=frame.viewport, logical_size=(width + 2.0 * pad, height + 2.0 * pad),
+                           matrix_values=tuple(m), quad_vao=frame.quad_vao)

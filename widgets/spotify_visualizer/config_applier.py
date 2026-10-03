@@ -659,6 +659,22 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if 'extruded_spectrum_smooth_edges' in kwargs:
         host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
 
+    # --- Shockwave Grid presentation ----------------------------------
+    for key, (low, high) in _SHOCKWAVE_GRID_KEYS.items():
+        if key in kwargs:
+            setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
+    for key in _SHOCKWAVE_GRID_COLOURS:
+        if key in kwargs:
+            raw = kwargs[key]
+            if not isinstance(raw, (list, tuple)) or len(raw) < 3:
+                raise ValueError(f"{key} must be an RGB/RGBA sequence")
+            values = [max(0, min(255, int(round(float(channel))))) for channel in list(raw[:4])]
+            while len(values) < 4:
+                values.append(255)
+            setattr(host, f"_{key}", values)
+    if 'shockwave_grid_allow_overflow' in kwargs:
+        host._shockwave_grid_allow_overflow = bool(kwargs['shockwave_grid_allow_overflow'])
+
 
 
 
@@ -673,9 +689,38 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
 }
 
 
+_SHOCKWAVE_GRID_KEYS: Dict[str, tuple[float, float]] = {
+    "shockwave_grid_density": (0.0, 1.0),
+    "shockwave_grid_floor": (0.0, 1.0),
+    "shockwave_grid_glow": (0.0, 1.0),
+    "shockwave_grid_horizon": (0.0, 1.0),
+    "shockwave_grid_scroll": (0.0, 1.0),
+    "shockwave_grid_tilt": (0.0, 1.0),
+    "shockwave_grid_turn": (-1.0, 1.0),
+    "shockwave_grid_wave_height": (0.0, 1.0),
+    "shockwave_grid_wave_speed": (0.0, 1.0),
+}
+_SHOCKWAVE_GRID_COLOURS = ("shockwave_grid_line_color", "shockwave_grid_crest_color")
+
+
 def presentation_setting_range(key: str) -> tuple[float, float]:
     """The canonical (low, high) of a ranged presentation-only setting (for live orbiting)."""
-    return _EXTRUDED_SPECTRUM_KEYS[key]
+    return {**_EXTRUDED_SPECTRUM_KEYS, **_SHOCKWAVE_GRID_KEYS}[key]
+
+
+def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
+    """Shockwave Grid's renderer-only parameters from the presentation owner, with any
+    held-key view orbit evaluated at the capture's ``now_ts``."""
+    pres = _presentation_source(widget)
+    values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _SHOCKWAVE_GRID_KEYS}
+    for key in _SHOCKWAVE_GRID_COLOURS:
+        values[key] = tuple(getattr(pres, f"_{key}"))
+    values["shockwave_grid_allow_overflow"] = bool(pres._shockwave_grid_allow_overflow)
+    if now_ts is not None:
+        from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
+
+        values = apply_view_orbit_motion(pres, "shockwave_grid", values, now_ts)
+    return values
 
 
 def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:

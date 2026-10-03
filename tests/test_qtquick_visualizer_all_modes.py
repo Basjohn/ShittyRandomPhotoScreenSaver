@@ -64,7 +64,8 @@ from widgets.spotify_visualizer.spectrum_frame_runtime import (
     SpectrumFrameRuntime,
 )
 from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
-from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
+from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame, ShockwaveGridFrame
+from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 
 
 _MODE_STATES = {
@@ -75,6 +76,7 @@ _MODE_STATES = {
     "devcurve": DevCurveFrame,
     "sphere": SphereFrame,
     "extruded_spectrum": ExtrudedSpectrumFrame,
+    "shockwave_grid": ShockwaveGridFrame,
 }
 _MODE_IDS = tuple(
     descriptor.mode_id
@@ -101,6 +103,8 @@ class _BubbleSimulation:
 def _runtime(mode_id: str):
     if mode_id in ("spectrum", "extruded_spectrum"):   # Extruded borrows Spectrum's runtime
         return SpectrumFrameRuntime()
+    if mode_id == "shockwave_grid":                     # Spectrum's runtime plus an event ring
+        return ShockwaveGridFrameRuntime()
     if mode_id == "oscilloscope":
         return OscilloscopeFrameRuntime()
     if mode_id == "sine_wave":
@@ -136,7 +140,7 @@ def _drive_runtime(
         "source_activation_id": source_activation_id,
         "playing": playing,
     }
-    if mode_id in ("spectrum", "extruded_spectrum"):
+    if mode_id in ("spectrum", "extruded_spectrum", "shockwave_grid"):
         return runtime.resolve(
             (0.2, 0.6),
             bar_count=2,
