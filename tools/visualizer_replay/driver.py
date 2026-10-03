@@ -30,7 +30,7 @@ from widgets.spotify_visualizer.quick_presentation_sync import QuickVisualizerPr
 from widgets.spotify_visualizer.quick_technical_config import apply_controller_technical_config
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mode_kwargs
-from widgets.spotify_visualizer.technical_config import build_technical_cache
+from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
 from .engine import ReplayBeatEngine
@@ -39,6 +39,17 @@ from .metrics import calculate_metrics
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/visualizer_replay/v1"
 MODES = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
+# Modes that replay from schema 2 clips only (their inputs are the real-scale lanes).
+REAL_SCALE_MODES = ("sphere",)
+
+
+def sphere_output(state) -> tuple[float, ...]:
+    """Sphere's behavioural outputs on one frame: section drives (fragmentation), then size,
+    spin, tracer, incoming drive and density, then each live cohort's progress/strength/density."""
+    cohorts = tuple(value for cohort in state.particle_cohorts
+                    for value in (cohort.progress, cohort.strength, cohort.density))
+    return (*state.section_drives, state.size_pulse, state.rotation_drive, state.tracer_drive,
+            state.incoming_drive, state.incoming_density, *cohorts)
 
 
 def mode_output(frame):
@@ -50,6 +61,8 @@ def mode_output(frame):
         return tuple(value for _name, curve in state.curves for value in curve)
     if frame.mode_id == "spectrum":
         return frame.common.bars + state.peaks
+    if frame.mode_id == "sphere":
+        return sphere_output(state)
     if frame.mode_id == "sine_wave":
         return tuple(float(state.parameters[key]) for key in (
             "resolved_sensitivity", "resolved_width_reaction", "wave_effect_gate",
@@ -92,8 +105,8 @@ def deterministic_clock():
         random.setstate(saved_random)
 
 
-def _configure(controller, mode):
-    activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": 0})
+def _configure(controller, mode, preset: int = 0):
+    activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
     model = SpotifyVisualizerSettings.from_mapping(
         activation.resolved_config, apply_preset_overlay=False, resolve_preset_indices=False,
     )
@@ -108,7 +121,8 @@ def _configure(controller, mode):
     apply_presentation_vis_mode_kwargs(controller.presentation_state, values)
     apply_engine_vis_mode_kwargs(controller.engine, values)
     controller.technical_config_cache = build_technical_cache(None, model)
-    apply_controller_technical_config(controller, controller.technical_config_cache[mode], reason="offline_replay")
+    apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, mode),
+                                      reason="offline_replay")
     controller.enabled = True
     controller.playing = True
     controller.begin_render_activation(
@@ -120,9 +134,11 @@ def _configure(controller, mode):
     state._waiting_for_fresh_engine_frame = False
 
 
-def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1):
-    if mode not in (*MODES, "control") or present_every < 1:
+def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0):
+    if mode not in (*MODES, *REAL_SCALE_MODES, "control") or present_every < 1:
         raise ValueError("invalid replay mode or presentation interval")
+    if mode in REAL_SCALE_MODES and any(frame.real is None for frame in clip.frames):
+        raise ValueError("Sphere replays only from schema 2 (real-scale) clips")
     frames = []
     logical_series = []
     presentation_trace = []
@@ -134,7 +150,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1):
             engine_factory=lambda _count: engine,
         )
         controller.engine = engine
-        _configure(controller, controller.mode_id)
+        _configure(controller, controller.mode_id, preset)
         sync = QuickVisualizerPresentationSync(
             controller,
             resolve_presentation=lambda: resolve_visualizer_presentation(
@@ -175,6 +191,14 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1):
                         )} for p in bubble.simulation._bubbles
                     ]}
                 frames.append(row)
+                if controller.mode_id == "sphere":
+                    state = logical.mode_state
+                    row["sphere"] = {
+                        "section_drives": list(state.section_drives), "size_pulse": state.size_pulse,
+                        "rotation_drive": state.rotation_drive, "tracer_drive": state.tracer_drive,
+                        "incoming_drive": state.incoming_drive, "incoming_density": state.incoming_density,
+                        "cohorts": [asdict(cohort) for cohort in state.particle_cohorts],
+                    }
                 if controller.mode_id == "devcurve":
                     runtime = controller.peek_logical_mode_state("devcurve")
                     travel_rates.append(runtime.solver_state.foreground_travel_rate)
