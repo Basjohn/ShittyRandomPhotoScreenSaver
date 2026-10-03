@@ -219,10 +219,6 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Side defects (found in passing)
 
-- [ ] `tools` defaults-authority audit (`tests/test_defaults_schema_authority.py`, two tests) parses every `.py` under
-  the working tree, including untracked scratch: a Python 3.13 scipy copy in `tmp/Usu_Markup_Correction/py313libs`
-  fails to parse and turns both tests red (2026-10-03). The audit should skip ignored/untracked trees such as `tmp/`.
-
 - [ ] `tests/test_feed_runtime.py`: 3 reds on `HEAD` (2026-10-03, found while gating Extruded Spectrum; also red on a
   clean worktree): `test_retiring_one_endpoint_cancels_only_its_queued_work_and_prunes_state`,
   `test_shared_endpoint_is_cancelled_only_after_its_last_active_lease` and
