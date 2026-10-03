@@ -131,6 +131,16 @@ Presentation side owns:
 
 The worker does not mutate Quick items or GPU resources.
 
+**Musical onsets (event-driven modes).** The transient bus publishes each onset as an immutable `MusicalOnset`
+(`widgets/spotify_visualizer/transient_bus.py`): a process-wide serial (it never restarts, not even with a replaced
+bus), the analysis timestamp, the kind, the clipped strength (0..1), the unclipped magnitude (0..3: how far above its
+adaptive threshold, relative to it, so a big hit still differs from a medium one), the absolute post-noise-floor,
+pre-AGC loudness it happened at (the bus's own input is loudness-normalised, so a near-silent passage triggers as
+readily as a loud one) and its presence (that loudness against a 6 s running level). The last 16 are one tuple the
+audio lane replaces per onset; `BeatEngine.get_onset_events(after_serial)` returns the ones a consumer has not taken.
+Sampling the bus's per-frame onset flag instead depended on the analysis and logical cadences lining up. Bars:
+`tests/test_qtquick_shockwave_grid.py`. The shared primitive for Shockwave Grid, Reactive Particle Field and lightning.
+
 **Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Shockwave Grid)
 offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host lets it compile or allocate one unit
 of what its first visible frame of that activation would create (a program, a mesh, the stream ring, the target, the
@@ -478,9 +488,9 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
 
 - **Authored state:** Spectrum's frame runtime, technical profile and bar colours, extended by
   `ShockwaveGridFrameRuntime` (`widgets/spotify_visualizer/shockwave_frame_runtime.py`) with a bounded event ring:
-  each new musical onset (the rising edge of the transient bus's onset flag, at least 0.09 s after the last, only
-  while playing) becomes one event with a deterministic origin (from its serial number; kicks nearer the front middle)
-  and the onset's strength. Events are aged on the logical clock at capture, dropped after 3.2 s, at most 16 held.
+  each musical onset the transient bus publishes (at least 0.09 s after the last, only while playing) becomes one
+  event, born when the onset happened, with a deterministic origin (from its admission number; kicks nearer the
+  front middle) and the onset's strength. Onsets are taken exactly once by serial (see "Musical onsets" below). Events are aged on the logical clock at capture, dropped after 3.2 s, at most 16 held.
   `ShockwaveGridFrame.events` carries them aged, so the renderer has no clock or history of its own. Live events (or
   Scroll) keep Spectrum's animation clock running, so frames publish while waves move.
 - **Picture:** one draw of the shared triangle grid (180x120 cells) displaced in the vertex shader: each event a

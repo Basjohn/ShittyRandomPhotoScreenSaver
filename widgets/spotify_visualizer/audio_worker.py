@@ -95,6 +95,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_onset_detected",
     "_onset_type",
     "_onset_strength",
+    "_onset_events",
     "_pre_agc_control_norm",
     "_pre_agc_control_bass",
     "_pre_agc_control_mid",
@@ -249,6 +250,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._onset_detected: bool = False
         self._onset_type: str = ""
         self._onset_strength: float = 0.0
+        self._onset_events: tuple = ()      # the bus's published MusicalOnsets
         # Shared control-lane energies (pre-AGC, dynamically normalised).
         # These are separate from the AGC source fields so we can keep
         # visualizer control dynamics expressive under hot passages without
@@ -450,6 +452,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._onset_detected = False
             self._onset_type = ""
             self._onset_strength = 0.0
+            self._onset_events = ()
             self._pre_agc_bass = 0.0
             self._pre_agc_mid = 0.0
             self._pre_agc_treble = 0.0
@@ -767,6 +770,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             "_onset_detected",
             "_onset_type",
             "_onset_strength",
+            "_onset_events",
             "_pre_agc_control_norm",
             "_pre_agc_control_bass",
             "_pre_agc_control_mid",

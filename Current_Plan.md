@@ -90,10 +90,9 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   choice; `transitions.detail_3d` retired by an input bridge). Extruded: samples + Mirror refresh; Shockwave: samples,
   Glow, grid density. Contracts and per-tier costs: `Docs/Reference/Transitions.md` "3D Detail",
   `Docs/Reference/Visualizer_Reference.md` 16A/16B. Physical: the tiers on both displays (cross-cutting item below).
-- [ ] **H3. Exact musical events for event-driven modes.** Shockwave Grid samples the transient bus's onset flag per
-  tick, so two onsets inside one tick merge and a very short one can be missed. Expose the bus's timestamped onset
-  events with sequence numbers and consume them exactly once on the logical clock; this becomes the shared event
-  primitive for Reactive Particle Field and lightning (S18: "never rerandomise per frame").
+- [x] **H3. Exact musical events**: the transient bus publishes immutable, serial-numbered `MusicalOnset`s (with the
+  unclipped magnitude and absolute loudness H4 needs); Shockwave Grid takes each exactly once, born when it happened.
+  Contract: `Docs/Reference/Visualizer_Reference.md` "Musical onsets".
 - [ ] **H4. Shockwave Grid reactivity tuning (visually accepted; operator feedback 2026-10-03).** (a) It reacts too
   much at near-silence: gate/scale wave admission and amplitude by real loudness. (b) The biggest sounds have nothing
   that sets them apart from medium ones, so they get drowned out: make strength non-linear and give big hits something

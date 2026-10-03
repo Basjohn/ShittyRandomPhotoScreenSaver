@@ -1,11 +1,13 @@
 """Activation-fenced authored state for the Shockwave Grid Visualizer mode.
 
 Spectrum's frame runtime (bars, peaks, temporal treatment, shape editor, energy distribution)
-plus a bounded ring of shockwave events: each admitted musical onset (the rising edge of the
-transient bus's onset flag, at least ``SHOCKWAVE_MIN_GAP`` after the last) becomes one event
-with a deterministic origin (from its serial number and onset type) and the onset's strength.
-Events are aged on the logical clock at capture and dropped after ``SHOCKWAVE_LIFETIME``; at most
-``SHOCKWAVE_CAPACITY`` are held, the oldest giving way. Nothing here touches Qt or GL.
+plus a bounded ring of shockwave events: each musical onset the transient bus publishes
+(``MusicalOnset``, taken exactly once by serial, however the analysis and logical cadences
+relate) and at least ``SHOCKWAVE_MIN_GAP`` after the last becomes one event, born when the
+onset happened, with a deterministic origin (from its admission number and onset type) and the
+onset's strength. Events are aged on the logical clock at capture and dropped after
+``SHOCKWAVE_LIFETIME``; at most ``SHOCKWAVE_CAPACITY`` are held, the oldest giving way. Nothing
+here touches Qt or GL.
 """
 
 from __future__ import annotations
@@ -30,32 +32,41 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         super().__init__()
         self._events: list[_Event] = []
         self._event_serial = 0
-        self._onset_held = False
+        self._onset_serial = 0
         self._last_event_ts = float("-inf")
 
     def reset(self) -> None:
         super().reset()
         self._events = []
         self._event_serial = 0
-        self._onset_held = False
+        self._onset_serial = 0
         self._last_event_ts = float("-inf")
 
+    @property
+    def onset_serial(self) -> int:
+        """The last onset serial taken: ask the engine only for the onsets after it."""
+        return self._onset_serial
+
     @retirement_fenced
-    def record_onsets(self, *, onset: bool, kind: str, strength: float, now_ts: float,
+    def record_onsets(self, *, onsets, now_ts: float,
                       playing: bool) -> tuple[tuple[float, float, float, float], ...]:
-        """Admit this tick's onset (if it is a new one) and return the live events as
-        (age, x share, z, strength), oldest first."""
-        rising = bool(onset) and not self._onset_held
-        self._onset_held = bool(onset)
+        """Admit the new published onsets (``MusicalOnset``, oldest first; any already taken
+        are skipped) and return the live events as (age, x share, z, strength), oldest first."""
         now = float(now_ts)
         if self._events and now < self._events[-1][0]:
             self._events = []                       # the clock went back (a new activation)
             self._last_event_ts = float("-inf")
-        if rising and playing and now - self._last_event_ts >= SHOCKWAVE_MIN_GAP:
-            x, z = shockwave_origin(self._event_serial, str(kind))
-            self._events.append((now, x, z, max(0.25, min(1.0, float(strength)))))
+        for onset in onsets:
+            if onset.serial <= self._onset_serial:
+                continue
+            self._onset_serial = onset.serial
+            birth = min(now, float(onset.timestamp))
+            if not playing or birth - self._last_event_ts < SHOCKWAVE_MIN_GAP:
+                continue
+            x, z = shockwave_origin(self._event_serial, str(onset.kind))
+            self._events.append((birth, x, z, max(0.25, min(1.0, float(onset.strength)))))
             self._event_serial += 1
-            self._last_event_ts = now
+            self._last_event_ts = birth
         self._events = [event for event in self._events if now - event[0] < SHOCKWAVE_LIFETIME]
         del self._events[:-SHOCKWAVE_CAPACITY]
         return tuple((now - birth, x, z, s) for birth, x, z, s in self._events)
