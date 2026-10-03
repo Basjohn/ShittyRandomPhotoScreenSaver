@@ -1117,7 +1117,7 @@ class TransitionsTab(QWidget):
             ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
         ),
         "page_curl": (
-            ("gloss", "Paper Gloss:", 0., 1., "Shine and reflections of the next image on the curling page."),
+            ("gloss", "Gloss:", 0., 1., "Shine of the laminated sheet and reflections of the next image on it."),
         ),
         "cube_turn": (
             ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the turning box."),

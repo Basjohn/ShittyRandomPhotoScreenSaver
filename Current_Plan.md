@@ -159,8 +159,8 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Operator transition requests (2026-10-03) | before Extruded Spectrum
 
-- [ ] **Page Curl rework**: more gradual, curls further (a tighter, longer roll), and a glossy laminated sheet rather
-  than dull paper.
+- [x] **Page Curl rework landed**: a growing laminate roll at an even pace, the print's colour kept under a clear
+  coat (physical check in Transitions.md).
 - [ ] **Accordion Fold rework**: as built it has no visual value; redesign it.
 - [ ] **Beam** (new, wipe family): a lightsaber-like beam crosses the picture in a custom colour (bright blue by
   default), with no handle, glow and sparks, no or minimal flicker (nothing seizure-inducing) and a slight brightness
