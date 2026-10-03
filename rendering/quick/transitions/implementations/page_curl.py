@@ -1,4 +1,4 @@
-"""Lazy Quick renderer for Page Curl: the old picture peels away over the new one."""
+"""Lazy Quick renderer for Page Curl: the old picture peels away and rolls up over the new one."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ class QuickPageCurlRenderer:
         bind_frame(program, uniforms, frame)
         gl.glUniform2f(uniforms["uDirection"], *direction)
         gl.glUniform1f(uniforms["uLine"], line)
-        gl.glUniform1f(uniforms["uShade"], page_curl_shade_weight(line, far))
+        gl.glUniform1f(uniforms["uShade"], page_curl_shade_weight(line, near, far))
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
