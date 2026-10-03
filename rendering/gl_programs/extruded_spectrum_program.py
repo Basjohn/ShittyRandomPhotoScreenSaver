@@ -103,15 +103,10 @@ def extruded_fit(half_span: float, depth: float, tilt: float, reflection: float,
 
 def extruded_overflow_frame(frame, pad: float):
     """A frame like ``frame`` whose item reaches ``pad`` item-local units further on every
-    side (its matrix shifted to match), for compositing a scene that leaves the item."""
-    from types import SimpleNamespace
+    side, for compositing a scene that leaves the item (the shared ``padded_item_frame``)."""
+    from rendering.quick.scene3d.frame import padded_item_frame
 
-    m = list(frame.matrix_values)
-    for row in range(4):
-        m[12 + row] -= pad * (m[row] + m[4 + row])
-    width, height = frame.logical_size
-    return SimpleNamespace(viewport=frame.viewport, logical_size=(width + 2.0 * pad, height + 2.0 * pad),
-                           matrix_values=tuple(m), quad_vao=frame.quad_vao)
+    return padded_item_frame(frame, pad)
 
 
 _COMMON_UNIFORMS = """

@@ -233,6 +233,10 @@ Each foundation slice adds what it learned here.
 - A flat face under a distant camera mirrors a distant environment as one flat colour: take a mirror's reflection
   toward a near virtual eye. Reflect real content (the photo, or for a Visualizer what Quick drew beneath it);
   an invented studio reads as washout (Extruded Spectrum's Mirror Faces, 2026-10-03).
+- Post passes over owned targets (resolve, bloom) must not inherit the caller's blending: transitions run with
+  blending off, but a Visualizer host blends straight alpha, and a bloom chain blending onto its own levels carries
+  glow from frame to frame (Shockwave Grid's first renders). Disable blending for them and hand the caller's state
+  back after.
 - Reading the render target Quick is drawing into (a blit of what is beneath) stalls the GPU for a fixed ~0.55 ms
   at 2560x1440 whatever the region size; the same blit alone costs ~0.03 ms. Refresh such a copy every few frames,
   never every frame.

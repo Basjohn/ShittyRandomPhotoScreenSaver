@@ -632,6 +632,24 @@ _EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'extruded_spectrum_smooth_edges': bool,
 }
 _EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED_SPECTRUM_BUILD_SPECS)
+_SHOCKWAVE_GRID_LIMITS: Dict[str, Tuple[float, float]] = {
+    'shockwave_grid_density': (0.0, 1.0),
+    'shockwave_grid_floor': (0.0, 1.0),
+    'shockwave_grid_glow': (0.0, 1.0),
+    'shockwave_grid_horizon': (0.0, 1.0),
+    'shockwave_grid_scroll': (0.0, 1.0),
+    'shockwave_grid_tilt': (0.0, 1.0),
+    'shockwave_grid_turn': (-1.0, 1.0),
+    'shockwave_grid_wave_height': (0.0, 1.0),
+    'shockwave_grid_wave_speed': (0.0, 1.0),
+}
+_SHOCKWAVE_GRID_COLOURS = ('shockwave_grid_line_color', 'shockwave_grid_crest_color')
+_SHOCKWAVE_GRID_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    **{key: float for key in _SHOCKWAVE_GRID_LIMITS},
+    **{key: list for key in _SHOCKWAVE_GRID_COLOURS},
+    'shockwave_grid_allow_overflow': bool,
+}
+_SHOCKWAVE_GRID_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SHOCKWAVE_GRID_BUILD_SPECS)
 
 _DEVCURVE_ACTIVE_LAYERS = {"bass", "vocals", "mids", "transients"}
 _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
@@ -712,6 +730,7 @@ def _build_visualizer_model_kwargs(
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
         _build_read_value_map(read_value, _EXTRUDED_SPECTRUM_BUILD_SPECS),
+        _build_read_value_map(read_value, _SHOCKWAVE_GRID_BUILD_SPECS),
         preset_kwargs,
     )
 
@@ -1410,6 +1429,20 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_smooth_edges: bool = field(
         default_factory=lambda: _visualizer_default('extruded_spectrum_smooth_edges'))
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
+    shockwave_grid_density: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_density'))
+    shockwave_grid_floor: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_floor'))
+    shockwave_grid_glow: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_glow'))
+    shockwave_grid_horizon: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_horizon'))
+    shockwave_grid_scroll: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_scroll'))
+    shockwave_grid_tilt: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_tilt'))
+    shockwave_grid_turn: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_turn'))
+    shockwave_grid_wave_height: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_wave_height'))
+    shockwave_grid_wave_speed: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_wave_speed'))
+    shockwave_grid_crest_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('shockwave_grid_crest_color')))
+    shockwave_grid_line_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('shockwave_grid_line_color')))
+    shockwave_grid_allow_overflow: bool = field(
+        default_factory=lambda: _visualizer_default('shockwave_grid_allow_overflow'))
+    preset_shockwave_grid: int = field(default_factory=lambda: _visualizer_default('preset_shockwave_grid'))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
@@ -1425,6 +1458,16 @@ class SpotifyVisualizerSettings:
         from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
         if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
             self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')
+        for attr, (low, high) in _SHOCKWAVE_GRID_LIMITS.items():
+            _clamp_attr_range(self, attr, low, high)
+        self.shockwave_grid_allow_overflow = bool(self.shockwave_grid_allow_overflow)
+        for attr in _SHOCKWAVE_GRID_COLOURS:
+            value = list(getattr(self, attr) or ())
+            if len(value) < 3:
+                value = list(_visualizer_default(attr))
+            while len(value) < 4:
+                value.append(255)
+            setattr(self, attr, [max(0, min(255, int(round(float(channel))))) for channel in value[:4]])
 
     def _apply_list_default(self, attr: str, value: list[int]) -> None:
         if getattr(self, attr) is None:
@@ -1665,6 +1708,7 @@ class SpotifyVisualizerSettings:
             self._serialize_devcurve_settings(prefix),
             self._serialize_sphere_settings(prefix),
             _serialize_prefixed_fields(self, prefix, _EXTRUDED_SPECTRUM_SERIALIZERS),
+            _serialize_prefixed_fields(self, prefix, _SHOCKWAVE_GRID_SERIALIZERS),
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),

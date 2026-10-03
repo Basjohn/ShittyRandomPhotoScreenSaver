@@ -319,10 +319,14 @@ class SceneTarget:
 
     @contextmanager
     def emission_writes(self) -> Iterator[None]:
-        """Let the enclosed passes write emitted light (location 1); a no-op without overlay bloom."""
+        """Let the enclosed passes write emitted light (location 1), added up across passes; a no-op
+        without overlay bloom. (The caller's blend, captured at ``begin``, returns at ``end``.)"""
         if not self._names["emission"]:
             yield
             return
+        gl.glEnablei(gl.GL_BLEND, 1)
+        gl.glBlendEquationSeparatei(1, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+        gl.glBlendFuncSeparatei(1, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
         gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         try:
             yield
@@ -446,6 +450,8 @@ class SceneTarget:
                 glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
         if self._overlay is not None and self._names["emission"] and bloom > 0.0:
             try:
+                # The post passes overwrite their targets: no caller blending (handed back below).
+                gl.glDisable(gl.GL_BLEND)
                 emitted = self._resolve_emission(frame, resources) if multisampled else self._names["emission"]
                 glow = self._bloom.apply(emitted, (allocated_width, allocated_height), resources, frame.quad_vao)
                 self._restore_inherited(frame)

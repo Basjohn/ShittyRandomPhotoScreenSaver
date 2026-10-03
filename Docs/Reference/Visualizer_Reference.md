@@ -15,6 +15,7 @@ Canonical current mode ids remain owned by the settings/mode registry:
 - `devcurve`
 - `sphere` — experimental, FRAMELESS, dormant by default
 - `extruded_spectrum` — FRAMELESS, dormant by default; Spectrum's bars as lit 3D columns
+- `shockwave_grid` — FRAMELESS, dormant by default; a neon grid floor rippled by onset shockwaves
 
 The first five are the established carded technical modes. Extruded Spectrum (section 16A) is a permanent mode that
 borrows Spectrum's frame runtime, technical profile and bar colours and owns only its 3D presentation. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
@@ -53,6 +54,7 @@ admission/status/defaults and close acceptance gates, not require reimplementing
 | DevCurve | yes | yes | no | yes |
 | Sphere (experimental) | yes | yes | no | yes |
 | Extruded Spectrum | yes | no | yes | yes |
+| Shockwave Grid | yes | no | yes | yes |
 
 Paused Spectrum remains intentionally mixed:
 
@@ -452,6 +454,37 @@ Sphere is the active promotion target and remains behaviourally private until it
   `velocity_writes()`, evaluating its points at the snapshot's logical t and t - shutter (never real time).
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
+
+## 16B. Shockwave Grid
+
+A neon grid floor in perspective (`rendering/quick/visualizer/implementations/shockwave_grid.py`, GLSL and CPU
+mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visualizer with its own authored events.
+
+- **Authored state:** Spectrum's frame runtime, technical profile and bar colours, extended by
+  `ShockwaveGridFrameRuntime` (`widgets/spotify_visualizer/shockwave_frame_runtime.py`) with a bounded event ring:
+  each new musical onset (the rising edge of the transient bus's onset flag, at least 0.09 s after the last, only
+  while playing) becomes one event with a deterministic origin (from its serial number; kicks nearer the front middle)
+  and the onset's strength. Events are aged on the logical clock at capture, dropped after 3.2 s, at most 16 held.
+  `ShockwaveGridFrame.events` carries them aged, so the renderer has no clock or history of its own. Live events (or
+  Scroll) keep Spectrum's animation clock running, so frames publish while waves move.
+- **Picture:** one draw of the shared triangle grid (180x120 cells) displaced in the vertex shader: each event a
+  circular crest with a shallow trough behind, travelling at Wave Speed and fading over 1.1 s; Spectrum's bars raise a
+  ridge along the far edge (Horizon). Lines are analytic in the fragment shader (anti-aliased by their on-screen
+  width), turning toward the crest colour on crests and the ridge, over a dark translucent floor (Floor). The grid
+  fades out at its far edge and sides.
+- **Glow** uses the overlay bloom of `SceneTarget` (`Docs/Reference/Scene3D_Resources.md`): the lines emit their
+  light into the emission attachment and the glow is added over the wallpaper. Glow 0 allocates no emission
+  attachment or bloom chain.
+- **View:** turn a full circle and tilt from level to straight down about the grid's centre, from a camera beyond the
+  grid's reach (`shockwave_camera`); `shockwave_fit` frames the visible grid and the highest ridge between 10% and 96%
+  of the field for every view. W/A/S/D and Alt + drag orbit it (`view_orbit_settings`), Allow Overflow lets it pass the
+  rectangle. CUSTOM quarter-turn is not offered.
+- **Guided Setup preview:** rendered by the foundry with three fixture onsets fed through a minimal transient-bus
+  stand-in (`_PREVIEW_ONSETS`).
+- **Cost** at a card filling a 2560x1440 display (RTX 4090), median: 0.6 ms CPU submit and 0.07 ms GPU without glow;
+  1.0 ms and 0.16 ms with glow (the bloom passes), 3 or 16 live waves alike.
+- **Physical checks (open):** wave timing against real music (kicks vs. snares, busy tracks hitting the 16-event cap),
+  the presets on both displays, glow strength, the horizon ridge, orbiting, and Allow Overflow near screen edges.
 
 ## 16A. Extruded Spectrum
 

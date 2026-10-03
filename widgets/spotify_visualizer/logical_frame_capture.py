@@ -21,6 +21,7 @@ from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,
     ExtrudedSpectrumFrame,
+    ShockwaveGridFrame,
     ModeFrame,
     OscilloscopeFrame,
     SineFrame,
@@ -328,6 +329,41 @@ def _capture_extruded_spectrum(
     )
 
 
+def _capture_shockwave_grid(
+    widget: Any,
+    engine: Any,
+    context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]] | None:
+    """Spectrum's capture under the Shockwave identity, plus the live onset events (admitted
+    and aged by the mode's frame runtime on this tick's logical time) and its presentation keys."""
+
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("Shockwave Grid logical capture requires its runtime controller owner")
+    runtime_type = _mode_frame_runtime_type("shockwave_grid")
+    runtime = _resolve_current_mode_runtime(controller, "shockwave_grid", runtime_type)
+    if runtime is None:
+        return None
+    getter = getattr(engine, "get_transient_energy_bands", None) if engine is not None else None
+    try:
+        transient = _transient_state(getter() if callable(getter) else None)
+    except Exception:
+        transient = _transient_state(None)
+    events = runtime.record_onsets(onset=transient.onset_detected, kind=transient.onset_type,
+                                   strength=transient.onset_strength, now_ts=context.now_ts,
+                                   playing=context.playing)
+    if events is None:
+        return None
+    parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
+    return _capture_spectrum_family(
+        widget, engine, context, mode_id="shockwave_grid", frame_type=ShockwaveGridFrame,
+        extra_parameters=parameters,
+        # Waves move (and the grid may scroll) on Spectrum's animation clock.
+        animation_enabled=bool(events) or float(parameters["shockwave_grid_scroll"]) > 0.0,
+        frame_fields={"events": events},
+    )
+
+
 def _capture_spectrum_family(
     widget: Any,
     engine: Any,
@@ -337,6 +373,7 @@ def _capture_spectrum_family(
     frame_type: type[SpectrumFrame],
     extra_parameters: Mapping[str, object] | None = None,
     animation_enabled: bool | None = None,
+    frame_fields: Mapping[str, object] | None = None,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     """One Spectrum-runtime capture for ``mode_id`` (Spectrum, or a mode that borrows its
     frame runtime through its descriptor)."""
@@ -433,6 +470,7 @@ def _capture_spectrum_family(
                     if not name.startswith("_quick_")
                 }
             ),
+            **dict(frame_fields or {}),
         ),
         extra,
     )
@@ -801,6 +839,7 @@ ModeCapture = Callable[
 _BUILTIN_MODE_CAPTURE: dict[str, ModeCapture] = {
     "spectrum": _capture_spectrum,
     "extruded_spectrum": _capture_extruded_spectrum,
+    "shockwave_grid": _capture_shockwave_grid,
     "oscilloscope": _capture_oscilloscope,
     "sine_wave": _capture_sine,
     "bubble": _capture_bubble,

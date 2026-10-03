@@ -232,6 +232,33 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
     ),
+    # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's bars as a ridge
+    # along its horizon. Spectrum's frame runtime (bars, technical profile, bar colours) plus a
+    # bounded onset-event ring of its own; frameless and orbitable like Extruded Spectrum.
+    VisualizerModeDescriptor(
+        "shockwave_grid",
+        "Shockwave Grid",
+        "_shockwave_grid_preset_slider",
+        ("shockwave_grid_",),
+        VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.FRAMELESS,
+            clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True,
+        ),
+        frame_runtime_module="widgets.spotify_visualizer.shockwave_frame_runtime",
+        frame_runtime_class="ShockwaveGridFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.shockwave_grid",
+        settings_builder_module="ui.tabs.media.shockwave_grid_builder",
+        settings_builder_factory="build_shockwave_grid_ui",
+        technical_controls=False,
+        rainbow_controls=False,
+        shared_bar_appearance=False,
+        shared_bar_profile_mode="spectrum",
+        technical_profile_mode="spectrum",
+        renderer_overflow_setting="shockwave_grid_allow_overflow",
+        view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
+        view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+    ),
 )
 
 _GATED_MODES: dict[str, callable] = {}

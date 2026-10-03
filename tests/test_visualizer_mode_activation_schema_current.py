@@ -75,6 +75,7 @@ def test_model_serializes_only_current_mode_activation_schema() -> None:
         "devcurve": False,
         "sphere": True,
         "extruded_spectrum": False,
+        "shockwave_grid": False,
     }
     assert model.enabled_modes == ("spectrum", "bubble", "sphere")
 
@@ -97,5 +98,6 @@ def test_retired_enabled_modes_is_migrated_once_and_removed(caplog) -> None:
         "devcurve": False,
         "sphere": False,
         "extruded_spectrum": False,
+        "shockwave_grid": False,
     }
     assert "Retired enabled_modes was relied on" in caplog.text

@@ -532,11 +532,19 @@
         784,
         518
       ]
+    },
+    {
+      "mode_id": "shockwave_grid",
+      "path": "visualizer_shockwave_grid.png",
+      "size": [
+        784,
+        518
+      ]
     }
   ],
   "generation": {
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 21333647
+  "total_bytes": 21680750
 }

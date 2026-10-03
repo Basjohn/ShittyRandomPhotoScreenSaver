@@ -43,6 +43,14 @@ _ALL_FRAME_RUNTIME_MODULES = {
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
     # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
     "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
+    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
+}
+
+
+# A frame runtime that extends another loads its base with it (Shockwave Grid's is Spectrum's plus
+# its event ring); every other mode's runtime must stay unloaded.
+_RUNTIME_BASES = {
+    "widgets.spotify_visualizer.shockwave_frame_runtime": ("widgets.spotify_visualizer.spectrum_frame_runtime",),
 }
 
 
@@ -140,6 +148,7 @@ _FRAME_RUNTIME_MODULES = {
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
     # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
     "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
+    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
 }
 
 
@@ -256,6 +265,7 @@ runtimes = {
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
     # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
     "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
+    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
 }
 print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
 """
@@ -266,8 +276,9 @@ def test_real_sole_enabled_tick_imports_only_active_frame_runtime(mode):
     out = _run_fresh(_REAL_RUNTIME_BODY.replace("__MODE__", repr(mode)))
     loaded = ast.literal_eval(out)
     assert loaded[mode] is True, f"{mode}: active frame runtime did not load ({out})"
+    allowed = {_FRAME_RUNTIME_MODULES[mode], *_RUNTIME_BASES.get(_FRAME_RUNTIME_MODULES[mode], ())}
     for other, present in loaded.items():
-        if _FRAME_RUNTIME_MODULES[other] != _FRAME_RUNTIME_MODULES[mode]:
+        if _FRAME_RUNTIME_MODULES[other] not in allowed:
             assert present is False, (
                 f"{mode} active but disabled mode {other!r} frame runtime imported "
                 f"through the real logical/capture path ({out})"

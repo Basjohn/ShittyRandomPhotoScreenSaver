@@ -410,6 +410,8 @@ def test_an_overlays_bloom_glows_only_from_emitted_light_and_never_darkens(captu
         ring = (slice(HEIGHT // 2 - 26, HEIGHT // 2 - 16), slice(WIDTH // 2 - 10, WIDTH // 2 + 10))
         assert brighter[ring].mean() > 20                           # the glow spills past the quad
         assert brighter[:6, :6].max() <= 2                          # far away: untouched
+        # Nothing carries over: a frame without emission after a glowing one shows no glow.
+        assert np.abs(draw(plain, bloom=1.0, emit_scope=True) - unlit).max() <= 1
         programs = {key for key, *_ in scene_target_programs(samples, True, False, overlay=True)}
         assert programs <= set(resources._programs)
     finally:
