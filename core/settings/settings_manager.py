@@ -1071,8 +1071,12 @@ class SettingsManager(QObject):
             apply_preset_overlay=False,
             resolve_preset_indices=False,
         )
+        with self._lock:
+            stored_cache = self._settings.value('visualizer_custom_presets', {})
+        # Only snapshots that differ from the stored ones are normalized again.
         normalized_cache = normalize_visualizer_custom_snapshot_cache(
-            custom_presets
+            custom_presets,
+            unchanged_from=stored_cache if isinstance(stored_cache, Mapping) else None,
         )
 
         with self._lock:

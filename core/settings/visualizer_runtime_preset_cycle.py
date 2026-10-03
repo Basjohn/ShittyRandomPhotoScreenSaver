@@ -70,7 +70,11 @@ def resolve_next_visualizer_runtime_preset(
     target_index = (source_index + 1) % preset_count
     custom_index = get_custom_preset_index(mode_key)
 
-    cache = normalize_visualizer_custom_snapshot_cache(custom_presets)
+    # Only this mode's snapshot is read or replaced; the others pass through as stored.
+    cache = normalize_visualizer_custom_snapshot_cache(
+        custom_presets,
+        unchanged_from={key: value for key, value in custom_presets.items() if key != mode_key},
+    )
     cached_payload = cache.get(mode_key)
     if source_index == custom_index:
         cache[mode_key] = build_normalized_custom_snapshot(mode_key, source)

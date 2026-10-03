@@ -148,6 +148,8 @@ def build_normalized_custom_snapshot(mode_key: str, spotify_vis_config: Mapping[
 
 def normalize_visualizer_custom_snapshot_cache(
     cache: Mapping[str, Any],
+    *,
+    unchanged_from: Mapping[str, Any] | None = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Return the canonical ``mode -> snapshot`` Custom-cache mapping.
 
@@ -159,6 +161,10 @@ def normalize_visualizer_custom_snapshot_cache(
 
     Unknown or malformed entries fail loudly.  Silently keeping an unreadable
     cache would make the user-owned Custom slot look valid until restoration.
+
+    ``unchanged_from`` is the cache as already stored: a mode's snapshot equal to
+    its stored one is kept as it is rather than normalized again (each normalization
+    builds a whole settings model, so a one-mode edit no longer pays for every mode).
     """
 
     if not isinstance(cache, Mapping):
@@ -193,7 +199,10 @@ def normalize_visualizer_custom_snapshot_cache(
     for mode_key, payload in flat.items():
         if mode_key not in nested:
             nested[mode_key] = payload
+    stored = unchanged_from if isinstance(unchanged_from, Mapping) else {}
     for mode_key, payload in list(nested.items()):
+        if mode_key in stored and stored[mode_key] == payload:
+            continue
         owned = _filter_snapshot_payload_ownership(mode_key, payload)
         nested[mode_key] = normalize_visualizer_mode_payload(mode_key, owned)
     return nested

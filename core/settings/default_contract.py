@@ -101,13 +101,22 @@ def get_canonical_default(
     contain dots.
     """
 
-    # Read-only, cached canonical tree: we only traverse it and deep-copy the
-    # single leaf value returned below, so the shared tree is never mutated.
-    return lookup_default_path(
-        _canonical_defaults_readonly(_resolve_profile(application)),
-        key,
-        missing=missing,
-    )
+    value = _canonical_leaf(_resolve_profile(application), str(key or "").strip())
+    if value is MISSING_DEFAULT:
+        return missing
+    # Immutable leaves are shared; anything a caller could mutate is its own copy.
+    return value if type(value) in _IMMUTABLE_LEAVES else deepcopy(value)
+
+
+_IMMUTABLE_LEAVES = frozenset({bool, int, float, str, type(None)})
+
+
+@lru_cache(maxsize=8192)
+def _canonical_leaf(profile: str, key: str) -> Any:
+    """One looked-up default per (profile, dotted key), held privately and never handed out
+    mutable. Model builds read thousands of defaults (a Visualizer settings model alone ~660),
+    so the dotted walk is paid once per key rather than once per read."""
+    return lookup_default_path(_canonical_defaults_readonly(profile), key)
 
 
 def lookup_default_path(
