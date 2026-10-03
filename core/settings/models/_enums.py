@@ -36,6 +36,7 @@ class TransitionType(Enum):
     ACCORDION_FOLD = "Accordion Fold"
     RELIEF_RISE = "Relief Rise"
     CUBE_TURN = "Cube Turn"
+    BEAM = "Beam"
 
 
 class WidgetPosition(Enum):

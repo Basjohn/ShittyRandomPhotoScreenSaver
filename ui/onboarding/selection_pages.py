@@ -258,6 +258,7 @@ TRANSITION_COPY = {
     "accordion_fold": "The picture folds up like an accordion, flips over and unfolds as the next one.",
     "relief_rise": "A wave of relief carries one picture into the next.",
     "cube_turn": "The picture turns like a cube to show the next one.",
+    "beam": "A beam of light sweeps across, leaving the next picture behind.",
 }
 
 

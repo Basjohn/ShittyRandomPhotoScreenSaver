@@ -256,6 +256,7 @@ def resolve_quick_transition_spec(
         "accordion_fold",
         "relief_rise",
         "cube_turn",
+        "beam",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

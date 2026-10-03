@@ -110,6 +110,7 @@ class TransitionsTab(QWidget):
                 "accordion_fold",
                 "relief_rise",
                 "cube_turn",
+                "beam",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -601,6 +602,7 @@ class TransitionsTab(QWidget):
         "Accordion Fold": "_build_accordion_fold_group",
         "Relief Rise": "_build_relief_rise_group",
         "Cube Turn": "_build_cube_turn_group",
+        "Beam": "_build_beam_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -623,6 +625,7 @@ class TransitionsTab(QWidget):
         "Accordion Fold": "accordion_fold_group",
         "Relief Rise": "relief_rise_group",
         "Cube Turn": "cube_turn_group",
+        "Beam": "beam_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -638,6 +641,7 @@ class TransitionsTab(QWidget):
             "Accordion Fold",
             "Relief Rise",
             "Cube Turn",
+            "Beam",
         }
     )
 
@@ -852,6 +856,16 @@ class TransitionsTab(QWidget):
             self.accordion_pleats_spin.setValue(self._new_transition_number(
                 cfg, 'pleats', 'accordion_fold', canonical['pleats'], self.accordion_pleats_spin, int,
             ))
+        if hasattr(self, 'beam_group'):
+            canonical = canonical_transitions['beam']
+            cfg = self._new_transition_section(transitions_config, 'beam', canonical)
+            color = cfg.get('color', canonical['color'])
+            if not (isinstance(color, (list, tuple)) and len(color) >= 3
+                    and all(isinstance(c, (int, float)) for c in color[:3])):
+                color = canonical['color']
+            self._beam_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
+            self.beam_color_btn.set_color(self._beam_color)
+            self.beam_sparks_check.setChecked(bool(cfg.get('sparks', canonical['sparks'])))
         if hasattr(self, 'disintegrate_group'):
             canonical = canonical_transitions['disintegrate']
             cfg = self._new_transition_section(transitions_config, 'disintegrate', canonical)
@@ -1122,6 +1136,10 @@ class TransitionsTab(QWidget):
         "cube_turn": (
             ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the turning box."),
         ),
+        "beam": (
+            ("glow", "Glow:", 0., 1., "How far the beam's light reaches and how strongly it lights the picture."),
+            ("scorch", "Scorch:", 0., 1., "How strongly the beam scorches the new picture before it cures clean."),
+        ),
         "relief_rise": (
             ("depth", "Relief Depth:", 0., 1., "How high the pictures rise as the wave passes."),
             ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the relief."),
@@ -1355,6 +1373,38 @@ class TransitionsTab(QWidget):
         detail_row.addStretch()
         self._build_surface_controls(layout, "melt_drip")
         self._specific_group_host_layout.addWidget(self.melt_drip_group)
+
+    def _build_beam_group(self) -> None:
+        self.beam_group = QGroupBox("Beam Settings")
+        self._style_group_box(self.beam_group)
+        layout = QVBoxLayout(self.beam_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        color_row = self._swatch_row(layout, "Beam Colour:")
+        self.beam_color_btn = ColorSwatchButton(title="Choose Beam Colour", show_alpha=False, auto_picker=False)
+        self._beam_color = QColor(*_transition_default("beam.color"))
+        self.beam_color_btn.set_color(self._beam_color)
+        self.beam_color_btn.setFixedSize(60, 24)
+        self.beam_color_btn.setToolTip("The colour of the beam and its glow; its core always burns white.")
+        self.beam_color_btn.clicked.connect(self._pick_beam_color)
+        color_row.addWidget(self.beam_color_btn)
+        color_row.addStretch()
+        self._build_surface_controls(layout, "beam")
+        sparks_row = self._aligned_row(layout, "", wrap=False)
+        self.beam_sparks_check = QCheckBox("Sparks")
+        self.beam_sparks_check.setProperty("circleIndicator", True)
+        self.beam_sparks_check.setChecked(bool(_transition_default("beam.sparks")))
+        self.beam_sparks_check.setToolTip("Sparks spraying from where the beam cuts the picture.")
+        self.beam_sparks_check.stateChanged.connect(self._save_settings)
+        sparks_row.addWidget(self.beam_sparks_check)
+        sparks_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.beam_group)
+
+    def _pick_beam_color(self) -> None:
+        color = StyledColorPicker.get_color(self._beam_color, self, "Beam Colour", show_alpha=False)
+        if color is not None:
+            self._beam_color = color
+            self.beam_color_btn.set_color(color)
+            self._save_settings()
 
     def _build_cube_turn_group(self) -> None:
         self.cube_turn_group = QGroupBox("Cube Turn Settings")
@@ -2145,6 +2195,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'blinds_style_combo', None),
             getattr(self, 'blinds_slats_spin', None),
             getattr(self, 'disintegrate_grain_spin', None),
+            getattr(self, 'beam_sparks_check', None),
             getattr(self, 'accordion_pleats_spin', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
@@ -2273,7 +2324,7 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn"):
+                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2387,7 +2438,7 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition in {"Directional Pixel Accretion", "Disintegrate", "Relief Rise"}:
+                elif transition in {"Directional Pixel Accretion", "Disintegrate", "Relief Rise", "Beam"}:
                     self.direction_combo.addItems([
                         "Left to Right", "Right to Left", "Top to Bottom",
                         "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
@@ -2395,7 +2446,8 @@ class TransitionsTab(QWidget):
                     ])
                     current = self._direction_by_type[{"Directional Pixel Accretion": "pixel_accretion",
                                                        "Disintegrate": "disintegrate",
-                                                       "Relief Rise": "relief_rise"}[transition]]
+                                                       "Relief Rise": "relief_rise",
+                                                       "Beam": "beam"}[transition]]
                     idx = self.direction_combo.findText(current)
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
@@ -2557,6 +2609,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["relief_rise"] = cur_dir
         elif cur_type == "Cube Turn":
             self._direction_by_type["cube_turn"] = cur_dir
+        elif cur_type == "Beam":
+            self._direction_by_type["beam"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2697,6 +2751,13 @@ class TransitionsTab(QWidget):
             }
         else:
             melt_drip = _existing_subdict('melt_drip')
+        if hasattr(self, 'beam_group'):
+            c = self._beam_color
+            beam = {'direction': self._direction_by_type['beam'],
+                    'color': [c.red(), c.green(), c.blue(), 255],
+                    'sparks': self.beam_sparks_check.isChecked()}
+        else:
+            beam = {**_existing_subdict('beam'), 'direction': self._direction_by_type['beam']}
         if hasattr(self, 'cube_turn_group'):
             cube_turn = {'direction': self._direction_by_type['cube_turn']}
         else:
@@ -2726,7 +2787,7 @@ class TransitionsTab(QWidget):
                                 ("ink_bloom", ink_bloom),
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("accordion_fold", accordion_fold),
-                                ("relief_rise", relief_rise), ("cube_turn", cube_turn)):
+                                ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2773,6 +2834,7 @@ class TransitionsTab(QWidget):
             'accordion_fold': accordion_fold,
             'relief_rise': relief_rise,
             'cube_turn': cube_turn,
+            'beam': beam,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):

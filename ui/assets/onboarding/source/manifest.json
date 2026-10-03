@@ -374,6 +374,23 @@
       ]
     },
     {
+      "transition_id": "beam",
+      "path": "transition_beam.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.18,
+        0.38,
+        0.58
+      ]
+    },
+    {
       "transition_id": "cube_turn",
       "path": "transition_cube_turn.png",
       "size": [
@@ -513,5 +530,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 20542624
+  "total_bytes": 21275909
 }
