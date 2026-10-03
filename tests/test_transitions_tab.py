@@ -561,3 +561,34 @@ def test_cube_turn_page_offers_directions_and_round_trips(qapp, settings_manager
     tab.cube_turn_antialiasing_combo.setCurrentText("8x")
     persisted = settings_manager.get("transitions", {})["cube_turn"]
     assert persisted == {"direction": "Up", "gloss": 0.7, "antialiasing": "8x"}
+
+
+def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot):
+    """Beam's direction, colour, sparks and surface values save and load back."""
+    from PySide6.QtGui import QColor
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "beam_group")
+    tab._activation_checkboxes["Beam"].setChecked(True)
+    tab._on_nav_selected("Beam")
+    assert hasattr(tab, "beam_group")
+    tab.direction_combo.setCurrentIndex(tab.direction_combo.findText("Diagonal BR-TL"))
+    tab._beam_color = QColor(12, 200, 99)
+    tab.beam_sparks_check.setChecked(not tab.beam_sparks_check.isChecked())
+    sparks = tab.beam_sparks_check.isChecked()
+    tab.beam_scorch_spin.setValue(0.15)
+    tab._save_settings()
+
+    beam = settings_manager.get('transitions', {})['beam']
+    assert beam['direction'] == 'Diagonal BR-TL'
+    assert beam['color'][:3] == [12, 200, 99] and beam['sparks'] is sparks
+    assert beam['scorch'] == pytest.approx(0.15)
+
+    reloaded = TransitionsTab(settings_manager)
+    qtbot.addWidget(reloaded)
+    reloaded._on_nav_selected("Beam")
+    assert reloaded._beam_color.getRgb()[:3] == (12, 200, 99)
+    assert reloaded.beam_sparks_check.isChecked() is sparks
+    assert reloaded.beam_scorch_spin.value() == pytest.approx(0.15)
+    assert reloaded.direction_combo.currentText() == 'Diagonal BR-TL'

@@ -57,6 +57,7 @@ _DEFAULT_TRANSITION_SAMPLES: Final = (0.25, 0.50, 0.75)
 _TRANSITION_SAMPLES: Final = {
     "block_spins": (0.38, 0.46, 0.58),
     "accordion_fold": (0.3, 0.45, 0.72),
+    "beam": (0.18, 0.38, 0.58),
 }
 
 _CREDENTIAL_FILENAMES: Final = frozenset({

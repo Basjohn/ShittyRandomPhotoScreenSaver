@@ -90,6 +90,10 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),
     QuickTransitionImplementationDescriptor(
+        transition_id="beam",
+        module_name="rendering.quick.transitions.implementations.beam",
+    ),
+    QuickTransitionImplementationDescriptor(
         transition_id="cube_turn",
         module_name="rendering.quick.transitions.implementations.cube_turn",
     ),

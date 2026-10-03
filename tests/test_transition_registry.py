@@ -94,4 +94,5 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "accordion_fold": EasingCurve.LINEAR,
         "relief_rise": EasingCurve.LINEAR,
         "cube_turn": EasingCurve.LINEAR,
+        "beam": EasingCurve.LINEAR,
     }

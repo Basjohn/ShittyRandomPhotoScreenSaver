@@ -4,6 +4,7 @@
     <file alias="onboarding/manifest.json">../assets/onboarding/source/manifest.json</file>
     <file alias="onboarding/SRPSSWitch.png" compression-algorithm="none">../assets/onboarding/source/SRPSSWitch.png</file>
     <file alias="onboarding/transition_accordion_fold.png" compression-algorithm="none">../assets/onboarding/source/transition_accordion_fold.png</file>
+    <file alias="onboarding/transition_beam.png" compression-algorithm="none">../assets/onboarding/source/transition_beam.png</file>
     <file alias="onboarding/transition_blinds.png" compression-algorithm="none">../assets/onboarding/source/transition_blinds.png</file>
     <file alias="onboarding/transition_block_flip.png" compression-algorithm="none">../assets/onboarding/source/transition_block_flip.png</file>
     <file alias="onboarding/transition_block_spins.png" compression-algorithm="none">../assets/onboarding/source/transition_block_spins.png</file>

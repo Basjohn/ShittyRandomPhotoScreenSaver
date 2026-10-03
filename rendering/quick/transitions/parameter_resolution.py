@@ -860,6 +860,27 @@ def _resolve_relief_rise(
                                **resolve_scene_quality(settings, cfg, defaults)})
 
 
+def _resolve_beam(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "beam")
+    defaults = _canonical("beam")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_PIXEL_DIRECTIONS,
+        mapping=_PIXEL_DIRECTION_MAP,
+        rng=rng,
+    )
+    color = _normalized_glow_color(_value(cfg, defaults, "color"), defaults["color"], field_name="color")
+    return _finish(direction, {
+        "seed": _seed(rng),
+        "color": tuple(min(1.0, channel) for channel in color[:3]),
+        "sparks": _bool(_value(cfg, defaults, "sparks"), bool(defaults["sparks"])),
+        **_surface_values(cfg, defaults, ("glow", "scorch")),
+    })
+
+
 def _resolve_cube_turn(
     settings: Mapping[str, object],
     rng: _RandomSource,
@@ -904,6 +925,7 @@ _RESOLVERS = {
     "accordion_fold": _resolve_accordion_fold,
     "relief_rise": _resolve_relief_rise,
     "cube_turn": _resolve_cube_turn,
+    "beam": _resolve_beam,
 }
 
 
