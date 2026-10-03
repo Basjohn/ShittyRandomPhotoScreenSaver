@@ -78,7 +78,7 @@ def test_after_warming_a_runs_first_frames_compile_and_allocate_nothing(qt_app, 
     try:
         work = _Work(monkeypatch)
         run = capture.run(effect, direction=direction, duration_ms=3000,
-                          settings={"detail_3d": "High", section: dict(_SETUPS[setup])})
+                          settings={"scene3d_detail": "High", section: dict(_SETUPS[setup])})
         parameters = run.request.parameter_dict()
         size = (capture.width, capture.height)
         steps = 0
@@ -104,7 +104,7 @@ def test_without_a_render_size_the_warm_up_compiles_only(qt_app, monkeypatch):
     capture = TransitionCapture(256, 144)
     try:
         work = _Work(monkeypatch)
-        run = capture.run("block_spins", direction="left", settings={"detail_3d": "High"})
+        run = capture.run("block_spins", direction="left", settings={"scene3d_detail": "High"})
         while not capture.host.warm_step(run.request.transition_id, run.request.parameter_dict()):
             pass
         assert work.allocations == []

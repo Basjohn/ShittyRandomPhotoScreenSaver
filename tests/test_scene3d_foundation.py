@@ -93,7 +93,7 @@ def test_detail_tiers_trade_cost_monotonically():
 def test_every_tier_keeps_exact_endpoints_and_restores_the_framebuffer(qt_app, detail):
     capture = TransitionCapture(256, 144)
     try:
-        run = capture.run("exploding_tiles", direction="center_out", settings={"detail_3d": detail})
+        run = capture.run("exploding_tiles", direction="center_out", settings={"scene3d_detail": detail})
         source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
         near_start = np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16)
         middle = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
@@ -115,7 +115,7 @@ def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app)
         for detail in ("High", "Balanced"):
             # Bloom off: this compares multisampling alone.
             run = capture.run("exploding_tiles", direction="center_out",
-                              settings={"detail_3d": detail, "exploding_tiles": {"bloom": "Off"}})
+                              settings={"scene3d_detail": detail, "exploding_tiles": {"bloom": "Off"}})
             frames[detail] = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
         difference = np.abs(frames["High"] - frames["Balanced"])
         # Same scene, smoother silhouettes: only edge pixels change.
@@ -124,7 +124,7 @@ def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app)
 
         renderer = capture.host._implementations["exploding_tiles"]
         run = capture.run("exploding_tiles", direction="center_out",
-                          settings={"detail_3d": "High", "exploding_tiles": {"bloom": "Off"}})
+                          settings={"scene3d_detail": "High", "exploding_tiles": {"bloom": "Off"}})
         capture.render(run, 0.2)
         assert renderer._target.has_resources
         capture.host.park()
@@ -170,7 +170,7 @@ def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, directi
         source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
         frames = {}
         for detail in SCENE3D_DETAIL_NAMES:
-            run = capture.run(effect, direction=direction, settings={"detail_3d": detail}, duration_ms=8000)
+            run = capture.run(effect, direction=direction, settings={"scene3d_detail": detail}, duration_ms=8000)
             assert np.abs(np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16) - source).mean() < 0.5
             assert np.abs(np.asarray(capture.render(run, 0.9999)[0], dtype=np.int16) - destination).mean() < 0.5
             frames[detail] = np.asarray(capture.render(run, 0.45)[0], dtype=np.int16)
@@ -180,7 +180,7 @@ def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, directi
         assert difference.mean() < 3.0
         assert (difference.max(axis=2) > 24).mean() < 0.08
         renderer = capture.host._implementations[effect]
-        run = capture.run(effect, direction=direction, settings={"detail_3d": "High"}, duration_ms=8000)
+        run = capture.run(effect, direction=direction, settings={"scene3d_detail": "High"}, duration_ms=8000)
         capture.render(run, 0.45)
         assert renderer._target.has_resources
         capture.host.park()
@@ -196,7 +196,7 @@ def test_bloom_glows_emitted_light_only_and_follows_the_transition_setting(qt_ap
         def frame(detail, bloom, progress):
             section = {"bloom": bloom, "bloom_strength": 1.0}
             run = capture.run("exploding_tiles", direction="center_out", duration_ms=8000,
-                              settings={"detail_3d": detail, "exploding_tiles": section})
+                              settings={"scene3d_detail": detail, "exploding_tiles": section})
             return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
 
         # Late in the run nothing emits (no sparks, cracks, embers or flash): the photographs never bloom.
@@ -271,7 +271,7 @@ def test_a_transitions_anti_aliasing_choice_decides_the_scene_target(qt_app, eff
         for tier, choice, motion_blur, expected in (("Performance", "4x", "Off", True), ("High", "Off", "Off", False),
                                                     ("High", "Auto", "Off", True), ("Performance", "Off", "On", True)):
             run = capture.run(effect, direction=direction, duration_ms=8000,
-                              settings={"detail_3d": tier, section: {"antialiasing": choice, "motion_blur": motion_blur}})
+                              settings={"scene3d_detail": tier, section: {"antialiasing": choice, "motion_blur": motion_blur}})
             capture.render(run, 0.45)
             renderer = capture.host._implementations[effect]
             assert renderer._target.has_resources is expected, (tier, choice, motion_blur)
@@ -287,7 +287,7 @@ def test_motion_blur_blurs_only_moving_tiles_and_follows_the_transition_setting(
         def frame(detail, motion_blur, progress):
             section = {"motion_blur": motion_blur}
             run = capture.run("exploding_tiles", direction="center_out", duration_ms=3000,
-                              settings={"detail_3d": detail, "exploding_tiles": section})
+                              settings={"scene3d_detail": detail, "exploding_tiles": section})
             return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
 
         # Before anything moves the frame is exact; at the detonation the flying tiles blur.
@@ -316,7 +316,7 @@ def test_every_3d_transition_blurs_its_motion_and_stays_exact_when_nothing_moves
 
         def frame(motion_blur, progress, duration_ms):
             run = capture.run(effect, direction=direction, duration_ms=duration_ms,
-                              settings={"detail_3d": "High", section: {"motion_blur": motion_blur}})
+                              settings={"scene3d_detail": "High", section: {"motion_blur": motion_blur}})
             return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
 
         # When its pieces move fastest, at a short duration, they blur...

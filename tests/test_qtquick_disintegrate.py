@@ -56,7 +56,7 @@ def _pixels(image) -> np.ndarray:
 
 @pytest.mark.parametrize("detail", ("High", "Balanced"))
 def test_frames_before_the_first_release_and_after_the_last_death_are_the_photographs(capture, detail):
-    run = capture.run("disintegrate", direction="diag_tl_br", settings={"detail_3d": detail}, duration_ms=6000)
+    run = capture.run("disintegrate", direction="diag_tl_br", settings={"scene3d_detail": detail}, duration_ms=6000)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
     assert np.array_equal(_pixels(capture.render(run, 0.0)[0]), source)
     assert np.array_equal(_pixels(capture.render(run, 0.025)[0]), source)
@@ -106,7 +106,7 @@ def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, 
     capture = TransitionCapture(256, 144)
     try:
         work = _Work(monkeypatch)
-        run = capture.run("disintegrate", direction="left", settings={"detail_3d": "High"}, duration_ms=3000)
+        run = capture.run("disintegrate", direction="left", settings={"scene3d_detail": "High"}, duration_ms=3000)
         parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
         steps = 0
         while not capture.host.warm_step("disintegrate", parameters, size):

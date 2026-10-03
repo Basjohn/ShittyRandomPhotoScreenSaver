@@ -161,7 +161,7 @@ def _roll(run) -> tuple[float, float]:
 @pytest.mark.parametrize("detail", ("High", "Balanced", "Performance"))
 @pytest.mark.parametrize("origin", ("bottom_right", "top_left", "left", "bottom"))
 def test_the_flat_page_and_the_uncovered_picture_are_exact_away_from_the_curl(capture, origin, detail, size):
-    run = capture.run("page_curl", direction=origin, settings={"detail_3d": detail, "page_curl": {"size": size}},
+    run = capture.run("page_curl", direction=origin, settings={"scene3d_detail": detail, "page_curl": {"size": size}},
                       duration_ms=4000)
     roll = _roll(run)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
@@ -238,7 +238,7 @@ def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, 
     capture = TransitionCapture(256, 144)
     try:
         work = _Work(monkeypatch)
-        run = capture.run("page_curl", direction="left", settings={"detail_3d": "High"}, duration_ms=3000)
+        run = capture.run("page_curl", direction="left", settings={"scene3d_detail": "High"}, duration_ms=3000)
         parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
         steps = 0
         while not capture.host.warm_step("page_curl", parameters, size):
@@ -266,7 +266,7 @@ def test_the_resolver_picks_origins_and_repairs_values():
         seen.add(resolved.direction)
     assert seen == set(PAGE_CURL_ORIGINS.values())
     resolved = resolve_parameterized_phase_c_inputs(
-        "page_curl", {"detail_3d": "Balanced", "page_curl": {"direction": "Top Left", "gloss": 9, "size": -2}},
+        "page_curl", {"scene3d_detail": "Balanced", "page_curl": {"direction": "Top Left", "gloss": 9, "size": -2}},
         random_source=random.Random(1))
     assert resolved.direction == "top_left"
     assert resolved.parameter_dict() == {"gloss": 1.0, "size": 0.0, "detail": "Balanced", "samples": 0}

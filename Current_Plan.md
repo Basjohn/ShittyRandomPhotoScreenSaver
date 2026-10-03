@@ -87,7 +87,7 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   first visible frame 3-4 ms. Contract and numbers: `Docs/Reference/Visualizer_Reference.md` "Prepared reveal".
 - [x] **H2. 3D quality tiers in a 3D Settings tab** (General / 3D Transitions / 3D Visualizers pills; `Auto / High /
   Balanced / Performance / KAK`; one resolver `core/settings/scene3d_quality.py`; each level stores only its own
-  choice; `transitions.detail_3d` retired by an input bridge). Extruded: samples + Mirror refresh; Shockwave: samples,
+  choice; `transitions.detail_3d` retired by an input bridge). Extruded: samples + Mirror Faces on/off; Shockwave: samples,
   Glow, grid density. Contracts and per-tier costs: `Docs/Reference/Transitions.md` "3D Detail",
   `Docs/Reference/Visualizer_Reference.md` 16A/16B. Physical: the tiers on both displays (cross-cutting item below).
 - [x] **H3. Exact musical events**: the transient bus publishes immutable, serial-numbered `MusicalOnset`s (with the

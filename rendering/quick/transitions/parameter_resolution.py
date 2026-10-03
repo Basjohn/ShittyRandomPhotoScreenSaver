@@ -635,8 +635,10 @@ def _resolve_detail(
 
 # The request-time field carrying the run's resolved 3D Transitions tier. Never persisted:
 # ``resolve_quick_transition_spec`` resolves it once from the 3D Settings and adds it to the
-# Transitions mapping the per-transition resolvers read.
-SCENE_DETAIL_FIELD = "detail_3d"
+# Transitions mapping the per-transition resolvers read. Named as the Visualizers' activation
+# parameter is, and unlike the retired persisted ``transitions.detail_3d``, so a stray retired leaf
+# can never be read (or written back) as the run's tier.
+SCENE_DETAIL_FIELD = "scene3d_detail"
 
 
 def resolve_scene_detail(settings: Mapping[str, object]) -> str:
