@@ -118,8 +118,6 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   image change (`backdrop.py`) while a mode reflects, the renderer uploads it once; no GL texture shared, PR-04
   untouched. Mirror Faces p90 GPU 0.60 -> 0.098 ms. Physical check: reflections follow wallpaper changes on both
   displays (and after a CUSTOM display transfer).
-- [ ] **Loose ends:** list the new 3D test files in `Docs/TestSuite.md`; the side defects below. (The Extruded
-  turn/tilt unit change is recorded in `Docs/Architecture/Persisted_Input_Compatibility.md`.)
 
 ## 2. S17 | active-only high-fidelity scene buffers, lighting and materials
 
@@ -219,6 +217,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Side defects (found in passing)
 
+None open.
 
 ## Handoff rules
 
