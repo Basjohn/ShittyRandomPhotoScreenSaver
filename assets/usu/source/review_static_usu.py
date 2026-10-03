@@ -120,5 +120,25 @@ for camera, stem in views:
         for ground, hidden in ground_visibility:
             ground.hide_render = hidden
 scene.camera = scene.objects["Review_THREE_QUARTER"]
+# Enlarged neutral views expose the attachment transitions for approval.
+scene.render.resolution_x = scene.render.resolution_y = 1000
+for name in ("THREE_QUARTER", "SIDE", "BACK", "HIGH_REAR"):
+    camera = scene.objects["Review_" + name]
+    location = camera.location.copy()
+    scale, lens = camera.data.ortho_scale, camera.data.lens
+    try:
+        camera.location.z += 1.05
+        if camera.data.type == "ORTHO":
+            camera.data.ortho_scale = 3.3
+        else:
+            camera.data.lens = 140
+        scene.camera = camera
+        scene.render.filepath = str(ASSET / "renders" / ("Usu_detail_" + name.lower() + ".png"))
+        bpy.ops.render.render(write_still=True)
+    finally:
+        camera.location = location
+        camera.data.ortho_scale, camera.data.lens = scale, lens
+scene.render.resolution_x, scene.render.resolution_y = 1000, 1200
+scene.camera = scene.objects["Review_THREE_QUARTER"]
 bpy.ops.wm.save_as_mainfile(filepath=str(ASSET / "Usu_Static_Approval.blend"), compress=True)
 print(json.dumps(report, indent=2))
