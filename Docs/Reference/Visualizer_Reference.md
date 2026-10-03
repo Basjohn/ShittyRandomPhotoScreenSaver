@@ -490,23 +490,28 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   front-on scale and the target grows by `EXTRUDED_OVERFLOW_PAD` of the item height.
 - **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
 - **Live view orbit (W/A/S/D):** a 3D freeform mode names its (turn, tilt) settings in the descriptor's
-  `view_orbit_settings`; DisplayManager publishes "a 3D view is shown" to every display's input owner on owner
-  creation/retirement and mode completion (an event fact, no provider read per key). While it is shown, W/S tilt the
-  camera up/down and A/D move it left/right, one step (the descriptor's `view_orbit_steps`: 2 degrees each way) per
-  press or OS key repeat. Turn goes a full circle and wraps (-1..1 is -180..180 degrees); tilt runs from level to
-  straight down (0..1 is 0..90 degrees) about the bars' mid-height, so the camera circles the scene's middle. Steps
-  are applied straight to the presentation state the next logical capture reads (no new clock, timer or poll). Nothing
-  is saved per step: the result is written once, through the atomic runtime-preset persistence, when the last held
-  key is really released (repeat release/press pairs ignored), when the Visualizer retires mid-orbit, or never if a
-  preset change replaced the view. On a curated preset the edit moves the mode to Custom holding what was shown
-  (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. With no 3D view shown W/A/S/D exit like any
-  other key. The S key no longer opens Settings (the context menu does).
-- **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it the same way: 4 pixels per
-  step, the scene turning toward the drag and the camera rising as you drag down. The display runtime gives its own
-  input owner the scene's `visualizer_contains_scene_position` hit test (cleared when the runtime retires); while a
-  drag is on, pointer motion is routed to the input owner even in interaction mode, and orbiting finishes (one
-  save) only once no key is held and no drag is on. Without Alt, off the Visualizer or outside interaction/Ctrl
-  mode, pointer behaviour is unchanged.
+  `view_orbit_settings` and one step of each in `view_orbit_steps` (2 degrees). DisplayManager publishes "a 3D view is
+  shown" to every display's input owner on owner creation/retirement and mode completion (an event fact, no provider
+  read per key). While it is shown, W/S tilt the camera up/down and A/D move it left/right at a steady 30 steps a
+  second (60 degrees) while held, several keys at once. The rate runs on the logical clock, never on OS key repeat
+  (which stops repeating an older key once another is pressed: the "stuck" orbit of 2026-10-03): the input owner
+  publishes the held keys' combined direction when it changes, the GUI thread replaces one immutable
+  `ViewOrbitMotion` (view at a moment + rates) on the presentation state, and the logical capture evaluates it at its
+  own frame time (`widgets/spotify_visualizer/view_orbit.py`). The GUI thread is the only writer; release settles the
+  reached view into the settings (freeze, write, drop, so no capture sees a half update). Turn goes a full circle and
+  wraps (-1..1 is -180..180 degrees); tilt runs from level to straight down (0..1 is 0..90 degrees) about the bars'
+  mid-height. Nothing is saved while orbiting: the result is written once, through the atomic runtime-preset
+  persistence, when no key is held and no drag is on, when the Visualizer retires mid-orbit, or never if a preset
+  replaced the view (held keys then carry on from the preset's view). On a curated preset the edit moves the mode to
+  Custom holding what was shown (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. With no 3D view
+  shown W/A/S/D exit like any other key. The S key no longer opens Settings (the context menu does).
+- **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it too: a step per 4 pixels, the
+  scene turning toward the drag and the camera rising as you drag down. The display runtime lends its own input
+  owner the scene's `visualizer_contains_scene_position` hit test; the input owner drops it (with any held keys or
+  drag) when its admission closes. While a drag is on, pointer motion is routed to the input owner even in
+  interaction mode. A drag's steps are fractions per mouse move, so every relay of `view_orbit_requested` carries
+  floats (an int relay once truncated them all to zero; `tests/test_visualizer_view_orbit.py` drives the real window
+  and runtime). Without Alt, off the Visualizer or outside interaction/Ctrl mode, pointer behaviour is unchanged.
 - **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
   submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
   backdrop copy.

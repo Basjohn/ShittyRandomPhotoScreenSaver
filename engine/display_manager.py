@@ -812,8 +812,23 @@ class DisplayManager(QObject):
                 # A replacement generation can retire between snapshot and push.
                 continue
 
+    def _set_quick_view_orbit_rates(self, turn_steps: float, tilt_steps: float) -> None:
+        """Held orbit keys changed: the shown 3D view turns at the new rates on the logical clock."""
+
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return
+        from widgets.spotify_visualizer.view_orbit import set_view_orbit_rates
+
+        mode_id = str(owner.controller.mode_id)
+        values = set_view_orbit_rates(
+            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, time.time()
+        )
+        if values:
+            self._quick_view_orbit_pending = (mode_id, values)
+
     def _orbit_quick_visualizer_view(self, turn_steps: float, tilt_steps: float) -> None:
-        """Step the shown 3D Visualizer's view live; nothing is saved until orbiting stops."""
+        """Step the shown 3D Visualizer's view live (a drag); nothing is saved until orbiting stops."""
 
         owner = self._quick_visualizer_owner
         if owner is None or owner.is_retired:
@@ -822,14 +837,21 @@ class DisplayManager(QObject):
 
         mode_id = str(owner.controller.mode_id)
         values = orbit_visualizer_view(
-            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps
+            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, time.time()
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
 
     def _persist_quick_visualizer_view(self) -> None:
-        """Save a finished orbit once (on the release of the last held key)."""
+        """Settle and save a finished orbit once (no key held and no drag on any more)."""
 
+        owner = self._quick_visualizer_owner
+        if owner is not None:
+            from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion
+
+            settled = stop_view_orbit_motion(owner.controller.presentation_state, time.time())
+            if settled is not None:
+                self._quick_view_orbit_pending = settled
         pending = self._quick_view_orbit_pending
         self._quick_view_orbit_pending = None
         settings = self.settings_manager
@@ -1419,6 +1441,9 @@ class DisplayManager(QObject):
         persist(target.visualizer_config, target.custom_presets)
         # The preset replaced the view; an orbit still held continues from it.
         self._quick_view_orbit_pending = None
+        from widgets.spotify_visualizer.view_orbit import rebase_view_orbit_motion
+
+        rebase_view_orbit_motion(owner.controller.presentation_state, time.time())
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(
             target.visualizer_config
         )
@@ -1447,6 +1472,7 @@ class DisplayManager(QObject):
         runtime.cycle_transition_requested.connect(
             self.cycle_transition_requested.emit
         )
+        runtime.view_orbit_rates_changed.connect(self._set_quick_view_orbit_rates)
         runtime.view_orbit_requested.connect(self._orbit_quick_visualizer_view)
         runtime.view_orbit_finished.connect(self._persist_quick_visualizer_view)
         runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())

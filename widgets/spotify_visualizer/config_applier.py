@@ -673,13 +673,23 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
 }
 
 
-def extruded_spectrum_parameters(widget: Any) -> Dict[str, object]:
-    """Extruded Spectrum's renderer-only parameters from the presentation owner."""
+def presentation_setting_range(key: str) -> tuple[float, float]:
+    """The canonical (low, high) of a ranged presentation-only setting (for live orbiting)."""
+    return _EXTRUDED_SPECTRUM_KEYS[key]
+
+
+def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
+    """Extruded Spectrum's renderer-only parameters from the presentation owner, with any
+    held-key view orbit evaluated at the capture's ``now_ts``."""
     pres = _presentation_source(widget)
     values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _EXTRUDED_SPECTRUM_KEYS}
     values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
+    if now_ts is not None:
+        from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
+
+        values = apply_view_orbit_motion(pres, "extruded_spectrum", values, now_ts)
     return values
 
 
