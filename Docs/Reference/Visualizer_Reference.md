@@ -140,6 +140,11 @@ readily as a loud one) and its presence (that loudness against a 6 s running lev
 audio lane replaces per onset; `BeatEngine.get_onset_events(after_serial)` returns the ones a consumer has not taken.
 Sampling the bus's per-frame onset flag instead depended on the analysis and logical cadences lining up. Bars:
 `tests/test_qtquick_shockwave_grid.py`. The shared primitive for Shockwave Grid, Reactive Particle Field and lightning.
+`BeatEngine.get_musical_level()` reads the latest frame's (loudness, presence), the same measurement an onset there
+carries, for modes whose events come from elsewhere (Voxel Sphere); near-silence does not drain the running level.
+What an onset *earns* follows one shared rule beside them (`musical_weight`, `musical_emphasis`,
+`learn_usual_presence`). Real scales (loudness 3-17 in music, presence about 1): `Docs/Guides/
+Visualizer_Reactivity_Authoring.md` 2A. Bars: `tests/test_transient_bus.py`.
 
 **Shared 3D view and lines.** Every 3D Visualizer orbits and projects through `SCENE3D_ORBIT_GLSL` /
 `scene3d_orbit_project` (`rendering/gl_programs/scene3d.py`): turn about the vertical axis, tilt toward the camera
