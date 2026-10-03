@@ -1210,3 +1210,59 @@ def scene3d_camera_shake(seconds: float, amplitude: float, seed: int) -> tuple[f
     x = 0.6 * math.sin(seconds * 23.0 + phase[0]) + 0.4 * math.sin(seconds * 41.0 + phase[1])
     y = 0.6 * math.sin(seconds * 19.0 + phase[2]) + 0.4 * math.sin(seconds * 37.0 + phase[3])
     return x * amplitude, y * amplitude
+
+
+# ---- Orbiting views and screen-space lines (3D Visualizers: Extruded Spectrum, Shockwave Grid) ----
+#
+# A 3D Visualizer turns its scene about the vertical axis (``turn``) and tilts it toward the
+# camera (``tilt``) about a ``pivot``, which then sits at ``anchor`` in front of a pinhole camera
+# ``camera`` units away along +z; screen y is up. Each mode supplies only its constants (where it
+# pivots, where the pivot sits, how far the camera is) and its own fit. Lines are drawn
+# analytically in the fragment shader at a width in screen pixels.
+
+SCENE3D_ORBIT_GLSL = """
+// A world direction turned about the vertical axis (view.y), then tilted toward the camera (view.x).
+vec3 sceneOrbitView(vec3 p, vec2 view) {
+    float ct = cos(view.y), st = sin(view.y);
+    p = vec3(p.x * ct + p.z * st, p.y, -p.x * st + p.z * ct);
+    float c = cos(view.x), s = sin(view.x);
+    return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
+}
+// A world point the same way about ``pivot``, which then sits at ``anchor`` in the camera's frame.
+vec3 sceneOrbitPoint(vec3 p, vec2 view, vec3 pivot, vec3 anchor) {
+    return sceneOrbitView(p - pivot, view) + anchor;
+}
+// (screen x, screen y up, view depth) of a world point, the camera ``camera`` away along +z.
+vec3 sceneOrbitProject(vec3 p, vec2 view, vec3 pivot, vec3 anchor, float camera) {
+    vec3 v = sceneOrbitPoint(p, view, pivot, anchor);
+    float scale = camera / (camera - v.z);
+    return vec3(v.x * scale, v.y * scale, v.z);
+}
+// Coverage of the nearer of two lines, ``widthPx`` screen pixels wide, ``distancePx`` away.
+float sceneLineCoverage(vec2 distancePx, vec2 widthPx) {
+    return max(1.0 - smoothstep(0.0, widthPx.x, distancePx.x), 1.0 - smoothstep(0.0, widthPx.y, distancePx.y));
+}
+// Screen pixels from ``coord`` to the nearest whole-number line on each axis, ``perPixel`` being
+// ``fwidth(coord)`` (the caller keeps it, e.g. to fade lines thinner than a pixel).
+vec2 sceneGridLineDistancePx(vec2 coord, vec2 perPixel) {
+    return abs(fract(coord - 0.5) - 0.5) / max(perPixel, vec2(1e-5));
+}
+"""
+
+
+def scene3d_orbit_view(direction: Vec3, tilt: float, turn: float) -> Vec3:
+    """CPU mirror of ``sceneOrbitView``."""
+    x, y, z = direction
+    ct, st = math.cos(turn), math.sin(turn)
+    x, z = x * ct + z * st, -x * st + z * ct
+    c, s = math.cos(tilt), math.sin(tilt)
+    return x, y * c - z * s, y * s + z * c
+
+
+def scene3d_orbit_project(point: Vec3, tilt: float, turn: float, *, camera: float,
+                          pivot: Vec3 = (0.0, 0.0, 0.0), anchor: Vec3 = (0.0, 0.0, 0.0)) -> Vec3:
+    """CPU mirror of ``sceneOrbitProject``: (screen x, screen y up, view depth)."""
+    vx, vy, vz = scene3d_orbit_view((point[0] - pivot[0], point[1] - pivot[1], point[2] - pivot[2]), tilt, turn)
+    vx, vy, vz = vx + anchor[0], vy + anchor[1], vz + anchor[2]
+    scale = camera / (camera - vz)
+    return vx * scale, vy * scale, vz

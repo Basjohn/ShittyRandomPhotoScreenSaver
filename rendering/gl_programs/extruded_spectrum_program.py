@@ -42,7 +42,12 @@ from __future__ import annotations
 
 import math
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, Scene3DStorageLayout
+from rendering.gl_programs.scene3d import (
+    SCENE3D_GLSL,
+    SCENE3D_ORBIT_GLSL,
+    Scene3DStorageLayout,
+    scene3d_orbit_project,
+)
 
 EXTRUDED_MAX_TILT = math.radians(90.0)
 EXTRUDED_MAX_TURN = math.radians(180.0)
@@ -65,14 +70,8 @@ EXTRUDED_BARS = Scene3DStorageLayout.of("ExtrudedBars", "ExtrudedBar", (("level"
 def extruded_project(point: tuple[float, float, float], tilt: float,
                      turn: float = 0.0) -> tuple[float, float, float]:
     """CPU mirror of ``extrudedProject``: (screen x, screen y up, view depth) of a world point."""
-    x, y, z = point
-    ct, st = math.cos(turn), math.sin(turn)
-    x, z = x * ct + z * st, -x * st + z * ct
-    c, s = math.cos(tilt), math.sin(tilt)
-    y -= EXTRUDED_PIVOT
-    raised, toward = y * c - z * s + EXTRUDED_PIVOT, y * s + z * c
-    scale = EXTRUDED_CAMERA / (EXTRUDED_CAMERA - toward)
-    return x * scale, raised * scale, toward
+    pivot = (0.0, EXTRUDED_PIVOT, 0.0)
+    return scene3d_orbit_project(point, tilt, turn, camera=EXTRUDED_CAMERA, pivot=pivot, anchor=pivot)
 
 
 def extruded_height(level: float, height_scale: float) -> float:
@@ -119,27 +118,19 @@ uniform vec2 uView;         // tilt, turn (radians)
 uniform float uHeightScale;
 """
 
-_PROJECTION_GLSL = f"""
+_PROJECTION_GLSL = SCENE3D_ORBIT_GLSL + f"""
 const float EXTRUDED_CEILING = {EXTRUDED_CEILING:.6f};
 const float EXTRUDED_CAMERA = {EXTRUDED_CAMERA:.6f};
 const float EXTRUDED_PIVOT = {EXTRUDED_PIVOT:.6f};
-// A world direction turned about the vertical axis, then tilted toward the camera.
-vec3 extrudedView(vec3 p, vec2 view) {{
-    float ct = cos(view.y), st = sin(view.y);
-    p = vec3(p.x * ct + p.z * st, p.y, -p.x * st + p.z * ct);
-    float c = cos(view.x), s = sin(view.x);
-    return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
-}}
-// A world point the same way, the tilt pivoting about the bars' mid-height.
+// The shared orbit (scene3d.py), the tilt pivoting about the bars' mid-height, which stays put.
+vec3 extrudedView(vec3 p, vec2 view) {{ return sceneOrbitView(p, view); }}
 vec3 extrudedViewPoint(vec3 p, vec2 view) {{
     vec3 pivot = vec3(0.0, EXTRUDED_PIVOT, 0.0);
-    return extrudedView(p - pivot, view) + pivot;
+    return sceneOrbitPoint(p, view, pivot, pivot);
 }}
-// (screen x, screen y up, view depth) of a world point, as the CPU mirror.
 vec3 extrudedProject(vec3 p, vec2 view) {{
-    vec3 v = extrudedViewPoint(p, view);
-    float scale = EXTRUDED_CAMERA / (EXTRUDED_CAMERA - v.z);
-    return vec3(v.x * scale, v.y * scale, v.z);
+    vec3 pivot = vec3(0.0, EXTRUDED_PIVOT, 0.0);
+    return sceneOrbitProject(p, view, pivot, pivot, EXTRUDED_CAMERA);
 }}
 // Spectrum's level transfer: the uploaded level (already x0.55) to bar-field heights.
 float extrudedHeight(float level) {{
@@ -209,7 +200,7 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
     "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
     "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
-    + SCENE3D_GLSL
+    + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL
     + """
 void main() {
     vec3 n = normalize(vNormal);
@@ -232,7 +223,7 @@ void main() {
     }
     vec2 edge = onFace.x > 0.5 ? px.zy : (onFace.y > 0.5 ? px.xz : px.xy);
     vec2 edgeWidth = onFace.x > 0.5 ? widths.zy : (onFace.y > 0.5 ? widths.xz : widths.xy);
-    float rim = max(1.0 - smoothstep(0.0, edgeWidth.x, edge.x), 1.0 - smoothstep(0.0, edgeWidth.y, edge.y));
+    float rim = sceneLineCoverage(edge, edgeWidth);
     // 0 spectral bodies with Spectrum's border edges; 1 Spectrum's body with glowing spectral
     // edges; 2 Spectrum's fill and border.
     vec3 body = uColouring == 0 ? vHue : uFill.rgb;

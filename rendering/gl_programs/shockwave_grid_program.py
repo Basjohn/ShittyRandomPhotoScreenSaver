@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 
-from rendering.gl_programs.scene3d import Scene3DStorageLayout
+from rendering.gl_programs.scene3d import SCENE3D_ORBIT_GLSL, Scene3DStorageLayout, scene3d_orbit_project
 
 SHOCKWAVE_MAX_TILT = math.radians(90.0)
 SHOCKWAVE_MAX_TURN = math.radians(180.0)
@@ -149,13 +149,7 @@ def shockwave_camera(half_width: float) -> float:
 def shockwave_project(point: tuple[float, float, float], tilt: float, turn: float,
                       camera: float = SHOCKWAVE_CAMERA) -> tuple[float, float, float]:
     """CPU mirror of ``shockwaveProject``: (screen x, screen y up, view depth) of a world point."""
-    x, y, z = point[0], point[1], point[2] + 0.5 * SHOCKWAVE_DEPTH
-    ct, st = math.cos(turn), math.sin(turn)
-    x, z = x * ct + z * st, -x * st + z * ct
-    c, s = math.cos(tilt), math.sin(tilt)
-    raised, toward = y * c - z * s, y * s + z * c
-    scale = camera / (camera - toward)
-    return x * scale, raised * scale, toward
+    return scene3d_orbit_project(point, tilt, turn, camera=camera, pivot=(0.0, 0.0, -0.5 * SHOCKWAVE_DEPTH))
 
 
 def shockwave_fit(tilt: float, turn: float, half_width: float, ridge: float) -> tuple[float, float]:
@@ -242,28 +236,19 @@ float shockwaveRidge(vec2 p) {{
     float reach = shockwaveSmooth(-SHOCKWAVE_DEPTH * (1.0 - {SHOCKWAVE_HORIZON_REACH:.6f}), -SHOCKWAVE_DEPTH, p.y);
     return uHorizon * bar * reach;
 }}
-// A world point or direction: turned about the vertical axis, then tilted toward the camera,
-// about the grid's centre (points) or the origin (directions).
-vec3 shockwaveView(vec3 p) {{
-    float ct = cos(uView.y), st = sin(uView.y);
-    p = vec3(p.x * ct + p.z * st, p.y, -p.x * st + p.z * ct);
-    float c = cos(uView.x), s = sin(uView.x);
-    return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
-}}
+// The shared orbit (scene3d.py) about the grid's centre, which the camera faces.
+vec3 shockwaveView(vec3 p) {{ return sceneOrbitView(p, uView); }}
 vec3 shockwaveViewPoint(vec3 p) {{
-    return shockwaveView(p + vec3(0.0, 0.0, 0.5 * SHOCKWAVE_DEPTH));
+    return sceneOrbitPoint(p, uView, vec3(0.0, 0.0, -0.5 * SHOCKWAVE_DEPTH), vec3(0.0));
 }}
-// (screen x, screen y up, view depth), as the CPU mirror.
 vec3 shockwaveProject(vec3 p) {{
-    vec3 v = shockwaveViewPoint(p);
-    float scale = uCamera / (uCamera - v.z);
-    return vec3(v.xy * scale, v.z);
+    return sceneOrbitProject(p, uView, vec3(0.0, 0.0, -0.5 * SHOCKWAVE_DEPTH), vec3(0.0), uCamera);
 }}
 """
 
 SHOCKWAVE_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location = 0) in vec2 aUv;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + _COMMON
+    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + _COMMON
     + """
 out vec3 vWorld;      // the displaced point, in the camera's frame (lighting)
 out vec2 vGrid;       // the point on the flat grid (x, z)
@@ -307,6 +292,7 @@ SHOCKWAVE_FRAGMENT_SOURCE = (
     "uniform float uScroll;    // the lines' travel toward the viewer (field heights)\n"
     "uniform vec4 uLineColor;\nuniform vec4 uCrestColor;\nuniform float uFloor;\nuniform float uGlow;\n"
     "uniform float uEdgePx;\n"
+    + SCENE3D_ORBIT_GLSL
     + f"const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};\n"
     + """
 vec4 sceneEmission(vec3 light) { return vec4(light, dot(light, vec3(0.2126, 0.7152, 0.0722))); }
@@ -319,8 +305,7 @@ void main() {
     // Lines from the grid coordinates, anti-aliased by their width on screen.
     vec2 cell = vec2(vGrid.x, vGrid.y + uScroll) * uCells;
     vec2 width = max(fwidth(cell), vec2(1e-5));
-    vec2 distance = abs(fract(cell - 0.5) - 0.5) / width;
-    float line = 1.0 - smoothstep(0.0, uEdgePx, min(distance.x, distance.y));
+    float line = sceneLineCoverage(sceneGridLineDistancePx(cell, width), vec2(uEdgePx));
     // Lines thinner than a pixel fade instead of shimmering.
     line *= clamp(1.2 / max(max(width.x, width.y) * 6.0, 1.0), 0.0, 1.0) * 0.6 + 0.4;
     float crest = clamp(vCrest, 0.0, 2.5);

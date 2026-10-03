@@ -141,6 +141,15 @@ audio lane replaces per onset; `BeatEngine.get_onset_events(after_serial)` retur
 Sampling the bus's per-frame onset flag instead depended on the analysis and logical cadences lining up. Bars:
 `tests/test_qtquick_shockwave_grid.py`. The shared primitive for Shockwave Grid, Reactive Particle Field and lightning.
 
+**Shared 3D view and lines.** Every 3D Visualizer orbits and projects through `SCENE3D_ORBIT_GLSL` /
+`scene3d_orbit_project` (`rendering/gl_programs/scene3d.py`): turn about the vertical axis, tilt toward the camera
+about a `pivot` that then sits at an `anchor` in front of a pinhole camera; a mode supplies only those constants and
+its own fit (Extruded Spectrum pivots at mid-bar and keeps it there; Shockwave Grid pivots at the grid's centre and
+faces it). Lines are `sceneLineCoverage` / `sceneGridLineDistancePx` (anti-aliased by their screen-pixel width).
+Moving both modes onto them changed nothing visible: Extruded byte-identical in 10 views, Shockwave within 1/255 (float
+order). A new 3D mode uses these instead of copying a projection. Bar: `test_scene3d_foundation.py`
+(`test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection`).
+
 **Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Shockwave Grid)
 offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host lets it compile or allocate one unit
 of what its first visible frame of that activation would create (a program, a mesh, the stream ring, the target, the

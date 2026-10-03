@@ -332,3 +332,40 @@ def test_every_3d_transition_blurs_its_motion_and_stays_exact_when_nothing_moves
         assert not renderer._target.has_resources
     finally:
         capture.close()
+
+
+def test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection():
+    """``scene3d_orbit_project`` (H6) is the one orbit/perspective both 3D Visualizers use; each
+    mode's former inline projection, kept here as the reference, must come out unchanged."""
+    import math
+    import random
+
+    from rendering.gl_programs.extruded_spectrum_program import EXTRUDED_CAMERA, EXTRUDED_PIVOT, extruded_project
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH, shockwave_project
+
+    def former_extruded(point, tilt, turn):
+        x, y, z = point
+        ct, st = math.cos(turn), math.sin(turn)
+        x, z = x * ct + z * st, -x * st + z * ct
+        c, s = math.cos(tilt), math.sin(tilt)
+        y -= EXTRUDED_PIVOT
+        raised, toward = y * c - z * s + EXTRUDED_PIVOT, y * s + z * c
+        scale = EXTRUDED_CAMERA / (EXTRUDED_CAMERA - toward)
+        return x * scale, raised * scale, toward
+
+    def former_shockwave(point, tilt, turn, camera):
+        x, y, z = point[0], point[1], point[2] + 0.5 * SHOCKWAVE_DEPTH
+        ct, st = math.cos(turn), math.sin(turn)
+        x, z = x * ct + z * st, -x * st + z * ct
+        c, s = math.cos(tilt), math.sin(tilt)
+        raised, toward = y * c - z * s, y * s + z * c
+        scale = camera / (camera - toward)
+        return x * scale, raised * scale, toward
+
+    rng = random.Random(6)
+    for _ in range(500):
+        point = (rng.uniform(-3, 3), rng.uniform(-1, 1), rng.uniform(-2.4, 0))
+        tilt, turn, camera = rng.uniform(0, math.pi / 2), rng.uniform(-math.pi, math.pi), rng.uniform(2.6, 6)
+        assert extruded_project(point, tilt, turn) == pytest.approx(former_extruded(point, tilt, turn), abs=1e-12)
+        assert shockwave_project(point, tilt, turn, camera) == pytest.approx(
+            former_shockwave(point, tilt, turn, camera), abs=1e-12)
