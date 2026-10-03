@@ -30,6 +30,7 @@
     <file alias="onboarding/transition_wipe.png" compression-algorithm="none">../assets/onboarding/source/transition_wipe.png</file>
     <file alias="onboarding/visualizer_bubble.png" compression-algorithm="none">../assets/onboarding/source/visualizer_bubble.png</file>
     <file alias="onboarding/visualizer_devcurve.png" compression-algorithm="none">../assets/onboarding/source/visualizer_devcurve.png</file>
+    <file alias="onboarding/visualizer_extruded_spectrum.png" compression-algorithm="none">../assets/onboarding/source/visualizer_extruded_spectrum.png</file>
     <file alias="onboarding/visualizer_oscilloscope.png" compression-algorithm="none">../assets/onboarding/source/visualizer_oscilloscope.png</file>
     <file alias="onboarding/visualizer_sine_wave.png" compression-algorithm="none">../assets/onboarding/source/visualizer_sine_wave.png</file>
     <file alias="onboarding/visualizer_spectrum.png" compression-algorithm="none">../assets/onboarding/source/visualizer_spectrum.png</file>

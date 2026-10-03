@@ -1,0 +1,22 @@
+{
+  "mode": "extruded_spectrum",
+  "name": "Preset 2 (Skyline)",
+  "preset_index": 1,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "extruded_spectrum",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "mode": "extruded_spectrum",
+        "extruded_spectrum_depth": 2.2,
+        "extruded_spectrum_tilt": 0.65,
+        "extruded_spectrum_gloss": 0.3,
+        "extruded_spectrum_reflection": 0.0,
+        "extruded_spectrum_allow_overflow": true,
+        "extruded_spectrum_colouring": "Bar Colours",
+        "extruded_spectrum_turn": 0.45,
+        "extruded_spectrum_hue_drift": 0.0
+      }
+    }
+  }
+}

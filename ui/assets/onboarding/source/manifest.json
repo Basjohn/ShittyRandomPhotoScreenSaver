@@ -524,11 +524,19 @@
         417,
         372
       ]
+    },
+    {
+      "mode_id": "extruded_spectrum",
+      "path": "visualizer_extruded_spectrum.png",
+      "size": [
+        784,
+        518
+      ]
     }
   ],
   "generation": {
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 21275909
+  "total_bytes": 21330562
 }

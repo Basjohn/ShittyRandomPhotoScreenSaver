@@ -14,8 +14,10 @@ Canonical current mode ids remain owned by the settings/mode registry:
 - `bubble`
 - `devcurve`
 - `sphere` — experimental, FRAMELESS, dormant by default
+- `extruded_spectrum` — FRAMELESS, dormant by default; Spectrum's bars as lit 3D columns
 
-The first five are the established carded technical modes. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
+The first five are the established carded technical modes. Extruded Spectrum (section 16A) is a permanent mode that
+borrows Spectrum's frame runtime, technical profile and bar colours and owns only its 3D presentation. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
 
 ## 1A. Registered modes vs enabled modes
 
@@ -50,6 +52,7 @@ admission/status/defaults and close acceptance gates, not require reimplementing
 | Oscilloscope | yes | yes | no | yes |
 | DevCurve | yes | yes | no | yes |
 | Sphere (experimental) | yes | yes | no | yes |
+| Extruded Spectrum | yes | no | yes | yes |
 
 Paused Spectrum remains intentionally mixed:
 
@@ -242,7 +245,7 @@ Architecture permits a mode to omit:
 - border/frame;
 - card shadow.
 
-Sphere is the current experimental example: a free-standing 3D object using FRAMELESS + VIEWPORT_RECT while remaining inside the same retained Quick scene/lifecycle.
+Sphere and Extruded Spectrum are the current examples: free-standing 3D objects using FRAMELESS + VIEWPORT_RECT while remaining inside the same retained Quick scene/lifecycle. With Allow Overflow on, Extruded Spectrum's node is unbounded and its scene may extend past the viewport rectangle; there is still no card to draw.
 
 Frameless does not mean display-global or separate-window rendering.
 
@@ -449,4 +452,25 @@ Sphere is the active promotion target and remains behaviourally private until it
   `velocity_writes()`, evaluating its points at the snapshot's logical t and t - shutter (never real time).
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
+
+## 16A. Extruded Spectrum
+
+The first Visualizer on the shared foundation (`rendering/quick/visualizer/implementations/extruded_spectrum.py`,
+GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
+
+- **Authored state:** Spectrum's. The descriptor names Spectrum's frame runtime, technical profile and shared-bar
+  profile, so bars, peaks, the R-76 temporal treatment, the shape editor and energy distribution are Spectrum's own.
+  `ExtrudedSpectrumFrame` is a `SpectrumFrame` with the mode's presentation parameters; the height transfer equals
+  Spectrum's (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
+- **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral Edges /
+  Bar Colours), hue drift, gloss, reflection, allow overflow. Hue drift advances with logical time only.
+- **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
+  binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor
+  reflection (fades to zero at the field bottom), translucent ghost columns for the peaks. S17 material lighting.
+- **Fit:** `extruded_fit` frames the projected bounding box of the tallest possible field for the current tilt, turn,
+  depth and reflection, so no setting can push the scene out of the rectangle; with overflow on, the scene keeps its
+  front-on scale and the target grows by `EXTRUDED_OVERFLOW_PAD` of the item height.
+- **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
+- **Guided Setup preview:** rendered by the foundry through the production capture and renderer
+  (`_RENDERED_VISUALIZER_PREVIEWS`), since the operator's screenshot sheet predates the mode.
 

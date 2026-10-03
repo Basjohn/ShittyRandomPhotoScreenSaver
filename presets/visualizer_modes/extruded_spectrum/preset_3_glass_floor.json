@@ -1,0 +1,22 @@
+{
+  "mode": "extruded_spectrum",
+  "name": "Preset 3 (Glass Floor)",
+  "preset_index": 2,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "extruded_spectrum",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "mode": "extruded_spectrum",
+        "extruded_spectrum_depth": 0.6,
+        "extruded_spectrum_tilt": 0.18,
+        "extruded_spectrum_gloss": 0.9,
+        "extruded_spectrum_reflection": 0.8,
+        "extruded_spectrum_allow_overflow": true,
+        "extruded_spectrum_colouring": "Spectral Edges",
+        "extruded_spectrum_turn": -0.2,
+        "extruded_spectrum_hue_drift": 0.5
+      }
+    }
+  }
+}

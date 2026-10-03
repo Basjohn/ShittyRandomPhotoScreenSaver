@@ -37,7 +37,7 @@ def _controller(*, generation: int = 0) -> VisualizerRuntimeController:
 def test_current_modes_resolve_their_proven_carded_presentation_policy() -> None:
     for mode_id in VISUALIZER_MODE_IDS:
         policy = get_visualizer_mode_descriptor(mode_id).presentation_policy
-        if mode_id == "sphere":
+        if mode_id in ("sphere", "extruded_spectrum"):          # the free-standing 3D modes
             assert policy.shell_policy is VisualizerShellPolicy.FRAMELESS
             assert policy.clip_policy is VisualizerClipPolicy.VIEWPORT_RECT
         else:

@@ -614,6 +614,23 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
+# Extruded Spectrum (experimental): presentation-only keys. Its bars, analysis and colours
+# come from Spectrum's runtime, technical profile and shared-bar profile (descriptor).
+_EXTRUDED_SPECTRUM_LIMITS: Dict[str, Tuple[float, float]] = {
+    'extruded_spectrum_depth': (0.25, 3.0),
+    'extruded_spectrum_tilt': (0.0, 1.0),
+    'extruded_spectrum_gloss': (0.0, 1.0),
+    'extruded_spectrum_reflection': (0.0, 1.0),
+    'extruded_spectrum_hue_drift': (0.0, 1.0),
+    'extruded_spectrum_turn': (-1.0, 1.0),
+}
+_EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    **{key: float for key in _EXTRUDED_SPECTRUM_LIMITS},
+    'extruded_spectrum_colouring': str,
+    'extruded_spectrum_allow_overflow': bool,
+}
+_EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED_SPECTRUM_BUILD_SPECS)
+
 _DEVCURVE_ACTIVE_LAYERS = {"bass", "vocals", "mids", "transients"}
 _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
     "devcurve_layer_bass_outline_width": (0.001, 0.020),
@@ -692,6 +709,7 @@ def _build_visualizer_model_kwargs(
         ),
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
+        _build_read_value_map(read_value, _EXTRUDED_SPECTRUM_BUILD_SPECS),
         preset_kwargs,
     )
 
@@ -1375,6 +1393,17 @@ class SpotifyVisualizerSettings:
     preset_bubble: int = field(default_factory=lambda: _visualizer_default('preset_bubble'))
     preset_devcurve: int = field(default_factory=lambda: _visualizer_default('preset_devcurve'))
     preset_sphere: int = field(default_factory=lambda: _visualizer_default('preset_sphere'))
+    extruded_spectrum_depth: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_depth'))
+    extruded_spectrum_tilt: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_tilt'))
+    extruded_spectrum_gloss: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_gloss'))
+    extruded_spectrum_reflection: float = field(
+        default_factory=lambda: _visualizer_default('extruded_spectrum_reflection'))
+    extruded_spectrum_hue_drift: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_hue_drift'))
+    extruded_spectrum_turn: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_turn'))
+    extruded_spectrum_colouring: str = field(default_factory=lambda: _visualizer_default('extruded_spectrum_colouring'))
+    extruded_spectrum_allow_overflow: bool = field(
+        default_factory=lambda: _visualizer_default('extruded_spectrum_allow_overflow'))
+    preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
@@ -1383,6 +1412,12 @@ class SpotifyVisualizerSettings:
         self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
+        for attr, (low, high) in _EXTRUDED_SPECTRUM_LIMITS.items():
+            _clamp_attr_range(self, attr, low, high)
+        self.extruded_spectrum_allow_overflow = bool(self.extruded_spectrum_allow_overflow)
+        from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+        if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
+            self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')
 
     def _apply_list_default(self, attr: str, value: list[int]) -> None:
         if getattr(self, attr) is None:
@@ -1622,6 +1657,7 @@ class SpotifyVisualizerSettings:
             self._serialize_bubble_settings(prefix),
             self._serialize_devcurve_settings(prefix),
             self._serialize_sphere_settings(prefix),
+            _serialize_prefixed_fields(self, prefix, _EXTRUDED_SPECTRUM_SERIALIZERS),
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),

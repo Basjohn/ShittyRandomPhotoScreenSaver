@@ -415,6 +415,7 @@ def test_quick_devcurve_registry_is_static_lazy_and_resource_dormant(
         "bubble",
         "devcurve",
         "sphere",
+        "extruded_spectrum",
     )
     imported: list[str] = []
     real_import = implementation_registry.import_module
