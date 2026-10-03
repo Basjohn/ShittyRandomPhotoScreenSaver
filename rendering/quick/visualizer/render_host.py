@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import time
 from typing import TYPE_CHECKING
 
 from OpenGL import GL as gl
@@ -65,6 +66,13 @@ def create_lifecycle_telemetry_if_admitted() -> (
 
 
 
+# Hidden frames (content fade 0, as during a mode or preset reveal's waiting phase) let a renderer
+# that offers ``prepare_step`` compile or allocate one unit, at least this far apart, so no two
+# nearby frames of the window both carry a compile. Measured at the first visible frame before
+# this existed: Shockwave Grid 22 ms with a warm driver shader cache, 139 ms cold.
+PREPARE_SPACING_S = 0.03
+
+
 class QuickVisualizerRenderHost:
     """Own one shared quad and resolve only the current mode implementation."""
 
@@ -77,6 +85,10 @@ class QuickVisualizerRenderHost:
         self._quad_vbo = 0
         self._implementations: dict[str, QuickVisualizerRenderer] = {}
         self._last_render_mode_id: str | None = None
+        # (mode id, activation id) whose renderer has everything its visible frames need. Written
+        # here on the render thread, read by the GUI-side reveal (one reference, no lock needed).
+        self._prepared: tuple[str, int] | None = None
+        self._next_prepare_at = 0.0
         # Opt-in only: injected telemetry (tests/tools) wins; otherwise consult
         # the process experiment admission. ``None`` == disabled == no new
         # allocation/lock/bookkeeping for ordinary Standard/MC runtime.
@@ -134,6 +146,11 @@ class QuickVisualizerRenderHost:
     @property
     def resolved_mode_ids(self) -> frozenset[str]:
         return frozenset(self._implementations)
+
+    @property
+    def prepared_activation(self) -> tuple[str, int] | None:
+        """(mode id, activation id) whose renderer is ready to draw without compiling."""
+        return self._prepared
 
     def render(
         self,
@@ -219,7 +236,20 @@ class QuickVisualizerRenderHost:
                     ),
                     auxiliary=int(snapshot.logical.runtime_generation),
                 )
-            implementation.render(frame)
+            prepare = getattr(implementation, "prepare_step", None)
+            activation = (mode_id, int(snapshot.logical.activation_id))
+            if prepare is not None and snapshot.presentation.content_fade <= 0.0:
+                # Hidden: nothing would be drawn, so prepare instead (spaced, one unit).
+                if self._prepared != activation:
+                    now = time.monotonic()
+                    if now >= self._next_prepare_at:
+                        self._next_prepare_at = now + PREPARE_SPACING_S
+                        if prepare(frame):
+                            self._prepared = activation
+            else:
+                implementation.render(frame)
+                if self._prepared != activation:
+                    self._prepared = activation      # it has drawn: whatever it needed exists
             if frame_trace is not None:
                 frame_trace.record(
                     FrameTraceEvent.RENDER_MODE_READY,
@@ -272,6 +302,8 @@ class QuickVisualizerRenderHost:
             if not implementation.has_resources:
                 self._implementations.pop(mode_id, None)
                 successes += 1
+                if self._prepared is not None and self._prepared[0] == mode_id:
+                    self._prepared = None
         # A failed release stays accounted as a failure and a retained renderer;
         # it is never silently dropped from the ownership snapshot.
         if self._lifecycle is not None:
@@ -311,6 +343,7 @@ class QuickVisualizerRenderHost:
             gl.glDeleteVertexArrays(1, [self._quad_vao])
         self._quad_vao = 0
         self._last_render_mode_id = None
+        self._prepared = None
         if self._lifecycle is not None:
             self._lifecycle.note_full_release(
                 error=(" | ".join(errors) if errors else None)

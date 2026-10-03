@@ -131,6 +131,18 @@ Presentation side owns:
 
 The worker does not mutate Quick items or GPU resources.
 
+**Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Shockwave Grid)
+offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host lets it compile or allocate one unit
+of what its first visible frame of that activation would create (a program, a mesh, the stream ring, the target, the
+glow chain, the backdrop copy), at least `PREPARE_SPACING_S` (30 ms) apart, and records the (mode, activation) as
+prepared; a visible draw records it too. The owner keeps a mode or preset reveal in `waiting_target` (fade 0) until the
+render thread reports the activation prepared, and reveals anyway after `_PREPARED_REVEAL_DEADLINE_S` (1.5 s) so a
+window that renders nothing cannot strand the activation. Nothing is preloaded: only the incoming activation prepares,
+and only what its parameters need. Measured at a 1600x900 card (RTX 4090), first visible frame: Extruded 6-8 ms ->
+3-4 ms, Shockwave Grid with glow 22 ms (139 ms with a cold driver shader cache) -> 4 ms; the steps themselves cost
+0.5-11 ms each on hidden frames. The first hidden frame of a session also imports the renderer's modules (~20 ms
+once, shared with the 3D transitions once those have run). Bars: `tests/test_visualizer_prepared_reveal.py`.
+
 Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the current architecture.
 
 Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are

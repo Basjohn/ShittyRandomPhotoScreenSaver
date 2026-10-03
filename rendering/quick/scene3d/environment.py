@@ -250,6 +250,25 @@ class BackdropEnvironment:
             self._frames_since += 1
         return self._texture
 
+    def warm(self, viewport: tuple[int, int, int, int]) -> bool:
+        """One unit of allocating ahead what ``texture`` will use for ``viewport`` (the copy, then
+        a resolve target when the target Quick draws into is multisampled); True once done. The
+        first ``texture`` after a warm-up still captures."""
+        vx, vy, vw, vh = (int(v) for v in viewport)
+        size = environment_size((vw, vh))
+        if self._size != size:
+            self._release_texture()
+            self._allocate(size)
+            self._frames_since = BACKDROP_REFRESH_FRAMES      # allocated, never captured: due
+            return False
+        source = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+        samples = ctypes.c_int(0)
+        gl.glGetNamedFramebufferParameteriv(source, gl.GL_SAMPLES, ctypes.byref(samples))
+        if samples.value > 1 and (self._resolve is None or self._resolve[2] != (vw, vh)):
+            self._resolve_target((vw, vh))
+            return False
+        return True
+
     def capture(self, viewport: tuple[int, int, int, int]) -> int:
         vx, vy, vw, vh = (int(v) for v in viewport)
         size = environment_size((vw, vh))

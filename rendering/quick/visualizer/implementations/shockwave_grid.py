@@ -29,10 +29,10 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_half_width,
     shockwave_wave_speed,
 )
-from rendering.quick.scene3d.frame import padded_item_frame
-from rendering.quick.scene3d.resources import MeshResources
+from rendering.quick.scene3d.frame import item_pixel_rect, padded_item_frame
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import ShockwaveGridFrame
 
 from ..implementation_values import parameter, rgba
@@ -68,6 +68,26 @@ class QuickShockwaveGridRenderer:
         r.program("grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE)
         r.uniforms("grid", _UNIFORMS)
         r.mesh("grid", scene3d_grid_vertices(*SHOCKWAVE_GRID_CELLS), (2,))
+
+    def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
+        """One unit of what this activation's first visible frame would otherwise compile or
+        allocate (a program, the grid mesh, the stream ring, the target and its glow), on a hidden
+        frame; True once nothing is left."""
+        parameters = frame.snapshot.logical.mode_state.parameters
+        bloom = float(parameter(parameters, "shockwave_grid_glow")) > 0.0
+        overflow = bool(parameter(parameters, "shockwave_grid_allow_overflow"))
+        target_frame = padded_item_frame(frame, _OVERFLOW_PAD * frame.logical_size[1]) if overflow else frame
+        r = self._resources
+        if not warm_programs([(r, "grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE),
+                              *((r, *program) for program in scene_target_programs(_SAMPLES, bloom, False,
+                                                                                   overlay=True))]):
+            return False
+        if not r.has_mesh("grid"):
+            r.mesh("grid", scene3d_grid_vertices(*SHOCKWAVE_GRID_CELLS), (2,))
+            return False
+        if not self._stream.warm():
+            return False
+        return self._target.warm(item_pixel_rect(target_frame)[2:], _SAMPLES, overlay=True, bloom=bloom)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot

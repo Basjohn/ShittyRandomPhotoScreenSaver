@@ -240,6 +240,11 @@ Each foundation slice adds what it learned here.
 - Reading the render target Quick is drawing into (a blit of what is beneath) stalls the GPU for a fixed ~0.55 ms
   at 2560x1440 whatever the region size; the same blit alone costs ~0.03 ms. Refresh such a copy every few frames,
   never every frame.
+- A first draw compiles every program it touches and allocates every target on that visible frame, and a cold driver
+  shader cache makes one compile 100+ ms (Shockwave Grid: 139 ms). A 3D Visualizer prepares on the hidden frames of
+  its reveal instead (`prepare_step`, Visualizer_Reference "Prepared reveal"); a transition warms the next run ahead.
+  Either way the list of what a first frame creates must stay in step with the draw, and a test must show the first
+  visible frame compiles and allocates nothing.
 
 **Settings**
 - A transition's quality choices (Anti-aliasing, Bloom, and future ones such as Motion Blur) live on its own page.

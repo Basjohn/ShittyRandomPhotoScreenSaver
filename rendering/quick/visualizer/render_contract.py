@@ -173,6 +173,11 @@ class QuickVisualizerRenderFrame:
 
 
 class QuickVisualizerRenderer(Protocol):
+    """A mode renderer. One whose descriptor sets ``prepared_reveal`` also offers
+    ``prepare_step(frame) -> bool``: on a hidden frame (content fade 0) it compiles or allocates
+    at most one unit of what its first visible frame of this activation would otherwise create,
+    and returns True once nothing is left (see ``QuickVisualizerRenderHost``)."""
+
     mode_id: str
 
     @property
