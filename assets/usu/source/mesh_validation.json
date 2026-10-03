@@ -1,0 +1,45 @@
+{
+  "scope": "Static authoring only; visual approval pending",
+  "surfaces": {
+    "Usu_Body_And_Arms": {
+      "vertices": 1196,
+      "faces": 1250,
+      "quads": 1138,
+      "triangles": 112,
+      "nonmanifold_edges": 0,
+      "loose_vertices": 0,
+      "zero_area_faces": 0
+    },
+    "Usu_Foot_L": {
+      "vertices": 530,
+      "faces": 576,
+      "quads": 480,
+      "triangles": 96,
+      "nonmanifold_edges": 0,
+      "loose_vertices": 0,
+      "zero_area_faces": 0
+    },
+    "Usu_Foot_R": {
+      "vertices": 530,
+      "faces": 576,
+      "quads": 480,
+      "triangles": 96,
+      "nonmanifold_edges": 0,
+      "loose_vertices": 0,
+      "zero_area_faces": 0
+    },
+    "Usu_Head_And_Ears": {
+      "vertices": 4393,
+      "faces": 4392,
+      "quads": 4390,
+      "triangles": 2,
+      "nonmanifold_edges": 0,
+      "loose_vertices": 0,
+      "zero_area_faces": 0
+    }
+  },
+  "armatures": 0,
+  "armature_modifiers": 0,
+  "scene_object_actions": 0,
+  "packed_reference": true
+}

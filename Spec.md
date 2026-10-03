@@ -213,6 +213,11 @@ solve deleted-object failures with timers, event-loop pumping, leaked hidden sec
 
 ## Shared 3D rendering foundation / dormancy
 
+Usu character authoring material lives under `assets/usu/` (see its `README.md`).
+The Blender source and review renders are authoring assets; they do not admit a
+runtime Visualizer, rig, animation or engine export. `Current_Plan.md` owns any
+active asset approval work, while the deferred mode remains future work.
+
 SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick scene**; future 3D work must inspect and
 reuse/extend this foundation where appropriate rather than creating a second renderer stack.
 Shared mesh, reflection and scene/post resource ownership, immutable storage, multi-bind and state restoration are
