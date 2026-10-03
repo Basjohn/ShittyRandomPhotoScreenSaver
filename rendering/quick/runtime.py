@@ -65,6 +65,9 @@ class QuickDisplayRuntime(QObject):
     view_orbit_rates_changed = Signal(float, float)
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
+    visualizer_move_requested = Signal(QPoint, QPoint)
+    visualizer_scale_requested = Signal(int)
+    visualizer_gesture_finished = Signal()
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
     custom_layout_undo_requested = Signal()
@@ -244,6 +247,9 @@ class QuickDisplayRuntime(QObject):
         self._input.view_orbit_rates_changed.connect(self.view_orbit_rates_changed.emit)
         self._input.view_orbit_requested.connect(self.view_orbit_requested.emit)
         self._input.view_orbit_finished.connect(self.view_orbit_finished.emit)
+        self._input.visualizer_move_requested.connect(self.visualizer_move_requested.emit)
+        self._input.visualizer_scale_requested.connect(self.visualizer_scale_requested.emit)
+        self._input.visualizer_gesture_finished.connect(self.visualizer_gesture_finished.emit)
         self._input.custom_layout_save_requested.connect(
             self.custom_layout_save_requested.emit
         )

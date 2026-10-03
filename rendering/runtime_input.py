@@ -7,7 +7,7 @@ import math
 import time
 
 from PySide6.QtCore import QObject, QPoint, QPointF, Qt, Signal
-from PySide6.QtGui import QKeyEvent, QMouseEvent
+from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
 
 from core.logging.logger import get_logger
 
@@ -99,6 +99,13 @@ class RuntimeInputOwner(QObject):
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
     VIEW_ORBIT_DRAG_PIXELS_PER_STEP = 4.0
+    # On the same shown 3D Visualizer, Alt + right drag moves it and Alt + wheel resizes it,
+    # outside Edit (in interaction or Ctrl mode, like the orbit): the move as the pointer's
+    # global offset since the press (and its global position), the resize one wheel step at a
+    # time. The gesture finishes at the drag's release, or when Alt is released after wheeling.
+    visualizer_move_requested = Signal(QPoint, QPoint)
+    visualizer_scale_requested = Signal(int)
+    visualizer_gesture_finished = Signal()
 
     MOUSE_EXIT_THRESHOLD = 10
     # The camera moves around the scene: W up over it, S down, A left, D right.
@@ -134,6 +141,8 @@ class RuntimeInputOwner(QObject):
         # Whether a scene point lies on the shown Visualizer (set by the display's runtime).
         self._view_orbit_hit_test: Callable[[QPointF], bool] | None = None
         self._view_orbit_drag: QPointF | None = None      # the last drag position while dragging
+        self._visualizer_drag_origin: QPoint | None = None   # Alt + right drag: the global press point
+        self._visualizer_wheeling = False                    # Alt + wheel steps since Alt went down
 
     def is_interaction_mode_enabled(self) -> bool:
         provider = self._interaction_mode_provider
@@ -186,6 +195,8 @@ class RuntimeInputOwner(QObject):
             self._view_orbit_held.clear()
             self._view_orbit_drag = None
             self.view_orbit_finished.emit()
+        if not enabled:
+            self._end_visualizer_gesture()
         self._view_orbit_enabled = enabled
 
     def set_view_orbit_hit_test(self, hit_test: Callable[[QPointF], bool] | None) -> None:
@@ -206,16 +217,46 @@ class RuntimeInputOwner(QObject):
         if not self._view_orbiting():
             self.view_orbit_finished.emit()
 
-    def _starts_view_orbit_drag(self, event: QMouseEvent, ctrl_mode_active: bool) -> bool:
+    def _alt_gesture_on_visualizer(self, modifiers, position: QPointF, ctrl_mode_active: bool) -> bool:
+        """Alt held over the shown 3D Visualizer, in interaction or Ctrl mode."""
         hit_test = self._view_orbit_hit_test
         return bool(
             self._view_orbit_enabled
             and hit_test is not None
-            and event.button() == Qt.MouseButton.LeftButton
-            and event.modifiers() & Qt.KeyboardModifier.AltModifier
+            and modifiers & Qt.KeyboardModifier.AltModifier
             and (self.is_interaction_mode_enabled() or ctrl_mode_active)
-            and hit_test(event.position())
+            and hit_test(position)
         )
+
+    def _starts_view_orbit_drag(self, event: QMouseEvent, ctrl_mode_active: bool) -> bool:
+        return (event.button() == Qt.MouseButton.LeftButton
+                and self._alt_gesture_on_visualizer(event.modifiers(), event.position(), ctrl_mode_active))
+
+    def _visualizer_gesture_active(self) -> bool:
+        return self._visualizer_drag_origin is not None or self._visualizer_wheeling
+
+    def _end_visualizer_gesture(self) -> None:
+        """End any direct Visualizer gesture (finished once, by whichever part ends last)."""
+        active = self._visualizer_gesture_active()
+        self._visualizer_drag_origin = None
+        self._visualizer_wheeling = False
+        if active:
+            self.visualizer_gesture_finished.emit()
+
+    def handle_wheel(self, event: QWheelEvent, global_ctrl_held: bool = False) -> bool:
+        """Alt + wheel over the shown 3D Visualizer resizes it (before its volume wheel)."""
+        if self._should_suppress_runtime_pointer_input("wheelEvent"):
+            return False
+        ctrl_mode_active = self.is_ctrl_mode_active() or bool(global_ctrl_held)
+        if not self._alt_gesture_on_visualizer(event.modifiers(), event.position(), ctrl_mode_active):
+            return False
+        # With Alt held Qt may report the vertical wheel as horizontal.
+        delta = event.angleDelta()
+        step = int(delta.y() or delta.x())
+        if step:
+            self._visualizer_wheeling = True
+            self.visualizer_scale_requested.emit(step)
+        return True
 
     def is_view_orbit_enabled(self) -> bool:
         return self._view_orbit_enabled
@@ -327,6 +368,11 @@ class RuntimeInputOwner(QObject):
         if event.key() == Qt.Key.Key_Control and self._consume_control_key:
             self.set_ctrl_held(False)
             return True
+        if event.key() == Qt.Key.Key_Alt and self._visualizer_wheeling and not event.isAutoRepeat():
+            self._visualizer_wheeling = False
+            if self._visualizer_drag_origin is None:
+                self.visualizer_gesture_finished.emit()
+            return True
         orbit_key = self._view_orbit_key(event) if self._view_orbit_held else None
         if orbit_key is not None:
             # Key repeat delivers release/press pairs while the key stays down: orbiting ends
@@ -349,6 +395,11 @@ class RuntimeInputOwner(QObject):
         if self._starts_view_orbit_drag(event, ctrl_mode_active):
             self._view_orbit_drag = QPointF(event.position())
             return True
+        if (event.button() == Qt.MouseButton.RightButton
+                and self._alt_gesture_on_visualizer(event.modifiers(), event.position(), ctrl_mode_active)):
+            # Alt + right on the Visualizer moves it; no context menu while Alt is held there.
+            self._visualizer_drag_origin = self._global_mouse_point(event)
+            return True
         self._mouse_press_pos = self._local_mouse_point(event)
         self._mouse_press_time = time.time()
 
@@ -370,6 +421,10 @@ class RuntimeInputOwner(QObject):
         global_ctrl_held: bool = False,
     ) -> bool:
         if self._should_suppress_runtime_pointer_input("mouseMoveEvent"):
+            return True
+        if self._visualizer_drag_origin is not None:
+            cursor = self._global_mouse_point(event)
+            self.visualizer_move_requested.emit(cursor - self._visualizer_drag_origin, cursor)
             return True
         if self._view_orbit_drag is not None:
             # Dragging right moves the camera left round the scene (it turns toward the drag);
@@ -412,6 +467,11 @@ class RuntimeInputOwner(QObject):
             self._view_orbit_drag = None
             self._finish_view_orbit_if_idle()
             return True
+        if self._visualizer_drag_origin is not None and _event.button() == Qt.MouseButton.RightButton:
+            self._visualizer_drag_origin = None
+            if not self._visualizer_wheeling:
+                self.visualizer_gesture_finished.emit()
+            return True
         self._mouse_press_pos = None
         self._mouse_press_time = 0.0
         return False
@@ -453,6 +513,7 @@ class RuntimeInputOwner(QObject):
         self._ctrl_state_publisher = None
         # A closed input holds nothing of its scene; an orbit in progress ends here.
         orbiting = self._view_orbiting()
+        self._end_visualizer_gesture()
         self._view_orbit_hit_test = None
         self._view_orbit_drag = None
         self._view_orbit_held.clear()

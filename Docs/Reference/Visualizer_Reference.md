@@ -592,6 +592,20 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   interaction mode. A drag's steps are fractions per mouse move, so every relay of `view_orbit_requested` carries
   floats (an int relay once truncated them all to zero; `tests/test_visualizer_view_orbit.py` drives the real window
   and runtime). Without Alt, off the Visualizer or outside interaction/Ctrl mode, pointer behaviour is unchanged.
+- **Alt + right drag / Alt + wheel** (the same admission: a shown 3D Visualizer under the pointer, interaction or Ctrl
+  mode) move and resize it outside Edit. The input owner takes Alt + right before the context menu and Alt + wheel
+  before the Visualizer's volume wheel (`QuickDisplayWindow.wheelEvent`; Qt may report the wheel as horizontal with
+  Alt held); every other press or wheel is untouched. A gesture runs through Edit's own session machinery in
+  `QuickCustomLayoutOwner` (`begin_direct_visualizer_gesture`): a session holding only the Visualizer, its display
+  bound chrome-less (`bind_direct_custom_layout_session`: no overlay model or guides, native and widget input not
+  blocked), authored placement quiesced as Edit does. The move follows the pointer exactly, clamped to its display
+  (no invisible magnetic snap, no display transfer); the wheel is Edit's uniform resize. It ends at the drag's release,
+  or when Alt is released after wheeling (one gesture, finished once, whichever ends last), and commits through
+  Edit's `save` once: the same persistence and live promotion, nothing written when nothing changed, and no Edit-close
+  input guard. Edit never inherits one (starting Edit commits it first; Edit's keys follow `is_editing`, not a
+  gesture); teardown, Settings and layout slots treat it as an open session (`is_active`). Nothing is held between
+  gestures. Bars: `tests/test_visualizer_direct_gestures.py` (the input owner, and the real display unit + Visualizer
+  + owner seam).
 - **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
   submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
   backdrop copy.

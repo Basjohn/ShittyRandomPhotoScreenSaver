@@ -97,12 +97,10 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   bus. Now a loudness/presence gate silences near-silence, presence against the track's usual onsets lets big hits
   reach ~2.9x medium ones (taller, wider, brighter, with an echo ring), the ridge glows brighter where bars are
   loudest, and an Idle Swell drifts side to side. Contract: Visualizer_Reference 16B "Reactivity"; physical check open.
-- [ ] **H5. Direct 3D Visualizer controls outside Edit/Arrange.** Alt + left drag orbits (landed). Add **Alt + right
-  drag** to move the 3D Visualizer and **Alt + scroll wheel** to resize it uniformly, both outside Edit mode, with no
-  Edit-mode UI. Suppress the context menu while Alt is held; if Alt + right click cannot be made reliable, switch the
-  move to middle-drag. Must not conflict with Arrange/Edit, must not create a second geometry authority (persist through
-  the same owner Edit/Arrange commit through, once at gesture end, never per movement), zero cost when settled, minimal
-  cost while held. Ownership and lifecycle stay pristine (cleanup on input close, as orbit).
+- [x] **H5. Direct 3D Visualizer controls outside Edit**: Alt + right drag moves, Alt + wheel resizes (Alt + left
+  orbits), through Edit's own session code with no chrome, one commit through Edit's Save at the gesture's end, nothing
+  held between gestures. Contract: `Docs/Reference/Visualizer_Reference.md` 16A "Alt + right drag / Alt + wheel".
+  Physical check open: both displays, Alt behaviour with the OS (no stray menu), anchored vs. Custom placement.
 - [ ] **H6. Shared Visualizer 3D camera, fit and line helpers.** Extruded and Shockwave each carry their own projection,
   pivot, fit and fwidth-line code with CPU mirrors. Extract one shared helper (GLSL + CPU mirror) before the next 3D
   mode copies it again.

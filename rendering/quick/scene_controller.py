@@ -911,6 +911,39 @@ class QuickSceneController(QObject):
             model.visibilityChanged.connect(self._on_context_menu_visibility_changed)
         return True
 
+    def bind_direct_custom_layout_session(
+        self,
+        session: CustomLayoutSession,
+        *,
+        display_identity: str,
+        display_origin: QPoint | None = None,
+    ) -> None:
+        """Bind a direct Visualizer gesture's session (Alt + drag / wheel outside Edit).
+
+        The working rectangle reaches the retained pixels exactly as in Edit (the
+        same presentation authority and viewport config sink), but nothing of Edit
+        shows or blocks: no overlay model, no guides, native and ordinary-widget input
+        stay with their owners, so the gesture's own pointer events keep arriving.
+        ``clear_custom_layout_session`` ends it like any session.
+        """
+
+        identity = str(display_identity or "").strip()
+        if not identity:
+            raise ValueError("display_identity must not be empty")
+        self._custom_layout_display_identity = identity
+        self._custom_layout_display_origin = QPoint(display_origin or QPoint())
+        self._custom_layout_session = session
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("volumeWheelEnabled", False)
+        self._custom_layout_visualizer_baseline = (
+            None if self._visualizer_item is None else self._visualizer_item.presentation
+        )
+        if self._visualizer_item is not None:
+            self._visualizer_item.set_custom_layout_presentation_authority(True)
+        session.subscribe_changes(self._apply_custom_layout_item)
+        for item in session.items():
+            self._apply_custom_layout_item(item)
+
     def bind_custom_layout_session(
         self,
         session: CustomLayoutSession,
@@ -1169,6 +1202,10 @@ class QuickSceneController(QObject):
             else:
                 corrupt.append("visualizer_item")
                 self._visualizer_item = None
+        session = self._custom_layout_session
+        if session is not None:
+            # A direct gesture's binding listens itself (Edit's listens through its overlay).
+            session.unsubscribe_changes(self._apply_custom_layout_item)
         self._custom_layout_session = None
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()

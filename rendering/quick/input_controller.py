@@ -70,8 +70,9 @@ class QuickInputController(RuntimeInputOwner):
         """Whether pointer motion can still trigger the non-interaction exit gesture."""
 
         state = self._state
-        if state.admission_open and self._view_orbit_drag is not None:
-            return True                       # an Alt-drag orbit follows the pointer in any mode
+        if state.admission_open and (self._view_orbit_drag is not None
+                                     or self._visualizer_drag_origin is not None):
+            return True                       # an Alt-drag orbit or move follows the pointer in any mode
         return bool(
             state.admission_open
             and not state.exiting
@@ -236,6 +237,11 @@ class QuickInputController(RuntimeInputOwner):
         if not self._state.admission_open:
             return True
         return super().handle_mouse_double_click(event)
+
+    def handle_wheel(self, event, global_ctrl_held: bool = False) -> bool:
+        if not self._state.admission_open:
+            return False
+        return super().handle_wheel(event, global_ctrl_held)
 
     def close_input(self) -> bool:
         """Close admission before scene/window retirement begins."""

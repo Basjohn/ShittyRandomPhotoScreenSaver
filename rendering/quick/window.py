@@ -378,6 +378,16 @@ class QuickDisplayWindow(QQuickWindow):
             return
         super().mouseReleaseEvent(event)
 
+    def wheelEvent(self, event) -> None:
+        # Alt + wheel over a shown 3D Visualizer resizes it outside Edit; the input owner
+        # declines every other wheel, which goes on to QML (volume and Edit wheels) unchanged.
+        if not self._custom_layout_input_blocked:
+            controller = self._input_controller
+            if controller is not None and controller.handle_wheel(event):
+                event.accept()
+                return
+        super().wheelEvent(event)
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if self._custom_layout_input_blocked:
             super().mouseDoubleClickEvent(event)
