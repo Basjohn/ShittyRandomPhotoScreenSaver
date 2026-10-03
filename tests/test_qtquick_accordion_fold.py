@@ -1,8 +1,9 @@
-"""Accordion Fold: the fold geometry (CPU mirror) and the transition through the production
-host on a real offscreen context (no window): pleats keep their width, creases sit on grid
-vertex rows at every tier, exact and continuous ends, the uncovered new picture exact (shaded
-as the mirror says) beyond the folded stack, every edge folds toward itself, a warm-up that
-leaves the first frames nothing to do, park/release, and the resolver."""
+"""Accordion Fold: the fold geometry (CPU mirror, checked on the GPU) and the transition through the
+production host on a real offscreen context (no window): pleats keep their width through folding,
+flipping and unfolding, the phases meet, the turning stack stays above the picture, creases sit on
+grid vertex rows at every tier, exact and continuous ends, the front carries the old picture and
+the back the new one, a still backdrop beyond the stack, every edge folds toward itself, a warm-up
+that leaves the first frames nothing to do, park/release, and the resolver."""
 from __future__ import annotations
 
 import math
@@ -13,13 +14,14 @@ import pytest
 
 from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGES
 from rendering.gl_programs.accordion_fold_program import (
-    ACCORDION_MAX_ANGLE,
-    ACCORDION_SHADE,
-    ACCORDION_SHADE_REACH,
+    ACCORDION_FLIP_END,
+    ACCORDION_FOLD_END,
+    ACCORDION_GLSL,
+    ACCORDION_MAX_FOLD,
     accordion_edge,
     accordion_fold,
     accordion_grid,
-    accordion_shade_weight,
+    accordion_lift,
     accordion_state,
 )
 from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS
@@ -30,21 +32,58 @@ pytestmark = pytest.mark.qt
 
 W, H = 320, 180
 ASPECT = W / H
+_FOLD = 0.5 * ACCORDION_FOLD_END
+_UNFOLD = 0.5 * (ACCORDION_FLIP_END + 1.0)
 
 
-def test_pleats_fold_without_stretching():
+def test_pleats_keep_their_width_through_folding_flipping_and_unfolding():
     length, pleats = ASPECT, 8
-    for angle in (0.0, 0.3, 1.0, ACCORDION_MAX_ANGLE):
-        step = 1e-4
+    states = [(fold, 0.0) for fold in (0.0, 0.3, ACCORDION_MAX_FOLD)]
+    states += [(ACCORDION_MAX_FOLD, flip) for flip in (0.4, 1.5, 2.9)]
+    states += [(fold, math.pi) for fold in (ACCORDION_MAX_FOLD, 0.7, 0.2)]
+    step = 1e-4
+    for fold, flip in states:
         for a in np.linspace(0.0, length - step, 500):
-            x0, z0 = accordion_fold(a, length, pleats, angle, 0.0)
-            x1, z1 = accordion_fold(a + step, length, pleats, angle, 0.0)
+            x0, z0 = accordion_fold(a, length, pleats, fold, flip)
+            x1, z1 = accordion_fold(a + step, length, pleats, fold, flip)
             assert math.hypot(x1 - x0, z1 - z0) == pytest.approx(step, rel=1e-3)
+            assert z0 >= -1e-12                           # never through the picture
     assert accordion_fold(0.37, length, pleats, 0.0, 0.0) == pytest.approx((0.37, 0.0))
-    # The stack ends past its edge, and the shade with it.
-    angle, slide = accordion_state(1.0, length, pleats)
-    assert accordion_fold(length, length, pleats, angle, slide)[0] < 0.0
-    assert accordion_shade_weight(1.0) == 0.0 and accordion_shade_weight(0.5) == 1.0
+    # Laid flat back up, a point lands mirrored across the picture.
+    assert accordion_fold(0.37, length, pleats, 0.0, math.pi) == pytest.approx((length - 0.37, 0.0))
+
+
+def test_the_phases_meet():
+    length, pleats = ASPECT, 8
+    for a in np.linspace(0.0, length, 97):
+        folded = accordion_fold(a, length, pleats, ACCORDION_MAX_FOLD, 0.0)
+        assert accordion_fold(a, length, pleats, ACCORDION_MAX_FOLD, 1e-9) == pytest.approx(folded, abs=1e-7)
+        turned = accordion_fold(a, length, pleats, ACCORDION_MAX_FOLD, math.pi - 1e-9)
+        assert accordion_fold(a, length, pleats, ACCORDION_MAX_FOLD, math.pi) == pytest.approx(turned, abs=1e-7)
+    assert accordion_state(0.0) == (0.0, 0.0) and accordion_state(1.0) == (0.0, math.pi)
+    assert accordion_state(ACCORDION_FOLD_END - 1e-9)[0] == pytest.approx(ACCORDION_MAX_FOLD)
+    assert accordion_state(ACCORDION_FLIP_END)[1] == pytest.approx(math.pi)
+    assert accordion_lift(0.0) == 0.0 and accordion_lift(ACCORDION_MAX_FOLD) == 1.0
+
+
+def test_the_fold_matches_its_mirror_on_the_gpu(qt_app):
+    from tests.test_scene3d_glsl_mirrors import _GlslProbe, _check
+
+    probe = _GlslProbe()
+    try:
+        rng = random.Random(3)
+        cases = []
+        for _ in range(160):
+            length, pleats = rng.choice((ASPECT, 1.0)), rng.randint(4, 16)
+            flip = rng.choice((0.0, math.pi, rng.uniform(0.0, math.pi)))
+            fold = ACCORDION_MAX_FOLD if 0.0 < flip < math.pi else rng.uniform(0.0, ACCORDION_MAX_FOLD)
+            cases.append((rng.uniform(0.0, length), length, pleats, fold, flip))
+        gpu = probe.run("vec4 a = arg(0); FragColor = vec4(accordionFold(a.x, a.y, a.z, a.w, arg(1).x), 0.0, 0.0);",
+                        [[(a, length, pleats, fold), (flip,)] for a, length, pleats, fold, flip in cases],
+                        declarations=ACCORDION_GLSL)
+        _check(gpu, [(*accordion_fold(*case), 0.0, 0.0) for case in cases])
+    finally:
+        probe.close()
 
 
 @pytest.mark.parametrize("pleats", (4, 7, 12, 16))
@@ -76,46 +115,54 @@ def _distance_from_edge(edge: str) -> np.ndarray:
     return direction[0] * xs[None, :] + direction[1] * ys[:, None] + 0.5 * length
 
 
+def _closer(frame, a, b, region) -> bool:
+    return np.abs(frame[region] - a[region]).mean() < np.abs(frame[region] - b[region]).mean()
+
+
 @pytest.mark.parametrize("detail", ("High", "Balanced", "Performance"))
 @pytest.mark.parametrize("edge", tuple(ACCORDION_EDGES.values()))
-def test_the_uncovered_picture_is_exact_beyond_the_stack(capture, edge, detail):
+def test_the_front_folds_away_and_the_back_unfolds_as_the_new_picture(capture, edge, detail):
     run = capture.run("accordion_fold", direction=edge, settings={"detail_3d": detail}, duration_ms=4000)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
     assert np.array_equal(_pixels(capture.render(run, 0.0)[0]), source)
     assert np.array_equal(_pixels(capture.render(run, 1.0)[0]), destination)
     length = 1.0 if edge in ("top", "bottom") else ASPECT
     a = _distance_from_edge(edge)
-    for progress in (0.45, 0.6, 0.8):
+    for progress, picture, other in ((_FOLD, source, destination), (_UNFOLD, destination, source)):
         frame = _pixels(capture.render(run, progress)[0])
-        angle, slide = accordion_state(progress, length, 8)
-        front = length * math.cos(angle) - slide
-        beyond = a > front + 0.12            # past the stack and its perspective
-        assert beyond.any()
-        shade = accordion_shade_weight(progress) * ACCORDION_SHADE * np.exp(-(a[beyond] - front) / ACCORDION_SHADE_REACH)
-        expected = destination[beyond] * (1.0 - shade[:, None])
-        assert np.abs(frame[beyond] - expected).max() <= 2, progress
-        near = a < 0.02                      # the stack still stands against its edge while folding
-        if progress < 0.72:
-            assert np.abs(frame[near] - destination[near]).mean() > 5
+        fold, _flip = accordion_state(progress)
+        extent = length * math.cos(fold)
+        near = a < 0.6 * extent                          # the sheet, against its own edge
+        beyond = a > extent + 0.12                        # past it and its perspective: the backdrop
+        assert near.any() and beyond.any()
+        assert _closer(frame, picture, other, near), progress
+        assert np.abs(frame[beyond] - picture[beyond]).mean() > 5
+
+
+def test_the_backdrop_beyond_the_stack_holds_still(capture):
+    run = capture.run("accordion_fold", direction="left", duration_ms=4000)
+    first, second = (_pixels(capture.render(run, p)[0]) for p in (0.42, 0.56))
+    beyond = _distance_from_edge("left") > ASPECT * math.cos(ACCORDION_MAX_FOLD) + 0.12
+    assert np.array_equal(first[beyond], second[beyond])
 
 
 def test_ends_are_continuous(capture):
     run = capture.run("accordion_fold", direction="bottom", duration_ms=4000)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
     assert np.abs(_pixels(capture.render(run, 0.01)[0]) - source).mean() < 0.5
-    assert np.abs(_pixels(capture.render(run, 0.999)[0]) - destination).mean() < 0.5
+    assert np.abs(_pixels(capture.render(run, 0.995)[0]) - destination).mean() < 0.5
 
 
-def test_gloss_changes_only_the_folded_picture(capture):
+def test_gloss_changes_only_the_folded_sheet(capture):
     frames = []
     for gloss in (0.0, 1.0):
         run = capture.run("accordion_fold", direction="right", settings={"accordion_fold": {"gloss": gloss}},
                           duration_ms=4000)
-        frames.append(_pixels(capture.render(run, 0.5)[0]))
+        frames.append(_pixels(capture.render(run, 0.3)[0]))
     changed = np.abs(frames[0] - frames[1]).max(axis=2) > 0
-    angle, slide = accordion_state(0.5, ASPECT, 8)
+    fold, _flip = accordion_state(0.3)
     assert changed.any()
-    assert not changed[_distance_from_edge("right") > ASPECT * math.cos(angle) - slide + 0.12].any()
+    assert not changed[_distance_from_edge("right") > ASPECT * math.cos(fold) + 0.12].any()
 
 
 def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):

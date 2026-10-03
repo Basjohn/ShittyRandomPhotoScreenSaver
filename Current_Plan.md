@@ -161,7 +161,8 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 - [x] **Page Curl rework landed**: a growing laminate roll at an even pace, the print's colour kept under a clear
   coat (physical check in Transitions.md).
-- [ ] **Accordion Fold rework**: as built it has no visual value; redesign it.
+- [x] **Accordion Fold rework landed**: fold, flip over, unfold as the new picture on the sheet's back, over a
+  frosted backdrop (physical check in Transitions.md).
 - [ ] **Beam** (new, wipe family): a lightsaber-like beam crosses the picture in a custom colour (bright blue by
   default), with no handle, glow and sparks, no or minimal flicker (nothing seizure-inducing) and a slight brightness
   gain as it goes. It leaves the new picture slightly burned, and the burn cures back to the clean picture.
