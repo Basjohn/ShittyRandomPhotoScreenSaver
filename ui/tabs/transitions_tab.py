@@ -1127,7 +1127,7 @@ class TransitionsTab(QWidget):
             ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the relief."),
         ),
         "accordion_fold": (
-            ("gloss", "Paper Gloss:", 0., 1., "Shine and reflections of the next image on the folds."),
+            ("gloss", "Gloss:", 0., 1., "Sheen of the folded sheet and reflections of the next image on it."),
         ),
         "disintegrate": (
             ("wind", "Wind:", .5, 2., "How hard the wind blows the grains away: their speed and how far they fly."),

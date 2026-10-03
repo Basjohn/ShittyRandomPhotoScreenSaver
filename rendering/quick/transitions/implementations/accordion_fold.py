@@ -1,10 +1,8 @@
-"""Lazy Quick renderer for Accordion Fold: the old picture folds up against an edge and leaves."""
+"""Lazy Quick renderer for Accordion Fold: the picture folds up, flips over and unfolds as the next one."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-import math
-
 from OpenGL import GL as gl
 
 from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGES, ACCORDION_PLEATS_RANGE
@@ -14,7 +12,7 @@ from rendering.gl_programs.accordion_fold_program import (
     ACCORDION_VERTEX_SOURCE,
     accordion_edge,
     accordion_grid,
-    accordion_shade_weight,
+    accordion_lift,
     accordion_state,
 )
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices, scene3d_request_samples
@@ -44,9 +42,9 @@ def accordion_parameters(parameters: Mapping[str, object]) -> tuple[int, float, 
 class QuickAccordionFoldRenderer:
     transition_id = "accordion_fold"
 
-    _PAGE_UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uEdge", "uLength", "uPleats", "uAngle", "uSlide",
-                      "uOldTex", "uEnvironment", "uGloss")
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uShade", "uFront", "uEdge", "uLength")
+    _PAGE_UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uEdge", "uLength", "uPleats", "uFold", "uFlip",
+                      "uOldTex", "uNewTex", "uEnvironment", "uGloss", "uLift", "uMirror")
+    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uEnvironment")
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Accordion Fold")
@@ -117,9 +115,8 @@ class QuickAccordionFoldRenderer:
         aspect = width / height
         vertical = edge in ("top", "bottom")
         length = 1.0 if vertical else aspect
-        angle, slide = accordion_state(progress, length, pleats)
+        fold, flip = accordion_state(progress)
         direction = accordion_edge(edge)
-        front = length * math.cos(angle) - slide
         r = self._resources
 
         program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, ACCORDION_BACKDROP_FRAGMENT_SOURCE)
@@ -127,16 +124,16 @@ class QuickAccordionFoldRenderer:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame)
-        gl.glUniform2f(uniforms["uEdge"], *direction)
-        gl.glUniform1f(uniforms["uLength"], length)
-        gl.glUniform1f(uniforms["uFront"], front)
-        gl.glUniform1f(uniforms["uShade"], accordion_shade_weight(progress))
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         r.begin_depth(frame)
         program = r.program("page", ACCORDION_VERTEX_SOURCE, ACCORDION_FRAGMENT_SOURCE)
-        # Flat-shaded pleats never read the grid normal, so uGridCells may be dropped.
+        # Flat-shaded pleats read the grid normal only for which side faces the viewer.
         uniforms = r.uniforms("page", self._PAGE_UNIFORMS, required=False)
         bind_frame(program, uniforms, frame)
         columns, rows = accordion_grid(pleats, scene3d_detail(detail).grid_cells, aspect, vertical)
@@ -144,13 +141,12 @@ class QuickAccordionFoldRenderer:
         gl.glUniform2f(uniforms["uEdge"], *direction)
         gl.glUniform1f(uniforms["uLength"], length)
         gl.glUniform1f(uniforms["uPleats"], float(pleats))
-        gl.glUniform1f(uniforms["uAngle"], angle)
-        gl.glUniform1f(uniforms["uSlide"], slide)
+        gl.glUniform1f(uniforms["uFold"], fold)
+        gl.glUniform1f(uniforms["uFlip"], flip)
         gl.glUniform1f(uniforms["uGloss"], gloss)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glUniform1f(uniforms["uLift"], accordion_lift(fold))
+        gl.glUniform2f(uniforms["uMirror"], 0.0 if vertical else 1.0, 1.0 if vertical else 0.0)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)       # still bound on unit 2
         draw_grid(r, columns, rows)
 
     def release_resources(self) -> None:
