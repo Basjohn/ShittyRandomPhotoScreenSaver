@@ -12,7 +12,8 @@ PyOpenGL binds its checker), and each Quick render node drains the GL error flag
 frame (``raise_pending_gl_error``) inside its existing failure handling, so a GL error is still
 reported (through the node's ``RenderFailureLog``), now per node and frame rather than per call.
 An error left by GL work outside a node's frame (warm-up steps, releases) surfaces at the next
-node frame. Tests and tools keep PyOpenGL's per-call checking, which is stricter.
+node frame. Tests and tools keep PyOpenGL's per-call checking, which is stricter, except tools that measure
+production cost (``tools/visualizer_cost_probe.py``), which turn it off as the application does.
 """
 from __future__ import annotations
 

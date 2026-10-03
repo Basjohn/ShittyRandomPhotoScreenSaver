@@ -169,8 +169,10 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   packets fire ~2 per 0.5 s at every level (admission frequency is untouched; only amplitude scales); quiet frames
   still earn reward 0.15-0.35; the absolute quiet edge never engages (the bus loudness lane reads 3-17 in music);
   floors gate on the presence weight, which is 1 for most frames. (A pause had also drained the running level and
-  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Retune during S19 against the deterministic replay
-  golden, not by ear: admission frequency scaled by the reward, a convex reward curve, floors on the reward.
+  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Order: the S19 golden first captures today's
+  behaviour (behavioural parity below holds for the *migration*); this retune is then a separate, operator-approved
+  behavioural change measured against that golden on the deterministic replay, not by ear: admission frequency
+  scaled by the reward, a convex reward curve, floors on the reward.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
