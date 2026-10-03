@@ -61,7 +61,7 @@ def test_manual_transition_resolves_canonical_duration_and_direction() -> None:
     assert spec.requested_name == "Slide"
     assert spec.selected_from_random is False
     assert spec.duration_ms == 321
-    assert spec.direction == "right"
+    assert spec.direction == "left"
     assert dict(spec.parameters) == {"motion_style": "Linear"}
 
 

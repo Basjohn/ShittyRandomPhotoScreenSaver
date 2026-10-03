@@ -157,12 +157,15 @@ Implement vertical features in this order unless evidence from a preceding slice
 - [ ] Only after primitives are individually accepted, combine them deliberately: electrical storm terrain, smoke-lit
   voxel fracture, ember/dust destruction, refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL.
 
-## Side defect to decide
+## Operator transition requests (2026-10-03) | before Extruded Spectrum
 
-- [ ] **Horizontal direction labels of Glass Shatter, Directional Pixel Accretion (and likely Exploding Tiles) are
-  reversed on screen.** The shared `_DIRECTION_MAP` sends "Left to Right" to `left`, so pieces move right-to-left,
-  while its vertical labels match what is seen (measured 2026-10-03). Flipping the map changes accepted looks of
-  several transitions, so it is an operator decision; Disintegrate already maps its labels truthfully.
+- [ ] **Page Curl rework**: more gradual, curls further (a tighter, longer roll), and a glossy laminated sheet rather
+  than dull paper.
+- [ ] **Accordion Fold rework**: as built it has no visual value; redesign it.
+- [ ] **Beam** (new, wipe family): a lightsaber-like beam crosses the picture in a custom colour (bright blue by
+  default), with no handle, glow and sparks, no or minimal flicker (nothing seizure-inducing) and a slight brightness
+  gain as it goes. It leaves the new picture slightly burned, and the burn cures back to the clean picture.
+- [ ] **Burn**: optional new fire effects (operator open to enhancement; keep the current look as the default).
 
 ## 5. Cross-cutting acceptance | applies to every open box above
 

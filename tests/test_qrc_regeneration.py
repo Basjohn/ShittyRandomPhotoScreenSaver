@@ -462,7 +462,7 @@ def test_foundry_qrc_sidecar_uses_the_active_owner_and_cancellation(monkeypatch,
     assert statuses[0].current is True
     assert "-PrepareEnvironmentOnly" in launched[0]
     assert launched[1][1] == "-c"
-    assert captured["command"][:4] == [str(rcc), "-g", "python", str(qrc)]  # type: ignore[index]
+    assert captured["command"][:3] == [str(rcc), "-binary", str(qrc)]  # type: ignore[index]
     assert captured["kwargs"]["stdout"] is subprocess.PIPE  # type: ignore[index]
 
 

@@ -191,9 +191,15 @@ Each foundation slice adds what it learned here.
   same frame is the same pixels on every run and GPU.
 - `MeshResources.uniforms` caches the first name list per program: a shared pass sets its own uniforms through its
   own location cache, and a pass may legitimately not read every hook uniform (look those up with `required=False`).
-- Direction labels must describe what the viewer sees. The shared map's horizontal codes name the starting side
-  (Glass Shatter, Pixel Accretion: "Left to Right" moves pieces leftward) while its vertical codes name the travel;
-  new effects map their labels truthfully (Disintegrate's wind map) and test it on screen.
+- Direction labels must describe what the viewer sees, and one convention holds everywhere: a label names where the
+  motion starts and the way it travels ("Left to Right" starts on the left; a diagonal starts in its first named
+  corner), and a resolved code names the way it travels (``right``). Until 2026-10-03 the shared map sent
+  horizontal labels to the starting side while renderers read codes as the travel, so Glass Shatter, Exploding
+  Tiles, Pixel Accretion, Slide and Block Spins ran their horizontal labels backwards (Block Flip's vectors were
+  mirrored to hide it); Burn read texture v as pointing up, reversing its vertical and diagonal labels and its ash
+  drift; Block Spins' diagonals spun about the named diagonal instead of sweeping along it.
+  `tests/test_transition_direction_labels.py` renders every labelled direction of every transition through the
+  production resolver; a new directional effect joins it.
 
 **Preparing runs (S11)**
 - A run's first frames compile and allocate nothing they could have prepared. Every renderer lists the programs
@@ -246,6 +252,9 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
 - [ ] Exploding Tiles: build-up, rumble and detonation timing, burst and drift pacing (debris clears by ~65-80%), side colour, sparks, shadows and flash strength on several photos and directions; 3D Detail High vs Balanced vs Performance on both displays, including cost with active Visualizers;
 - [ ] both displays with active music and representative heavy load: Visualizer freshness, frame-spacing tails and
   transition first use;
+- [ ] Direction labels (2026-10-03 truth fix): Glass Shatter, Exploding Tiles, Pixel Accretion, Slide and 3D Block
+  Spins now move "Left to Right" from the left; Burn's "Top to Bottom" and diagonals burn from the top, and its ash
+  now falls; Block Spins' diagonals sweep from the named corner. Check each on real photos;
 - [ ] Cube Turn on real photos in every direction at 4000 ms: turn pace, how far the camera draws back, the
   backdrop's dimness, Gloss;
 - [ ] Relief Rise on real photos in several directions at 6000 ms: relief height (Relief Depth), the colour crossing

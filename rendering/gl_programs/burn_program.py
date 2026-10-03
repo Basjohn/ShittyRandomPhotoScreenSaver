@@ -106,10 +106,11 @@ float warped_fbm(vec2 p) {
 // =====================================================================
 float burn_axis(vec2 uv) {
     if (u_direction == 1) return 1.0 - uv.x;
-    if (u_direction == 2) return 1.0 - uv.y;
-    if (u_direction == 3) return uv.y;
-    if (u_direction == 4) return (uv.x + (1.0 - uv.y)) * 0.5;        // TL->BR
-    if (u_direction == 5) return ((1.0 - uv.x) + (1.0 - uv.y)) * 0.5; // TR->BL
+    // uv is the texture coordinate: v grows down the screen.
+    if (u_direction == 2) return uv.y;
+    if (u_direction == 3) return 1.0 - uv.y;
+    if (u_direction == 4) return (uv.x + uv.y) * 0.5;                // TL->BR
+    if (u_direction == 5) return ((1.0 - uv.x) + uv.y) * 0.5;        // TR->BL
     return uv.x;
 }
 
@@ -321,7 +322,7 @@ void main() {
             vec2 ash_cell_size = vec2(60.0, 30.0);
             // Ash drifts downward and slightly sideways
             vec2 ash_uv = uv;
-            ash_uv.y += u_time * 0.02;
+            ash_uv.y -= u_time * 0.02;
             ash_uv.x += sin(u_time * 0.8 + uv.y * 15.0) * 0.003;
             vec2 ash_cell = floor(ash_uv * ash_cell_size);
             float ash_rnd = spark_hash(ash_cell, u_seed + 77.0);

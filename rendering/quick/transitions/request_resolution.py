@@ -79,9 +79,11 @@ class ResolvedQuickTransitionSpec:
         )
 
 
+# A Settings label names the way the motion travels, and so does the resolved code:
+# "Left to Right" is ``right``.
 _DIRECTION_MAP = {
-    "Left to Right": "left",
-    "Right to Left": "right",
+    "Left to Right": "right",
+    "Right to Left": "left",
     "Top to Bottom": "down",
     "Bottom to Top": "up",
     "Diagonal TL-BR": "diag_tl_br",
