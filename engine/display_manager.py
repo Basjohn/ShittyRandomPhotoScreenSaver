@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, List, Dict, Optional, Set, Mapping
-from PySide6.QtCore import QObject, Signal, QUrl, Qt
+from PySide6.QtCore import QObject, QPoint, Signal, QUrl, Qt
 from PySide6.QtGui import QGuiApplication, QScreen, QDesktopServices
 
 from core.logging.logger import (
@@ -875,7 +875,44 @@ class DisplayManager(QObject):
         logger.info("[VIS_ORBIT] Saved mode=%s view=%s", mode_id, values)
 
     def _quick_custom_layout_active(self) -> bool:
-        return bool(self._quick_custom_layout_owner.is_active)
+        # Edit's own keys (undo, lock, Save/Cancel) belong to Edit, never to a direct gesture.
+        return bool(self._quick_custom_layout_owner.is_editing)
+
+    def _begin_quick_visualizer_gesture(self) -> bool:
+        """Open (or continue) a direct Visualizer gesture: never inside Edit, with authored
+        placement quiesced for its duration exactly as Edit does."""
+        owner = self._quick_custom_layout_owner
+        if owner.is_direct:
+            return True
+        if owner.is_active:
+            return False
+        self._set_quick_authored_layout_enabled(False, restore_base=False)
+        try:
+            began = owner.begin_direct_visualizer_gesture()
+        except Exception:
+            if self._authored_layout_allowed_by_settings():
+                self._set_quick_authored_layout_enabled(True, restore_base=False)
+            raise
+        if not began and self._authored_layout_allowed_by_settings():
+            self._set_quick_authored_layout_enabled(True, restore_base=False)
+        return began
+
+    def _move_quick_visualizer(self, offset: QPoint, cursor: QPoint) -> None:
+        if self._begin_quick_visualizer_gesture():
+            self._quick_custom_layout_owner.move_direct_visualizer(offset, cursor)
+
+    def _scale_quick_visualizer(self, angle_delta_y: int) -> None:
+        if self._begin_quick_visualizer_gesture():
+            self._quick_custom_layout_owner.scale_direct_visualizer(angle_delta_y)
+
+    def _finish_quick_visualizer_gesture(self) -> None:
+        """The gesture's end: one commit through Edit's Save (nothing when nothing changed)."""
+        owner = self._quick_custom_layout_owner
+        if not owner.is_direct:
+            return
+        owner.finish_direct_visualizer_gesture()
+        if self._authored_layout_allowed_by_settings():
+            self._set_quick_authored_layout_enabled(True, restore_base=False)
 
     def _configure_quick_auxiliary(self, unit: QuickDisplayUnit) -> None:
         """Apply canonical generation-scoped auxiliary state once before show."""
@@ -1048,7 +1085,7 @@ class DisplayManager(QObject):
             dimming_enabled=dimming_enabled,
             interaction_mode_enabled=self._interaction_mode_enabled(),
             interaction_mode_locked=is_mc_build(),
-            edit_mode_active=self._quick_custom_layout_owner.is_active,
+            edit_mode_active=self._quick_custom_layout_owner.is_editing,
             layout_actions_available=self._quick_custom_layout_owner.can_start(),
         )
         unit.configure_context_menu(
@@ -1485,6 +1522,9 @@ class DisplayManager(QObject):
         runtime.view_orbit_rates_changed.connect(self._set_quick_view_orbit_rates)
         runtime.view_orbit_requested.connect(self._orbit_quick_visualizer_view)
         runtime.view_orbit_finished.connect(self._persist_quick_visualizer_view)
+        runtime.visualizer_move_requested.connect(self._move_quick_visualizer)
+        runtime.visualizer_scale_requested.connect(self._scale_quick_visualizer)
+        runtime.visualizer_gesture_finished.connect(self._finish_quick_visualizer_gesture)
         runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())
         runtime.context_menu_requested.connect(
             lambda _position, display=unit: self._refresh_quick_context_menu(
@@ -1699,6 +1739,8 @@ class DisplayManager(QObject):
     def _start_quick_custom_layout_session(self) -> bool:
         """Enter global CUSTOM edit mode with authored layout fully dormant."""
 
+        if self._quick_custom_layout_owner.is_direct:
+            self._finish_quick_visualizer_gesture()
         if self._quick_custom_layout_owner.is_active:
             return True
         # Quiesce placement callbacks before capture, preserving the visible

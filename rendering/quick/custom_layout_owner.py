@@ -256,12 +256,27 @@ class QuickCustomLayoutOwner:
         self._undo_history: list[_EditUndoSnapshot] = []
         self._undo_pending: tuple[str, _EditUndoSnapshot] | None = None
         self._active = False
+        # A direct Visualizer gesture (outside Edit): the session holds only the Visualizer, its
+        # display is bound without edit chrome, and the rectangle it started from.
+        self._direct = False
+        self._direct_origin: QRect | None = None
+        self._direct_offset = QPoint()
         self._retired = False
         self._settings_change_signal = getattr(settings_manager, "settings_changed", None)
         if self._settings_change_signal is not None and hasattr(
             self._settings_change_signal, "connect"
         ):
             self._settings_change_signal.connect(self._on_settings_changed)
+
+    @property
+    def is_editing(self) -> bool:
+        """Edit (CUSTOM with its chrome) is open; a direct Visualizer gesture is not Edit."""
+        return self._active and not self._direct
+
+    @property
+    def is_direct(self) -> bool:
+        """A direct Visualizer gesture (Alt + right drag / Alt + wheel) holds the session."""
+        return self._active and self._direct
 
     @property
     def is_active(self) -> bool:
@@ -431,6 +446,8 @@ class QuickCustomLayoutOwner:
     def start(self) -> bool:
         if self._retired:
             return False
+        if self._direct:
+            self.finish_direct_visualizer_gesture()
         if self._active:
             return True
         widgets = self._settings_manager.get_widgets_map()
@@ -637,6 +654,9 @@ class QuickCustomLayoutOwner:
     def save(self, *, defer_topology_reconciliation: bool = False) -> bool:
         if not self._active or self._session is None:
             return False
+        if self._direct and not self._direct_changed():
+            self._finish()
+            return True
         # Observe the SAME session item and retained QML target on either side
         # of the existing Save promotion; do not initiate a layout publication.
         selected_geo_item = self._session.selected_item() if is_geometry_logging_enabled() else None
@@ -729,6 +749,104 @@ class QuickCustomLayoutOwner:
                 self._reload_request("save_continue")
         logger.info("[CUSTOM_LAYOUT] Saved one Quick session")
         return True
+
+    # ---- Direct Visualizer gestures (outside Edit) ------------------------------------
+    #
+    # Alt + right drag moves and Alt + wheel resizes a shown 3D Visualizer without Edit's chrome.
+    # It is the same session machinery as Edit, holding only the Visualizer: moves resolve through
+    # ``resolve_move`` (clamped to its display, never transferred, no peer guides), the wheel
+    # through ``resize_wheel``, and the gesture's end commits through ``save`` (one persistence,
+    # the same live promotion; nothing is written when nothing changed). Nothing is held between
+    # gestures.
+
+    def begin_direct_visualizer_gesture(self) -> bool:
+        if self._retired or self._settings_manager is None:
+            return False
+        if self._active:
+            return self._direct
+        bindings = self._live_display_bindings()
+        if not bindings:
+            return False
+        session = CustomLayoutSession()
+        descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
+        self._visualizer_pixels_per_world.clear()
+        self._admit_visualizer_item(session, descriptors, bindings, self._settings_manager.get_widgets_map())
+        item = next(iter(session.items()), None)
+        if item is None:
+            self._visualizer_pixels_per_world.clear()
+            return False
+        binding = bindings[item.current_display_identity]
+        binding.unit.runtime.scene_controller.bind_direct_custom_layout_session(
+            session,
+            display_identity=binding.identity,
+            display_origin=binding.geometry.topLeft(),
+        )
+        self._bindings = {binding.identity: binding}
+        self._descriptors = descriptors
+        self._session = session
+        self._coordinator = None
+        self._direct = True
+        self._direct_origin = QRect(item.current_global_rect)
+        self._direct_offset = QPoint()
+        self._active = True
+        logger.info("[CUSTOM_LAYOUT] Direct Visualizer gesture began display=%s", binding.identity)
+        return True
+
+    def _direct_item(self) -> CustomLayoutSessionItem | None:
+        session = self._session
+        if not self._direct or session is None:
+            return None
+        return next(iter(session.items()), None)
+
+    def _direct_changed(self) -> bool:
+        item = self._direct_item()
+        return item is not None and (
+            item.current_global_rect != item.baseline_global_rect
+            or item.current_size_payload != item.baseline_size_payload
+            or item.current_viewport_extent != item.baseline_viewport_extent
+        )
+
+    def move_direct_visualizer(self, offset: QPoint, cursor: QPoint) -> bool:
+        """Move the Visualizer by the pointer's global ``offset`` since the gesture began."""
+        item, origin = self._direct_item(), self._direct_origin
+        if item is None or origin is None:
+            return False
+        self._direct_offset = QPoint(offset)
+        del cursor   # the move stays on its display (no transfer), so only the offset matters
+        # Follow the pointer exactly within the display: Edit's magnetic snapping without its
+        # guides would move the Visualizer for no visible reason.
+        display = self._bindings[item.current_display_identity].geometry
+        proposed = origin.translated(QPoint(offset))
+        local = clamp_local_rect_to_bounds(
+            QRect(proposed.x() - display.x(), proposed.y() - display.y(), proposed.width(), proposed.height()),
+            display.size(),
+            min_size=quick_custom_minimum_size(item),
+        )
+        resolved = local.translated(display.topLeft())
+        if resolved == item.current_global_rect:
+            return False
+        item.set_geometry(resolved)
+        self._session.notify_item_changed(item)
+        return True
+
+    def scale_direct_visualizer(self, angle_delta_y: int) -> bool:
+        """One wheel step of uniform resize, as Edit's wheel over the Visualizer."""
+        item = self._direct_item()
+        if item is None or not angle_delta_y:
+            return False
+        changed = self.resize_wheel(item, int(angle_delta_y))
+        if changed:
+            self._session.notify_item_changed(item)   # as Edit's overlay does after its wheel
+            # A drag in the same gesture carries on from the resized rectangle, without a jump.
+            self._direct_origin = QRect(item.current_global_rect).translated(-self._direct_offset)
+        return changed
+
+    def finish_direct_visualizer_gesture(self) -> bool:
+        """Commit the gesture (when it changed anything) and release the session."""
+        if not self._direct:
+            return False
+        self.clear_move_guides()
+        return self.save()
 
     def take_deferred_topology_reconciliation(self) -> str | None:
         """Consume one layout-slot topology replacement reason after persistence."""
@@ -1016,6 +1134,9 @@ class QuickCustomLayoutOwner:
 
     def _publish_move_guides(self, display_identity: str, resolution: Any) -> None:
         """Publish only peer-edge/centering assists for the active move sample."""
+
+        if self._direct:
+            return
 
         allowed_kinds = {"peer", "peer_center", "display_center"}
 
@@ -2914,12 +3035,13 @@ class QuickCustomLayoutOwner:
         # screensaver. Arm the existing replacement guard *before* removing the
         # overlay so no retained family action can inherit that gesture. This is
         # event-bound only; it adds no pointer-motion/render cadence.
-        from rendering.runtime_input import suppress_runtime_pointer_input
+        if not self._direct:
+            from rendering.runtime_input import suppress_runtime_pointer_input
 
-        suppress_runtime_pointer_input(
-            700,
-            reason="custom_layout_overlay_close",
-        )
+            suppress_runtime_pointer_input(
+                700,
+                reason="custom_layout_overlay_close",
+            )
         corruption: list[str] = []
         bindings = tuple(self._bindings.values())
         coordinator = self._coordinator
@@ -2969,6 +3091,9 @@ class QuickCustomLayoutOwner:
             self._visualizer_pixels_per_world.clear()
             self._visualizer_move_transfer_latch.clear()
             self._active = False
+            self._direct = False
+            self._direct_origin = None
+            self._direct_offset = QPoint()
         return tuple(dict.fromkeys(corruption))
 
     def _transfer_visualizer_display_transaction(

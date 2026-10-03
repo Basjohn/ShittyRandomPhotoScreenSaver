@@ -106,8 +106,11 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
   -  'Z'             - Previous image
   -  'X'             - Next image
   -  'C'             - Cycle transition type
-  -  'W/A/S/D'       - With a 3D Visualizer showing (Extruded Spectrum): orbit its view live; saved when you let go
-                       (or hold Alt and drag it with the left mouse button in Interaction mode)
+  -  'W/A/S/D'       - With a 3D Visualizer showing (Extruded Spectrum, Shockwave Grid): orbit its view live; saved
+                       when you let go (or hold Alt and drag it with the left mouse button in Interaction mode)
+  -  'Alt + right drag' - In Interaction mode, move a shown 3D Visualizer without Edit (no context menu while Alt is
+                       held on it); saved when you let go
+  -  'Alt + wheel'   - In Interaction mode, resize a shown 3D Visualizer without Edit; saved when you release Alt
   -  'PgUp/PgDown'   - Global Volume Up/Down
   -  'Spacebar'      - Play/Pause
   -  'Home'          - Global Media Play Pause
