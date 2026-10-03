@@ -46,6 +46,7 @@ from rendering.gl_programs.scene3d import (
     SCENE3D_GLSL,
     SCENE3D_ORBIT_GLSL,
     Scene3DStorageLayout,
+    scene3d_orbit_eye,
     scene3d_orbit_project,
 )
 
@@ -63,8 +64,9 @@ EXTRUDED_PIVOT = 0.5 * EXTRUDED_CEILING
 # How far (in item heights) an overflowing scene may reach beyond the item on every side.
 EXTRUDED_OVERFLOW_PAD = 0.5
 EXTRUDED_HUE_DRIFT_RATE = 0.15    # hue turns per authored second at full drift
-EXTRUDED_BARS = Scene3DStorageLayout.of("ExtrudedBars", "ExtrudedBar", (("level", "float"), ("peak", "float")),
-                                        array="bars")
+# One record per bar, in draw order (``extruded_draw_order``); ``bar`` is the bar's own index.
+EXTRUDED_BARS = Scene3DStorageLayout.of("ExtrudedBars", "ExtrudedBar",
+                                        (("level", "float"), ("peak", "float"), ("bar", "float")), array="bars")
 
 
 def extruded_project(point: tuple[float, float, float], tilt: float,
@@ -72,6 +74,17 @@ def extruded_project(point: tuple[float, float, float], tilt: float,
     """CPU mirror of ``extrudedProject``: (screen x, screen y up, view depth) of a world point."""
     pivot = (0.0, EXTRUDED_PIVOT, 0.0)
     return scene3d_orbit_project(point, tilt, turn, camera=EXTRUDED_CAMERA, pivot=pivot, anchor=pivot)
+
+
+def extruded_draw_order(first: float, step: float, count: int, tilt: float, turn: float) -> list[int]:
+    """The bars' indices in a painter's order for the translucent passes (ghost columns, the floor
+    reflection): farthest from the eye along the row first. The boxes occupy disjoint x intervals,
+    so a plane of constant x separates any two; of two bars on the same side of the eye the
+    farther draws first, and two on opposite sides cannot cover each other. ``first`` and ``step``
+    are the first bar's centre x and the bar step in world units (``uBarGeometry``)."""
+    pivot = (0.0, EXTRUDED_PIVOT, 0.0)
+    eye_x = scene3d_orbit_eye(tilt, turn, camera=EXTRUDED_CAMERA, pivot=pivot, anchor=pivot)[0]
+    return sorted(range(count), key=lambda index: (-abs(first + index * step - eye_x), index))
 
 
 def extruded_height(level: float, height_scale: float) -> float:
@@ -157,8 +170,8 @@ EXTRUDED_VERTEX_SOURCE = (
     + SCENE3D_GLSL + EXTRUDED_BARS.glsl(3) + _PROJECTION_GLSL
     + """
 void main() {
-    int index = gl_InstanceID;
-    ExtrudedBar bar = bars[index];
+    ExtrudedBar bar = bars[gl_InstanceID];        // records come in draw order (extruded_draw_order)
+    int index = int(bar.bar + 0.5);
     float height = extrudedHeight(bar.level);
     float peak = extrudedHeight(bar.peak);
     float bottom = 0.0, top = height;
@@ -186,6 +199,12 @@ void main() {
     float hue = fract(0.8 * float(index) / max(1.0, float(uBarCount - 1)) + uHueShift);
     vHue = mix(vec3(1.0), clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0), 0.85);
     gl_Position = extrudedClip(world, vItemY);
+    if (uPass != 0) {
+        // Translucent passes keep only the faces turned toward the eye (at the view frame's
+        // (0, 0, camera)), so a box never blends over itself; in painter's order that is exact.
+        // (A plane faces the eye at all its points or none, so per-vertex agrees across a face.)
+        if (dot(vNormal, vec3(0.0, 0.0, EXTRUDED_CAMERA) - vWorld) <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    }
 }
 """
 )
@@ -259,6 +278,9 @@ void main() {
         if (below >= 1.0) discard;
         alpha = uReflection * 0.7 * (1.0 - below) * (1.0 - below);
     }
+    // A translucent box now blends once (its far faces are culled); give that one layer the
+    // opacity its front and back faces used to add up to, so Ghost and Reflection keep their look.
+    if (uPass != 0) { alpha = clamp(alpha, 0.0, 1.0); alpha = alpha * (2.0 - alpha); }
     FragColor = vec4(lit, alpha);
 }
 """

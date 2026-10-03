@@ -1259,6 +1259,22 @@ def scene3d_orbit_view(direction: Vec3, tilt: float, turn: float) -> Vec3:
     return x, y * c - z * s, y * s + z * c
 
 
+def scene3d_orbit_unview(direction: Vec3, tilt: float, turn: float) -> Vec3:
+    """The inverse of ``scene3d_orbit_view``: a view-frame direction back in the world."""
+    x, y, z = direction
+    c, s = math.cos(tilt), math.sin(tilt)
+    y, z = y * c + z * s, -y * s + z * c
+    ct, st = math.cos(turn), math.sin(turn)
+    return x * ct - z * st, y, x * st + z * ct
+
+
+def scene3d_orbit_eye(tilt: float, turn: float, *, camera: float, pivot: Vec3 = (0.0, 0.0, 0.0),
+                      anchor: Vec3 = (0.0, 0.0, 0.0)) -> Vec3:
+    """The orbiting camera's position in the world (for ordering translucent pieces)."""
+    x, y, z = scene3d_orbit_unview((-anchor[0], -anchor[1], camera - anchor[2]), tilt, turn)
+    return x + pivot[0], y + pivot[1], z + pivot[2]
+
+
 def scene3d_orbit_project(point: Vec3, tilt: float, turn: float, *, camera: float,
                           pivot: Vec3 = (0.0, 0.0, 0.0), anchor: Vec3 = (0.0, 0.0, 0.0)) -> Vec3:
     """CPU mirror of ``sceneOrbitProject``: (screen x, screen y up, view depth)."""

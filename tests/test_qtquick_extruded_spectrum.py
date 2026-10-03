@@ -288,3 +288,32 @@ def test_the_mode_borrows_spectrums_runtime_and_stays_dormant_until_it_renders()
             "print([m for m in sys.modules if 'extruded_spectrum' in m and not m.endswith('_options')])\n")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, check=True)
     assert result.stdout.strip() == "[]"
+
+
+def test_translucent_bars_draw_in_a_painters_order_for_any_view():
+    """H8: ghost columns and the reflection blend in an exact order. The eye is the orbit's
+    inverse; the bars, in disjoint x slabs, draw farthest from it first."""
+    import math
+    import random
+
+    from rendering.gl_programs.extruded_spectrum_program import EXTRUDED_CAMERA, EXTRUDED_PIVOT, extruded_draw_order
+    from rendering.gl_programs.scene3d import scene3d_orbit_eye, scene3d_orbit_view
+
+    pivot = (0.0, EXTRUDED_PIVOT, 0.0)
+    rng = random.Random(8)
+    for _ in range(300):
+        tilt, turn = rng.uniform(0.0, math.pi / 2), rng.uniform(-math.pi, math.pi)
+        eye = scene3d_orbit_eye(tilt, turn, camera=EXTRUDED_CAMERA, pivot=pivot, anchor=pivot)
+        seen = scene3d_orbit_view(tuple(e - p for e, p in zip(eye, pivot)), tilt, turn)
+        seen = tuple(v + a for v, a in zip(seen, pivot))                         # + the anchor
+        assert seen == pytest.approx((0.0, 0.0, EXTRUDED_CAMERA), abs=1e-9)     # where the camera is
+        first, step, count = rng.uniform(-2.0, -0.5), rng.uniform(0.02, 0.2), rng.randint(2, 64)
+        order = extruded_draw_order(first, step, count, tilt, turn)
+        assert sorted(order) == list(range(count))
+        position = {bar: slot for slot, bar in enumerate(order)}
+        for a in range(count):
+            for b in range(count):
+                xa, xb = first + a * step, first + b * step
+                # Of two bars on the same side of the eye, the nearer one draws later.
+                if (xa - eye[0]) * (xb - eye[0]) > 0 and abs(xa - eye[0]) < abs(xb - eye[0]):
+                    assert position[a] > position[b]

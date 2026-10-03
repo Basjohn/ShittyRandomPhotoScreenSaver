@@ -546,5 +546,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 21692132
+  "total_bytes": 21695658
 }
