@@ -260,6 +260,11 @@ Each foundation slice adds what it learned here.
 - Choices shared by the Settings page and the resolver live in an import-safe module (`scene3d.py`,
   `blockspin_options.py`). The runtime imports the Settings tabs, and a `*_program` shader module may load only when
   its transition renders; the import-isolation tests in `test_qtquick_transition_implementations.py` enforce it.
+- Pixel A/B evidence needs a deterministic picture first. Shockwave Grid is not bit-deterministic frame to frame on
+  the same inputs (about 50 px of 230k differ by 1-2/255, with or without glow) and its idle swell and scroll follow
+  the snapshot's animation time: compare it with that tolerance; Bubble, Spectrum, Sphere and Extruded hash exactly.
+- Tools that measure cost must run as production does: `tools/visualizer_cost_probe.py` now turns per-call GL
+  error checking off first (it measured with it on until 2026-10-04, roughly doubling CPU).
 
 ## Physical acceptance (open)
 
