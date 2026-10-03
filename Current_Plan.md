@@ -182,10 +182,11 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   driver resolves technical profiles as production does and replays Sphere (`REAL_SCALE_MODES`) through
   `capture_sphere`, recording its behavioural outputs per frame, for any preset. Bars:
   `tests/test_visualizer_replay_real_scale.py`.
-- [ ] **Golden step 1b: recorder.** A tool (opt-in, no product cost) writing schema 2 clips from live loopback audio
-  through the real worker and BeatEngine, so the golden and the ramp retune use the operator's real music: silence,
-  a quiet intro, vocals, kicks, a sustained loud passage, a pause and its return. Note: the scheduler's per-type
-  debounce counts from timestamp 0, so a replay event in a clip's first ~0.1 s is dropped, as live.
+- [x] **Golden step 1b: recorder** `tools/visualizer_replay/record.py` (no window, no product cost; Harness_Index).
+  Clips start at 1 s so the scheduler's per-type debounce (counted from timestamp 0) drops nothing.
+- [ ] **Golden step 1c (operator): record the real music.** `python -m tools.visualizer_replay.record NAME --seconds
+  60` while playing: a quiet intro, vocals, kicks/drops, a sustained loud passage, a pause and its return (one or more
+  clips). The first recording also confirms the analysis spectrum arrives (silence leaves it empty).
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
