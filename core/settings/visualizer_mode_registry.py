@@ -105,6 +105,10 @@ class VisualizerModeDescriptor:
     # Whether Guided Setup offers the mode to someone who has not already admitted it.
     # Experimental modes are kept out of first-run choices.
     guided_setup_offered: bool = True
+    # 3D freeform modes name their (turn, tilt) presentation settings here, and W/A/S/D then
+    # orbit the view live (widgets/spotify_visualizer/view_orbit.py). Empty: the keys keep
+    # their ordinary meaning (any key exits).
+    view_orbit_settings: tuple[str, ...] = ()
 
     @property
     def preset_key(self) -> str:
@@ -223,6 +227,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         shared_bar_profile_mode="spectrum",
         technical_profile_mode="spectrum",
         renderer_overflow_setting="extruded_spectrum_allow_overflow",
+        view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
     ),
 )
 

@@ -1,4 +1,4 @@
-"""Lazy Settings body for the experimental Extruded Spectrum visualizer."""
+"""Lazy Settings body for the Extruded Spectrum visualizer."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -22,6 +22,9 @@ _FINISH_SLIDERS = (
     ("extruded_spectrum_hue_drift", "Hue Drift:", 0, 100,
      "How fast spectral colours drift around the colour wheel; zero holds them still."),
     ("extruded_spectrum_gloss", "Gloss:", 0, 100, "Shine on the bars' faces."),
+    ("extruded_spectrum_face_mirror", "Mirror Faces:", 0, 100,
+     "Gives the bars' faces (not their edges) a polished, reflective surface that catches a "
+     "studio's lights as the bars move; zero leaves them plain."),
     ("extruded_spectrum_reflection", "Reflection:", 0, 100,
      "How strongly the bars reflect in the floor beneath them; zero shows no floor."),
 )
@@ -50,7 +53,7 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     )
     _, finish = build_collapsible_bucket(
         tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="finish", title="Finish",
-        helper_text="Colour, shine, the floor reflection and whether the 3D may leave its rectangle.",
+        helper_text="Colour, shine, reflections, edge smoothing and whether the 3D may leave its rectangle.",
     )
 
     def row(layout, label):
@@ -100,4 +103,15 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
         "rectangle. Off: the whole 3D scene is fitted inside it.")
     bind_setting_signal(tab, tab.extruded_spectrum_allow_overflow.toggled, auto_switch=True)
     content.addWidget(tab.extruded_spectrum_allow_overflow)
+    content.addStretch()
+    content = row(finish, "Smooth Edges:")
+    tab.extruded_spectrum_smooth_edges = QCheckBox("Anti-alias the bars' edge lines at an angle")
+    tab.extruded_spectrum_smooth_edges.setProperty("circleIndicator", True)
+    tab.extruded_spectrum_smooth_edges.setChecked(
+        tab._default_bool("spotify_visualizer", "extruded_spectrum_smooth_edges"))
+    tab.extruded_spectrum_smooth_edges.setToolTip(
+        "On: the edge lines keep an even, smoothed width however the bars are turned or tilted. "
+        "Off: lines are sized as if seen head-on, which thins and roughens them on faces seen at an angle.")
+    bind_setting_signal(tab, tab.extruded_spectrum_smooth_edges.toggled, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_smooth_edges)
     content.addStretch()

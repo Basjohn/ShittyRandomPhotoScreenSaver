@@ -621,6 +621,7 @@ _EXTRUDED_SPECTRUM_LIMITS: Dict[str, Tuple[float, float]] = {
     'extruded_spectrum_tilt': (0.0, 1.0),
     'extruded_spectrum_gloss': (0.0, 1.0),
     'extruded_spectrum_reflection': (0.0, 1.0),
+    'extruded_spectrum_face_mirror': (0.0, 1.0),
     'extruded_spectrum_hue_drift': (0.0, 1.0),
     'extruded_spectrum_turn': (-1.0, 1.0),
 }
@@ -628,6 +629,7 @@ _EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     **{key: float for key in _EXTRUDED_SPECTRUM_LIMITS},
     'extruded_spectrum_colouring': str,
     'extruded_spectrum_allow_overflow': bool,
+    'extruded_spectrum_smooth_edges': bool,
 }
 _EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED_SPECTRUM_BUILD_SPECS)
 
@@ -1403,6 +1405,10 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_colouring: str = field(default_factory=lambda: _visualizer_default('extruded_spectrum_colouring'))
     extruded_spectrum_allow_overflow: bool = field(
         default_factory=lambda: _visualizer_default('extruded_spectrum_allow_overflow'))
+    extruded_spectrum_face_mirror: float = field(
+        default_factory=lambda: _visualizer_default('extruded_spectrum_face_mirror'))
+    extruded_spectrum_smooth_edges: bool = field(
+        default_factory=lambda: _visualizer_default('extruded_spectrum_smooth_edges'))
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
 
     def __post_init__(self):
@@ -1415,6 +1421,7 @@ class SpotifyVisualizerSettings:
         for attr, (low, high) in _EXTRUDED_SPECTRUM_LIMITS.items():
             _clamp_attr_range(self, attr, low, high)
         self.extruded_spectrum_allow_overflow = bool(self.extruded_spectrum_allow_overflow)
+        self.extruded_spectrum_smooth_edges = bool(self.extruded_spectrum_smooth_edges)
         from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
         if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
             self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')

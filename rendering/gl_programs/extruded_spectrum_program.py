@@ -22,6 +22,14 @@ bar body (the Organs look) or Spectrum's bar colours; spectral hues may drift on
 frame's authored animation time. Ghost peaks are translucent columns from the bar's top
 to its peak, as in Spectrum; the reflection is the row mirrored under the floor, fading to
 nothing at the bar field's bottom.
+
+Edge lines are drawn by the shader along each face's border, sized as if seen head-on. Smooth
+Edges measures them in screen pixels (``fwidth`` of the face coordinates) and keeps each at
+least 1.2 smoothed pixels wide, so a face seen at an angle keeps a ramped line instead of one
+foreshortened below a pixel; head-on nothing changes. Mirror Faces gives the faces (never the edge lines) a polished, faintly brushed
+chrome surface reflecting a fixed studio (``extrudedStudio``: a bright sky over a dark ground
+at a crisp horizon, and two softbox strips) toward a near virtual eye, so the horizon crosses
+the bars and the lights sweep across them as the view turns.
 """
 
 from __future__ import annotations
@@ -186,17 +194,45 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform vec4 uFill;\nuniform vec4 uBorder;\nuniform float uGloss;\nuniform float uEdgePx;\n"
     "uniform int uPass;\nuniform float uGhostAlpha;\nuniform float uReflection;\nuniform int uColouring;\n"
     "uniform vec2 uFloorSpan;   // item y of the floor line and of the bar field's bottom\n"
+    "uniform float uSmooth;     // 1: edge lines measured in screen pixels (anti-aliased at any angle)\n"
+    "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
     + SCENE3D_GLSL
     + """
+// A chrome studio around the bars, by reflected direction in the camera's frame: a bright sky
+// falling to a grey ground at a crisp horizon set low (the view looks down on the bars, so their
+// faces mostly mirror what lies below eye level), and two softbox strips above it.
+vec3 extrudedStudio(vec3 r) {
+    float h = r.y + 0.3;
+    vec3 sky = mix(vec3(0.95, 0.97, 1.0), vec3(0.3, 0.36, 0.48), smoothstep(0.0, 0.8, h));
+    vec3 ground = mix(vec3(0.32, 0.3, 0.29), vec3(0.06), smoothstep(0.0, -0.5, h));
+    vec3 env = mix(ground, sky, smoothstep(-0.004, 0.004, h));
+    float above = smoothstep(0.0, 0.08, h);
+    env += vec3(1.5) * smoothstep(0.05, 0.0, abs(r.x - 0.24)) * above;
+    env += vec3(1.0) * smoothstep(0.035, 0.0, abs(r.x + 0.3)) * above;
+    return env;
+}
 void main() {
     vec3 n = normalize(vNormal);
-    // Distance to the nearest edge of this face, in pixels. The face is the box axis whose local
-    // coordinate sits at 0 or 1 (the normal is in the turned, tilted frame).
-    vec3 lo = min(vLocal, 1.0 - vLocal) * vSize;
-    vec3 onFace = step(min(vLocal, 1.0 - vLocal), vec3(1e-3));
-    vec2 edge = onFace.x > 0.5 ? lo.zy : (onFace.y > 0.5 ? lo.xz : lo.xy);
-    float width = uColouring == 1 ? 1.6 * uEdgePx : uEdgePx;
-    float rim = 1.0 - smoothstep(0.0, width, min(edge.x, edge.y));
+    // Distance to the nearest edge of this face, per face axis. The face is the box axis whose
+    // local coordinate sits at 0 or 1 (the normal is in the turned, tilted frame). Off, lines are
+    // sized in pixels of the face seen head-on, so foreshortening thins them below a pixel. Smooth
+    // Edges measures in screen pixels: each line keeps its head-on width (converted to screen
+    // pixels along that axis) but never narrower than SMOOTH_MIN_PX, so head-on nothing changes and
+    // at an angle a line stays a smooth ramp instead of breaking up.
+    const float SMOOTH_MIN_PX = 1.2;
+    vec3 perPixel = max(fwidth(vLocal), vec3(1e-6));
+    vec3 lo = min(vLocal, 1.0 - vLocal);
+    vec3 onFace = step(lo, vec3(1e-3));
+    float width = (uColouring == 1 ? 1.6 : 1.0) * uEdgePx;
+    vec3 px = lo * vSize;
+    vec3 widths = vec3(width);
+    if (uSmooth > 0.5) {
+        px = lo / perPixel;
+        widths = max(width / max(vSize * perPixel, vec3(1e-6)), vec3(SMOOTH_MIN_PX));
+    }
+    vec2 edge = onFace.x > 0.5 ? px.zy : (onFace.y > 0.5 ? px.xz : px.xy);
+    vec2 edgeWidth = onFace.x > 0.5 ? widths.zy : (onFace.y > 0.5 ? widths.xz : widths.xy);
+    float rim = max(1.0 - smoothstep(0.0, edgeWidth.x, edge.x), 1.0 - smoothstep(0.0, edgeWidth.y, edge.y));
     // 0 spectral bodies with Spectrum's border edges; 1 Spectrum's body with glowing spectral
     // edges; 2 Spectrum's fill and border.
     vec3 body = uColouring == 0 ? vHue : uFill.rgb;
@@ -205,6 +241,20 @@ void main() {
     SceneMaterial bar = SceneMaterial(mix(body, trim, rim * trimAlpha), mix(0.75, 0.18, uGloss), 0.0, 0.5,
                                       uColouring == 1 ? trim * rim * 0.8 : vec3(0.0));
     vec3 lit = sceneMaterialLit(bar, n, vWorld, vec3(2.3), vec3(0.45));
+    if (uMirror > 0.0) {
+        // Polished faces: the studio reflected toward a near virtual eye at mid-bar height (the
+        // real camera is far, so a flat face would mirror one flat colour), so the studio's
+        // horizon and lights cross the bars and sweep as the view turns. Faintly brushed,
+        // tinted by the face's colour, stronger at grazing angles. Edge lines stay as they are.
+        vec3 v = normalize(vec3(0.0, 0.4, 1.6) - vWorld);
+        vec3 r = reflect(-v, n);
+        vec2 grainAt = floor(vec2(vLocal.x * vSize.x + vLocal.z * vSize.z, vLocal.y * vSize.y * 0.02) * 0.7);
+        float grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 tint = mix(vec3(1.0), body * 1.35, 0.6);
+        vec3 mirror = extrudedStudio(r) * tint * (0.92 + 0.16 * grain);
+        float fresnel = 0.75 + 0.25 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+        lit = mix(lit, mirror + lit * 0.2, uMirror * fresnel * (1.0 - rim * trimAlpha));
+    }
     float alpha = 1.0;
     if (uPass == 1) alpha = uGhostAlpha * mix(0.45, 1.0, rim);
     if (uPass == 2) {

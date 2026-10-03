@@ -74,6 +74,7 @@ def _live_unit(
             screen_index=screen_index,
             binding_loss=binding_loss,
             scene_controller=scene_controller,
+            input_controller=SimpleNamespace(set_view_orbit_enabled=lambda _enabled: None),
             window=SimpleNamespace(screen=lambda: object()),
             # display_bounds() reads display_identity.geometry; give each screen
             # a distinct non-overlapping rect like a real dual-display topology.
@@ -92,6 +93,7 @@ def _manager(position: str) -> DisplayManager:
     manager._runtime_generation = 805
     manager._quick_visualizer_owner = None
     manager._quick_visualizer_unit = None
+    manager._quick_view_orbit_pending = None
     manager._quick_visualizer_failover_token = 0
     manager._quick_visualizer_construct_result = "not_attempted"
     manager._quick_visualizer_construct_reject_reason = None

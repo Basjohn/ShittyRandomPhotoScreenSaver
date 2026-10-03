@@ -462,8 +462,19 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   profile, so bars, peaks, the R-76 temporal treatment, the shape editor and energy distribution are Spectrum's own.
   `ExtrudedSpectrumFrame` is a `SpectrumFrame` with the mode's presentation parameters; the height transfer equals
   Spectrum's (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
-- **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral Edges /
-  Bar Colours), hue drift, gloss, reflection, allow overflow. Hue drift advances with logical time only.
+- **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral
+  Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, smooth edges, allow overflow. Hue drift advances
+  with logical time only.
+- **Edge lines** are drawn by the shader along each face's border. Smooth Edges (on by default) measures them in true
+  screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
+  pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line
+  instead of one foreshortened below a pixel (the jagged edges reported 2026-10-03); head-on (Glass Floor) the lines
+  are unchanged. Off, lines are sized as if seen head-on.
+- **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed chrome surface reflecting
+  a fixed studio (`extrudedStudio`: bright sky over a grey ground at a crisp, low horizon, two softbox strips). The
+  reflection is taken toward a near virtual eye at mid-bar height, since the real camera is far and a flat face
+  would mirror one flat colour: the horizon crosses the bars and the strips sweep across them as the view turns.
+  Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor reflection.
 - **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
   binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor
   reflection (fades to zero at the field bottom), translucent ghost columns for the peaks. S17 material lighting.
@@ -471,6 +482,22 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   depth and reflection, so no setting can push the scene out of the rectangle; with overflow on, the scene keeps its
   front-on scale and the target grows by `EXTRUDED_OVERFLOW_PAD` of the item height.
 - **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
+- **Live view orbit (W/A/S/D):** a 3D freeform mode names its (turn, tilt) settings in the descriptor's
+  `view_orbit_settings`; DisplayManager publishes "a 3D view is shown" to every display's input owner on owner
+  creation/retirement and mode completion (an event fact, no provider read per key). While it is shown, W/S tilt the
+  camera up/down and A/D move it left/right, one `VIEW_ORBIT_STEP` (0.05, 2 degrees) per press or OS key repeat,
+  applied straight to the presentation state the next logical capture reads (no new clock, timer or poll). Nothing
+  is saved per step: the result is written once, through the atomic runtime-preset persistence, when the last held
+  key is really released (repeat release/press pairs ignored), when the Visualizer retires mid-orbit, or never if a
+  preset change replaced the view. On a curated preset the edit moves the mode to Custom holding what was shown
+  (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. With no 3D view shown W/A/S/D exit like any
+  other key. The S key no longer opens Settings (the context menu does).
+- **Cost** at a 1400x520 card (RTX 4090), median (p90): 0.7-0.9 (1.0-1.1) ms CPU submit and 0.019-0.022 (0.025) ms
+  GPU per frame across the presets; Smooth Edges and Mirror Faces cost nothing measurable.
+- **Physical checks (open):** each preset with live music on both displays (Visualizer freshness alongside 3D
+  transitions); edge lines at strong tilt/turn with Smooth Edges on and off; Mirror Faces' horizon and softboxes
+  while orbiting; W/A/S/D feel (step size, key-repeat pace), the view surviving a restart, and a curated preset
+  becoming Custom after an orbit; Allow Overflow near screen edges.
 - **Guided Setup preview:** rendered by the foundry through the production capture and renderer
   (`_RENDERED_VISUALIZER_PREVIEWS`), since the operator's screenshot sheet predates the mode.
 

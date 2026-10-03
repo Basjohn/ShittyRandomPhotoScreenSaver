@@ -644,7 +644,7 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if 'bubble_tail_opacity' in kwargs:
         host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
-    # --- Extruded Spectrum presentation (experimental) -----------------
+    # --- Extruded Spectrum presentation -------------------------------
     for key, (low, high) in _EXTRUDED_SPECTRUM_KEYS.items():
         if key in kwargs:
             setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
@@ -656,6 +656,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._extruded_spectrum_colouring = colouring
     if 'extruded_spectrum_allow_overflow' in kwargs:
         host._extruded_spectrum_allow_overflow = bool(kwargs['extruded_spectrum_allow_overflow'])
+    if 'extruded_spectrum_smooth_edges' in kwargs:
+        host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
 
 
 
@@ -665,6 +667,7 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
     "extruded_spectrum_tilt": (0.0, 1.0),
     "extruded_spectrum_gloss": (0.0, 1.0),
     "extruded_spectrum_reflection": (0.0, 1.0),
+    "extruded_spectrum_face_mirror": (0.0, 1.0),
     "extruded_spectrum_hue_drift": (0.0, 1.0),
     "extruded_spectrum_turn": (-1.0, 1.0),
 }
@@ -676,6 +679,7 @@ def extruded_spectrum_parameters(widget: Any) -> Dict[str, object]:
     values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _EXTRUDED_SPECTRUM_KEYS}
     values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
+    values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
     return values
 
 
