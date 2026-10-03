@@ -105,9 +105,11 @@ def musical_emphasis(presence: float, usual: float) -> float:
 
 def learn_usual_presence(usual: float, presence: float) -> float:
     """The track's usual onset presence after an onset at ``presence`` (start from 1.0, neutral):
-    only an onset clearly part of the music moves it."""
+    only an onset clearly part of the music moves it, and no more than the most it can stand out
+    (``musical_emphasis``'s 2x) would, so one outlier cannot make every later onset look soft."""
     if float(presence) >= MUSICAL_PRESENCE[1]:
-        return float(usual) + (float(presence) - float(usual)) * MUSICAL_USUAL_RATE
+        learned = min(float(presence), 2.0 * float(usual))
+        return float(usual) + (learned - float(usual)) * MUSICAL_USUAL_RATE
     return float(usual)
 
 
@@ -219,6 +221,11 @@ class TransientBus:
             level = max(0.0, float(loudness))
             if self._frame_count == 1 or elapsed <= 0.0:
                 self._loudness_reference = max(self._loudness_reference, level)
+            elif level < MUSICAL_QUIET[0]:
+                # Near-silence (a pause, a gap between tracks) is not the music's level: it does
+                # not drain the running level, so the music resuming is not "many times louder
+                # than usual" (it was: presence 46 after a 6 s pause).
+                pass
             else:
                 alpha = 1.0 - math.exp(-min(elapsed, 1.0) / LOUDNESS_REFERENCE_SECONDS)
                 self._loudness_reference += (level - self._loudness_reference) * alpha

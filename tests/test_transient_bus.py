@@ -45,6 +45,31 @@ def test_the_frame_musical_level_is_what_an_onset_there_carries(monkeypatch):
     assert tb.musical_level == (onset.loudness, onset.presence)
 
 
+def test_a_pause_does_not_make_the_music_resuming_look_many_times_louder(monkeypatch):
+    """Operator log 2026-10-03: after a 6 s pause the running level had drained, the music came
+    back at presence 46, and the consumers' learned usual level jumped to 73, muting the next
+    ~10 s. Near-silence no longer drains the level; one outlier moves the usual level at most as
+    far as the largest emphasis it could earn."""
+    from widgets.spotify_visualizer import transient_bus
+    from widgets.spotify_visualizer.transient_bus import learn_usual_presence
+
+    clock = [100.0]
+
+    def tick():
+        clock[0] += 0.01
+        return clock[0]
+
+    monkeypatch.setattr(transient_bus.time, "time", tick)
+    tb = TransientBus()
+    for _ in range(600):                                   # 6 s of steady music
+        tb.update(0.3, 0.3, 0.3, loudness=8.0)
+    for _ in range(600):                                   # a 6 s pause
+        tb.update(0.0, 0.0, 0.0, loudness=0.0)
+    tb.update(0.3, 0.3, 0.3, loudness=8.0)                 # the same music again
+    assert 0.9 <= tb.musical_level[1] <= 1.1
+    assert learn_usual_presence(1.0, 46.0) <= 1.0 + 0.12 * 1.0 + 1e-9
+
+
 class TestTransientBusBasic:
     """Core spectral flux and onset detection."""
 
