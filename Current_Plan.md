@@ -172,7 +172,10 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Order: the S19 golden first captures today's
   behaviour (behavioural parity below holds for the *migration*); this retune is then a separate, operator-approved
   behavioural change measured against that golden on the deterministic replay, not by ear: admission frequency
-  scaled by the reward, a convex reward curve, floors on the reward.
+  scaled by the reward, a convex reward curve, floors on the reward. **Everything ramps, fast up and gentle down**
+  (operator): particle population/power, fragmentation power and frequency, tracer speed, spin velocity. Calibrate in
+  the real scales (`Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A: loudness 3-17 in music, presence ~1), not
+  `0..1` absolutes.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
