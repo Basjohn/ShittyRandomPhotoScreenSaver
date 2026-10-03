@@ -44,7 +44,7 @@ and binds; depth renderbuffers also use named storage. Rendering and resolve pas
 
 | Owner | Storage and allocation contract |
 | --- | --- |
-| `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets ; an **overlay** scope (a Visualizer drawn over its card) clears to transparent and composites the resolved scene back as straight alpha times an opacity, discarding where nothing was drawn, with no bloom or motion blur |
+| `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets ; an **overlay** scope (a Visualizer drawn over its card) clears to transparent and composites the resolved scene back as straight alpha times an opacity, discarding where nothing was drawn, with no motion blur. An overlay **with bloom** adds an RGBA16F emission attachment (location 1, written only inside `emission_writes()` as `sceneEmission(light)`), blurs it through the shared bloom chain and composites premultiplied with the glow added, under a blend it sets and then hands back as the caller had it (captured at `begin`), so glow is exactly additive over what Quick drew and no emission writes means no glow. The non-bloom overlay path is unchanged |
 | Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
 | Motion | One RG16F compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
 | Motion Trails | Existing R8 mask, allocated only for its active requesting consumer |

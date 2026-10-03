@@ -330,18 +330,92 @@ def test_an_overlays_smoothed_edges_blend_without_a_dark_fringe(capture):
         resources.release_resources()
 
 
-def test_an_overlay_refuses_bloom_and_motion_blur(capture):
+def test_an_overlay_refuses_motion_blur(capture):
     from rendering.quick.scene3d.target import scene_target_programs
 
     resources, target = MeshResources("target test"), SceneTarget("target test")
     try:
         card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
-        for options in ({"bloom": 0.5}, {"motion_blur": True}):
-            with pytest.raises(ValueError, match="overlay"):
-                with target.scope(card, 4, resources, overlay=1.0, **options):
-                    pass
         with pytest.raises(ValueError, match="overlay"):
-            scene_target_programs(4, True, False, overlay=True)
+            with target.scope(card, 4, resources, overlay=1.0, motion_blur=True):
+                pass
+        with pytest.raises(ValueError, match="overlay"):
+            scene_target_programs(4, False, True, overlay=True)
     finally:
         target.release()
         resources.release_resources()
+
+
+def _emitting_program(emit: bool):
+    """A quad over the middle of the card: dim grey, emitting warm light into location 1."""
+    from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.scene3d.target import SCENE_EMISSION_GLSL
+
+    vertex = ("#version 460 core\nvoid main() {\n"
+              "    vec2 p[4] = vec2[](vec2(-0.2, -0.2), vec2(0.2, -0.2), vec2(-0.2, 0.2), vec2(0.2, 0.2));\n"
+              "    gl_Position = vec4(p[gl_VertexID], 0.0, 1.0);\n}\n")
+    fragment = ("#version 460 core\nlayout(location = 0) out vec4 FragColor;\n"
+                "layout(location = 1) out vec4 Emission;\n" + SCENE_EMISSION_GLSL
+                + "void main() { FragColor = vec4(0.2, 0.2, 0.2, 1.0);"
+                + (" Emission = sceneEmission(vec3(2.0, 1.2, 0.3)); }\n" if emit else " Emission = vec4(0.0); }\n"))
+    return compile_program(vertex, fragment, label="overlay bloom test")
+
+
+def _blend_state():
+    names = (gl.GL_BLEND_SRC_RGB, gl.GL_BLEND_DST_RGB, gl.GL_BLEND_SRC_ALPHA, gl.GL_BLEND_DST_ALPHA,
+             gl.GL_BLEND_EQUATION_RGB, gl.GL_BLEND_EQUATION_ALPHA)
+    return bool(gl.glIsEnabled(gl.GL_BLEND)), tuple(int(gl.glGetIntegerv(name)) for name in names)
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_an_overlays_bloom_glows_only_from_emitted_light_and_never_darkens(capture, samples):
+    """With bloom an overlay's emitted light (written in emission_writes()) glows over what is
+    drawn: additively, so nothing gets darker; without emission writes the bloom changes
+    nothing; the caller's blend state comes back; the warm-up list covers what it draws."""
+    from rendering.quick.scene3d.target import scene_target_programs
+
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    emitting, plain = _emitting_program(True), _emitting_program(False)
+
+    def draw(program, *, bloom, emit_scope):
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        gl.glViewport(0, 0, WIDTH, HEIGHT)
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        gl.glClearColor(0.25, 0.25, 0.3, 1.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        _straight_alpha()
+        before = _blend_state()
+        with target.scope(card, samples, resources, overlay=1.0, bloom=bloom):
+            gl.glUseProgram(program)
+            gl.glBindVertexArray(capture.vao)
+            if emit_scope:
+                with target.emission_writes():
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            else:
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        assert _blend_state() == before                             # the caller's blend is back
+        assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == capture.fbo
+        return _read(capture)
+
+    try:
+        card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        without = draw(emitting, bloom=0.0, emit_scope=True)        # no bloom: no emission attachment
+        unlit = draw(plain, bloom=1.0, emit_scope=True)             # emits nothing
+        unwritten = draw(emitting, bloom=1.0, emit_scope=False)     # emission writes not opened
+        assert np.abs(unlit - without).max() <= 1
+        assert np.abs(unwritten - without).max() <= 1
+        glowing = draw(emitting, bloom=1.0, emit_scope=True)
+        brighter = glowing[..., :3].sum(axis=2) - without[..., :3].sum(axis=2)
+        assert brighter.min() >= -2                                 # additive: never darker
+        ring = (slice(HEIGHT // 2 - 26, HEIGHT // 2 - 16), slice(WIDTH // 2 - 10, WIDTH // 2 + 10))
+        assert brighter[ring].mean() > 20                           # the glow spills past the quad
+        assert brighter[:6, :6].max() <= 2                          # far away: untouched
+        programs = {key for key, *_ in scene_target_programs(samples, True, False, overlay=True)}
+        assert programs <= set(resources._programs)
+    finally:
+        gl.glDisable(gl.GL_BLEND)
+        gl.glDeleteProgram(emitting)
+        gl.glDeleteProgram(plain)
+        target.release()
+        resources.release_resources()
+    assert not target.has_resources

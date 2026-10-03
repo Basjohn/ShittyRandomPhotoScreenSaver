@@ -72,6 +72,13 @@ class QuickExtrudedSpectrumRenderer:
         return (self._resources.has_resources or self._target.has_resources or self._stream.has_resources
                 or self._backdrop.has_resources)
 
+    def _initialize(self) -> None:
+        """Compile the bar program and build the box mesh ahead of a first frame (shader admission)."""
+        r = self._resources
+        r.program("bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE)
+        r.uniforms("bars", _UNIFORMS)
+        r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
+
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
         logical = snapshot.logical
