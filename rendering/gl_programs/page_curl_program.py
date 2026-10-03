@@ -6,8 +6,9 @@ direction is a strip: the part behind the line has peeled and wound into a loose
 rides the line, its free edge innermost (radius ``PAGE_CURL_ROLL_INNER``), each turn
 ``2 pi PAGE_CURL_ROLL_PITCH`` further out, so the roll grows as more is peeled. The spiral is
 solved for arc length exactly, so the sheet bends but never stretches, and it leaves the flat page
-tangentially, so there is no crease. Once a row has peeled completely its roll rolls on, off the
-far side. The shared bendable grid draws it (``sceneDisplace``), so the flat part is the photograph
+tangentially, so there is no crease. Curl Size scales the roll (``page_curl_roll``): the largest is
+the free edge's curl and pitch above; thinner rolls wind tighter, so the whole roll shrinks with
+the setting. Once a row has peeled completely its roll rolls on, off the far side. The shared bendable grid draws it (``sceneDisplace``), so the flat part is the photograph
 exactly.
 
 The new picture lies beneath, shaded under the roll; the shade fades to nothing before the roll
@@ -25,9 +26,12 @@ import numpy as np
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_grid_vertex_source
 
-# The roll: its innermost radius (the free edge's curl) and its growth per radian.
+# The largest roll: its innermost radius (the free edge's curl) and its growth per radian.
 PAGE_CURL_ROLL_INNER = 0.05
 PAGE_CURL_ROLL_PITCH = 0.01
+PAGE_CURL_ROLL = (PAGE_CURL_ROLL_INNER, PAGE_CURL_ROLL_PITCH)
+# The thinnest roll Curl Size reaches, as a share of the largest one's size.
+PAGE_CURL_THINNEST = 0.1
 # The shade's strength on the new picture under the roll, and its reach (in roll radii).
 PAGE_CURL_SHADE = 0.45
 PAGE_CURL_SHADE_REACH = 1.2
@@ -56,31 +60,38 @@ def page_curl_span(direction: tuple[float, float], aspect: float) -> tuple[float
     return min(values), max(values)
 
 
-def _arc(r):
+def page_curl_roll(size: float) -> tuple[float, float]:
+    """The roll's innermost radius and pitch for Curl Size ``size`` (0 thinnest, 1 largest).
+    The radius scales with the size and the pitch with its square, so a wound roll (radius
+    about sqrt(2 pitch length)) shrinks in step with the size."""
+    k = PAGE_CURL_THINNEST + (1.0 - PAGE_CURL_THINNEST) * max(0.0, min(1.0, float(size)))
+    return PAGE_CURL_ROLL_INNER * k, PAGE_CURL_ROLL_PITCH * k * k
+
+
+def _arc(r, b):
     """The spiral's arc length from the centre to radius ``r`` (up to a constant)."""
-    b = PAGE_CURL_ROLL_PITCH
     root = np.sqrt(r * r + b * b)
     return (r * root + b * b * np.log(r + root)) / (2.0 * b)
 
 
-def page_curl_roll_radius(length):
-    """CPU mirror of ``pageCurlRadius``: the roll's radius ``length`` along the sheet from its
-    free edge (arrays welcome)."""
-    r0, b = PAGE_CURL_ROLL_INNER, PAGE_CURL_ROLL_PITCH
+def page_curl_roll_radius(length, roll=PAGE_CURL_ROLL):
+    """CPU mirror of ``pageCurlRadius``: the radius of the roll ``roll`` (inner radius, pitch)
+    ``length`` along the sheet from its free edge (arrays welcome)."""
+    r0, b = roll
     s = np.maximum(np.asarray(length, dtype=np.float64), 0.0)
-    target = _arc(r0) + s
+    target = _arc(r0, b) + s
     r = np.sqrt(r0 * r0 + 2.0 * b * s)
     for _ in range(_NEWTON_STEPS):
-        r = r - (_arc(r) - target) * b / np.sqrt(r * r + b * b)
+        r = r - (_arc(r, b) - target) * b / np.sqrt(r * r + b * b)
     return np.maximum(r, r0)
 
 
-def page_curl_end_radius(near: float, far: float) -> float:
+def page_curl_end_radius(near: float, far: float, roll=PAGE_CURL_ROLL) -> float:
     """The largest roll the run makes: the page's longest strip wound up."""
-    return float(page_curl_roll_radius(far - near))
+    return float(page_curl_roll_radius(far - near, roll))
 
 
-def page_curl_line(progress: float, near: float, far: float) -> float:
+def page_curl_line(progress: float, near: float, far: float, roll=PAGE_CURL_ROLL) -> float:
     """The peel line's position at ``progress``: from the page's first corner (nothing peeled)
     until the roll and its shade have left the far side. An even pace with soft ends."""
     t = max(0.0, min(1.0, float(progress)))
@@ -91,14 +102,14 @@ def page_curl_line(progress: float, near: float, far: float) -> float:
         e = 1.0 - (1.0 - t) * (1.0 - t) / (2.0 * a * (1.0 - a))
     else:
         e = (t - 0.5 * a) / (1.0 - a)
-    end = far + PAGE_CURL_EXIT * page_curl_end_radius(near, far)
+    end = far + PAGE_CURL_EXIT * page_curl_end_radius(near, far, roll)
     return near + (end - near) * e
 
 
-def page_curl_shade_weight(line: float, near: float, far: float) -> float:
+def page_curl_shade_weight(line: float, near: float, far: float, roll=PAGE_CURL_ROLL) -> float:
     """The shade's fade as the roll leaves the page: 1 until it is half a roll past the far
     side, 0 at the end of the run."""
-    radius = page_curl_end_radius(near, far)
+    radius = page_curl_end_radius(near, far, roll)
     lo, hi = far + 0.5 * radius, far + PAGE_CURL_EXIT * radius
     x = max(0.0, min(1.0, (line - lo) / (hi - lo)))
     return 1.0 - x * x * (3.0 - 2.0 * x)
@@ -116,16 +127,16 @@ def page_curl_row(point, direction, aspect: float):
     return back, ahead
 
 
-def page_curl_row_radius(point, direction, line: float, aspect: float):
+def page_curl_row_radius(point, direction, line: float, aspect: float, roll=PAGE_CURL_ROLL):
     """CPU mirror of ``pageCurlRowRadius``: the radius of the roll in ``point``'s strip."""
     back, ahead = page_curl_row(point, direction, aspect)
     along = point[0] * direction[0] + point[1] * direction[1]
     peeled = np.minimum(line, along + ahead) - (along - back)
-    return page_curl_roll_radius(peeled)
+    return page_curl_roll_radius(peeled, roll)
 
 
 def page_curl_displace(point: tuple[float, float], direction: tuple[float, float], line: float,
-                       aspect: float) -> tuple[float, float, float]:
+                       aspect: float, roll=PAGE_CURL_ROLL) -> tuple[float, float, float]:
     """CPU mirror of ``pageCurlDisplace``: where the page's point (world xy at rest) lies."""
     along = point[0] * direction[0] + point[1] * direction[1]
     u = line - along
@@ -133,9 +144,9 @@ def page_curl_displace(point: tuple[float, float], direction: tuple[float, float
         return point[0], point[1], 0.0
     back, ahead = (float(v) for v in page_curl_row(point, direction, aspect))
     far_row = along + ahead
-    r = float(page_curl_roll_radius(back))                      # the sheet's own place in the roll
-    rc = float(page_curl_roll_radius(min(line, far_row) - (along - back)))
-    b = PAGE_CURL_ROLL_PITCH
+    r = float(page_curl_roll_radius(back, roll))                # the sheet's own place in the roll
+    rc = float(page_curl_roll_radius(min(line, far_row) - (along - back), roll))
+    b = roll[1]
     contact = -0.5 * math.pi + math.atan2(b, rc)
     angle = contact - (rc - r) / b - max(line - far_row, 0.0) / rc
     across = r * math.cos(angle) - rc * math.cos(contact)
@@ -144,21 +155,20 @@ def page_curl_displace(point: tuple[float, float], direction: tuple[float, float
 
 
 PAGE_CURL_GLSL = f"""
-const float ROLL_INNER = {PAGE_CURL_ROLL_INNER:.6f};
-const float ROLL_PITCH = {PAGE_CURL_ROLL_PITCH:.6f};
-float pageCurlArc(float r) {{
-    float root = sqrt(r * r + ROLL_PITCH * ROLL_PITCH);
-    return (r * root + ROLL_PITCH * ROLL_PITCH * log(r + root)) / (2.0 * ROLL_PITCH);
+// A roll is (innermost radius, pitch per radian); see page_curl_roll.
+float pageCurlArc(float r, float pitch) {{
+    float root = sqrt(r * r + pitch * pitch);
+    return (r * root + pitch * pitch * log(r + root)) / (2.0 * pitch);
 }}
 // The roll's radius the given length along the sheet from its free edge (the spiral solved
 // for arc length exactly, so the sheet never stretches).
-float pageCurlRadius(float length) {{
+float pageCurlRadius(float length, vec2 roll) {{
     float s = max(length, 0.0);
-    float target = pageCurlArc(ROLL_INNER) + s;
-    float r = sqrt(ROLL_INNER * ROLL_INNER + 2.0 * ROLL_PITCH * s);
+    float target = pageCurlArc(roll.x, roll.y) + s;
+    float r = sqrt(roll.x * roll.x + 2.0 * roll.y * s);
     for (int i = 0; i < {_NEWTON_STEPS}; ++i)
-        r -= (pageCurlArc(r) - target) * ROLL_PITCH / sqrt(r * r + ROLL_PITCH * ROLL_PITCH);
-    return max(r, ROLL_INNER);
+        r -= (pageCurlArc(r, roll.y) - target) * roll.y / sqrt(r * r + roll.y * roll.y);
+    return max(r, roll.x);
 }}
 // How far the page extends behind (x) and ahead of (y) p along d; extent is the page's half size.
 vec2 pageCurlRow(vec2 p, vec2 d, vec2 extent) {{
@@ -174,37 +184,37 @@ vec2 pageCurlRow(vec2 p, vec2 d, vec2 extent) {{
     return row;
 }}
 // The radius of the roll in p's strip of the page.
-float pageCurlRowRadius(vec2 p, vec2 d, float line, vec2 extent) {{
+float pageCurlRowRadius(vec2 p, vec2 d, float line, vec2 extent, vec2 roll) {{
     vec2 row = pageCurlRow(p, d, extent);
     float along = dot(p, d);
-    return pageCurlRadius(min(line, along + row.y) - (along - row.x));
+    return pageCurlRadius(min(line, along + row.y) - (along - row.x), roll);
 }}
 // Where the page's point p (world xy at rest) lies when the peel line, travelling along d,
 // stands at line: flat ahead of the line; behind it wound into the strip's roll, which stands
 // on the line (and, once the strip has peeled completely, rolls on along d).
-vec3 pageCurlDisplace(vec2 p, vec2 d, float line, vec2 extent) {{
+vec3 pageCurlDisplace(vec2 p, vec2 d, float line, vec2 extent, vec2 roll) {{
     float along = dot(p, d);
     float u = line - along;
     if (u <= 0.0) return vec3(p, 0.0);
     vec2 row = pageCurlRow(p, d, extent);
     float farRow = along + row.y;
-    float r = pageCurlRadius(row.x);
-    float rc = pageCurlRadius(min(line, farRow) - (along - row.x));
-    float contact = -1.57079633 + atan(ROLL_PITCH, rc);
-    float angle = contact - (rc - r) / ROLL_PITCH - max(line - farRow, 0.0) / rc;
+    float r = pageCurlRadius(row.x, roll);
+    float rc = pageCurlRadius(min(line, farRow) - (along - row.x), roll);
+    float contact = -1.57079633 + atan(roll.y, rc);
+    float angle = contact - (rc - r) / roll.y - max(line - farRow, 0.0) / rc;
     float across = r * cos(angle) - rc * cos(contact);
     return vec3(p + d * (u + across), r * sin(angle) - rc * sin(contact));
 }}
 """
 
-_CURL_UNIFORMS = "uniform vec2 uDirection;\nuniform float uLine;\n"
+_CURL_UNIFORMS = "uniform vec2 uDirection;\nuniform float uLine;\nuniform vec2 uRoll;\n"
 
 PAGE_CURL_VERTEX_SOURCE = scene3d_grid_vertex_source(
     """
 vec3 sceneDisplace(vec2 uv) {
     float aspect = uItemSize.x / uItemSize.y;
     vec3 p = scenePlanePoint(uv, aspect);
-    return pageCurlDisplace(p.xy, uDirection, uLine, vec2(0.5 * aspect, 0.5));
+    return pageCurlDisplace(p.xy, uDirection, uLine, vec2(0.5 * aspect, 0.5), uRoll);
 }
 """,
     _CURL_UNIFORMS + PAGE_CURL_GLSL,
@@ -220,7 +230,7 @@ void main() {
     vec3 photo = texture(uOldTex, vUv).rgb;
     // How far this point of the sheet has lifted: 0 flat, 1 from a quarter of the free edge's curl on.
     float u = uLine - dot(scenePlanePoint(vUv, uItemSize.x / uItemSize.y).xy, uDirection);
-    float lift = clamp(u / (0.5 * 3.14159265 * ROLL_INNER), 0.0, 1.0);
+    float lift = clamp(u / (0.5 * 3.14159265 * uRoll.x), 0.0, 1.0);
     if (lift <= 0.0) {
         FragColor = vec4(photo, 1.0);   // the flat page: the photograph exactly
         return;
@@ -258,7 +268,7 @@ void main() {{
     float behind = uLine - dot(p, uDirection);
     float shade = 0.0;
     if (behind > 0.0) {{
-        float radius = pageCurlRowRadius(p, uDirection, uLine, vec2(0.5 * aspect, 0.5));
+        float radius = pageCurlRowRadius(p, uDirection, uLine, vec2(0.5 * aspect, 0.5), uRoll);
         shade = uShade * {PAGE_CURL_SHADE:.6f}
               * exp(-max(behind - 0.5 * radius, 0.0) / ({PAGE_CURL_SHADE_REACH:.6f} * radius));
     }}

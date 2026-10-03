@@ -12,6 +12,7 @@ from rendering.gl_programs.page_curl_program import (
     PAGE_CURL_VERTEX_SOURCE,
     page_curl_direction,
     page_curl_line,
+    page_curl_roll,
     page_curl_shade_weight,
     page_curl_span,
 )
@@ -32,22 +33,26 @@ from ..render_contract import QuickTransitionRenderFrame
 _ORIGINS = frozenset(PAGE_CURL_ORIGINS.values())
 
 
-def page_curl_parameters(parameters: Mapping[str, object]) -> tuple[float, str]:
-    """The resolved gloss and 3D Detail tier, validated before any GL state changes."""
-    gloss, detail = parameters.get("gloss"), parameters.get("detail")
-    if isinstance(gloss, bool) or not isinstance(gloss, (int, float)) or not 0.0 <= float(gloss) <= 1.0:
-        raise ValueError("Page Curl needs a resolved gloss between 0 and 1")
+def page_curl_parameters(parameters: Mapping[str, object]) -> tuple[float, float, str]:
+    """The resolved gloss, curl size and 3D Detail tier, validated before any GL state changes."""
+    values = []
+    for name in ("gloss", "size"):
+        value = parameters.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"Page Curl needs a resolved {name} between 0 and 1")
+        values.append(float(value))
+    detail = parameters.get("detail")
     if not isinstance(detail, str):
         raise ValueError("Page Curl needs a resolved 3D Detail tier")
-    return float(gloss), detail
+    return values[0], values[1], detail
 
 
 class QuickPageCurlRenderer:
     transition_id = "page_curl"
 
-    _PAGE_UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uDirection", "uLine", "uOldTex", "uEnvironment",
-                      "uGloss")
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uShade", "uDirection", "uLine")
+    _PAGE_UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uDirection", "uLine", "uRoll", "uOldTex",
+                      "uEnvironment", "uGloss")
+    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uShade", "uDirection", "uLine", "uRoll")
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Page Curl")
@@ -64,7 +69,8 @@ class QuickPageCurlRenderer:
         if origin not in _ORIGINS:
             raise ValueError(f"unknown resolved Page Curl origin: {origin!r}")
         parameters = frame.run.request.parameter_dict()
-        gloss, detail = page_curl_parameters(parameters)
+        gloss, size, detail = page_curl_parameters(parameters)
+        roll = page_curl_roll(size)
         try:
             if progress <= 0.0:
                 self._resources.draw_image(frame, frame.source_texture_id)
@@ -76,9 +82,9 @@ class QuickPageCurlRenderer:
             environment = self._environment.texture(frame, self._resources)
             if samples:
                 with self._target.scope(frame, samples, self._resources):
-                    self._draw(frame, progress, origin, gloss, detail, environment)
+                    self._draw(frame, progress, origin, gloss, roll, detail, environment)
             else:
-                self._draw(frame, progress, origin, gloss, detail, environment)
+                self._draw(frame, progress, origin, gloss, roll, detail, environment)
         except Exception:
             self.release_resources()
             raise
@@ -87,7 +93,7 @@ class QuickPageCurlRenderer:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
         between runs): True once that run's first frame will compile nothing and, given the
         render ``size`` in device pixels, allocate nothing."""
-        _gloss, detail = page_curl_parameters(parameters)
+        _gloss, _size, detail = page_curl_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
@@ -110,12 +116,13 @@ class QuickPageCurlRenderer:
         self._target.release()
         self._environment.release()
 
-    def _draw(self, frame, progress: float, origin: str, gloss: float, detail: str, environment: int) -> None:
+    def _draw(self, frame, progress: float, origin: str, gloss: float, roll: tuple[float, float], detail: str,
+              environment: int) -> None:
         width, height = frame.logical_size
         aspect = width / height
         direction = page_curl_direction(origin, aspect)
         near, far = page_curl_span(direction, aspect)
-        line = page_curl_line(progress, near, far)
+        line = page_curl_line(progress, near, far, roll)
         r = self._resources
 
         program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE)
@@ -125,7 +132,8 @@ class QuickPageCurlRenderer:
         bind_frame(program, uniforms, frame)
         gl.glUniform2f(uniforms["uDirection"], *direction)
         gl.glUniform1f(uniforms["uLine"], line)
-        gl.glUniform1f(uniforms["uShade"], page_curl_shade_weight(line, near, far))
+        gl.glUniform2f(uniforms["uRoll"], *roll)
+        gl.glUniform1f(uniforms["uShade"], page_curl_shade_weight(line, near, far, roll))
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
@@ -137,6 +145,7 @@ class QuickPageCurlRenderer:
         gl.glUniform2f(uniforms["uGridCells"], float(columns), float(rows))
         gl.glUniform2f(uniforms["uDirection"], *direction)
         gl.glUniform1f(uniforms["uLine"], line)
+        gl.glUniform2f(uniforms["uRoll"], *roll)
         gl.glUniform1f(uniforms["uGloss"], gloss)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)

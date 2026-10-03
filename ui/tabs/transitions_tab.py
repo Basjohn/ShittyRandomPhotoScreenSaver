@@ -1133,6 +1133,8 @@ class TransitionsTab(QWidget):
             ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
         ),
         "page_curl": (
+            ("size", "Curl Size:", 0., 1., "How large the peeled sheet's roll grows: thin and tight up to a "
+             "loose, wide curl."),
             ("gloss", "Gloss:", 0., 1., "Shine of the laminated sheet and reflections of the next image on it."),
         ),
         "cube_turn": (
@@ -1141,6 +1143,8 @@ class TransitionsTab(QWidget):
         "beam": (
             ("glow", "Glow:", 0., 1., "How far the beam's light reaches and how strongly it lights the picture."),
             ("scorch", "Scorch:", 0., 1., "How strongly the beam scorches the new picture before it cures clean."),
+            ("cure", "Cure Time:", 0., 1., "How long the scorch takes to cure clean. A longer cure has the beam "
+             "cross sooner, so the run still ends on the clean picture."),
         ),
         "relief_rise": (
             ("depth", "Relief Depth:", 0., 1., "How high the pictures rise as the wave passes."),

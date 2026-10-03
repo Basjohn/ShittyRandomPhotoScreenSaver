@@ -493,9 +493,10 @@ def test_page_curl_page_offers_origins_and_round_trips(qapp, settings_manager, q
     assert items == list(PAGE_CURL_ORIGIN_CHOICES)
     tab.direction_combo.setCurrentText("Top Left")
     tab.page_curl_gloss_spin.setValue(0.8)
+    tab.page_curl_size_spin.setValue(0.65)
     tab.page_curl_antialiasing_combo.setCurrentText("8x")
     persisted = settings_manager.get("transitions", {})["page_curl"]
-    assert persisted == {"direction": "Top Left", "gloss": 0.8, "antialiasing": "8x"}
+    assert persisted == {"direction": "Top Left", "gloss": 0.8, "size": 0.65, "antialiasing": "8x"}
     assert tab.page_curl_advanced_body.isAncestorOf(tab.page_curl_antialiasing_combo)
 
 
@@ -578,12 +579,14 @@ def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot)
     tab.beam_sparks_check.setChecked(not tab.beam_sparks_check.isChecked())
     sparks = tab.beam_sparks_check.isChecked()
     tab.beam_scorch_spin.setValue(0.15)
+    tab.beam_cure_spin.setValue(0.9)
     tab._save_settings()
 
     beam = settings_manager.get('transitions', {})['beam']
     assert beam['direction'] == 'Diagonal BR-TL'
     assert beam['color'][:3] == [12, 200, 99] and beam['sparks'] is sparks
     assert beam['scorch'] == pytest.approx(0.15)
+    assert beam['cure'] == pytest.approx(0.9)
 
     reloaded = TransitionsTab(settings_manager)
     qtbot.addWidget(reloaded)
