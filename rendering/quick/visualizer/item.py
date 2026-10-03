@@ -123,6 +123,12 @@ class _RenderNodeRetirement:
             return None
         return node.render_host.lifecycle_snapshot()
 
+    def renderer_prepared(self, mode_id: str, activation_id: int) -> bool:
+        """Whether the current node's renderer for this activation is ready to draw."""
+        with self._lock:
+            node = self._node
+        return node is not None and node.render_host.prepared_activation == (mode_id, int(activation_id))
+
     def update_latest_mode(self, mode_id: str | None) -> None:
         with self._lock:
             self._latest_mode_id = mode_id
@@ -203,6 +209,10 @@ class VisualizerRenderItem(QQuickItem):
     ) -> VisualizerRenderHostLifecycleSnapshot | None:
         """Boundary-only render-host lifecycle facts, or ``None`` when disabled."""
         return self._retirement.render_host_lifecycle_snapshot()
+
+    def renderer_prepared(self, mode_id: str, activation_id: int) -> bool:
+        """GUI thread: whether the render thread has prepared this activation's renderer."""
+        return self._retirement.renderer_prepared(mode_id, activation_id)
 
     @property
     def render_identity(self) -> VisualizerRenderIdentity | None:

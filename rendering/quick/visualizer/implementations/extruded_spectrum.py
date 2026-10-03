@@ -29,9 +29,9 @@ from rendering.gl_programs.extruded_spectrum_program import (
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect
-from rendering.quick.scene3d.resources import MeshResources
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
 
 from ..implementation_values import parameter, rgba
@@ -78,6 +78,31 @@ class QuickExtrudedSpectrumRenderer:
         r.program("bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE)
         r.uniforms("bars", _UNIFORMS)
         r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
+
+    def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
+        """One unit of what this activation's first visible frame would otherwise compile or
+        allocate (a program, the box mesh, the stream ring, the target, the backdrop copy), on a
+        hidden frame; True once nothing is left."""
+        parameters = frame.snapshot.logical.mode_state.parameters
+        overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
+        samples = _SMOOTH_SAMPLES if bool(parameter(parameters, "extruded_spectrum_smooth_edges")) else _SAMPLES
+        target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
+                        if overflow else frame)
+        r = self._resources
+        if not warm_programs([(r, "bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE),
+                              *((r, *program) for program in scene_target_programs(samples, False, False,
+                                                                                   overlay=True))]):
+            return False
+        if not r.has_mesh("box"):
+            r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
+            return False
+        if not self._stream.warm():
+            return False
+        if not self._target.warm(item_pixel_rect(target_frame)[2:], samples, overlay=True):
+            return False
+        if float(parameter(parameters, "extruded_spectrum_face_mirror")) > 0.0:
+            return self._backdrop.warm(frame.viewport)
+        return True
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot

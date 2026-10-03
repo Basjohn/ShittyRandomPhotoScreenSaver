@@ -115,6 +115,10 @@ class VisualizerModeDescriptor:
     # units. Empty: the keys keep their ordinary meaning (any key exits).
     view_orbit_settings: tuple[str, ...] = ()
     view_orbit_steps: tuple[float, ...] = ()
+    # The renderer offers ``prepare_step``: a mode or preset reveal stays hidden while it
+    # compiles and allocates on the hidden frames (one spaced unit each), so first use never
+    # costs a visible frame (``quick_display_visualizer_owner``, ``render_host``).
+    prepared_reveal: bool = False
 
     @property
     def preset_key(self) -> str:
@@ -236,6 +240,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_overflow_setting="extruded_spectrum_allow_overflow",
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
+        prepared_reveal=True,
     ),
     # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's bars as a ridge
     # along its horizon. Spectrum's frame runtime (bars, technical profile, bar colours) plus a
@@ -263,6 +268,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_overflow_setting="shockwave_grid_allow_overflow",
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        prepared_reveal=True,
     ),
 )
 

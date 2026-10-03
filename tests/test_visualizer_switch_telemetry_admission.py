@@ -85,7 +85,7 @@ def test_no_flag_host_switch_path_is_a_noop_for_telemetry(monkeypatch):
         monkeypatch.setattr(render_host_module.gl, name, lambda *_args: None)
 
     for mode in ("bubble", "spectrum", "bubble"):
-        snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id=mode))
+        snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id=mode, activation_id=1))
         assert host.render(
             snapshot=snapshot,
             viewport=(0, 0, 10, 10),

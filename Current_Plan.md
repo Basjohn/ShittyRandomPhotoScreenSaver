@@ -80,12 +80,11 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
 - [x] **H0. Borrowed technical profile ignored the lender's preset** (the "pinned, unreactive" Extruded Spectrum of
   2026-10-03): fixed at the activation owner, bars `tests/test_visualizer_profile_lender_presets.py`. Sphere keeps its
   raw-key resolution until S19 captures its golden (S19 item: replace it with Sphere's own profile).
-- [ ] **H1. First use of a 3D Visualizer: verify the reveal hides it, don't preload.** Operator position: not loading
-  everything at all times is deliberate as the modes get ambitious; a one-time hitch on first activation is acceptable
-  **only if** the mode's content fade-in starts after it, it does not stop the world, and it does not poison later frames
-  or Visualizer latency. Verify that 3D Visualizers are reveal/fade-gated like the others, measure the first-activation
-  cost (shader compile + allocation) and the frames after it; fix only what fails those conditions (e.g. gate the fade
-  on the first real draw, or spread allocation). No preload of every mode's programs.
+- [x] **H1. First use of a 3D Visualizer lands behind its reveal** (operator: no preloading; a one-time cost is fine
+  only hidden by the fade, never stopping the world or poisoning later frames). Finding: the fade did *not* hide it; the
+  first visible frame compiled and allocated (Shockwave 22 ms, 139 ms cold cache; logs 2026-10-03: 21-45 ms on
+  switches). Now prepared on the hidden frames, one spaced unit each, the reveal held until done (1.5 s deadline):
+  first visible frame 3-4 ms. Contract and numbers: `Docs/Reference/Visualizer_Reference.md` "Prepared reveal".
 - [ ] **H2. 3D quality tiers in a 3D Settings tab.** One tab with pills **General**, **3D Transitions**,
   **3D Visualizers**. General owns the shared `Auto / High / Balanced / Performance / KAK` vocabulary (the SSOT); the two
   family pills may override it per family, and individual entries (a transition or a Visualizer mode) may override

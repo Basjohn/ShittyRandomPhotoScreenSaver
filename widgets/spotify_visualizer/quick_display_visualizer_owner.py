@@ -28,6 +28,12 @@ _MODE_TRANSITION_HALF_DURATION_S = 0.25
 # startup-reveal window. This is the visualizer's own single scene-fade
 # authority; the generation startup-reveal gate is a separate root multiplicand.
 _ACTIVATION_SCENE_FADE_DURATION_S = 1.3
+# A ``prepared_reveal`` target stays hidden while the render thread prepares its renderer on
+# the hidden frames (one spaced unit each, ``QuickVisualizerRenderHost``), so its first-use
+# compile and allocation land behind the fade; past this it reveals anyway and the renderer
+# finishes on its first visible frame, as before (a window that renders nothing cannot strand
+# the activation or its completion).
+_PREPARED_REVEAL_DEADLINE_S = 1.5
 
 
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
@@ -115,6 +121,9 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 1.0
+        # (mode, activation id) the waiting target's reveal holds for, and since when.
+        self._preparing_activation: tuple[str, int] | None = None
+        self._waiting_target_since = 0.0
         # ``None`` until the owner first starts: any presentation resolved before
         # then is fully opaque (never hidden). Once armed, the authored scene
         # fade eases 0 -> 1 over ``_ACTIVATION_SCENE_FADE_DURATION_S`` sampled
@@ -756,6 +765,8 @@ class QuickDisplayVisualizerOwner:
             ):
                 return self._sync.sync_latest()
             published = self._sync.sync_latest()
+            if published and self._target_renderer_preparing(now):
+                return published
             if published:
                 self._mode_transition_phase = "fading_in"
                 self._mode_transition_started_at = now
@@ -779,6 +790,24 @@ class QuickDisplayVisualizerOwner:
             return published
 
         raise RuntimeError(f"unknown visualizer mode transition phase: {phase}")
+
+    def _target_renderer_preparing(self, now: float) -> bool:
+        """True while a ``prepared_reveal`` target's renderer is still preparing (bounded)."""
+        activation = self._preparing_activation
+        if activation is None:
+            return False
+        if now - self._waiting_target_since < _PREPARED_REVEAL_DEADLINE_S:
+            item = self._presentation_runtime.scene_controller.visualizer_item
+            if not item.renderer_prepared(*activation):
+                return True
+        else:
+            logger.info(
+                "[SPOTIFY_VIS] Revealing %s before its renderer prepared (%.1f s)",
+                activation[0],
+                _PREPARED_REVEAL_DEADLINE_S,
+            )
+        self._preparing_activation = None
+        return False
 
     def _target_reveals_paused_idle_without_engine_frame(self) -> bool:
         """True when the active target may reveal its paused idle with no engine frame.
@@ -978,6 +1007,12 @@ class QuickDisplayVisualizerOwner:
         except Exception:
             self._mode_transition_phase = "failed"
             raise
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+        self._preparing_activation = (
+            (target, activation_id) if get_visualizer_mode_descriptor(target).prepared_reveal else None
+        )
+        self._waiting_target_since = now
         self._mode_transition_phase = "waiting_target"
         self._mode_transition_started_at = 0.0
         self._mode_transition_fade = 0.0
@@ -1078,6 +1113,7 @@ class QuickDisplayVisualizerOwner:
         self._sync = None
         self._publication_wake = None
         self._pending_mode_activation = None
+        self._preparing_activation = None
         self._presentation_resolver = None
         self._card_shadow_kwargs.clear()
         return True

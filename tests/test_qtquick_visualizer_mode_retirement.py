@@ -127,7 +127,7 @@ def _install_host_render_stubs(monkeypatch, host, renderers):
 
 
 def _render_mode(host, mode_id):
-    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id=mode_id))
+    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id=mode_id, activation_id=1))
     return host.render(
         snapshot=snapshot,
         viewport=(0, 0, 100, 100),
@@ -275,7 +275,7 @@ def test_render_retires_inactive_mode_before_resolving_current_mode(monkeypatch)
     ):
         monkeypatch.setattr(render_host_module.gl, name, lambda *_args: None)
 
-    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id="bubble"))
+    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id="bubble", activation_id=1))
     assert host.render(
         snapshot=snapshot,
         viewport=(0, 0, 100, 100),
