@@ -102,6 +102,10 @@ Learned the hard way while building the shared 3D foundation. They bind every ch
 Each foundation slice adds what it learned here.
 
 **Measuring**
+- CPU submit: the application runs PyOpenGL with per-call error checking off (`rendering/gl_error_policy.py`; it was
+  45-60% of render-thread CPU) and each render node checks GL errors once per frame. Measure CPU submit the same way:
+  `tools/visualizer_cost_probe.py` and harnesses import OpenGL with checking on unless told otherwise, so set
+  `OpenGL.ERROR_CHECKING = False` before importing `OpenGL.GL` when comparing with production.
 - GPU cost: `GL_TIME_ELAPSED` around a whole frame or one stage, over at least 90 frames, reporting median and p90.
   Flush after every frame as presentation does (`TransitionCapture.benchmark` does). Without a flush, the driver's
   command-buffer boundary lands inside a query and counts the GPU waiting on the CPU: periodic multi-ms spikes

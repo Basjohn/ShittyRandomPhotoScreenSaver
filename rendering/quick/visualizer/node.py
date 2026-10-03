@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from OpenGL import GL as gl
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
+from rendering.gl_error_policy import raise_pending_gl_error
 
 from core.performance.frame_trace import (
     FrameTraceEvent,
@@ -363,6 +365,7 @@ class VisualizerRenderNode(QSGRenderNode):
                         self._clip_host.end(clip_run)
                     else:
                         self._clip_host.end(clip_run, trace_context=clip_trace)
+            raise_pending_gl_error(gl, "Visualizer render node")   # the frame's one GL error check
             self._telemetry.note_draw(
                 mode_id,
                 logical_revision=snapshot.logical_revision,

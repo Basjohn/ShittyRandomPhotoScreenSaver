@@ -17,6 +17,12 @@ from core.native_threads import configure_native_thread_pools
 
 configure_native_thread_pools()
 
+# Before anything imports OpenGL.GL: GL errors are checked once per rendered frame, not after
+# every GL call (rendering/gl_error_policy.py: 45-60% of render-thread CPU).
+from rendering.gl_error_policy import disable_per_call_gl_error_checking
+
+disable_per_call_gl_error_checking()
+
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,

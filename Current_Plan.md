@@ -103,9 +103,13 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   Physical check open: both displays, Alt behaviour with the OS (no stray menu), anchored vs. Custom placement.
 - [x] **H6. Shared 3D view and line helpers** (`SCENE3D_ORBIT_GLSL` / `scene3d_orbit_project`, `sceneLineCoverage`):
   both modes moved onto them without visible change. Fit policies stay per mode (they genuinely differ).
-- [ ] **H7. Per-pass uniform blocks for 3D Visualizers.** Each mode spends 0.6-1.0 ms render-thread CPU per frame,
-  mostly individual uniform calls holding the GIL and stalling the Python logical producer. Pack per-pass uniforms into
-  one block on the S14 stream (as Exploding Tiles did); measure GL calls and CPU submit before/after.
+- [x] **H7. Render-thread CPU**: profiling showed PyOpenGL's per-call `glGetError` was 45-60% of every mode's
+  render-thread CPU (Bubble 0.37 -> 0.17 ms, Spectrum 0.43 -> 0.24, Extruded 0.65 -> 0.35, Shockwave + glow 1.04 ->
+  0.41; transitions alike). It is off at process start; each render node checks once per frame through its failure
+  log (`rendering/gl_error_policy.py`). Uniform blocks would now save ~0.03 ms per mode: not done.
+- [ ] **Next render-thread CPU lever (measured, not started):** the Visualizer host's inherited-GL-state capture
+  (`rendering/quick/visualizer/gl_state.py`) is ~40% of what remains in a 3D mode, `glGet*` through PyOpenGL's
+  numpy-array wrappers. It is CHK26-lineage protected perf: change only with a measured, pixel-neutral fast path.
 - [ ] **H8. Ghost-column transparency order.** Extruded's translucent ghost columns can mis-order at strong angles.
   Solve with S17's weighted blended OIT when that lands (first consumer), or an exact ordering if cheaper.
 - [ ] **H9. Lend the displayed wallpaper to Visualizers.** Mirror Faces copies the framebuffer every 6th frame
