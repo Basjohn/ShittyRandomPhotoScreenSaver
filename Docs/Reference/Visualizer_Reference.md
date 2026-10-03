@@ -18,7 +18,11 @@ Canonical current mode ids remain owned by the settings/mode registry:
 - `shockwave_grid` — FRAMELESS, dormant by default; a neon grid floor rippled by onset shockwaves
 
 The first five are the established carded technical modes. Extruded Spectrum (section 16A) is a permanent mode that
-borrows Spectrum's frame runtime, technical profile and bar colours and owns only its 3D presentation. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
+borrows Spectrum's frame runtime, technical profile and bar colours and owns only its 3D presentation (Shockwave Grid,
+16B, likewise). A borrower sees the lender as the lender shows itself: the activation payload resolves each lender
+(`get_profile_lender_modes`) through the lender's own active preset after the borrower's, so Extruded Spectrum reacts
+exactly as Spectrum's selected preset does; before 2026-10-03 it read the raw stored `spectrum_*` keys or Spectrum's
+factory defaults and could sit pinned at full height. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
 
 ## 1A. Registered modes vs enabled modes
 
