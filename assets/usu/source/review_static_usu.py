@@ -59,7 +59,24 @@ report["scene_object_actions"] = 0
 reference = scene.objects["Approved_Usu_Turnaround_PACKED"].data
 report["packed_reference"] = bool(reference and reference.packed_file)
 assert report["packed_reference"], "Approved turnaround must be packed"
+report["validation_shading"] = "Workbench material colors; fixed paint studio; no shadows, cavity, specular or outline"
 (ASSET / "source" / "mesh_validation.json").write_text(json.dumps(report, indent=2) + "\n")
+
+# Shape validation uses ordinary solid shading, independent of scene lighting.
+scene.render.engine = "BLENDER_WORKBENCH"
+shading = scene.display.shading
+for prop, value in (("light", "STUDIO"), ("color_type", "MATERIAL"),
+                    ("background_type", "VIEWPORT")):
+    assert value in {v.identifier for v in shading.bl_rna.properties[prop].enum_items}
+    setattr(shading, prop, value)
+assert any(light.name == "paint.sl" for light in bpy.context.preferences.studio_lights)
+shading.studio_light = "paint.sl"
+shading.background_color = (.26, .26, .26)
+shading.show_shadows = False
+shading.show_cavity = False
+shading.show_specular_highlight = False
+shading.show_object_outline = False
+scene.objects["Review_Ground"].hide_render = True
 
 settings = scene.render.image_settings
 assert "PNG" in {v.identifier for v in settings.bl_rna.properties["file_format"].enum_items}

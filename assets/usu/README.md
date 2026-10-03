@@ -5,8 +5,9 @@ directory is authoring/review material and has no SRPSS runtime consumer.
 The live approval checklist is in `../../Current_Plan.md`; the filename does
 not assert visual acceptance.
 
-The constrained correction pass is saved, but does not yet satisfy the full
-visual brief. The remaining ear-root work is listed under **Before rigging**.
+The corrected eye linework and a constrained crown/root repair are saved.
+The ear roots still do not fully satisfy the correction sheet; the remaining
+review items are listed under **Before rigging**. No visual acceptance is implied.
 
 The art direction is the asset section and approval gates in
 `../../Docs/Future_Work/Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`.
@@ -19,15 +20,21 @@ drawings were available during this session.
 - Four closed principal surfaces: joined head/ears, torso with connected arms,
   and two separate rounded feet. The feet's upper caps sit inside the torso.
 - The head/ear cage retains 4,390 quads and two small repair triangles. Local
-  depth adjustments fill the rear attachment valleys; local surface fairing
-  rounds the temple and upper crown transitions. The face, lower ear volume
-  and front silhouette constrain these edits. No overlay patches remain.
+  volume filling and vertex redistribution soften the attachment recesses;
+  bounded crown and rear-surface fairing smooth the profile. The retained
+  repair changes vertex positions, not the cage topology. Trial replacement
+  patches were discarded; no overlay patches remain. The body and feet are
+  unchanged from the preceding saved checkpoint.
 - The torso/arm cage has 4,313 quads and 698 triangles. Folded internal shoulder
   faces were removed, the joins rebuilt, and the surrounding surface faired.
   The feet retain their original longitudinal quad loops and small end fans.
 - Subdivision remains unapplied: level 1 on the head/ears and torso/arms, level
-  2 on the feet. Eyes and brows are separate simple
-  surface meshes; there are no sockets, nose, mouth, fur, toes or tail.
+  2 on the feet. Eyes and brows are separate surface meshes. Each eye now has
+  a fine closed iris rim and a separate mirrored, open outer arc with a
+  lower/inner gap and tapered ends. The filled outer oval and white inset were
+  replaced. Iris/glint/brow positions in the front projection are retained;
+  their depth was re-seated on the evaluated facial surface. There is no nose,
+  mouth, fur, toe detail or tail.
 - Smooth matte neutral clay, charcoal hands and simple eye materials expose
   the shape without surface texture. The reference's ear greys and body
   highlights are interpreted as shading, rather than new markings.
@@ -41,7 +48,10 @@ renders all nine views, and saves the `.blend`. It does not replace geometry.
 
 ## Review images
 
-All individual views are 1000 × 1200 PNGs. These four use the same orthographic scale:
+All individual views are 1000 × 1200 PNGs. Validation uses Workbench material
+colors and a fixed plain studio light, with shadows, cavity, specular highlights
+and object outlines disabled. Scene beauty lights do not affect these images.
+These four use the same orthographic scale:
 
 - `renders/Usu_front.png`
 - `renders/Usu_side.png`
@@ -65,17 +75,18 @@ Five 85 mm perspective checks use the same character geometry:
 `renders/Usu_Free_Angles.png` arranges those views. The low-front view hides
 the studio ground to keep its horizon from crossing the subject.
 `source/front_preservation.json` compares the evaluated front silhouette with
-the pre-correction anchor and records unchanged eye/brow and foot coordinates.
+the preceding saved checkpoint (`68943262`). Its silhouette overlap is 99.32%;
+body/arm and foot cage coordinates and all principal face connectivity are unchanged.
 This geometric comparison measures preservation, not artistic acceptance.
 
 ## Before rigging
 
-User visual approval is mandatory. The correction improves the rear attachment
-trenches and arm transitions, but a small side-temple indentation and shallow
-rear-root bands remain visible from some angles. These are outstanding modelling
-review items, not accepted details. Also check the upper rear crown contour in
-HIGH SIDE. Check SIDE, HIGH SIDE and HIGH REAR closely
-alongside the front anchor and supplied turnaround.
+User visual approval is mandatory. Small temple dimples and pinched rear-root
+depressions remain visible, especially in SIDE, HIGH SIDE and HIGH REAR. The
+crown transition is smoother, but the roots are not yet clean from every angle.
+These are outstanding modelling issues, not accepted details. Compare those
+views with `renders/CORRECTIONS.png` and the supplied turnaround. Also review
+the open eye arcs in FRONT and 3/4 and their stronger foreshortening in SIDE.
 
 The profile eye still reads narrower than the drawn side eye. Ear/shoulder
 deformation and the feet's hidden root overlaps have not been tested; static
