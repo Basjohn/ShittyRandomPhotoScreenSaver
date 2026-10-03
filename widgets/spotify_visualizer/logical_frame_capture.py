@@ -319,7 +319,7 @@ def _capture_extruded_spectrum(
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     """Spectrum's capture under the Extruded identity, plus its presentation keys."""
 
-    parameters = config_applier.extruded_spectrum_parameters(widget)
+    parameters = config_applier.extruded_spectrum_parameters(widget, context.now_ts)
     return _capture_spectrum_family(
         widget, engine, context, mode_id="extruded_spectrum", frame_type=ExtrudedSpectrumFrame,
         extra_parameters=parameters,

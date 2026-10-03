@@ -61,7 +61,9 @@ class QuickDisplayRuntime(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
-    view_orbit_requested = Signal(int, int)
+    # Floats: a drag's steps are fractions (an int signature truncated them all to nothing).
+    view_orbit_rates_changed = Signal(float, float)
+    view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
@@ -239,6 +241,7 @@ class QuickDisplayRuntime(QObject):
         self._input.layout_slot_save_requested.connect(
             self.layout_slot_save_requested.emit
         )
+        self._input.view_orbit_rates_changed.connect(self.view_orbit_rates_changed.emit)
         self._input.view_orbit_requested.connect(self.view_orbit_requested.emit)
         self._input.view_orbit_finished.connect(self.view_orbit_finished.emit)
         self._input.custom_layout_save_requested.connect(
@@ -704,7 +707,6 @@ class QuickDisplayRuntime(QObject):
             self._context_menu = None
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
-            self._input.set_view_orbit_hit_test(None)          # drop the retiring scene's hit test
             self._input.deleteLater()
             self._input = None
         self._set_phase(QuickRuntimePhase.RETIRED)

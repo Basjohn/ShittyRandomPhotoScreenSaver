@@ -91,9 +91,11 @@ class RuntimeInputOwner(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
-    # W/A/S/D while a 3D freeform Visualizer is shown (one step per press or key repeat), or
-    # Alt + left drag on it in interaction/Ctrl mode (a step per DRAG_PIXELS_PER_STEP pixels):
-    # (turn steps, tilt steps); then the end of orbiting once no key is held and no drag is on.
+    # While a 3D freeform Visualizer is shown: W/A/S/D publish the held keys' combined direction
+    # (turn, tilt) whenever it changes (the view turns at a steady rate while held, whatever the
+    # OS key repeat does); an Alt + left drag on it in interaction/Ctrl mode steps it (a step per
+    # DRAG_PIXELS_PER_STEP pixels); orbiting finishes once no key is held and no drag is on.
+    view_orbit_rates_changed = Signal(float, float)
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
     VIEW_ORBIT_DRAG_PIXELS_PER_STEP = 4.0
@@ -192,6 +194,11 @@ class RuntimeInputOwner(QObject):
         if hit_test is None:
             self._view_orbit_drag = None
 
+    def _held_view_orbit_rates(self) -> tuple[float, float]:
+        turn = sum(self._VIEW_ORBIT_KEYS[key][0] for key in self._view_orbit_held)
+        tilt = sum(self._VIEW_ORBIT_KEYS[key][1] for key in self._view_orbit_held)
+        return float(turn), float(tilt)
+
     def _view_orbiting(self) -> bool:
         return bool(self._view_orbit_held) or self._view_orbit_drag is not None
 
@@ -281,9 +288,10 @@ class RuntimeInputOwner(QObject):
         if self._view_orbit_enabled:
             orbit_key = self._view_orbit_key(event)
             if orbit_key is not None:
-                if not event.isAutoRepeat():
+                # Key repeat changes nothing: the view already turns while the key is held.
+                if not event.isAutoRepeat() and orbit_key not in self._view_orbit_held:
                     self._view_orbit_held.add(orbit_key)
-                self.view_orbit_requested.emit(*self._VIEW_ORBIT_KEYS[orbit_key])
+                    self.view_orbit_rates_changed.emit(*self._held_view_orbit_rates())
                 return True
         if key == Qt.Key.Key_Space:
             self.play_pause_requested.emit()
@@ -325,6 +333,7 @@ class RuntimeInputOwner(QObject):
             # only on the real release of the last held key, so the result is saved once.
             if not event.isAutoRepeat() and orbit_key in self._view_orbit_held:
                 self._view_orbit_held.discard(orbit_key)
+                self.view_orbit_rates_changed.emit(*self._held_view_orbit_rates())
                 self._finish_view_orbit_if_idle()
             return True
         return False
@@ -442,6 +451,14 @@ class RuntimeInputOwner(QObject):
         self._interaction_mode_provider = None
         self._global_ctrl_held_provider = None
         self._ctrl_state_publisher = None
+        # A closed input holds nothing of its scene; an orbit in progress ends here.
+        orbiting = self._view_orbiting()
+        self._view_orbit_hit_test = None
+        self._view_orbit_drag = None
+        self._view_orbit_held.clear()
+        self._view_orbit_enabled = False
+        if orbiting:
+            self.view_orbit_finished.emit()
 
     def _request_exit(self) -> None:
         self._exiting = True

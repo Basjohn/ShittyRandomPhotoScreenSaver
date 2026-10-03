@@ -1,6 +1,8 @@
-"""Live W/A/S/D view orbiting for 3D freeform Visualizers: which modes offer it, the keys (with
-key repeat and several held keys), the live step and clamping, and saving: once, when orbiting
-stops, never per step; on a curated preset the view moves the mode to Custom."""
+"""Live view orbiting for 3D freeform Visualizers: which modes offer it; held W/A/S/D turning at
+a steady rate on the logical clock (whatever the OS key repeat does, several keys at once); Alt +
+left drag in interaction mode, through the real display window and runtime relay; wrapping and
+clamping; and saving: once, when orbiting stops, never per step; on a curated preset the view
+moves the mode to Custom."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -83,7 +85,7 @@ def _owner():
 
     owner = RuntimeInputOwner()
     steps, finished, exits = [], [], []
-    owner.view_orbit_requested.connect(lambda turn, tilt: steps.append((turn, tilt)))
+    owner.view_orbit_rates_changed.connect(lambda turn, tilt: steps.append((turn, tilt)))
     owner.view_orbit_finished.connect(lambda: finished.append(True))
     owner.exit_requested.connect(lambda: exits.append(True))
     return owner, steps, finished, exits
@@ -100,22 +102,26 @@ def test_wasd_orbit_only_when_a_3d_visualizer_is_shown_and_s_no_longer_opens_set
     for key in (Qt.Key.Key_W, Qt.Key.Key_A, Qt.Key.Key_S, Qt.Key.Key_D):
         assert owner.handle_key_press(_key(QEvent.Type.KeyPress, key)) is True
         assert owner.handle_key_release(_key(QEvent.Type.KeyRelease, key)) is True
-    assert steps == [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    # Each press starts that key's direction, each release stops it.
+    assert steps == [(0, 1), (0, 0), (1, 0), (0, 0), (0, -1), (0, 0), (-1, 0), (0, 0)]
     assert finished == [True] * 4 and exits == []
 
 
-def test_orbiting_finishes_once_on_the_real_release_of_the_last_held_key(qt_app):
+def test_held_keys_turn_together_and_finish_once_whatever_the_key_repeat_does(qt_app):
     owner, steps, finished, _exits = _owner()
     owner.set_view_orbit_enabled(True)
     owner.handle_key_press(_key(QEvent.Type.KeyPress, Qt.Key.Key_W))
     for _ in range(10):                                           # key repeat: release/press pairs
         owner.handle_key_release(_key(QEvent.Type.KeyRelease, Qt.Key.Key_W, repeat=True))
         owner.handle_key_press(_key(QEvent.Type.KeyPress, Qt.Key.Key_W, repeat=True))
+    assert steps == [(0, 1)]                                      # repeat changes nothing
+    # The OS stops repeating W once D is pressed; both still turn the view, and releasing D
+    # leaves W turning it (the "stuck" orbit of OS-repeat stepping).
     owner.handle_key_press(_key(QEvent.Type.KeyPress, Qt.Key.Key_D))
-    owner.handle_key_release(_key(QEvent.Type.KeyRelease, Qt.Key.Key_W))
-    assert len(steps) == 12 and finished == []                    # D still held
     owner.handle_key_release(_key(QEvent.Type.KeyRelease, Qt.Key.Key_D))
-    assert finished == [True]
+    assert steps == [(0, 1), (-1, 1), (0, 1)] and finished == []
+    owner.handle_key_release(_key(QEvent.Type.KeyRelease, Qt.Key.Key_W))
+    assert steps[-1] == (0, 0) and finished == [True]
     # Losing the 3D view mid-orbit (mode change, retirement) ends the orbit too.
     owner.handle_key_press(_key(QEvent.Type.KeyPress, Qt.Key.Key_A))
     owner.set_view_orbit_enabled(False)
@@ -148,6 +154,39 @@ def _manager(section, mode="extruded_spectrum"):
     )
 
 
+def test_held_keys_turn_the_view_on_the_logical_clock_and_settle_when_released():
+    from widgets.spotify_visualizer.view_orbit import (
+        VIEW_ORBIT_STEPS_PER_SECOND,
+        apply_view_orbit_motion,
+        set_view_orbit_rates,
+        stop_view_orbit_motion,
+    )
+
+    mode = "extruded_spectrum"
+    turn, tilt = view_orbit_settings(mode)
+    turn_step, _tilt_step = get_visualizer_mode_descriptor(mode).view_orbit_steps
+    host = _host()
+    start = view_orbit_values(host, mode)
+    set_view_orbit_rates(host, mode, 1.0, 0.0, now=100.0)
+    rate = turn_step * VIEW_ORBIT_STEPS_PER_SECOND
+    # The capture (logical thread) sees the view its own frame time has reached; nothing is written.
+    for now in (100.0, 100.5, 101.0):
+        seen = apply_view_orbit_motion(host, mode, dict(start), now)
+        assert seen[turn] == pytest.approx((start[turn] + rate * (now - 100.0) + 1.0) % 2.0 - 1.0)
+        assert seen[tilt] == pytest.approx(start[tilt])
+    assert view_orbit_values(host, mode) == start                 # settings untouched while held
+    # The production capture reads its parameters through the same evaluation at its frame time.
+    from widgets.spotify_visualizer.config_applier import extruded_spectrum_parameters
+
+    captured = extruded_spectrum_parameters(host, 101.0)
+    assert captured[turn] == pytest.approx(apply_view_orbit_motion(host, mode, dict(start), 101.0)[turn])
+    assert captured[turn] != pytest.approx(start[turn])
+    settled = stop_view_orbit_motion(host, now=101.0)
+    assert settled[0] == mode and view_orbit_values(host, mode) == pytest.approx(settled[1])
+    assert apply_view_orbit_motion(host, mode, {"x": 1}, 999.0) == {"x": 1}   # no motion any more
+    assert stop_view_orbit_motion(host, now=102.0) is None
+
+
 def test_the_view_is_saved_once_when_orbiting_stops_never_per_step():
     from core.settings.visualizer_presets import get_custom_preset_index
     from engine.display_manager import DisplayManager
@@ -156,7 +195,8 @@ def test_the_view_is_saved_once_when_orbiting_stops_never_per_step():
                "preset_extruded_spectrum": get_custom_preset_index("extruded_spectrum")}
     manager = _manager(section)
     for _ in range(30):
-        DisplayManager._orbit_quick_visualizer_view(manager, 1, 1)
+        DisplayManager._orbit_quick_visualizer_view(manager, 0.5, 0.25)    # a drag's steps
+    DisplayManager._set_quick_view_orbit_rates(manager, 1.0, 0.0)          # then a held key
     assert manager.settings_manager.writes == []                  # live only while orbiting
     DisplayManager._persist_quick_visualizer_view(manager)
     DisplayManager._persist_quick_visualizer_view(manager)        # a second release saves nothing
@@ -262,5 +302,51 @@ def test_orbiting_finishes_once_after_both_keys_and_drag_end_and_retirement_drop
     owner.set_view_orbit_hit_test(None)                              # the display's runtime retires
     assert not owner.passive_mouse_move_requires_routing
     owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, 140, 100))
-    assert len(steps) == 1                                           # only W's step; the drag is gone
+    assert steps == []                                               # the drag is gone
     owner.deleteLater()
+
+
+def test_alt_drag_through_the_real_display_window_reaches_the_runtime_in_fractions(qt_app):
+    """The production seam: window events -> input owner -> QuickDisplayRuntime relay. A drag's
+    steps are fractions of a step per mouse move; the relay must carry them (an int signature
+    once truncated every one to zero, so dragging did nothing)."""
+    from PySide6.QtCore import QPointF
+
+    from rendering.quick.runtime import QuickDisplayRuntime
+    from rendering.quick.scene_controller import QuickSceneFactory
+    from rendering.quick.state import QuickWindowPolicy
+    from rendering.runtime_input import clear_runtime_pointer_input_suppression
+
+    clear_runtime_pointer_input_suppression()
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=31, screen=qt_app.primaryScreen(),
+                                  scene_factory=factory,
+                                  window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+                                  interaction_mode_enabled=True)
+    steps, rates, finished = [], [], []
+    runtime.view_orbit_requested.connect(lambda turn, tilt: steps.append((turn, tilt)))
+    runtime.view_orbit_rates_changed.connect(lambda turn, tilt: rates.append((turn, tilt)))
+    runtime.view_orbit_finished.connect(lambda: finished.append(True))
+    controller = runtime.input_controller
+    try:
+        # The runtime lends its own scene's Visualizer hit test (no Visualizer here: it says no).
+        assert controller._view_orbit_hit_test == runtime.scene_controller.visualizer_contains_scene_position
+        assert not controller._view_orbit_hit_test(QPointF(10.0, 10.0))
+        controller.set_view_orbit_enabled(True)
+        controller.set_view_orbit_hit_test(lambda point: True)    # stand in for a shown Visualizer
+        window = runtime.window
+        window.mousePressEvent(_mouse(QEvent.Type.MouseButtonPress, 100, 100))
+        window.mouseMoveEvent(_mouse(QEvent.Type.MouseMove, 102, 101))
+        window.mouseMoveEvent(_mouse(QEvent.Type.MouseMove, 103, 101))
+        window.mouseReleaseEvent(_mouse(QEvent.Type.MouseButtonRelease, 103, 101))
+        step = controller.VIEW_ORBIT_DRAG_PIXELS_PER_STEP
+        assert steps == [pytest.approx((2 / step, 1 / step)), pytest.approx((1 / step, 0.0))]
+        assert finished == [True]
+        window.keyPressEvent(_key(QEvent.Type.KeyPress, Qt.Key.Key_A))
+        window.keyReleaseEvent(_key(QEvent.Type.KeyRelease, Qt.Key.Key_A))
+        assert rates == [(1.0, 0.0), (0.0, 0.0)] and finished == [True, True]
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+    assert controller._view_orbit_hit_test is None                # retirement dropped the scene's test
