@@ -169,20 +169,31 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   packets fire ~2 per 0.5 s at every level (admission frequency is untouched; only amplitude scales); quiet frames
   still earn reward 0.15-0.35; the absolute quiet edge never engages (the bus loudness lane reads 3-17 in music);
   floors gate on the presence weight, which is 1 for most frames. (A pause had also drained the running level and
-  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Order: the S19 golden first captures today's
-  behaviour (behavioural parity below holds for the *migration*); this retune is then a separate, operator-approved
-  behavioural change measured against that golden on the deterministic replay, not by ear: admission frequency
+  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Part of the migration (operator 2026-10-04: the
+  golden is not literal; today's reactivity numbers are known poor). Measured on the real-scale replay, not by ear: admission frequency
   scaled by the reward, a convex reward curve, floors on the reward. **Everything ramps, fast up and gentle down**
   (operator): particle population/power, fragmentation power and frequency, tracer speed, spin velocity. Calibrate in
   the real scales (`Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A: loudness 3-17 in music, presence ~1), not
   `0..1` absolutes.
+- [ ] **Golden step 1: real-scale replay input.** `FeatureFrame` schema v1 validates every lane into `0..1`, so the
+  replay cannot carry real music (bus loudness 3-17, the live lane pinned at 2.5) nor Sphere's seams. Schema v2,
+  additive (v1 fixtures load unchanged): optional real-scale lanes (live pre-AGC bands, musical level, the raw analysis
+  spectrum, typed scheduler events), finite and non-negative but not capped; `ReplayBeatEngine` serves them through
+  the same accessors production uses. Then a recorder (tool, opt-in, no product cost) that writes v2 clips from live
+  loopback audio, so the golden and the ramp retune use the operator's real music: silence, quiet intro, vocal,
+  kicks, sustained loud passage, a pause and its return.
+- [ ] **Golden step 2:** Sphere in the replay driver (capture through `capture_sphere`), its behavioural outputs
+  recorded per frame for both golden presets.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
   evidence so a prettier renderer is not mistaken for a reaction regression.
-- [ ] **Behavioural parity is hard.** Preserve Sphere's authored timing, event admission, section drives, cohort identity,
-  tracer semantics, size/rotation response, intake/outtake semantics, stable voxel identity and source-freshness contract.
-  Default/new-profile resolution must reproduce today's behaviour before any user-authored technical change is applied.
+- [ ] **Behavioural golden is a reference, not a lock (operator 2026-10-04).** Today's reaction *numbers* are known to
+  be poor (no real ramp, admission at small sounds) and are expected to change during the migration. What must not be
+  lost: event ownership (no ambient spawning, nothing authored in silence), the response vocabulary (local
+  fragmentation, intake/outtake cohorts, tracer travel, sustained body growth, spin), stable voxel and cohort identity,
+  source freshness, and that loud passages and big hits react at least as strongly as now. The golden records today's
+  outputs so every change is a measured, intended difference, never an accidental one.
 - [ ] **Visual parity is a floor, not a ceiling.** Preserve the recognisable stepped-voxel/preset identity and authored
   colour/alpha intent, but shared Scene3D may improve antialiasing, lighting, materials, depth readability, shadows,
   reflection/refraction treatment or other presentation quality during the migration. A deliberate visual difference is
