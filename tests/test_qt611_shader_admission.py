@@ -28,7 +28,7 @@ try:
                 renderer._initialize()
             if callable(getattr(renderer, "warm", None)):
                 section = "blockspin" if descriptor.transition_id == "block_spins" else descriptor.transition_id
-                setups = ({}, {"detail_3d": "High", section: {"antialiasing": "4x", "motion_blur": "On",
+                setups = ({}, {"scene3d_detail": "High", section: {"antialiasing": "4x", "motion_blur": "On",
                            "motion_trails": "On", "bloom": "On", "edge_glass": "Both"}})
                 for setup in setups:
                     run = capture.run(descriptor.transition_id, settings=setup)

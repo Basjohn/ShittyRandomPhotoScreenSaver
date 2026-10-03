@@ -22,7 +22,7 @@ W, H = 320, 180
 
 
 def _settings(**blinds) -> dict:
-    return {"detail_3d": blinds.pop("detail", "High"), "blinds": {"style": "3D Slats", **blinds}}
+    return {"scene3d_detail": blinds.pop("detail", "High"), "blinds": {"style": "3D Slats", **blinds}}
 
 
 def _pixels(image) -> np.ndarray:

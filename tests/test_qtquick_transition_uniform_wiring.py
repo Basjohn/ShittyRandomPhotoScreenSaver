@@ -295,6 +295,8 @@ def _burn_params(**overrides) -> dict:
         "smoke_density": 0.5,
         "ash_enabled": False,
         "ash_density": 0.2,
+        "flames": False,
+        "ember_veins": True,
         "seed": 88.0,
     }
     params.update(overrides)
@@ -320,6 +322,8 @@ def test_burn_covers_all_authored_uniforms_and_run_clock_time(monkeypatch):
     assert recorder.uniforms["u_ash_enabled"] == 0
     assert recorder.uniforms["u_ash_density"] == pytest.approx(0.2)
     assert recorder.uniforms["u_seed"] == pytest.approx(88.0)
+    assert recorder.uniforms["u_flames"] == 0
+    assert recorder.uniforms["u_ember_veins"] == 1
     # u_time is derived from the immutable run clock (linear_progress), not the
     # eased presentation curve.
     assert recorder.uniforms["u_time"] == pytest.approx(1.0)
@@ -331,10 +335,12 @@ def test_burn_boolean_toggles_encode_as_integer_uniforms(monkeypatch):
     frame = _frame(
         "burn",
         "Burn",
-        _burn_params(smoke_enabled=False, ash_enabled=True),
+        _burn_params(smoke_enabled=False, ash_enabled=True, flames=True, ember_veins=False),
     )
 
     burn_module.QuickBurnRenderer().render(frame)
 
     assert recorder.uniforms["u_smoke_enabled"] == 0
     assert recorder.uniforms["u_ash_enabled"] == 1
+    assert recorder.uniforms["u_flames"] == 1
+    assert recorder.uniforms["u_ember_veins"] == 0

@@ -49,7 +49,7 @@ def _ranks(direction) -> np.ndarray:
 @pytest.mark.parametrize("detail", ("High", "Balanced", "Performance"))
 @pytest.mark.parametrize("code", ("right", "up", "diag_br_tl"))
 def test_ahead_of_the_wave_and_behind_it_the_pictures_are_exact(capture, code, detail):
-    run = capture.run("relief_rise", direction=code, settings={"detail_3d": detail}, duration_ms=4000)
+    run = capture.run("relief_rise", direction=code, settings={"scene3d_detail": detail}, duration_ms=4000)
     source, destination = _pixels(capture.images[0]), _pixels(capture.images[1])
     assert np.array_equal(_pixels(capture.render(run, 0.0)[0]), source)
     assert np.array_equal(_pixels(capture.render(run, 1.0)[0]), destination)
@@ -109,7 +109,7 @@ def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, 
     capture = TransitionCapture(256, 144)
     try:
         work = _Work(monkeypatch)
-        run = capture.run("relief_rise", direction="left", settings={"detail_3d": "High"}, duration_ms=3000)
+        run = capture.run("relief_rise", direction="left", settings={"scene3d_detail": "High"}, duration_ms=3000)
         parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
         steps = 0
         while not capture.host.warm_step("relief_rise", parameters, size):

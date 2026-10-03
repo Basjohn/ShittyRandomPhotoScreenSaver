@@ -294,7 +294,7 @@ def test_the_3d_detail_tier_reaches_the_run_and_unknown_values_use_the_default(s
     rng = _Rng()
     rng.choice_values = ["left"]
     rng.randint_values = [77]
-    settings = {} if stored is None else {"detail_3d": stored}
+    settings = {} if stored is None else {"scene3d_detail": stored}
     params = resolve_parameterized_phase_c_inputs("exploding_tiles", settings, random_source=rng).parameter_dict()
     assert params["detail"] == (stored if stored in SCENE3D_DETAIL_NAMES else default)
 
@@ -310,7 +310,7 @@ def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
         return scene3d_samples(detail, choice) if field == "antialiasing" else scene3d_post_effect(detail, choice)
 
     def quality(detail_3d, section_values, transition="exploding_tiles"):
-        settings = {"detail_3d": detail_3d, transition: section_values}
+        settings = {"scene3d_detail": detail_3d, transition: section_values}
         rng = _Rng()
         rng.choice_values = ["left"]
         rng.randint_values = [9]
