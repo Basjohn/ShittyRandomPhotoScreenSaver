@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import time
 from types import SimpleNamespace
 
@@ -567,6 +569,18 @@ class _DeferredManager:
             callback(SimpleNamespace(success=False, error=exc))
 
 
+def _fetched(consumer) -> int:
+    """Publications of fetched results, not counting the family startup barrier's metadata-only
+    republish (the same result with ``initial_admission_complete`` turned True, 5.0.6), which
+    must close the barrier exactly once after them."""
+    results = [result for result, _from_cache in consumer.accepted]
+    barrier = [index for index, result in enumerate(results) if index and result.initial_admission_complete
+               and not results[index - 1].initial_admission_complete
+               and replace(results[index - 1], initial_admission_complete=True) == result]
+    assert len(barrier) <= 1 and (not results or results[-1].initial_admission_complete)
+    return len(results) - len(barrier)
+
+
 def _lease_for_url(manager, *, slot, url, generation=81):
     config = CustomFeedConfig.from_mapping(slot, {
         "enabled": True, "name": "Probe", "feed_url": url,
@@ -608,7 +622,7 @@ def test_retiring_one_endpoint_cancels_only_its_queued_work_and_prunes_state(mon
     assert first_key not in owner._states
     assert not abandoned.accepted
     manager.finish(1)
-    assert len(retained.accepted) == 1
+    assert _fetched(retained) == 1
     assert sources[second_key].cache_calls == 1
     assert feed_runtime.shared_feed_owner_count() == 1
     second.retire()
@@ -633,7 +647,7 @@ def test_shared_endpoint_is_cancelled_only_after_its_last_active_lease(monkeypat
     first.stop()
     assert not state.work_cancel.is_set()
     manager.finish(0)
-    assert not first_consumer.accepted and len(second_consumer.accepted) == 1
+    assert not first_consumer.accepted and _fetched(second_consumer) == 1
     assert source.cache_calls == 1
     first.retire()
     second.retire()
@@ -659,7 +673,7 @@ def test_cancelled_inflight_source_never_publishes_on_reactivation(monkeypatch):
     manager.finish(0)
     assert len(manager.tasks) == 2 and not consumer.accepted
     manager.finish(1)
-    assert source.cache_calls == 1 and len(consumer.accepted) == 1
+    assert source.cache_calls == 1 and _fetched(consumer) == 1
     lease.retire()
 
 
