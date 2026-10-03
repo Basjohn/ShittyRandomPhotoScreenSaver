@@ -29,6 +29,7 @@ from __future__ import annotations
 import math
 
 from rendering.gl_programs.scene3d import SCENE3D_ORBIT_GLSL, Scene3DStorageLayout, scene3d_orbit_project
+from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight
 
 SHOCKWAVE_MAX_TILT = math.radians(90.0)
 SHOCKWAVE_MAX_TURN = math.radians(180.0)
@@ -47,13 +48,9 @@ SHOCKWAVE_HORIZON_REACH = 0.45    # the far share of the grid the spectrum ridge
 SHOCKWAVE_CEILING = 0.95          # Spectrum's tallest bar, in field heights
 SHOCKWAVE_MAX_BARS = 64
 SHOCKWAVE_GRID_CELLS = (180, 120)  # the displaced surface's tessellation (columns, rows)
-# Onset strength (``shockwave_strength``): absolute loudness below the first edge makes no wave;
-# presence (loudness against the running level) below its first edge neither, so near-silence
-# inside a loud track stays calm; an onset's presence against the track's usual onsets
-# (``SHOCKWAVE_USUAL_RATE`` adapts that) sets how much it stands out.
-SHOCKWAVE_QUIET = (0.08, 0.6)
-SHOCKWAVE_PRESENCE = (0.15, 0.8)
-SHOCKWAVE_USUAL_RATE = 0.12
+# Onset strength (``shockwave_strength``) follows the shared musical rule (``musical_weight``,
+# ``musical_emphasis`` in the transient bus): near-silence and quiet passages inside a loud track
+# make no wave, and an onset louder than the track's usual ones stands out.
 SHOCKWAVE_MIN_STRENGTH = 0.12     # weaker onsets make no wave
 SHOCKWAVE_MAX_STRENGTH = 2.0
 SHOCKWAVE_ECHO_SPEED = 0.62       # a big hit's echo ring, as a share of the wave speed
@@ -91,11 +88,9 @@ def shockwave_amplitude(height: float) -> float:
 def shockwave_strength(magnitude: float, loudness: float, presence: float, usual: float) -> float:
     """A wave's strength (0 .. ``SHOCKWAVE_MAX_STRENGTH``) for an onset (``MusicalOnset``'s
     magnitude, loudness and presence) when the track's usual onset presence is ``usual``."""
-    quiet = _smoothstep(SHOCKWAVE_QUIET[0], SHOCKWAVE_QUIET[1], float(loudness))
-    present = _smoothstep(SHOCKWAVE_PRESENCE[0], SHOCKWAVE_PRESENCE[1], float(presence))
-    emphasis = max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
     hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / 3.0))
-    return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, quiet * present * emphasis * hit))
+    strength = musical_weight(loudness, presence) * musical_emphasis(presence, usual) * hit
+    return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, strength))
 
 
 def shockwave_idle(height: float, idle: float, time: float, half_width: float) -> tuple[float, float]:

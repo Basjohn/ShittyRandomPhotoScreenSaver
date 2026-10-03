@@ -232,16 +232,13 @@ def test_the_mode_borrows_spectrums_bars_and_stays_dormant_until_it_renders():
 
 
 def test_quiet_onsets_make_no_wave_and_big_hits_stand_well_apart_from_medium_ones():
-    from rendering.gl_programs.shockwave_grid_program import (
-        SHOCKWAVE_MAX_STRENGTH,
-        SHOCKWAVE_MIN_STRENGTH,
-        SHOCKWAVE_QUIET,
-    )
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_MAX_STRENGTH, SHOCKWAVE_MIN_STRENGTH
+    from widgets.spotify_visualizer.transient_bus import MUSICAL_QUIET
 
     medium = shockwave_strength(1.5, 1.0, 1.0, 1.0)
     big = shockwave_strength(3.0, 2.0, 1.6, 1.0)          # louder than the track's usual onsets
     assert SHOCKWAVE_MIN_STRENGTH < medium <= 1.0 and big >= 2.5 * medium and big <= SHOCKWAVE_MAX_STRENGTH
-    assert shockwave_strength(3.0, SHOCKWAVE_QUIET[0], 1.0, 1.0) == 0.0          # near-silent level
+    assert shockwave_strength(3.0, MUSICAL_QUIET[0], 1.0, 1.0) == 0.0            # near-silent level
     assert shockwave_strength(3.0, 1.0, 0.1, 1.0) < SHOCKWAVE_MIN_STRENGTH       # quiet passage of a loud track
     # More magnitude, loudness or presence never weakens a wave.
     for low, high in (((1.0, 1.0, 1.0), (2.0, 1.0, 1.0)), ((1.0, 0.3, 1.0), (1.0, 0.6, 1.0)),

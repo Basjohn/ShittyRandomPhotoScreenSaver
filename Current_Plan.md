@@ -156,6 +156,9 @@ Sphere is the legacy exception that predates the shared Scene3D foundation. Prom
 GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
 `Docs/Reference/Sphere_Visualizer.md` owns the behavioural golden and the Bubble golden remains unrelated and untouchable.
 
+- [x] **Pre-golden reactivity fix (operator 2026-10-03):** near-silence fragmented and threw particles as fully as a
+  full blast. Sphere's reward now follows the shared musical rule Shockwave uses, and both energy floors act on that
+  weight. Contract: `Docs/Reference/Sphere_Visualizer.md` "Musical reward". The golden below captures this behaviour.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**

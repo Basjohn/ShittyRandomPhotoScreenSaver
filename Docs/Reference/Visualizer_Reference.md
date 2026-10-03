@@ -509,10 +509,11 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   fades out at its far edge and sides.
 - **Reactivity** (operator 2026-10-03: too lively at near-silence, big hits drowned among medium ones, wanted idle
   motion and brighter glow where it is loudest). A wave's strength is `shockwave_strength` of the onset's magnitude,
-  loudness and presence (`MusicalOnset`): no wave below an absolute loudness (`SHOCKWAVE_QUIET`) or when quiet
-  against the running level (`SHOCKWAVE_PRESENCE`: a near-silent passage of a loud track), and the onset's presence
-  against the track's usual onset presence (followed by the frame runtime from a neutral 1.0) sets how much it stands
-  out: a hit 1.6x the usual reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
+  loudness and presence (`MusicalOnset`) under the shared musical rule in `transient_bus.py` (Voxel Sphere uses the
+  same rule): no wave below an absolute loudness (`MUSICAL_QUIET`) or when quiet against the running level
+  (`MUSICAL_PRESENCE`: a near-silent passage of a loud track) (`musical_weight`), and the onset's presence against the
+  track's usual onset presence (`learn_usual_presence`, from a neutral 1.0) sets how much it stands out
+  (`musical_emphasis`): a hit 1.6x the usual reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
   wave grows taller more slowly, widens, brightens and trails an echo ring at 0.62 of its speed, so the biggest
   moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
   brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge
