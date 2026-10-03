@@ -27,6 +27,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_fit,
     shockwave_grid_cells,
     shockwave_half_width,
+    shockwave_idle,
     shockwave_wave_speed,
 )
 from rendering.quick.scene3d.frame import item_pixel_rect, padded_item_frame
@@ -42,7 +43,8 @@ from .spectrum import prepare_spectrum_shader_levels
 _EVENT_BINDING = 3
 # How far (in item heights) an overflowing grid may reach beyond the item on every side.
 _OVERFLOW_PAD = 0.5
-_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uBarCount",
+_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle",
+             "uBarCount",
              "uBars", "uHeightScale", "uCells", "uScroll", "uLineColor", "uCrestColor", "uFloor", "uGlow",
              "uEdgePx")
 
@@ -149,6 +151,9 @@ class QuickShockwaveGridRenderer:
                            shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
                            shockwave_wave_speed(float(parameter(parameters, "shockwave_grid_wave_speed"))))
             gl.glUniform1f(uniforms["uHorizon"], ridge)
+            gl.glUniform2f(uniforms["uIdle"], *shockwave_idle(
+                float(parameter(parameters, "shockwave_grid_wave_height")),
+                float(parameter(parameters, "shockwave_grid_idle")), float(mode_state.animation_time), half_width))
             gl.glUniform1i(uniforms["uBarCount"], count)
             if count:
                 gl.glUniform1fv(uniforms["uBars"], count, levels[:count])

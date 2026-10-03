@@ -498,6 +498,17 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   ridge along the far edge (Horizon). Lines are analytic in the fragment shader (anti-aliased by their on-screen
   width), turning toward the crest colour on crests and the ridge, over a dark translucent floor (Floor). The grid
   fades out at its far edge and sides.
+- **Reactivity** (operator 2026-10-03: too lively at near-silence, big hits drowned among medium ones, wanted idle
+  motion and brighter glow where it is loudest). A wave's strength is `shockwave_strength` of the onset's magnitude,
+  loudness and presence (`MusicalOnset`): no wave below an absolute loudness (`SHOCKWAVE_QUIET`) or when quiet
+  against the running level (`SHOCKWAVE_PRESENCE`: a near-silent passage of a loud track), and the onset's presence
+  against the track's usual onset presence (followed by the frame runtime from a neutral 1.0) sets how much it stands
+  out: a hit 1.6x the usual reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
+  wave grows taller more slowly, widens, brightens and trails an echo ring at 0.62 of its speed, so the biggest
+  moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
+  brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge
+  smoothly from side to side over 11 s, so the grid moves between beats (it keeps the animation clock running).
+  Bars: `tests/test_qtquick_shockwave_grid.py`.
 - **Glow** uses the overlay bloom of `SceneTarget` (`Docs/Reference/Scene3D_Resources.md`): the lines emit their
   light into the emission attachment and the glow is added over the wallpaper. Glow 0 allocates no emission
   attachment or bloom chain.
@@ -513,7 +524,8 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   Glow, a 180x120 grid; Balanced 2x, Glow, 128x85; Performance single-sampled, no Glow, 64x43; KAK the same at 48x32
   (`shockwave_grid_cells`). Measured as above with Glow 0.8: GPU median 0.17 / 0.13 / 0.04 / 0.04 ms, CPU 1.0 / 1.2 /
   0.65 / 0.67 ms (the bloom chain's calls go with the Glow).
-- **Physical checks (open):** wave timing against real music (kicks vs. snares, busy tracks hitting the 16-event cap),
+- **Physical checks (open):** the reactivity on real music: calm at near-silence and between songs, ordinary beats
+  against big drops, the idle swell's pace; wave timing (kicks vs. snares, busy tracks hitting the 16-event cap),
   the presets on both displays, glow strength, the horizon ridge, orbiting, and Allow Overflow near screen edges.
 
 ## 16A. Extruded Spectrum

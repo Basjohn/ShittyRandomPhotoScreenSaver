@@ -14,6 +14,7 @@ _SLIDER_KEYS = (
     "shockwave_grid_density",
     "shockwave_grid_glow",
     "shockwave_grid_floor",
+    "shockwave_grid_idle",
     "shockwave_grid_scroll",
 )
 _COLOUR_KEYS = ("shockwave_grid_line_color", "shockwave_grid_crest_color")

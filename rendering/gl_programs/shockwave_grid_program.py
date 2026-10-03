@@ -4,9 +4,13 @@ A neon grid floor seen in perspective. Musical onsets (the frame runtime's bound
 ring, ``ShockwaveGridFrame.events``: each event's age, origin and strength, aged on the
 logical clock at capture) launch circular shockwaves across it: a raised crest with a
 shallow trough behind, travelling outward at ``speed`` and fading over ``SHOCKWAVE_DECAY``
-seconds. The crest brightens the grid lines toward the crest colour and its light blooms.
-Spectrum's bars raise a ridge along the far edge (the horizon), so the grid reacts between
-onsets too. The grid may scroll toward the viewer on the frame's animation time.
+seconds. ``shockwave_strength`` turns an onset into a strength (0 .. ``SHOCKWAVE_MAX_STRENGTH``):
+near-silence gives none, a big hit far more than a medium one; above 1 a wave grows taller
+(more slowly), wider, brighter, and trails an echo ring. The crest brightens the grid lines
+toward the crest colour and its light blooms. Spectrum's bars raise a ridge along the far edge
+(the horizon), brighter where they are loudest, and a soft idle swell sweeps from side to side,
+so the grid moves between onsets too. The grid may scroll toward the viewer on the frame's
+animation time.
 
 World units are the bar field's height: x across, y up, z toward the viewer; the grid spans
 ``|x| <= half width`` and ``-SHOCKWAVE_DEPTH <= z <= 0``. The view turns about the vertical axis
@@ -43,6 +47,18 @@ SHOCKWAVE_HORIZON_REACH = 0.45    # the far share of the grid the spectrum ridge
 SHOCKWAVE_CEILING = 0.95          # Spectrum's tallest bar, in field heights
 SHOCKWAVE_MAX_BARS = 64
 SHOCKWAVE_GRID_CELLS = (180, 120)  # the displaced surface's tessellation (columns, rows)
+# Onset strength (``shockwave_strength``): absolute loudness below the first edge makes no wave;
+# presence (loudness against the running level) below its first edge neither, so near-silence
+# inside a loud track stays calm; an onset's presence against the track's usual onsets
+# (``SHOCKWAVE_USUAL_RATE`` adapts that) sets how much it stands out.
+SHOCKWAVE_QUIET = (0.08, 0.6)
+SHOCKWAVE_PRESENCE = (0.15, 0.8)
+SHOCKWAVE_USUAL_RATE = 0.12
+SHOCKWAVE_MIN_STRENGTH = 0.12     # weaker onsets make no wave
+SHOCKWAVE_MAX_STRENGTH = 2.0
+SHOCKWAVE_ECHO_SPEED = 0.62       # a big hit's echo ring, as a share of the wave speed
+SHOCKWAVE_IDLE_PERIOD = 11.0      # seconds for the idle swell to sweep across and back
+SHOCKWAVE_IDLE_HEIGHT = 0.35      # the idle swell's height at Idle Swell 1, as a share of a wave's
 
 SHOCKWAVE_EVENTS = Scene3DStorageLayout.of(
     "ShockwaveEvents", "ShockwaveEvent",
@@ -72,6 +88,23 @@ def shockwave_amplitude(height: float) -> float:
     return 0.04 + 0.3 * max(0.0, min(1.0, float(height)))
 
 
+def shockwave_strength(magnitude: float, loudness: float, presence: float, usual: float) -> float:
+    """A wave's strength (0 .. ``SHOCKWAVE_MAX_STRENGTH``) for an onset (``MusicalOnset``'s
+    magnitude, loudness and presence) when the track's usual onset presence is ``usual``."""
+    quiet = _smoothstep(SHOCKWAVE_QUIET[0], SHOCKWAVE_QUIET[1], float(loudness))
+    present = _smoothstep(SHOCKWAVE_PRESENCE[0], SHOCKWAVE_PRESENCE[1], float(presence))
+    emphasis = max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
+    hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / 3.0))
+    return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, quiet * present * emphasis * hit))
+
+
+def shockwave_idle(height: float, idle: float, time: float, half_width: float) -> tuple[float, float]:
+    """The idle swell: (height, centre x) at ``time`` seconds of animation for Wave Height and
+    Idle Swell 0..1: a soft ridge sweeping smoothly from one side to the other and back."""
+    amplitude = shockwave_amplitude(height) * SHOCKWAVE_IDLE_HEIGHT * max(0.0, min(1.0, float(idle)))
+    return amplitude, 1.1 * float(half_width) * math.sin(2.0 * math.pi * float(time) / SHOCKWAVE_IDLE_PERIOD)
+
+
 def shockwave_origin(serial: int, kind: str) -> tuple[float, float]:
     """Where the ``serial``-th event starts, deterministically: kicks near the front middle,
     snares and the rest further out. x is a share of the half width; z is in field heights."""
@@ -93,12 +126,17 @@ def shockwave_height(x: float, z: float, events, amplitude: float, speed: float)
     from ``events`` [(age, ox, oz, strength), ...] (``ox`` already in world units)."""
     height = crest = 0.0
     for age, ox, oz, strength in events:
-        envelope = strength * math.exp(-age / SHOCKWAVE_DECAY) * _smoothstep(0.0, 0.06, age)
-        d = math.hypot(x - ox, z - oz) - speed * age
-        bump = math.exp(-(d / SHOCKWAVE_WIDTH) ** 2)
-        trough = math.exp(-((d + 1.8 * SHOCKWAVE_WIDTH) / SHOCKWAVE_WIDTH) ** 2)
-        height += amplitude * envelope * (bump - 0.35 * trough)
-        crest += envelope * bump
+        fade = math.exp(-age / SHOCKWAVE_DECAY) * _smoothstep(0.0, 0.06, age)
+        over = max(0.0, strength - 1.0)                    # a big hit's share above a full wave
+        lift = min(strength, 1.0) + 0.5 * over             # taller, but more slowly
+        width = SHOCKWAVE_WIDTH * (1.0 + 0.6 * over)       # and wider
+        distance = math.hypot(x - ox, z - oz)
+        d = distance - speed * age
+        bump = math.exp(-(d / width) ** 2)
+        trough = math.exp(-((d + 1.8 * width) / width) ** 2)
+        echo = math.exp(-((distance - SHOCKWAVE_ECHO_SPEED * speed * age) / width) ** 2)
+        height += amplitude * fade * (lift * (bump - 0.35 * trough) + 0.6 * over * echo)
+        crest += fade * (strength * bump + 0.6 * over * echo)
     return height, crest
 
 
@@ -152,6 +190,7 @@ _COMMON = f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
 const float SHOCKWAVE_WIDTH = {SHOCKWAVE_WIDTH:.6f};
 const float SHOCKWAVE_DECAY = {SHOCKWAVE_DECAY:.6f};
+const float SHOCKWAVE_ECHO_SPEED = {SHOCKWAVE_ECHO_SPEED:.6f};
 uniform mat4 uMatrix;
 uniform vec4 uField;          // field in item coordinates: left, top, width, height
 uniform vec2 uView;           // tilt, turn (radians)
@@ -161,6 +200,7 @@ uniform float uHalfWidth;     // the grid's half width (field heights)
 uniform int uEventCount;
 uniform vec2 uWave;           // crest amplitude (field heights), speed (field heights per second)
 uniform float uHorizon;       // the spectrum ridge's height (field heights at a full bar)
+uniform vec2 uIdle;           // the idle swell: height (field heights), centre x (shockwave_idle)
 uniform int uBarCount;
 uniform float uBars[{SHOCKWAVE_MAX_BARS}];
 uniform float uHeightScale;
@@ -173,13 +213,22 @@ vec2 shockwaveHeight(vec2 p) {{
     float height = 0.0, crest = 0.0;
     for (int i = 0; i < uEventCount; ++i) {{
         ShockwaveEvent e = events[i];
-        float envelope = e.strength * exp(-e.age / SHOCKWAVE_DECAY) * shockwaveSmooth(0.0, 0.06, e.age);
-        float d = length(p - vec2(e.x, e.z)) - uWave.y * e.age;
-        float bump = exp(-pow(d / SHOCKWAVE_WIDTH, 2.0));
-        float trough = exp(-pow((d + 1.8 * SHOCKWAVE_WIDTH) / SHOCKWAVE_WIDTH, 2.0));
-        height += uWave.x * envelope * (bump - 0.35 * trough);
-        crest += envelope * bump;
+        float fade = exp(-e.age / SHOCKWAVE_DECAY) * shockwaveSmooth(0.0, 0.06, e.age);
+        float over = max(0.0, e.strength - 1.0);
+        float lift = min(e.strength, 1.0) + 0.5 * over;
+        float width = SHOCKWAVE_WIDTH * (1.0 + 0.6 * over);
+        float distance = length(p - vec2(e.x, e.z));
+        float d = distance - uWave.y * e.age;
+        float bump = exp(-pow(d / width, 2.0));
+        float trough = exp(-pow((d + 1.8 * width) / width, 2.0));
+        float echo = exp(-pow((distance - SHOCKWAVE_ECHO_SPEED * uWave.y * e.age) / width, 2.0));
+        height += uWave.x * fade * (lift * (bump - 0.35 * trough) + 0.6 * over * echo);
+        crest += fade * (e.strength * bump + 0.6 * over * echo);
     }}
+    // The idle swell: a soft ridge along z, its centre sweeping across x; a little light.
+    float swell = exp(-pow((p.x - uIdle.y) / 0.55, 2.0)) * (0.75 + 0.25 * sin(2.4 * p.y + 0.8 * uIdle.y));
+    height += uIdle.x * swell;
+    crest += 0.6 * swell * uIdle.x / max(uWave.x, 1e-3);
     return vec2(height, crest);
 }}
 // Spectrum's ridge along the far edge: the bar under x, by Spectrum's level transfer.
@@ -220,6 +269,7 @@ out vec3 vWorld;      // the displaced point, in the camera's frame (lighting)
 out vec2 vGrid;       // the point on the flat grid (x, z)
 out float vCrest;
 out float vRidge;
+out float vRidgeLevel;  // the ridge as a share of its tallest (0..1): its loudness
 out vec3 vNormal;
 vec3 shockwaveSurface(vec2 p, out float crest, out float ridge) {
     vec2 wave = shockwaveHeight(p);
@@ -239,6 +289,7 @@ void main() {
     vGrid = p;
     vCrest = crest;
     vRidge = ridge;
+    vRidgeLevel = uHorizon > 0.0 ? clamp(ridge / (uHorizon * 0.95), 0.0, 1.0) : 0.0;
     vec3 screen = shockwaveProject(surface);
     float h = uField.w;
     vec2 item = vec2(uField.x + 0.5 * uField.z + screen.x * uFit.x * h, uField.y + h * (uFit.y - screen.y * uFit.x));
@@ -251,7 +302,7 @@ void main() {
 
 SHOCKWAVE_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location = 0) out vec4 FragColor;\nlayout(location = 1) out vec4 Emission;\n"
-    "in vec3 vWorld;\nin vec2 vGrid;\nin float vCrest;\nin float vRidge;\nin vec3 vNormal;\n"
+    "in vec3 vWorld;\nin vec2 vGrid;\nin float vCrest;\nin float vRidge;\nin float vRidgeLevel;\nin vec3 vNormal;\n"
     "uniform float uHalfWidth;\nuniform float uCells;     // grid cells per field height\n"
     "uniform float uScroll;    // the lines' travel toward the viewer (field heights)\n"
     "uniform vec4 uLineColor;\nuniform vec4 uCrestColor;\nuniform float uFloor;\nuniform float uGlow;\n"
@@ -272,9 +323,10 @@ void main() {
     float line = 1.0 - smoothstep(0.0, uEdgePx, min(distance.x, distance.y));
     // Lines thinner than a pixel fade instead of shimmering.
     line *= clamp(1.2 / max(max(width.x, width.y) * 6.0, 1.0), 0.0, 1.0) * 0.6 + 0.4;
-    float crest = clamp(vCrest, 0.0, 1.5);
+    float crest = clamp(vCrest, 0.0, 2.5);
     vec3 colour = mix(uLineColor.rgb, uCrestColor.rgb, clamp(crest * 1.2 + vRidge * 1.5, 0.0, 1.0));
-    float bright = 1.0 + 1.8 * crest;
+    // Brighter where the wave is stronger, and along the ridge where the bars are loudest.
+    float bright = (1.0 + 1.8 * crest) * (1.0 + 0.4 * vRidgeLevel);
     vec3 lit = colour * bright;
     // The floor between the lines: dark, catching a little light on the waves' slopes.
     vec3 n = normalize(vNormal);

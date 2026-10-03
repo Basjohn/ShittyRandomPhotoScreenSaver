@@ -17,6 +17,7 @@
         ],
         "shockwave_grid_density": 0.6,
         "shockwave_grid_floor": 0.7,
+        "shockwave_grid_idle": 0.2,
         "shockwave_grid_glow": 0.85,
         "shockwave_grid_horizon": 0.65,
         "shockwave_grid_line_color": [

@@ -21,6 +21,8 @@ _WAVE_SLIDERS = (
      "How fast the shockwaves spread across the grid."),
     ("shockwave_grid_horizon", "Horizon:", 0, 100,
      "How high Spectrum's bars raise the far edge of the grid; zero keeps it flat."),
+    ("shockwave_grid_idle", "Idle Swell:", 0, 100,
+     "A soft swell that drifts from side to side, so the grid moves between beats; zero holds it still."),
     ("shockwave_grid_tilt", "Tilt:", 0, 100,
      "How far the view looks down onto the grid, from level to straight down (W and S while it shows)."),
     ("shockwave_grid_turn", "Turn:", -100, 100,
