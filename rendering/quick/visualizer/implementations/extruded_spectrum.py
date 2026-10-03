@@ -23,6 +23,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
     EXTRUDED_MAX_TURN,
     EXTRUDED_OVERFLOW_PAD,
     EXTRUDED_VERTEX_SOURCE,
+    extruded_draw_order,
     extruded_fit,
     extruded_overflow_frame,
 )
@@ -55,12 +56,13 @@ def extruded_quality(parameters) -> tuple[int, float, int]:
     return detail.overlay_samples * (2 if smooth else 1), mirror, detail.backdrop_refresh
 
 
-def extruded_bar_records(levels, peaks, count: int) -> bytes:
-    """One (level, peak) std430 record per bar, levels already carrying Spectrum's upload transfer."""
+def extruded_bar_records(levels, peaks, count: int, order=None) -> bytes:
+    """One (level, peak, bar index) std430 record per bar in draw ``order`` (default: by index),
+    levels already carrying Spectrum's upload transfer."""
     values = []
-    for index in range(count):
-        values.extend((levels[index], peaks[index]))
-    return struct.pack(f"<{2 * count}f", *values)
+    for index in (range(count) if order is None else order):
+        values.extend((levels[index], peaks[index], float(index)))
+    return struct.pack(f"<{3 * count}f", *values)
 
 
 class QuickExtrudedSpectrumRenderer:
@@ -162,7 +164,9 @@ class QuickExtrudedSpectrumRenderer:
         program = r.program("bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE)
         uniforms = r.uniforms("bars", _UNIFORMS)
         vao, vertices = r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
-        records = extruded_bar_records(levels, peaks, count)
+        first = (layout.bars_left + 0.5 * layout.bar_width - centre) / height
+        order = extruded_draw_order(first, (layout.bar_width + layout.bar_gap) / height, count, tilt, turn)
+        records = extruded_bar_records(levels, peaks, count, order)
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
         smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))

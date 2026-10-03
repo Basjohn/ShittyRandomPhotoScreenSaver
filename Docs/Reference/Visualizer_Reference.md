@@ -560,6 +560,13 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   24, KAK single-sampled with Mirror Faces off. Measured at a full 2560x1440 card (Smooth Edges and Mirror Faces on,
   RTX 4090), GPU median (p90) High 0.10 (0.60) ms -> Balanced 0.07 (0.30) -> Performance 0.06 (0.06) -> KAK 0.05
   (0.05): the p90 is the copy's stall, rarer down the tiers. CPU stays ~0.7 ms (H7 targets it).
+- **Translucent order** (ghost columns, floor reflection): exact for any view without OIT. The bar records reach the
+  shader in a painter's order (`extruded_draw_order`: farthest from the orbit's eye along the row first, the eye from
+  `scene3d_orbit_eye`; the boxes occupy disjoint x slabs, so that order is exact and two bars on opposite sides of the
+  eye never cover each other), each carrying its bar index; the translucent passes drop faces turned from the eye, so
+  a box never blends over itself (winding-independent, so the mirrored reflection is right too). Each box now blends
+  once; its alpha becomes the opacity its front and back faces used to add up to, a(2 - a), clamped first (the
+  reflection's authored alpha exceeds 1 above the floor line).
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
   the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). What Quick drew under the
   Visualizer (wallpaper, and widgets beneath it) is copied from the render target into a small mipmapped texture

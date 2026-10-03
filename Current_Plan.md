@@ -110,8 +110,10 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
 - [ ] **Next render-thread CPU lever (measured, not started):** the Visualizer host's inherited-GL-state capture
   (`rendering/quick/visualizer/gl_state.py`) is ~40% of what remains in a 3D mode, `glGet*` through PyOpenGL's
   numpy-array wrappers. It is CHK26-lineage protected perf: change only with a measured, pixel-neutral fast path.
-- [ ] **H8. Ghost-column transparency order.** Extruded's translucent ghost columns can mis-order at strong angles.
-  Solve with S17's weighted blended OIT when that lands (first consumer), or an exact ordering if cheaper.
+- [x] **H8. Translucent order in Extruded Spectrum** solved exactly without OIT: bar records in a painter's order from
+  the orbit's eye (`scene3d_orbit_eye`, `extruded_draw_order`; bars occupy disjoint x slabs) and faces turned from the
+  eye culled in the translucent passes; one layer carries the opacity two used to. Physical check: ghosts at strong
+  angles, the reflection's floor contact line.
 - [ ] **H9. Lend the displayed wallpaper to Visualizers.** Mirror Faces copies the framebuffer every 6th frame
   (~0.55 ms stall each). Define a legal lend of the background's current texture to Visualizers (as transitions are
   lent theirs under PR-04, never mutated or sampled illegally), shared by every reflective mode. Before S19.
