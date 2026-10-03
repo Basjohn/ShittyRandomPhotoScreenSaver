@@ -1038,6 +1038,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_crest_color': [255, 70, 210, 255],
                                     'shockwave_grid_density': 0.45,
                                     'shockwave_grid_floor': 0.55,
+                                    'shockwave_grid_idle': 0.35,
                                     'shockwave_grid_glow': 0.6,
                                     'shockwave_grid_horizon': 0.5,
                                     'shockwave_grid_line_color': [0, 220, 255, 255],

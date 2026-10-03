@@ -93,12 +93,10 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
 - [x] **H3. Exact musical events**: the transient bus publishes immutable, serial-numbered `MusicalOnset`s (with the
   unclipped magnitude and absolute loudness H4 needs); Shockwave Grid takes each exactly once, born when it happened.
   Contract: `Docs/Reference/Visualizer_Reference.md` "Musical onsets".
-- [ ] **H4. Shockwave Grid reactivity tuning (visually accepted; operator feedback 2026-10-03).** (a) It reacts too
-  much at near-silence: gate/scale wave admission and amplitude by real loudness. (b) The biggest sounds have nothing
-  that sets them apart from medium ones, so they get drowned out: make strength non-linear and give big hits something
-  of their own (stronger, wider, brighter crest). (c) Slight idle energy travelling gradually from one side to the
-  other when quiet. (d) Glow brighter at the loudest sounds in their own area (local crest/ridge glow, ~15% is already
-  visible); today glow strength is uniform. Built on H3's events.
+- [x] **H4. Shockwave Grid reactivity**: the onset strength had a 0.25 floor and a 1.0 cap on a loudness-normalised
+  bus. Now a loudness/presence gate silences near-silence, presence against the track's usual onsets lets big hits
+  reach ~2.9x medium ones (taller, wider, brighter, with an echo ring), the ridge glows brighter where bars are
+  loudest, and an Idle Swell drifts side to side. Contract: Visualizer_Reference 16B "Reactivity"; physical check open.
 - [ ] **H5. Direct 3D Visualizer controls outside Edit/Arrange.** Alt + left drag orbits (landed). Add **Alt + right
   drag** to move the 3D Visualizer and **Alt + scroll wheel** to resize it uniformly, both outside Edit mode, with no
   Edit-mode UI. Suppress the context menu while Alt is held; if Alt + right click cannot be made reliable, switch the

@@ -635,6 +635,7 @@ _EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED
 _SHOCKWAVE_GRID_LIMITS: Dict[str, Tuple[float, float]] = {
     'shockwave_grid_density': (0.0, 1.0),
     'shockwave_grid_floor': (0.0, 1.0),
+    'shockwave_grid_idle': (0.0, 1.0),
     'shockwave_grid_glow': (0.0, 1.0),
     'shockwave_grid_horizon': (0.0, 1.0),
     'shockwave_grid_scroll': (0.0, 1.0),
@@ -1431,6 +1432,7 @@ class SpotifyVisualizerSettings:
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
     shockwave_grid_density: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_density'))
     shockwave_grid_floor: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_floor'))
+    shockwave_grid_idle: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_idle'))
     shockwave_grid_glow: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_glow'))
     shockwave_grid_horizon: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_horizon'))
     shockwave_grid_scroll: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_scroll'))

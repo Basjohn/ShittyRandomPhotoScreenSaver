@@ -353,8 +353,9 @@ def _capture_shockwave_grid(
     return _capture_spectrum_family(
         widget, engine, context, mode_id="shockwave_grid", frame_type=ShockwaveGridFrame,
         extra_parameters=parameters,
-        # Waves move (and the grid may scroll) on Spectrum's animation clock.
-        animation_enabled=bool(events) or float(parameters["shockwave_grid_scroll"]) > 0.0,
+        # Waves move (and the grid may scroll, the swell drift) on Spectrum's animation clock.
+        animation_enabled=(bool(events) or float(parameters["shockwave_grid_scroll"]) > 0.0
+                           or float(parameters["shockwave_grid_idle"]) > 0.0),
         frame_fields={"events": events},
     )
 

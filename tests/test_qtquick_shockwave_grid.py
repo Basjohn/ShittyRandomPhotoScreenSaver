@@ -29,6 +29,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_height,
     shockwave_origin,
     shockwave_project,
+    shockwave_strength,
 )
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 
@@ -70,7 +71,8 @@ def test_an_event_is_admitted_once_per_onset_spaced_bounded_and_aged():
     assert len(_record(runtime, bus, 10.08)) == 1                          # too soon after the last
     bus.onset(10.3, kind="snare", strength=0.4)
     events = _record(runtime, bus, 10.3)
-    assert len(events) == 2 and events[0][0] == pytest.approx(0.295) and events[1][3] == pytest.approx(0.4)
+    assert len(events) == 2 and events[0][0] == pytest.approx(0.295)
+    assert events[1][3] == pytest.approx(shockwave_strength(0.4, 1.0, 1.0, 1.0))   # from its magnitude
     bus.onset(10.6)
     assert len(_record(runtime, bus, 10.6, playing=False)) == 2             # paused: not admitted...
     assert len(_record(runtime, bus, 10.7)) == 2                            # ...nor later
@@ -227,3 +229,75 @@ def test_the_mode_borrows_spectrums_bars_and_stays_dormant_until_it_renders():
             "print([m for m in sys.modules if 'shockwave' in m])\n")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, check=True)
     assert result.stdout.strip() == "[]"
+
+
+def test_quiet_onsets_make_no_wave_and_big_hits_stand_well_apart_from_medium_ones():
+    from rendering.gl_programs.shockwave_grid_program import (
+        SHOCKWAVE_MAX_STRENGTH,
+        SHOCKWAVE_MIN_STRENGTH,
+        SHOCKWAVE_QUIET,
+    )
+
+    medium = shockwave_strength(1.5, 1.0, 1.0, 1.0)
+    big = shockwave_strength(3.0, 2.0, 1.6, 1.0)          # louder than the track's usual onsets
+    assert SHOCKWAVE_MIN_STRENGTH < medium <= 1.0 and big >= 2.5 * medium and big <= SHOCKWAVE_MAX_STRENGTH
+    assert shockwave_strength(3.0, SHOCKWAVE_QUIET[0], 1.0, 1.0) == 0.0          # near-silent level
+    assert shockwave_strength(3.0, 1.0, 0.1, 1.0) < SHOCKWAVE_MIN_STRENGTH       # quiet passage of a loud track
+    # More magnitude, loudness or presence never weakens a wave.
+    for low, high in (((1.0, 1.0, 1.0), (2.0, 1.0, 1.0)), ((1.0, 0.3, 1.0), (1.0, 0.6, 1.0)),
+                      ((1.0, 1.0, 0.5), (1.0, 1.0, 1.2))):
+        assert shockwave_strength(*low, 1.0) <= shockwave_strength(*high, 1.0)
+
+
+def test_the_runtime_learns_the_usual_onset_so_a_bigger_one_stands_out():
+    from widgets.spotify_visualizer.transient_bus import MusicalOnset
+
+    runtime = ShockwaveGridFrameRuntime()
+    serial, now, strengths = 5000, 50.0, []
+
+    def onset(magnitude, loudness, presence):
+        nonlocal serial, now
+        serial += 1
+        now += 0.25
+        event = MusicalOnset(serial=serial, timestamp=now, kind="kick", strength=min(1.0, magnitude),
+                             magnitude=magnitude, loudness=loudness, presence=presence)
+        before = runtime.record_onsets(onsets=(), now_ts=now, playing=True)
+        after = runtime.record_onsets(onsets=(event,), now_ts=now, playing=True)
+        strengths.append(after[-1][3] if len(after) > len(before) or (after and after[-1][0] == 0.0) else None)
+
+    for _ in range(12):
+        onset(2.0, 1.8, 1.6)                               # a steady track: presence 1.6 is its usual
+    usual = strengths[-1]
+    onset(3.0, 3.0, 2.6)                                    # a hit well above that
+    assert strengths[-1] is not None and strengths[-1] >= 2.0 * usual
+    onset(2.0, 0.05, 0.05)                                  # near-silence between songs
+    assert strengths[-1] is None
+
+
+def test_a_big_wave_is_wider_taller_and_trails_an_echo_ring():
+    amplitude, speed, age = 0.2, 1.0, 0.8
+    ring = speed * age
+    for strength in (1.0, 2.0):
+        height, crest = shockwave_height(ring, -1.0, [(age, 0.0, -1.0, strength)], amplitude, speed)
+        assert height > 0.0 and crest > 0.0
+    full = shockwave_height(ring, -1.0, [(age, 0.0, -1.0, 1.0)], amplitude, speed)
+    big = shockwave_height(ring, -1.0, [(age, 0.0, -1.0, 2.0)], amplitude, speed)
+    assert full[0] < big[0] < 2.0 * full[0] and big[1] > 1.5 * full[1]      # taller, more slowly; brighter
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_ECHO_SPEED
+
+    echo = SHOCKWAVE_ECHO_SPEED * speed * age
+    assert shockwave_height(echo, -1.0, [(age, 0.0, -1.0, 1.0)], amplitude, speed)[1] < 0.05
+    assert shockwave_height(echo, -1.0, [(age, 0.0, -1.0, 2.0)], amplitude, speed)[1] > 0.2     # the echo
+
+
+def test_the_idle_swell_drifts_side_to_side_and_moves_the_empty_grid(target):
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_IDLE_PERIOD, shockwave_idle
+
+    centres = [shockwave_idle(0.5, 1.0, t, 2.0)[1] for t in np.linspace(0.0, SHOCKWAVE_IDLE_PERIOD, 40)]
+    assert max(centres) > 1.5 and min(centres) < -1.5 and max(abs(c) for c in centres) <= 2.2
+    assert max(abs(a - b) for a, b in zip(centres, centres[1:])) < 0.5          # gradual, no jumps
+    assert shockwave_idle(0.5, 0.0, 3.0, 2.0)[0] == 0.0
+    capture, host = target
+    still = capture.render(host, _snapshot(events=(), shockwave_grid_idle=0.0, shockwave_grid_glow=0.0))
+    swell = capture.render(host, _snapshot(events=(), shockwave_grid_idle=1.0, shockwave_grid_glow=0.0))
+    assert np.abs(swell - still)[..., :3].max(axis=2).astype(bool).sum() > 500

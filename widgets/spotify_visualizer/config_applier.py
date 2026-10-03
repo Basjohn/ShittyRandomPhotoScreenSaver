@@ -696,6 +696,7 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
 _SHOCKWAVE_GRID_KEYS: Dict[str, tuple[float, float]] = {
     "shockwave_grid_density": (0.0, 1.0),
     "shockwave_grid_floor": (0.0, 1.0),
+    "shockwave_grid_idle": (0.0, 1.0),
     "shockwave_grid_glow": (0.0, 1.0),
     "shockwave_grid_horizon": (0.0, 1.0),
     "shockwave_grid_scroll": (0.0, 1.0),

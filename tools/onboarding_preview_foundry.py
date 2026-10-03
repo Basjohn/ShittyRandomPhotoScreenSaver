@@ -989,9 +989,11 @@ _WIDGET_PREVIEWS: Final = {
 # production capture and renderer (Spectrum-runtime modes only). They are frameless, so like
 # the sheet's Sphere they sit on a dark backdrop inside a drawn frame.
 _RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid")
-# Modes whose picture comes from musical onsets get a few fixture onsets (time, type, strength)
-# through a minimal transient-bus stand-in before the settled captures at 1.0 and 1.12 s.
-_PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 1.0), (0.55, "snare", 0.8), (0.8, "kick", 0.9))}
+# Modes whose picture comes from musical onsets get a few fixture onsets (time, type, magnitude,
+# presence: a big hit, then two ordinary ones) through a minimal transient-bus stand-in before the
+# settled captures at 1.0 and 1.12 s.
+_PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 3.0, 1.5), (0.55, "snare", 2.0, 1.0),
+                                             (0.8, "kick", 2.4, 1.0))}
 
 
 class _PreviewOnsets:
@@ -1000,11 +1002,12 @@ class _PreviewOnsets:
     def __init__(self) -> None:
         self.onsets: list = []
 
-    def publish(self, timestamp: float, kind: str, strength: float) -> None:
+    def publish(self, timestamp: float, kind: str, magnitude: float, presence: float) -> None:
         from widgets.spotify_visualizer.transient_bus import MusicalOnset
 
         self.onsets.append(MusicalOnset(serial=len(self.onsets) + 1, timestamp=timestamp, kind=kind,
-                                        strength=strength, magnitude=strength, loudness=1.0, presence=1.0))
+                                        strength=min(1.0, magnitude), magnitude=magnitude, loudness=1.0,
+                                        presence=presence))
 
     def get_onset_events(self, after_serial: int = 0):
         return tuple(onset for onset in self.onsets if onset.serial > after_serial)
@@ -1183,8 +1186,8 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     if onsets:
         engine = _PreviewOnsets()
         state._engine = engine
-        for time, kind, strength in onsets:
-            engine.publish(time, kind, strength)
+        for time, kind, magnitude, presence in onsets:
+            engine.publish(time, kind, magnitude, presence)
             capture_visualizer_logical_frame(state, now_ts=time + 0.01, changed=True, mode_reveal_ready=True)
     first = capture_visualizer_logical_frame(
         state,
