@@ -88,6 +88,35 @@ def test_sphere_replays_deterministically_and_its_reaction_follows_the_music(qt_
     assert not any(row["sphere"]["cohorts"] for row in first["frames"][:90])
 
 
+def test_the_recorder_keeps_real_scales_and_takes_each_typed_event_once():
+    """A recorded frame keeps production units (loudness 12, the live lane at its 2.5 clamp, an
+    unbounded spectrum), clamps only the schema 1 normalised lanes, and takes each event once."""
+    from types import SimpleNamespace
+
+    from tools.visualizer_replay.record import _frame
+    from widgets.spotify_visualizer.energy_bands import EnergyBands
+    from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEnergyBands, TransientEventScheduler
+
+    scheduler = TransientEventScheduler()
+    scheduler.feed(OnsetEvent(timestamp=__import__("time").time(), event_type="kick", strength=0.9))
+    hot = EnergyBands(bass=1.0, mid=1.0, high=0.6, overall=1.0)
+    engine = SimpleNamespace(
+        get_transient_energy_bands=lambda: TransientEnergyBands(bass_transient=2.2, onset_detected=True,
+                                                                 onset_type="kick", onset_strength=1.0),
+        get_energy_bands=lambda: hot, get_pre_agc_energy_bands=lambda: hot, get_bubble_energy_bands=lambda: hot,
+        get_live_pre_agc_energy_bands=lambda: EnergyBands(bass=2.5, mid=2.5, high=1.1, overall=2.0),
+        get_pre_agc_analysis_spectrum=lambda: tuple(4.0 + k for k in range(48)),
+        get_musical_level=lambda: (12.0, 1.3), get_waveform=lambda: [0.5] * 256,
+    )
+    first = _frame(engine, 1_000_000, [0.4] * 35, scheduler)
+    second = _frame(engine, 1_011_111, [0.4] * 35, scheduler)
+    assert first.real.musical_level == (12.0, 1.3) and first.real.live[0] == 2.5
+    assert max(first.real.analysis_spectrum) == 51.0
+    assert first.energy.transient.bass == 1.0 and first.energy.transient.onset_type == "bass"
+    assert [e.kind for e in first.real.events] == ["kick"] and second.real.events == ()
+    assert len(first.raw_bars) == 32 and len(first.waveform) == 64
+
+
 def test_sphere_refuses_a_schema_1_clip(qt_app):
     from tools.visualizer_replay.driver import load_clips
 
