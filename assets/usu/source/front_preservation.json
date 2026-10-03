@@ -1,0 +1,42 @@
+{
+  "front_mask_resolution": [
+    2000,
+    2400
+  ],
+  "silhouette_intersection_over_union": 0.9901445166625054,
+  "changed_silhouette_pixels": 14684,
+  "changed_fraction_of_union": 0.009855483337494596,
+  "cage_changes": {
+    "Usu_Foot_L": {
+      "max_abs_xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "changed_vertices": 0
+    },
+    "Usu_Foot_R": {
+      "max_abs_xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "changed_vertices": 0
+    },
+    "Usu_Head_And_Ears": {
+      "max_abs_xyz": [
+        0.060221850872039795,
+        0.2847535014152527,
+        0.07242155075073242
+      ],
+      "changed_vertices": 2619
+    }
+  },
+  "baseline_blend_sha256": "13cf606581afc25532fad2a1ed0c835babd19fb88a165e02c7b909feff817d0d",
+  "baseline_commit": "a5048260",
+  "method": "Union of evaluated principal-mesh front projections at 2000x2400; same original subdivision levels on the baseline. This measures silhouette preservation, not likeness or approval.",
+  "face_detail_max_abs_coordinate_change": 0.0,
+  "feet_coordinates_unchanged": true,
+  "body_cage_rebuilt_locally_at_arm_joins": true,
+  "reviewed_blend_sha256": "87600538d8e36538ebde7ee3c824b5c49fae5fc7a008909ef43c2662ea437934"
+}
