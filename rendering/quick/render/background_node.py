@@ -9,6 +9,8 @@ import threading
 import time
 
 from OpenGL import GL as gl
+
+from rendering.gl_error_policy import raise_pending_gl_error
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
@@ -287,6 +289,7 @@ class BackgroundRenderNode(QSGRenderNode):
                     revision=trace_sequence,
                     auxiliary=transition_run_id,
                 )
+            raise_pending_gl_error(gl, "Background render node")   # the frame's one GL error check
             if self._failure_log.failing:
                 self._failure_log.note_success()
         except Exception as exc:
