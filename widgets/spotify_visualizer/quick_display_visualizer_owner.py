@@ -270,6 +270,7 @@ class QuickDisplayVisualizerOwner:
             resolved_technical,
             reason=reason,
         )
+        self._refresh_backdrop()
 
         controller.resolve_logical_mode_state(
             controller.mode_id, _mode_runtime_factory(controller.mode_id)
@@ -303,6 +304,29 @@ class QuickDisplayVisualizerOwner:
                 kind="recreation",
             )
 
+    def _refresh_backdrop(self) -> None:
+        """Keep the reflected wallpaper (``backdrop.py``) while the active mode reflects it (its
+        descriptor's ``backdrop_setting`` above zero, on a tier with reflections), nothing
+        otherwise: made once per displayed photograph, here on the GUI thread (~1.4 ms at 4K)."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        from rendering.gl_programs.scene3d import scene3d_detail
+
+        state = self._controller.presentation_state
+        setting = get_visualizer_mode_descriptor(self._controller.mode_id).backdrop_setting
+        reflects = (bool(setting) and float(getattr(state, f"_{setting}")) > 0.0
+                    and scene3d_detail(state._scene3d_detail).reflections)
+        image = self._presentation_runtime.scene_controller.presentation_image if reflects else None
+        current = getattr(state, "_backdrop", None)
+        if image is None:
+            if current is not None:
+                state._backdrop = None
+            return
+        if current is not None and current.identity == image.identity:
+            return
+        from widgets.spotify_visualizer.backdrop import make_visualizer_backdrop
+
+        state._backdrop = make_visualizer_backdrop(image)
+
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
         if self._retired:
             raise RuntimeError("cannot bind a retired visualizer owner")
@@ -314,6 +338,8 @@ class QuickDisplayVisualizerOwner:
         self._runtime.bind_visualizer_viewport_config(
             self._controller.set_custom_viewport_override
         )
+        self._presentation_runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
+        self._refresh_backdrop()
         from widgets.spotify_visualizer.quick_presentation_sync import (
             QuickVisualizerPresentationSync,
             QuickVisualizerPublicationWake,
@@ -446,12 +472,15 @@ class QuickDisplayVisualizerOwner:
         old_presentation_runtime = self._presentation_runtime
         old_runtime = self._runtime
         old_presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+        old_presentation_runtime.scene_controller.set_presentation_image_listener(None)
         try:
             self._presentation_runtime = runtime
             self._runtime = runtime
             runtime.bind_visualizer_viewport_config(
                 self._controller.set_custom_viewport_override
             )
+            runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
+            self._refresh_backdrop()      # the new display's own photograph
             self._controller.logical_mailbox.set_trace_screen_index(
                 int(runtime.screen_index)
             )
@@ -468,6 +497,7 @@ class QuickDisplayVisualizerOwner:
             # edge rather than leave the logical owner attached to half a scene.
             try:
                 runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+                runtime.scene_controller.set_presentation_image_listener(None)
             except Exception:
                 logger.exception(
                     "[SPOTIFY_VIS] Failed clearing partial target viewport route"
@@ -480,6 +510,7 @@ class QuickDisplayVisualizerOwner:
             old_presentation_runtime.bind_visualizer_viewport_config(
                 self._controller.set_custom_viewport_override
             )
+            old_presentation_runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
             raise
         return True
 
@@ -1100,6 +1131,8 @@ class QuickDisplayVisualizerOwner:
             # not retain controller.set_custom_viewport_override and thereby keep
             # this generation-scoped owner alive past the destruction barrier.
             self._presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
+            self._presentation_runtime.scene_controller.set_presentation_image_listener(None)
+            self._controller.presentation_state._backdrop = None
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False

@@ -199,10 +199,23 @@ def test_the_content_fade_and_spectrum_colours(target):
             assert colour.max() - colour.min() < 12
 
 
-def test_mirror_faces_reflect_what_lies_beneath_on_the_faces_only(target):
-    """Mirror Faces shows the wallpaper (what Quick drew under the Visualizer) in the bars' faces:
-    over an orange backdrop the faces turn orange, over a blue one blue; nothing outside the
-    bars changes, and with Mirror Faces off nothing of the backdrop is captured or held."""
+def _wallpaper(identity, rgb):
+    """The reflected wallpaper an owner would make from a displayed photograph of one colour."""
+    from rendering.quick.image_state import PresentationImage
+    from widgets.spotify_visualizer.backdrop import make_visualizer_backdrop
+
+    pixel = bytes((*rgb, 255))
+    image = PresentationImage(identity=identity, source_path="", logical_size=(1280.0, 720.0),
+                              device_pixel_ratio=1.0, pixel_size=(1280, 720), row_stride=1280 * 4,
+                              rgba8=pixel * (1280 * 720))
+    return make_visualizer_backdrop(image)
+
+
+def test_mirror_faces_reflect_the_displayed_wallpaper_on_the_faces_only(target):
+    """Mirror Faces shows the displayed photograph (the ``backdrop`` parameter its owner keeps) in
+    the bars' faces: an orange wallpaper turns them orange, a blue one blue; nothing outside the
+    bars changes; with Mirror Faces off, or no wallpaper, nothing is held; what Quick drew beneath
+    is never read."""
     capture, host = target
     organ = dict(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_reflection=0.0,
                  extruded_spectrum_tilt=0.1, extruded_spectrum_gloss=0.9)
@@ -210,12 +223,16 @@ def test_mirror_faces_reflect_what_lies_beneath_on_the_faces_only(target):
     faces, drawn = shown[..., 3] == 255, shown[..., 3] > 0
     renderer = host._implementations["extruded_spectrum"]
     assert not renderer._backdrop.has_resources
+    capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0))      # no wallpaper yet
+    assert not renderer._backdrop.has_resources
     colours = {}
-    for name, backdrop in (("orange", (1.0, 0.5, 0.0, 1.0)), ("blue", (0.0, 0.25, 1.0, 1.0))):
-        empty = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0),
-                               backdrop=backdrop)
+    for name, rgb in (("orange", (255, 128, 0)), ("blue", (0, 64, 255))):
+        wallpaper = _wallpaper(name, rgb)
+        empty = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0, backdrop=wallpaper),
+                               backdrop=(0.1, 0.1, 0.1, 1.0))      # what lies beneath is not reflected
         assert renderer._backdrop.has_resources
-        plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0), backdrop=backdrop)
+        plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0, backdrop=wallpaper),
+                               backdrop=(0.1, 0.1, 0.1, 1.0))
         changed = np.abs(empty - plain)[..., :3].max(axis=2) > 2
         assert changed.any() and not changed[~drawn].any()        # only on the bars
         colours[name] = empty[faces][:, :3].mean(axis=0)
@@ -224,22 +241,61 @@ def test_mirror_faces_reflect_what_lies_beneath_on_the_faces_only(target):
     assert not renderer._backdrop.has_resources                  # off again: nothing held
 
 
-def test_the_backdrop_is_copied_every_few_frames_not_every_frame(target):
-    """Reading the target being drawn stalls the GPU, so the backdrop copy is refreshed every
-    BACKDROP_REFRESH_FRAMES frames and reused in between; a changed wallpaper shows within them."""
-    from rendering.quick.scene3d.environment import BACKDROP_REFRESH_FRAMES
-
+def test_the_wallpaper_is_uploaded_once_per_photograph(target):
+    """The reflected wallpaper uploads when the displayed photograph changes, never per frame,
+    and nothing reads back the target being drawn."""
     capture, host = target
-    mirrored = _snapshot(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_face_mirror=1.0,
-                         extruded_spectrum_gloss=0.9)
-    faces = capture.render(host, mirrored)[..., 3] == 255         # the bars alone, over nothing
-    capture.render(host, mirrored, backdrop=(1.0, 0.5, 0.0, 1.0))
+    first, second = _wallpaper("first", (255, 128, 0)), _wallpaper("second", (0, 64, 255))
+    mirrored = dict(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_face_mirror=1.0,
+                    extruded_spectrum_gloss=0.9)
+    faces = capture.render(host, _snapshot(**mirrored, backdrop=first))[..., 3] == 255
     backdrop = host._implementations["extruded_spectrum"]._backdrop
-    first = backdrop.captures
-    frames = [capture.render(host, mirrored, backdrop=(0.0, 0.25, 1.0, 1.0)) for _ in range(3 * BACKDROP_REFRESH_FRAMES)]
-    assert backdrop.captures - first == 3
-    late = frames[-1][faces][:, :3].mean(axis=0)
-    assert late[2] > late[0] + 40                                 # the new (blue) backdrop is reflected
+    for _ in range(10):
+        capture.render(host, _snapshot(**mirrored, backdrop=first))
+    assert backdrop.uploads == 1
+    frames = [capture.render(host, _snapshot(**mirrored, backdrop=second)) for _ in range(10)]
+    assert backdrop.uploads == 2
+    late = frames[0][faces][:, :3].mean(axis=0)
+    assert late[2] > late[0] + 40                                 # the new (blue) one at once
+
+
+def test_the_owner_keeps_a_wallpaper_only_while_its_mode_reflects():
+    """The owner's refresh: a small copy of the displayed photograph while the active mode
+    reflects (Mirror Faces above zero on a tier with reflections), made once per photograph;
+    nothing otherwise."""
+    from types import SimpleNamespace
+
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
+
+    class _Image:
+        def __init__(self, identity):
+            self.identity, self.pixel_size, self.row_stride = identity, (64, 36), 64 * 4
+            self.rgba8 = bytes((200, 100, 50, 255)) * (64 * 36)
+
+    owner = QuickDisplayVisualizerOwner.__new__(QuickDisplayVisualizerOwner)
+    state = SimpleNamespace(_extruded_spectrum_face_mirror=0.0, _scene3d_detail="High", _backdrop=None)
+    owner._controller = SimpleNamespace(mode_id="extruded_spectrum", presentation_state=state)
+    owner._presentation_runtime = SimpleNamespace(scene_controller=SimpleNamespace(presentation_image=None))
+    scene = owner._presentation_runtime.scene_controller
+    scene.presentation_image = _Image("a")
+    owner._refresh_backdrop()
+    assert state._backdrop is None                               # Mirror Faces off
+    state._extruded_spectrum_face_mirror = 0.6
+    owner._refresh_backdrop()
+    made = state._backdrop
+    assert made is not None and made.identity == "a" and made.size[0] == 512
+    owner._refresh_backdrop()
+    assert state._backdrop is made                               # once per photograph
+    scene.presentation_image = _Image("b")
+    owner._refresh_backdrop()
+    assert state._backdrop.identity == "b"
+    state._scene3d_detail = "KAK"                                # a tier without reflections
+    owner._refresh_backdrop()
+    assert state._backdrop is None
+    state._scene3d_detail = "High"
+    owner._controller.mode_id = "spectrum"                       # a mode that does not reflect
+    owner._refresh_backdrop()
+    assert state._backdrop is None
 
 
 def test_smooth_edges_fill_in_lines_that_foreshortening_thinned(target):

@@ -419,6 +419,7 @@ class QuickSceneController(QObject):
         self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
+        self._presentation_image_listener: Callable[[], None] | None = None
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
         self._visualizer_double_click_admission: Any | None = None
         self._visualizer_middle_click_admission: Any | None = None
@@ -1451,6 +1452,9 @@ class QuickSceneController(QObject):
         next_identity = None if image is None else image.identity
         self.background_item.set_presentation_image(image)
         if prior_identity != next_identity:
+            listener = self._presentation_image_listener
+            if listener is not None:
+                listener()
             self._trace_surface_event(
                 "presentation_image_published",
                 probe_frames=3,
@@ -1460,6 +1464,11 @@ class QuickSceneController(QObject):
     @property
     def presentation_image(self) -> PresentationImage | None:
         return self.background_item.presentation_image
+
+    def set_presentation_image_listener(self, listener: Callable[[], None] | None) -> None:
+        """One listener told when the displayed photograph changes (the Visualizer owner, whose
+        reflecting modes keep a small copy of it); ``None`` detaches it."""
+        self._presentation_image_listener = listener
 
     def bind_perf_pacer_state_provider(
         self,

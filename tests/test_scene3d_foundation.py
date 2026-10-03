@@ -82,10 +82,8 @@ def test_detail_tiers_trade_cost_monotonically():
         assert values == sorted(values, reverse=True), lever
     assert tiers[-1].particles > 0.0 and tiers[-1].grid_cells >= 2
     assert tiers[0].overlay_samples > 1 and tiers[-1].overlay_samples == 0
-    # Reflections refresh less often down the tiers and are off at the cheapest.
-    refresh = [tier.backdrop_refresh for tier in tiers]
-    assert all(value > 0 for value in refresh[:-1]) and refresh[:-1] == sorted(refresh[:-1])
-    assert refresh[-1] == 0
+    # Reflections (Mirror Faces) on every tier but the cheapest.
+    assert all(tier.reflections for tier in tiers[:-1]) and not tiers[-1].reflections
     with pytest.raises(ValueError):
         scene3d_detail("Ultra")
 

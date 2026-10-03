@@ -119,6 +119,9 @@ class VisualizerModeDescriptor:
     # compiles and allocates on the hidden frames (one spaced unit each), so first use never
     # costs a visible frame (``quick_display_visualizer_owner``, ``render_host``).
     prepared_reveal: bool = False
+    # A setting whose value above zero means the mode reflects the displayed wallpaper; its owner
+    # then keeps a small copy of it in the mode's parameters (``widgets/spotify_visualizer/backdrop.py``).
+    backdrop_setting: str = ""
 
     @property
     def preset_key(self) -> str:
@@ -241,6 +244,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
         prepared_reveal=True,
+        backdrop_setting="extruded_spectrum_face_mirror",
     ),
     # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's bars as a ridge
     # along its horizon. Spectrum's frame runtime (bars, technical profile, bar colours) plus a

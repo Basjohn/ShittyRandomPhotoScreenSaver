@@ -114,9 +114,10 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   the orbit's eye (`scene3d_orbit_eye`, `extruded_draw_order`; bars occupy disjoint x slabs) and faces turned from the
   eye culled in the translucent passes; one layer carries the opacity two used to. Physical check: ghosts at strong
   angles, the reflection's floor contact line.
-- [ ] **H9. Lend the displayed wallpaper to Visualizers.** Mirror Faces copies the framebuffer every 6th frame
-  (~0.55 ms stall each). Define a legal lend of the background's current texture to Visualizers (as transitions are
-  lent theirs under PR-04, never mutated or sampled illegally), shared by every reflective mode. Before S19.
+- [x] **H9. Reflected wallpaper without reading the target**: the owner downsamples the displayed photograph once per
+  image change (`backdrop.py`) while a mode reflects, the renderer uploads it once; no GL texture shared, PR-04
+  untouched. Mirror Faces p90 GPU 0.60 -> 0.098 ms. Physical check: reflections follow wallpaper changes on both
+  displays (and after a CUSTOM display transfer).
 - [ ] **Loose ends:** list the new 3D test files in `Docs/TestSuite.md`; the side defects below. (The Extruded
   turn/tilt unit change is recorded in `Docs/Architecture/Persisted_Input_Compatibility.md`.)
 

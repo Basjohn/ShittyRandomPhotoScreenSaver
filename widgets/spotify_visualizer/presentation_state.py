@@ -47,6 +47,8 @@ def install_default_presentation_state(state: VisualizerPresentationState) -> No
 
     defaults["scene3d_detail"] = resolve_visualizer_tier(None, mode_id, gpu=last_validated_gpu())
     apply_presentation_vis_mode_kwargs(state, defaults)
+    if not hasattr(state, "_backdrop"):
+        state._backdrop = None            # the reflected wallpaper, kept by the owner (backdrop.py)
 
 
 __all__ = ["VisualizerPresentationState", "install_default_presentation_state"]

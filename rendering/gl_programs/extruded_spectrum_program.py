@@ -29,8 +29,9 @@ least 1.2 smoothed pixels wide, so a face seen at an angle keeps a ramped line i
 foreshortened below a pixel; head-on nothing changes.
 
 Mirror Faces gives the faces (never the edge lines) a polished, faintly brushed
-mirror surface reflecting the wallpaper: what Quick drew under the Visualizer, captured each
-frame into a small mipmapped texture (``BackdropEnvironment``). A face shows the wallpaper
+mirror surface reflecting the wallpaper: the displayed photograph, downsampled once per image change
+(``widgets/spotify_visualizer/backdrop.py``) into a small mipmapped texture (``BackdropEnvironment``).
+A face shows the wallpaper
 around it displaced by its reflected ray (taken toward a near virtual eye, so it varies across
 the row), sharper with Gloss, so the picture slides across the bars as the view turns.
 
