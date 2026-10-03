@@ -29,3 +29,18 @@ for i,(label,stem,ref_crop) in enumerate(views):
     sheet.paste(render.resize((480,576),Image.Resampling.LANCZOS),(i*480,44))
 comparison.save(ASSET/"renders"/"Usu_Reference_Comparison.png")
 sheet.save(ASSET/"renders"/"Usu_Static_Views.png")
+
+free_views=[("OBLIQUE FRONT","oblique_front"),("OBLIQUE REAR","oblique_rear"),
+            ("HIGH REAR","high_rear"),("LOW FRONT","low_front"),
+            ("HIGH SIDE","high_side")]
+free_sheet=Image.new("RGB",(1920,1624),(244,244,244))
+free_draw=ImageDraw.Draw(free_sheet)
+for i,(label,stem) in enumerate(free_views):
+    x,y=(i%3)*640,(i//3)*812
+    free_draw.text((x+24,y+9),label,fill=(25,25,25),font=font)
+    render=Image.open(ASSET/"renders"/f"Usu_{stem}.png").convert("RGB")
+    assert render.size == (1000,1200), (stem,render.size)
+    free_sheet.paste(render.resize((640,768),Image.Resampling.LANCZOS),(x,y+40))
+free_draw.multiline_text((1304,900),"STATIC SHAPE REVIEW\n\nSame geometry in every view.\nVisual approval pending.",
+                         fill=(25,25,25),font=font,spacing=12)
+free_sheet.save(ASSET/"renders"/"Usu_Free_Angles.png")

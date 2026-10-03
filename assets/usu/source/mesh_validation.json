@@ -2,13 +2,15 @@
   "scope": "Static authoring only; visual approval pending",
   "surfaces": {
     "Usu_Body_And_Arms": {
-      "vertices": 1196,
-      "faces": 1250,
-      "quads": 1138,
-      "triangles": 112,
+      "vertices": 4664,
+      "faces": 5011,
+      "quads": 4313,
+      "triangles": 698,
       "nonmanifold_edges": 0,
       "loose_vertices": 0,
-      "zero_area_faces": 0
+      "zero_area_faces": 0,
+      "nonadjacent_cage_self_intersections": 0,
+      "nonadjacent_subdivision_self_intersections": 0
     },
     "Usu_Foot_L": {
       "vertices": 530,
@@ -17,7 +19,9 @@
       "triangles": 96,
       "nonmanifold_edges": 0,
       "loose_vertices": 0,
-      "zero_area_faces": 0
+      "zero_area_faces": 0,
+      "nonadjacent_cage_self_intersections": 0,
+      "nonadjacent_subdivision_self_intersections": 0
     },
     "Usu_Foot_R": {
       "vertices": 530,
@@ -26,7 +30,9 @@
       "triangles": 96,
       "nonmanifold_edges": 0,
       "loose_vertices": 0,
-      "zero_area_faces": 0
+      "zero_area_faces": 0,
+      "nonadjacent_cage_self_intersections": 0,
+      "nonadjacent_subdivision_self_intersections": 0
     },
     "Usu_Head_And_Ears": {
       "vertices": 4393,
@@ -35,7 +41,9 @@
       "triangles": 2,
       "nonmanifold_edges": 0,
       "loose_vertices": 0,
-      "zero_area_faces": 0
+      "zero_area_faces": 0,
+      "nonadjacent_cage_self_intersections": 0,
+      "nonadjacent_subdivision_self_intersections": 0
     }
   },
   "armatures": 0,
