@@ -1656,6 +1656,12 @@ class _SpotifyBeatEngine(QObject):
             onset_strength=getattr(w, '_onset_strength', 0.0),
         )
 
+    def get_onset_events(self, after_serial: int = 0) -> tuple:
+        """The published onsets (``MusicalOnset``) with a serial after ``after_serial``, oldest
+        first: a consumer passing the last serial it took gets each onset exactly once."""
+        events = getattr(self._audio_worker, '_onset_events', ())
+        return tuple(event for event in events if event.serial > after_serial)
+
     def get_event_scheduler(self) -> "TransientEventScheduler | None":
         """Return the event micro-scheduler (§2.4) if the transient bus exists.
 

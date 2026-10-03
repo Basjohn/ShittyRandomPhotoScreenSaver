@@ -37,37 +37,89 @@ pytestmark = pytest.mark.qt
 W, H = 684, 418
 
 
-def _record(runtime, now, onset=False, kind="kick", strength=1.0, playing=True):
-    return runtime.record_onsets(onset=onset, kind=kind, strength=strength, now_ts=now, playing=playing)
+class _Onsets:
+    """Published onsets as the transient bus makes them (serial, timestamp, kind, strength)."""
+
+    def __init__(self) -> None:
+        self.published = []
+        self.serial = 1000          # serials are process-wide: never assume they start at 1
+
+    def onset(self, timestamp, kind="kick", strength=1.0):
+        from widgets.spotify_visualizer.transient_bus import MusicalOnset
+
+        self.serial += 1
+        self.published.append(MusicalOnset(serial=self.serial, timestamp=timestamp, kind=kind, strength=strength,
+                                           magnitude=strength, loudness=1.0, presence=1.0))
+
+    def after(self, serial):
+        return tuple(onset for onset in self.published if onset.serial > serial)
 
 
-def test_an_event_is_admitted_once_per_new_onset_spaced_bounded_and_aged():
-    runtime = ShockwaveGridFrameRuntime()
-    assert _record(runtime, 10.0) == ()
-    events = _record(runtime, 10.01, onset=True)
-    assert len(events) == 1 and events[0][0] == pytest.approx(0.0)
-    assert len(_record(runtime, 10.02, onset=True)) == 1             # the same onset held: no new event
-    _record(runtime, 10.03)
-    assert len(_record(runtime, 10.03 + SHOCKWAVE_MIN_GAP / 2, onset=True)) == 1   # too soon after the last
-    _record(runtime, 10.2)
-    events = _record(runtime, 10.3, onset=True, kind="snare", strength=0.4)
-    assert len(events) == 2 and events[0][0] == pytest.approx(0.29) and events[1][3] == pytest.approx(0.4)
-    assert _record(runtime, 10.35, onset=False, playing=False) and len(_record(runtime, 10.4)) == 2
-    _record(runtime, 10.5)
-    assert len(_record(runtime, 10.6, onset=True, playing=False)) == 2   # paused: onsets are not admitted
-    assert _record(runtime, 10.3 + SHOCKWAVE_LIFETIME + 0.01) == ()      # all expired
+def _record(runtime, bus, now, playing=True):
+    return runtime.record_onsets(onsets=bus.after(runtime.onset_serial), now_ts=now, playing=playing)
+
+
+def test_an_event_is_admitted_once_per_onset_spaced_bounded_and_aged():
+    runtime, bus = ShockwaveGridFrameRuntime(), _Onsets()
+    assert _record(runtime, bus, 10.0) == ()
+    bus.onset(10.005)
+    events = _record(runtime, bus, 10.01)
+    assert len(events) == 1 and events[0][0] == pytest.approx(0.005)      # born when it happened
+    assert len(_record(runtime, bus, 10.02)) == 1                          # taken once
+    bus.onset(10.005 + SHOCKWAVE_MIN_GAP / 2)
+    assert len(_record(runtime, bus, 10.08)) == 1                          # too soon after the last
+    bus.onset(10.3, kind="snare", strength=0.4)
+    events = _record(runtime, bus, 10.3)
+    assert len(events) == 2 and events[0][0] == pytest.approx(0.295) and events[1][3] == pytest.approx(0.4)
+    bus.onset(10.6)
+    assert len(_record(runtime, bus, 10.6, playing=False)) == 2             # paused: not admitted...
+    assert len(_record(runtime, bus, 10.7)) == 2                            # ...nor later
+    assert _record(runtime, bus, 10.3 + SHOCKWAVE_LIFETIME + 0.01) == ()    # all expired
     now = 20.0
     for _ in range(SHOCKWAVE_CAPACITY + 5):
-        _record(runtime, now, onset=True)
-        _record(runtime, now + 0.01)
+        bus.onset(now)
         now += SHOCKWAVE_MIN_GAP + 0.01
-    events = _record(runtime, now)
+    events = _record(runtime, bus, now)                                     # read once, after them all
     assert len(events) == SHOCKWAVE_CAPACITY
     assert [age for age, *_ in events] == sorted((age for age, *_ in events), reverse=True)   # oldest first
     # The clock going back (a new activation) starts afresh; a retired runtime authors nothing.
-    assert _record(runtime, 1.0) == ()
+    assert _record(runtime, bus, 1.0) == ()
     runtime.retire()
-    assert _record(runtime, 2.0, onset=True) is None
+    bus.onset(2.0)
+    assert _record(runtime, bus, 2.0) is None
+
+
+def test_the_bus_publishes_every_onset_exactly_once_whatever_the_reading_cadence(monkeypatch):
+    """Onsets inside one logical tick are each delivered (sampling the bus's onset flag per tick
+    merged or missed them); serials stay unique across a replaced bus."""
+    from widgets.spotify_visualizer import transient_bus
+    from widgets.spotify_visualizer.transient_bus import TransientBus
+
+    clock = [100.0]
+    monkeypatch.setattr(transient_bus.time, "time", lambda: clock[0])
+    bus = TransientBus()
+    times = []
+    for step in range(60):                      # 2.7 ms analysis frames: a quiet floor with three hits
+        clock[0] = 100.0 + step * 0.0027
+        hit = step in (20, 40, 58)
+        bus.update(1.5 if hit else 0.1, 0.1, 0.1, loudness=2.0 if hit else 0.2)
+        if hit:
+            times.append(clock[0])
+    onsets = bus.recent_onsets
+    assert [round(onset.timestamp, 6) for onset in onsets] == [round(t, 6) for t in times]
+    assert all(onset.kind == "kick" and onset.magnitude > 0.0 for onset in onsets)
+    assert [o.serial for o in onsets] == sorted({o.serial for o in onsets})
+    runtime = ShockwaveGridFrameRuntime()
+    events = runtime.record_onsets(onsets=onsets, now_ts=clock[0], playing=True)
+    assert len(events) == 2                     # the middle one came within SHOCKWAVE_MIN_GAP of the first
+    assert runtime.record_onsets(onsets=onsets, now_ts=clock[0] + 0.01, playing=True) is not None
+    assert runtime.onset_serial == onsets[-1].serial
+    fresh = TransientBus()                      # a replaced bus (an activation) keeps serials unique
+    clock[0] += 1.0
+    fresh.update(0.1, 0.1, 0.1)
+    clock[0] += 0.003
+    fresh.update(1.5, 0.1, 0.1)
+    assert fresh.recent_onsets and fresh.recent_onsets[0].serial > onsets[-1].serial
 
 
 def test_origins_are_deterministic_and_on_the_grid():

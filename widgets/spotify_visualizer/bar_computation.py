@@ -272,6 +272,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                 min(2.5, max(0.0, bass_energy / _tb_norm)),
                 min(2.5, max(0.0, mid_energy / _tb_norm)),
                 min(2.5, max(0.0, treble_energy / _tb_norm)),
+                loudness=max(bass_energy, mid_energy, treble_energy),
             )
             _g_clamp = float(worker._transient_clamp)
             worker._transient_bass = min(_g_clamp, _t_snap.bass_transient)
@@ -280,6 +281,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             worker._onset_detected = _t_snap.onset_detected
             worker._onset_type = _t_snap.onset_type
             worker._onset_strength = _t_snap.onset_strength
+            worker._onset_events = _tb.recent_onsets
 
         # ── Shape-node driven profile ────────────────────────────────
         # The shape editor remains the visual guide, but lane energy now

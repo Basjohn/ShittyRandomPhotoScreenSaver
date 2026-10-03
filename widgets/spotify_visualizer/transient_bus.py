@@ -21,7 +21,9 @@ No external dependencies beyond numpy (already required by audio_worker).
 """
 from __future__ import annotations
 
+import itertools
 import logging
+import math
 import time
 from dataclasses import dataclass
 from typing import List
@@ -46,6 +48,34 @@ class TransientEnergyBands:
     onset_strength: float = 0.0  # 0..1 normalised onset magnitude
 
 
+@dataclass(frozen=True, slots=True)
+class MusicalOnset:
+    """One detected onset, published once and never mutated (``TransientBus.recent_onsets``).
+
+    ``serial`` is unique in the process (it never restarts, not even with a new bus), so a
+    consumer takes every onset after the last serial it saw exactly once, however its own
+    cadence relates to the analysis. ``strength`` is the bus's clipped 0..1 value;
+    ``magnitude`` the unclipped one (0..3: how far above threshold, relative to it), which
+    still tells a big hit from a medium one. ``loudness`` is the absolute post-noise-floor,
+    pre-AGC level the onset happened at (the bus's own input is loudness-normalised, so a
+    near-silent passage triggers as readily as a loud one); ``presence`` is that level
+    against the recent running level (about 1 in steady music, low in a quiet passage of a
+    loud track, 0 with no loudness supplied).
+    """
+    serial: int
+    timestamp: float
+    kind: str
+    strength: float
+    magnitude: float
+    loudness: float = 0.0
+    presence: float = 0.0
+
+
+_ONSET_SERIALS = itertools.count(1)
+# Time constant of the running loudness ``presence`` compares an onset with (seconds).
+LOUDNESS_REFERENCE_SECONDS = 6.0
+
+
 @dataclass(slots=True)
 class OnsetEvent:
     """Timestamped onset event stored in the ring buffer."""
@@ -67,6 +97,9 @@ class TransientBus:
 
     # Ring buffer capacity for onset events
     _RING_CAPACITY: int = 8
+    # How many published onsets ``recent_onsets`` keeps (a consumer reading at its own
+    # cadence never falls this far behind: onsets are at least ``min_onset_gap_s`` apart).
+    PUBLISHED_ONSETS: int = 16
 
     def __init__(
         self,
@@ -111,6 +144,9 @@ class TransientBus:
             OnsetEvent() for _ in range(self._RING_CAPACITY)
         ]
         self._onset_ring_head: int = 0
+        # Published onsets (replaced, never mutated) and the running loudness.
+        self._recent_onsets: tuple[MusicalOnset, ...] = ()
+        self._loudness_reference: float = 0.0
 
         # Timing
         self._last_onset_ts: float = 0.0
@@ -129,14 +165,26 @@ class TransientBus:
         bass_energy: float,
         mid_energy: float,
         high_energy: float,
+        *,
+        loudness: float | None = None,
     ) -> TransientEnergyBands:
         """Process one FFT frame and return transient energy snapshot.
 
         Parameters are post-noise-floor, pre-AGC band energies (0..1 range).
+        ``loudness`` is the frame's absolute level, before any normalisation of those
+        energies; onsets carry it (see ``MusicalOnset``).
         """
         now = time.time()
+        elapsed = now - self._last_update_ts if self._last_update_ts else 0.0
         self._last_update_ts = now
         self._frame_count += 1
+        if loudness is not None:
+            level = max(0.0, float(loudness))
+            if self._frame_count == 1 or elapsed <= 0.0:
+                self._loudness_reference = max(self._loudness_reference, level)
+            else:
+                alpha = 1.0 - math.exp(-min(elapsed, 1.0) / LOUDNESS_REFERENCE_SECONDS)
+                self._loudness_reference += (level - self._loudness_reference) * alpha
 
         if not self._has_prev:
             # First frame — seed previous values, no flux yet
@@ -241,6 +289,19 @@ class TransientBus:
                         self._onset_ring_head + 1
                     ) % self._RING_CAPACITY
 
+                    # Publish it (one tuple replacement: readers never see a partial event).
+                    level = 0.0 if loudness is None else max(0.0, float(loudness))
+                    self._recent_onsets = self._recent_onsets[1 - self.PUBLISHED_ONSETS:] + (MusicalOnset(
+                        serial=next(_ONSET_SERIALS),
+                        timestamp=now,
+                        kind=self._onset_type,
+                        strength=self._onset_strength,
+                        magnitude=max_t,
+                        loudness=level,
+                        presence=(level / self._loudness_reference
+                                  if loudness is not None and self._loudness_reference > 1e-6 else 0.0),
+                    ),)
+
                     # Feed event micro-scheduler (§2.4)
                     if self._scheduler is not None:
                         self._scheduler.feed(OnsetEvent(
@@ -281,6 +342,11 @@ class TransientBus:
             onset_type=self._onset_type,
             onset_strength=self._onset_strength,
         )
+
+    @property
+    def recent_onsets(self) -> tuple[MusicalOnset, ...]:
+        """The last ``PUBLISHED_ONSETS`` onsets, oldest first (an immutable tuple)."""
+        return self._recent_onsets
 
     def get_scheduler(self) -> "TransientEventScheduler":
         """Return the event micro-scheduler, creating it on first access."""

@@ -344,14 +344,9 @@ def _capture_shockwave_grid(
     runtime = _resolve_current_mode_runtime(controller, "shockwave_grid", runtime_type)
     if runtime is None:
         return None
-    getter = getattr(engine, "get_transient_energy_bands", None) if engine is not None else None
-    try:
-        transient = _transient_state(getter() if callable(getter) else None)
-    except Exception:
-        transient = _transient_state(None)
-    events = runtime.record_onsets(onset=transient.onset_detected, kind=transient.onset_type,
-                                   strength=transient.onset_strength, now_ts=context.now_ts,
-                                   playing=context.playing)
+    getter = getattr(engine, "get_onset_events", None) if engine is not None else None
+    onsets = getter(runtime.onset_serial) if callable(getter) else ()
+    events = runtime.record_onsets(onsets=onsets, now_ts=context.now_ts, playing=context.playing)
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)

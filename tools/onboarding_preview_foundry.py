@@ -995,16 +995,19 @@ _PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 1.0), (0.55, "snare",
 
 
 class _PreviewOnsets:
-    """The one engine call an onset-driven capture makes: the transient bus's latest state."""
+    """The one engine call an onset-driven capture makes: the published onsets after a serial."""
 
     def __init__(self) -> None:
-        self.onset: tuple[str, float] | None = None
+        self.onsets: list = []
 
-    def get_transient_energy_bands(self):
-        from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+    def publish(self, timestamp: float, kind: str, strength: float) -> None:
+        from widgets.spotify_visualizer.transient_bus import MusicalOnset
 
-        kind, strength = self.onset or ("", 0.0)
-        return TransientEnergyBands(onset_detected=self.onset is not None, onset_type=kind, onset_strength=strength)
+        self.onsets.append(MusicalOnset(serial=len(self.onsets) + 1, timestamp=timestamp, kind=kind,
+                                        strength=strength, magnitude=strength, loudness=1.0, presence=1.0))
+
+    def get_onset_events(self, after_serial: int = 0):
+        return tuple(onset for onset in self.onsets if onset.serial > after_serial)
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
 
 
@@ -1181,10 +1184,8 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         engine = _PreviewOnsets()
         state._engine = engine
         for time, kind, strength in onsets:
-            for onset, at in (((kind, strength), time), (None, time + 0.02)):
-                engine.onset = onset
-                capture_visualizer_logical_frame(state, now_ts=at, changed=True, mode_reveal_ready=True)
-        engine.onset = None
+            engine.publish(time, kind, strength)
+            capture_visualizer_logical_frame(state, now_ts=time + 0.01, changed=True, mode_reveal_ready=True)
     first = capture_visualizer_logical_frame(
         state,
         now_ts=1.0,
