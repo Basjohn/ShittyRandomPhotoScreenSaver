@@ -237,6 +237,60 @@ def test_orbiting_a_curated_preset_moves_the_mode_to_custom_holding_what_was_sho
     assert (config[turn], config[tilt]) == (-0.3, 0.9) and cache == {}
 
 
+def test_saving_an_orbit_normalizes_only_the_snapshot_it_replaces(tmp_path, monkeypatch, qt_app):
+    """A finished orbit is saved on the GUI thread between frames, so it must stay cheap: only the
+    orbited mode's Custom snapshot is (re)built, every other stored snapshot passes through as it
+    is (normalizing each one built a whole settings model, ~50 ms a save: a visible jump). What
+    is persisted is exactly what normalizing everything would have persisted."""
+    import core.settings.visualizer_presets as presets
+    from core.settings.settings_manager import SettingsManager
+    from core.settings.visualizer_presets import (
+        VISUALIZER_CUSTOM_STORAGE_KEY,
+        build_normalized_custom_snapshot,
+        get_custom_preset_index,
+        get_presets,
+        normalize_visualizer_custom_snapshot_cache,
+    )
+    from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
+
+    mode = "extruded_spectrum"
+    turn, tilt = view_orbit_settings(mode)
+    settings = SettingsManager(application="orbit_save_test", storage_base_dir=tmp_path)
+    stored = {other: build_normalized_custom_snapshot(other, {**deepcopy(_DEFAULTS), "mode": other})
+              for other in VISUALIZER_MODE_IDS}
+    curated = next(index for index, p in enumerate(get_presets(mode)) if not p.is_custom and p.settings)
+    for index, values in ((get_custom_preset_index(mode), {turn: -0.3, tilt: 0.2}),
+                          (curated, {turn: 0.42, tilt: 0.13})):
+        section = {**deepcopy(_DEFAULTS), "mode": mode, f"preset_{mode}": index}
+        settings.replace_visualizer_runtime_preset_state(section, stored)
+        normalized = []
+        real = presets.normalize_visualizer_mode_payload
+        monkeypatch.setattr(presets, "normalize_visualizer_mode_payload",
+                            lambda key, payload: normalized.append(key) or real(key, payload))
+        config, cache = resolve_visualizer_view_orbit(settings.get("widgets.spotify_visualizer"),
+                                                      settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {}),
+                                                      mode=mode, values=values)
+        settings.replace_visualizer_runtime_preset_state(config, cache)
+        monkeypatch.undo()
+        assert set(normalized) <= {mode}                         # never the modes it left alone
+        assert len(normalized) <= 2                               # built once, checked once
+        persisted = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        assert persisted == normalize_visualizer_custom_snapshot_cache(cache)
+        assert {key: persisted[key] for key in stored if key != mode} == {
+            key: value for key, value in stored.items() if key != mode}
+
+
+def test_canonical_defaults_are_never_handed_out_mutable():
+    """Default lookups are cached per key; a caller mutating what it got must not change the next."""
+    from core.settings.default_contract import require_canonical_default
+
+    key = "widgets.spotify_visualizer.spectrum_shape_nodes"
+    first = require_canonical_default(key)
+    assert isinstance(first, list) and first
+    first.clear()
+    assert require_canonical_default(key) and require_canonical_default(key) is not first
+
+
 def _mouse(kind, x, y, *, button=Qt.MouseButton.LeftButton, alt=True):
     from PySide6.QtCore import QPointF
     from PySide6.QtGui import QMouseEvent

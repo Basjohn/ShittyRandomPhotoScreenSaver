@@ -37,7 +37,8 @@ def resolve_visualizer_view_orbit(
     # The orbit never changes which mode is shown (it may finish just after a mode change).
     config["mode"] = str(visualizer_config.get("mode") or mode_key)
     config.update({str(key): float(value) for key, value in values.items()})
-    cache = normalize_visualizer_custom_snapshot_cache(custom_presets)
+    # The orbit replaces at most this mode's snapshot; the stored ones pass through as they are.
+    cache = normalize_visualizer_custom_snapshot_cache(custom_presets, unchanged_from=custom_presets)
     if not activation.is_custom:
         config[get_preset_key(mode_key)] = get_custom_preset_index(mode_key)
         cache[mode_key] = build_normalized_custom_snapshot(mode_key, config)
