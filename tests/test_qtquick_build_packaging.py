@@ -36,6 +36,27 @@ def test_every_product_nuitka_worker_packages_the_quick_qml_contract():
         assert "--include-qt-plugins=all" not in source, worker
 
 
+def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_builds():
+    """``assets/usu`` (rig sources and renders, ~130 MB) is nowhere near product use: no QRC
+    manifest lists it, no build or installer script ships it (nor ``assets`` wholesale), and no
+    product code imports it, so Nuitka never follows it."""
+    import re
+    import subprocess
+
+    for manifest in (ROOT / "ui" / "resources").glob("*.qrc"):
+        assert "assets/usu" not in manifest.read_text(encoding="utf-8").replace("\\", "/"), manifest
+    scripts = [*PRODUCT_WORKERS, ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1",
+               ROOT / "tools" / "build_layout.ps1", *(ROOT / "scripts").glob("*.iss")]
+    for script in scripts:
+        source = script.read_text(encoding="utf-8").replace("\\", "/").lower()
+        assert "usu" not in re.findall(r"[a-z_]+", source), script
+        assert not re.search(r"include-data-dir=assets(/|=)", source), script
+        assert not re.search(r'source:\s*"?[^"\n]*assets/?(\*|")', source), script
+    tracked = subprocess.run(["git", "grep", "-l", "-E", r"(from|import) assets\.usu", "--", "*.py"],
+                             cwd=ROOT, capture_output=True, text=True).stdout.split()
+    assert [path for path in tracked if not path.startswith("assets/usu/")] == []
+
+
 def test_diagnostic_build_reuses_the_qml_aware_canonical_worker():
     source = (
         ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
