@@ -34,6 +34,34 @@ A source that is excellent for one job may be actively harmful for another. Sphe
 | **Smoothed/post-AGC/display bars** | stable displayed bars/curves, deliberately sustained envelopes, visual settling | local onset/event detection when attack/freshness matters; feeding one mode from another mode's presentation-shaped signal |
 | **Typed transient/event bus** | semantic kick/vocal/snare/onset admission and consume-once accents | polling/reusing one event as a level signal; using clamped event confidence as maximum presentation velocity/power |
 
+### 2A. Measured signal scales: real music is far louder than "1"
+
+Agents (and earlier SRPSS work) repeatedly calibrated against an imagined `0..1` world. Real playback is nowhere near
+it. Measured on the operator's machine (Spotify via WASAPI loopback, 2026-10-03, technical profile sensitivity 0.97,
+energy boost 1.18, input gain 0.98; `[SPHERE_AUDIO]` diagnostics):
+
+| Signal (accessor) | Silence | Quiet moments / fade-ins | Ordinary to loud music |
+| --- | --- | --- | --- |
+| live pre-AGC bands (`get_live_pre_agc_energy_bands`, clamped at 2.5) | 0 | 0.1-1.9 | **pinned**: bass 2.5 almost always, mid 1.3-2.5, high 0-2.5 |
+| transient-bus loudness (`get_musical_level()[0]`, peak band, unclamped) | 0 | 0.2-2 | **3-17**, typically 5-12 |
+| presence (`get_musical_level()[1]`, loudness / its 6 s running level) | 0 | 0.03-0.6 | **0.35-2.0, about 1** at the track's own level |
+| control / support lanes (`get_pre_agc_energy_bands`, `get_bubble_energy_bands`) | 0 | low | 0..1, normalised (bounded by design) |
+
+Consequences, all learned the hard way:
+
+- **Absolute thresholds in `0..1` units mean "is it silent?" and nothing more.** A gate at 0.09 or a slider floor in
+  `0..1` on the live or loudness lanes never closes during music (Sphere's intake gate and energy floors did exactly
+  that until 2026-10-03). The absolute numbers also move with the technical profile and the source's own volume.
+- **Judge loudness relative to the track**: presence is the balanced space (about 1 is "this track's normal",
+  0.3 a quiet passage, 1.7+ a big moment). The shared rule in `transient_bus.py` (`musical_weight` for near-silence and
+  far-quieter passages, `musical_emphasis` against the track's usual onset presence, `learn_usual_presence`) is the
+  one definition; Shockwave Grid and Voxel Sphere use it. Use it rather than inventing another.
+- **A clamp is not a normaliser.** The 2.5 clamp on the live lane is a safety bound; ordinary music saturates it, so
+  no contrast survives there.
+- **Silence must not teach a running level.** A running reference that decays through a pause makes the music's
+  return look tens of times louder than usual (presence 46 was measured); the bus holds its level through
+  near-silence.
+
 Sphere's rejected spectral-flux implementation is the cleanest negative example: `get_smoothed_bars()` had already passed through Spectrum-oriented shaping, temporal bar smoothing and AGC/play-ramp behavior. That made a Sphere-local onset detector depend on another mode's display signal. The accepted path uses the already-computed, temporally unsmoothed, pre-shape/pre-AGC analysis spectrum instead.
 
 Conversely, raw/pre-AGC is **not** automatically better everywhere. Bubble/Blob proved that pushing hotter raw pressure through downstream math tuned for a cooler smoothed signal simply changes “dead” into “blown out.” Source choice and response math must be calibrated together.
@@ -123,6 +151,11 @@ Use typed events, peak-picked flux, Schmitt/rise edges or another explicit event
 ### Medium continuous response
 
 For things such as shape articulation or rotation speed, use short asymmetric attack/release smoothing. Fast attack + slower release can preserve punch without jittering back to zero immediately.
+
+**Everything ramps (operator 2026-10-03).** Every reactive element follows the music's weight with a fast rise and a
+gentle fall, and each one ramps on its own: particle population and power, fragmentation power *and how often it
+fires*, tracer speed, spin velocity, glow. Scaling only the size of a reward while its admission frequency stays
+constant reads as "reacts to everything the same" (Sphere's 2026-10-03 log: ~2 packets per 0.5 s at every level).
 
 ### Slow sustained response
 
