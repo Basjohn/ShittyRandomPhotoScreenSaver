@@ -16,6 +16,13 @@ With motion blur the target has a second attachment, the screen motion of each
 pixel's surface over the shutter (see ``motion.MotionBlur``). It is write-protected
 while the scene draws; a pass that moves opens it with ``velocity_writes()``.
 
+An **overlay** scope (``overlay=`` an opacity) is for a scene drawn over what Quick has
+already drawn (a Visualizer over its card): the target clears to transparent and the
+composite hands the resolved scene back as straight alpha, times the opacity, to the
+caller's blend state (the Visualizer host blends straight alpha). Where nothing was drawn
+the composite discards, so the card shows through untouched. Bloom (which writes its glow
+into alpha) and motion blur are transition facilities and are refused in an overlay.
+
 ``scope`` restores Quick's framebuffers, viewport and scissor even when the
 scene raises, so a consumer needs no fence change of its own (the Visualizer
 fence stays as it is: modes that do not use a target pay nothing).
@@ -90,6 +97,30 @@ void main() {
 }
 """
 
+# An overlay: the resolved scene as straight alpha (its colour was blended over transparent
+# black, so it is premultiplied), times the opacity; nothing drawn shows what lies below.
+_OVERLAY_GLSL = """
+uniform float uOpacity;
+vec4 sceneOverlay(vec4 colour) {
+    if (colour.a <= 0.0) discard;
+    return vec4(colour.rgb / colour.a, colour.a * uOpacity);
+}
+"""
+_COMPOSITE_OVERLAY_FRAGMENT = _COMPOSITE_HEADER + "uniform sampler2D uScene;\n" + _OVERLAY_GLSL + """
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin;
+    if (any(lessThan(texel, ivec2(0))) || any(greaterThanEqual(texel, uExtent))) discard;
+    FragColor = sceneOverlay(texelFetch(uScene, texel, 0));
+}
+"""
+_COMPOSITE_OVERLAY_SAMPLES_FRAGMENT = _COMPOSITE_HEADER + _RESOLVE_GLSL + _OVERLAY_GLSL + """
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin;
+    if (any(lessThan(texel, ivec2(0))) || any(greaterThanEqual(texel, uExtent))) discard;
+    FragColor = sceneOverlay(sceneResolved(texel));
+}
+"""
+
 # The whole allocation, resolved for the post effects (outside the rect it is cleared black).
 _RESOLVE_FRAGMENT = "#version 460 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
 void main() {
@@ -111,11 +142,18 @@ void main() {
 """)
 
 
-def scene_target_programs(samples: int, bloom: bool, motion: bool) -> tuple[tuple[str, str, str], ...]:
+def scene_target_programs(samples: int, bloom: bool, motion: bool,
+                          overlay: bool = False) -> tuple[tuple[str, str, str], ...]:
     """(key, vertex, fragment) of every program ``end`` draws with for this setup, for a gradual
     warm-up. Keep in step with ``end`` (the warm-up bar renders a first frame that must compile
     nothing)."""
     multisampled = int(samples) > 1
+    if overlay:
+        if bloom or motion:
+            raise ValueError("an overlay scene target has no bloom or motion blur")
+        if multisampled:
+            return (("scene_overlay_samples", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_SAMPLES_FRAGMENT),)
+        return (("scene_overlay", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_FRAGMENT),)
     if not (bloom or motion):
         if multisampled:
             return (("scene_composite_samples", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_SAMPLES_FRAGMENT),)
@@ -181,6 +219,7 @@ class SceneTarget:
         self._inherited = (0, 0)
         self._scissor = False
         self._rect = (0, 0, 0, 0)
+        self._overlay: float | None = None
         self._bloom = BloomChain(label)
         self._motion = MotionBlur(label)
 
@@ -196,15 +235,18 @@ class SceneTarget:
     @contextmanager
     def scope(self, frame: SceneFrame, samples: int, resources,
               rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
-              motion_blur: bool = False) -> Iterator[None]:
+              motion_blur: bool = False, overlay: float | None = None) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
         (see ``post.BloomChain``); the passes must then write alpha deliberately.
         With ``motion_blur`` the passes that move write their screen motion inside
-        ``velocity_writes()`` (see ``motion.MotionBlur``).
+        ``velocity_writes()`` (see ``motion.MotionBlur``). With ``overlay`` (an opacity)
+        the scene is laid over what is already drawn (see the module notes).
         """
-        self.begin(frame, samples, rect, motion_blur)
+        if overlay is not None and (bloom > 0.0 or motion_blur):
+            raise ValueError(f"{self.label}: an overlay scene target has no bloom or motion blur")
+        self.begin(frame, samples, rect, motion_blur, overlay=overlay)
         try:
             yield
         except BaseException:
@@ -268,7 +310,7 @@ class SceneTarget:
             gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
-              motion_blur: bool = False) -> None:
+              motion_blur: bool = False, overlay: float | None = None) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -282,11 +324,13 @@ class SceneTarget:
             self.release()
             self._allocate(_bucket(width), _bucket(height), samples, motion_blur)
         self._rect = (x, y, width, height)
+        self._overlay = None if overlay is None else max(0.0, min(1.0, float(overlay)))
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
         gl.glDisable(gl.GL_SCISSOR_TEST)
         clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
         try:
-            gl.glClearColor(0.0, 0.0, 0.0, 1.0)   # the motion attachment clears to no motion
+            # The motion attachment clears to no motion; an overlay's colour to transparent.
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0 if self._overlay is not None else 1.0)
             gl.glClearDepth(1.0)
             gl.glDepthMask(gl.GL_TRUE)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
@@ -317,7 +361,24 @@ class SceneTarget:
             if bloom > 0.0:
                 glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
         self._restore_inherited(frame)
-        if scene == self._names["colour"] and multisampled:
+        if self._overlay is not None:
+            key = "scene_overlay_samples" if multisampled else "scene_overlay"
+            program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_SAMPLES_FRAGMENT
+                                        if multisampled else _COMPOSITE_OVERLAY_FRAGMENT)
+            names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity")
+            uniforms = resources.uniforms(key, names + (("uSceneSamples", "uSamples") if multisampled
+                                                         else ("uScene",)))
+            gl.glUseProgram(program)
+            gl.glUniform1f(uniforms["uOpacity"], self._overlay)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            if multisampled:
+                gl.glUniform1i(uniforms["uSamples"], self._samples)
+                gl.glUniform1i(uniforms["uSceneSamples"], 0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, scene)
+            else:
+                gl.glUniform1i(uniforms["uScene"], 0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, scene)
+        elif scene == self._names["colour"] and multisampled:
             program = resources.program("scene_composite_samples", ITEM_QUAD_VERTEX_SOURCE,
                                         _COMPOSITE_SAMPLES_FRAGMENT)
             uniforms = resources.uniforms("scene_composite_samples", ("uMatrix", "uItemSize", "uOrigin", "uExtent",
@@ -348,6 +409,7 @@ class SceneTarget:
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         if scene == self._names["colour"] and multisampled:
             gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
+        self._overlay = None
 
     def _resolve(self, frame: SceneFrame, resources) -> tuple[int, int]:
         """Average the samples of the whole allocation into plain textures (for the post effects).

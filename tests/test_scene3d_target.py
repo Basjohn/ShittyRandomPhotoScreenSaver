@@ -253,3 +253,95 @@ def test_motion_blur_smears_a_moving_surface_along_its_motion_only(capture, samp
     finally:
         target.release()
         resources.release_resources()
+
+
+def _straight_alpha() -> None:
+    """The Visualizer host's blend state, which an overlay composites into."""
+    gl.glEnable(gl.GL_BLEND)
+    gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+    gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_an_overlay_lays_the_scene_over_what_is_drawn(capture, samples):
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        card = _card_frame(capture, 40, 20, 120, 80)
+        inner = _card_frame(capture, 70, 40, 50, 30)       # the scene covers only part of the card
+        texture = capture.textures[0]
+        _clear(capture)
+        _straight_alpha()
+        resources.draw_image(inner, texture)
+        direct = _read(capture)
+
+        _clear(capture)
+        _straight_alpha()
+        with target.scope(card, samples, resources, overlay=1.0):
+            resources.draw_image(inner, texture)
+        through = _read(capture)
+        assert np.array_equal(direct, through)              # untouched card pixels stay as they were
+
+        _clear(capture)
+        _straight_alpha()
+        with target.scope(card, samples, resources, overlay=0.5):
+            resources.draw_image(inner, texture)
+        half = _read(capture)
+        magenta = np.array([255, 0, 255, 255])
+        drawn = (direct != magenta).any(axis=2)
+        expected = 0.5 * direct[..., :3] + 0.5 * magenta[:3]
+        assert np.abs(half[..., :3][drawn] - expected[drawn]).max() <= 1
+        assert np.array_equal(half[~drawn], direct[~drawn])
+        assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == capture.fbo
+        programs = {key for key, *_ in __import__("rendering.quick.scene3d.target", fromlist=["x"])
+                    .scene_target_programs(samples, False, False, overlay=True)}
+        assert programs <= set(resources._programs)        # the warm-up list covers what it draws
+    finally:
+        gl.glDisable(gl.GL_BLEND)
+        target.release()
+        resources.release_resources()
+
+
+def test_an_overlays_smoothed_edges_blend_without_a_dark_fringe(capture):
+    from rendering.quick.render.gl_resources import compile_program
+
+    program = compile_program("#version 460 core\nvoid main() {\n"
+                              "    vec2 p[3] = vec2[](vec2(-0.6, -0.8), vec2(0.7, -0.5), vec2(-0.2, 0.9));\n"
+                              "    gl_Position = vec4(p[gl_VertexID], 0.0, 1.0);\n}\n",
+                              "#version 460 core\nout vec4 FragColor;\nvoid main() { FragColor = vec4(1.0); }\n",
+                              label="overlay edge test")
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        _clear(capture)
+        _straight_alpha()
+        with target.scope(card, 4, resources, overlay=1.0):
+            gl.glUseProgram(program)
+            gl.glBindVertexArray(capture.vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        pixels = _read(capture)
+        green = pixels[..., 1]
+        assert ((green > 10) & (green < 245)).sum() > 50     # smoothed edge pixels exist
+        # White over magenta: red and blue stay full everywhere; a dark fringe would drop them.
+        assert pixels[..., 0].min() >= 253 and pixels[..., 2].min() >= 253
+    finally:
+        gl.glDisable(gl.GL_BLEND)
+        gl.glDeleteProgram(program)
+        target.release()
+        resources.release_resources()
+
+
+def test_an_overlay_refuses_bloom_and_motion_blur(capture):
+    from rendering.quick.scene3d.target import scene_target_programs
+
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        for options in ({"bloom": 0.5}, {"motion_blur": True}):
+            with pytest.raises(ValueError, match="overlay"):
+                with target.scope(card, 4, resources, overlay=1.0, **options):
+                    pass
+        with pytest.raises(ValueError, match="overlay"):
+            scene_target_programs(4, True, False, overlay=True)
+    finally:
+        target.release()
+        resources.release_resources()
