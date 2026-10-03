@@ -107,9 +107,14 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   render-thread CPU (Bubble 0.37 -> 0.17 ms, Spectrum 0.43 -> 0.24, Extruded 0.65 -> 0.35, Shockwave + glow 1.04 ->
   0.41; transitions alike). It is off at process start; each render node checks once per frame through its failure
   log (`rendering/gl_error_policy.py`). Uniform blocks would now save ~0.03 ms per mode: not done.
-- [ ] **Next render-thread CPU lever (measured, not started):** the Visualizer host's inherited-GL-state capture
-  (`rendering/quick/visualizer/gl_state.py`) is ~40% of what remains in a 3D mode, `glGet*` through PyOpenGL's
-  numpy-array wrappers. It is CHK26-lineage protected perf: change only with a measured, pixel-neutral fast path.
+- [x] **CHK26 inherited-state capture fast path** (operator-approved 2026-10-04 under the full CHK26 contract): the
+  same per-frame `glGetIntegerv`/`glGetBooleanv`/`glIsEnabled` reads, same fields and order, called directly instead
+  of through PyOpenGL's numpy wrappers; nothing cached, restore and clip ownership untouched. Evidence: field parity
+  0/300 randomized states (both captures); capture 104-109 -> 39-42 us; whole render CPU median Bubble 0.21 -> 0.12,
+  Spectrum 0.26 -> 0.18, Extruded 0.36 -> 0.26, Shockwave 0.43 -> 0.36 ms, GPU unchanged; pixels and restored state
+  bit-identical for Bubble/Spectrum/Sphere/Extruded, Shockwave within its own <=1/255 noise; clip smoke, render node,
+  CUSTOM, switch, teardown and Bubble golden suites green (1416). Live check: `render_host_begin -> gl_state_ready`
+  in the frame trace (was ~0.56 ms median on the TV display).
 - [x] **H8. Translucent order in Extruded Spectrum** solved exactly without OIT: bar records in a painter's order from
   the orbit's eye (`scene3d_orbit_eye`, `extruded_draw_order`; bars occupy disjoint x slabs) and faces turned from the
   eye culled in the translucent passes; one layer carries the opacity two used to. Physical check: ghosts at strong
@@ -159,6 +164,13 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 - [x] **Pre-golden reactivity fix (operator 2026-10-03):** near-silence fragmented and threw particles as fully as a
   full blast. Sphere's reward now follows the shared musical rule Shockwave uses, and both energy floors act on that
   weight. Contract: `Docs/Reference/Sphere_Visualizer.md` "Musical reward". The golden below captures this behaviour.
+- [ ] **Sphere reaction ramp (operator 2026-10-03 22:42-22:51 log, open):** after the musical reward, Sphere still
+  reads as reacting to small sounds with little ramp, and doubling the floors changed less than expected. Measured:
+  packets fire ~2 per 0.5 s at every level (admission frequency is untouched; only amplitude scales); quiet frames
+  still earn reward 0.15-0.35; the absolute quiet edge never engages (the bus loudness lane reads 3-17 in music);
+  floors gate on the presence weight, which is 1 for most frames. (A pause had also drained the running level and
+  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Retune during S19 against the deterministic replay
+  golden, not by ear: admission frequency scaled by the reward, a convex reward curve, floors on the reward.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**

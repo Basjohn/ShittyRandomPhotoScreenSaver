@@ -26,6 +26,13 @@ from time import perf_counter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Measure what production runs: per-call GL error checking off, as main.py sets it before
+# OpenGL.GL is first imported (rendering/gl_error_policy.py).
+from rendering.gl_error_policy import disable_per_call_gl_error_checking  # noqa: E402
+
+if not disable_per_call_gl_error_checking():
+    raise SystemExit("OpenGL.GL was imported before the probe could match production error checking")
+
 
 def _parameters(pairs: list[str]) -> dict[str, object]:
     parsed: dict[str, object] = {}
