@@ -910,14 +910,20 @@ def _preview_system_audio_osd(scene: _HiddenQuickScene, art: Path):
 def _preview_visualizers(scene: _HiddenQuickScene, art: Path):
     """The real Visualizer card shell with canonical Spectrum bars composited inside."""
 
+    return _preview_visualizer_card(scene, art, "spectrum")
+
+
+def _preview_visualizer_card(scene: _HiddenQuickScene, art: Path, mode: str, *, size=(600, 250)):
+    """The real Visualizer card shell with one mode's canonical render composited inside."""
+
     from PIL import Image
     from PySide6.QtCore import QRectF
     from PySide6.QtQuick import QQuickItem
     from widgets.spotify_visualizer.presentation_geometry import VisualizerShellPolicy
 
-    width, height = 600, 250
-    bars_path = art.parent / "spectrum_bars.png"
-    snapshot = _render_spectrum_preview(bars_path, width=width, height=height)
+    width, height = size
+    bars_path = art.parent / f"{mode}_bars.png"
+    snapshot = _render_spectrum_preview(bars_path, width=width, height=height, mode=mode)
     presentation = snapshot.presentation
     style = presentation.shell_style
     loader = scene.find("visualizerPresentationLoader")
@@ -979,6 +985,32 @@ _WIDGET_PREVIEWS: Final = {
 }
 
 
+# Modes the operator's Visualizer screenshot sheet does not cover, rendered through their
+# production capture and renderer (Spectrum-runtime modes only). They are frameless, so like
+# the sheet's Sphere they sit on a dark backdrop inside a drawn frame.
+_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum",)
+_RENDERED_PREVIEW_SIZE: Final = (684, 418)
+
+
+def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, output: Path) -> None:
+    from PIL import Image
+
+    from tools import onboarding_sheet_previews
+
+    width, height = _RENDERED_PREVIEW_SIZE
+    for mode in _RENDERED_VISUALIZER_PREVIEWS:
+        bars_path = art.parent / f"{mode}_bars.png"
+        _render_spectrum_preview(bars_path, width=width, height=height, mode=mode)
+        backdrop = Image.new("RGBA", (width, height))
+        for row in range(height):
+            shade = int(16 + 20 * row / max(1, height - 1))
+            backdrop.paste((shade, shade + 2, shade + 8, 255), (0, row, width, row + 1))
+        with Image.open(bars_path) as bars:
+            backdrop.alpha_composite(bars.convert("RGBA"))
+        framed = onboarding_sheet_previews._framed(backdrop, (255, 255, 255))
+        onboarding_sheet_previews._with_shadow(framed).save(output / f"visualizer_{mode}.png", "PNG", optimize=True)
+
+
 def _build_widget_previews(output: Path, scratch: Path, *,
                            families: list[str] | None = None) -> list[dict[str, object]]:
     from PySide6.QtGui import QGuiApplication
@@ -1001,13 +1033,16 @@ def _build_widget_previews(output: Path, scratch: Path, *,
             name = f"widget_{family_id}.png"
             width, height = _frame_preview(image, output / name)
             rows.append({"family_id": family_id, "path": name, "size": [width, height]})
+        if not families or "visualizers" in families:
+            _build_rendered_visualizer_previews(scene, art, output)
     finally:
         scene.close()
     return rows
 
 
-def _build_spectrum_preview_snapshot(*, width: int, height: int):
-    """Build one deterministic Spectrum snapshot through the production capture seam."""
+def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "spectrum"):
+    """Build one deterministic snapshot of a Spectrum-runtime mode (Spectrum, or a mode that
+    borrows its frame runtime) through the production capture seam."""
 
     from dataclasses import asdict
 
@@ -1017,7 +1052,10 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int):
         resolve_directional_extensions,
         resolve_signed_offset,
     )
-    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from core.settings.visualizer_mode_registry import (
+        get_technical_profile_mode,
+        get_visualizer_presentation_policy,
+    )
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
     from rendering.quick.shadow_snapshot import QuickShadowSnapshot
     from rendering.quick.widgets.host import ORDINARY_CARD_SHADOW_BASE
@@ -1052,8 +1090,8 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int):
     # display owner.  A foundry image must not become a second table of Spectrum
     # colours, topology, bar count, or renderer parameters.
     activation = resolve_visualizer_activation_payload(
-        {"mode": "spectrum", "preset_spectrum": 0},
-        mode="spectrum",
+        {"mode": mode, f"preset_{mode}": 0},
+        mode=mode,
     )
     model = SpotifyVisualizerSettings.from_mapping(
         activation.resolved_config,
@@ -1062,8 +1100,8 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int):
     resolved = asdict(model)
     controller = VisualizerRuntimeController(
         runtime_generation=1,
-        bar_count=model.resolve_bar_count("spectrum"),
-        initial_mode="spectrum",
+        bar_count=model.resolve_bar_count(get_technical_profile_mode(mode)),
+        initial_mode=mode,
     )
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=controller.bar_count)
@@ -1086,7 +1124,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int):
     # canvas so the preview is a clean crop of that real local surface.
     extent = (float(width), float(height))
     presentation = resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy("spectrum"),
+        policy=get_visualizer_presentation_policy(mode),
         display_size=(float(width), float(height)),
         outer_origin=(0.0, 0.0),
         viewport_extent=extent,
@@ -1147,7 +1185,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int):
     )
 
 
-def _render_spectrum_preview(path: Path, *, width: int, height: int):
+def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str = "spectrum"):
     """Render canonical Spectrum bars on transparency through the production GL host.
 
     The Visualizer card shell is QML (``VisualizerPresentation.qml``); the caller
@@ -1182,12 +1220,12 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int):
         gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
         gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER, depth)
         if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE: raise RuntimeError("Spectrum FBO incomplete")
-        snapshot = _build_spectrum_preview_snapshot(width=width, height=height)
+        snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)
         gl.glViewport(0, 0, width, height); gl.glClearColor(0., 0., 0., 0.); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         # Quick's item coordinates are top-left based; match the production
         # render-frame transform before readback flips OpenGL's framebuffer.
         matrix = (2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
-        if host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)), matrix_values=matrix) != "spectrum": raise RuntimeError("Spectrum renderer was not admitted")
+        if host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)), matrix_values=matrix) != mode: raise RuntimeError(f"{mode} renderer was not admitted")
         import numpy
         pixels = numpy.frombuffer(bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)),
                                   dtype=numpy.uint8).reshape(height, width, 4)

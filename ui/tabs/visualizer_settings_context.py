@@ -63,6 +63,7 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "bubble": ("_bubble_advanced",),
     "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
     "sphere": ("_sphere_normal", "_sphere_advanced", "_sphere_advanced_host"),
+    "extruded_spectrum": ("_extruded_spectrum_advanced", "_extruded_spectrum_advanced_host"),
 }
 
 

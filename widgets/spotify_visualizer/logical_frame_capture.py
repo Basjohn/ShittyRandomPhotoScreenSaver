@@ -20,6 +20,7 @@ from widgets.spotify_visualizer.reactivity_diagnostics import (
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,
+    ExtrudedSpectrumFrame,
     ModeFrame,
     OscilloscopeFrame,
     SineFrame,
@@ -308,16 +309,50 @@ def _capture_spectrum(
     engine: Any,
     context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
-    extra = _base_extras(widget, "spectrum", engine)
+    return _capture_spectrum_family(widget, engine, context, mode_id="spectrum", frame_type=SpectrumFrame)
+
+
+def _capture_extruded_spectrum(
+    widget: Any,
+    engine: Any,
+    context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]] | None:
+    """Spectrum's capture under the Extruded identity, plus its presentation keys."""
+
+    parameters = config_applier.extruded_spectrum_parameters(widget)
+    return _capture_spectrum_family(
+        widget, engine, context, mode_id="extruded_spectrum", frame_type=ExtrudedSpectrumFrame,
+        extra_parameters=parameters,
+        animation_enabled=bool(parameters["extruded_spectrum_hue_drift"] > 0.0
+                               and parameters["extruded_spectrum_colouring"] != "Bar Colours"),
+    )
+
+
+def _capture_spectrum_family(
+    widget: Any,
+    engine: Any,
+    context: _CaptureContext,
+    *,
+    mode_id: str,
+    frame_type: type[SpectrumFrame],
+    extra_parameters: Mapping[str, object] | None = None,
+    animation_enabled: bool | None = None,
+) -> tuple[ModeFrame, dict[str, Any]] | None:
+    """One Spectrum-runtime capture for ``mode_id`` (Spectrum, or a mode that borrows its
+    frame runtime through its descriptor)."""
+
+    extra = _base_extras(widget, mode_id, engine)
+    if extra_parameters:
+        extra.update(extra_parameters)
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError(
             "Spectrum logical capture requires its runtime controller owner"
         )
-    SpectrumFrameRuntime = _mode_frame_runtime_type("spectrum")
+    SpectrumFrameRuntime = _mode_frame_runtime_type(mode_id)
     runtime = _resolve_current_mode_runtime(
         controller,
-        "spectrum",
+        mode_id,
         SpectrumFrameRuntime,
     )
     if runtime is None:
@@ -352,20 +387,20 @@ def _capture_spectrum(
         animation_enabled=bool(
             extra["rainbow_enabled"]
             or extra["rainbow_per_bar"]
-        ),
+        ) if animation_enabled is None else animation_enabled,
     )
     if resolved is None:
-        if controller.peek_logical_mode_state("spectrum") is not runtime:
+        if controller.peek_logical_mode_state(mode_id) is not runtime:
             return None
         raise RuntimeError("Spectrum logical state retired during capture")
-    if controller.peek_logical_mode_state("spectrum") is not runtime:
+    if controller.peek_logical_mode_state(mode_id) is not runtime:
         return None
     if is_viz_diagnostics_enabled():
         maybe_log_reactivity_boundary(
             widget,
             logger,
             now_ts=context.now_ts,
-            mode="spectrum",
+            mode=mode_id,
             playing=context.playing,
             source_ready=resolved.reactive_source_ready,
             runtime_generation=context.runtime_generation,
@@ -387,7 +422,7 @@ def _capture_spectrum(
     extra["_quick_resolved_bars"] = resolved.bars
     extra["_quick_spectrum_changed"] = resolved.changed
     return (
-        SpectrumFrame(
+        frame_type(
             peaks=resolved.peaks,
             ghost_bars=resolved.ghost_bars,
             animation_time=resolved.animation_time,
@@ -765,6 +800,7 @@ ModeCapture = Callable[
 
 _BUILTIN_MODE_CAPTURE: dict[str, ModeCapture] = {
     "spectrum": _capture_spectrum,
+    "extruded_spectrum": _capture_extruded_spectrum,
     "oscilloscope": _capture_oscilloscope,
     "sine_wave": _capture_sine,
     "bubble": _capture_bubble,

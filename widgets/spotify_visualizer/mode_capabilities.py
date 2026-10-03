@@ -33,7 +33,7 @@ from typing import Any
 
 # Every authored mode may present while playback is idle.
 _IDLE_REVEAL = frozenset(
-    {"bubble", "spectrum", "sine_wave", "oscilloscope", "devcurve", "sphere"}
+    {"bubble", "spectrum", "sine_wave", "oscilloscope", "devcurve", "sphere", "extruded_spectrum"}
 )
 
 # Modes whose paused motion is generated from engine ticks, so a paused tick may
@@ -44,7 +44,7 @@ _IDLE_SELF_ANIMATING = frozenset(
 
 # Modes whose idle scene is produced entirely by presentation and needs no
 # source frame at all.
-_PRESENTATION_OWNED_IDLE = frozenset({"spectrum"})
+_PRESENTATION_OWNED_IDLE = frozenset({"spectrum", "extruded_spectrum"})
 
 # Modes whose renderer draws the waveform *samples*. Every other mode carries an
 # empty sample payload (no per-tick copy/validation) and no paused idle

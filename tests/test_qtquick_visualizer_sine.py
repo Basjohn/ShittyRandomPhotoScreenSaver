@@ -370,6 +370,7 @@ def test_quick_sine_registry_is_lazy_and_resource_dormant(monkeypatch) -> None:
         "bubble",
         "devcurve",
         "sphere",
+        "extruded_spectrum",
     )
     assert imported == []
 

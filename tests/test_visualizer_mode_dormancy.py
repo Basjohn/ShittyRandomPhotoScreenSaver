@@ -41,6 +41,8 @@ _ALL_FRAME_RUNTIME_MODULES = {
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
+    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
+    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
 }
 
 
@@ -136,6 +138,8 @@ _FRAME_RUNTIME_MODULES = {
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
+    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
+    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
 }
 
 
@@ -250,6 +254,8 @@ runtimes = {
     "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
     "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
     "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
+    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
+    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
 }
 print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
 """
@@ -261,7 +267,7 @@ def test_real_sole_enabled_tick_imports_only_active_frame_runtime(mode):
     loaded = ast.literal_eval(out)
     assert loaded[mode] is True, f"{mode}: active frame runtime did not load ({out})"
     for other, present in loaded.items():
-        if other != mode:
+        if _FRAME_RUNTIME_MODULES[other] != _FRAME_RUNTIME_MODULES[mode]:
             assert present is False, (
                 f"{mode} active but disabled mode {other!r} frame runtime imported "
                 f"through the real logical/capture path ({out})"

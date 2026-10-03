@@ -102,6 +102,9 @@ class VisualizerModeDescriptor:
     # metadata only; the boolean value itself remains a canonical persisted
     # product setting carried in the mode's immutable parameter snapshot.
     renderer_overflow_setting: str = ""
+    # Whether Guided Setup offers the mode to someone who has not already admitted it.
+    # Experimental modes are kept out of first-run choices.
+    guided_setup_offered: bool = True
 
     @property
     def preset_key(self) -> str:
@@ -192,6 +195,34 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         shared_bar_profile_mode="spectrum",
         technical_profile_mode="spectrum",
         renderer_overflow_setting="sphere_allow_overflow",
+        guided_setup_offered=False,
+    ),
+    # The first Visualizer on the shared Scene3D foundation. It reuses Spectrum's frame
+    # runtime (bars, peaks, R-76 temporal treatment, the shape editor), technical profile
+    # and bar colours, and owns only its presentation. Frameless like Sphere (the 3D stands
+    # over the wallpaper and may overflow its rectangle), reflowing with the viewport;
+    # CUSTOM quarter-turn content rotation is not offered (its Turn control orbits instead).
+    VisualizerModeDescriptor(
+        "extruded_spectrum",
+        "Extruded Spectrum",
+        "_extruded_spectrum_preset_slider",
+        ("extruded_spectrum_",),
+        VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.FRAMELESS,
+            clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True,
+        ),
+        frame_runtime_module="widgets.spotify_visualizer.spectrum_frame_runtime",
+        frame_runtime_class="SpectrumFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.extruded_spectrum",
+        settings_builder_module="ui.tabs.media.extruded_spectrum_builder",
+        settings_builder_factory="build_extruded_spectrum_ui",
+        technical_controls=False,
+        rainbow_controls=False,
+        shared_bar_appearance=False,
+        shared_bar_profile_mode="spectrum",
+        technical_profile_mode="spectrum",
+        renderer_overflow_setting="extruded_spectrum_allow_overflow",
     ),
 )
 

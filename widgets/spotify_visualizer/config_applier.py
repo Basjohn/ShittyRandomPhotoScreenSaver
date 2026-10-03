@@ -644,7 +644,39 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if 'bubble_tail_opacity' in kwargs:
         host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
+    # --- Extruded Spectrum presentation (experimental) -----------------
+    for key, (low, high) in _EXTRUDED_SPECTRUM_KEYS.items():
+        if key in kwargs:
+            setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
+    if 'extruded_spectrum_colouring' in kwargs:
+        from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+        colouring = str(kwargs['extruded_spectrum_colouring'])
+        if colouring not in EXTRUDED_COLOURINGS:
+            raise ValueError(f"invalid Extruded Spectrum colouring {colouring!r}")
+        host._extruded_spectrum_colouring = colouring
+    if 'extruded_spectrum_allow_overflow' in kwargs:
+        host._extruded_spectrum_allow_overflow = bool(kwargs['extruded_spectrum_allow_overflow'])
 
+
+
+
+_EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
+    "extruded_spectrum_depth": (0.25, 3.0),
+    "extruded_spectrum_tilt": (0.0, 1.0),
+    "extruded_spectrum_gloss": (0.0, 1.0),
+    "extruded_spectrum_reflection": (0.0, 1.0),
+    "extruded_spectrum_hue_drift": (0.0, 1.0),
+    "extruded_spectrum_turn": (-1.0, 1.0),
+}
+
+
+def extruded_spectrum_parameters(widget: Any) -> Dict[str, object]:
+    """Extruded Spectrum's renderer-only parameters from the presentation owner."""
+    pres = _presentation_source(widget)
+    values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _EXTRUDED_SPECTRUM_KEYS}
+    values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
+    values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
+    return values
 
 
 def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:

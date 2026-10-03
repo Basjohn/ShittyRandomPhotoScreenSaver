@@ -1,0 +1,174 @@
+"""Qt Quick Extruded Spectrum renderer: Spectrum's bars as lit 3D boxes (experimental).
+
+The first Visualizer on the shared Scene3D foundation: a multisampled overlay
+``SceneTarget`` (frameless: no card, so the bars stand over the wallpaper), the shared unit
+box drawn instanced from one std430 record per bar on a stream ring, and the shared
+physically based material. It consumes only the immutable snapshot; the bars come from
+Spectrum's frame runtime unchanged. With overflow allowed the target and its composite
+reach ``EXTRUDED_OVERFLOW_PAD`` item heights past the item, so the 3D may escape it.
+"""
+
+from __future__ import annotations
+
+import struct
+
+from OpenGL import GL as gl
+
+from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from rendering.gl_programs.extruded_spectrum_program import (
+    EXTRUDED_FRAGMENT_SOURCE,
+    EXTRUDED_HUE_DRIFT_RATE,
+    EXTRUDED_MAX_DEPTH,
+    EXTRUDED_MAX_TILT,
+    EXTRUDED_MAX_TURN,
+    EXTRUDED_OVERFLOW_PAD,
+    EXTRUDED_VERTEX_SOURCE,
+    extruded_fit,
+    extruded_overflow_frame,
+)
+from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES
+from rendering.quick.scene3d.resources import MeshResources
+from rendering.quick.scene3d.stream import StreamRing
+from rendering.quick.scene3d.target import SceneTarget
+from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
+
+from ..implementation_values import parameter, rgba
+from ..render_contract import QuickVisualizerRenderFrame
+from .spectrum import compute_quick_spectrum_layout, prepare_spectrum_shader_levels
+
+_MAX_BARS = 64
+_SAMPLES = 4
+_BAR_BINDING = 3
+_UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
+             "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
+             "uGhostAlpha", "uReflection")
+
+
+def extruded_bar_records(levels, peaks, count: int) -> bytes:
+    """One (level, peak) std430 record per bar, levels already carrying Spectrum's upload transfer."""
+    values = []
+    for index in range(count):
+        values.extend((levels[index], peaks[index]))
+    return struct.pack(f"<{2 * count}f", *values)
+
+
+class QuickExtrudedSpectrumRenderer:
+    mode_id = "extruded_spectrum"
+
+    def __init__(self) -> None:
+        self._resources = MeshResources("Quick Extruded Spectrum")
+        self._target = SceneTarget("Quick Extruded Spectrum")
+        self._stream = StreamRing("Quick Extruded Spectrum")
+        self._fit_key: tuple | None = None
+        self._fit = (1.0, 0.0)
+
+    @property
+    def has_resources(self) -> bool:
+        return self._resources.has_resources or self._target.has_resources or self._stream.has_resources
+
+    def render(self, frame: QuickVisualizerRenderFrame) -> None:
+        snapshot = frame.snapshot
+        logical = snapshot.logical
+        mode_state = logical.mode_state
+        if not isinstance(mode_state, ExtrudedSpectrumFrame):
+            raise TypeError("Extruded Spectrum renderer received another mode frame")
+        presentation = snapshot.presentation
+        count = min(_MAX_BARS, int(logical.common.bar_count))
+        if count <= 0 or presentation.content_fade <= 0.0:
+            return
+        if frame.content_rotation_quarters:
+            raise ValueError("Extruded Spectrum does not offer content rotation")
+        levels, peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
+        layout = compute_quick_spectrum_layout(
+            local_content_rect=frame.logical_content_rect,
+            viewport_extent=presentation.logical_viewport_extent,
+            visual_scale=presentation.uniform_visual_scale,
+            bar_count=count,
+        )
+        parameters = mode_state.parameters
+        style = logical.common.style
+        scale = presentation.uniform_visual_scale
+        content_x, content_y, content_width, content_height = layout.content_rect
+        margin_y = 6.0 * scale
+        field = (content_x, content_y + margin_y, content_width, content_height - 2.0 * margin_y)
+        height = field[3]
+        if height <= 0.0:
+            return
+        centre = layout.bars_left + 0.5 * layout.bar_span
+        depth = min(EXTRUDED_MAX_DEPTH, layout.bar_width / height * float(parameter(parameters,
+                                                                                     "extruded_spectrum_depth")))
+        tilt = EXTRUDED_MAX_TILT * float(parameter(parameters, "extruded_spectrum_tilt"))
+        turn = EXTRUDED_MAX_TURN * float(parameter(parameters, "extruded_spectrum_turn"))
+        reflection = float(parameter(parameters, "extruded_spectrum_reflection"))
+        overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
+        colouring = EXTRUDED_COLOURINGS.index(str(parameter(parameters, "extruded_spectrum_colouring")))
+        hue_shift = (mode_state.animation_time * EXTRUDED_HUE_DRIFT_RATE
+                     * float(parameter(parameters, "extruded_spectrum_hue_drift"))) % 1.0
+        key = (round(layout.bar_span / height, 6), round(depth, 6), round(tilt, 6), round(turn, 6),
+               round(reflection, 6), round(content_width / height, 6), overflow)
+        if key != self._fit_key:
+            self._fit = extruded_fit(0.5 * layout.bar_span / height, depth, tilt, reflection, content_width / height,
+                                     turn, overflow)
+            self._fit_key = key
+        ghost_alpha = (max(0.0, min(1.0, float(parameter(parameters, "spectrum_ghost_alpha"))))
+                       if bool(parameter(parameters, "spectrum_ghosting_enabled")) else 0.0)
+
+        r = self._resources
+        program = r.program("bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("bars", _UNIFORMS)
+        vao, vertices = r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
+        records = extruded_bar_records(levels, peaks, count)
+        target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
+                        if overflow else frame)
+        with self._target.scope(target_frame, _SAMPLES, r, overlay=presentation.content_fade):
+            gl.glUseProgram(program)
+            gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
+            gl.glUniform4f(uniforms["uField"], *field)
+            gl.glUniform2f(uniforms["uCentre"], centre, field[1] + field[3])
+            gl.glUniform4f(uniforms["uBarGeometry"], (layout.bars_left + 0.5 * layout.bar_width - centre) / height,
+                           (layout.bar_width + layout.bar_gap) / height, 0.5 * layout.bar_width / height, depth)
+            gl.glUniform2f(uniforms["uFit"], *self._fit)
+            gl.glUniform2f(uniforms["uView"], tilt, turn)
+            gl.glUniform1f(uniforms["uHeightScale"], layout.height_scale)
+            gl.glUniform1i(uniforms["uBarCount"], count)
+            gl.glUniform1f(uniforms["uHueShift"], hue_shift)
+            gl.glUniform1i(uniforms["uColouring"], colouring)
+            field_bottom = field[1] + field[3]
+            gl.glUniform2f(uniforms["uFloorSpan"], field_bottom - self._fit[1] * height, field_bottom)
+            gl.glUniform4f(uniforms["uFill"], *rgba(style["fill_color"]))
+            gl.glUniform4f(uniforms["uBorder"], *rgba(style["border_color"]))
+            gl.glUniform1f(uniforms["uGloss"], float(parameter(parameters, "extruded_spectrum_gloss")))
+            gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
+            gl.glUniform1f(uniforms["uGhostAlpha"], ghost_alpha)
+            gl.glUniform1f(uniforms["uReflection"], reflection)
+            gl.glBindVertexArray(vao)
+            gl.glEnable(gl.GL_DEPTH_TEST)
+            gl.glDepthMask(gl.GL_TRUE)
+            with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _BAR_BINDING, records):
+                gl.glUniform1i(uniforms["uPass"], 0)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+                gl.glDepthMask(gl.GL_FALSE)              # the translucent passes after the bars
+                if reflection > 0.0:
+                    gl.glUniform1i(uniforms["uPass"], 2)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+                if ghost_alpha > 0.0:
+                    gl.glUniform1i(uniforms["uPass"], 1)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+
+    def release_resources(self) -> None:
+        errors: list[str] = []
+        for release in (self._target.release, self._stream.release, self._resources.release_resources):
+            try:
+                release()
+            except Exception as exc:
+                errors.append(str(exc))
+        self._fit_key = None
+        if errors:
+            raise RuntimeError(" | ".join(errors))
+
+
+def create_visualizer_renderer() -> QuickExtrudedSpectrumRenderer:
+    return QuickExtrudedSpectrumRenderer()
+
+
+__all__ = ["QuickExtrudedSpectrumRenderer", "create_visualizer_renderer", "extruded_bar_records"]

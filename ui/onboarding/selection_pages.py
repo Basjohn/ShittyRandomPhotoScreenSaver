@@ -195,8 +195,9 @@ class VisualizerPage(Page):
         widgets = self.settings.get("widgets"); section = widgets["spotify_visualizer"]
         active = set(resolve_admissible_enabled_modes(section["mode_activation"]))
         if self._offered_modes is None:
-            # Experimental Sphere can be retained/disabled here only if already admitted.
-            self._offered_modes = [d for d in iter_visualizer_mode_descriptors() if d.mode_id != "sphere" or d.mode_id in active]
+            # Experimental modes can be retained/disabled here only if already admitted.
+            self._offered_modes = [d for d in iter_visualizer_mode_descriptors()
+                                   if d.guided_setup_offered or d.mode_id in active]
         with QSignalBlocker(self.enabled): self.enabled.setChecked(bool(section["enabled"]))
         effective = is_widget_family_effective(widgets, "visualizers")
         self.enabled.setEnabled(effective)

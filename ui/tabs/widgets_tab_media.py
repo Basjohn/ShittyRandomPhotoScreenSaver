@@ -68,6 +68,10 @@ from ui.tabs.media.sine_wave_settings_binding import (
     collect_sine_wave_mode_settings,
     load_sine_wave_mode_settings,
 )
+from ui.tabs.media.extruded_spectrum_settings_binding import (
+    collect_extruded_spectrum_mode_settings,
+    load_extruded_spectrum_mode_settings,
+)
 from ui.tabs.media.sphere_settings_binding import (
     collect_sphere_mode_settings,
     load_sphere_mode_settings,
@@ -845,6 +849,7 @@ _VIS_MODE_CONTAINER_ATTR = {
     "bubble": "_bubble_settings_container",
     "devcurve": "_devcurve_settings_container",
     "sphere": "_sphere_settings_container",
+    "extruded_spectrum": "_extruded_spectrum_settings_container",
 }
 
 
@@ -908,6 +913,8 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
         load_devcurve_mode_settings(tab, cfg, sync_color_button=_sync)
     elif mode_id == "sphere":
         load_sphere_mode_settings(tab, cfg)
+    elif mode_id == "extruded_spectrum":
+        load_extruded_spectrum_mode_settings(tab, cfg)
     else:
         return
 
@@ -1508,6 +1515,8 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             spotify_vis_config.update(collect_devcurve_mode_settings(tab))
         elif _cur_mode == 'sphere':
             spotify_vis_config.update(collect_sphere_mode_settings(tab))
+        elif _cur_mode == 'extruded_spectrum':
+            spotify_vis_config.update(collect_extruded_spectrum_mode_settings(tab))
     collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
     collect_visualizer_preset_indices(tab, spotify_vis_config)

@@ -37,10 +37,10 @@ class TestVisualizerModeEnum:
         modes = list(VisualizerMode)
         assert len(modes) == 5
         assert modes[0] == VisualizerMode.SPECTRUM
-        permanent_worker_ids = set(VISUALIZER_MODE_IDS) - {"sphere"}
-        assert {m.name.lower() for m in modes} == permanent_worker_ids
-        assert "sphere" in VISUALIZER_MODE_IDS
-        assert all(m.name.lower() != "sphere" for m in modes)
+        # Modes that borrow another mode's technical profile have no worker mode of their own.
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        borrowing = {m for m in VISUALIZER_MODE_IDS if get_visualizer_mode_descriptor(m).technical_profile_mode}
+        assert {m.name.lower() for m in modes} == set(VISUALIZER_MODE_IDS) - borrowing
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""

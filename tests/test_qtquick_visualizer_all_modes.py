@@ -64,6 +64,7 @@ from widgets.spotify_visualizer.spectrum_frame_runtime import (
     SpectrumFrameRuntime,
 )
 from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
+from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
 
 
 _MODE_STATES = {
@@ -73,6 +74,7 @@ _MODE_STATES = {
     "bubble": BubbleFrame,
     "devcurve": DevCurveFrame,
     "sphere": SphereFrame,
+    "extruded_spectrum": ExtrudedSpectrumFrame,
 }
 _MODE_IDS = tuple(
     descriptor.mode_id
@@ -97,7 +99,7 @@ class _BubbleSimulation:
 
 
 def _runtime(mode_id: str):
-    if mode_id == "spectrum":
+    if mode_id in ("spectrum", "extruded_spectrum"):   # Extruded borrows Spectrum's runtime
         return SpectrumFrameRuntime()
     if mode_id == "oscilloscope":
         return OscilloscopeFrameRuntime()
@@ -134,7 +136,7 @@ def _drive_runtime(
         "source_activation_id": source_activation_id,
         "playing": playing,
     }
-    if mode_id == "spectrum":
+    if mode_id in ("spectrum", "extruded_spectrum"):
         return runtime.resolve(
             (0.2, 0.6),
             bar_count=2,
@@ -357,7 +359,9 @@ def test_all_registered_modes_apply_generic_source_admission_without_dispatch(
 
     assert snapshot_is_render_admissible(paused) is True
     assert snapshot_is_render_admissible(current) is True
-    assert snapshot_is_render_admissible(stale) is (mode_id != "spectrum")
+    from widgets.spotify_visualizer import mode_capabilities
+
+    assert snapshot_is_render_admissible(stale) is (not mode_capabilities.requires_authoritative_first_source(mode_id))
 
 
 @dataclass

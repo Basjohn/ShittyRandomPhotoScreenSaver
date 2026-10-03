@@ -80,6 +80,7 @@ _MODE_NORMAL_ATTR = {
     "bubble": "_bubble_normal",
     "devcurve": "_devcurve_normal",
     "sphere": "_sphere_normal",
+    "extruded_spectrum": "_extruded_spectrum_normal",
 }
 
 

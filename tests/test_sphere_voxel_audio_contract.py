@@ -871,11 +871,11 @@ def test_sphere_optional_presentation_features_are_mode_owned_in_canonical_schem
 
     descriptors = {item.mode_id: item for item in iter_all_visualizer_mode_descriptors()}
     assert descriptors["sphere"].renderer_overflow_setting == "sphere_allow_overflow"
-    assert all(
-        not item.renderer_overflow_setting
-        for mode, item in descriptors.items()
-        if mode != "sphere"
-    )
+    # Overflow is only for the frameless modes, each through its own setting.
+    for mode, item in descriptors.items():
+        if item.renderer_overflow_setting:
+            assert item.presentation_policy.shell_policy.value == "frameless", mode
+            assert item.renderer_overflow_setting.startswith(mode + "_"), mode
 
 
 def test_overflow_clip_bypass_is_descriptor_gated_and_accepted_modes_stay_clipped() -> None:
