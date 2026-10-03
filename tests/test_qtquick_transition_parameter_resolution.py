@@ -77,8 +77,7 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
         assert params["reshatter"] is bool(require_canonical_default("transitions.glass_shatter.reshatter"))
     elif transition_id == "exploding_tiles":
         assert params["columns"] == 48 and params["depth"] == pytest.approx(1.5)
-        from core.settings.default_contract import require_canonical_default
-        assert params["detail"] == require_canonical_default("transitions.detail_3d")
+        assert params["detail"] == _default_tier()
     elif transition_id == "pixel_accretion":
         assert params["tile_size"] == 32 and params["travel"] == pytest.approx(1.0)
     else:
@@ -278,12 +277,19 @@ def test_melt_random_and_retired_edge_directions_pick_a_real_origin(stored):
     assert resolved.direction == "top_right"
 
 
-@pytest.mark.parametrize("stored", ["High", "Balanced", "Performance", "Ultra", None, 3])
+def _default_tier():
+    """The tier a request without one resolves: the canonical 3D Settings (Auto by the GPU)."""
+    from core.settings.scene3d_quality import resolve_scene3d_tier
+    from rendering.quick.bootstrap import last_validated_gpu
+
+    return resolve_scene3d_tier(None, "transitions", gpu=last_validated_gpu())
+
+
+@pytest.mark.parametrize("stored", ["High", "Balanced", "Performance", "KAK", "Ultra", None, 3])
 def test_the_3d_detail_tier_reaches_the_run_and_unknown_values_use_the_default(stored):
-    from core.settings.default_contract import require_canonical_default
     from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
 
-    default = require_canonical_default("transitions.detail_3d")
+    default = _default_tier()
     assert default in SCENE3D_DETAIL_NAMES
     rng = _Rng()
     rng.choice_values = ["left"]

@@ -15,6 +15,10 @@ from typing import TYPE_CHECKING, Any, Dict
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
 from core.settings.legacy_setting_aliases import promote_legacy_section_aliases, RETIRED_SETTING_KEYS
+from core.settings.scene3d_detail_input_compat import (
+    SCENE3D_TRANSITIONS_DETAIL_KEY,
+    promote_legacy_transitions_detail,
+)
 from core.settings.resample_filter_input_compat import (
     promote_legacy_display_resample_filter,
 )
@@ -55,7 +59,7 @@ IMPORT_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("geometry", "Custom Geometry Including Layouts"),
     ("misc", "Misc Settings"),
 )
-_DISPLAY_ROOTS = frozenset({"display", "input", "accessibility", "timing"})
+_DISPLAY_ROOTS = frozenset({"display", "input", "accessibility", "timing", "scene3d"})
 _THEME_UI_KEYS = frozenset({"settings_theme_selection"})
 # Where widgets sit, not how they look or behave: per-widget placement fields,
 # per-display clock faces, CUSTOM layouts and the numbered layout slots.
@@ -222,6 +226,13 @@ def _project_import_state(
         if section_key == "transitions":
             if not isinstance(section_value, Mapping):
                 raise TypeError("transitions SST section must be a mapping")
+            scene3d_section = normalized_root.get("scene3d")
+            section_value, promoted, _detail_changed = promote_legacy_transitions_detail(
+                section_value,
+                scene3d_section if isinstance(scene3d_section, Mapping) else None,
+            )
+            if promoted is not None and "transitions_detail" in promoted:
+                state[SCENE3D_TRANSITIONS_DETAIL_KEY] = promoted["transitions_detail"]
             incoming = _coerce_nested_import_mapping(mgr, "transitions", section_value)
             existing = state.get("transitions", {})
             if merge and isinstance(existing, Mapping):

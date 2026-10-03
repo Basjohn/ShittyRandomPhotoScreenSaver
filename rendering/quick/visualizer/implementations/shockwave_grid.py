@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import scene3d_grid_vertices
+from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS,
-    SHOCKWAVE_GRID_CELLS,
     SHOCKWAVE_MAX_BARS,
     SHOCKWAVE_MAX_RIDGE,
     SHOCKWAVE_MAX_TILT,
@@ -26,6 +25,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_camera,
     shockwave_event_records,
     shockwave_fit,
+    shockwave_grid_cells,
     shockwave_half_width,
     shockwave_wave_speed,
 )
@@ -39,13 +39,20 @@ from ..implementation_values import parameter, rgba
 from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import prepare_spectrum_shader_levels
 
-_SAMPLES = 4
 _EVENT_BINDING = 3
 # How far (in item heights) an overflowing grid may reach beyond the item on every side.
 _OVERFLOW_PAD = 0.5
 _UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uBarCount",
              "uBars", "uHeightScale", "uCells", "uScroll", "uLineColor", "uCrestColor", "uFloor", "uGlow",
              "uEdgePx")
+
+
+def shockwave_quality(parameters) -> tuple[int, float, tuple[int, int]]:
+    """(samples, glow, grid cells) for the activation's 3D Detail tier: the tier's overlay
+    multisampling, the Glow only on tiers with post effects, the tier's grid density."""
+    detail = scene3d_detail(parameter(parameters, "scene3d_detail"))
+    glow = float(parameter(parameters, "shockwave_grid_glow")) if detail.post_effects else 0.0
+    return detail.overlay_samples, glow, shockwave_grid_cells(detail.grid_cells)
 
 
 class QuickShockwaveGridRenderer:
@@ -67,27 +74,29 @@ class QuickShockwaveGridRenderer:
         r = self._resources
         r.program("grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE)
         r.uniforms("grid", _UNIFORMS)
-        r.mesh("grid", scene3d_grid_vertices(*SHOCKWAVE_GRID_CELLS), (2,))
+        cells = shockwave_grid_cells(10 ** 6)                 # the densest (High) grid
+        r.mesh(_mesh_key(cells), scene3d_grid_vertices(*cells), (2,))
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
         allocate (a program, the grid mesh, the stream ring, the target and its glow), on a hidden
         frame; True once nothing is left."""
         parameters = frame.snapshot.logical.mode_state.parameters
-        bloom = float(parameter(parameters, "shockwave_grid_glow")) > 0.0
+        samples, glow, cells = shockwave_quality(parameters)
+        bloom = glow > 0.0
         overflow = bool(parameter(parameters, "shockwave_grid_allow_overflow"))
         target_frame = padded_item_frame(frame, _OVERFLOW_PAD * frame.logical_size[1]) if overflow else frame
         r = self._resources
         if not warm_programs([(r, "grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE),
-                              *((r, *program) for program in scene_target_programs(_SAMPLES, bloom, False,
+                              *((r, *program) for program in scene_target_programs(samples, bloom, False,
                                                                                    overlay=True))]):
             return False
-        if not r.has_mesh("grid"):
-            r.mesh("grid", scene3d_grid_vertices(*SHOCKWAVE_GRID_CELLS), (2,))
+        if not r.has_mesh(_mesh_key(cells)):
+            r.mesh(_mesh_key(cells), scene3d_grid_vertices(*cells), (2,))
             return False
         if not self._stream.warm():
             return False
-        return self._target.warm(item_pixel_rect(target_frame)[2:], _SAMPLES, overlay=True, bloom=bloom)
+        return self._target.warm(item_pixel_rect(target_frame)[2:], samples, overlay=True, bloom=bloom)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -108,7 +117,7 @@ class QuickShockwaveGridRenderer:
         levels, _peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
         half_width = shockwave_half_width(field[2] / field[3])
         events = shockwave_event_records(tuple(mode_state.events), half_width)
-        glow = float(parameter(parameters, "shockwave_grid_glow"))
+        samples, glow, cells = shockwave_quality(parameters)
         overflow = bool(parameter(parameters, "shockwave_grid_allow_overflow"))
         scale = presentation.uniform_visual_scale
         tilt = SHOCKWAVE_MAX_TILT * float(parameter(parameters, "shockwave_grid_tilt"))
@@ -122,12 +131,12 @@ class QuickShockwaveGridRenderer:
         r = self._resources
         program = r.program("grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE)
         uniforms = r.uniforms("grid", _UNIFORMS)
-        vao, vertices = r.mesh("grid", scene3d_grid_vertices(*SHOCKWAVE_GRID_CELLS), (2,))
+        vao, vertices = r.mesh(_mesh_key(cells), scene3d_grid_vertices(*cells), (2,))
         # An empty event list still binds one (unread) record.
         records = SHOCKWAVE_EVENTS.pack(events or [{"age": 0.0, "x": 0.0, "z": 0.0, "strength": 0.0}])
         target_frame = padded_item_frame(frame, _OVERFLOW_PAD * frame.logical_size[1]) if overflow else frame
         bloom = 1.4 * glow
-        with self._target.scope(target_frame, _SAMPLES, r, overlay=presentation.content_fade, bloom=bloom):
+        with self._target.scope(target_frame, samples, r, overlay=presentation.content_fade, bloom=bloom):
             gl.glUseProgram(program)
             gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
             gl.glUniform4f(uniforms["uField"], *field)
@@ -171,8 +180,12 @@ class QuickShockwaveGridRenderer:
             raise RuntimeError(" | ".join(errors))
 
 
+def _mesh_key(cells: tuple[int, int]) -> str:
+    return f"grid {cells[0]}x{cells[1]}"
+
+
 def create_visualizer_renderer() -> QuickShockwaveGridRenderer:
     return QuickShockwaveGridRenderer()
 
 
-__all__ = ["QuickShockwaveGridRenderer", "create_visualizer_renderer"]
+__all__ = ["QuickShockwaveGridRenderer", "create_visualizer_renderer", "shockwave_quality"]

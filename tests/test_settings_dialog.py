@@ -140,13 +140,15 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     """Dialog exposes the current top-level tab set, including Visualizers."""
     dialog = SettingsDialog(settings_manager, animation_manager)
 
-    # V7 promoted Visualizers to its own top-level tab, sitting after Widgets.
+    # V7 promoted Visualizers to its own top-level tab, sitting after Widgets; the 3D
+    # Settings tab (3D detail for transitions and Visualizers) follows it.
     expected_keys = [
         "sources",
         "display",
         "transitions",
         "widgets",
         "visualizers",
+        "scene3d",
         "accessibility",
         "themes",
         "about",

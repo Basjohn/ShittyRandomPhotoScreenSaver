@@ -26,7 +26,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
     extruded_fit,
     extruded_overflow_frame,
 )
-from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES
+from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_detail
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
@@ -39,13 +39,20 @@ from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import compute_quick_spectrum_layout, prepare_spectrum_shader_levels
 
 _MAX_BARS = 64
-# Multisampling of the 3D target: Smooth Edges also doubles it (measured: no visible GPU cost).
-_SAMPLES = 4
-_SMOOTH_SAMPLES = 8
 _BAR_BINDING = 3
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
              "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap")
+
+
+def extruded_quality(parameters) -> tuple[int, float, int]:
+    """(samples, Mirror Faces strength, backdrop refresh frames) for the activation's 3D Detail
+    tier: the tier's overlay multisampling, doubled by Smooth Edges; Mirror Faces at the tier's
+    wallpaper refresh, off where the tier has none."""
+    detail = scene3d_detail(parameter(parameters, "scene3d_detail"))
+    smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
+    mirror = float(parameter(parameters, "extruded_spectrum_face_mirror")) if detail.backdrop_refresh else 0.0
+    return detail.overlay_samples * (2 if smooth else 1), mirror, detail.backdrop_refresh
 
 
 def extruded_bar_records(levels, peaks, count: int) -> bytes:
@@ -85,7 +92,7 @@ class QuickExtrudedSpectrumRenderer:
         hidden frame; True once nothing is left."""
         parameters = frame.snapshot.logical.mode_state.parameters
         overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
-        samples = _SMOOTH_SAMPLES if bool(parameter(parameters, "extruded_spectrum_smooth_edges")) else _SAMPLES
+        samples, mirror, _refresh = extruded_quality(parameters)
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
         r = self._resources
@@ -100,7 +107,7 @@ class QuickExtrudedSpectrumRenderer:
             return False
         if not self._target.warm(item_pixel_rect(target_frame)[2:], samples, overlay=True):
             return False
-        if float(parameter(parameters, "extruded_spectrum_face_mirror")) > 0.0:
+        if mirror > 0.0:
             return self._backdrop.warm(frame.viewport)
         return True
 
@@ -159,15 +166,14 @@ class QuickExtrudedSpectrumRenderer:
         target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
                         if overflow else frame)
         smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
-        mirror = float(parameter(parameters, "extruded_spectrum_face_mirror"))
+        samples, mirror, refresh = extruded_quality(parameters)
         backdrop = 0
         if mirror > 0.0:
-            backdrop = self._backdrop.texture(frame.viewport)      # before anything is drawn over it
+            backdrop = self._backdrop.texture(frame.viewport, refresh)   # before anything is drawn over it
         elif self._backdrop.has_resources:
             self._backdrop.release()                                # Mirror Faces off: hold nothing
         origin = item_pixel_rect(target_frame)
-        with self._target.scope(target_frame, _SMOOTH_SAMPLES if smooth else _SAMPLES, r,
-                                overlay=presentation.content_fade):
+        with self._target.scope(target_frame, samples, r, overlay=presentation.content_fade):
             gl.glUseProgram(program)
             gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
             gl.glUniform4f(uniforms["uField"], *field)
@@ -228,4 +234,5 @@ def create_visualizer_renderer() -> QuickExtrudedSpectrumRenderer:
     return QuickExtrudedSpectrumRenderer()
 
 
-__all__ = ["QuickExtrudedSpectrumRenderer", "create_visualizer_renderer", "extruded_bar_records"]
+__all__ = ["QuickExtrudedSpectrumRenderer", "create_visualizer_renderer", "extruded_bar_records",
+           "extruded_quality"]

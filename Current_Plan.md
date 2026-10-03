@@ -85,13 +85,11 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
   first visible frame compiled and allocated (Shockwave 22 ms, 139 ms cold cache; logs 2026-10-03: 21-45 ms on
   switches). Now prepared on the hidden frames, one spaced unit each, the reveal held until done (1.5 s deadline):
   first visible frame 3-4 ms. Contract and numbers: `Docs/Reference/Visualizer_Reference.md` "Prepared reveal".
-- [ ] **H2. 3D quality tiers in a 3D Settings tab.** One tab with pills **General**, **3D Transitions**,
-  **3D Visualizers**. General owns the shared `Auto / High / Balanced / Performance / KAK` vocabulary (the SSOT); the two
-  family pills may override it per family, and individual entries (a transition or a Visualizer mode) may override
-  their family, without becoming a second source of truth: each level stores only "inherit" or an explicit tier, and
-  one resolver produces the effective tier. Visualizer consumers first: Extruded Spectrum's MSAA/Smooth Edges samples
-  and backdrop refresh, Shockwave Grid's grid density and bloom levels. Existing transition quality settings move under
-  the same resolver rather than beside it.
+- [x] **H2. 3D quality tiers in a 3D Settings tab** (General / 3D Transitions / 3D Visualizers pills; `Auto / High /
+  Balanced / Performance / KAK`; one resolver `core/settings/scene3d_quality.py`; each level stores only its own
+  choice; `transitions.detail_3d` retired by an input bridge). Extruded: samples + Mirror refresh; Shockwave: samples,
+  Glow, grid density. Contracts and per-tier costs: `Docs/Reference/Transitions.md` "3D Detail",
+  `Docs/Reference/Visualizer_Reference.md` 16A/16B. Physical: the tiers on both displays (cross-cutting item below).
 - [ ] **H3. Exact musical events for event-driven modes.** Shockwave Grid samples the transient bus's onset flag per
   tick, so two onsets inside one tick merge and a very short one can be missed. Expose the bus's timestamped onset
   events with sequence numbers and consume them exactly once on the logical clock; this becomes the shared event
@@ -119,9 +117,8 @@ per-frame flush, median/p90, CPU submit and Python GL-call count, both displays 
 - [ ] **H9. Lend the displayed wallpaper to Visualizers.** Mirror Faces copies the framebuffer every 6th frame
   (~0.55 ms stall each). Define a legal lend of the background's current texture to Visualizers (as transitions are
   lent theirs under PR-04, never mutated or sampled illegally), shared by every reflective mode. Before S19.
-- [ ] **Loose ends:** document the Extruded turn/tilt unit change (tilt x40/90, turn x40/180, no migration; only
-  operator-saved views affected) in `Docs/Architecture/Persisted_Input_Compatibility.md`; list the new 3D test files
-  in `Docs/TestSuite.md`; the side defects below.
+- [ ] **Loose ends:** list the new 3D test files in `Docs/TestSuite.md`; the side defects below. (The Extruded
+  turn/tilt unit change is recorded in `Docs/Architecture/Persisted_Input_Compatibility.md`.)
 
 ## 2. S17 | active-only high-fidelity scene buffers, lighting and materials
 

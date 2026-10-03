@@ -21,7 +21,11 @@ from rendering.transition_registry import (
 )
 
 from ..image_state import PresentationImage
-from .parameter_resolution import resolve_block_spins_parameters, resolve_parameterized_phase_c_inputs
+from .parameter_resolution import (
+    SCENE_DETAIL_FIELD,
+    resolve_block_spins_parameters,
+    resolve_parameterized_phase_c_inputs,
+)
 from .state import (
     TransitionParameters,
     TransitionRequest,
@@ -177,6 +181,13 @@ def resolve_quick_transition_spec(
         else {}
     )
     transitions = _mapping(raw)
+    if settings_manager is not None:
+        # The run's 3D Detail tier, resolved once from the 3D Settings.
+        from core.settings.scene3d_quality import read_scene3d_section, resolve_scene3d_tier
+        from rendering.quick.bootstrap import last_validated_gpu
+
+        transitions = {**transitions, SCENE_DETAIL_FIELD: resolve_scene3d_tier(
+            read_scene3d_section(settings_manager.get), "transitions", gpu=last_validated_gpu())}
     requested_name = canonicalize_transition_name(
         transitions.get("type", canonical_type),
         fallback=canonicalize_transition_name(canonical_type, fallback=""),

@@ -31,8 +31,12 @@ def _key(kind, key, *, repeat=False):
 def _host():
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
 
+    from core.settings.scene3d_quality import resolve_visualizer_tier
+
     host = SimpleNamespace()
-    apply_presentation_vis_mode_kwargs(host, dict(_DEFAULTS))
+    # The activation adds the resolved 3D Detail tier beside the Visualizer section's values.
+    apply_presentation_vis_mode_kwargs(
+        host, {**dict(_DEFAULTS), "scene3d_detail": resolve_visualizer_tier(None, "extruded_spectrum")})
     return host
 
 

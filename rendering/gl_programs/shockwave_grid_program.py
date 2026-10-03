@@ -49,6 +49,13 @@ SHOCKWAVE_EVENTS = Scene3DStorageLayout.of(
     (("age", "float"), ("x", "float"), ("z", "float"), ("strength", "float")), array="events")
 
 
+def shockwave_grid_cells(tier_cells: int) -> tuple[int, int]:
+    """The displaced grid's (columns, rows) for a 3D Detail tier: its density along the width,
+    never more than ``SHOCKWAVE_GRID_CELLS``, the rows keeping the cells square."""
+    columns = max(2, min(SHOCKWAVE_GRID_CELLS[0], int(tier_cells)))
+    return columns, max(2, round(columns * SHOCKWAVE_GRID_CELLS[1] / SHOCKWAVE_GRID_CELLS[0]))
+
+
 def shockwave_half_width(aspect: float) -> float:
     """The grid's half width for a field ``aspect`` times wider than tall (wide enough that
     its sides leave the view when it is turned)."""
