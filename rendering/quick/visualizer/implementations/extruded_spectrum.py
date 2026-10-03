@@ -1,4 +1,4 @@
-"""Qt Quick Extruded Spectrum renderer: Spectrum's bars as lit 3D boxes (experimental).
+"""Qt Quick Extruded Spectrum renderer: Spectrum's bars as lit 3D boxes.
 
 The first Visualizer on the shared Scene3D foundation: a multisampled overlay
 ``SceneTarget`` (frameless: no card, so the bars stand over the wallpaper), the shared unit
@@ -41,7 +41,7 @@ _SAMPLES = 4
 _BAR_BINDING = 3
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
-             "uGhostAlpha", "uReflection")
+             "uGhostAlpha", "uReflection", "uSmooth", "uMirror")
 
 
 def extruded_bar_records(levels, peaks, count: int) -> bytes:
@@ -141,6 +141,8 @@ class QuickExtrudedSpectrumRenderer:
             gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
             gl.glUniform1f(uniforms["uGhostAlpha"], ghost_alpha)
             gl.glUniform1f(uniforms["uReflection"], reflection)
+            gl.glUniform1f(uniforms["uSmooth"], 1.0 if parameter(parameters, "extruded_spectrum_smooth_edges") else 0.0)
+            gl.glUniform1f(uniforms["uMirror"], float(parameter(parameters, "extruded_spectrum_face_mirror")))
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_TRUE)

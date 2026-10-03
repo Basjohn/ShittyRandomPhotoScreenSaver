@@ -76,7 +76,6 @@ class RuntimeInputOwner(QObject):
     """Own shared runtime hotkeys and exit gestures for any presentation host."""
 
     exit_requested = Signal()
-    settings_requested = Signal()
     next_image_requested = Signal()
     previous_image_requested = Signal()
     cycle_transition_requested = Signal()
@@ -92,8 +91,17 @@ class RuntimeInputOwner(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
+    # W/A/S/D while a 3D freeform Visualizer is shown: one step per press or key repeat
+    # (turn steps, tilt steps), and the end of orbiting once the last held key is released.
+    view_orbit_requested = Signal(int, int)
+    view_orbit_finished = Signal()
 
     MOUSE_EXIT_THRESHOLD = 10
+    # The camera moves around the scene: W up over it, S down, A left, D right.
+    _VIEW_ORBIT_KEYS = {
+        Qt.Key.Key_W: (0, 1), Qt.Key.Key_S: (0, -1), Qt.Key.Key_A: (1, 0), Qt.Key.Key_D: (-1, 0),
+    }
+    _VIEW_ORBIT_VK = {0x57: Qt.Key.Key_W, 0x53: Qt.Key.Key_S, 0x41: Qt.Key.Key_A, 0x44: Qt.Key.Key_D}
 
     def __init__(
         self,
@@ -117,6 +125,8 @@ class RuntimeInputOwner(QObject):
         self._exit_gesture_active = False
         self._exiting = False
         self._context_menu_active = False
+        self._view_orbit_enabled = False
+        self._view_orbit_held: set[Qt.Key] = set()
 
     def is_interaction_mode_enabled(self) -> bool:
         provider = self._interaction_mode_provider
@@ -161,6 +171,26 @@ class RuntimeInputOwner(QObject):
 
     def set_context_menu_active(self, active: bool) -> None:
         self._context_menu_active = bool(active)
+
+    def set_view_orbit_enabled(self, enabled: bool) -> None:
+        """Event-published fact: a 3D freeform Visualizer is shown, so W/A/S/D orbit it."""
+        enabled = bool(enabled)
+        if not enabled and self._view_orbit_held:
+            self._view_orbit_held.clear()
+            self.view_orbit_finished.emit()
+        self._view_orbit_enabled = enabled
+
+    def is_view_orbit_enabled(self) -> bool:
+        return self._view_orbit_enabled
+
+    def _view_orbit_key(self, event: QKeyEvent) -> Qt.Key | None:
+        key = event.key()
+        if key in self._VIEW_ORBIT_KEYS:
+            return Qt.Key(key)
+        try:
+            return self._VIEW_ORBIT_VK.get(int(event.nativeVirtualKey() or 0))
+        except Exception:
+            return None
 
     def is_context_menu_active(self) -> bool:
         return self._context_menu_active
@@ -218,9 +248,13 @@ class RuntimeInputOwner(QObject):
         if key_text == "c" or key == Qt.Key.Key_C or native_vk == 0x43:
             self.cycle_transition_requested.emit()
             return True
-        if key_text == "s" or key == Qt.Key.Key_S or native_vk == 0x53:
-            self.settings_requested.emit()
-            return True
+        if self._view_orbit_enabled:
+            orbit_key = self._view_orbit_key(event)
+            if orbit_key is not None:
+                if not event.isAutoRepeat():
+                    self._view_orbit_held.add(orbit_key)
+                self.view_orbit_requested.emit(*self._VIEW_ORBIT_KEYS[orbit_key])
+                return True
         if key == Qt.Key.Key_Space:
             self.play_pause_requested.emit()
             return True
@@ -254,6 +288,15 @@ class RuntimeInputOwner(QObject):
     def handle_key_release(self, event: QKeyEvent) -> bool:
         if event.key() == Qt.Key.Key_Control and self._consume_control_key:
             self.set_ctrl_held(False)
+            return True
+        orbit_key = self._view_orbit_key(event) if self._view_orbit_held else None
+        if orbit_key is not None:
+            # Key repeat delivers release/press pairs while the key stays down: orbiting ends
+            # only on the real release of the last held key, so the result is saved once.
+            if not event.isAutoRepeat() and orbit_key in self._view_orbit_held:
+                self._view_orbit_held.discard(orbit_key)
+                if not self._view_orbit_held:
+                    self.view_orbit_finished.emit()
             return True
         return False
 

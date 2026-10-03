@@ -115,7 +115,6 @@ def test_quick_input_uses_the_single_neutral_policy_owner():
         "previous_requested",
         "next_requested",
         "cycle_transition_requested",
-        "settings_requested",
         "play_pause_requested",
         "home_play_pause_requested",
         "previous_track_requested",
@@ -128,6 +127,8 @@ def test_quick_input_uses_the_single_neutral_policy_owner():
         "context_menu_requested",
         "layout_slot_load_requested",
         "layout_slot_save_requested",
+        "view_orbit_requested",
+        "view_orbit_finished",
     ):
         assert f"{signal_name} = Signal(" in runtime_source
         input_signal_name = {
@@ -251,20 +252,18 @@ def test_quick_window_forwards_hotkeys_to_generation_zero_owner(qt_app):
     controller.previous_image_requested.connect(lambda: routed.append("previous"))
     controller.next_image_requested.connect(lambda: routed.append("next"))
     controller.cycle_transition_requested.connect(lambda: routed.append("cycle"))
-    controller.settings_requested.connect(lambda: routed.append("settings"))
     controller.exit_requested.connect(lambda: routed.append("exit"))
 
     for key, text in (
         (Qt.Key.Key_Z, "z"),
         (Qt.Key.Key_X, "x"),
         (Qt.Key.Key_C, "c"),
-        (Qt.Key.Key_S, "s"),
     ):
         event = _key_press(key, text)
         QCoreApplication.sendEvent(window, event)
         assert event.isAccepted() is True
 
-    assert routed == ["previous", "next", "cycle", "settings"]
+    assert routed == ["previous", "next", "cycle"]
     assert controller.input_state.runtime_generation == 0
     assert window.describe_window_state()["input_controller_bound"] is True
 
@@ -272,7 +271,7 @@ def test_quick_window_forwards_hotkeys_to_generation_zero_owner(qt_app):
     QCoreApplication.sendEvent(window, control_press)
     assert controller.input_state.ctrl_held is True
     QCoreApplication.sendEvent(window, _key_press(Qt.Key.Key_A, "a"))
-    assert routed == ["previous", "next", "cycle", "settings"]
+    assert routed == ["previous", "next", "cycle"]
 
     QCoreApplication.sendEvent(window, _key_release(Qt.Key.Key_Control))
     assert controller.input_state.ctrl_held is False

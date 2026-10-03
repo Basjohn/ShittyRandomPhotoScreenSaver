@@ -227,6 +227,13 @@ Each foundation slice adds what it learned here.
   authored durations (8000 ms), not the harness's 1000 ms default: the jarring rumble only showed at length.
 - Pieces launch with their full speed (no ease-in: that read as falling), and every piece leaves the frame.
 - Judge looks on real photos. Render new animations only for new transitions, not for tweaks to an existing one.
+- Lines a shader draws on a face (rims, edge lines) are measured in screen pixels (`fwidth` of the face
+  coordinates), not in face units times a head-on size: foreshortened faces otherwise thin them below a pixel and
+  they alias, and MSAA only smooths geometry edges (Extruded Spectrum's Smooth Edges, 2026-10-03).
+- A flat face under a distant camera mirrors a distant environment as one flat colour. Take a mirror's reflection
+  toward a near virtual eye, and put the environment's features where the view really looks: a view tilted down
+  onto the scene mirrors what lies below the horizon, so a dark ground there hides the whole effect (Extruded
+  Spectrum's Mirror Faces).
 
 **Settings**
 - A transition's quality choices (Anti-aliasing, Bloom, and future ones such as Motion Blur) live on its own page.
@@ -261,7 +268,7 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
   now falls; Block Spins' diagonals sweep from the named corner. Check each on real photos;
 - [ ] Beam on real photos in several directions and colours at its default 3500 ms and longer: the blade's look
   (core, band, halo), the light it casts, steadiness (no flicker anywhere), spark density and fall, the scorch's
-  strength and how it cures, Glow and Scorch at both ends;
+  strength and how it cures, Glow, Scorch and Cure Time at both ends (a slow cure crosses sooner);
 - [ ] Burn's Flames and Ember Veins (off by default) on real photos in every direction: flame height and colour
   with Glow Intensity and the two colours, the wall of fire along a vertical edge, how visible the veins are at
   different Char Widths;
@@ -275,7 +282,7 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
 - [ ] Disintegrate on real photos in several wind directions at 6500 ms: grain size, wind strength, swirl, the noisy
   front and fade; High vs Balanced on both displays, and GPU cost with active Visualizers;
 - [ ] Page Curl (laminate roll, 2026-10-03) on real photos from every origin at 5000 ms and longer: roll size and
-  growth, pace, the print's colour on the roll, the clear coat and Gloss, the shade under the roll, High vs Balanced
+  growth across Curl Size (the thinnest roll on Performance's coarser grid especially), pace, the print's colour on the roll, the clear coat and Gloss, the shade under the roll, High vs Balanced
   vs Performance smoothness of the roll on both displays;
 - [ ] Blinds 3D Slats on real photos in both orientations at its default 4000 ms and longer: the wave's pace, slat
   lighting and Slat Gloss, the shade through the gaps, 6 vs 48 slats, High vs Balanced;

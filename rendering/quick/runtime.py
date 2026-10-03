@@ -49,7 +49,6 @@ class QuickDisplayRuntime(QObject):
     previous_requested = Signal()
     next_requested = Signal()
     cycle_transition_requested = Signal()
-    settings_requested = Signal()
     play_pause_requested = Signal()
     home_play_pause_requested = Signal()
     previous_track_requested = Signal()
@@ -62,6 +61,8 @@ class QuickDisplayRuntime(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
+    view_orbit_requested = Signal(int, int)
+    view_orbit_finished = Signal()
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
     custom_layout_undo_requested = Signal()
@@ -201,7 +202,6 @@ class QuickDisplayRuntime(QObject):
         self._input.cycle_transition_requested.connect(
             self.cycle_transition_requested.emit
         )
-        self._input.settings_requested.connect(self.settings_requested.emit)
         self._input.play_pause_requested.connect(self.play_pause_requested.emit)
         self._input.home_play_pause_requested.connect(
             self.home_play_pause_requested.emit
@@ -238,6 +238,8 @@ class QuickDisplayRuntime(QObject):
         self._input.layout_slot_save_requested.connect(
             self.layout_slot_save_requested.emit
         )
+        self._input.view_orbit_requested.connect(self.view_orbit_requested.emit)
+        self._input.view_orbit_finished.connect(self.view_orbit_finished.emit)
         self._input.custom_layout_save_requested.connect(
             self.custom_layout_save_requested.emit
         )

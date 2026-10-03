@@ -1,4 +1,4 @@
-"""Extruded Spectrum (experimental): Spectrum's bars as lit 3D boxes on the shared Scene3D
+"""Extruded Spectrum: Spectrum's bars as lit 3D boxes on the shared Scene3D
 foundation. The projection and height transfer equal their CPU mirrors on the GPU and
 Spectrum's own transfer; the fit keeps the tallest scene inside the bar field; through the
 production capture seam and render host on a real offscreen context (no window) the bars
@@ -196,6 +196,39 @@ def test_the_content_fade_and_spectrum_colours(target):
         if rows.size:
             colour = plain[rows, int(c), :3].mean(axis=0)
             assert colour.max() - colour.min() < 12
+
+
+def test_mirror_faces_polish_only_the_bars_faces(target):
+    capture, host = target
+    organ = dict(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_reflection=0.0,
+                 extruded_spectrum_tilt=0.2)
+    plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0))
+    chrome = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0))
+    changed = np.abs(chrome - plain).max(axis=2) > 2
+    drawn = plain[..., 3] > 0
+    assert changed.any()
+    assert not changed[~drawn].any()                         # no new geometry, nothing outside the bars
+    # The faces mirror the studio's bright sky: the bars' bodies brighten overall.
+    body = drawn & (plain[..., 3] == 255)
+    assert chrome[body][:, :3].mean() > plain[body][:, :3].mean() + 10
+
+
+def test_smooth_edges_only_fill_in_lines_that_foreshortening_thinned(target):
+    """Smooth Edges keeps edge lines at least a smoothed pixel wide on faces seen at an angle: it
+    only ever adds line light, near the lines, and never dims or recolours a face."""
+    capture, host = target
+    for view in (dict(extruded_spectrum_tilt=0.0, extruded_spectrum_turn=0.0),
+                 dict(extruded_spectrum_tilt=0.8, extruded_spectrum_turn=0.8)):
+        frames = [capture.render(host, _snapshot(extruded_spectrum_colouring="Spectral Edges",
+                                                 extruded_spectrum_reflection=0.0,
+                                                 extruded_spectrum_smooth_edges=smooth, **view))
+                  for smooth in (False, True)]
+        off, on = (frame[..., :3].sum(axis=2) for frame in frames)
+        drawn = (frames[0][..., 3] > 0) | (frames[1][..., 3] > 0)
+        assert not (on < off - 24).any()                         # never darker
+        brighter = on > off + 24
+        assert brighter.sum() < 0.2 * drawn.sum()                 # only along the lines
+    assert brighter.any()                                         # at an angle, thinned lines are filled in
 
 
 def test_resources_are_released_with_the_mode(target):

@@ -155,10 +155,6 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 Implement vertical features in this order unless evidence from a preceding slice justifies a swap:
 
-- [ ] **Extruded Spectrum** follow-ups (the mode landed and is accepted as permanent; `Docs/Reference/Visualizer_Reference.md`
-  16A): optional light anti-aliasing of the shader-drawn rims at an angle without softening Glass Floor; an optional
-  reflective surface on the bar faces (not the edges) plus a preset using it with the mirror floor; live WASD
-  tilt/turn as a reusable control for 3D freeform Visualizers (replacing the S key's Settings shortcut).
 - [ ] **Shockwave Grid**: displaced grid + bounded event SSBO + emissive/bloom proof on the SDR presentation path.
 - [ ] **Reactive Particle Field**: compute/compaction/indirect/OIT proof.
 - [ ] **Spectrum Terrain / Skyline / Tunnel**, then **Waveform Ribbon** and **Deformable Blob Sphere**.

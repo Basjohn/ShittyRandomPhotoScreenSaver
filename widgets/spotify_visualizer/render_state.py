@@ -297,7 +297,7 @@ class SpectrumFrame:
 
 @dataclass(frozen=True, slots=True)
 class ExtrudedSpectrumFrame(SpectrumFrame):
-    """Spectrum's authored payload for the experimental Extruded Spectrum renderer.
+    """Spectrum's authored payload for the Extruded Spectrum renderer.
 
     The same frame runtime resolves it; only the mode identity (and the renderer that
     admits it) differ, so the bars keep Spectrum's authored response exactly."""

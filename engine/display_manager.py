@@ -122,7 +122,7 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     save_image_requested = Signal(int)  # context menu - save the image on this display
     cycle_transition_requested = Signal()  # C key - cycle transition mode
-    settings_requested = Signal()  # S key - open settings
+    settings_requested = Signal()  # context menu - open settings
     settings_target_requested = Signal(str)  # runtime widget -> semantic Settings target
     # The exact DisplayManager identity is a pointer-width Python integer.
     custom_layout_reload_requested = Signal(str, int, object)
@@ -197,6 +197,8 @@ class DisplayManager(QObject):
         self._quick_ctrl_coordinator = SharedCtrlCoordinator()
         self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
         self._quick_visualizer_owner: Any | None = None
+        # A live W/A/S/D view orbit not yet saved: (mode id, {setting: value}).
+        self._quick_view_orbit_pending: tuple[str, dict[str, float]] | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
         self._quick_visualizer_media_model: Any | None = None
         # Secondary fence for the CUSTOM failover grace deadline (bumped on a
@@ -789,6 +791,67 @@ class DisplayManager(QObject):
                 # A replacement generation can retire between snapshot and push.
                 continue
 
+    def _quick_view_orbit_admitted(self) -> bool:
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return False
+        from widgets.spotify_visualizer.view_orbit import view_orbit_settings
+
+        return bool(view_orbit_settings(owner.controller.mode_id))
+
+    def _publish_quick_view_orbit_admission(self) -> None:
+        """Tell every live Quick input whether W/A/S/D orbit the shown Visualizer."""
+
+        admitted = self._quick_view_orbit_admitted()
+        for display in tuple(self.displays):
+            if not isinstance(display, QuickDisplayUnit) or display.is_retired:
+                continue
+            try:
+                display.runtime.input_controller.set_view_orbit_enabled(admitted)
+            except RuntimeError:
+                # A replacement generation can retire between snapshot and push.
+                continue
+
+    def _orbit_quick_visualizer_view(self, turn_steps: int, tilt_steps: int) -> None:
+        """Step the shown 3D Visualizer's view live; nothing is saved until orbiting stops."""
+
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return
+        from widgets.spotify_visualizer.view_orbit import orbit_visualizer_view
+
+        mode_id = str(owner.controller.mode_id)
+        values = orbit_visualizer_view(
+            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps
+        )
+        if values:
+            self._quick_view_orbit_pending = (mode_id, values)
+
+    def _persist_quick_visualizer_view(self) -> None:
+        """Save a finished orbit once (on the release of the last held key)."""
+
+        pending = self._quick_view_orbit_pending
+        self._quick_view_orbit_pending = None
+        settings = self.settings_manager
+        if pending is None or settings is None:
+            return
+        from core.settings.visualizer_presets import VISUALIZER_CUSTOM_STORAGE_KEY
+        from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
+
+        mode_id, values = pending
+        section = settings.get("widgets.spotify_visualizer")
+        custom_presets = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        if not isinstance(section, Mapping) or not isinstance(custom_presets, Mapping):
+            logger.warning("[VIS_ORBIT] Orbit not saved: malformed settings roots")
+            return
+        config, cache = resolve_visualizer_view_orbit(
+            section, custom_presets, mode=mode_id, values=values
+        )
+        settings.replace_visualizer_runtime_preset_state(config, cache)
+        self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(config)
+        self._refresh_all_quick_context_menus()
+        logger.info("[VIS_ORBIT] Saved mode=%s view=%s", mode_id, values)
+
     def _quick_custom_layout_active(self) -> bool:
         return bool(self._quick_custom_layout_owner.is_active)
 
@@ -1315,6 +1378,7 @@ class DisplayManager(QObject):
         if isinstance(section, dict):
             section["mode"] = str(mode_id)
         self._refresh_all_quick_context_menus()
+        self._publish_quick_view_orbit_admission()
         logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
 
     def _complete_quick_visualizer_preset_change(
@@ -1353,6 +1417,8 @@ class DisplayManager(QObject):
                 "Settings authority has no atomic visualizer preset persistence"
             )
         persist(target.visualizer_config, target.custom_presets)
+        # The preset replaced the view; an orbit still held continues from it.
+        self._quick_view_orbit_pending = None
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(
             target.visualizer_config
         )
@@ -1381,7 +1447,9 @@ class DisplayManager(QObject):
         runtime.cycle_transition_requested.connect(
             self.cycle_transition_requested.emit
         )
-        runtime.settings_requested.connect(self.settings_requested.emit)
+        runtime.view_orbit_requested.connect(self._orbit_quick_visualizer_view)
+        runtime.view_orbit_finished.connect(self._persist_quick_visualizer_view)
+        runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())
         runtime.context_menu_requested.connect(
             lambda _position, display=unit: self._refresh_quick_context_menu(
                 display
@@ -2635,6 +2703,7 @@ class DisplayManager(QObject):
             owner.start()
             self._quick_visualizer_owner = owner
             self._quick_visualizer_unit = chosen
+            self._publish_quick_view_orbit_admission()
             if media_model is not None:
                 self._bind_quick_visualizer_media(media_model)
             chosen.attach_visualizer_owner(owner)
@@ -2899,8 +2968,11 @@ class DisplayManager(QObject):
             chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
             chosen.runtime.scene_controller.set_visualizer_middle_click_admission(None)
             chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
+        # An orbit still held when the Visualizer goes is saved now; its release never comes.
+        self._persist_quick_visualizer_view()
         self._quick_visualizer_owner = None
         self._quick_visualizer_unit = None
+        self._publish_quick_view_orbit_admission()
         return True
 
     def _schedule_visualizer_failover_deadline(
