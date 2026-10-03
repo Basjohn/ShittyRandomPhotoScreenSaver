@@ -232,7 +232,14 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Side defects (found in passing)
 
-None open.
+- [ ] **Visualizer cadence during image transitions (operator: Bubble micro-flicker, 2026-10-03).** Frame trace of
+  the 22:42-22:51 run, TV display: steady stretches draw 1:1 (about 450 draws per 450 logical frames per 5 s, ~1
+  repeat), but transition windows draw 500-600 times for the same 450 frames (50-170 repeated draws), so 90 Hz Bubble
+  frames are shown unevenly while the transition drives the display faster. Not new (2026-09-22 trace: 45-87 repeats
+  in the same windows) and not Bubble's logical smoothing (golden unchanged; nothing in its chain changed). Fix at
+  the presentation edge, never by retuning Bubble (Bubble Temporal Fidelity): candidates are pacing visualizer
+  presentation to its own publications during transitions, or visual-only interpolation between published frames.
+  Evidence: `tools/frame_trace_report.py <trace> --timeline-seconds 5`, `repeat_draws` per window.
 
 ## Handoff rules
 
