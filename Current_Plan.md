@@ -58,7 +58,12 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
   - [ ] Attribute the GUI starvation: an opt-in `--frame-trace` sampler that records the GUI thread's Python stack
     when a Visualizer GUI wake is > 40 ms late (zero cost without the flag; no polling at rest), or correlate with
     usage/feeds/media work on a run with those diagnostics off.
-  - [ ] Attribute D1's unattributed gaps (after_rendering -> frame_swap; DWM/present queue).
+  - [ ] Attribute D1's unattributed gaps. Measured (stall lines now print the longest render-thread silence and the
+    events around it): frames kept coming every 12-14 ms through those gaps but recorded no Visualizer draw, so they
+    are not render stalls: the node had no snapshot or was not in those frames. This run also moved the Visualizer
+    between displays (CUSTOM transfer 16:12:54); check whether they cluster at transfer/visibility edges on an
+    unattended run. The GUI-starved stalls show the silence at swap -> frame_begin (the next frame waits for the GUI
+    thread; render nodes and trace callbacks are Python, so any long GIL holder stalls rendering too).
 - [ ] N1d. Fix at the owner the evidence names (e.g. requesters coalesced onto Visualizer frames while one presents,
   the pattern the transition ride uses), with a regression bar that fails when the extra frames return.
   Physical check: Bubble and DevCurve on the 165 Hz and 60 Hz displays.
