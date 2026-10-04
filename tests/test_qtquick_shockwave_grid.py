@@ -57,7 +57,7 @@ class _Onsets:
 
 
 def _record(runtime, bus, now, playing=True):
-    return runtime.record_onsets(onsets=bus.after(runtime.onset_serial), now_ts=now, playing=playing)
+    return runtime.record_onsets(onsets=bus.after(runtime.onset_serial), now_ts=now, playing=playing, passage_intensity=1.0)
 
 
 def test_an_event_is_admitted_once_per_onset_spaced_bounded_and_aged():
@@ -112,9 +112,9 @@ def test_the_bus_publishes_every_onset_exactly_once_whatever_the_reading_cadence
     assert all(onset.kind == "kick" and onset.magnitude > 0.0 for onset in onsets)
     assert [o.serial for o in onsets] == sorted({o.serial for o in onsets})
     runtime = ShockwaveGridFrameRuntime()
-    events = runtime.record_onsets(onsets=onsets, now_ts=clock[0], playing=True)
+    events = runtime.record_onsets(onsets=onsets, now_ts=clock[0], playing=True, passage_intensity=1.0)
     assert len(events) == 2                     # the middle one came within SHOCKWAVE_MIN_GAP of the first
-    assert runtime.record_onsets(onsets=onsets, now_ts=clock[0] + 0.01, playing=True) is not None
+    assert runtime.record_onsets(onsets=onsets, now_ts=clock[0] + 0.01, playing=True, passage_intensity=1.0) is not None
     assert runtime.onset_serial == onsets[-1].serial
     fresh = TransientBus()                      # a replaced bus (an activation) keeps serials unique
     clock[0] += 1.0
@@ -258,8 +258,8 @@ def test_the_runtime_learns_the_usual_onset_so_a_bigger_one_stands_out():
         now += 0.25
         event = MusicalOnset(serial=serial, timestamp=now, kind="kick", strength=min(1.0, magnitude),
                              magnitude=magnitude, loudness=loudness, presence=presence)
-        before = runtime.record_onsets(onsets=(), now_ts=now, playing=True)
-        after = runtime.record_onsets(onsets=(event,), now_ts=now, playing=True)
+        before = runtime.record_onsets(onsets=(), now_ts=now, playing=True, passage_intensity=1.0)
+        after = runtime.record_onsets(onsets=(event,), now_ts=now, playing=True, passage_intensity=1.0)
         strengths.append(after[-1][3] if len(after) > len(before) or (after and after[-1][0] == 0.0) else None)
 
     for _ in range(12):
@@ -269,6 +269,31 @@ def test_the_runtime_learns_the_usual_onset_so_a_bigger_one_stands_out():
     assert strengths[-1] is not None and strengths[-1] >= 2.0 * usual
     onset(2.0, 0.05, 0.05)                                  # near-silence between songs
     assert strengths[-1] is None
+
+
+def test_how_often_and_how_strong_waves_come_ramps_with_the_passage():
+    """The same onsets (eight a second, ordinary loud music) make few, soft waves in the track's
+    quietest passage and frequent, full ones in its loudest. Without the ramp both were the same
+    (~9 waves a second at every level on real music)."""
+    from widgets.spotify_visualizer.transient_bus import MusicalOnset
+
+    def waves(intensity):
+        runtime, born = ShockwaveGridFrameRuntime(), []
+        for index in range(80):
+            now = 20.0 + index * 0.125
+            onset = MusicalOnset(serial=7000 + index, timestamp=now, kind="kick", strength=1.0,
+                                 magnitude=2.0, loudness=9.0, presence=1.2)
+            events = runtime.record_onsets(onsets=(onset,), now_ts=now, playing=True,
+                                           passage_intensity=intensity)
+            born += [event[3] for event in events if event[0] == 0.0]
+        return len(born), (sum(born) / len(born) if born else 0.0)
+
+    (quiet_count, quiet_strength), (usual_count, usual_strength), (loud_count, loud_strength) = (
+        waves(0.0), waves(0.5), waves(1.0))
+    assert loud_count == 80 and quiet_count <= 0.25 * loud_count
+    assert quiet_count < usual_count < loud_count
+    assert quiet_strength < usual_strength < loud_strength
+    assert quiet_strength <= 0.35 * loud_strength
 
 
 def test_a_big_wave_is_wider_taller_and_trails_an_echo_ring():

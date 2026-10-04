@@ -3,10 +3,12 @@
 Spectrum's frame runtime (bars, peaks, temporal treatment, shape editor, energy distribution)
 plus a bounded ring of shockwave events: each musical onset the transient bus publishes
 (``MusicalOnset``, taken exactly once by serial, however the analysis and logical cadences
-relate) and at least ``SHOCKWAVE_MIN_GAP`` after the last becomes one event, born when the
-onset happened, with a deterministic origin (from its admission number and onset type) and a
-strength from its magnitude, loudness and presence (``shockwave_strength``) against the track's
-usual onset presence, which this runtime follows; an onset too weak for a wave makes none. Events are aged on the logical clock at capture and dropped after
+relate) and at least ``shockwave_gap`` after the last becomes one event, born when the onset
+happened, with a deterministic origin (from its admission number and onset type) and a strength
+from its magnitude, loudness and presence (``shockwave_strength``) against the track's usual
+onset presence, which this runtime follows, times the passage's share
+(``shockwave_passage_share``); an onset too weak for a wave makes none. The gap and the share
+both ramp on the passage intensity. Events are aged on the logical clock at capture and dropped after
 ``SHOCKWAVE_LIFETIME``; at most ``SHOCKWAVE_CAPACITY`` are held, the oldest giving way. Nothing
 here touches Qt or GL.
 """
@@ -16,9 +18,10 @@ from __future__ import annotations
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_CAPACITY,
     SHOCKWAVE_LIFETIME,
-    SHOCKWAVE_MIN_GAP,
     SHOCKWAVE_MIN_STRENGTH,
+    shockwave_gap,
     shockwave_origin,
+    shockwave_passage_share,
     shockwave_strength,
 )
 from widgets.spotify_visualizer.frame_runtime_lifecycle import retirement_fenced
@@ -55,11 +58,14 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         return self._onset_serial
 
     @retirement_fenced
-    def record_onsets(self, *, onsets, now_ts: float,
-                      playing: bool) -> tuple[tuple[float, float, float, float], ...]:
+    def record_onsets(self, *, onsets, now_ts: float, playing: bool,
+                      passage_intensity: float) -> tuple[tuple[float, float, float, float], ...]:
         """Admit the new published onsets (``MusicalOnset``, oldest first; any already taken
-        are skipped) and return the live events as (age, x share, z, strength), oldest first."""
+        are skipped) at ``passage_intensity`` (``BeatEngine.get_musical_intensity``) and return
+        the live events as (age, x share, z, strength), oldest first."""
         now = float(now_ts)
+        gap = shockwave_gap(passage_intensity)
+        share = shockwave_passage_share(passage_intensity)
         if self._events and now < self._events[-1][0]:
             self._events = []                       # the clock went back (a new activation)
             self._last_event_ts = float("-inf")
@@ -68,10 +74,11 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
                 continue
             self._onset_serial = onset.serial
             birth = min(now, float(onset.timestamp))
-            if not playing or birth - self._last_event_ts < SHOCKWAVE_MIN_GAP:
+            if not playing or birth - self._last_event_ts < gap:
                 continue
             presence = float(onset.presence)
-            strength = shockwave_strength(onset.magnitude, onset.loudness, presence, self._usual_presence)
+            strength = share * shockwave_strength(onset.magnitude, onset.loudness, presence,
+                                                  self._usual_presence)
             self._usual_presence = learn_usual_presence(self._usual_presence, presence)
             if strength < SHOCKWAVE_MIN_STRENGTH:
                 continue
