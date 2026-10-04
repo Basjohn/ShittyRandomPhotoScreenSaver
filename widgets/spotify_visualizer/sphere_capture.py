@@ -7,16 +7,20 @@ from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame, f
 
 
 def _render_parameters(widget: Any, parameters: FrozenFields) -> FrozenFields:
-    """The runtime's resolved parameters plus the presentation-owned 3D Detail tier, for the
-    renderer only (the logical runtime never sees it). Rebuilt only when either changes."""
+    """The runtime's resolved parameters plus the presentation-owned values only the renderer
+    reads (the 3D Detail tier, Mirror Cubes and the reflected wallpaper): the logical runtime
+    never sees them. Rebuilt only when one of them changes."""
     from widgets.spotify_visualizer.config_applier import _presentation_source
 
-    tier = str(_presentation_source(widget)._scene3d_detail)
+    pres = _presentation_source(widget)
+    backdrop = getattr(pres, "_backdrop", None)
+    key = (str(pres._scene3d_detail), float(pres._sphere_mirror), None if backdrop is None else backdrop.identity)
     cached = getattr(widget, "_sphere_render_parameters", None)
-    if cached is not None and cached[0] is parameters and cached[1] == tier:
+    if cached is not None and cached[0] is parameters and cached[1] == key:
         return cached[2]
-    merged = freeze_render_fields({**dict(parameters), "scene3d_detail": tier})
-    widget._sphere_render_parameters = (parameters, tier, merged)
+    merged = freeze_render_fields({**dict(parameters), "scene3d_detail": key[0], "sphere_mirror": key[1],
+                                   "backdrop": backdrop})
+    widget._sphere_render_parameters = (parameters, key, merged)
     return merged
 
 

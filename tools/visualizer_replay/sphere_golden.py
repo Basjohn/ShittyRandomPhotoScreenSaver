@@ -8,7 +8,11 @@ hit, silence), recording every authored Sphere output per frame, the resolved hi
 profile and each preset's resolved parameters.
 
 It is a reference, not a lock (operator 2026-10-04): a reaction change is allowed when it is
-measured and intended. Without ``--write`` the tool replays and prints what differs from the
+measured and intended. Presets are authored content and never tested against (operator
+2026-10-04): a case is seeded from its curated preset only when recorded, and its resolved Sphere
+settings are frozen into the golden; replays use that frozen copy, so editing or adding presets
+never moves it. Only behaviour (the frames) fails; settings and the technical profile are
+reported for information. Without ``--write`` the tool replays and prints what differs from the
 committed golden, per segment; ``--write`` re-records it (only for an intended, documented
 change). ``tests/test_sphere_promotion_golden.py`` fails on any unreviewed difference.
 """
@@ -127,26 +131,47 @@ def _frame_record(state) -> dict:
     return _round(record)
 
 
-def capture() -> dict:
-    """Replay both goldens and return the full reference document."""
+def _seed_settings(preset: int, overrides) -> dict:
+    """A case's Sphere settings as its curated preset resolves them today (used only to record)."""
     from core.settings.models import SpotifyVisualizerSettings
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+
+    activation = resolve_visualizer_activation_payload({"mode": "sphere", "preset_sphere": preset})
+    model = SpotifyVisualizerSettings.from_mapping(activation.resolved_config, apply_preset_overlay=False,
+                                                   resolve_preset_indices=False)
+    values = {key: value for key, value in dataclasses.asdict(model).items() if key.startswith("sphere_")}
+    values.update(overrides or {})
+    return json.loads(json.dumps(values))
+
+
+def case_settings(golden: dict | None = None) -> dict:
+    """Each case's frozen Sphere settings: from ``golden`` when it holds them, else seeded."""
+    out = {}
+    for preset, name, overrides in PRESETS:
+        frozen = None if golden is None else golden["presets"].get(name, {}).get("settings")
+        out[name] = dict(frozen) if frozen else _seed_settings(preset, overrides)
+    return out
+
+
+def capture(golden: dict | None = None) -> dict:
+    """Replay every case from its frozen settings (``golden``'s, or freshly seeded from the
+    curated presets when recording) and return the full reference document."""
+    from core.settings.models import SpotifyVisualizerSettings
     from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 
     from .driver import replay_clip
 
     clip, bounds = golden_clip()
+    settings = case_settings(golden)
     document = {"clip": {"frames": len(clip.frames), "segments": [list(b) for b in bounds]}, "presets": {}}
     for preset, name, overrides in PRESETS:
-        activation = resolve_visualizer_activation_payload({"mode": "sphere", "preset_sphere": preset})
-        model = SpotifyVisualizerSettings.from_mapping(activation.resolved_config, apply_preset_overlay=False,
-                                                       resolve_preset_indices=False)
-        technical = resolve_technical_config(build_technical_cache(None, model), "sphere")
-        result = replay_clip(clip, "sphere", preset=preset, overrides=overrides)
+        technical = resolve_technical_config(build_technical_cache(None, SpotifyVisualizerSettings()), "sphere")
+        result = replay_clip(clip, "sphere", preset=0, overrides=settings[name])
         series = result["logical_series"]
         document["presets"][name] = {
-            "preset_index": preset,
+            "seeded_from_preset": preset,
             "overrides": overrides or {},
+            "settings": settings[name],
             "technical_profile": _round(dict(technical)),
             # The 3D Detail tier is a hardware choice (the GPU's), not behaviour: left out.
             "parameters": _round({k: v for k, v in dict(series[0].mode_state.parameters).items()
@@ -197,8 +222,9 @@ def summarise(frames, bounds) -> dict:
 
 
 def differences(golden: dict, current: dict) -> list[str]:
-    """Readable differences: technical profile and parameters exactly, frames by segment summary
-    and the first differing frame."""
+    """Readable differences: frames by segment summary and the first differing frame (behaviour:
+    these fail); the technical profile and parameters as ``info:`` lines (authored or default
+    values: reported, never failing)."""
     lines = []
     bounds = [tuple(b) for b in golden["clip"]["segments"]]
     for name, reference in golden["presets"].items():
@@ -207,7 +233,7 @@ def differences(golden: dict, current: dict) -> list[str]:
             if reference[key] != now[key]:
                 changed = sorted(k for k in set(reference[key]) | set(now[key])
                                  if reference[key].get(k) != now[key].get(k))
-                lines.append(f"{name}: {key} differs: {changed}")
+                lines.append(f"info: {name}: {key} differs: {changed}")
         if reference["frames"] != now["frames"]:
             first = next(i for i, (a, b) in enumerate(zip(reference["frames"], now["frames"])) if a != b) \
                 if len(reference["frames"]) == len(now["frames"]) else 0
@@ -238,7 +264,27 @@ VISUAL_CASES = (
     ("voxel_bloom_big_hit", "voxel_bloom", "big_hit", 12, 480, 270),
     ("glass_current_wide", "glass_current", "big_hit", 12, 960, 120),
     ("glass_current_tall", "glass_current", "big_hit", 12, 200, 600),
+    # Mirror Cubes over a synthetic wallpaper (never a personal photo in the repository).
+    ("voxel_bloom_mirror", "voxel_bloom", "kicks", 60, 480, 270),
 )
+# Renderer-only values a case adds (its presentation and the reflected wallpaper).
+VISUAL_EXTRA = {"voxel_bloom_mirror": {"sphere_mirror": 1.0, "sphere_gloss": 1.0}}
+
+
+def synthetic_backdrop():
+    """A deterministic wallpaper for the mirror case: a warm-to-cool gradient with soft bands."""
+    import numpy as np
+
+    from widgets.spotify_visualizer.backdrop import VisualizerBackdrop
+
+    width, height = 256, 144
+    y, x = np.mgrid[0:height, 0:width].astype(np.float32)
+    u, v = x / (width - 1), y / (height - 1)
+    bands = 0.5 + 0.5 * np.sin(u * 18.0 + v * 7.0)
+    rgb = np.stack([0.85 * (1 - v) + 0.10 * bands, 0.35 + 0.30 * u * bands, 0.25 + 0.65 * v], axis=-1)
+    rgba = np.concatenate([np.clip(rgb, 0, 1) * 255, np.full((height, width, 1), 255.0)], axis=-1)
+    return VisualizerBackdrop(identity="sphere_golden_synthetic", size=(width, height),
+                              rgba=np.ascontiguousarray(rgba.astype(np.uint8)).tobytes())
 
 
 def _custom_presentation(width: float, height: float):
@@ -267,12 +313,11 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
 
     clip, bounds = golden_clip()
     starts = dict(bounds)
-    presets = {name: (preset, overrides) for preset, name, overrides in PRESETS}
+    settings = case_settings(load_golden() if GOLDEN.exists() else None)
     snapshots = {}
     for preset_name in sorted({case[1] for case in cases}):
         wanted = {name: starts[segment] + offset for name, golden, segment, offset, *_ in cases if golden == preset_name}
-        preset, overrides = presets[preset_name]
-        result = replay_clip(clip, "sphere", preset=preset, overrides=overrides, snapshots_at=wanted.values())
+        result = replay_clip(clip, "sphere", preset=0, overrides=settings[preset_name], snapshots_at=wanted.values())
         snapshots.update({name: result["snapshots"][index] for name, index in wanted.items()})
     images = {}
     for name, _golden, _segment, _offset, width, height in cases:
@@ -280,8 +325,11 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
         # production presentation resolver (Sphere centres itself in the presentation's content).
         snapshot = snapshots[name]
         state = snapshot.logical.mode_state
+        extra = dict(VISUAL_EXTRA.get(name, {}))
+        if extra.get("sphere_mirror"):
+            extra["backdrop"] = synthetic_backdrop()
         state = dataclasses.replace(state, parameters=freeze_render_fields(
-            {**dict(state.parameters), "scene3d_detail": VISUAL_TIER}))
+            {**dict(state.parameters), "scene3d_detail": VISUAL_TIER, **extra}))
         snapshots[name] = dataclasses.replace(snapshot, presentation=_custom_presentation(width, height),
                                               logical=dataclasses.replace(snapshot.logical, mode_state=state))
         window_w, window_h = 3 * width, 3 * height
@@ -365,7 +413,8 @@ def main() -> None:
     from PySide6.QtCore import QCoreApplication
 
     QCoreApplication.instance() or QCoreApplication([])
-    current = capture()
+    golden = None if args.write or not GOLDEN.exists() else load_golden()
+    current = capture(golden)
     bounds = [tuple(b) for b in current["clip"]["segments"]]
     for name, data in current["presets"].items():
         print(f"== {name}")
@@ -379,7 +428,7 @@ def main() -> None:
         print(f"wrote {GOLDEN}")
         return
     if GOLDEN.exists():
-        lines = differences(load_golden(), current)
+        lines = differences(golden, current)
         print("\n".join(lines) if lines else "matches the golden")
 
 

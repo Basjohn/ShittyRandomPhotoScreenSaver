@@ -1262,6 +1262,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'sphere_incoming_transient_velocity_enabled': True,
                                     'sphere_light_direction': 'NW',
                                     'sphere_light_tracer_enabled': True,
+                                    'sphere_mirror': 0.0,
                                     'sphere_particle_amount': 1.0,
                                     'sphere_particle_distance': 1.35,
                                     'sphere_particle_energy_floor': 0.075,

@@ -19,10 +19,10 @@ def golden():
 
 
 @pytest.fixture(scope="module")
-def current(qt_app):
+def current(qt_app, golden):
     from tools.visualizer_replay.sphere_golden import capture
 
-    return capture()
+    return capture(golden)               # from the golden's frozen settings, never the preset files
 
 
 def _segments(document):
@@ -34,7 +34,7 @@ def _segments(document):
 def test_sphere_matches_its_promotion_golden(golden, current):
     from tools.visualizer_replay.sphere_golden import differences
 
-    lines = differences(golden, current)
+    lines = [line for line in differences(golden, current) if not line.startswith("info:")]
     assert not lines, "Sphere differs from its promotion golden (re-record only for an intended, " \
                       "documented change):\n" + "\n".join(lines)
 
@@ -77,7 +77,22 @@ def test_a_behaviour_change_is_caught_and_described(golden, current):
     lines = differences(golden, changed)
     assert any("glass_current: frames differ from frame" in line for line in lines)
     assert any(line.strip().startswith("kicks:") and "tracer" in line for line in lines)
-    assert any("technical_profile differs: ['sensitivity']" in line for line in lines)
+    # Authored/default values are reported, never failing.
+    assert any(line.startswith("info:") and "technical_profile differs: ['sensitivity']" in line for line in lines)
+
+
+def test_editing_a_curated_preset_never_moves_the_golden(golden, monkeypatch):
+    """Presets are authored content (operator 2026-10-04): the golden replays its frozen settings."""
+    from core.settings import visualizer_presets
+    from tools.visualizer_replay import sphere_golden
+
+    def edited(payload, *args, **kwargs):
+        raise AssertionError("the golden must not resolve a curated preset when it holds frozen settings")
+
+    monkeypatch.setattr(visualizer_presets, "resolve_visualizer_activation_payload", edited)
+    settings = sphere_golden.case_settings(golden)
+    assert set(settings) == set(golden["presets"])
+    assert all(value == golden["presets"][name]["settings"] for name, value in settings.items())
 
 
 def test_sphere_renders_its_visual_reference(qt_app):

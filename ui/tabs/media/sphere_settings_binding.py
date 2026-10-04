@@ -37,6 +37,7 @@ _SPHERE_SETTING_KEYS = (
     "sphere_rotation_speed",
     "sphere_gloss",
     "sphere_specular",
+    "sphere_mirror",
     "sphere_light_direction",
     "sphere_vocal_response",
     "sphere_size_response",
@@ -111,6 +112,7 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_rotation_speed": tab.sphere_rotation_speed.value() / 100.0,
         "sphere_gloss": tab.sphere_gloss.value() / 100.0,
         "sphere_specular": tab.sphere_specular.value() / 100.0,
+        "sphere_mirror": tab.sphere_mirror.value() / 100.0,
         "sphere_size_response": tab.sphere_size_response.value() / 100.0,
         "sphere_vocal_response": tab.sphere_vocal_response.value() / 100.0,
     }

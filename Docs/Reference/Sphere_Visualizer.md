@@ -79,6 +79,20 @@ Before any architectural promotion into shared/permanent ownership, capture both
   0.03 ms, 17 Python GL calls per frame.
 - *The five accepted modes:* the existing replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
 
+Presets are authored content and never tested against (operator 2026-10-04): each case is seeded from its curated
+preset only when recorded, and its resolved Sphere settings are frozen into the golden; replays use that frozen copy,
+so editing or adding presets never moves it. Only the frames fail; settings and the technical profile are reported
+as information. The visual cases render at a pinned tier (High) and the mirror case reflects a synthetic wallpaper
+(no personal photo in the repository).
+
+**Mirror Cubes** (`sphere_mirror`, 0..1, default 0, presentation-owned like Extruded's Mirror Faces; operator
+2026-10-04): the cube faces (never the edge lines or the tracer) become polished mirrors reflecting the displayed
+wallpaper (the owner's small copy, `backdrop_setting`, on 3D Detail tiers with reflections), each face by its own
+rotated normal toward a near virtual eye, so faces show different parts of the picture and it slides across them as
+the shell turns; as sharp as the greater of Gloss and Mirror Cubes, highlights kept on top, faintly tinted by the
+fill, a mirrored face more opaque. Mixed in display space after Sphere's tone map so the photograph reads as itself.
+Curated **Preset 5 (Mirror Ball)** shows it off: silver cubes, thin graphite edges, full Gloss and Mirror.
+
 `python -m tools.visualizer_replay.sphere_golden` prints the per-segment summary and what differs; `--visual` writes
 before/after sheets to `logs/sphere_visual_review/` for review by eye. An intended change re-records with `--write` /
 `--write-visual` and states the measured difference in its commit.

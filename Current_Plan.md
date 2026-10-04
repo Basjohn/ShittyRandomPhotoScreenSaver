@@ -185,6 +185,8 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   Physical check: orbit both to extremes on both displays.
 - [ ] **Sphere visual upgrade licence (operator):** the migration may make Sphere more visually appealing with the
   shared feature set (materials, lighting, post, reflections, tiers), within the golden-as-reference rules above.
+  Landed: tier antialiasing through the scene target; **Mirror Cubes** (operator 2026-10-04: mirror cubes, and a
+  preset that shows them off: Preset 5 Mirror Ball). Physical check: Mirror Ball on bright and dark wallpapers.
 - [x] **Reactivity goblin audit of the other modes** (operator 2026-10-04; Bubble excluded). Tool:
   `python -m tools.visualizer_replay.mode_audit` on the four songs (the second takes). Found and fixed: the engine's
   inline (pool-less) analysis published raw bars only, so recordings carried a zero continuous lane (one commit
@@ -218,6 +220,10 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 - [ ] Replace duplicate low-level GPU plumbing with Scene3D equivalents: lifetime/fences, frame/target, persistent-stream
   and SSBO transport, common material/light/post, shared particle/shadow facilities and the common 3D quality resolver.
   Delete superseded Sphere-local low-level infrastructure after acceptance; do not retain a fallback engine.
+  Done: programs/uniforms/mesh on `MeshResources` (static instance stream), prepared reveal, own `SceneTarget` overlay
+  with tier multisampling, `reach_item_frame` overflow (the private depth-scissor helpers are gone), the reflected
+  wallpaper through `BackdropEnvironment`. Remaining: per-frame values in one uniform block (two programs set ~60
+  uniforms a frame), then the technical profile.
 - [ ] **Give Sphere deliberate technical controls instead of permanently borrowing Spectrum invisibly.** Inventory the
   actual analysis seams Sphere consumes, then replace the single `technical_controls=False` / whole-Spectrum-profile
   borrow with descriptor-owned per-control capability metadata and a Sphere-owned resolved technical profile. Source/capture
@@ -272,6 +278,11 @@ Implement vertical features in this order unless evidence from a preceding slice
   the presentation edge, never by retuning Bubble (Bubble Temporal Fidelity): candidates are pacing visualizer
   presentation to its own publications during transitions, or visual-only interpolation between published frames.
   Evidence: `tools/frame_trace_report.py <trace> --timeline-seconds 5`, `repeat_draws` per window.
+- [ ] **Two stale tests red on HEAD (found 2026-10-04, not from S19):** `tests/test_godzip_foundry_core.py::
+  test_run_tab_is_last_and_remains_repo_local` pins the button label `LOCAL vs GIT HEAD` (UI wording; the tool
+  changed), and `tests/test_media_io_starvation.py::test_media_transport_command_starts_while_network_stalls_the_io_pool`
+  stubs a controller without `_run_coro_on_work_loop` (production renamed its work-loop entry). Reconcile both to the
+  current tool/controller; do not pin wording.
 
 ## Handoff rules
 
