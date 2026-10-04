@@ -62,8 +62,6 @@ EXTRUDED_REFLECTION_SPACE = 0.22  # floor lift (bar-field heights) a full reflec
 # The view tilts about the bars' mid-height, so orbiting circles the middle of the scene (level
 # views are unchanged; looking straight down keeps the tops where the bars' middle was).
 EXTRUDED_PIVOT = 0.5 * EXTRUDED_CEILING
-# How far (in item heights) an overflowing scene may reach beyond the item on every side.
-EXTRUDED_OVERFLOW_PAD = 0.5
 EXTRUDED_HUE_DRIFT_RATE = 0.15    # hue turns per authored second at full drift
 # One record per bar, in draw order (``extruded_draw_order``); ``bar`` is the bar's own index.
 EXTRUDED_BARS = Scene3DStorageLayout.of("ExtrudedBars", "ExtrudedBar",
@@ -114,12 +112,19 @@ def extruded_fit(half_span: float, depth: float, tilt: float, reflection: float,
     return scale, lift - bottom * scale
 
 
-def extruded_overflow_frame(frame, pad: float):
-    """A frame like ``frame`` whose item reaches ``pad`` item-local units further on every
-    side, for compositing a scene that leaves the item (the shared ``padded_item_frame``)."""
-    from rendering.quick.scene3d.frame import padded_item_frame
-
-    return padded_item_frame(frame, pad)
+def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: float, turn: float,
+                   fit: tuple[float, float], reflection: float) -> tuple[float, float, float, float]:
+    """The item-local (left, top, right, bottom) extent of everything the bars can draw for this
+    view: every bar at the ceiling over its full depth, and its floor reflection. Fixed per view
+    and shape, never per frame of music."""
+    scale, floor = fit
+    top, height = float(field[1]), float(field[3])
+    low = -EXTRUDED_CEILING if reflection > 0.0 else 0.0
+    points = [extruded_project((x, y, z), tilt, turn) for x in (-half_span, half_span)
+              for y in (low, 1.05 * EXTRUDED_CEILING) for z in (-depth, 0.0)]
+    xs = [centre + p[0] * scale * height for p in points]
+    ys = [top + height - (floor + p[1] * scale) * height for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 _COMMON_UNIFORMS = """

@@ -53,14 +53,34 @@ def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
     return left, bottom, max(0, right - left), max(0, top - bottom)
 
 
-def padded_item_frame(frame: SceneFrame, pad: float):
-    """A frame like ``frame`` whose item reaches ``pad`` item-local units further on every side
-    (its matrix shifted to match): the target rect for a scene allowed to leave its item."""
+def _extended_item_frame(frame: SceneFrame, left: float, top: float, right: float, bottom: float):
     from types import SimpleNamespace
 
     m = list(frame.matrix_values)
     for row in range(4):
-        m[12 + row] -= pad * (m[row] + m[4 + row])
+        m[12 + row] -= left * m[row] + top * m[4 + row]
     width, height = frame.logical_size
-    return SimpleNamespace(viewport=frame.viewport, logical_size=(width + 2.0 * pad, height + 2.0 * pad),
+    return SimpleNamespace(viewport=frame.viewport, logical_size=(width + left + right, height + top + bottom),
                            matrix_values=tuple(m), quad_vao=frame.quad_vao)
+
+
+# A reaching scene's target grows in steps of this share of the item's height, so it reallocates
+# only when the scene's reach crosses a step (an orbit), never per frame of music.
+REACH_STEP = 0.25
+
+
+def reach_item_frame(frame: SceneFrame, bounds: tuple[float, float, float, float]):
+    """A frame like ``frame`` whose item covers ``bounds`` too: the item-local (left, top, right,
+    bottom) extent of everything a 3D + frameless scene can draw, for its render target. Each side
+    reaches just past the bounds in ``REACH_STEP`` steps and never past the window (a 3D frameless
+    Visualizer is not contained to its frame, operator 2026-10-04)."""
+    width, height = frame.logical_size
+    step = max(1e-6, REACH_STEP * height)
+    m = frame.matrix_values
+    _vx, _vy, vw, vh = frame.viewport
+    per_unit = min(abs(m[0]) * 0.5 * vw, abs(m[5]) * 0.5 * vh) or 1.0
+    most = max(vw, vh) / per_unit                     # item units across the whole window
+    left, top, right, bottom = (max(0.0, value) for value in (
+        -bounds[0], -bounds[1], bounds[2] - width, bounds[3] - height))
+    reach = [min(most, math.ceil(value / step - 1e-9) * step) for value in (left, top, right, bottom)]
+    return _extended_item_frame(frame, *reach)

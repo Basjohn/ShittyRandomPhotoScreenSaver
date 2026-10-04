@@ -587,8 +587,11 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor
   reflection (fades to zero at the field bottom), translucent ghost columns for the peaks. S17 material lighting.
 - **Fit:** `extruded_fit` frames the projected bounding box of the tallest possible field for the current tilt, turn,
-  depth and reflection, so no setting can push the scene out of the rectangle; with overflow on, the scene keeps its
-  front-on scale and the target grows by `EXTRUDED_OVERFLOW_PAD` of the item height.
+  depth and reflection, so no setting can push the scene out of the rectangle; with overflow on (default), the scene
+  keeps its front-on scale and is not contained to its frame: the target covers everything the bars can draw for the
+  view (`extruded_reach`, every bar at the ceiling plus its reflection), grown in `REACH_STEP` steps and clamped to
+  the window (`reach_item_frame`; Shockwave Grid the same with `shockwave_reach`). Stacking: the Visualizer layer is
+  above every widget and below only the OSD, Edit chrome and the context menu (`DisplayScene.qml`).
 - **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
 - **Live view orbit (W/A/S/D):** a 3D freeform mode names its (turn, tilt) settings in the descriptor's
   `view_orbit_settings` and one step of each in `view_orbit_steps` (2 degrees). DisplayManager publishes "a 3D view is

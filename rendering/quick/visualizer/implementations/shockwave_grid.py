@@ -28,9 +28,10 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_grid_cells,
     shockwave_half_width,
     shockwave_idle,
+    shockwave_reach,
     shockwave_wave_speed,
 )
-from rendering.quick.scene3d.frame import item_pixel_rect, padded_item_frame
+from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
@@ -41,8 +42,6 @@ from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import prepare_spectrum_shader_levels
 
 _EVENT_BINDING = 3
-# How far (in item heights) an overflowing grid may reach beyond the item on every side.
-_OVERFLOW_PAD = 0.5
 _UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle",
              "uBarCount",
              "uBars", "uHeightScale", "uCells", "uScroll", "uLineColor", "uCrestColor", "uFloor", "uGlow",
@@ -79,6 +78,32 @@ class QuickShockwaveGridRenderer:
         cells = shockwave_grid_cells(10 ** 6)                 # the densest (High) grid
         r.mesh(_mesh_key(cells), scene3d_grid_vertices(*cells), (2,))
 
+    def _view(self, frame: QuickVisualizerRenderFrame, parameters):
+        """(field, half width, tilt, turn, ridge, fit) for this frame's view and shape; the fit is
+        recomputed only when the view or shape changes."""
+        field = tuple(float(value) for value in frame.logical_content_rect)
+        half_width = shockwave_half_width(field[2] / field[3]) if field[3] > 0.0 else 1.0
+        tilt = SHOCKWAVE_MAX_TILT * float(parameter(parameters, "shockwave_grid_tilt"))
+        turn = SHOCKWAVE_MAX_TURN * float(parameter(parameters, "shockwave_grid_turn"))
+        ridge = SHOCKWAVE_MAX_RIDGE * float(parameter(parameters, "shockwave_grid_horizon"))
+        key = (round(tilt, 6), round(turn, 6), round(half_width, 6), round(ridge, 6))
+        if key != self._fit_key:
+            self._fit = shockwave_fit(tilt, turn, half_width, ridge)
+            self._fit_key = key
+        return field, half_width, tilt, turn, ridge, self._fit
+
+    def _target_frame(self, frame: QuickVisualizerRenderFrame, parameters):
+        """The frame the scene target covers: the item, or with overflow everything the grid can
+        draw, up to the whole window (3D + frameless: not contained to its frame)."""
+        if not bool(parameter(parameters, "shockwave_grid_allow_overflow")):
+            return frame
+        field, half_width, tilt, turn, ridge, fit = self._view(frame, parameters)
+        if field[3] <= 0.0:
+            return frame
+        return reach_item_frame(frame, shockwave_reach(
+            field, fit, tilt, turn, half_width, ridge, float(parameter(parameters, "shockwave_grid_wave_height")),
+            float(parameter(parameters, "shockwave_grid_idle"))))
+
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
         allocate (a program, the grid mesh, the stream ring, the target and its glow), on a hidden
@@ -86,8 +111,7 @@ class QuickShockwaveGridRenderer:
         parameters = frame.snapshot.logical.mode_state.parameters
         samples, glow, cells = shockwave_quality(parameters)
         bloom = glow > 0.0
-        overflow = bool(parameter(parameters, "shockwave_grid_allow_overflow"))
-        target_frame = padded_item_frame(frame, _OVERFLOW_PAD * frame.logical_size[1]) if overflow else frame
+        target_frame = self._target_frame(frame, parameters)
         r = self._resources
         if not warm_programs([(r, "grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE),
                               *((r, *program) for program in scene_target_programs(samples, bloom, False,
@@ -117,18 +141,10 @@ class QuickShockwaveGridRenderer:
         parameters = mode_state.parameters
         count = min(SHOCKWAVE_MAX_BARS, int(logical.common.bar_count))
         levels, _peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
-        half_width = shockwave_half_width(field[2] / field[3])
+        field, half_width, tilt, turn, ridge, _fit = self._view(frame, parameters)
         events = shockwave_event_records(tuple(mode_state.events), half_width)
         samples, glow, cells = shockwave_quality(parameters)
-        overflow = bool(parameter(parameters, "shockwave_grid_allow_overflow"))
         scale = presentation.uniform_visual_scale
-        tilt = SHOCKWAVE_MAX_TILT * float(parameter(parameters, "shockwave_grid_tilt"))
-        turn = SHOCKWAVE_MAX_TURN * float(parameter(parameters, "shockwave_grid_turn"))
-        ridge = SHOCKWAVE_MAX_RIDGE * float(parameter(parameters, "shockwave_grid_horizon"))
-        key = (round(tilt, 6), round(turn, 6), round(half_width, 6), round(ridge, 6))
-        if key != self._fit_key:
-            self._fit = shockwave_fit(tilt, turn, half_width, ridge)
-            self._fit_key = key
 
         r = self._resources
         program = r.program("grid", SHOCKWAVE_VERTEX_SOURCE, SHOCKWAVE_FRAGMENT_SOURCE)
@@ -136,7 +152,7 @@ class QuickShockwaveGridRenderer:
         vao, vertices = r.mesh(_mesh_key(cells), scene3d_grid_vertices(*cells), (2,))
         # An empty event list still binds one (unread) record.
         records = SHOCKWAVE_EVENTS.pack(events or [{"age": 0.0, "x": 0.0, "z": 0.0, "strength": 0.0}])
-        target_frame = padded_item_frame(frame, _OVERFLOW_PAD * frame.logical_size[1]) if overflow else frame
+        target_frame = self._target_frame(frame, parameters)
         bloom = 1.4 * glow
         with self._target.scope(target_frame, samples, r, overlay=presentation.content_fade, bloom=bloom):
             gl.glUseProgram(program)
