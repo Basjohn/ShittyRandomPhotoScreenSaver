@@ -37,6 +37,7 @@ from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.performance.frame_trace import (
     FrameTraceEvent,
     current_frame_trace,
+    current_gui_stall_sampler,
     logical_timestamp_ns,
 )
 from widgets.spotify_visualizer.reactivity_diagnostics import (
@@ -142,6 +143,7 @@ class QuickVisualizerPresentationSync:
         self._request_present = request_present
         self._resolve_screen_index = resolve_screen_index
         self._frame_trace = current_frame_trace()
+        self._stall_sampler = current_gui_stall_sampler()     # --frame-trace only (N1e)
 
     def _screen_index(self) -> int:
         resolver = self._resolve_screen_index
@@ -177,6 +179,8 @@ class QuickVisualizerPresentationSync:
             return False
         trace = self._frame_trace
         if trace is not None:
+            if self._stall_sampler is not None:
+                self._stall_sampler.note_wake()
             trace.record(
                 FrameTraceEvent.GUI_WAKE_DELIVER,
                 screen_index=self._screen_index(),
