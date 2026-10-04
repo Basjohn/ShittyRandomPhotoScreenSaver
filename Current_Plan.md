@@ -45,6 +45,15 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     its rate-sensitive filters (`min(1, dt*k)`) need a replay check at 120/165, and D0's logical + render work rises
     ~1.8x. (B) visual-only present-time interpolation: even motion at +~1 logical interval (~11 ms) latency; BTF/R-62
     treat added latency as a regression. (C) accept. Recommendation: A.
+  - [x] Operator 2026-10-04: try A, on condition it does not lower smoothness, perceived smoothness, reactivity or
+    elasticity. Focus N1b and N1e before N2/N3.
+  - [ ] A1. Find the logical interval authority and how the presenting display's refresh can reach it (edge-driven:
+    display bind/transfer, never polled).
+  - [ ] A2. Audit the logical path for per-tick (frame-count) constants that would change behaviour with the rate;
+    convert them to dt before changing the rate.
+  - [ ] A3. Bubble at 90 vs 120 vs 165 Hz on the same input (replay held to the higher rate): BTF metrics (attack,
+    decay, overshoot, settling, trajectory, radius variation) must match; other modes' replay metrics too.
+  - [ ] A4. Cost at 165 Hz (logical + render, CPU/GPU) and the operator's live check.
 - [x] N1c. DevCurve's highlight streams ruled out (replay, two songs): they respawn every ~3.5 s but never on
   screen (spawn x 1.10-1.18, lobe width <= ~0.10 at the curated widths), x moves continuously at the travel rate,
   brightness changes p99 ~1.1/s.
