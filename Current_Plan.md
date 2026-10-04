@@ -24,9 +24,10 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
   12-97 times (165 Hz D0). Per window frame, classify fresh vs repeat Visualizer draw and name what requested the
   frame (other QML animations, widget updates such as clock/media/weather, cursor, the other display). If the trace
   cannot name the requester, add one opt-in `--frame-trace` event at the request edge (zero cost without the flag).
-  Scratch analysers from this session: per-second repeats/own/other transitions, and publication/swap gap
-  periodicity, both reading the trace through `tools/frame_trace_report.py`'s reader; fold the useful one into
-  that tool.
+  Tool: `python tools/frame_trace_cadence.py <trace> [--seconds]`. Strongest lead (16:14 trace, Visualizer on the
+  60 Hz D1 for 309 s, no transition on either display): **94 draws/s of which 35 are repeats, so only ~59 of 90
+  states/s reach the screen** and those land unevenly; during transitions on D1 the same ~45 repeats/s. Find why a
+  60 Hz window renders ~94 frames/s with swap interval 0, and which states are dropped.
 - [ ] N1b. Measure what the viewer sees, not draw counts: per fresh Visualizer revision, publish -> swap age and its
   jitter, and whether a fresh frame is delayed when another frame is in flight on the render thread. Repeats are
   harmless unless they delay fresh frames or make present spacing uneven; prove which before fixing.
