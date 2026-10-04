@@ -125,9 +125,15 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
   authored content.
 
 **N3. Finish S19 Sphere** (section 4), in this order, each its own checkpoint:
-- [ ] N3a. Inventory the analysis seams Sphere actually consumes (pre-AGC live lane, `(loudness, presence)`,
-  raw spectrum, typed events, passage intensity) and which technical settings change them (input gain, block size,
-  sensitivity, noise floor); prove each with a test before exposing it.
+- [ ] N3a. Inventory the analysis seams Sphere actually consumes and which technical settings change them; prove each
+  with a test before exposing it.
+  - [x] Seams (`sphere_capture.py`): `get_musical_level` / `get_musical_intensity` (transient bus), `get_bubble_energy_bands`
+    (gate-floor dependent), `get_live_pre_agc_energy_bands` (post-floor, pre-AGC, clamped 2.5),
+    `get_pre_agc_analysis_spectrum` (raw FFT before shaping/smoothing/AGC), `get_event_scheduler` (typed events).
+    Candidate controls: input gain, audio block size, sensitivity, dynamic/manual floor; AGC strength and dynamic
+    range act after these taps (expected dead for Sphere: prove).
+  - [ ] Per-control proof: feed the engine the same synthetic audio under each control's extremes and record which
+    of the five seams change (an engine-level harness test, no window).
 - [ ] N3b. Sphere-owned resolved technical profile with descriptor-owned per-control capability metadata, replacing
   the hidden whole-Spectrum borrow; installs missing Sphere keys resolve to today's Spectrum-backed values.
 - [ ] N3c. Per-frame values in one uniform block (two programs set ~60 uniforms a frame).
