@@ -775,19 +775,17 @@ def _real_spectrum_gl(qt_app):
 def test_real_gl_organs_preset_keeps_dark_fill_when_screen_fit_shrinks_glow(
     _real_spectrum_gl,
 ) -> None:
-    """Organs' real production route must not turn the black bar body white."""
+    """Organs' real production route must not turn the black bar body white (Organs as frozen 2026-10-04: the
+    curated preset is authored content, Current_Plan N2)."""
     from core.settings.models import SpotifyVisualizerSettings
-    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
     from widgets.spotify_visualizer.config_applier import (
         _populate_shared_visualizer_extras,
         apply_presentation_vis_mode_kwargs,
     )
 
-    payload = resolve_visualizer_activation_payload(
-        {"mode": "spectrum", "preset_spectrum": 0}, mode="spectrum",
-    )
     settings = SpotifyVisualizerSettings.from_mapping(
-        payload.resolved_config, apply_preset_overlay=False,
+        frozen_visualizer_settings("spectrum"), apply_preset_overlay=False,
     )
     resolved = asdict(settings)
     controller = VisualizerRuntimeController(
