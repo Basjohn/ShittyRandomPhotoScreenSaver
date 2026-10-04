@@ -280,6 +280,13 @@ def test_the_wallpaper_uploads_once_per_photograph_and_the_reflection_crossfades
     assert np.abs(frames[1] - frames[0])[faces].max() <= 6          # no frame jumps
     assert means[0][0] > means[2][0] > means[3][0] and means[0][2] < means[2][2] < means[3][2]
     assert means[3][2] > means[3][0] + 40                           # blue once the crossfade settles
+    # A wallpaper brought in by a transition crossfades over that transition's duration.
+    third, long = _wallpaper("third", (255, 128, 0)), 6.0
+    later = change + blend + 2.0
+    lasting = [capture.render(host, _snapshot(at=later + t, **mirrored, backdrop=third, backdrop_blend_s=long))
+               [faces][:, :3].mean(axis=0) for t in (0.0, blend + 0.5, long + 0.5)]
+    assert lasting[0][2] > lasting[1][2] > lasting[2][2]            # still turning orange past 2 s
+    assert lasting[1][2] > lasting[2][2] + 10
 
 
 def test_the_owner_keeps_a_wallpaper_only_while_its_mode_reflects():
@@ -298,7 +305,8 @@ def test_the_owner_keeps_a_wallpaper_only_while_its_mode_reflects():
     owner = QuickDisplayVisualizerOwner.__new__(QuickDisplayVisualizerOwner)
     state = SimpleNamespace(_extruded_spectrum_face_mirror=0.0, _scene3d_detail="High", _backdrop=None)
     owner._controller = SimpleNamespace(mode_id="extruded_spectrum", presentation_state=state)
-    owner._presentation_runtime = SimpleNamespace(scene_controller=SimpleNamespace(presentation_image=None))
+    owner._presentation_runtime = SimpleNamespace(scene_controller=SimpleNamespace(presentation_image=None,
+                                                                                   incoming_image=None))
     scene = owner._presentation_runtime.scene_controller
     scene.presentation_image = _Image("a")
     owner._refresh_backdrop()
@@ -311,7 +319,16 @@ def test_the_owner_keeps_a_wallpaper_only_while_its_mode_reflects():
     assert state._backdrop is made                               # once per photograph
     scene.presentation_image = _Image("b")
     owner._refresh_backdrop()
-    assert state._backdrop.identity == "b"
+    assert state._backdrop.identity == "b" and state._backdrop_blend_s is None   # no transition: its own fade
+    # A transition toward "c" starts: the reflection takes it now, crossfading over the
+    # transition's duration; when the scene adopts "c" nothing is made again.
+    scene.incoming_image = (_Image("c"), 3.5)
+    owner._refresh_backdrop()
+    incoming = state._backdrop
+    assert incoming.identity == "c" and state._backdrop_blend_s == 3.5
+    scene.incoming_image, scene.presentation_image = None, _Image("c")
+    owner._refresh_backdrop()
+    assert state._backdrop is incoming
     state._scene3d_detail = "KAK"                                # a tier without reflections
     owner._refresh_backdrop()
     assert state._backdrop is None
@@ -396,3 +413,23 @@ def test_translucent_bars_draw_in_a_painters_order_for_any_view():
                 # Of two bars on the same side of the eye, the nearer one draws later.
                 if (xa - eye[0]) * (xb - eye[0]) > 0 and abs(xa - eye[0]) < abs(xb - eye[0]):
                     assert position[a] > position[b]
+
+
+
+def test_a_transition_announces_its_photograph_when_it_starts():
+    """The scene tells its listener at a transition's start what it is bringing in and over how
+    long, and forgets it once it adopts a photograph."""
+    from types import SimpleNamespace
+
+    from rendering.quick.scene_controller import QuickSceneController
+
+    scene = QuickSceneController.__new__(QuickSceneController)
+    calls = []
+    scene._readiness = SimpleNamespace(admission_open=True)
+    scene._incoming_image = None
+    scene._presentation_image_listener = lambda: calls.append(scene.incoming_image)
+    scene.announce_incoming_image("next", 2.5)
+    assert calls == [("next", 2.5)] and scene.incoming_image == ("next", 2.5)
+    scene._readiness = SimpleNamespace(admission_open=False)
+    scene.announce_incoming_image("later", 1.0)                      # a closed scene ignores it
+    assert scene.incoming_image == ("next", 2.5) and len(calls) == 1

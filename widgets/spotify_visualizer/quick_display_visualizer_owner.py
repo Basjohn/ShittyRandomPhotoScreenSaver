@@ -315,7 +315,15 @@ class QuickDisplayVisualizerOwner:
         setting = get_visualizer_mode_descriptor(self._controller.mode_id).backdrop_setting
         reflects = (bool(setting) and float(getattr(state, f"_{setting}")) > 0.0
                     and scene3d_detail(state._scene3d_detail).reflections)
-        image = self._presentation_runtime.scene_controller.presentation_image if reflects else None
+        # A running transition's incoming photograph wins: the reflection crossfades to it from the
+        # transition's start, over its duration (the "seed" a transition already carries), so it
+        # has finished changing when the scene adopts the photograph. Nothing is read unless the
+        # mode reflects.
+        incoming = image = None
+        if reflects:
+            scene = self._presentation_runtime.scene_controller
+            incoming = scene.incoming_image
+            image = incoming[0] if incoming is not None else scene.presentation_image
         current = getattr(state, "_backdrop", None)
         if image is None:
             if current is not None:
@@ -326,6 +334,7 @@ class QuickDisplayVisualizerOwner:
         from widgets.spotify_visualizer.backdrop import make_visualizer_backdrop
 
         state._backdrop = make_visualizer_backdrop(image)
+        state._backdrop_blend_s = None if incoming is None else incoming[1]
 
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
         if self._retired:

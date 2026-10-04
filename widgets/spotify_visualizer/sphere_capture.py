@@ -14,12 +14,14 @@ def _render_parameters(widget: Any, parameters: FrozenFields) -> FrozenFields:
 
     pres = _presentation_source(widget)
     backdrop = getattr(pres, "_backdrop", None)
-    key = (str(pres._scene3d_detail), float(pres._sphere_mirror), None if backdrop is None else backdrop.identity)
+    blend_s = getattr(pres, "_backdrop_blend_s", None)
+    key = (str(pres._scene3d_detail), float(pres._sphere_mirror), None if backdrop is None else backdrop.identity,
+           blend_s)
     cached = getattr(widget, "_sphere_render_parameters", None)
     if cached is not None and cached[0] is parameters and cached[1] == key:
         return cached[2]
     merged = freeze_render_fields({**dict(parameters), "scene3d_detail": key[0], "sphere_mirror": key[1],
-                                   "backdrop": backdrop})
+                                   "backdrop": backdrop, "backdrop_blend_s": blend_s})
     widget._sphere_render_parameters = (parameters, key, merged)
     return merged
 

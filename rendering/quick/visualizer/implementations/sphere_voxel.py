@@ -895,7 +895,8 @@ class QuickSphereVoxelRenderer:
         if mirror > 0.0:
             # The displayed wallpaper, crossfading from the last one (or in from none).
             backdrop, previous, blend = self._backdrop.textures(parameter(parameters, "backdrop"),
-                                                                frame.snapshot.logical.logical_timestamp)
+                                                                frame.snapshot.logical.logical_timestamp,
+                                                                parameter(parameters, "backdrop_blend_s"))
             if not previous:
                 previous, mirror = backdrop, mirror * blend
         elif self._backdrop.has_resources:
