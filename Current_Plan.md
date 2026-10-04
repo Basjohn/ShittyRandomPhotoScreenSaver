@@ -30,8 +30,19 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     26 repeats/s (extra frames); D0 during its own transitions 93 draws/s, 3.4 repeats/s (the ride works: was 180-210).
   - [ ] Name the requester of D0's extra steady frames.
 - [ ] N1b. Measure what the viewer sees, not draw counts: per fresh Visualizer revision, publish -> swap age and its
-  jitter, and whether a fresh frame is delayed when another frame is in flight on the render thread. Repeats are
-  harmless unless they delay fresh frames or make present spacing uneven; prove which before fixing.
+  jitter, and how long each state is held at the display.
+  - [x] Tool view: `frame_trace_cadence.py <trace> --refresh 0=164.835 --refresh 1=60` ("fresh" lines).
+  - [x] 16:14 trace: the pipeline is precise (publish -> swap median 2.8 ms D0 / 7.3 ms D1; fresh-swap spacing error vs
+    logical spacing median 0.5-0.7 ms). The unevenness is the cadence ratio itself: on the 165 Hz D0 a 90 Hz state is
+    held 2 refreshes 80% / 1 refresh 18% of the time (motion steps unevenly ~15x a second); on the 60 Hz D1 a third of
+    the states are never shown (motion alternates 1- and 2-state steps). Unattended seconds draw ~1:1 (92 draws, 2
+    repeats); D0's extra-frame bursts coincide with interaction (context menu / CUSTOM edit, 16:12:51-54).
+  - [ ] **Operator decision (BTF 5.1: the 90 Hz class changes only by explicit approval).** Options: (A) logical
+    cadence matched to the presenting display: its refresh when that is >= 88 Hz (165 on D0: one state per refresh),
+    twice it below that (120 on a 60 Hz display: exactly two per refresh); Bubble integrates by dt (`tick(dt)`), but
+    its rate-sensitive filters (`min(1, dt*k)`) need a replay check at 120/165, and D0's logical + render work rises
+    ~1.8x. (B) visual-only present-time interpolation: even motion at +~1 logical interval (~11 ms) latency; BTF/R-62
+    treat added latency as a regression. (C) accept. Recommendation: A.
 - [ ] N1c. Check DevCurve's highlight streams on the live trace cadence: a stream respawns every ~2-3 s (three
   streams over a 1.54-unit loop at the passage's travel rate), which matches the reported jerk period; confirm or
   rule out a visible pop at spawn/exit before blaming presentation.

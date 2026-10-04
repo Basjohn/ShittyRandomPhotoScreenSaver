@@ -108,18 +108,62 @@ def gaps(rows, *, publish_ms: float, swap_ms: float) -> None:
     _gap_report("swap", swaps, swap_ms)
 
 
+def fresh_presentation(rows, refresh_hz: dict[int, float]) -> None:
+    """What the viewer sees: for each revision's first swap, publish -> swap age, the spacing of fresh swaps
+    against the spacing of their logical times, and (given the display refresh) how many refreshes each
+    state is held for at the display. Seconds containing a transition or extra frames are included."""
+    published, first_swap, logical = {}, {}, {}
+    for ts, event, screen, revision, logical_ns, aux in rows:
+        key = (screen, aux, revision)
+        if event == LOGICAL_PUBLISH:
+            published.setdefault(key, ts)
+            logical[key] = logical_ns
+        elif event == FRAME_SWAP and key in published and key not in first_swap:
+            first_swap[key] = ts
+    by_screen = defaultdict(list)
+    for key, swap in first_swap.items():
+        by_screen[key[0]].append((swap, published[key], logical[key]))
+    for screen, items in sorted(by_screen.items()):
+        items.sort()
+        ages = sorted((swap - pub) / 1e6 for swap, pub, _ in items)
+        errors = []
+        for (s0, _p0, l0), (s1, _p1, l1) in zip(items, items[1:]):
+            swap_gap, logical_gap = (s1 - s0) / 1e6, (l1 - l0) / 1e6
+            if 0 < logical_gap < 40 and 0 < swap_gap < 60:
+                errors.append(abs(swap_gap - logical_gap))
+        errors.sort()
+        line = (f"fresh screen={screen} n={len(items)} publish->swap median={statistics.median(ages):.2f}ms "
+                f"p95={ages[int(0.95 * (len(ages) - 1))]:.2f}ms | spacing error vs logical median="
+                f"{statistics.median(errors):.2f}ms p95={errors[int(0.95 * (len(errors) - 1))]:.2f}ms")
+        hz = refresh_hz.get(screen)
+        if hz:
+            period = 1000.0 / hz
+            vsyncs = [int(((s - items[0][0]) / 1e6) // period) for s, _p, _l in items]
+            holds = defaultdict(int)
+            for a, b in zip(vsyncs, vsyncs[1:]):
+                holds[min(4, b - a)] += 1
+            total = max(1, sum(holds.values()))
+            line += " | held refreshes " + " ".join(
+                f"{k if k < 4 else '4+'}:{holds[k] / total:.0%}" for k in sorted(holds))
+        print(line)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("trace", type=Path)
     parser.add_argument("--seconds", action="store_true", help="print every second's row")
     parser.add_argument("--publish-gap-ms", type=float, default=16.0)
     parser.add_argument("--swap-gap-ms", type=float, default=25.0)
+    parser.add_argument("--refresh", action="append", default=[], metavar="SCREEN=HZ",
+                        help="display refresh per screen for the held-refresh histogram, e.g. 0=164.835")
     args = parser.parse_args()
     rows = sorted(_records(args.trace))
     if not rows:
         raise SystemExit("empty trace")
     per_second(rows, verbose=args.seconds)
     gaps(rows, publish_ms=args.publish_gap_ms, swap_ms=args.swap_gap_ms)
+    refresh = {int(k): float(v) for k, v in (item.split("=", 1) for item in args.refresh)}
+    fresh_presentation(rows, refresh)
 
 
 if __name__ == "__main__":
