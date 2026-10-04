@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 
 from rendering.gl_programs.scene3d import SCENE3D_ORBIT_GLSL, Scene3DStorageLayout, scene3d_orbit_project
-from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight
+from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight, passage_ramp
 
 SHOCKWAVE_MAX_TILT = math.radians(90.0)
 SHOCKWAVE_MAX_TURN = math.radians(180.0)
@@ -43,7 +43,7 @@ SHOCKWAVE_WIDTH = 0.16            # a crest's half width
 SHOCKWAVE_DECAY = 1.1             # seconds for a wave to fall to 1/e
 SHOCKWAVE_LIFETIME = 3.2          # seconds after which an event is dropped (all but invisible)
 SHOCKWAVE_CAPACITY = 16           # events held at once (the bounded event buffer)
-SHOCKWAVE_MIN_GAP = 0.09          # seconds between two admitted onsets
+SHOCKWAVE_MIN_GAP = 0.09          # seconds between two admitted onsets in the loudest passage
 SHOCKWAVE_HORIZON_REACH = 0.45    # the far share of the grid the spectrum ridge rises over
 SHOCKWAVE_CEILING = 0.95          # Spectrum's tallest bar, in field heights
 SHOCKWAVE_MAX_BARS = 64
@@ -51,6 +51,13 @@ SHOCKWAVE_GRID_CELLS = (180, 120)  # the displaced surface's tessellation (colum
 # Onset strength (``shockwave_strength``) follows the shared musical rule (``musical_weight``,
 # ``musical_emphasis`` in the transient bus): near-silence and quiet passages inside a loud track
 # make no wave, and an onset louder than the track's usual ones stands out.
+# Everything ramps on the passage (``PassageIntensity``): how often waves may come (the gap from
+# ``SHOCKWAVE_QUIET_GAP`` in the track's quietest passage to ``SHOCKWAVE_MIN_GAP`` in its loudest)
+# and how strong they are (``passage_ramp``, ``SHOCKWAVE_QUIET_SHARE`` in the quietest). The
+# emphasis is relative to the track's usual onset, so without the ramp a soft passage's onsets
+# stood out as much as a loud one's: ~9 waves/s at every level, big waves commonest when quiet.
+SHOCKWAVE_QUIET_GAP = 0.6
+SHOCKWAVE_QUIET_SHARE = 0.3
 SHOCKWAVE_MIN_STRENGTH = 0.12     # weaker onsets make no wave
 SHOCKWAVE_MAX_STRENGTH = 2.0
 SHOCKWAVE_ECHO_SPEED = 0.62       # a big hit's echo ring, as a share of the wave speed
@@ -91,6 +98,17 @@ def shockwave_strength(magnitude: float, loudness: float, presence: float, usual
     hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / 3.0))
     strength = musical_weight(loudness, presence) * musical_emphasis(presence, usual) * hit
     return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, strength))
+
+
+def shockwave_gap(intensity: float) -> float:
+    """The least time between two waves at passage ``intensity`` (0 quietest .. 1 loudest)."""
+    level = max(0.0, min(1.0, float(intensity)))
+    return SHOCKWAVE_QUIET_GAP + (SHOCKWAVE_MIN_GAP - SHOCKWAVE_QUIET_GAP) * level
+
+
+def shockwave_passage_share(intensity: float) -> float:
+    """The share of an onset's strength (``shockwave_strength``) a wave keeps at passage ``intensity``."""
+    return passage_ramp(intensity, SHOCKWAVE_QUIET_SHARE)
 
 
 def shockwave_idle(height: float, idle: float, time: float, half_width: float) -> tuple[float, float]:

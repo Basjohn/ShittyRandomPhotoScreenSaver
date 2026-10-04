@@ -346,7 +346,10 @@ def _capture_shockwave_grid(
         return None
     getter = getattr(engine, "get_onset_events", None) if engine is not None else None
     onsets = getter(runtime.onset_serial) if callable(getter) else ()
-    events = runtime.record_onsets(onsets=onsets, now_ts=context.now_ts, playing=context.playing)
+    intensity_getter = getattr(engine, "get_musical_intensity", None) if engine is not None else None
+    intensity = float(intensity_getter()) if callable(intensity_getter) else 0.0
+    events = runtime.record_onsets(onsets=onsets, now_ts=context.now_ts, playing=context.playing,
+                                   passage_intensity=intensity)
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)

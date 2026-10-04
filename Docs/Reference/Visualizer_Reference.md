@@ -502,7 +502,7 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
 
 - **Authored state:** Spectrum's frame runtime, technical profile and bar colours, extended by
   `ShockwaveGridFrameRuntime` (`widgets/spotify_visualizer/shockwave_frame_runtime.py`) with a bounded event ring:
-  each musical onset the transient bus publishes (at least 0.09 s after the last, only while playing) becomes one
+  each musical onset the transient bus publishes (at least `shockwave_gap` after the last, only while playing) becomes one
   event, born when the onset happened, with a deterministic origin (from its admission number; kicks nearer the
   front middle) and the onset's strength. Onsets are taken exactly once by serial (see "Musical onsets" below). Events are aged on the logical clock at capture, dropped after 3.2 s, at most 16 held.
   `ShockwaveGridFrame.events` carries them aged, so the renderer has no clock or history of its own. Live events (or
@@ -523,6 +523,13 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
   brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge
   smoothly from side to side over 11 s, so the grid moves between beats (it keeps the animation clock running).
+  **Everything ramps (2026-10-04):** the emphasis is relative to the track's usual onset, so on recorded music a soft
+  passage's onsets stood out like a loud one's: ~9 waves/s at every level, strength flat ~0.45, big waves commonest
+  in quiet passages. Both now ramp on the passage intensity (`BeatEngine.get_musical_intensity`): the gap between
+  waves (`shockwave_gap`, 0.6 s in the quietest passage down to 0.09 s in the loudest) and the strength's share
+  (`shockwave_passage_share` = `passage_ramp`, 0.3 in the quietest). Four songs, 2 s passage windows, quietest
+  quarter / middle / loudest quarter: ~3 / 4-6.6 / 5.5-8.9 waves/s, strength ~0.31 / 0.40 / 0.48, big waves now in
+  loud passages. Loud passages keep nearly their previous rate.
   Bars: `tests/test_qtquick_shockwave_grid.py`.
 - **Glow** uses the overlay bloom of `SceneTarget` (`Docs/Reference/Scene3D_Resources.md`): the lines emit their
   light into the emission attachment and the glow is added over the wallpaper. Glow 0 allocates no emission
