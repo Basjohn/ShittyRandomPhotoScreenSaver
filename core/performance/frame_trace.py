@@ -434,6 +434,7 @@ class FrameTraceSink:
 
 
 _active_sink: FrameTraceSink | None = None
+_active_stall_sampler = None
 _active_lock = threading.Lock()
 
 
@@ -446,12 +447,16 @@ def start_frame_trace(log_dir: Path, argv: list[str] | tuple[str, ...]) -> Frame
 
     if not frame_trace_requested(argv):
         return None
-    global _active_sink
+    global _active_sink, _active_stall_sampler
     with _active_lock:
         if _active_sink is not None:
             return _active_sink
         sink = FrameTraceSink(Path(log_dir) / "screensaver_frame_trace.bin")
         _active_sink = sink
+        # The trace's companion: GUI-thread stacks when Visualizer GUI wakes stall (N1e).
+        from core.performance.gui_stall_sampler import GuiStallSampler
+
+        _active_stall_sampler = GuiStallSampler(Path(log_dir) / "gui_stall_stacks.log")
         return sink
 
 
@@ -461,10 +466,19 @@ def current_frame_trace() -> FrameTraceSink | None:
     return _active_sink
 
 
+def current_gui_stall_sampler():
+    """The ``--frame-trace`` GUI stall sampler; ordinary runtime receives ``None``."""
+
+    return _active_stall_sampler
+
+
 def close_frame_trace() -> dict[str, object] | None:
-    global _active_sink
+    global _active_sink, _active_stall_sampler
     with _active_lock:
         sink, _active_sink = _active_sink, None
+        sampler, _active_stall_sampler = _active_stall_sampler, None
+    if sampler is not None:
+        sampler.close()
     if sink is None:
         return None
     return sink.close()

@@ -112,7 +112,9 @@ not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and 
 `python tools\image_change_perf_parser.py logs\screensaver_perf.log`. `Current_Plan.md` owns the acceptance status.
 `python toolsrame_trace_cadence.py logs\screensaver_frame_trace.bin [--seconds]` reports Visualizer presentation
 cadence from the same trace: per-second publications/draws/repeated draws by transition state, and publication/swap
-gap frequency and periodicity with the logical dt (Current_Plan N1).
+gap frequency and periodicity with the logical dt, and classifies each presentation stall (Current_Plan N1). The
+same `--frame-trace` admission writes `logs\gui_stall_stacks.log`: every thread's Python stack once per stall of
+the Visualizer's GUI wakes (> 40 ms), then the stall's length.
 
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 

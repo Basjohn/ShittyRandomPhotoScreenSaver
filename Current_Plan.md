@@ -76,9 +76,13 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
   with a healthy GUI thread and short render (suspect swap blocking with swap interval 0: measure
   after_rendering -> frame_swap next).
   - [x] Stall classifier in `tools/frame_trace_cadence.py`.
-  - [ ] Attribute the GUI starvation: an opt-in `--frame-trace` sampler that records the GUI thread's Python stack
-    when a Visualizer GUI wake is > 40 ms late (zero cost without the flag; no polling at rest), or correlate with
-    usage/feeds/media work on a run with those diagnostics off.
+  - [ ] Attribute the GUI starvation.
+    - [x] Sampler: `core/performance/gui_stall_sampler.py`, created and closed with the `--frame-trace` sink; each
+      Visualizer GUI wake notes itself; no wake for 40 ms writes every thread's stack once per stall to
+      `logs/gui_stall_stacks.log` (`sampler_late_ms` large = a GIL holder, not GUI Python), then the stall's
+      length. Idle until the first wake and after 2 s without wakes. Bars: `tests/test_gui_stall_sampler.py`.
+    - [ ] **Operator run needed:** a normal `--frame-trace` session with Bubble or DevCurve (unattended a few
+      minutes), then read `logs/gui_stall_stacks.log` against the trace's gui_starved stalls and fix the owner.
   - [ ] Attribute D1's unattributed gaps. Measured (stall lines now print the longest render-thread silence and the
     events around it): frames kept coming every 12-14 ms through those gaps but recorded no Visualizer draw, so they
     are not render stalls: the node had no snapshot or was not in those frames. This run also moved the Visualizer
