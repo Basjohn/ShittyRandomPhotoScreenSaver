@@ -21,6 +21,7 @@ pytestmark = pytest.mark.qt
 _CASES = {
     "extruded_spectrum": {"extruded_spectrum_smooth_edges": True, "extruded_spectrum_face_mirror": 0.6},
     "shockwave_grid": {"shockwave_grid_glow": 0.8},
+    "sphere": {},
 }
 
 
@@ -30,7 +31,7 @@ def test_the_descriptor_flag_matches_the_renderers_that_prepare():
         module = importlib.import_module(descriptor.renderer_module)
         renderer = getattr(module, descriptor.renderer_factory)()
         assert descriptor.prepared_reveal == hasattr(renderer, "prepare_step"), mode
-    assert {"extruded_spectrum", "shockwave_grid"} <= {
+    assert {"extruded_spectrum", "shockwave_grid", "sphere"} <= {
         mode for mode in VISUALIZER_MODE_IDS if get_visualizer_mode_descriptor(mode).prepared_reveal}
 
 
@@ -87,10 +88,12 @@ def test_hidden_frames_prepare_spaced_and_the_first_visible_frame_creates_nothin
     assert host.prepared_activation == (mode, 1)
     assert len(compiles) >= 2 and np.diff(compiles).min() >= PREPARE_SPACING_S - 1e-9
     renderer = host._implementations[mode]
-    allocation = renderer._target.allocation
+    scene_target = getattr(renderer, "_target", None)
+    allocation = scene_target.allocation if scene_target is not None else None
     before = len(compiles)
     pixels = target.render(host, _snapshot(mode, 1.0, **parameters), backdrop=backdrop)
-    assert len(compiles) == before and renderer._target.allocation == allocation
+    assert len(compiles) == before
+    assert scene_target is None or scene_target.allocation == allocation
     assert np.abs(pixels - pixels[0, 0]).max() > 0                       # and it draws
 
 
