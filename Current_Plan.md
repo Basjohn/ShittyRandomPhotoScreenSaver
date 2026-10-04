@@ -163,8 +163,8 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 - [x] **Everything ramps (operator 2026-10-03/04)**, measured on recorded music: every Sphere reaction (how often and
   how strongly fragments, particles and tracer fire, tracer light/speed, spin, body growth) ramps on the shared passage
-  intensity (`transient_bus.PassageIntensity`: the heard passage against the track's usual level, 0.65 usual;
-  2026-10-04 redesign after the operator's log showed overreaction after resets and near-silence once settled);
+  intensity (`transient_bus.PassageIntensity`: the heard passage on the fixed real-music scale, 0.65 at the usual
+  loudness; nothing learned from the track, which faded sustained choruses and overreacted after resets);
   floors gate on it. Before/after numbers and contract: `Docs/Reference/Sphere_Visualizer.md` "Everything ramps";
   measure with `python -m tools.visualizer_replay.sphere_ramp`. Physical check: the four songs live.
 - [x] **Golden step 1a: real-scale replay.** `FeatureFrame` schema 1 validated every lane into `0..1` and could not

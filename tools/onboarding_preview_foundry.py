@@ -1003,14 +1003,19 @@ class _PreviewOnsets:
         self.onsets: list = []
 
     def publish(self, timestamp: float, kind: str, magnitude: float, presence: float) -> None:
-        from widgets.spotify_visualizer.transient_bus import MusicalOnset
+        from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS, MusicalOnset
 
+        # Loudness on the fixed real-music scale: a hit at presence 1.5 is a big one.
         self.onsets.append(MusicalOnset(serial=len(self.onsets) + 1, timestamp=timestamp, kind=kind,
-                                        strength=min(1.0, magnitude), magnitude=magnitude, loudness=1.0,
-                                        presence=presence))
+                                        strength=min(1.0, magnitude), magnitude=magnitude,
+                                        loudness=MUSICAL_USUAL_LOUDNESS * presence, presence=presence))
 
     def get_onset_events(self, after_serial: int = 0):
         return tuple(onset for onset in self.onsets if onset.serial > after_serial)
+
+    def get_musical_intensity(self) -> float:
+        """The preview shows the mode in a full, loud passage."""
+        return 1.0
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
 
 

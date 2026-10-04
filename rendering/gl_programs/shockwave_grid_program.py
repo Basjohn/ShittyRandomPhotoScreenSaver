@@ -92,11 +92,11 @@ def shockwave_amplitude(height: float) -> float:
     return 0.04 + 0.3 * max(0.0, min(1.0, float(height)))
 
 
-def shockwave_strength(magnitude: float, loudness: float, presence: float, usual: float) -> float:
+def shockwave_strength(magnitude: float, loudness: float, presence: float) -> float:
     """A wave's strength (0 .. ``SHOCKWAVE_MAX_STRENGTH``) for an onset (``MusicalOnset``'s
-    magnitude, loudness and presence) when the track's usual onset presence is ``usual``."""
+    magnitude, loudness and presence), its emphasis read on the fixed loudness scale."""
     hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / 3.0))
-    strength = musical_weight(loudness, presence) * musical_emphasis(presence, usual) * hit
+    strength = musical_weight(loudness, presence) * musical_emphasis(loudness) * hit
     return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, strength))
 
 

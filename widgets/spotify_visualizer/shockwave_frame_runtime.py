@@ -5,8 +5,8 @@ plus a bounded ring of shockwave events: each musical onset the transient bus pu
 (``MusicalOnset``, taken exactly once by serial, however the analysis and logical cadences
 relate) and at least ``shockwave_gap`` after the last becomes one event, born when the onset
 happened, with a deterministic origin (from its admission number and onset type) and a strength
-from its magnitude, loudness and presence (``shockwave_strength``) against the track's usual
-onset presence, which this runtime follows, times the passage's share
+from its magnitude, loudness and presence (``shockwave_strength``, its emphasis on the fixed
+loudness scale), times the passage's share
 (``shockwave_passage_share``); an onset too weak for a wave makes none. The gap and the share
 both ramp on the passage intensity. Events are aged on the logical clock at capture and dropped after
 ``SHOCKWAVE_LIFETIME``; at most ``SHOCKWAVE_CAPACITY`` are held, the oldest giving way. Nothing
@@ -26,7 +26,6 @@ from rendering.gl_programs.shockwave_grid_program import (
 )
 from widgets.spotify_visualizer.frame_runtime_lifecycle import retirement_fenced
 from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
-from widgets.spotify_visualizer.transient_bus import learn_usual_presence
 
 # One admitted shockwave: (birth time, x as a share of the half width, z, strength).
 _Event = tuple[float, float, float, float]
@@ -41,8 +40,6 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._event_serial = 0
         self._onset_serial = 0
         self._last_event_ts = float("-inf")
-        # The track's usual onset presence; starts at the running level itself and adapts.
-        self._usual_presence = 1.0
 
     def reset(self) -> None:
         super().reset()
@@ -50,7 +47,6 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._event_serial = 0
         self._onset_serial = 0
         self._last_event_ts = float("-inf")
-        self._usual_presence = 1.0
 
     @property
     def onset_serial(self) -> int:
@@ -77,9 +73,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
             if not playing or birth - self._last_event_ts < gap:
                 continue
             presence = float(onset.presence)
-            strength = share * shockwave_strength(onset.magnitude, onset.loudness, presence,
-                                                  self._usual_presence)
-            self._usual_presence = learn_usual_presence(self._usual_presence, presence)
+            strength = share * shockwave_strength(onset.magnitude, onset.loudness, presence)
             if strength < SHOCKWAVE_MIN_STRENGTH:
                 continue
             x, z = shockwave_origin(self._event_serial, str(onset.kind))

@@ -80,8 +80,11 @@ def _resolve(
 ):
     live = presence or reactive or render_state.VisualizerEnergyState()
     if musical is None:
-        # The bus's loudness is the peak band's unclamped level; at the track's usual presence.
-        musical = (max(live.bass, live.mid, live.high), 1.0)
+        # The fixtures' band values stand for passages on the live lane: below the near-silence
+        # edge they are near-silence, otherwise ordinary music (the usual loudness on the fixed
+        # real-music scale, at the running level).
+        level = max(live.bass, live.mid, live.high)
+        musical = (level, 1.0) if level < 0.08 else _ORDINARY_MUSIC
     if intensity is None:
         # As the bus's PassageIntensity reads: 0 in near-silence, else a loud passage of the track.
         intensity = 0.0 if musical[0] < 0.08 else 1.0
@@ -104,8 +107,8 @@ def _resolve(
 
 
 # Ordinary music for fixtures whose small band values stand for a normal passage, not quietness:
-# loudness well above the near-silence edge, at the track's usual presence.
-_ORDINARY_MUSIC = (1.0, 1.0)
+# the usual loudness on the fixed real-music scale, at the running level.
+_ORDINARY_MUSIC = (8.5, 1.0)
 
 
 def test_voxel_renderer_is_sectional_audio_geometry_not_time_motion() -> None:
@@ -1834,24 +1837,26 @@ def test_how_often_sphere_reacts_ramps_with_the_passage() -> None:
     assert quiet[3] < 0.7 * loud[3]
 
 
-def test_the_usual_level_is_learned_from_the_music_so_a_loud_track_does_not_mute_itself() -> None:
-    """Events clearly part of the music teach Sphere the track's usual presence (from a neutral
-    1.0); a track whose events sit above 1 then earns the full reward at its own usual level."""
+def test_a_sustained_loud_chorus_earns_the_same_reward_from_its_first_hit_to_its_last() -> None:
+    """Nothing is learned from the track (operator 2026-10-04: reactions faded inside the same
+    chorus): the same loud hit in the same loud passage earns the same reward every time, a
+    louder hit earns more, near-silence nothing."""
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     runtime = sphere_runtime.SphereFrameRuntime()
     reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
-    ts = 40.0
-    _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=_ORDINARY_MUSIC)
+    loud = (8.5 * 1.3, 1.0)
+    ts, rewards = 40.0, []
+    _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=loud, intensity=1.0)
     for _ in range(40):
         ts += 0.3
-        _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=(1.5, 1.4),
+        _resolve(runtime, render_state, ts=ts, reactive=reactive, musical=loud, intensity=1.0,
                  scheduler=_Scheduler(kick=_Event(1.0)))
-    assert runtime._usual_presence == pytest.approx(1.4, abs=0.02)
-    # Near-silence teaches nothing.
-    usual = runtime._usual_presence
-    _resolve(runtime, render_state, ts=ts + 0.3, reactive=reactive, musical=(0.05, 0.1),
-             scheduler=_Scheduler(kick=_Event(1.0)))
-    assert runtime._usual_presence == usual
+        rewards.append(runtime._last_reward)
+    assert rewards[0] > 0.5 and rewards[-1] == pytest.approx(rewards[0])
+    _resolve(runtime, render_state, ts=ts + 0.3, reactive=reactive, musical=(8.5 * 0.7, 1.0), intensity=1.0)
+    assert runtime._last_reward < rewards[-1]
+    _resolve(runtime, render_state, ts=ts + 0.6, reactive=reactive, musical=(0.05, 0.1), intensity=1.0)
+    assert runtime._last_reward == 0.0
 
 
 def test_sphere_energy_floor_persistence_and_preset_parity() -> None:

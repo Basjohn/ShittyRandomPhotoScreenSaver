@@ -142,8 +142,8 @@ Sampling the bus's per-frame onset flag instead depended on the analysis and log
 `tests/test_qtquick_shockwave_grid.py`. The shared primitive for Shockwave Grid, Reactive Particle Field and lightning.
 `BeatEngine.get_musical_level()` reads the latest frame's (loudness, presence), the same measurement an onset there
 carries, for modes whose events come from elsewhere (Voxel Sphere); near-silence does not drain the running level.
-What an onset *earns* follows one shared rule beside them (`musical_weight`, `musical_emphasis`,
-`learn_usual_presence`). Real scales (loudness 3-17 in music, presence about 1): `Docs/Guides/
+What an onset *earns* follows one shared rule beside them (`musical_weight`, `musical_emphasis` on the fixed
+loudness scale; nothing learned from the track). Real scales (loudness 3-17 in music, presence about 1): `Docs/Guides/
 Visualizer_Reactivity_Authoring.md` 2A. Bars: `tests/test_transient_bus.py`.
 
 **Shared 3D view and lines.** Every 3D Visualizer orbits and projects through `SCENE3D_ORBIT_GLSL` /
@@ -516,9 +516,9 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   motion and brighter glow where it is loudest). A wave's strength is `shockwave_strength` of the onset's magnitude,
   loudness and presence (`MusicalOnset`) under the shared musical rule in `transient_bus.py` (Voxel Sphere uses the
   same rule): no wave below an absolute loudness (`MUSICAL_QUIET`) or when quiet against the running level
-  (`MUSICAL_PRESENCE`: a near-silent passage of a loud track) (`musical_weight`), and the onset's presence against the
-  track's usual onset presence (`learn_usual_presence`, from a neutral 1.0) sets how much it stands out
-  (`musical_emphasis`): a hit 1.6x the usual reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
+  (`MUSICAL_PRESENCE`: a near-silent passage of a loud track) (`musical_weight`), and the onset's loudness on the fixed
+  scale (`musical_emphasis`, around `MUSICAL_USUAL_LOUDNESS`; 2026-10-04: a learned usual presence flattened a sustained
+  loud chorus) sets how much it stands out: a hit 1.6x the usual loudness reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
   wave grows taller more slowly, widens, brightens and trails an echo ring at 0.62 of its speed, so the biggest
   moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
   brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge

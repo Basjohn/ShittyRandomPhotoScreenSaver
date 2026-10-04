@@ -48,10 +48,9 @@ def test_the_frame_musical_level_is_what_an_onset_there_carries(monkeypatch):
 def test_a_pause_does_not_make_the_music_resuming_look_many_times_louder(monkeypatch):
     """Operator log 2026-10-03: after a 6 s pause the running level had drained, the music came
     back at presence 46, and the consumers' learned usual level jumped to 73, muting the next
-    ~10 s. Near-silence no longer drains the level; one outlier moves the usual level at most as
-    far as the largest emphasis it could earn."""
+    ~10 s. Near-silence no longer drains the level (and since 2026-10-04 no consumer learns a usual
+    level at all: emphasis is read on the fixed loudness scale)."""
     from widgets.spotify_visualizer import transient_bus
-    from widgets.spotify_visualizer.transient_bus import learn_usual_presence
 
     clock = [100.0]
 
@@ -67,7 +66,6 @@ def test_a_pause_does_not_make_the_music_resuming_look_many_times_louder(monkeyp
         tb.update(0.0, 0.0, 0.0, loudness=0.0)
     tb.update(0.3, 0.3, 0.3, loudness=8.0)                 # the same music again
     assert 0.9 <= tb.musical_level[1] <= 1.1
-    assert learn_usual_presence(1.0, 46.0) <= 1.0 + 0.12 * 1.0 + 1e-9
 
     # A near-silent first frame (the moment before a track starts) does not seed the level either:
     # recorded clips read presence 363-1089 at their start when it did.
@@ -302,37 +300,45 @@ class TestBeatEngineTransient:
 
 
 # --- Passage intensity (operator 2026-10-04: Sphere swung between overreacting after a reset and
-# barely reacting once settled) ---------------------------------------------------------------
+# barely reacting, and its reactions faded inside a sustained loud chorus) ---------------------
+
+_PATTERN = (1.6, 1.1, 0.6, 0.4, 1.3, 0.9, 0.5, 0.4)
+
 
 def _beats(seconds: float, level: float, rate: float = 90.0):
-    """Real-music-like loudness: a kick-heavy bar flickering 0.4x..1.6x around ``level``."""
-    pattern = (1.6, 1.1, 0.6, 0.4, 1.3, 0.9, 0.5, 0.4)
-    return [level * pattern[int(i / rate * 8) % len(pattern)] for i in range(int(seconds * rate))]
+    """Real-music-like loudness: a kick-heavy bar flickering around ``level`` (its mean)."""
+    mean = sum(_PATTERN) / len(_PATTERN)
+    return [level / mean * _PATTERN[int(i / rate * 8) % len(_PATTERN)] for i in range(int(seconds * rate))]
 
 
 def _feed(intensity, samples, rate: float = 90.0):
     return [intensity.update(value, 1.0 / rate) for value in samples]
 
 
-def test_usual_music_reads_as_usual_and_stays_there():
+def test_a_sustained_loud_chorus_reacts_as_strongly_at_its_end_as_at_its_start():
+    """Nothing adapts to the track: a minute of the same loud chorus reads the same throughout
+    (the relative designs faded it as they learned it)."""
     from statistics import fmean
 
     from widgets.spotify_visualizer.transient_bus import PassageIntensity
 
     intensity = PassageIntensity()
-    values = _feed(intensity, _beats(120.0, 7.0))
-    early, late = fmean(values[20 * 90:40 * 90]), fmean(values[100 * 90:])
-    assert abs(early - PassageIntensity.USUAL) < 0.1 and abs(late - PassageIntensity.USUAL) < 0.1
-    assert abs(late - early) < 0.05                      # no drift into "almost not reacting"
+    _feed(intensity, _beats(20.0, PassageIntensity.USUAL_LOUDNESS))          # a usual verse first
+    chorus = _feed(intensity, _beats(60.0, PassageIntensity.USUAL_LOUDNESS * 1.4))
+    start, end = fmean(chorus[2 * 90:6 * 90]), fmean(chorus[-4 * 90:])
+    assert start > 0.85 and abs(end - start) < 0.02
 
 
-def test_a_fresh_start_does_not_overreact():
+def test_usual_music_reads_as_usual_from_the_start_and_stays_there():
     from statistics import fmean
 
     from widgets.spotify_visualizer.transient_bus import PassageIntensity
 
-    values = _feed(PassageIntensity(), _beats(3.0, 7.0))
-    assert fmean(values[45:]) < PassageIntensity.USUAL + 0.15
+    # A steady level eases to itself (a flickering bar eases above its mean, as real music does;
+    # the scale was calibrated on the eased level of recorded music).
+    values = _feed(PassageIntensity(), [PassageIntensity.USUAL_LOUDNESS] * (120 * 90))
+    early, late = fmean(values[2 * 90:6 * 90]), fmean(values[100 * 90:])
+    assert abs(early - PassageIntensity.USUAL) < 1e-6 and abs(late - early) < 1e-6
 
 
 def test_louder_passages_read_higher_and_quieter_ones_lower():
@@ -341,21 +347,21 @@ def test_louder_passages_read_higher_and_quieter_ones_lower():
     from widgets.spotify_visualizer.transient_bus import PassageIntensity
 
     intensity = PassageIntensity()
-    _feed(intensity, _beats(40.0, 7.0))
-    loud = fmean(_feed(intensity, _beats(4.0, 7.0 * 1.6))[180:])
-    quiet = fmean(_feed(intensity, _beats(4.0, 7.0 * 0.6))[180:])
-    assert loud > 0.9 and quiet < 0.4
+    usual = fmean(_feed(intensity, _beats(10.0, PassageIntensity.USUAL_LOUDNESS))[-180:])
+    loud = fmean(_feed(intensity, _beats(4.0, PassageIntensity.USUAL_LOUDNESS * 1.3))[180:])
+    quiet = fmean(_feed(intensity, _beats(4.0, PassageIntensity.USUAL_LOUDNESS * 0.7))[180:])
+    assert quiet < usual < loud
     assert _feed(intensity, [0.01] * 90)[-1] == 0.0       # near-silence reads 0
 
 
 def test_a_reactivity_reset_keeps_the_musical_context():
-    """A preset hotswap or Settings rebuild resets the per-mode DSP, not the track's context."""
+    """A preset hotswap or Settings rebuild resets the per-mode DSP, not the music's level."""
     from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 
     worker = _SpotifyBeatEngine(4)._audio_worker
     worker._manual_floor = 0.12                          # as an activation's floor config resolves it
     bus = worker._transient_bus
-    _feed(bus._intensity, _beats(30.0, 7.0))
+    _feed(bus._intensity, _beats(30.0, 9.0))
     before = bus.musical_intensity
     worker.reset_reactivity_state()
     assert worker._transient_bus is not bus

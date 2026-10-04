@@ -48,7 +48,7 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerTransientState,
 )
 from widgets.spotify_visualizer.transient_bus import (
-    learn_usual_presence,
+    MUSICAL_USUAL_LOUDNESS,
     musical_weight,
     passage_ramp,
 )
@@ -454,8 +454,6 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         self._fullness_initialized = False
         self._last_packet_ts = -1.0e9
         self._source_active = False
-        # The track's usual event presence (``learn_usual_presence``), from a neutral 1.0.
-        self._usual_presence = 1.0
         self._last_reward = 0.0
         self._intensity_now = 0.0
 
@@ -946,7 +944,6 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._fullness_initialized = bool(active)
             self._last_packet_ts = -1.0e9
             self._source_active = active
-            self._usual_presence = 1.0
             self._last_reward = 0.0
             self._intensity_now = 0.0
             self._last_diag_ts = now
@@ -1000,7 +997,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         )
         musical = musical_weight(level_loudness, level_presence)
         intensity = _clamp01(musical_intensity) if active else 0.0
-        standout = level_presence / max(self._usual_presence, 1.0e-3)
+        # How far this hit stands out, on the fixed loudness scale (never a learned usual level).
+        standout = level_loudness / MUSICAL_USUAL_LOUDNESS
         reward = _ramp_reward(intensity, musical, standout)
         self._last_reward = reward
         self._intensity_now = intensity
@@ -1351,8 +1349,6 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             if tracer_enabled and tracer_event_strength > 0.0:
                 self._trigger_tracer(now=now, strength=tracer_event_strength, debounce=_ramp_interval(
                     _TRACER_QUIET_DEBOUNCE_S, _TRACER_EVENT_DEBOUNCE_S, intensity))
-            if candidates or incoming_candidates:
-                self._usual_presence = learn_usual_presence(self._usual_presence, level_presence)
 
             rotation_target = _clamp01(max(
                 articulation_score * 0.76,
@@ -1511,7 +1507,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 "[SPHERE_AUDIO] active=%s reactive=%.3f/%.3f/%.3f live=%.3f/%.3f/%.3f presence=%.3f/%.3f "
                 "activity=%.3f/%.3f spectrum=%.5f flux=%.4f threshold=%.4f spectral_evt=%.3f/%d crest=%.3f crest_bmh=%.3f/%.3f/%.3f shape=%.3f envelope=%.3f "
                 "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f intake=%.3f gate=%s density=%.3f impact=%.3f motion=%.3f cohorts=%d in/out=%d/%d progress=%.3f-%.3f cohort_v=%.3f-%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d "
-                "musical=%.3f/%.3f usual=%.3f intensity=%.3f reward=%.3f",
+                "musical=%.3f/%.3f standout=%.3f intensity=%.3f reward=%.3f",
                 active,
                 bass_now,
                 mid_now,
@@ -1580,7 +1576,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 self._packet_sources_since_diag["onset"],
                 level_loudness,
                 level_presence,
-                self._usual_presence,
+                level_loudness / MUSICAL_USUAL_LOUDNESS,
                 self._intensity_now,
                 reward,
             )

@@ -78,12 +78,14 @@ LOUDNESS_REFERENCE_SECONDS = 6.0
 # How much an onset counts musically, for every consumer that rewards onsets (Shockwave Grid's
 # waves, Voxel Sphere's fragments and particles): an absolute loudness below MUSICAL_QUIET's
 # first edge counts for nothing (near-silence), and so does a presence below MUSICAL_PRESENCE's
-# (a quiet passage inside a loud track). Against the track's usual onset presence, learned at
-# MUSICAL_USUAL_RATE from onsets clearly part of the music, a louder onset stands out and a
-# softer one recedes.
+# (a quiet passage inside a loud track). How far a hit stands out, and how loud a passage is,
+# are read on the fixed real-music scale around MUSICAL_USUAL_LOUDNESS (the median onset and
+# eased passage loudness of the four recorded songs, 2026-10-04: 8.2 and 8.5), never against a
+# level learned from the track: every learned one flattened a sustained loud chorus as it
+# learned it (operator 2026-10-04, the reactivity guide's "hot-chorus flatlining").
 MUSICAL_QUIET = (0.08, 0.6)
 MUSICAL_PRESENCE = (0.15, 0.8)
-MUSICAL_USUAL_RATE = 0.12
+MUSICAL_USUAL_LOUDNESS = 8.5
 
 
 def _smoothstep(edge0: float, edge1: float, value: float) -> float:
@@ -97,10 +99,12 @@ def musical_weight(loudness: float, presence: float) -> float:
             * _smoothstep(MUSICAL_PRESENCE[0], MUSICAL_PRESENCE[1], presence))
 
 
-def musical_emphasis(presence: float, usual: float) -> float:
-    """How far an onset stands out against the track's ``usual`` onset presence: 1 for a usual
-    one, up to 2^1.5 for a much louder one, down to 0.5^1.5 for a much softer one."""
-    return max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
+def musical_emphasis(loudness: float) -> float:
+    """How far an onset at ``loudness`` stands out on the fixed scale: 1 at
+    ``MUSICAL_USUAL_LOUDNESS``, up to 2^1.5 for a much louder one, down to 0.5^1.5 for a much
+    softer one (recorded music: a p90 onset ~1.9, a p10 one ~0.36), however long the music has
+    been that loud."""
+    return max(0.5, min(2.0, float(loudness) / MUSICAL_USUAL_LOUDNESS)) ** 1.5
 
 
 PASSAGE_RAMP_CURVE = 1.3
@@ -115,36 +119,33 @@ def passage_ramp(intensity: float, quiet: float) -> float:
 
 
 class PassageIntensity:
-    """Where the passage being heard sits against the track's usual level, 0..1 ("everything
-    ramps"): ``USUAL`` for a usual passage, toward 1 in a louder one, toward 0 in a quieter one,
-    0 in near-silence.
+    """How loud the passage being heard is on the fixed real-music scale, 0..1 ("everything
+    ramps"): ``USUAL`` at ``USUAL_LOUDNESS``, toward 1 louder, toward 0 quieter, 0 in near-silence.
 
-    Loudness flickers with every beat (2-14 within a bar of real music), so the passage is the
-    loudness eased into a level (``LEVEL_RISE_S`` up, ``LEVEL_FALL_S`` down: a lift registers
-    quickly, a dip gently). The track's usual level is the geometric mean of that level: the
-    mean of everything heard so far until ``USUAL_S`` of music, then a ``USUAL_S`` moving mean
-    (a quiet intro or a loud first hit cannot dominate it). The value is ``USUAL`` plus
-    ``SPREAD`` per natural-log unit of level over usual: on the four recorded songs (2026-10-04)
-    passages sit at -0.16..+0.20 of usual (p10..p90), which reads about 0.35..1.
+    Loudness (the bus's absolute post-noise-floor, pre-AGC level) flickers with every beat (2-14
+    within a bar of real music), so the passage is the loudness eased into a level
+    (``LEVEL_RISE_S`` up, ``LEVEL_FALL_S`` down: a lift registers quickly, a dip gently). The
+    value is ``USUAL`` plus ``SPREAD`` per natural-log unit of that level over
+    ``USUAL_LOUDNESS``: on the four recorded songs (2026-10-04) the level sits 6.8..10.7 (p5..p95,
+    median 8.5), which reads about 0.25..1.
 
-    (Until 2026-10-04 this was the envelope over a slowly falling peak: every reset re-seeded
-    the peak low, so Sphere overreacted for a while, then, once the peak had learned the loudest
-    hit, ordinary loud music read 0.1-0.5: reactions swung between too much and almost none.)
-    Near-silence reads 0 and moves nothing. Time-based, so the analysis and replay rates agree.
+    Nothing adapts to the track (operator 2026-10-04): every relative measure tried (the level
+    over a slowly falling peak, then over the track's 20 s usual level) flattened a sustained loud
+    chorus as it learned it, so reactions faded inside the same chorus, the "hot-chorus
+    flatlining" the reactivity guide warns about. A fixed scale follows playback volume instead:
+    quieter listening reacts less, consistently. Near-silence reads 0 and holds the level.
     """
 
     LEVEL_RISE_S = 0.4
     LEVEL_FALL_S = 1.2
-    USUAL_S = 20.0
+    USUAL_LOUDNESS = MUSICAL_USUAL_LOUDNESS
     USUAL = 0.65
-    SPREAD = 1.8
+    SPREAD = 1.5
 
-    __slots__ = ("_level", "_log_usual", "_heard", "_value")
+    __slots__ = ("_level", "_value")
 
     def __init__(self) -> None:
         self._level = 0.0
-        self._log_usual: float | None = None
-        self._heard = 0.0
         self._value = 0.0
 
     @property
@@ -157,26 +158,13 @@ class PassageIntensity:
         if loudness < MUSICAL_QUIET[0]:
             self._value = 0.0
             return self._value
-        if self._log_usual is None:                 # the first music seeds both
+        if self._level <= 0.0:                      # the first music seeds the level
             self._level = loudness
-            self._log_usual = math.log(loudness)
         tau = self.LEVEL_RISE_S if loudness > self._level else self.LEVEL_FALL_S
         self._level += (loudness - self._level) * (1.0 - math.exp(-dt / tau))
-        self._heard += dt
-        log_level = math.log(max(self._level, 1e-6))
-        self._log_usual += (log_level - self._log_usual) * min(1.0, dt / max(min(self.USUAL_S, self._heard), 1e-3))
-        self._value = max(0.0, min(1.0, self.USUAL + self.SPREAD * (log_level - self._log_usual)))
+        ratio = max(self._level, 1e-6) / self.USUAL_LOUDNESS
+        self._value = max(0.0, min(1.0, self.USUAL + self.SPREAD * math.log(ratio)))
         return self._value
-
-
-def learn_usual_presence(usual: float, presence: float) -> float:
-    """The track's usual onset presence after an onset at ``presence`` (start from 1.0, neutral):
-    only an onset clearly part of the music moves it, and no more than the most it can stand out
-    (``musical_emphasis``'s 2x) would, so one outlier cannot make every later onset look soft."""
-    if float(presence) >= MUSICAL_PRESENCE[1]:
-        learned = min(float(presence), 2.0 * float(usual))
-        return float(usual) + (learned - float(usual)) * MUSICAL_USUAL_RATE
-    return float(usual)
 
 
 @dataclass(slots=True)
