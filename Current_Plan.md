@@ -73,6 +73,21 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
   `preset=`, `presets/visualizer_modes`, `require_canonical_default` / default-value asserts, and the Guided Setup
   preview builders (`tools/onboarding_preview_foundry.py`), which resolve curated presets. Known red: Extruded's
   `test_the_bars_stand_where_spectrums_do...` (the operator's Studio preset).
+  - [x] Inventory (2026-10-04, grep). **Resolve curated presets through the activation payload:**
+    `test_onboarding_preview_assets`, `test_qtquick_custom_layout_owner`, `test_qtquick_visualizer_all_modes`,
+    `test_qtquick_visualizer_spectrum`, `test_visualizer_profile_lender_presets`, `test_visualizer_request_admission`,
+    `test_visualizer_settings_plumbing`; tools `visualizer_replay/driver.py` (`preset=`), `record.py`
+    (`sphere_golden.py` freezes at `--write`: done). **Render through the Guided Setup preview builders (curated
+    presets):** `test_onboarding_preview_assets`, `test_qt611_shader_admission`, `test_qtquick_extruded_spectrum`
+    (known red), `test_qtquick_shockwave_grid`, `test_scene3d_quality_settings`, `test_visualizer_3d_reach`,
+    `test_visualizer_prepared_reveal`. **Read preset files/dirs:** `test_build_runner`, `test_defaults_schema_authority`,
+    `test_qtquick_visualizer_spectrum`, `test_spectrum_shaping_current`, `test_sphere_voxel_audio_contract`,
+    `test_visualizer_glow_footprint`, `test_visualizer_line_coverage`, `test_visualizer_preset_manifest`,
+    `test_visualizer_presets`, `test_visualizer_user_authored_preset_catalog` (fixtures only: done), plus the temporal
+    golden's `approval_environment_manifest.json`. Some of these legitimately test the catalogue/manifest machinery
+    (keep, but assert structure only).
+  - [ ] Default-pinning scan: ~60 tests read canonical defaults; deriving inputs from them is allowed (memory rule),
+    pinning a default's *value* is not. Scan each for literal expected values equal to a default.
 - [ ] N2b. Give each its own frozen inputs (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
