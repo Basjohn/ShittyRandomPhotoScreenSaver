@@ -148,8 +148,10 @@ def capture() -> dict:
             "preset_index": preset,
             "overrides": overrides or {},
             "technical_profile": _round(dict(technical)),
+            # The 3D Detail tier is a hardware choice (the GPU's), not behaviour: left out.
             "parameters": _round({k: v for k, v in dict(series[0].mode_state.parameters).items()
-                                  if isinstance(v, (int, float, str, bool, list, tuple))}),
+                                  if isinstance(v, (int, float, str, bool, list, tuple))
+                                  and k != "scene3d_detail"}),
             "frames": [_frame_record(logical.mode_state) for logical in series],
         }
     return document
@@ -225,6 +227,7 @@ def differences(golden: dict, current: dict) -> list[str]:
 # a ceiling: a deliberate upgrade is reviewed by eye on the before/after sheets (--visual) and then
 # re-recorded (--write-visual).
 VISUAL_DIR = GOLDEN.parent / "sphere_visual"
+VISUAL_TIER = "High"                         # pinned: the reference must not depend on the GPU
 VISUAL_REVIEW = Path(__file__).resolve().parents[2] / "logs" / "sphere_visual_review"
 VISUAL_CASES = (
     ("glass_current_rest", "glass_current", "silence", 45, 480, 270),
@@ -258,6 +261,7 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.transition_contact_sheet import TransitionCapture
+    from widgets.spotify_visualizer.render_state import freeze_render_fields
 
     from .driver import replay_clip
 
@@ -274,7 +278,12 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
     for name, _golden, _segment, _offset, width, height in cases:
         # The replay presents the canonical item; resolve this case's CUSTOM extent through the
         # production presentation resolver (Sphere centres itself in the presentation's content).
-        snapshots[name] = dataclasses.replace(snapshots[name], presentation=_custom_presentation(width, height))
+        snapshot = snapshots[name]
+        state = snapshot.logical.mode_state
+        state = dataclasses.replace(state, parameters=freeze_render_fields(
+            {**dict(state.parameters), "scene3d_detail": VISUAL_TIER}))
+        snapshots[name] = dataclasses.replace(snapshot, presentation=_custom_presentation(width, height),
+                                              logical=dataclasses.replace(snapshot.logical, mode_state=state))
         window_w, window_h = 3 * width, 3 * height
         matrix = (2 / window_w, 0, 0, 0, 0, -2 / window_h, 0, 0, 0, 0, 1, 0, -1 / 3, 1 / 3, 0, 1)
         capture = TransitionCapture(window_w, window_h)
