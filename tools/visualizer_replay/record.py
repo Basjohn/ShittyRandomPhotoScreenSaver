@@ -156,14 +156,15 @@ def main() -> None:
     engine.acquire()
     engine.set_playback_state(True)
     engine.ensure_started()
-    scheduler = engine.get_event_scheduler()
     frames = []
     start = time.perf_counter()
 
     def tick():
         bars = engine.tick() or []
         elapsed = time.perf_counter() - start
-        frames.append(_frame(engine, 1_000_000 + int(elapsed * 1_000_000), bars, scheduler))
+        # Looked up every tick, as Sphere's capture does: the inline analysis commits a fresh copy of the
+        # worker's DSP state (transient bus and scheduler included) each frame.
+        frames.append(_frame(engine, 1_000_000 + int(elapsed * 1_000_000), bars, engine.get_event_scheduler()))
         if elapsed >= args.seconds:
             timer.stop()
             app.quit()
