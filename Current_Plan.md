@@ -115,7 +115,11 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     positives such as set-then-read round trips). 2026-10-04: 113 candidates in 33 files; largest
     `test_layout_slots` 19, `test_widget_descriptors` 13, `test_steam_phase3_settings_descriptors` 12,
     `test_widgets_tab_current` 11, `test_qtquick_transition_parameter_resolution` 9, `test_visualizer_settings_plumbing`
-    7. Review Visualizer files first, then the rest file by file. (as `sphere_golden.py` does: settings frozen at `--write`); replay
+    7. Review Visualizer files first, then the rest file by file.
+    - [x] Visualizer candidates reviewed (14): all set-then-read round trips (stubbed tabs, migrations, model inputs)
+      except Spectrum shaping's unset mirrored lane, now derived from the model's default.
+    - [ ] Non-Visualizer files (layout slots, widget descriptors, Steam descriptors, widgets tab, transition
+      parameter resolution, ...). (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
 

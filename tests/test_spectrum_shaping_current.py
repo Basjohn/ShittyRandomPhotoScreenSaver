@@ -299,7 +299,9 @@ class TestSettingsModelShaping:
         flat = model.to_dict()
         prefix = "widgets.spotify_visualizer"
         assert flat[f"{prefix}.spectrum_lane_strengths_linear"]["Bass"] == pytest.approx(0.60)
-        assert flat[f"{prefix}.spectrum_lane_strengths_mirrored"]["Bass"] == pytest.approx(0.80)
+        # The unset mirrored lanes keep the model's own default (derived, never pinned: the operator edits defaults).
+        default_mirrored = SpotifyVisualizerSettings().spectrum_lane_strengths_mirrored
+        assert flat[f"{prefix}.spectrum_lane_strengths_mirrored"]["Bass"] == pytest.approx(default_mirrored["Bass"])
         assert flat[f"{prefix}.spectrum_glow_enabled"] is False
         assert flat[f"{prefix}.spectrum_glow_intensity"] == pytest.approx(0.55)
         assert f"{prefix}.spectrum_bar_profile" not in flat
