@@ -1,6 +1,6 @@
 """Reactivity audit of the replayable modes on recorded music: python -m tools.visualizer_replay.mode_audit
 
-Replays every schema 2 clip in ``logs/visualizer_recordings`` (``*_noevents`` excluded) through
+Replays every schema 2 clip in ``logs/visualizer_recordings`` (archived takes excluded) through
 Spectrum (whose runtime Extruded Spectrum shares), Oscilloscope, Sine Wave, DevCurve and Shockwave
 Grid (its live waves; clips recorded with musical onsets), and reports
 the warning signs of ``Docs/Guides/Visualizer_Reactivity_Authoring.md`` per band of passage
@@ -10,12 +10,10 @@ quiet to loud and spends little time pinned.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import statistics
 
 from .driver import mode_output, replay_clip
 
-RECORDINGS = Path(__file__).resolve().parents[2] / "logs" / "visualizer_recordings"
 MODES = ("spectrum", "oscilloscope", "sine_wave", "devcurve", "shockwave_grid")
 BANDS = (("quiet", 0.0, 0.35), ("usual", 0.35, 0.75), ("loud", 0.75, 9.0))
 
@@ -50,10 +48,10 @@ def audit(clip, mode: str) -> dict:
 def main() -> None:
     from PySide6.QtCore import QCoreApplication
 
-    from widgets.spotify_visualizer.feature_frame import load_jsonl
-
     QCoreApplication.instance() or QCoreApplication([])
-    clips = [load_jsonl(path) for path in sorted(RECORDINGS.glob("*.jsonl")) if not path.stem.endswith("_noevents")]
+    from .record import recorded_clips
+
+    clips = recorded_clips()
     for mode in MODES:
         print(f"== {mode}")
         for clip in clips:
