@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import threading
 from collections.abc import Mapping, Sequence
@@ -17,9 +17,14 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerTransientState,
     freeze_render_fields,
 )
+from widgets.spotify_visualizer.transient_bus import musical_weight, passage_ramp
 
 
 _LAYER_NAMES = ("bass", "vocals", "mids", "transients")
+# The transients layer's share in the track's quietest passage (1 in its loudest). The shared
+# transient lane is self-relative (flux over its own adaptive threshold), so without the ramp a
+# quiet passage swung the layer as hard as a loud one, and near-silence harder.
+_TRANSIENT_QUIET_SHARE = 0.2
 
 
 def _bounded(value: object, minimum: float, maximum: float, *, name: str) -> float:
@@ -141,10 +146,16 @@ class DevCurveFrameRuntime:
         playing: bool,
         energy: VisualizerEnergyState,
         transient: VisualizerTransientState,
+        musical_level: tuple[float, float],
+        musical_intensity: float,
         layer_shape_nodes: Mapping[str, Sequence[Sequence[object]]],
         parameters: Mapping[str, object],
     ) -> DevCurveResolvedFrame | None:
-        """Integrate one authored step and detach all renderer-visible state."""
+        """Integrate one authored step and detach all renderer-visible state.
+
+        ``musical_level`` is (loudness, presence) (``BeatEngine.get_musical_level``) and
+        ``musical_intensity`` where the music sits in the track's own range
+        (``BeatEngine.get_musical_intensity``): together they ramp the transients layer."""
 
         with self._lock:
             if self._retired:
@@ -160,6 +171,8 @@ class DevCurveFrameRuntime:
                 playing=playing,
                 energy=energy,
                 transient=transient,
+                musical_level=musical_level,
+                musical_intensity=musical_intensity,
                 layer_shape_nodes=layer_shape_nodes,
                 parameters=parameters,
             )
@@ -177,6 +190,8 @@ class DevCurveFrameRuntime:
         playing: bool,
         energy: VisualizerEnergyState,
         transient: VisualizerTransientState,
+        musical_level: tuple[float, float],
+        musical_intensity: float,
         layer_shape_nodes: Mapping[str, Sequence[Sequence[object]]],
         parameters: Mapping[str, object],
     ) -> DevCurveResolvedFrame:
@@ -204,9 +219,20 @@ class DevCurveFrameRuntime:
         )
         if is_playing:
             resolved_energy = energy if source_ready else VisualizerEnergyState()
-            resolved_transient = (
-                transient if source_ready else VisualizerTransientState()
-            )
+            if source_ready:
+                # Near-silence earns nothing; a passage earns its share of the track's range.
+                loudness, presence = musical_level
+                gate = musical_weight(loudness, presence) * passage_ramp(
+                    musical_intensity, _TRANSIENT_QUIET_SHARE
+                )
+                resolved_transient = replace(
+                    transient,
+                    bass=transient.bass * gate,
+                    mid=transient.mid * gate,
+                    high=transient.high * gate,
+                )
+            else:
+                resolved_transient = VisualizerTransientState()
             if not source_ready:
                 source_generation = -1
                 source_activation_id = -1

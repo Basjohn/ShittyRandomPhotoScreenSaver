@@ -103,6 +103,17 @@ def musical_emphasis(presence: float, usual: float) -> float:
     return max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
 
 
+PASSAGE_RAMP_CURVE = 1.3
+
+
+def passage_ramp(intensity: float, quiet: float) -> float:
+    """The share of a reaction a passage earns: ``quiet`` in the track's quietest passage, 1 in its
+    loudest, convex (``PASSAGE_RAMP_CURVE``) so a usual passage sits nearer quiet than loud.
+    ``intensity`` is ``PassageIntensity`` (``BeatEngine.get_musical_intensity``)."""
+    level = max(0.0, min(1.0, float(intensity)))
+    return quiet + (1.0 - quiet) * pow(level, PASSAGE_RAMP_CURVE)
+
+
 class PassageIntensity:
     """How loud the music is against the track's own recent loud level, 0..1, rising fast and
     falling gently ("everything ramps"): 0 in a passage at or below ``LOW`` of that level (or

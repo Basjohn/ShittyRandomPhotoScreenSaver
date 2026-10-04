@@ -13,6 +13,12 @@ from widgets.spotify_visualizer.transient_bus import (
 PRODUCTION_WAVEFORM_BLOCK = 256
 
 
+# Schema 1 fixtures are synthetic and predate the musical level: an audible frame is authored as
+# ordinary music in a full passage (how every schema 1 floor was measured), silence as silence.
+# Real-scale behaviour is judged on schema 2 recordings, which carry the measured level.
+SCHEMA_1_MUSIC = (9.0, 1.2)
+
+
 def _waveform_block(samples) -> list[float]:
     """The recorded samples (decimated to 64 by the recorder) as a full production block:
     linear interpolation keeps the amplitude and shape; only detail above the recorded rate is lost."""
@@ -54,6 +60,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         # Recorded MusicalOnsets, re-published with the replay's own serials (the last 16, as live).
         self._replay_onsets: tuple = ()
         self._replay_onset_serial = 0
+        self._replay_audible = False
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
@@ -79,6 +86,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             onset_strength=float(transient.onset_strength),
         )
         self._replay_real = frame.real
+        self._replay_audible = any(value > 0.0 for value in frame.raw_bars)
         if frame.real is not None:
             step = 0.0 if self._replay_last_us is None else (frame.timestamp_us - self._replay_last_us) / 1e6
             self._replay_last_us = frame.timestamp_us
@@ -147,7 +155,9 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
 
     def get_musical_level(self) -> tuple[float, float]:
         real = self._replay_real
-        return super().get_musical_level() if real is None else tuple(real.musical_level)
+        if real is None:
+            return SCHEMA_1_MUSIC if self._replay_audible else (0.0, 0.0)
+        return tuple(real.musical_level)
 
     def get_onset_events(self, after_serial: int = 0) -> tuple:
         if self._replay_real is None:
@@ -155,7 +165,9 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         return tuple(onset for onset in self._replay_onsets if onset.serial > after_serial)
 
     def get_musical_intensity(self) -> float:
-        return super().get_musical_intensity() if self._replay_real is None else self._replay_intensity.value
+        if self._replay_real is None:
+            return 1.0 if self._replay_audible else 0.0
+        return self._replay_intensity.value
 
     def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
         real = self._replay_real

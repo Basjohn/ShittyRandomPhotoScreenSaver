@@ -351,6 +351,8 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
     source_generation = -1
     source_activation = -1
     source_timestamp = 0.0
+    musical_level = (0.0, 0.0)
+    musical_intensity = 0.0
     if engine is not None:
         try:
             engine_generation = coerce_identity(engine.get_generation_id())
@@ -363,6 +365,13 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
         except Exception:
             energy_input = None
             transient_input = None
+        try:
+            loudness, presence = engine.get_musical_level()
+            musical_level = (float(loudness), float(presence))
+            musical_intensity = float(engine.get_musical_intensity())
+        except Exception:
+            musical_level = (0.0, 0.0)
+            musical_intensity = 0.0
         try:
             (
                 raw_source_timestamp,
@@ -396,6 +405,8 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             playing=bool(widget._spotify_playing),
             energy=resolved_input_energy,
             transient=resolved_input_transient,
+            musical_level=musical_level,
+            musical_intensity=musical_intensity,
             layer_shape_nodes=layer_shape_nodes,
             parameters=parameters,
         )

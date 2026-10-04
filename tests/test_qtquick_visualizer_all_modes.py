@@ -210,6 +210,8 @@ def _drive_runtime(
             source_timestamp=now_ts - 0.01,
             energy=VisualizerEnergyState(bass=0.5, overall=0.5),
             transient=VisualizerTransientState(bass=0.4),
+            musical_level=(9.0, 1.2),
+            musical_intensity=1.0,
             layer_shape_nodes={
                 name: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
                 for name in ("bass", "vocals", "mids", "transients")

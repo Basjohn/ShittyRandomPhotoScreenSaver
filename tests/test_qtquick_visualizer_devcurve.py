@@ -85,6 +85,9 @@ def _parameters(*, ghosting: bool = True) -> dict[str, object]:
     return values
 
 
+# Ordinary loud music: (loudness, presence) as BeatEngine.get_musical_level reports it.
+_LOUD_MUSIC = (9.0, 1.2)
+
 def _advance(
     runtime: DevCurveFrameRuntime,
     *,
@@ -100,6 +103,8 @@ def _advance(
     ),
     transient: VisualizerTransientState = VisualizerTransientState(bass=0.8),
     parameters: dict[str, object] | None = None,
+    musical_level: tuple[float, float] = _LOUD_MUSIC,
+    musical_intensity: float = 1.0,
 ):
     return runtime.advance(
         now_ts=now_ts,
@@ -112,6 +117,8 @@ def _advance(
         playing=playing,
         energy=energy,
         transient=transient,
+        musical_level=musical_level,
+        musical_intensity=musical_intensity,
         layer_shape_nodes=_nodes(),
         parameters=_parameters() if parameters is None else parameters,
     )
@@ -195,6 +202,8 @@ def test_devcurve_runtime_freezes_layers_tuning_and_source_identity() -> None:
         playing=True,
         energy=VisualizerEnergyState(bass=0.8, mid=0.6, high=0.4, overall=0.7),
         transient=VisualizerTransientState(bass=0.9),
+        musical_level=_LOUD_MUSIC,
+        musical_intensity=1.0,
         layer_shape_nodes=nodes,
         parameters=parameters,
     )
@@ -288,6 +297,30 @@ def test_devcurve_transient_layer_preserves_historical_bass_only_input() -> None
         0.0
     )
     assert bass_hit.diagnostics["energies"]["transients"] > 0.0
+
+
+def test_devcurve_transients_layer_ramps_with_the_passage() -> None:
+    """The shared transient lane is self-relative, so the same kick reads as large in a quiet
+    passage as in a loud one. DevCurve's transients layer ramps on the passage instead:
+    near-silence earns nothing, the track's quietest passage a small share, its loudest all."""
+
+    def transients(level, intensity):
+        runtime = DevCurveFrameRuntime()
+        resolved = None
+        for step in range(30):
+            resolved = _advance(runtime, now_ts=6.0 + step * 0.016,
+                                transient=VisualizerTransientState(bass=0.8),
+                                musical_level=level, musical_intensity=intensity)
+        assert resolved is not None
+        return resolved.diagnostics["energies"]["transients"]
+
+    silent = transients((0.02, 0.05), 0.0)
+    quiet = transients(_LOUD_MUSIC, 0.0)
+    usual = transients(_LOUD_MUSIC, 0.5)
+    loud = transients(_LOUD_MUSIC, 1.0)
+    assert silent == pytest.approx(0.0, abs=1e-9)
+    assert 0.0 < quiet < usual < loud
+    assert quiet < 0.35 * loud
 
 
 def test_devcurve_ghost_settings_remain_visual_noop_for_historical_parity() -> None:

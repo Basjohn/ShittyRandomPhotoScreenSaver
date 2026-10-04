@@ -50,6 +50,7 @@ from widgets.spotify_visualizer.render_state import (
 from widgets.spotify_visualizer.transient_bus import (
     learn_usual_presence,
     musical_weight,
+    passage_ramp,
 )
 
 logger = get_logger(__name__)
@@ -180,7 +181,6 @@ _PACKET_QUIET_INTERVAL_S = 0.9
 _INCOMING_QUIET_INTERVAL_S = 1.6
 _TRACER_QUIET_DEBOUNCE_S = 0.8
 _RAMP_QUIET_REWARD = 0.2
-_RAMP_CURVE = 1.3
 # A packet whose musically weighted amplitude falls below this is not emitted (no flicker of
 # barely-moved sections in near-silence).
 _PACKET_MIN_AMPLITUDE = 0.05
@@ -315,7 +315,7 @@ def _ramp_reward(intensity: float, gate: float, standout: float) -> float:
     """What a firing earns, 0..1: the near-silence ``gate`` (``musical_weight``) times the passage
     ramp (``_RAMP_QUIET_REWARD`` in the quietest passage, 1 in the loudest, convex) times how far
     the event stands above the track's usual level (``standout``, 0.6..1.4)."""
-    ramp = _RAMP_QUIET_REWARD + (1.0 - _RAMP_QUIET_REWARD) * pow(_clamp01(intensity), _RAMP_CURVE)
+    ramp = passage_ramp(intensity, _RAMP_QUIET_REWARD)
     return _clamp01(_clamp01(gate) * ramp * max(0.6, min(1.4, float(standout))))
 
 
@@ -1361,7 +1361,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 _event_packet(vocal_event_strength) * 0.76,
                 onset_strength * 0.74,
                 sustained_target * 0.08 * max(bass_presence_gate, vocal_presence_gate),
-            )) * (0.30 + 0.70 * pow(intensity, _RAMP_CURVE)) * _clamp01(musical / 0.5)
+            )) * passage_ramp(intensity, 0.30) * _clamp01(musical / 0.5)
 
         relative_fullness = 0.0
         staged_growth = 0.0

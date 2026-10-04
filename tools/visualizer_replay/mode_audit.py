@@ -6,7 +6,8 @@ Grid (its live waves; clips recorded with musical onsets), and reports
 the warning signs of ``Docs/Guides/Visualizer_Reactivity_Authoring.md`` per band of passage
 intensity (<0.35 quiet, 0.35-0.75 usual, >0.75 loud): the output's mean level, how much it moves
 frame to frame, and how often its values sit at the ceiling or at zero. A healthy mode grows from
-quiet to loud and spends little time pinned.
+quiet to loud and spends little time pinned. DevCurve's reaction is a zero-mean undulation around
+its authored contour, so its level is the swing from the clip-long resting curve, not the mean.
 """
 from __future__ import annotations
 
@@ -22,14 +23,19 @@ def audit(clip, mode: str) -> dict:
     from widgets.spotify_visualizer.transient_bus import PassageIntensity
 
     result = replay_clip(clip, mode)
+    outputs = [mode_output(logical) for logical in result["logical_series"]]
+    if mode == "devcurve":
+        valid = [values for values in outputs if values]
+        rest = [statistics.fmean(column) for column in zip(*valid)] if valid else []
+        outputs = [tuple(v - r for v, r in zip(values, rest)) if values else values for values in outputs]
     follower, last_us = PassageIntensity(), None
     stats = {name: {"level": [], "motion": [], "ceiling": 0, "zero": 0, "values": 0} for name, *_ in BANDS}
     previous = None
-    for feature, logical in zip(clip.frames, result["logical_series"]):
+    for feature, output in zip(clip.frames, outputs):
         step = 0.0 if last_us is None else (feature.timestamp_us - last_us) / 1e6
         last_us = feature.timestamp_us
         intensity = follower.update(feature.real.musical_level[0], step)
-        values = [abs(float(v)) for v in mode_output(logical)]
+        values = [abs(float(v)) for v in output]
         if not values or feature.real.musical_level[0] <= 0.0:
             previous = values
             continue
@@ -38,7 +44,7 @@ def audit(clip, mode: str) -> dict:
         entry["level"].append(statistics.fmean(values))
         if previous is not None and len(previous) == len(values):
             entry["motion"].append(statistics.fmean(abs(a - b) for a, b in zip(values, previous)))
-        entry["ceiling"] += sum(1 for v in values if v >= 0.98 * max(1.0, peak if mode == "devcurve" else 1.0))
+        entry["ceiling"] += sum(1 for v in values if v >= 0.98)
         entry["zero"] += sum(1 for v in values if v <= 0.005)
         entry["values"] += len(values)
         previous = values
