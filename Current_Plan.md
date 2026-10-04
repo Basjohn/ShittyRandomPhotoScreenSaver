@@ -28,7 +28,9 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     `frame_trace_report.py` does; an earlier draft without the generation key over-counted repeats ~6x).
   - [x] 16:14 trace, measured: 60 Hz D1 steady 94 draws/s, 5.7 repeats/s (~1:1, healthy); 165 Hz D0 steady 115 draws/s,
     26 repeats/s (extra frames); D0 during its own transitions 93 draws/s, 3.4 repeats/s (the ride works: was 180-210).
-  - [ ] Name the requester of D0's extra steady frames.
+  - [ ] Name the requester of D0's extra steady frames. 16:14 trace: bursts of 50-150 extra frames/s lasting 1-7 s every
+    10-40 s; one coincides with the context menu / CUSTOM edit (16:12:51-54), the rest have no logged event. Confirm
+    on an unattended run (no mouse, no Settings) before treating them as a defect.
 - [ ] N1b. Measure what the viewer sees, not draw counts: per fresh Visualizer revision, publish -> swap age and its
   jitter, and how long each state is held at the display.
   - [x] Tool view: `frame_trace_cadence.py <trace> --refresh 0=164.835 --refresh 1=60` ("fresh" lines).
@@ -43,9 +45,20 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     its rate-sensitive filters (`min(1, dt*k)`) need a replay check at 120/165, and D0's logical + render work rises
     ~1.8x. (B) visual-only present-time interpolation: even motion at +~1 logical interval (~11 ms) latency; BTF/R-62
     treat added latency as a regression. (C) accept. Recommendation: A.
-- [ ] N1c. Check DevCurve's highlight streams on the live trace cadence: a stream respawns every ~2-3 s (three
-  streams over a 1.54-unit loop at the passage's travel rate), which matches the reported jerk period; confirm or
-  rule out a visible pop at spawn/exit before blaming presentation.
+- [x] N1c. DevCurve's highlight streams ruled out (replay, two songs): they respawn every ~3.5 s but never on
+  screen (spawn x 1.10-1.18, lobe width <= ~0.10 at the curated widths), x moves continuously at the travel rate,
+  brightness changes p99 ~1.1/s.
+- [ ] N1e. **Presentation stalls (the best match for DevCurve's "travel jerks every ~2 s+")**: swap gaps > 25 ms every
+  2-13 s (up to 198 ms) while the logical clock stays smooth. `frame_trace_cadence.py` "stall" lines classify them;
+  16:14 trace: 22 GUI-thread starvation (no Visualizer GUI wake for 45-198 ms; the usage sampler's 12-38 ms every 15 s
+  is too small to be all of it), 10 long renders on D1 (18-58 ms), 32 unattributed 25-44 ms gaps on the 60 Hz D1
+  with a healthy GUI thread and short render (suspect swap blocking with swap interval 0: measure
+  after_rendering -> frame_swap next).
+  - [x] Stall classifier in `tools/frame_trace_cadence.py`.
+  - [ ] Attribute the GUI starvation: an opt-in `--frame-trace` sampler that records the GUI thread's Python stack
+    when a Visualizer GUI wake is > 40 ms late (zero cost without the flag; no polling at rest), or correlate with
+    usage/feeds/media work on a run with those diagnostics off.
+  - [ ] Attribute D1's unattributed gaps (after_rendering -> frame_swap; DWM/present queue).
 - [ ] N1d. Fix at the owner the evidence names (e.g. requesters coalesced onto Visualizer frames while one presents,
   the pattern the transition ride uses), with a regression bar that fails when the extra frames return.
   Physical check: Bubble and DevCurve on the 165 Hz and 60 Hz displays.
