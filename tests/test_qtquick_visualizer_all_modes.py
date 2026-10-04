@@ -33,15 +33,12 @@ from tests._visualizer_presentation import (
     neutral_bubble_settings,
     neutral_bubble_pulse,
 )
-from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 
 def _resolved_mode_config(mode_id: str) -> dict:
-    """Complete canonical resolved config for one mode (all authored params)."""
-    payload = resolve_visualizer_activation_payload(
-        {"mode": mode_id, f"preset_{mode_id}": 0}, mode=mode_id
-    )
-    return dict(payload.resolved_config)
+    """A complete resolved config for one mode, frozen (curated presets are authored content, Current_Plan N2)."""
+    return dict(frozen_visualizer_settings(mode_id))
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,

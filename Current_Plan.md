@@ -96,8 +96,11 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     Extruded (the known red is green), Shockwave, Scene3D quality, 3D reach, prepared reveal. The foundry's own
     asset test keeps resolving the curated preset on purpose (it checks the preview shows the preset, derived, not
     pinned).
-  - [ ] Activation-payload tests (list above), replay `driver.py` `preset=` callers and floors goldens built from
-    preset 0.
+  - [x] Activation-payload tests reviewed: `all_modes` and Spectrum's Organs body test now take frozen settings;
+    `profile_lender_presets` tests the lending machinery across whatever presets exist (derived, keep);
+    `settings_plumbing` uses Custom (no curated read); `request_admission` only imports; `custom_layout_owner` uses
+    preset 0 as a realistic model for geometry checks (outcome independent of values; swap if it ever breaks).
+  - [ ] Replay `driver.py` `preset=` callers in tests and the floors goldens built from preset 0.
   - [ ] Preset-file readers that are not catalogue/manifest machinery tests. (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
