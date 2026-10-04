@@ -184,7 +184,18 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   `tests/test_visualizer_replay_real_scale.py`.
 - [x] **Golden step 1b: recorder** `tools/visualizer_replay/record.py` (no window, no product cost; Harness_Index).
   Clips start at 1 s so the scheduler's per-type debounce (counted from timestamp 0) drops nothing.
-- [ ] **Golden step 1c (operator): record the real music.** `python -m tools.visualizer_replay.record NAME --seconds
+- [ ] **3D + frameless Visualizers draw unclipped, above everything but the OSD (operator 2026-10-04).** A mode that is
+  both 3D and frameless is not contained to its frame area (Sphere already behaves so; Extruded Spectrum and Shockwave
+  Grid must too); a carded or 2D mode stays clipped. One descriptor-driven rule, not per-mode exceptions.
+- [ ] **Sphere visual upgrade licence (operator):** the migration may make Sphere more visually appealing with the
+  shared feature set (materials, lighting, post, reflections, tiers), within the golden-as-reference rules above.
+- [ ] **Reactivity goblin audit of the other modes** (operator: hand-cobbled, use the real-scale knowledge and the
+  historical bugs as warning lights; Bubble excluded, its cadence goblin is already targeted): Spectrum, Oscilloscope,
+  Sine Wave, DevCurve, Extruded Spectrum, Shockwave Grid, measured on the recorded clips.
+- [ ] **Golden step 1c (operator): record the real music.** First clips (2026-10-04, first 60 s of "Rag Doll",
+  "I Said Hi", "Human"; Human swings hard and is a Bubble favourite): loudness median 6-7, p90 ~12, max 18-20, live
+  bass pinned at 2.5 in 80-94% of frames. They lacked typed events (recorder bug, fixed 05ddc577) and showed the
+  cold-start presence spike (fixed); kept as `*_noevents`, re-recorded with the fix. `python -m tools.visualizer_replay.record NAME --seconds
   60` while playing: a quiet intro, vocals, kicks/drops, a sustained loud passage, a pause and its return (one or more
   clips). The first recording also confirms the analysis spectrum arrives (silence leaves it empty).
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
