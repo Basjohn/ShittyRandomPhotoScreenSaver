@@ -157,6 +157,13 @@ gentle fall, and each one ramps on its own: particle population and power, fragm
 fires*, tracer speed, spin velocity, glow. Scaling only the size of a reward while its admission frequency stays
 constant reads as "reacts to everything the same" (Sphere's 2026-10-03 log: ~2 packets per 0.5 s at every level).
 
+The shared ramp is `transient_bus.passage_ramp(intensity, quiet)`: `quiet` in the track's quietest passage, 1 in
+its loudest, convex. Multiply by `musical_weight(loudness, presence)` so near-silence earns nothing. Any lane that is
+**self-relative** (the bus's `bass/mid/high_transient` is flux over its own adaptive threshold) needs this ramp at
+its consumer: on its own, a kick in a quiet passage reads as large as one in a loud passage, and near-silence fires
+hardest. DevCurve's transients layer was inverted this way (Human's quiet passages swung it twice as hard as its loud
+ones) until it took the ramp (2026-10-04). Bubble reads the same lane but keeps its golden; do not gate it in the bus.
+
 ### Slow sustained response
 
 Whole-object fullness/growth should use a much slower envelope and/or slow adaptive floor/peak. Sphere's sustained body weight is deliberately slow so a loud passage reads heavier without becoming a giant beat pulse.
