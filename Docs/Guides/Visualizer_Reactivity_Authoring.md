@@ -164,6 +164,16 @@ its consumer: on its own, a kick in a quiet passage reads as large as one in a l
 hardest. DevCurve's transients layer was inverted this way (Human's quiet passages swung it twice as hard as its loud
 ones) until it took the ramp (2026-10-04). Bubble reads the same lane but keeps its golden; do not gate it in the bus.
 
+**Slow passage drive (DevCurve, operator 2026-10-04).** Travel speed, undulation speed and slope must follow the music
+without ever lurching. DevCurve once kept one speed and slope whatever the music did: the undulation drifted on
+the wall clock, and travel was capped at cruise ±10%, a guard against a historic energy throttle that swung it ~12×.
+The pattern that works: ease passage intensity evenly over ~1.5 s (per frame it flickers 0..1 with the beat; eased,
+it follows the passage a viewer hears, ~0.25 quietest / ~0.65 usual / ~0.95 loudest on real music), map it through
+those points to a 0..1 drive where 0.5 is the historical look, and scale travel (0.5–1.6×), phase speed and swing
+from it. Integrate phase and position from rate × dt so a speed change never jumps the picture. A loud passage is
+then faster and steeper; per-frame energy still never touches travel. Classify passages by 2 s windows when
+measuring, not by single frames.
+
 ### Slow sustained response
 
 Whole-object fullness/growth should use a much slower envelope and/or slow adaptive floor/peak. Sphere's sustained body weight is deliberately slow so a loud passage reads heavier without becoming a giant beat pulse.

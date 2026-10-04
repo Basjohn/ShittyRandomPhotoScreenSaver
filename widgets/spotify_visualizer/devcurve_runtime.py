@@ -10,19 +10,35 @@ from typing import Dict, List
 
 
 DEVCURVE_SAMPLE_COUNT = 96
-# Material/specular highlights should travel continuously.  Audio owns the
-# shape/amplitude reaction; it may only breathe this cruise rate gently.
+# Material/specular highlights travel continuously at this cruise rate in a usual passage.
+# Per-frame audio never throttles it (historic bug: an energy throttle swung it ~12x and
+# lurched); the passage moves it slowly within the passage range below, and sustained
+# transient activity breathes it +/-10% on top.
 DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE = 0.23 / 1.35
 DEVCURVE_MATERIAL_TRAVEL_VARIATION = 0.10
+# The passage drive, 0..1, scales from the track's quietest passage to its loudest: travel
+# speed, the undulation's phase speed and the undulation's swing (its slope). Passage intensity
+# flickers 0..1 with the beat, so it is first eased evenly over seconds into the passage level
+# a viewer hears (2 s means on real music: ~0.25 in the quietest passages, ~0.65 usual, ~0.95
+# loudest), then mapped through those points, so a usual passage (drive 0.5) is the historical
+# look. When paused the level eases back to usual.
+DEVCURVE_PASSAGE_TRAVEL = (0.5, 1.6)
+DEVCURVE_PASSAGE_PHASE_SPEED = (0.45, 1.65)
+DEVCURVE_PASSAGE_SWING = (0.55, 1.45)
+DEVCURVE_PASSAGE_POINTS = (0.25, 0.65, 0.95)
+DEVCURVE_PASSAGE_USUAL = DEVCURVE_PASSAGE_POINTS[1]
+DEVCURVE_PASSAGE_TAU_S = 1.5
 # (DEVCURVE_MATERIAL_TRAVEL_SMOOTH_TAU_S retired: rate smoothing is now the
 # asymmetric attack/release pair below.)
 # Travel speed is driven ONLY by sustained transient activity -- never by
 # aggregate energy (bass beats / vocals / mids), which used to make it lurch.
 # Brief transient kicks are rejected by a slow de-kick low-pass so a single hit
 # never jerks travel; the surviving "how busy are the transients" signal is
-# normalised against this reference before it may nudge the cruise rate +/-10%.
+# normalised against this reference before it may nudge the cruise rate +/-10%. The transients
+# input is passage-gated (DevCurveFrameRuntime), so on real music the de-kicked drive sits
+# ~0.01-0.08; at the old ungated reference (0.35) the nudge pinned travel near -10%.
 DEVCURVE_TRAVEL_TRANSIENT_DEKICK_TAU_S = 0.45
-DEVCURVE_TRAVEL_TRANSIENT_REFERENCE = 0.35
+DEVCURVE_TRAVEL_TRANSIENT_REFERENCE = 0.10
 # Asymmetric ramp: travel speeds up quickly when transient activity rises but
 # eases back down slowly, so no direction of change is jerky.
 DEVCURVE_TRAVEL_ATTACK_TAU_S = 0.30
@@ -33,6 +49,23 @@ _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
+
+
+def _passage_position(intensity: float) -> float:
+    """Passage intensity -> drive target: 0 at the quietest point, 0.5 usual, 1 loudest."""
+    quiet, usual, loud = DEVCURVE_PASSAGE_POINTS
+    value = float(intensity)
+    if value <= usual:
+        return 0.5 * _clamp((value - quiet) / (usual - quiet), 0.0, 1.0)
+    return 0.5 + 0.5 * _clamp((value - usual) / (loud - usual), 0.0, 1.0)
+
+
+def _passage_lerp(span: tuple[float, float], drive: float) -> float:
+    """span[0] at drive 0 (quietest passage), exactly 1 at 0.5 (usual), span[1] at 1 (loudest)."""
+    drive = _clamp(drive, 0.0, 1.0)
+    if drive <= 0.5:
+        return span[0] + (1.0 - span[0]) * (drive / 0.5)
+    return 1.0 + (span[1] - 1.0) * ((drive - 0.5) / 0.5)
 
 
 def _smoothstep(x: float) -> float:
@@ -173,6 +206,7 @@ def _update_specular_streams(
     curve: List[float],
     energy_drive: float,
     travel_drive: float,
+    passage_drive: float,
 ) -> List[List[float]]:
     _ensure_specular_streams(state)
     slots: List[List[float]] = []
@@ -188,8 +222,10 @@ def _update_specular_streams(
         _clamp(travel_drive / DEVCURVE_TRAVEL_TRANSIENT_REFERENCE, 0.0, 1.0)
     )
     variation = DEVCURVE_MATERIAL_TRAVEL_VARIATION
-    target_rate = DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE * (
-        (1.0 - variation) + (2.0 * variation) * active_mix
+    target_rate = (
+        DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE
+        * _passage_lerp(DEVCURVE_PASSAGE_TRAVEL, passage_drive)
+        * ((1.0 - variation) + (2.0 * variation) * active_mix)
     )
     previous_rate = float(state.specular_travel_rate)
     if previous_rate <= 0.0:
@@ -250,8 +286,15 @@ class DevCurveRuntimeState:
     foreground_travel_rate: float = 0.0
     foreground_travel_pos: float = 0.0
     specular_travel_rate: float = 0.0
-    # De-kicked sustained transient activity; the sole driver of travel speed.
+    # De-kicked sustained transient activity; breathes travel speed +/-10%.
     transient_travel_drive: float = 0.0
+    # The eased passage level and the drive mapped from it (see DEVCURVE_PASSAGE_*); the level
+    # is negative until the first frame seeds it.
+    passage_level: float = -1.0
+    passage_drive: float = 0.5
+    # The undulation's own phase, integrated at the passage's phase speed (seeded from the clock
+    # on the first frame), so a speed change never jumps the curve.
+    reactive_phase: float | None = None
     specular_streams: List[Dict[str, float]] = field(
         default_factory=lambda: [
             {"x": 1.06, "speed": 0.26, "strength": 0.72, "variant": 0.08},
@@ -290,6 +333,7 @@ def _build_curve(
     profile: List[float],
     seed: int,
     phase: float,
+    reactive_phase: float,
     idle_motion: float,
     idle_speed: float,
     smoothness: float,
@@ -317,8 +361,8 @@ def _build_curve(
         w2 = math.sin((x * 3.4 + phase * idle_speed * 0.17) * math.tau + _phase_rand(seed, 2))
         w3 = math.sin((x * 5.1 + phase * idle_speed * 0.11) * math.tau + _phase_rand(seed, 3))
         idle_wave = (w1 * 0.52 + w2 * 0.31 + w3 * 0.17)
-        ar1 = math.sin((x * 1.35 + phase * 0.23) * math.tau + _phase_rand(seed, 4))
-        ar2 = math.sin((x * 2.75 + phase * 0.18) * math.tau + _phase_rand(seed, 5))
+        ar1 = math.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + _phase_rand(seed, 4))
+        ar2 = math.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + _phase_rand(seed, 5))
         reactive_wave = ar1 * 0.64 + ar2 * 0.36
         y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * (0.55 + p * 0.45)
         if y > top_soft:
@@ -349,9 +393,26 @@ def solve_devcurve_frame(
     idle_speed: float,
     smoothness: float,
     layer_settings: Dict[str, Dict[str, float | bool]],
+    passage_intensity: float,
 ) -> Dict[str, object]:
+    """``passage_intensity`` is where the music sits in the track's own range
+    (``BeatEngine.get_musical_intensity``); it is eased into the slow passage drive."""
     dt = _clamp(float(dt), 0.001, 0.1)
     state.phase += dt
+    passage_target = (
+        _clamp(float(passage_intensity), 0.0, 1.0) if playing else DEVCURVE_PASSAGE_USUAL
+    )
+    if state.passage_level < 0.0:
+        state.passage_level = passage_target
+    else:
+        state.passage_level += (passage_target - state.passage_level) * (
+            1.0 - math.exp(-dt / DEVCURVE_PASSAGE_TAU_S)
+        )
+    state.passage_drive = _passage_position(state.passage_level)
+    if state.reactive_phase is None:
+        state.reactive_phase = float(now_ts)
+    state.reactive_phase += dt * _passage_lerp(DEVCURVE_PASSAGE_PHASE_SPEED, state.passage_drive)
+    swing = _passage_lerp(DEVCURVE_PASSAGE_SWING, state.passage_drive)
     energies = _layer_energy_map(energy_bands, transient_bus, playing)
     for key in _LAYER_ORDER:
         target = energies[key]
@@ -393,11 +454,12 @@ def solve_devcurve_frame(
             profile=profile,
             seed=idx * 997 + 13,
             phase=now_ts,
+            reactive_phase=state.reactive_phase,
             idle_motion=idle_motion,
             idle_speed=idle_speed,
             smoothness=smoothness,
             reactive=reactive,
-            power=motion_power * power,
+            power=motion_power * power * swing,
             offset=offset,
         )
         prev = state.previous_layers.get(key)
@@ -414,7 +476,7 @@ def solve_devcurve_frame(
             max_step = max(max_step, abs(curve[i] - curve[i - 1]))
     state.smoothness_max_step = max_step
     state.idle_amplitude = idle_motion * 0.018
-    state.active_amplitude = aggregate_energy * motion_power * 0.135
+    state.active_amplitude = aggregate_energy * motion_power * 0.135 * swing
     draw_order = sorted(
         _LAYER_ORDER,
         key=lambda src: (
@@ -444,6 +506,7 @@ def solve_devcurve_frame(
             curve=curve,
             energy_drive=energy_drive,
             travel_drive=state.transient_travel_drive,
+            passage_drive=state.passage_drive,
         )
 
     return {
@@ -459,5 +522,6 @@ def solve_devcurve_frame(
         "foreground_travel_rate": state.foreground_travel_rate,
         "foreground_travel_pos": state.foreground_travel_pos,
         "specular_travel_rate": state.specular_travel_rate,
+        "passage_drive": state.passage_drive,
         "energies": dict(state.smooth_energy),
     }
