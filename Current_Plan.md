@@ -119,13 +119,19 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     - [x] Visualizer candidates reviewed (14): all set-then-read round trips (stubbed tabs, migrations, model inputs)
       except Spectrum shaping's unset mirrored lane, now derived from the model's default.
     - [ ] Non-Visualizer files (layout slots, widget descriptors, Steam descriptors, widgets tab, transition
-      parameter resolution, ...). (as `sphere_golden.py` does: settings frozen at `--write`); replay
+      parameter resolution, ...). Spot-check: `test_layout_slots` candidates are explicit payload round trips (false
+      positives); expect most of the rest to be the same, so review only asserts with no matching input in the test. (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
 
-**N3. Finish S19 Sphere** (section 4): the Sphere-owned technical profile (replace the hidden Spectrum borrow), then
-per-frame values in one uniform block, then the standard capability/tier lifecycle; physical acceptance on the four
-songs.
+**N3. Finish S19 Sphere** (section 4), in this order, each its own checkpoint:
+- [ ] N3a. Inventory the analysis seams Sphere actually consumes (pre-AGC live lane, `(loudness, presence)`,
+  raw spectrum, typed events, passage intensity) and which technical settings change them (input gain, block size,
+  sensitivity, noise floor); prove each with a test before exposing it.
+- [ ] N3b. Sphere-owned resolved technical profile with descriptor-owned per-control capability metadata, replacing
+  the hidden whole-Spectrum borrow; installs missing Sphere keys resolve to today's Spectrum-backed values.
+- [ ] N3c. Per-frame values in one uniform block (two programs set ~60 uniforms a frame).
+- [ ] N3d. Standard capability/tier lifecycle and dormancy; physical acceptance on the four songs.
 
 **N4. Two stale red tests** (Side defects). **N5. S17** (section 2) as concrete consumers need it.
 
