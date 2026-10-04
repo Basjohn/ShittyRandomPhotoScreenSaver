@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from PySide6.QtGui import QColor
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from widgets.spotify_visualizer.render_state import (
     DevCurveFrame,
     OscilloscopeFrame,
@@ -62,11 +62,7 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
         # former generic sinusoid. Wobble Groove has six travelling lines,
         # 0.55 wave effect and 0.55 micro wobble, the combination reported to
         # reopen tiny-scale gaps during strong music.
-        preset = json.loads((
-            Path(__file__).resolve().parents[1]
-            / "presets" / "visualizer_modes" / "sine_wave"
-            / "preset_1_Wobble_Groove.json"
-        ).read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
+        preset = frozen_visualizer_settings("sine_wave")
         state = SineFrame(
             animation_time=0.37,
             parameters=freeze_render_fields({
@@ -97,8 +93,8 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
                 "sine_ghosting_enabled": preset["sine_ghosting_enabled"],
                 "sine_heartbeat": preset["sine_heartbeat"],
                 "sine_vertical_shift": preset["sine_vertical_shift"],
-                "rainbow_enabled": preset["sine_wave_rainbow_enabled"],
-                "rainbow_speed": preset["sine_wave_rainbow_speed"],
+                "rainbow_enabled": preset["rainbow_enabled"],
+                "rainbow_speed": preset["rainbow_speed"],
                 "wave_effect_gate": 0.0,
                 "u_rainbow_hue_offset": 0.0,
                 **{
@@ -124,11 +120,7 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
             }),
         )
     elif mode_id == "oscilloscope":
-        preset = json.loads((
-            Path(__file__).resolve().parents[1]
-            / "presets" / "visualizer_modes" / "oscilloscope"
-            / "preset_1_night_drive.json"
-        ).read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
+        preset = frozen_visualizer_settings("oscilloscope")
         state = OscilloscopeFrame(
             animation_time=0.37,
             parameters=freeze_render_fields({
@@ -147,8 +139,8 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
                 "osc_vertical_shift": preset["osc_vertical_shift"],
                 "osc_ghost_intensity": preset["osc_ghost_intensity"],
                 "osc_ghosting_enabled": preset["osc_ghosting_enabled"],
-                "rainbow_enabled": preset["oscilloscope_rainbow_enabled"],
-                "rainbow_speed": preset["oscilloscope_rainbow_speed"],
+                "rainbow_enabled": preset["rainbow_enabled"],
+                "rainbow_speed": preset["rainbow_speed"],
                 **{
                     f"line{index}_color": QColor(*preset[f"osc_line{index}_color"])
                     for index in range(2, 7)

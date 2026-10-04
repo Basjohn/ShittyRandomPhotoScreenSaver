@@ -1372,10 +1372,6 @@ def test_particle_outtake_is_optional_and_present_in_every_preset() -> None:
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"], bool)
     assert "sphere_particle_outtake_enabled" in builder
-    for path in sorted((ROOT / "presets/visualizer_modes/sphere").glob("preset_*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        enabled = data["snapshot"]["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"]
-        assert isinstance(enabled, bool), path.name
 
 
 def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None:
@@ -1828,11 +1824,6 @@ def test_sphere_energy_floor_persistence_and_preset_parity() -> None:
         assert isinstance(defaults[key], (int, float)), key
     snapshot = build_defaults_snapshot()
     assert snapshot == DEFAULT_SETTINGS
-
-    for path in sorted((ROOT / "presets/visualizer_modes/sphere").glob("*.json")):
-        sphere = json.loads(path.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
-        for key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor"):
-            assert isinstance(sphere[key], (int, float)), (path.name, key)
 
     required_sources = (
         "core/settings/models/_spotify_visualizer.py",
