@@ -47,13 +47,25 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     treat added latency as a regression. (C) accept. Recommendation: A.
   - [x] Operator 2026-10-04: try A, on condition it does not lower smoothness, perceived smoothness, reactivity or
     elasticity. Focus N1b and N1e before N2/N3.
-  - [ ] A1. Find the logical interval authority and how the presenting display's refresh can reach it (edge-driven:
-    display bind/transfer, never polled).
-  - [ ] A2. Audit the logical path for per-tick (frame-count) constants that would change behaviour with the rate;
-    convert them to dt before changing the rate.
-  - [ ] A3. Bubble at 90 vs 120 vs 165 Hz on the same input (replay held to the higher rate): BTF metrics (attack,
-    decay, overshoot, settling, trajectory, radius variation) must match; other modes' replay metrics too.
-  - [ ] A4. Cost at 165 Hz (logical + render, CPU/GPU) and the operator's live check.
+  - [x] A1. Interval authority: `QuickDisplayVisualizerOwner._start_logical_runtime` (1/90 s, `_DEFAULT_MAX_FPS`);
+    the presenting display's refresh is already the frame pacer's `target_hz` (updated on QScreen edges).
+  - [x] A2. Audit: Spectrum/Oscilloscope/Sine/heartbeat/Bubble trail smoothing are dt-based (`min(1, dt/tau)`,
+    slightly rate-sensitive linearisation); DevCurve highlight strength clamps a per-frame blend at >= 0.06
+    (rate-dependent; convert if A proceeds). No per-tick history buffers found.
+  - [x] A3. `python -m tools.visualizer_replay.cadence_parity` (fixtures held to 90/120/165 Hz, frozen settings).
+    **Bubble is not rate-invariant: A fails the operator's condition as built.** Isolated impulse at 120/165 vs 90:
+    radius overshoot -25%/-21%, excursion -24%/-19% (less elastic); 120 bpm beats: excursion +36%/+54%, radius
+    peak +20%. Peak-rate metrics (radius change/s, centroid speed) scale exactly with the rate: one-tick jumps
+    divided by a shorter dt, a metric artifact.
+  - [ ] A4. (only if A is revived with a rate-invariant Bubble integrator) cost and live check.
+  - [ ] **Option D (proposed after A3): presentation-time extrapolation.** Keep the logical cadence (and Bubble's
+    simulation) at its authored 90 Hz, publish each bubble's velocity (x, y, radius) with the frame, and let the
+    renderer draw each bubble at its position + velocity x (draw time - simulation time), horizon clamped to one
+    logical interval. Motion becomes a function of time, even on any refresh; nothing is delayed (unlike B) and the
+    simulation is untouched by construction (Bubble golden unchanged). Artifacts to measure: up to one interval of
+    motion past a reversal, spawn/pop unextrapolated. Needs the operator's go-ahead (BTF presentation change,
+    active-music physical lane). DevCurve would need its own (travel phase extrapolation is simple; curve shapes are
+    not).
 - [x] N1c. DevCurve's highlight streams ruled out (replay, two songs): they respawn every ~3.5 s but never on
   screen (spawn x 1.10-1.18, lobe width <= ~0.10 at the curated widths), x moves continuously at the travel rate,
   brightness changes p99 ~1.1/s.
