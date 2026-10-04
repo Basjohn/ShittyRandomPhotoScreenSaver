@@ -1258,18 +1258,31 @@ class _SpotifyBeatEngine(QObject):
                             samples, capture_ts=frame_capture_ts
                         )
                 else:
+                    # No compute pool: analyse inline, then smooth and commit exactly as a pool
+                    # result commits (smoothed bars, continuous energy, authoritative stamp).
                     worker_state = self._audio_worker.make_compute_snapshot()
                     from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
 
                     bars_inline = compute_bars_from_samples(worker_state, samples)
                     if isinstance(bars_inline, list):
-                        self._publish_pre_agc_analysis_spectrum_if_requested(worker_state)
-                        self._audio_worker.commit_compute_snapshot(worker_state)
-                        try:
-                            self._bars_result_buffer.publish(bars_inline)
-                        except Exception as e:
-                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                        self._latest_bars = bars_inline
+                        smoothed, _reset, energy = _smooth_analysis_bars(
+                            bars_inline,
+                            self._smoothed_bars,
+                            self._last_smooth_ts,
+                            now_ts,
+                            bar_count=self._bar_count,
+                            smoothing_tau=self._smoothing_tau,
+                            segment_hysteresis=self._segment_hysteresis,
+                            min_change_threshold=self._min_change_threshold,
+                        )
+                        self._commit_analysis_frame(
+                            raw_bars=bars_inline,
+                            smoothed_bars=smoothed,
+                            timestamp=now_ts,
+                            activation_id=self._activation_id,
+                            worker_state=worker_state,
+                            energy=energy,
+                        )
 
         try:
             last_ts = float(self._last_audio_ts)

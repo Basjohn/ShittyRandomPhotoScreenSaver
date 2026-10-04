@@ -212,3 +212,31 @@ def test_compute_snapshot_seeds_every_attr_before_first_frame():
     snapshot = worker.make_compute_snapshot()
     for name in _COMPUTE_SNAPSHOT_ATTRS:
         assert hasattr(snapshot, name), name
+
+
+def test_inline_analysis_commits_what_the_compute_lane_commits(monkeypatch):
+    """Without a compute pool (the replay recorder, any headless engine) a live frame still
+    publishes smoothed bars, the continuous energy lane and the authoritative stamp, exactly as
+    the pool's result does. The inline path once published raw bars only, so every recording
+    carried a zero continuous lane."""
+    import time
+
+    def run(manager):
+        engine = _SpotifyBeatEngine(bar_count=4)
+        _install_fake_analysis(monkeypatch, engine)
+        if manager is not None:
+            engine.set_thread_manager(manager)
+        engine._is_spotify_playing = True
+        frame = SimpleNamespace(samples=[0.0] * 64, capture_ts=time.time(),
+                                activation_id=engine._activation_id)
+        monkeypatch.setattr(engine._audio_buffer, "consume_latest", lambda: frame)
+        engine.tick()
+        return engine
+
+    pooled, inline = run(_ImmediateManager()), run(None)
+    assert inline._thread_manager is None and pooled._thread_manager is not None
+    assert inline._latest_bars == pooled._latest_bars == [0.1, 0.2, 0.3, 0.4]
+    assert inline._smoothed_bars == pooled._smoothed_bars
+    assert inline.get_energy_bands() == pooled.get_energy_bands()
+    assert inline.get_energy_bands().overall > 0.0
+    assert inline.get_authoritative_frame_commit_seq() == pooled.get_authoritative_frame_commit_seq() == 1
