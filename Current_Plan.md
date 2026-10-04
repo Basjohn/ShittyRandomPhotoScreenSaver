@@ -163,7 +163,8 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 
 - [x] **Everything ramps (operator 2026-10-03/04)**, measured on recorded music: every Sphere reaction (how often and
   how strongly fragments, particles and tracer fire, tracer light/speed, spin, body growth) ramps on the shared passage
-  intensity (`transient_bus.PassageIntensity`, fast up / gentle down, relative to the track's recent loud level);
+  intensity (`transient_bus.PassageIntensity`: the heard passage against the track's usual level, 0.65 usual;
+  2026-10-04 redesign after the operator's log showed overreaction after resets and near-silence once settled);
   floors gate on it. Before/after numbers and contract: `Docs/Reference/Sphere_Visualizer.md` "Everything ramps";
   measure with `python -m tools.visualizer_replay.sphere_ramp`. Physical check: the four songs live.
 - [x] **Golden step 1a: real-scale replay.** `FeatureFrame` schema 1 validated every lane into `0..1` and could not
@@ -278,6 +279,12 @@ Implement vertical features in this order unless evidence from a preceding slice
   the presentation edge, never by retuning Bubble (Bubble Temporal Fidelity): candidates are pacing visualizer
   presentation to its own publications during transitions, or visual-only interpolation between published frames.
   Evidence: `tools/frame_trace_report.py <trace> --timeline-seconds 5`, `repeat_draws` per window.
+- [ ] **Tests and replays must not read presets or canonical defaults as expected values (operator
+  2026-10-04: "really checking default settings or presets is not how any tests should ever function because I
+  change those often").** After the Bubble cadence fix and once Sphere is accepted: inventory every test, golden and
+  replay that resolves a curated preset or pins a canonical default (the replay driver's `preset=`, floors goldens
+  built from preset 0, default-value asserts) and give each its own frozen inputs, as the Sphere promotion golden
+  now does.
 - [ ] **Two stale tests red on HEAD (found 2026-10-04, not from S19):** `tests/test_godzip_foundry_core.py::
   test_run_tab_is_last_and_remains_repo_local` pins the button label `LOCAL vs GIT HEAD` (UI wording; the tool
   changed), and `tests/test_media_io_starvation.py::test_media_transport_command_starts_while_network_stalls_the_io_pool`

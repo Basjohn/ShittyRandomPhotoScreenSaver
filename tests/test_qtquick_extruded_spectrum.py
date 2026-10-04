@@ -14,6 +14,8 @@ import subprocess
 import sys
 
 import numpy as np
+
+from rendering.quick.scene3d.environment import BackdropEnvironment
 import pytest
 from OpenGL import GL as gl
 
@@ -109,10 +111,15 @@ class _Target:
         self.capture.close()
 
 
-def _snapshot(mode: str = "extruded_spectrum", **parameters):
+def _snapshot(mode: str = "extruded_spectrum", at: float | None = None, **parameters):
+    """The preview snapshot with ``parameters``; ``at`` seconds after its logical time when given."""
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
     snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode)
+    if at is not None:
+        logical = dataclasses.replace(snapshot.logical,
+                                      logical_timestamp=snapshot.logical.logical_timestamp + float(at))
+        snapshot = dataclasses.replace(snapshot, logical=logical)
     if parameters:
         state = snapshot.logical.mode_state
         state = dataclasses.replace(state, parameters={**dict(state.parameters), **parameters})
@@ -226,12 +233,17 @@ def test_mirror_faces_reflect_the_displayed_wallpaper_on_the_faces_only(target):
     capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0))      # no wallpaper yet
     assert not renderer._backdrop.has_resources
     colours = {}
-    for name, rgb in (("orange", (255, 128, 0)), ("blue", (0, 64, 255))):
+    for step, (name, rgb) in enumerate((("orange", (255, 128, 0)), ("blue", (0, 64, 255)))):
         wallpaper = _wallpaper(name, rgb)
-        empty = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=1.0, backdrop=wallpaper),
+        start = 10.0 * step
+        capture.render(host, _snapshot(at=start, **organ, extruded_spectrum_face_mirror=1.0, backdrop=wallpaper))
+        settled = start + BackdropEnvironment.BLEND_S + 0.5             # past its crossfade
+        empty = capture.render(host, _snapshot(at=settled, **organ, extruded_spectrum_face_mirror=1.0,
+                                               backdrop=wallpaper),
                                backdrop=(0.1, 0.1, 0.1, 1.0))      # what lies beneath is not reflected
         assert renderer._backdrop.has_resources
-        plain = capture.render(host, _snapshot(**organ, extruded_spectrum_face_mirror=0.0, backdrop=wallpaper),
+        plain = capture.render(host, _snapshot(at=settled, **organ, extruded_spectrum_face_mirror=0.0,
+                                               backdrop=wallpaper),
                                backdrop=(0.1, 0.1, 0.1, 1.0))
         changed = np.abs(empty - plain)[..., :3].max(axis=2) > 2
         assert changed.any() and not changed[~drawn].any()        # only on the bars
@@ -241,22 +253,33 @@ def test_mirror_faces_reflect_the_displayed_wallpaper_on_the_faces_only(target):
     assert not renderer._backdrop.has_resources                  # off again: nothing held
 
 
-def test_the_wallpaper_is_uploaded_once_per_photograph(target):
+def test_the_wallpaper_uploads_once_per_photograph_and_the_reflection_crossfades(target):
     """The reflected wallpaper uploads when the displayed photograph changes, never per frame,
-    and nothing reads back the target being drawn."""
+    and nothing reads back the target being drawn. The reflection never switches in one frame
+    (operator 2026-10-04): the first wallpaper fades in, a new one crossfades from the old one."""
     capture, host = target
     first, second = _wallpaper("first", (255, 128, 0)), _wallpaper("second", (0, 64, 255))
     mirrored = dict(extruded_spectrum_colouring="Spectral Edges", extruded_spectrum_face_mirror=1.0,
                     extruded_spectrum_gloss=0.9)
-    faces = capture.render(host, _snapshot(**mirrored, backdrop=first))[..., 3] == 255
+    blend = BackdropEnvironment.BLEND_S
+    plain = capture.render(host, _snapshot(at=0.0, **dict(mirrored, extruded_spectrum_face_mirror=0.0)))
+    faces = plain[..., 3] == 255
+    entering = capture.render(host, _snapshot(at=0.0, **mirrored, backdrop=first))
+    assert np.abs(entering - plain)[faces].max() <= 2               # fading in: nothing yet
     backdrop = host._implementations["extruded_spectrum"]._backdrop
-    for _ in range(10):
-        capture.render(host, _snapshot(**mirrored, backdrop=first))
+    for step in range(10):
+        capture.render(host, _snapshot(at=blend + 0.5 + step / 90, **mirrored, backdrop=first))
     assert backdrop.uploads == 1
-    frames = [capture.render(host, _snapshot(**mirrored, backdrop=second)) for _ in range(10)]
+    settled = capture.render(host, _snapshot(at=blend + 1.0, **mirrored, backdrop=first))[faces][:, :3].mean(axis=0)
+    change = blend + 2.0
+    frames = [capture.render(host, _snapshot(at=change + t, **mirrored, backdrop=second)).astype(np.int16)
+              for t in (0.0, 1.0 / 90, 0.5 * blend, blend + 0.5)]
     assert backdrop.uploads == 2
-    late = frames[0][faces][:, :3].mean(axis=0)
-    assert late[2] > late[0] + 40                                 # the new (blue) one at once
+    means = [frame[faces][:, :3].mean(axis=0) for frame in frames]
+    assert np.abs(means[0] - settled).max() < 3                     # the first frame is still the old one
+    assert np.abs(frames[1] - frames[0])[faces].max() <= 6          # no frame jumps
+    assert means[0][0] > means[2][0] > means[3][0] and means[0][2] < means[2][2] < means[3][2]
+    assert means[3][2] > means[3][0] + 40                           # blue once the crossfade settles
 
 
 def test_the_owner_keeps_a_wallpaper_only_while_its_mode_reflects():

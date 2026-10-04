@@ -225,6 +225,8 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
     "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
     "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
+    "uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend\n"
+    "uniform float uBackdropBlend;\n"
     + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL
     + """
 void main() {
@@ -268,7 +270,9 @@ void main() {
         vec3 r = reflect(-v, n);
         vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + vec2(r.x, r.y) * 0.35;
         uv = 1.0 - abs(1.0 - mod(uv, 2.0));
-        vec3 seen = textureLod(uBackdrop, uv, mix(3.0, 0.4, uGloss)).rgb;
+        float lod = mix(3.0, 0.4, uGloss);
+        vec3 seen = mix(textureLod(uBackdropPrevious, uv, lod).rgb, textureLod(uBackdrop, uv, lod).rgb,
+                        uBackdropBlend);
         vec2 grainAt = floor(vec2(vLocal.x * vSize.x + vLocal.z * vSize.z, vLocal.y * vSize.y * 0.02) * 0.7);
         float grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))) * 43758.5453);
         vec3 tint = mix(vec3(1.0), body * 1.35, 0.25);
