@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
+
 from widgets.spotify_visualizer.feature_frame import (
     REAL_SCALE_SCHEMA_VERSION,
     BandEnergy,
@@ -66,7 +68,7 @@ def test_real_scale_lanes_are_not_capped_at_one_and_schema_1_serialises_unchange
 def _sphere(clip):
     from tools.visualizer_replay.driver import replay_clip
 
-    return replay_clip(clip, "sphere")
+    return replay_clip(clip, "sphere", settings=frozen_visualizer_settings)
 
 
 def _peak_fragment(result, start, stop):
@@ -138,7 +140,8 @@ def test_recorded_musical_onsets_drive_shockwave_through_the_production_accessor
         onset = RecordedOnset("kick", 1.0, 2.5, 9.0 if loud else 0.05, 1.4 if loud else 0.01) \
             if index % 30 == 29 else None
         frames.append(with_onset(frame, onset))
-    result = replay_clip(FeatureClip(name="shockwave_onsets", frames=tuple(frames)), "shockwave_grid")
+    result = replay_clip(FeatureClip(name="shockwave_onsets", frames=tuple(frames)), "shockwave_grid",
+                         settings=frozen_visualizer_settings)
     strengths = [event[3] for logical in result["logical_series"] for event in logical.mode_state.events]
     quiet = [e for logical in result["logical_series"][:90] for e in logical.mode_state.events]
     assert not quiet and strengths and max(strengths) > 0.5

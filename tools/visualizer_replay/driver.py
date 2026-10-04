@@ -112,16 +112,24 @@ def deterministic_clock():
         random.setstate(saved_random)
 
 
-def _configure(controller, mode, preset: int = 0, overrides=None):
-    activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
+def _configure(controller, mode, preset: int = 0, overrides=None, settings=None):
+    """``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
+    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
+    activation = None
+    if settings is None:
+        activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
+        resolved = activation.resolved_config
+    else:
+        resolved = settings(mode) if callable(settings) else settings
     model = SpotifyVisualizerSettings.from_mapping(
-        activation.resolved_config, apply_preset_overlay=False, resolve_preset_indices=False,
+        resolved, apply_preset_overlay=False, resolve_preset_indices=False,
     )
     if overrides:
         model = replace(model, **dict(overrides))
     controller.set_mode(mode)
     controller.settings_model = model
-    controller.record_resolved_activation(activation)
+    if activation is not None:
+        controller.record_resolved_activation(activation)
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=controller.bar_count)
     install_default_presentation_state(controller.presentation_state)
@@ -144,9 +152,9 @@ def _configure(controller, mode, preset: int = 0, overrides=None):
 
 
 def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0, overrides=None,
-                snapshots_at=()):
-    """Replay ``clip`` through ``mode`` (curated ``preset``, with optional Settings-model
-    ``overrides``). ``snapshots_at``: frame indices whose published Quick snapshot is returned
+                snapshots_at=(), settings=None):
+    """Replay ``clip`` through ``mode`` (curated ``preset``, or ``settings``: frozen complete settings, a mapping
+    or ``mode -> mapping``; with optional Settings-model ``overrides``). ``snapshots_at``: frame indices whose published Quick snapshot is returned
     (``result["snapshots"]``, index -> snapshot) for renderer captures."""
     if mode not in (*MODES, *REAL_SCALE_MODES, "control") or present_every < 1:
         raise ValueError("invalid replay mode or presentation interval")
@@ -163,7 +171,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
             engine_factory=lambda _count: engine,
         )
         controller.engine = engine
-        _configure(controller, controller.mode_id, preset, overrides)
+        _configure(controller, controller.mode_id, preset, overrides, settings)
         snapshots = {}
         wanted = frozenset(snapshots_at)
         sync = QuickVisualizerPresentationSync(
@@ -182,7 +190,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
             for index, feature in enumerate(clip.frames):
                 clock[0] = feature.timestamp_us / 1_000_000.0
                 if mode == "control" and feature.mode != controller.mode_id:
-                    _configure(controller, feature.mode)
+                    _configure(controller, feature.mode, settings=settings)
                 controller.playing = feature.playing
                 engine.set_playback_state(feature.playing)
                 if not engine.accept_feature_frame(feature):

@@ -100,7 +100,10 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     `profile_lender_presets` tests the lending machinery across whatever presets exist (derived, keep);
     `settings_plumbing` uses Custom (no curated read); `request_admission` only imports; `custom_layout_owner` uses
     preset 0 as a realistic model for geometry checks (outcome independent of values; swap if it ever breaks).
-  - [ ] Replay `driver.py` `preset=` callers in tests and the floors goldens built from preset 0.
+  - [x] Replay: `replay_clip(..., settings=)` (a mapping or `mode -> mapping`) replaces the curated preset; every
+    replay test and the floors writer (`python -m tools.visualizer_replay`, `load_frozen`) run on the frozen copies;
+    84 replay tests and 66 floor cases pass without re-recording. Tuning tools (`mode_audit`, `sphere_ramp`) keep
+    reading the live presets on purpose.
   - [ ] Preset-file readers that are not catalogue/manifest machinery tests. (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
