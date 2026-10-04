@@ -663,6 +663,10 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
         host._scene3d_detail = scene3d_detail(kwargs['scene3d_detail']).name   # resolved upstream
 
+    # --- Voxel Sphere presentation (renderer-only; the logical runtime never reads it) ---
+    if 'sphere_mirror' in kwargs:
+        host._sphere_mirror = _sphere_bounded(kwargs['sphere_mirror'], 0.0, 1.0, 'sphere_mirror')
+
     # --- Shockwave Grid presentation ----------------------------------
     for key, (low, high) in _SHOCKWAVE_GRID_KEYS.items():
         if key in kwargs:

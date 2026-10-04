@@ -17,6 +17,7 @@ from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
 from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick import gl_query
+from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
@@ -92,6 +93,15 @@ def sphere_reach(presentation, parameters) -> tuple[float, float, float, float]:
         max_extent = max(max_extent, silhouette_extent + offset_extent)
     extent = radius * max_extent
     return cx - extent, cy - extent, cx + extent, cy + extent
+
+
+def sphere_mirror(parameters) -> float:
+    """Mirror Cubes as drawn: off where the tier has no reflections or no wallpaper is there."""
+    if not scene3d_detail(parameter(parameters, "scene3d_detail")).reflections:
+        return 0.0
+    if parameter(parameters, "backdrop") is None:
+        return 0.0
+    return max(0.0, min(1.0, float(parameter(parameters, "sphere_mirror"))))
 
 
 def sphere_samples(parameters) -> int:
@@ -480,6 +490,9 @@ uniform int uCelShading;
 uniform int uRainbowSurfaces;
 uniform int uRainbowEdges;
 uniform float uRainbowPhase;
+uniform float uMirror;          // polished mirror faces reflecting the wallpaper (never the edges)
+uniform sampler2D uBackdrop;    // the displayed wallpaper, a small mipmapped copy
+uniform vec4 uBackdropMap;      // (gl_FragCoord.xy + xy) / zw is the backdrop's uv
 
 vec3 rainbowRgb(float hue) {
     vec3 p = abs(fract(hue + vec3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0);
@@ -598,6 +611,30 @@ void main() {
     color = color / (vec3(1.0) + color * 0.18);
     color = pow(color, vec3(1.0 / 2.2));
 
+    // Mirror Cubes: polished faces reflecting the wallpaper around the Visualizer, in display
+    // space so the photograph reads as itself. The backdrop where this pixel sits, displaced by
+    // the reflected ray toward a near virtual eye (the real camera is far, so a flat face would
+    // mirror one patch), mirrored past the picture's edges; a mirror is polished, so it is as
+    // sharp as the greater of Gloss and Mirror Cubes. Every cube face turns with the shell, so
+    // differently facing faces show different parts of the picture and it slides across them as
+    // the shell spins. Lightly tinted by the fill, its highlights kept on top, stronger at grazing
+    // angles; edge lines and the tracer stay as they are.
+    float faceMirror = 0.0;
+    if (uMirror > 0.0) {
+        vec3 eyeToward = normalize(vec3(0.0, 0.0, 2.4) - vScreenCenter);
+        vec3 reflected = reflect(-eyeToward, worldNormal);
+        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.5;
+        uv = 1.0 - abs(1.0 - mod(uv, 2.0));
+        float polish = max(gloss, clamp(uMirror, 0.0, 1.0));
+        vec3 seen = textureLod(uBackdrop, uv, mix(3.0, 0.3, polish)).rgb;
+        vec3 tint = mix(vec3(1.0), base * 1.35, 0.25);
+        vec3 highlight = vec3(1.0, 0.985, 0.95) * (glossSheen + specEnergy + edgeSheen);
+        vec3 mirrored = seen * tint + color * 0.1 + pow(highlight, vec3(1.0 / 2.2)) * 0.8;
+        float fresnel = 0.8 + 0.2 * pow(1.0 - max(dot(worldNormal, eyeToward), 0.0), 5.0);
+        faceMirror = clamp(uMirror * fresnel * (1.0 - edgeDefinition) * (1.0 - tracerMix / 0.76), 0.0, 1.0);
+        color = mix(color, mirrored, faceMirror);
+    }
+
     // Fill and edge alpha are independent authored channels. Fully opaque
     // edges remain opaque around a translucent fill interior.
     // Alpha separation needs a decisive edge mask, not the same soft coverage
@@ -605,6 +642,8 @@ void main() {
     // opaque even when the authored fill is very translucent.
     float alphaEdge = smoothstep(0.22, 0.58, edgeDefinition);
     float authoredAlpha = mix(uFillColor.a, uEdgeColor.a, alphaEdge);
+    // A mirrored face is mostly surface: it hides more of what lies behind it.
+    authoredAlpha = mix(authoredAlpha, 1.0, 0.5 * faceMirror);
     fragColor = vec4(
         color,
         clamp(uFade * vArrivalFade * authoredAlpha, 0.0, 1.0)
@@ -646,6 +685,7 @@ _HERO_UNIFORMS = _TRANSFORM_UNIFORMS + (
     "uFillColor", "uEdgeColor", "uTracerColor", "uEdgeWeight",
     "uDepthShading", "uFade", "uCelShading",
     "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
+    "uMirror", "uBackdrop", "uBackdropMap",
 )
 _SHADOW_UNIFORMS = _TRANSFORM_UNIFORMS + ("uShadowColor", "uFade", "uLayerAlpha")
 # (key, vertex, fragment): what a first frame compiles, for the prepared reveal.
@@ -663,6 +703,7 @@ class QuickSphereVoxelRenderer:
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Sphere voxel")
         self._target = SceneTarget("Quick Sphere voxel")
+        self._backdrop = BackdropEnvironment("Quick Sphere voxel")
         self._program = 0
         self._shadow_program = 0
         self._shadow_uniforms: dict[str, int] = {}
@@ -676,7 +717,7 @@ class QuickSphereVoxelRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources
+        return self._resources.has_resources or self._target.has_resources or self._backdrop.has_resources
 
     def _target_frame(self, frame: QuickVisualizerRenderFrame, parameters):
         """The frame the scene target covers: the item, or with overflow everything Sphere can
@@ -698,7 +739,11 @@ class QuickSphereVoxelRenderer:
         if not r.has_mesh("voxels"):
             self._initialize()
             return False
-        return self._target.warm(item_pixel_rect(self._target_frame(frame, parameters))[2:], samples, overlay=True)
+        if not self._target.warm(item_pixel_rect(self._target_frame(frame, parameters))[2:], samples, overlay=True):
+            return False
+        if sphere_mirror(parameters) > 0.0:
+            return self._backdrop.warm(parameter(parameters, "backdrop"))
+        return True
 
     @staticmethod
     def _upload_particle_cohorts(uniforms: dict[str, int], cohorts) -> None:
@@ -841,6 +886,12 @@ class QuickSphereVoxelRenderer:
         # The host fences blending, culling and depth enables, the depth mask, program, VAO and
         # viewport; the scene target hands back framebuffers, viewport and scissor. Sphere also
         # sets the winding, culled face and depth test, so it hands those back itself.
+        mirror = sphere_mirror(parameters)
+        backdrop = 0
+        if mirror > 0.0:
+            backdrop = self._backdrop.texture(parameter(parameters, "backdrop"))   # the displayed wallpaper
+        elif self._backdrop.has_resources:
+            self._backdrop.release()                                # Mirror Cubes off: hold nothing
         front_face = gl_query.get_int(gl.GL_FRONT_FACE)
         cull_face = gl_query.get_int(gl.GL_CULL_FACE_MODE)
         depth_function = gl_query.get_int(gl.GL_DEPTH_FUNC)
@@ -904,6 +955,15 @@ class QuickSphereVoxelRenderer:
                     1.0,
                 )
                 gl.glUniform1f(u["uRainbowPhase"], rainbow_phase)
+                gl.glUniform1f(u["uMirror"], mirror)
+                if backdrop:
+                    origin = item_pixel_rect(target_frame)
+                    vx, vy, vw, vh = frame.viewport
+                    gl.glUniform4f(u["uBackdropMap"], origin[0] - vx, origin[1] - vy, vw, vh)
+                    gl.glActiveTexture(gl.GL_TEXTURE1)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, backdrop)
+                    gl.glUniform1i(u["uBackdrop"], 1)
+                    gl.glActiveTexture(gl.GL_TEXTURE0)
 
                 gl.glEnable(gl.GL_CULL_FACE)
                 gl.glCullFace(gl.GL_BACK)
@@ -1077,7 +1137,7 @@ class QuickSphereVoxelRenderer:
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._resources.release_resources):
+        for release in (self._target.release, self._backdrop.release, self._resources.release_resources):
             try:
                 release()
             except Exception as exc:
@@ -1100,6 +1160,7 @@ __all__ = [
     "QuickSphereVoxelRenderer",
     "SPHERE_RADIUS_FRACTION",
     "create_visualizer_renderer",
+    "sphere_mirror",
     "sphere_pixel_geometry",
     "sphere_reach",
     "sphere_samples",

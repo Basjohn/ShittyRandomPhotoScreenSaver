@@ -274,6 +274,11 @@ def build_sphere_ui(tab, parent_layout) -> None:
     tab.sphere_specular.setToolTip(
         "Controls per-face reflected sheen strength. Zero is matte; high values increase face shine without a shell-space glow lobe."
     )
+    slider(appearance, "sphere_mirror", "sphere_mirror", "Mirror Cubes:", 100, "")
+    tab.sphere_mirror.setToolTip(
+        "Gives the cubes' faces (not their edges) a polished mirror surface reflecting the wallpaper, "
+        "sharper with Gloss; zero leaves them plain. Needs a 3D Detail tier with reflections."
+    )
 
     # Finish is a UI bundle only. Any manual finish-axis edit immediately marks
     # the bundle Custom so the label never becomes a second hidden authority.

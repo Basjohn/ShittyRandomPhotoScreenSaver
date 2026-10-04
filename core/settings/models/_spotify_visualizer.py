@@ -608,6 +608,7 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_rotation_speed': float,
     'sphere_gloss': float,
     'sphere_specular': float,
+    'sphere_mirror': float,
     'sphere_light_direction': str,
     'sphere_vocal_response': float,
     'sphere_size_response': float,
@@ -1405,6 +1406,7 @@ class SpotifyVisualizerSettings:
     sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
     sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
     sphere_specular: float = field(default_factory=lambda: _visualizer_default('sphere_specular'))
+    sphere_mirror: float = field(default_factory=lambda: _visualizer_default('sphere_mirror'))
     sphere_light_direction: str = field(default_factory=lambda: _visualizer_default('sphere_light_direction'))
     sphere_vocal_response: float = field(default_factory=lambda: _visualizer_default('sphere_vocal_response'))
     sphere_size_response: float = field(default_factory=lambda: _visualizer_default('sphere_size_response'))
@@ -1557,7 +1559,7 @@ class SpotifyVisualizerSettings:
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_fragment_energy_floor", 0.0, 1.0), ("sphere_particle_energy_floor", 0.0, 1.0), ("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
+        for attr, low, high in (("sphere_fragment_energy_floor", 0.0, 1.0), ("sphere_particle_energy_floor", 0.0, 1.0), ("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_mirror", 0.0, 1.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
             _clamp_attr_range(self, attr, low, high)
 
     @property

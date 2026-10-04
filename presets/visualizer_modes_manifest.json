@@ -35,6 +35,7 @@
     "sphere/preset_1_glass_current.json",
     "sphere/preset_2_voxel_bloom.json",
     "sphere/preset_3_rainbow_intake.json",
-    "sphere/preset_4_rainbow_exhaust.json"
+    "sphere/preset_4_rainbow_exhaust.json",
+    "sphere/preset_5_mirror_ball.json"
   ]
 }
