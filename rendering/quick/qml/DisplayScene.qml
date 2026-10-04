@@ -44,12 +44,60 @@ Item {
     // native animation-driver tick; this per-display gate requests the custom
     // render item only when this display's own refresh interval is due.
     // No Python timer/callback and no frameSwapped feedback loop participates.
+    //
+    // The transition samples wall time on every frame this window renders, so
+    // a Visualizer presenting on this display carries it: while Visualizer
+    // frames keep arriving, the transition requests none of its own. Its own
+    // ticks (a ~115 Hz system timer, unaligned with the Visualizer's 90 Hz)
+    // used to add ~120 frames a second that redrew an unchanged Visualizer state
+    // and showed its motion unevenly (Bubble micro-flicker, 2026-10-03). Within
+    // transitionVisualizerFillS of the last Visualizer frame the gate waits;
+    // once Visualizer frames stop (pause, mode change) it fills in at the
+    // display's rate, so a transition never stalls on the Visualizer.
     property bool transitionFrameDriverActive: false
     property real transitionFrameTargetHz: 60.0
     property var transitionRenderItem: null
     property real transitionFrameNextDueS: 0.0
     property real transitionFrameAnimationTicks: 0
     property real transitionFrameUpdateRequests: 0
+    // Bumped by the scene controller per Visualizer frame request, only while
+    // this display's transition driver runs.
+    property real transitionVisualizerFrames: 0
+    property real transitionVisualizerFramesSeen: 0
+    property real transitionVisualizerLastS: -1.0
+    property real transitionFrameRiddenTicks: 0
+    readonly property real transitionVisualizerFillS: 0.025
+
+    // One native tick's decision, pure so it is testable: returns the gate's
+    // next state and whether this tick requests a transition frame.
+    function transitionFrameGate(gate, elapsedS, targetHz, visualizerFrames, fillS) {
+        var lastVisualizerS = gate.lastVisualizerS
+        var seen = gate.seenVisualizerFrames
+        if (visualizerFrames !== seen) {
+            seen = visualizerFrames
+            lastVisualizerS = elapsedS
+        }
+        if (lastVisualizerS >= 0.0 && elapsedS - lastVisualizerS < fillS) {
+            // A Visualizer frame carries the transition; the own deadline
+            // restarts when the Visualizer stops.
+            return { request: false, ridden: true, nextDueS: 0.0,
+                     lastVisualizerS: lastVisualizerS, seenVisualizerFrames: seen }
+        }
+        const intervalS = 1.0 / Math.max(1.0, targetHz)
+        var nextDueS = gate.nextDueS
+        if (nextDueS <= 0.0)
+            nextDueS = elapsedS
+        if (elapsedS + 0.0000005 < nextDueS)
+            return { request: false, ridden: false, nextDueS: nextDueS,
+                     lastVisualizerS: lastVisualizerS, seenVisualizerFrames: seen }
+        // Never repay missed intervals as a burst. One native animation tick
+        // may request at most one scene update; wall-time progress is sampled
+        // by TransitionRun, so skipping late opportunities is safe.
+        const behindS = Math.max(0.0, elapsedS - nextDueS)
+        const intervalsPassed = Math.floor(behindS / intervalS) + 1
+        return { request: true, ridden: false, nextDueS: nextDueS + intervalsPassed * intervalS,
+                 lastVisualizerS: lastVisualizerS, seenVisualizerFrames: seen }
+    }
 
     onTransitionFrameTargetHzChanged: {
         // A display retarget changes the cadence contract immediately. Discard
@@ -65,29 +113,29 @@ Item {
 
         onRunningChanged: {
             displayScene.transitionFrameNextDueS = 0.0
+            displayScene.transitionVisualizerLastS = -1.0
+            displayScene.transitionVisualizerFramesSeen =
+                displayScene.transitionVisualizerFrames
             if (running)
                 reset()
         }
 
         onTriggered: {
             displayScene.transitionFrameAnimationTicks += 1
-            const targetHz = Math.max(1.0, displayScene.transitionFrameTargetHz)
-            const intervalS = 1.0 / targetHz
-            var nextDueS = displayScene.transitionFrameNextDueS
-            if (nextDueS <= 0.0)
-                nextDueS = elapsedTime
-            if (elapsedTime + 0.0000005 < nextDueS) {
-                displayScene.transitionFrameNextDueS = nextDueS
+            const gate = displayScene.transitionFrameGate({
+                    nextDueS: displayScene.transitionFrameNextDueS,
+                    lastVisualizerS: displayScene.transitionVisualizerLastS,
+                    seenVisualizerFrames: displayScene.transitionVisualizerFramesSeen
+                }, elapsedTime, displayScene.transitionFrameTargetHz,
+                displayScene.transitionVisualizerFrames,
+                displayScene.transitionVisualizerFillS)
+            displayScene.transitionFrameNextDueS = gate.nextDueS
+            displayScene.transitionVisualizerLastS = gate.lastVisualizerS
+            displayScene.transitionVisualizerFramesSeen = gate.seenVisualizerFrames
+            if (gate.ridden)
+                displayScene.transitionFrameRiddenTicks += 1
+            if (!gate.request)
                 return
-            }
-
-            // Never repay missed intervals as a burst. One native animation
-            // tick may request at most one scene update; wall-time progress is
-            // sampled by TransitionRun, so skipping late opportunities is safe.
-            const behindS = Math.max(0.0, elapsedTime - nextDueS)
-            const intervalsPassed = Math.floor(behindS / intervalS) + 1
-            displayScene.transitionFrameNextDueS =
-                nextDueS + intervalsPassed * intervalS
             displayScene.transitionFrameUpdateRequests += 1
             displayScene.transitionRenderItem.update()
         }
