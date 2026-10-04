@@ -336,6 +336,7 @@ class DevCurveFrameRuntime:
                 name="devcurve_smoothness",
             ),
             layer_settings=layer_settings,
+            passage_intensity=float(musical_intensity) if source_ready else 0.0,
         )
         layer_map = frame["layers"]
         if not isinstance(layer_map, Mapping):
@@ -399,6 +400,7 @@ class DevCurveFrameRuntime:
                 "specular_travel_rate": float(
                     frame["specular_travel_rate"]
                 ),
+                "passage_drive": float(frame["passage_drive"]),
                 "energies": frame["energies"],
             }
         )

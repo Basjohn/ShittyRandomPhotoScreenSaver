@@ -8,6 +8,7 @@ import pytest
 from widgets.spotify_visualizer.devcurve_runtime import (
     DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE,
     DEVCURVE_MATERIAL_TRAVEL_VARIATION,
+    DEVCURVE_PASSAGE_USUAL,
     DevCurveRuntimeState,
     solve_devcurve_frame,
 )
@@ -30,7 +31,7 @@ def _shapes():
     return {name: [list(node) for node in nodes] for name in _LAYERS}
 
 
-def _solve(state: DevCurveRuntimeState, *, now: float, energy: float):
+def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: float = DEVCURVE_PASSAGE_USUAL):
     return solve_devcurve_frame(
         state,
         dt=0.016,
@@ -57,6 +58,7 @@ def _solve(state: DevCurveRuntimeState, *, now: float, energy: float):
         idle_speed=0.1,
         smoothness=0.55,
         layer_settings=_settings(),
+        passage_intensity=passage,
     )
 
 
@@ -95,3 +97,47 @@ def test_devcurve_material_position_integrates_smoothed_rate_without_rephasing()
     assert 0.0 <= p1 < 1.0
 
 
+def _settle(passage: float, seconds: float = 12.0):
+    state = DevCurveRuntimeState()
+    frame = None
+    for i in range(int(seconds / 0.016)):
+        frame = _solve(state, now=500.0 + i * 0.016, energy=0.6, passage=passage)
+    return state, frame
+
+
+def test_devcurve_travel_speed_and_swing_follow_the_passage():
+    """Operator 2026-10-04: DevCurve must not keep one speed and slope whatever the music does.
+    A loud passage travels faster and swings steeper than a quiet one at the same per-frame energy."""
+    _, quiet = _settle(0.0)
+    _, usual = _settle(DEVCURVE_PASSAGE_USUAL)
+    _, loud = _settle(1.0)
+    assert quiet["foreground_travel_rate"] < usual["foreground_travel_rate"] < loud["foreground_travel_rate"]
+    assert loud["foreground_travel_rate"] >= 2.0 * quiet["foreground_travel_rate"]
+    assert loud["active_amplitude"] >= 2.0 * quiet["active_amplitude"]
+
+    def phase_speed(passage):
+        state, _ = _settle(passage)
+        before = state.reactive_phase
+        _solve(state, now=10_000.0, energy=0.6, passage=passage)
+        return state.reactive_phase - before
+
+    assert phase_speed(1.0) >= 2.0 * phase_speed(0.0)
+
+
+def test_devcurve_passage_changes_ease_in_without_jumps():
+    """A passage flipping every frame never jitters travel, and a real quiet->loud change eases
+    in over seconds: no frame moves the rate or the curves by a visible jump."""
+    state, _ = _settle(0.0)
+    rates, curves = [], []
+    for i in range(400):
+        frame = _solve(state, now=900.0 + i * 0.016, energy=0.6, passage=1.0 if i % 2 else 0.0)
+        rates.append(float(frame["foreground_travel_rate"]))
+    assert max(abs(b - a) for a, b in zip(rates, rates[1:])) < 0.01 * DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE
+    state, _ = _settle(0.0)
+    for i in range(400):
+        frame = _solve(state, now=1900.0 + i * 0.016, energy=0.6, passage=1.0)
+        rates.append(float(frame["foreground_travel_rate"]))
+        curves.append(frame["layers"]["bass"])
+    steps = [abs(b - a) for a, b in zip(rates[400:], rates[401:])]
+    assert max(steps) < 0.02 * DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE
+    assert max(max(abs(b - a) for a, b in zip(c0, c1)) for c0, c1 in zip(curves, curves[1:])) < 0.02

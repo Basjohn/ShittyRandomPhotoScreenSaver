@@ -3,7 +3,11 @@ from __future__ import annotations
 import inspect
 import math
 
-from widgets.spotify_visualizer.devcurve_runtime import DevCurveRuntimeState, solve_devcurve_frame
+from widgets.spotify_visualizer.devcurve_runtime import (
+    DEVCURVE_PASSAGE_USUAL,
+    DevCurveRuntimeState,
+    solve_devcurve_frame,
+)
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 
@@ -42,6 +46,7 @@ def test_devcurve_active_amplitude_exceeds_idle_amplitude():
         idle_speed=0.6,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     active = solve_devcurve_frame(
         state,
@@ -57,6 +62,7 @@ def test_devcurve_active_amplitude_exceeds_idle_amplitude():
         idle_speed=0.6,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     assert active["active_amplitude"] > idle["active_amplitude"]
 
@@ -77,6 +83,7 @@ def test_devcurve_curves_are_finite_and_bounded():
         idle_speed=0.9,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     curves = list(frame["layers"].values())
     for curve in curves:
@@ -101,6 +108,7 @@ def test_devcurve_smoothness_guardrail_caps_local_step():
         idle_speed=0.7,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     assert frame["smoothness_max_step"] <= 0.03
 
@@ -131,6 +139,7 @@ def test_devcurve_foreground_layer_follows_enabled_order():
         idle_speed=0.6,
         smoothness=0.55,
         layer_settings=settings,
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     assert frame["draw_order"] == ["vocals", "mids", "transients", "bass"]
     assert frame["foreground_layer"] == "bass"
@@ -151,6 +160,7 @@ def test_devcurve_foreground_layer_follows_enabled_order():
         idle_speed=0.6,
         smoothness=0.55,
         layer_settings=settings,
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     assert frame2["foreground_layer"] == "transients"
     assert frame2["foreground_layer_id"] == 3
@@ -175,6 +185,7 @@ def test_devcurve_foreground_layer_disables_when_all_layers_off():
         idle_speed=0.6,
         smoothness=0.55,
         layer_settings=settings,
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     assert frame["foreground_layer"] == ""
     assert frame["foreground_layer_id"] == -1
@@ -196,6 +207,7 @@ def test_devcurve_specular_slots_are_bounded_and_present():
         idle_speed=0.7,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     slots = frame.get("specular_slots")
     assert isinstance(slots, list)
@@ -223,6 +235,7 @@ def test_devcurve_specular_slots_move_left_without_in_view_teleport():
         idle_speed=0.7,
         smoothness=0.55,
         layer_settings=_layer_defaults(),
+        passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
     frame1 = solve_devcurve_frame(state, now_ts=8.0, **kwargs)
     frame2 = solve_devcurve_frame(state, now_ts=8.016, **kwargs)
