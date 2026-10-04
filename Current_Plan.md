@@ -81,8 +81,16 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
       Visualizer GUI wake notes itself; no wake for 40 ms writes every thread's stack once per stall to
       `logs/gui_stall_stacks.log` (`sampler_late_ms` large = a GIL holder, not GUI Python), then the stall's
       length. Idle until the first wake and after 2 s without wakes. Bars: `tests/test_gui_stall_sampler.py`.
-    - [ ] **Operator run needed:** a normal `--frame-trace` session with Bubble or DevCurve (unattended a few
-      minutes), then read `logs/gui_stall_stacks.log` against the trace's gui_starved stalls and fix the owner.
+    - [x] Operator run (19:10-19:13, 2026-10-04; operator: DevCurve "much better now"): 11 stalls, sampler late
+      0-9 ms (the GUI thread itself, not a GIL holder). Startup (19:10:28-32) and teardown excluded, the owners are:
+      **feeds `replace_rows` -> `endResetModel` 272 ms** (rendering/quick/widgets/feeds.py:474, a whole-model reset
+      rebuilding delegates on the GUI thread); **`gc_policy.freeze_stable_generation` 60 ms**
+      (core/performance/gc_policy.py:168); one 80 ms stall with only `app.exec()` on the Python stack (Qt-native
+      GUI work or the GUI waiting on the render thread's sync); and at play start **`pyaudio.PyAudio()` constructed
+      on the GUI thread, 92 ms** (utils/audio_capture.py:273 via `set_playing` -> `BeatEngine.wake`).
+    - [ ] Fix feeds: update rows in place (dataChanged / insert / remove) instead of a model reset.
+    - [ ] Fix play start: construct the capture backend off the GUI thread.
+    - [ ] Check the GC freeze cadence/cost; then re-trace.
   - [ ] Attribute D1's unattributed gaps. Measured (stall lines now print the longest render-thread silence and the
     events around it): frames kept coming every 12-14 ms through those gaps but recorded no Visualizer draw, so they
     are not render stalls: the node had no snapshot or was not in those frames. This run also moved the Visualizer
