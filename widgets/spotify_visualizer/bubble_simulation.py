@@ -43,6 +43,11 @@ TRAIL_STEPS = 3  # uniform layout still reserves 3 vec3 slots per bubble
 TRAIL_SMEAR_FOLLOW_RATE = 0.65   # how quickly tails chase heads (per second) — lower = longer streaks
 TRAIL_SMEAR_FOLLOW_MAX = 0.18   # clamp per-tick lerp to keep visible lag
 TRAIL_SMEAR_DECAY_PER_SEC = 0.9  # how fast strength fades when slowing
+# What sizes the *drawn* radius (the hero size gate, the render loudness behind tiny bubbles' gain and the hero
+# boosts) rises at once and falls over this time constant. Raw, they flipped between ~0 and ~1 from one frame to
+# the next on frame-level energy noise, so a bubble caught between breathing states vibrated 1-2 px (operator
+# 2026-10-04). The simulation (pulse integration, motion) keeps the raw values; a real drop still shows within a beat.
+RENDER_SIZE_RELEASE_S = 0.10
 TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 35.0  # convert offset distance → brightness (higher = brighter sooner)
 TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
 IMPULSE_DAMPING_PER_SEC = 10.5
@@ -90,7 +95,7 @@ class BubbleState:
     exit_timer: float = 0.0     # time since exit began (safety destroy after grace)
     bounce_glide: float = 0.0   # short post-collision window where drift/stream are damped
     display_radius: float = 0.0  # display-only hero radius smoothing state
-    size_gate_energy: float = 0.0  # unsmoothed size gate used by hero render seam
+    size_gate_energy: float = 0.0  # size gate as drawn: instant open, RENDER_SIZE_RELEASE_S close (hero render seam)
     fade_in_duration: float = 0.0  # alpha-only birth fade; never a geometry/reactivity authority
 
 
@@ -289,6 +294,8 @@ class BubbleSimulation:
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
         self._sustained_loud_energy: float = 0.0  # Bubble loudness proxy; may exceed 1.0 for supra-unit hot windows
         self._render_body_energy: float = 0.0  # clean body proxy for visible hero sizing
+        self._drawn_loud_energy: float = 0.0  # the two above as the drawn radius reads them (RENDER_SIZE_RELEASE_S)
+        self._drawn_body_energy: float = 0.0
         self._hot_crest_energy: float = 0.0
         self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
         self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
@@ -337,6 +344,8 @@ class BubbleSimulation:
         self._smoothed_speed_energy = 0.0
         self._sustained_loud_energy = 0.0
         self._render_body_energy = 0.0
+        self._drawn_loud_energy = 0.0
+        self._drawn_body_energy = 0.0
         self._hot_crest_energy = 0.0
         self._bass_running_avg = 0.0
         self._midhi_running_avg = 0.0
@@ -678,6 +687,12 @@ class BubbleSimulation:
             self._sustained_loud_energy,
             pulse_bass + pulse_mid * 0.12 + pulse_high * 0.06,
         )
+        # The drawn radius reads these as they rise at once and fall over RENDER_SIZE_RELEASE_S (see there).
+        release = 1.0 - math.exp(-dt / RENDER_SIZE_RELEASE_S)
+        for name, value in (("_drawn_loud_energy", self._sustained_loud_energy),
+                            ("_drawn_body_energy", self._render_body_energy)):
+            held = getattr(self, name)
+            setattr(self, name, value if value >= held else held + (value - held) * release)
 
         # --- Small→big promotion on every beat ---
         if beat_detected:
@@ -1355,7 +1370,12 @@ class BubbleSimulation:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
             else:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
-            b.size_gate_energy = gated_energy
+            if gated_energy >= b.size_gate_energy:
+                b.size_gate_energy = gated_energy
+            else:
+                b.size_gate_energy += (gated_energy - b.size_gate_energy) * (
+                    1.0 - math.exp(-dt / RENDER_SIZE_RELEASE_S)
+                )
 
             if b.is_big:
                 big_lane_diag["big_count"] += 1.0
@@ -2066,7 +2086,7 @@ class BubbleSimulation:
 
     def _compute_big_render_boosts(self, bubble: BubbleState) -> tuple[float, float]:
         """Keep big-bubble render sizing on the sustained body contract."""
-        render_body_energy = max(0.0, self._render_body_energy)
+        render_body_energy = max(0.0, self._drawn_body_energy)
         big_hold_boost = soft_ceiling(
             max(0.0, render_body_energy - 0.84),
             knee=0.0,
@@ -2112,7 +2132,7 @@ class BubbleSimulation:
         """
         pulse = max(0.0, float(bubble.pulse_energy))
         loud_body = soft_ceiling(
-            max(0.0, self._render_body_energy - 0.78),
+            max(0.0, self._drawn_body_energy - 0.78),
             knee=0.0,
             ceiling=0.36,
             max_input=0.92,
@@ -2123,7 +2143,7 @@ class BubbleSimulation:
             return 1.0 + pulse * small_freq_pulse * gain
 
         loud_hold = soft_ceiling(
-            max(0.0, self._render_body_energy - 0.66),
+            max(0.0, self._drawn_body_energy - 0.66),
             knee=0.0,
             ceiling=1.0,
             max_input=0.92,
@@ -2150,14 +2170,14 @@ class BubbleSimulation:
         """
         clamp_factor = max(1.5, float(big_size_clamp))
         loud_headroom = soft_ceiling(
-            max(0.0, self._render_body_energy - 0.78),
+            max(0.0, self._drawn_body_energy - 0.78),
             knee=0.0,
             ceiling=0.36,
             max_input=0.34,
             curve=1.0,
         )
         supra_headroom = soft_ceiling(
-            max(0.0, self._render_body_energy - 0.92),
+            max(0.0, self._drawn_body_energy - 0.92),
             knee=0.0,
             ceiling=0.34,
             max_input=0.34,
@@ -2188,7 +2208,7 @@ class BubbleSimulation:
         # lie. Blend smoothing down instead of hard-bypassing it.
         hot_blend = _clamp01(
             max(
-                (self._sustained_loud_energy - 0.64) / 0.26,
+                (self._drawn_loud_energy - 0.64) / 0.26,
                 (bubble.pulse_energy - 0.74) / 0.22,
             )
         )

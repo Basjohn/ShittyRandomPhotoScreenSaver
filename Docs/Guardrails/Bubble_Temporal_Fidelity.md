@@ -115,6 +115,12 @@ That means:
 - visual-only smoothing-rate selection must itself vary continuously across settle/error and drop
   thresholds; a retained hero hovering near a threshold must not alternate between gentle and
   macro correction rates on adjacent frames;
+- what sizes the drawn radius must not flip frame to frame on energy noise: the hero size gate and the render
+  loudness behind tiny bubbles' gain and the hero boosts flipped ~0/~1 between adjacent frames, so a bubble caught
+  between breathing states vibrated 1-2 px (operator 2026-10-04). They rise at once and fall over
+  `RENDER_SIZE_RELEASE_S` (0.10 s); the simulation keeps the raw values, and clean-hit replay metrics (attack,
+  decay, overshoot, excursion, settling) are unchanged. Bar: `tests/test_bubble_render_judder.py`; measure with
+  `python -m tools.visualizer_replay.bubble_judder`;
 - no architecture may obtain smooth-looking motion by reducing source/logical cadence, hiding
   transients, averaging away edges, or reducing authored reactivity.
 

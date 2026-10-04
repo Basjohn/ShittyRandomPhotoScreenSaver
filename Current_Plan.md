@@ -58,7 +58,19 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     peak +20%. Peak-rate metrics (radius change/s, centroid speed) scale exactly with the rate: one-tick jumps
     divided by a shorter dt, a metric artifact.
   - [ ] A4. (only if A is revived with a rate-invariant Bubble integrator) cost and live check.
-  - [ ] **Option D (proposed after A3): presentation-time extrapolation.** Keep the logical cadence (and Bubble's
+  - [x] **Operator 2026-10-04: the Bubble "flicker" is a bubble caught between breathing states vibrating 1-2 px,
+    not cadence.** Measured (`python -m tools.visualizer_replay.bubble_judder`, bubbles tracked by position): the
+    radius, not x/y, alternates; source: the hero size gate and the render loudness (`_render_body_energy`,
+    `_sustained_loud_energy`) flipped ~0/~1 frame to frame on energy noise (the hero render pulled its pulse 38%
+    toward a gate closed for one frame). Fixed render-side: the drawn radius reads them rising at once and falling
+    over `RENDER_SIZE_RELEASE_S` 0.10 s; the simulation keeps the raw values (feeding the envelope into the pulse
+    doubled excursion: rejected). Judder on the four songs -73..-82% (265/157/56/84 -> 54/29/15/15 runs/min);
+    clean fixtures (impulse, 60/120/180 bpm, ramps, steps, silence) unchanged within 2%; noisy ones lose
+    chatter-shaped overshoot (broadband -40%, representative music -13%). Golden files untouched; Bubble suites
+    green. Bar: `tests/test_bubble_render_judder.py`. Physical check: Bubble on both displays.
+  - [ ] Remaining judder: small bubbles' pulse still integrates the raw gate flips (+/-0.03 a frame); a fix there
+    changes simulation output (measure against BTF first).
+  - [ ] **Option D (proposed after A3, now secondary: it does not address the judder above): presentation-time extrapolation.** Keep the logical cadence (and Bubble's
     simulation) at its authored 90 Hz, publish each bubble's velocity (x, y, radius) with the frame, and let the
     renderer draw each bubble at its position + velocity x (draw time - simulation time), horizon clamped to one
     logical interval. Motion becomes a function of time, even on any refresh; nothing is delayed (unlike B) and the
