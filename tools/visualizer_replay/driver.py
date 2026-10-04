@@ -67,11 +67,15 @@ def mode_output(frame):
         # The live waves' strengths, newest last (the grid's reaction; its bars are Spectrum's).
         return tuple(float(event[3]) for event in state.events)
     if frame.mode_id == "sine_wave":
-        return tuple(float(state.parameters[key]) for key in (
-            "resolved_sensitivity", "resolved_width_reaction", "wave_effect_gate",
-        ))
+        # What the lines' amplitude reads: each band's reactive energy scaled by the resolved
+        # sensitivity, and the heartbeat pulse.
+        sensitivity = float(state.parameters["resolved_sensitivity"])
+        energy = frame.common.energy
+        return (energy.bass * sensitivity, energy.mid * sensitivity, energy.high * sensitivity,
+                float(state.heartbeat_intensity))
     sensitivity = float(state.parameters["resolved_sensitivity"])
-    return tuple(value * sensitivity for value in frame.common.waveform)
+    drawn = frame.common.waveform[:frame.common.waveform_count]     # the samples the line draws
+    return tuple(value * sensitivity for value in drawn)
 
 
 def mode_metrics(series):

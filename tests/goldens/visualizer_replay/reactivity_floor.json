@@ -149,15 +149,15 @@
         "waveform_zero_crossings": 650
       },
       "reference_mode_metrics": {
-        "output_flux": 4.721607285076242,
-        "output_peak": 1.0
+        "output_flux": 0.2694484338794449,
+        "output_peak": 0.030078318826751087
       },
       "minimums": {
         "bar_peak": 0.4466744,
         "bar_flux": 38.24882585,
         "integrated_bar_energy": 0.14313145,
         "attack_slope_per_s": 22.33371915,
-        "output_flux": 2.360803642538121
+        "output_flux": 0.13472421693972245
       },
       "maximums": {}
     },
@@ -417,15 +417,15 @@
         "waveform_zero_crossings": 650
       },
       "reference_mode_metrics": {
-        "output_flux": 5.314846172410771,
-        "output_peak": 1.0
+        "output_flux": 0.33691062639673375,
+        "output_peak": 0.031588187966928666
       },
       "minimums": {
         "bar_peak": 0.4478475,
         "bar_flux": 48.40853055,
         "integrated_bar_energy": 0.17096895,
         "attack_slope_per_s": 22.39237615,
-        "output_flux": 2.6574230862053856
+        "output_flux": 0.16845531319836687
       },
       "maximums": {}
     },
@@ -685,15 +685,15 @@
         "waveform_zero_crossings": 661
       },
       "reference_mode_metrics": {
-        "output_flux": 2.819901460252072,
-        "output_peak": 1.0
+        "output_flux": 0.12951584072671038,
+        "output_peak": 0.02941881651430885
       },
       "minimums": {
         "bar_peak": 0.4453061,
         "bar_flux": 22.2968886,
         "integrated_bar_energy": 0.1113357,
         "attack_slope_per_s": 22.265304,
-        "output_flux": 1.409950730126036
+        "output_flux": 0.06475792036335519
       },
       "maximums": {}
     },
@@ -953,15 +953,15 @@
         "waveform_zero_crossings": 313
       },
       "reference_mode_metrics": {
-        "output_flux": 0.2439803203086654,
-        "output_peak": 1.0
+        "output_flux": 0.3907808903390836,
+        "output_peak": 0.08363620738341172
       },
       "minimums": {
         "bar_peak": 0.42793085,
         "bar_flux": 50.84709325,
         "integrated_bar_energy": 0.2814813,
         "attack_slope_per_s": 21.3965419,
-        "output_flux": 0.1219901601543327
+        "output_flux": 0.1953904451695418
       },
       "maximums": {}
     },
@@ -1221,15 +1221,15 @@
         "waveform_zero_crossings": 308
       },
       "reference_mode_metrics": {
-        "output_flux": 1.1816766590612775,
-        "output_peak": 0.9999999723359234
+        "output_flux": 0.20781939912784503,
+        "output_peak": 0.09763859193767702
       },
       "minimums": {
         "bar_peak": 0.43641785,
         "bar_flux": 11.65097095,
         "integrated_bar_energy": 0.13324165,
         "attack_slope_per_s": 0.4849087,
-        "output_flux": 0.5908383295306388
+        "output_flux": 0.10390969956392251
       },
       "maximums": {}
     },
@@ -1489,15 +1489,15 @@
         "waveform_zero_crossings": 326
       },
       "reference_mode_metrics": {
-        "output_flux": 1.2074429297873999,
-        "output_peak": 0.9999999870483285
+        "output_flux": 0.20243951352039266,
+        "output_peak": 0.06438412743389009
       },
       "minimums": {
         "bar_peak": 0.30901395,
         "bar_flux": 17.34006375,
         "integrated_bar_energy": 0.14625395,
         "attack_slope_per_s": 0.2177688,
-        "output_flux": 0.6037214648936999
+        "output_flux": 0.10121975676019633
       },
       "maximums": {}
     },
@@ -1757,15 +1757,15 @@
         "waveform_zero_crossings": 7
       },
       "reference_mode_metrics": {
-        "output_flux": 0.9944088368597359,
-        "output_peak": 0.5967313044285598
+        "output_flux": 0.0722443011599806,
+        "output_peak": 0.025335082656825228
       },
       "minimums": {
         "bar_peak": 0.21764095,
         "bar_flux": 8.7152574,
         "integrated_bar_energy": 0.016346,
         "attack_slope_per_s": 10.88204695,
-        "output_flux": 0.49720441842986796
+        "output_flux": 0.0361221505799903
       },
       "maximums": {}
     },
@@ -2012,8 +2012,8 @@
         "waveform_zero_crossings": 25
       },
       "reference_mode_metrics": {
-        "output_flux": 0.0001582892958895279,
-        "output_peak": 0.10001327190499709
+        "output_flux": 0.00010391465939111919,
+        "output_peak": 5.187064822118545e-05
       },
       "minimums": {},
       "maximums": {}
@@ -2311,15 +2311,15 @@
         "waveform_zero_crossings": 466
       },
       "reference_mode_metrics": {
-        "output_flux": 0.5327131021166958,
-        "output_peak": 1.0
+        "output_flux": 0.5026856314102401,
+        "output_peak": 0.06669432875304354
       },
       "minimums": {
         "bar_peak": 0.3467069,
         "bar_flux": 50.3351163,
         "integrated_bar_energy": 0.2542751,
         "attack_slope_per_s": 0.61911945,
-        "output_flux": 0.2663565510583479
+        "output_flux": 0.25134281570512007
       },
       "maximums": {}
     },
@@ -2575,7 +2575,7 @@
       },
       "reference_mode_metrics": {
         "output_flux": 0.0,
-        "output_peak": 0.1
+        "output_peak": 0.0
       },
       "minimums": {},
       "maximums": {
@@ -2834,15 +2834,15 @@
         "waveform_zero_crossings": 311
       },
       "reference_mode_metrics": {
-        "output_flux": 1.1800286242174323,
-        "output_peak": 0.9999998350182474
+        "output_flux": 0.22935826509271726,
+        "output_peak": 0.1019372092636648
       },
       "minimums": {
         "bar_peak": 0.44180425,
         "bar_flux": 11.58980025,
         "integrated_bar_energy": 0.1733935,
         "attack_slope_per_s": 0.5970328,
-        "output_flux": 0.5900143121087161
+        "output_flux": 0.11467913254635863
       },
       "maximums": {}
     },
@@ -3102,15 +3102,15 @@
         "waveform_zero_crossings": 234
       },
       "reference_mode_metrics": {
-        "output_flux": 0.16739034341228104,
-        "output_peak": 1.0
+        "output_flux": 0.1651106697725351,
+        "output_peak": 0.11124478861051297
       },
       "minimums": {
         "bar_peak": 0.4771691,
         "bar_flux": 0.17639155,
         "integrated_bar_energy": 0.14704325,
         "attack_slope_per_s": 4.77169085,
-        "output_flux": 0.08369517170614052
+        "output_flux": 0.08255533488626755
       },
       "maximums": {}
     },
@@ -3370,14 +3370,15 @@
         "waveform_zero_crossings": 232
       },
       "reference_mode_metrics": {
-        "output_flux": 0.0,
-        "output_peak": 1.0
+        "output_flux": 0.15268972977815012,
+        "output_peak": 0.10287605639155419
       },
       "minimums": {
         "bar_peak": 0.4774719,
         "bar_flux": 0.15050715,
         "integrated_bar_energy": 0.15995075,
-        "attack_slope_per_s": 23.8735947
+        "attack_slope_per_s": 23.8735947,
+        "output_flux": 0.07634486488907506
       },
       "maximums": {}
     },

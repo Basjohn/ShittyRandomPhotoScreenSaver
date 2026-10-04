@@ -8,6 +8,25 @@ from widgets.spotify_visualizer.transient_bus import (
     MusicalOnset, OnsetEvent, PassageIntensity, TransientEnergyBands, TransientEventScheduler,
 )
 
+# Production publishes the newest 256 capture samples (a loopback block is longer), so a
+# waveform consumer sees a full block, never a short one padded with zeros.
+PRODUCTION_WAVEFORM_BLOCK = 256
+
+
+def _waveform_block(samples) -> list[float]:
+    """The recorded samples (decimated to 64 by the recorder) as a full production block:
+    linear interpolation keeps the amplitude and shape; only detail above the recorded rate is lost."""
+    values = [float(v) for v in samples] or [0.0]
+    last = len(values) - 1
+    out = []
+    for index in range(PRODUCTION_WAVEFORM_BLOCK):
+        position = index * last / (PRODUCTION_WAVEFORM_BLOCK - 1)
+        lower = int(position)
+        upper = min(last, lower + 1)
+        out.append(values[lower] + (values[upper] - values[lower]) * (position - lower))
+    return out
+
+
 def _bands(source: Any) -> EnergyBands:
     return EnergyBands(
         bass=float(source.bass),
@@ -73,7 +92,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             for event in frame.real.events:
                 self._replay_scheduler.feed(OnsetEvent(
                     timestamp=frame.timestamp_us / 1_000_000.0, event_type=event.kind, strength=event.strength))
-        waveform = list(frame.waveform)
+        waveform = _waveform_block(frame.waveform)
         raw_bars = list(frame.raw_bars)
         if len(raw_bars) != self._bar_count:
             source_last = len(raw_bars) - 1
@@ -105,7 +124,12 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             activation_id=self.get_activation_id(),
             waveform=waveform,
             waveform_count=len(waveform),
-            energy_override=_bands(lanes.continuous),
+            # Production derives the continuous lane from the smoothed bars, so a real recording
+            # replays it from its raw bars through the replayed mode's own smoothing (more faithful
+            # than the recorder's Sphere-configured lane, and the only source for takes recorded
+            # while the recorder's engine published raw bars alone). Synthetic schema 1 fixtures
+            # author the lane directly.
+            energy_override=None if frame.real is not None else _bands(lanes.continuous),
         )
 
     def get_pre_agc_energy_bands(self) -> EnergyBands:
