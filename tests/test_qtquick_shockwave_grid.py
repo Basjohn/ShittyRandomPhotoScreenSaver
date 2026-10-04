@@ -32,6 +32,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_strength,
 )
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 pytestmark = pytest.mark.qt
 
@@ -167,7 +168,7 @@ def test_the_capture_turns_transient_onsets_into_aged_events():
     QGuiApplication.instance() or QGuiApplication(sys.argv)
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
-    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode="shockwave_grid")
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode="shockwave_grid", settings=frozen_visualizer_settings("shockwave_grid"))
     events = snapshot.logical.mode_state.events
     assert events and all(age > 0.0 for age, *_ in events)
     assert snapshot.logical.mode_state.mode_id == "shockwave_grid"
@@ -189,7 +190,7 @@ def target(qt_app):
 def _snapshot(events=None, **parameters):
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
-    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode="shockwave_grid")
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode="shockwave_grid", settings=frozen_visualizer_settings("shockwave_grid"))
     state = snapshot.logical.mode_state
     changes = {"parameters": {**dict(state.parameters), **parameters}}
     if events is not None:

@@ -1067,7 +1067,7 @@ def _build_widget_previews(output: Path, scratch: Path, *,
     return rows
 
 
-def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "spectrum"):
+def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "spectrum", settings=None):
     """Build one deterministic snapshot of a Spectrum-runtime mode (Spectrum, or a mode that
     borrows its frame runtime) through the production capture seam."""
 
@@ -1116,12 +1116,16 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     # Use the same preset/default normalization and typed model consumed by the
     # display owner.  A foundry image must not become a second table of Spectrum
     # colours, topology, bar count, or renderer parameters.
-    activation = resolve_visualizer_activation_payload(
-        {"mode": mode, f"preset_{mode}": 0},
-        mode=mode,
-    )
+    # ``settings``: a complete resolved settings mapping that replaces the curated preset (tests pass frozen
+    # copies, tests/_visualizer_frozen_settings.py, so authored presets never decide a test).
+    if settings is None:
+        activation = resolve_visualizer_activation_payload(
+            {"mode": mode, f"preset_{mode}": 0},
+            mode=mode,
+        )
+        settings = activation.resolved_config
     model = SpotifyVisualizerSettings.from_mapping(
-        activation.resolved_config,
+        settings,
         apply_preset_overlay=False,
     )
     resolved = asdict(model)

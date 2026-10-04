@@ -22,6 +22,7 @@ from core.settings.scene3d_quality import (
 )
 from core.settings.settings_manager import SettingsManager
 from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 DISCRETE = ("NVIDIA Corporation", "NVIDIA GeForce RTX 4090/PCIe/SSE2")
 
@@ -216,7 +217,7 @@ def _snapshot(mode, **parameters):
     from tests.test_qtquick_extruded_spectrum import H, W
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
-    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode)
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode, settings=frozen_visualizer_settings(mode))
     state = snapshot.logical.mode_state
     state = dataclasses.replace(state, parameters={**dict(state.parameters), **parameters})
     return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
