@@ -26,6 +26,17 @@ _ONSET_TYPE = {"kick": "bass", "snare": "mid", "vocal_swell": "high"}
 _TYPED_EVENT_AGE_S = 0.25
 
 
+def recorded_clips():
+    """The current recordings, oldest name first: archived takes (``*_noevents``, ``*_v1``, ...) are
+    kept on disk for reference but skipped."""
+    import re
+
+    from widgets.spotify_visualizer.feature_frame import load_jsonl
+
+    return [load_jsonl(path) for path in sorted(OUTPUT.glob("*.jsonl"))
+            if not re.search(r"_(noevents|v\d+)$", path.stem)]
+
+
 def _unit(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 

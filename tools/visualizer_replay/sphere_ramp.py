@@ -1,6 +1,6 @@
 """Sphere reaction ramp on recorded music: python -m tools.visualizer_replay.sphere_ramp [--preset N]
 
-Replays every schema 2 clip in ``logs/visualizer_recordings`` (``*_noevents`` excluded) through
+Replays every schema 2 clip in ``logs/visualizer_recordings`` (archived takes excluded) through
 Voxel Sphere's production capture and reports, per band of passage intensity (where the music sits
 in the track's own dynamic range, ``PassageIntensity``: <0.35 quiet, 0.35-0.75 usual, >0.75 loud),
 how often and how strongly each reaction fires: fragment bursts (the fragmentation starting to
@@ -10,12 +10,10 @@ rate and size.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import statistics
 
 from .driver import replay_clip
 
-RECORDINGS = Path(__file__).resolve().parents[2] / "logs" / "visualizer_recordings"
 BANDS = (("quiet <0.35", 0.0, 0.35), ("usual .35-.75", 0.35, 0.75), ("loud >0.75", 0.75, 9.0))
 FRAME_S = 0.011111
 
@@ -72,10 +70,10 @@ def main() -> None:
     args = parser.parse_args()
     from PySide6.QtCore import QCoreApplication
 
-    from widgets.spotify_visualizer.feature_frame import load_jsonl
-
     QCoreApplication.instance() or QCoreApplication([])
-    clips = [load_jsonl(path) for path in sorted(RECORDINGS.glob("*.jsonl")) if not path.stem.endswith("_noevents")]
+    from .record import recorded_clips
+
+    clips = recorded_clips()
     for preset in args.preset:
         print(f"== Sphere preset {preset}")
         for clip in clips:
