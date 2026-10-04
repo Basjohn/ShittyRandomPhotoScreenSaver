@@ -21,13 +21,14 @@ replay); the transition overlap alone (the transition ride, 05c4057e, removed ~1
 but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temporal_Fidelity.md`), R-62 and R-87
 (+ its 2026-10-04 follow-up) first; never retune Bubble or DevCurve to hide it.
 - [ ] N1a. Attribute the steady-state repeats: seconds with no transition still draw the same Visualizer revision
-  12-97 times (165 Hz D0). Per window frame, classify fresh vs repeat Visualizer draw and name what requested the
-  frame (other QML animations, widget updates such as clock/media/weather, cursor, the other display). If the trace
-  cannot name the requester, add one opt-in `--frame-trace` event at the request edge (zero cost without the flag).
-  Tool: `python tools/frame_trace_cadence.py <trace> [--seconds]`. Strongest lead (16:14 trace, Visualizer on the
-  60 Hz D1 for 309 s, no transition on either display): **94 draws/s of which 35 are repeats, so only ~59 of 90
-  states/s reach the screen** and those land unevenly; during transitions on D1 the same ~45 repeats/s. Find why a
-  60 Hz window renders ~94 frames/s with swap interval 0, and which states are dropped.
+  again. Per window frame, classify fresh vs repeat Visualizer draw and name what requested the frame (other QML
+  animations, widget updates such as clock/media/weather, cursor, the other display). If the trace cannot name the
+  requester, add one opt-in `--frame-trace` event at the request edge (zero cost without the flag).
+  - [x] Tool: `python tools/frame_trace_cadence.py <trace> [--seconds]` (revisions keyed by generation, as
+    `frame_trace_report.py` does; an earlier draft without the generation key over-counted repeats ~6x).
+  - [x] 16:14 trace, measured: 60 Hz D1 steady 94 draws/s, 5.7 repeats/s (~1:1, healthy); 165 Hz D0 steady 115 draws/s,
+    26 repeats/s (extra frames); D0 during its own transitions 93 draws/s, 3.4 repeats/s (the ride works: was 180-210).
+  - [ ] Name the requester of D0's extra steady frames.
 - [ ] N1b. Measure what the viewer sees, not draw counts: per fresh Visualizer revision, publish -> swap age and its
   jitter, and whether a fresh frame is delayed when another frame is in flight on the render thread. Repeats are
   harmless unless they delay fresh frames or make present spacing uneven; prove which before fixing.
