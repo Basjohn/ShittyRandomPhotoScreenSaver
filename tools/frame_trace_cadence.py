@@ -26,24 +26,25 @@ LOGICAL_PUBLISH, RENDER_DRAW, FRAME_SWAP, BACKGROUND_RENDER_BEGIN = 1, 5, 6, 19
 def _records(path: Path):
     raw, _segments = _read_trace_chain(path)
     for offset in range(HEADER.size, len(raw) - RECORD.size + 1, RECORD.size):
-        ts, event, screen, revision, logical_ns, _aux = RECORD.unpack_from(raw, offset)
+        ts, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, offset)
         if ts:
-            yield ts, event, screen, revision, logical_ns
+            yield ts, event, screen, revision, logical_ns, aux
 
 
 def per_second(rows, *, verbose: bool) -> None:
     t0 = rows[0][0]
     windows = defaultdict(lambda: defaultdict(int))
     seen = defaultdict(set)
-    for ts, event, screen, revision, _logical in rows:
+    for ts, event, screen, revision, _logical, aux in rows:
         key = (int((ts - t0) / 1e9), screen)
         if event == LOGICAL_PUBLISH:
             windows[key]["pub"] += 1
         elif event == RENDER_DRAW:
             windows[key]["draw"] += 1
-            if revision in seen[screen]:
+            # Revisions restart with each runtime generation (aux), as frame_trace_report keys them.
+            if (aux, revision) in seen[screen]:
                 windows[key]["repeat"] += 1
-            seen[screen].add(revision)
+            seen[screen].add((aux, revision))
         elif event == BACKGROUND_RENDER_BEGIN:
             windows[key]["bg"] += 1
     screens = sorted({screen for _second, screen in windows})
@@ -91,7 +92,7 @@ def _gap_report(name: str, series, threshold_ms: float) -> None:
 
 def gaps(rows, *, publish_ms: float, swap_ms: float) -> None:
     publications, swaps, logical = defaultdict(list), defaultdict(list), defaultdict(list)
-    for ts, event, screen, _revision, logical_ns in rows:
+    for ts, event, screen, _revision, logical_ns, _aux in rows:
         if event == LOGICAL_PUBLISH:
             publications[screen].append(ts)
             logical[screen].append(logical_ns)
