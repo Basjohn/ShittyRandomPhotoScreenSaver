@@ -69,6 +69,15 @@ def test_a_pause_does_not_make_the_music_resuming_look_many_times_louder(monkeyp
     assert 0.9 <= tb.musical_level[1] <= 1.1
     assert learn_usual_presence(1.0, 46.0) <= 1.0 + 0.12 * 1.0 + 1e-9
 
+    # A near-silent first frame (the moment before a track starts) does not seed the level either:
+    # recorded clips read presence 363-1089 at their start when it did.
+    fresh = TransientBus()
+    fresh.update(0.0, 0.0, 0.0, loudness=0.01)
+    assert fresh.musical_level == (0.01, 0.0)
+    for _ in range(3):
+        fresh.update(0.3, 0.3, 0.3, loudness=8.0)
+    assert 0.9 <= fresh.musical_level[1] <= 1.1
+
 
 class TestTransientBusBasic:
     """Core spectral flux and onset detection."""

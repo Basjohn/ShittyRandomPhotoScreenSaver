@@ -219,13 +219,14 @@ class TransientBus:
         self._frame_count += 1
         if loudness is not None:
             level = max(0.0, float(loudness))
-            if self._frame_count == 1 or elapsed <= 0.0:
-                self._loudness_reference = max(self._loudness_reference, level)
-            elif level < MUSICAL_QUIET[0]:
-                # Near-silence (a pause, a gap between tracks) is not the music's level: it does
-                # not drain the running level, so the music resuming is not "many times louder
-                # than usual" (it was: presence 46 after a 6 s pause).
+            if level < MUSICAL_QUIET[0]:
+                # Near-silence (a pause, a gap between tracks, the start before the music) is not
+                # the music's level: it neither seeds nor drains the running level, so the music
+                # starting or resuming is not "many times louder than usual" (it was: presence 46
+                # after a 6 s pause, 363-1089 when a near-silent first frame seeded it).
                 pass
+            elif self._loudness_reference < MUSICAL_QUIET[0] or elapsed <= 0.0:
+                self._loudness_reference = max(self._loudness_reference, level)
             else:
                 alpha = 1.0 - math.exp(-min(elapsed, 1.0) / LOUDNESS_REFERENCE_SECONDS)
                 self._loudness_reference += (level - self._loudness_reference) * alpha
