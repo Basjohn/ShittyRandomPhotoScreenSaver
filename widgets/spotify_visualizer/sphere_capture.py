@@ -52,10 +52,14 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
     # is clamped and sits at its cap through ordinary music, so it cannot tell near-silence or a
     # quiet passage from a loud one; the transient bus's unclamped level and presence can.
     musical_level = (0.0, 0.0)
+    musical_intensity = 0.0
     if source_is_current and engine is not None:
         level_getter = getattr(engine, "get_musical_level", None)
         if callable(level_getter):
             musical_level = tuple(float(value) for value in level_getter())
+        intensity_getter = getattr(engine, "get_musical_intensity", None)
+        if callable(intensity_getter):
+            musical_intensity = float(intensity_getter())
         getter = getattr(engine, "get_bubble_energy_bands", None)
         if callable(getter):
             try:
@@ -99,6 +103,7 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         reactive_energy=reactive_energy,
         presence_energy=presence_energy,
         musical_level=musical_level,
+        musical_intensity=musical_intensity,
         transient=transient,
         analysis_spectrum=analysis_spectrum,
         event_scheduler=scheduler,

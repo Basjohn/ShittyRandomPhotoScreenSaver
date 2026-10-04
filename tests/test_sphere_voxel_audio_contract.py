@@ -76,11 +76,15 @@ def _resolve(
     scheduler=None,
     params=None,
     musical=None,
+    intensity=None,
 ):
     live = presence or reactive or render_state.VisualizerEnergyState()
     if musical is None:
         # The bus's loudness is the peak band's unclamped level; at the track's usual presence.
         musical = (max(live.bass, live.mid, live.high), 1.0)
+    if intensity is None:
+        # As the bus's PassageIntensity reads: 0 in near-silence, else a loud passage of the track.
+        intensity = 0.0 if musical[0] < 0.08 else 1.0
     return runtime.resolve(
         now_ts=ts,
         runtime_generation=1,
@@ -91,6 +95,7 @@ def _resolve(
         reactive_energy=reactive or render_state.VisualizerEnergyState(),
         presence_energy=live,
         musical_level=tuple(float(value) for value in musical),
+        musical_intensity=float(intensity),
         transient=transient or render_state.VisualizerTransientState(),
         analysis_spectrum=tuple(spectrum) if spectrum is not None else tuple(0.10 for _ in range(64)),
         event_scheduler=scheduler,
@@ -237,9 +242,9 @@ def test_hot_steady_audio_does_not_fragment_or_create_false_relative_swell() -> 
     assert later is not None
     # A held hot source is one state: no repeated punch packets.
     assert max(later.section_drives) < 0.02
-    # Adaptive sustained response is relative to local song range. Starting and
-    # staying hot therefore establishes the baseline instead of pinning a swell.
-    assert later.size_pulse < 0.01
+    # A sustained loud passage reads heavy (intensity stays at 1, operator 2026-10-04) and
+    # holds a steady body rather than pulsing.
+    assert later.size_pulse > 0.1
     assert abs(frames[-1].size_pulse - frames[-10].size_pulse) < 0.002
 
 
@@ -496,17 +501,20 @@ def test_sustained_growth_distinguishes_soft_and_heavy_without_pulsing() -> None
     soft = render_state.VisualizerEnergyState(bass=0.12, mid=0.20, high=0.08, overall=0.16)
     heavy = render_state.VisualizerEnergyState(bass=0.55, mid=0.82, high=0.62, overall=0.70)
     params = _params(render_state, size_response=1.15)
-    _resolve(runtime, render_state, ts=7.0, reactive=soft, presence=soft, params=params)
+    # A soft passage of the track (intensity 0.25), then a heavy one (0.9).
+    _resolve(runtime, render_state, ts=7.0, reactive=soft, presence=soft, params=params,
+             musical=_ORDINARY_MUSIC, intensity=0.25)
     soft_frame = None
     for step in range(1, 31):
-        soft_frame = _resolve(runtime, render_state, ts=7.0 + step * 0.05, reactive=soft, presence=soft, params=params)
+        soft_frame = _resolve(runtime, render_state, ts=7.0 + step * 0.05, reactive=soft, presence=soft,
+                              params=params, musical=_ORDINARY_MUSIC, intensity=0.25)
     assert soft_frame is not None
 
     heavy_frames = []
     for step in range(1, 31):
         heavy_frames.append(_resolve(
             runtime, render_state, ts=8.5 + step * 0.05,
-            reactive=heavy, presence=heavy, params=params,
+            reactive=heavy, presence=heavy, params=params, musical=_ORDINARY_MUSIC, intensity=0.9,
         ))
     heavy_frame = heavy_frames[-1]
     assert heavy_frame is not None
@@ -624,15 +632,16 @@ def test_rotation_integrates_one_direction_and_speed_can_fall_during_active_play
     runtime = sphere_runtime.SphereFrameRuntime()
     quiet = render_state.VisualizerEnergyState(bass=0.12, mid=0.10, high=0.06, overall=0.10)
     params = _params(render_state, base_rotation_speed=0.03, rotation_speed=0.40)
-    _resolve(runtime, render_state, ts=10.0, reactive=quiet, presence=quiet, params=params)
-    idle = _resolve(runtime, render_state, ts=10.10, reactive=quiet, presence=quiet, params=params)
+    _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=10.0, reactive=quiet, presence=quiet, params=params)
+    idle = _resolve(runtime, render_state, musical=_ORDINARY_MUSIC, ts=10.10, reactive=quiet, presence=quiet, params=params)
     assert idle is not None
     idle_phase = idle.rotation_phase
-    assert idle.rotation_drive < 0.02
+    # Between events only the sustained passage's small share turns the shell (0.08 x intensity).
+    assert idle.rotation_drive < 0.08
     assert idle_phase > 0.0
 
     hit = _resolve(
-        runtime, render_state, ts=10.12, reactive=quiet, presence=quiet,
+        runtime, render_state, musical=_ORDINARY_MUSIC, ts=10.12, reactive=quiet, presence=quiet,
         scheduler=_Scheduler(kick=_Event(1.0)), params=params,
     )
     assert hit is not None
@@ -643,7 +652,7 @@ def test_rotation_integrates_one_direction_and_speed_can_fall_during_active_play
     frame = hit
     for step in range(1, 21):
         frame = _resolve(
-            runtime, render_state, ts=10.12 + step * 0.05,
+            runtime, render_state, musical=_ORDINARY_MUSIC, ts=10.12 + step * 0.05,
             reactive=quiet, presence=quiet, params=params,
         )
         assert frame is not None
@@ -654,7 +663,7 @@ def test_rotation_integrates_one_direction_and_speed_can_fall_during_active_play
     assert frame.rotation_drive < hit.rotation_drive * 0.35
 
     second = _resolve(
-        runtime, render_state, ts=11.17, reactive=quiet, presence=quiet,
+        runtime, render_state, musical=_ORDINARY_MUSIC, ts=11.17, reactive=quiet, presence=quiet,
         scheduler=_Scheduler(kick=_Event(0.9)), params=params,
     )
     assert second is not None
@@ -671,10 +680,10 @@ def test_base_rotation_and_velocity_reaction_are_independent_without_rewriting_p
     high_base = sphere_runtime.SphereFrameRuntime()
     low_params = _params(render_state, base_rotation_speed=0.01, rotation_speed=0.0)
     high_params = _params(render_state, base_rotation_speed=0.08, rotation_speed=0.0)
-    _resolve(low_base, render_state, ts=11.0, reactive=quiet, presence=quiet, params=low_params)
-    _resolve(high_base, render_state, ts=11.0, reactive=quiet, presence=quiet, params=high_params)
-    low_frame = _resolve(low_base, render_state, ts=12.0, reactive=quiet, presence=quiet, params=low_params)
-    high_frame = _resolve(high_base, render_state, ts=12.0, reactive=quiet, presence=quiet, params=high_params)
+    _resolve(low_base, render_state, musical=_ORDINARY_MUSIC, ts=11.0, reactive=quiet, presence=quiet, params=low_params)
+    _resolve(high_base, render_state, musical=_ORDINARY_MUSIC, ts=11.0, reactive=quiet, presence=quiet, params=high_params)
+    low_frame = _resolve(low_base, render_state, musical=_ORDINARY_MUSIC, ts=12.0, reactive=quiet, presence=quiet, params=low_params)
+    high_frame = _resolve(high_base, render_state, musical=_ORDINARY_MUSIC, ts=12.0, reactive=quiet, presence=quiet, params=high_params)
     assert low_frame is not None and high_frame is not None
     assert high_frame.rotation_phase > low_frame.rotation_phase * 6.5
 
@@ -684,15 +693,15 @@ def test_base_rotation_and_velocity_reaction_are_independent_without_rewriting_p
     strong_reaction = sphere_runtime.SphereFrameRuntime()
     no_reaction_params = _params(render_state, base_rotation_speed=0.02, rotation_speed=0.0)
     strong_reaction_params = _params(render_state, base_rotation_speed=0.02, rotation_speed=0.60)
-    _resolve(no_reaction, render_state, ts=13.0, reactive=quiet, presence=quiet, params=no_reaction_params)
-    _resolve(strong_reaction, render_state, ts=13.0, reactive=quiet, presence=quiet, params=strong_reaction_params)
+    _resolve(no_reaction, render_state, musical=_ORDINARY_MUSIC, ts=13.0, reactive=quiet, presence=quiet, params=no_reaction_params)
+    _resolve(strong_reaction, render_state, musical=_ORDINARY_MUSIC, ts=13.0, reactive=quiet, presence=quiet, params=strong_reaction_params)
     for runtime, params in ((no_reaction, no_reaction_params), (strong_reaction, strong_reaction_params)):
         _resolve(
-            runtime, render_state, ts=13.02, reactive=quiet, presence=quiet,
+            runtime, render_state, musical=_ORDINARY_MUSIC, ts=13.02, reactive=quiet, presence=quiet,
             scheduler=_Scheduler(kick=_Event(1.0)), params=params,
         )
-    no_frame = _resolve(no_reaction, render_state, ts=13.30, reactive=quiet, presence=quiet, params=no_reaction_params)
-    strong_frame = _resolve(strong_reaction, render_state, ts=13.30, reactive=quiet, presence=quiet, params=strong_reaction_params)
+    no_frame = _resolve(no_reaction, render_state, musical=_ORDINARY_MUSIC, ts=13.30, reactive=quiet, presence=quiet, params=no_reaction_params)
+    strong_frame = _resolve(strong_reaction, render_state, musical=_ORDINARY_MUSIC, ts=13.30, reactive=quiet, presence=quiet, params=strong_reaction_params)
     assert no_frame is not None and strong_frame is not None
     assert no_frame.rotation_phase > 0.0
     assert strong_frame.rotation_phase > no_frame.rotation_phase * 2.0
@@ -1713,11 +1722,9 @@ def test_rejected_three_band_rise_packet_authority_is_absent_from_sphere_runtime
 
 
 def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -> None:
-    """The two floors gate admission on the musical weight (``musical_weight``), each its own
-    path: an event in a passage well below the track's running level (weight ~0.45) passes a
-    low floor and is refused by a higher one; what an admitted event earns is unchanged."""
-    from widgets.spotify_visualizer.transient_bus import musical_weight
-
+    """The two floors gate admission on the passage intensity (where the music sits in the track's
+    own dynamic range), each its own path: an event in a mid-intensity passage passes a floor below
+    it and is refused by one above it; what an admitted event earns is unchanged."""
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     reactive = render_state.VisualizerEnergyState(
         bass=0.45, mid=0.52, high=0.28, overall=0.44,
@@ -1725,9 +1732,8 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
     presence = render_state.VisualizerEnergyState(
         bass=0.50, mid=0.55, high=0.35, overall=0.50,
     )
-    quiet_passage = (1.0, 0.45)
-    weight = musical_weight(*quiet_passage)
-    low, high = weight - 0.2, weight + 0.2
+    passage = 0.45
+    low, high = passage - 0.2, passage + 0.2
 
     def event_at(fragment_floor: float | None, particle_floor: float | None):
         runtime = sphere_runtime.SphereFrameRuntime()
@@ -1739,12 +1745,12 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
         parameters = render_state.FrozenFields(tuple(sorted(settings.items())))
         _resolve(
             runtime, render_state, ts=10.0, reactive=reactive,
-            presence=presence, params=parameters, musical=quiet_passage,
+            presence=presence, params=parameters, musical=_ORDINARY_MUSIC, intensity=passage,
         )
         frame = _resolve(
             runtime, render_state, ts=10.05, reactive=reactive,
             presence=presence, scheduler=_Scheduler(kick=_Event(1.0)),
-            params=parameters, musical=quiet_passage,
+            params=parameters, musical=_ORDINARY_MUSIC, intensity=passage,
         )
         assert frame is not None
         return frame, runtime._packet_sources_since_diag["kick"]
@@ -1775,43 +1781,76 @@ def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -
     assert both_filtered.particle_cohorts == ()
 
 
-def _kick_at(sphere_runtime, render_state, musical, *, live=None):
+def _kick_at(sphere_runtime, render_state, musical, *, live=None, intensity=1.0):
     """One kick + vocal swell after an ordinary preroll, at the given (loudness, presence)."""
     runtime = sphere_runtime.SphereFrameRuntime()
     reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
     lane = live or render_state.VisualizerEnergyState(bass=2.5, mid=2.5, high=1.2, overall=2.0)
     params = _params(render_state, incoming_density_response=True, incoming_transient_velocity=True)
     _resolve(runtime, render_state, ts=30.0, reactive=reactive, presence=lane, params=params,
-             musical=_ORDINARY_MUSIC)
+             musical=_ORDINARY_MUSIC, intensity=intensity)
     frame = _resolve(runtime, render_state, ts=30.05, reactive=reactive, presence=lane, params=params,
-                     musical=musical, scheduler=_Scheduler(kick=_Event(1.0), vocal_swell=_Event(0.9)))
+                     musical=musical, intensity=intensity,
+                     scheduler=_Scheduler(kick=_Event(1.0), vocal_swell=_Event(0.9)))
     assert frame is not None
     return frame
 
 
 def test_near_silence_earns_nothing_and_a_full_blast_the_full_reaction() -> None:
-    """Operator 2026-10-03: near-silence fragmented and threw particles as fully as a full blast,
-    whatever the floors. The same typed events now earn by the shared musical rule: nothing in
-    near-silence (the clamped live lane can sit at its cap regardless), less in a passage quieter
-    than the track's running level, the full reaction at the usual level and above."""
+    """Operator 2026-10-03/04: near-silence fragmented and threw particles as fully as a full blast,
+    with no ramp. The same typed events now earn by the passage: nothing in near-silence (the clamped
+    live lane can sit at its cap regardless), little in a quiet passage, more in a usual one, the
+    full reaction in a loud one; a big hit above the track's usual level earns at least as much."""
     render_state, sphere_runtime = _load_plain_visualizer_modules()
 
-    def reaction(musical):
-        frame = _kick_at(sphere_runtime, render_state, musical)
+    def reaction(musical, intensity):
+        frame = _kick_at(sphere_runtime, render_state, musical, intensity=intensity)
         cohort = max((c.strength for c in frame.particle_cohorts), default=0.0)
         return max(frame.section_drives), cohort, frame
 
-    silent_fragment, silent_cohort, _ = reaction((0.05, 0.1))      # under the near-silence edge
-    faint_fragment, faint_cohort, _ = reaction((0.19, 0.25))       # first frame back from a pause
-    quiet_fragment, quiet_cohort, _ = reaction((1.0, 0.5))          # a quiet passage of a loud track
-    usual_fragment, usual_cohort, usual = reaction(_ORDINARY_MUSIC)
-    loud_fragment, loud_cohort, loud = reaction((2.0, 1.6))         # louder than usual
+    silent_fragment, silent_cohort, _ = reaction((0.05, 0.1), 0.0)        # under the near-silence edge
+    faint_fragment, faint_cohort, _ = reaction((0.19, 0.25), 0.0)         # first frame back from a pause
+    quiet_fragment, quiet_cohort, _ = reaction((8.0, 0.8), 0.15)          # a quiet passage of the track
+    usual_fragment, usual_cohort, _ = reaction((8.0, 1.0), 0.65)          # its usual level
+    loud_fragment, loud_cohort, loud = reaction((8.0, 1.0), 1.0)          # its loudest
+    big_fragment, big_cohort, big = reaction((12.0, 1.5), 1.0)            # a big hit in a loud passage
     assert silent_fragment == 0.0 and silent_cohort == 0.0
-    assert faint_fragment < 0.1 * usual_fragment and faint_cohort == 0.0
-    assert 0.0 < quiet_fragment < usual_fragment and 0.0 < quiet_cohort < usual_cohort
-    assert usual_fragment > 0.9 and usual.particle_cohorts
-    assert loud_fragment >= usual_fragment and loud_cohort >= usual_cohort
-    assert loud.incoming_density >= usual.incoming_density
+    assert faint_fragment == 0.0 and faint_cohort == 0.0
+    assert 0.0 < quiet_fragment < 0.5 * usual_fragment and quiet_cohort < usual_cohort
+    assert usual_fragment < loud_fragment and usual_cohort < loud_cohort
+    assert loud_fragment > 0.9 and loud.particle_cohorts
+    assert big_fragment >= loud_fragment and big_cohort >= loud_cohort
+    assert big.incoming_density >= loud.incoming_density
+
+
+def test_how_often_sphere_reacts_ramps_with_the_passage() -> None:
+    """Kicks every 0.3 s for 6 s: a quiet passage fragments, launches particles and steps the
+    tracer far less often than a loud one, and spins slower."""
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    reactive = render_state.VisualizerEnergyState(bass=0.45, mid=0.52, high=0.28, overall=0.44)
+    lane = render_state.VisualizerEnergyState(bass=2.5, mid=2.5, high=1.2, overall=2.0)
+    params = _params(render_state, incoming_density_response=True, incoming_transient_velocity=True)
+
+    def run(intensity):
+        runtime = sphere_runtime.SphereFrameRuntime()
+        ts, launches, steps, spin = 40.0, 0, 0, []
+        last_target = 0.0
+        for index in range(540):
+            ts += 1.0 / 90.0
+            kick = index % 27 == 26
+            frame = _resolve(runtime, render_state, ts=ts, reactive=reactive, presence=lane, params=params,
+                             musical=_ORDINARY_MUSIC, intensity=intensity,
+                             scheduler=_Scheduler(kick=_Event(1.0)) if kick else None)
+            launches += sum(1 for cohort in frame.particle_cohorts if cohort.progress < 0.02)
+            steps += runtime._tracer_target_phase > last_target + 1e-9
+            last_target = runtime._tracer_target_phase
+            spin.append(frame.rotation_drive)
+        packets = sum(runtime._packet_sources_since_diag.values())
+        return packets, launches, steps, sum(spin) / len(spin)
+
+    quiet, loud = run(0.1), run(1.0)
+    assert quiet[0] < 0.6 * loud[0] and quiet[1] < 0.6 * loud[1] and quiet[2] < 0.6 * loud[2]
+    assert quiet[3] < 0.7 * loud[3]
 
 
 def test_the_usual_level_is_learned_from_the_music_so_a_loud_track_does_not_mute_itself() -> None:

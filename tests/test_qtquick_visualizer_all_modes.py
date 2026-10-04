@@ -224,6 +224,7 @@ def _drive_runtime(
             reactive_energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
             presence_energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
             musical_level=(0.5, 1.0),
+            musical_intensity=0.5,
             transient=VisualizerTransientState(bass=0.4),
             analysis_spectrum=(),
             source_active=bool(fresh_source and playing),

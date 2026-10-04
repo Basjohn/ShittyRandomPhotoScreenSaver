@@ -4,7 +4,9 @@ from typing import Any
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.feature_frame import FeatureFrame
-from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEnergyBands, TransientEventScheduler
+from widgets.spotify_visualizer.transient_bus import (
+    OnsetEvent, PassageIntensity, TransientEnergyBands, TransientEventScheduler,
+)
 
 def _bands(source: Any) -> EnergyBands:
     return EnergyBands(
@@ -26,6 +28,10 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         # with each frame's typed events at the replay clock (consumed once, aged as live).
         self._replay_real = None
         self._replay_scheduler = TransientEventScheduler()
+        # Passage intensity is derived (not recorded): the production follower fed with each frame's
+        # recorded loudness at the frame's own time step.
+        self._replay_intensity = PassageIntensity()
+        self._replay_last_us: int | None = None
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
@@ -52,6 +58,9 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         )
         self._replay_real = frame.real
         if frame.real is not None:
+            step = 0.0 if self._replay_last_us is None else (frame.timestamp_us - self._replay_last_us) / 1e6
+            self._replay_last_us = frame.timestamp_us
+            self._replay_intensity.update(frame.real.musical_level[0], step)
             for event in frame.real.events:
                 self._replay_scheduler.feed(OnsetEvent(
                     timestamp=frame.timestamp_us / 1_000_000.0, event_type=event.kind, strength=event.strength))
@@ -106,6 +115,9 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def get_musical_level(self) -> tuple[float, float]:
         real = self._replay_real
         return super().get_musical_level() if real is None else tuple(real.musical_level)
+
+    def get_musical_intensity(self) -> float:
+        return super().get_musical_intensity() if self._replay_real is None else self._replay_intensity.value
 
     def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
         real = self._replay_real
