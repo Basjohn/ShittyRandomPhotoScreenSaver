@@ -13,9 +13,9 @@ Two original Sphere goldens remain (two additional Rainbow variants are separate
 | Preset | Name | Golden role |
 | --- | --- | --- |
 | 1 | **Glass Current** | Former Preset 5 / Transparent React snapshot. Intake (`Particle Outtake` off), translucent fill and bright independent edges preserved. |
-| 2 | **Voxel Bloom** | Former Preset 6 / Reactive Voxel snapshot. Outtake on, opaque neutral presentation and Sphere shadow enabled. |
+| 2 | **Voxel Bloom** | Former Preset 6 / Reactive Voxel snapshot. Opaque neutral presentation and Sphere shadow enabled. |
 
-Their exact persisted snapshots are golden inputs. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
+Their exact persisted snapshots (`presets/visualizer_modes/sphere/`; the operator edits them) are golden inputs. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
 
 ## Isolation / ownership contract
 
@@ -62,6 +62,26 @@ Before any architectural promotion into shared/permanent ownership, capture both
 - Sphere logical outputs important to behaviour: event admission/source, section drives, tracer phase/drive, size pulse, rotation, cohort admission/density/velocity/direction/progress and vocal recoil;
 - representative renderer captures at ordinary and extreme CUSTOM aspect/scale where the existing capture seam can provide deterministic evidence;
 - baseline replay evidence for the five accepted permanent modes over the same shared-analysis change boundary.
+
+**Captured 2026-10-04** (`tools/visualizer_replay/sphere_golden.py`, `tests/test_sphere_promotion_golden.py`):
+
+- *Behavioural:* one deterministic real-scale clip (silence, kicks + snares, a flat/low passage after them, vocals,
+  a sustained loud bed, a big hit, a quiet outro, silence; quiet passages follow loud ones so the passage ramp is
+  exercised) replayed through the production capture for Glass Current, Voxel Bloom and Voxel Bloom with Particle
+  Outtake on (the curated snapshots currently all choose intake). Every authored `SphereFrame` field per frame
+  (drives, phases, incoming section/blend, every cohort's progress/strength/density/section/lane/velocity/recoil/
+  direction), the resolved hidden technical profile (Spectrum-backed: bar count 33, sensitivity 0.4, block 512,
+  dynamic floor 0.12, AGC 0.5, ...) and each preset's resolved parameters: `tests/goldens/visualizer_replay/sphere_promotion.json`.
+- *Visual:* the production render host offscreen on replayed snapshots: both goldens at rest, mid-kicks and on the
+  big hit (480x270 item), and extreme CUSTOM wide (960x120) and tall (200x600) through the production presentation
+  resolver: `tests/goldens/visualizer_replay/sphere_visual/` (bit-identical run to run).
+- *Cost* (`tools/visualizer_cost_probe.py sphere --size 2560x1440`): CPU submit median 0.44 ms / p90 0.47, GPU
+  0.03 ms, 17 Python GL calls per frame.
+- *The five accepted modes:* the existing replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
+
+`python -m tools.visualizer_replay.sphere_golden` prints the per-segment summary and what differs; `--visual` writes
+before/after sheets to `logs/sphere_visual_review/` for review by eye. An intended change re-records with `--write` /
+`--write-visual` and states the measured difference in its commit.
 
 After the candidate promotion, replay identical evidence. Sphere's behavioural golden is a **reference, not a lock** (operator 2026-10-04): its current reaction numbers are known to be poor and the migration is expected to retune them (the ramp, `Current_Plan.md` S19). Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
 

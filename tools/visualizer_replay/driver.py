@@ -7,7 +7,7 @@ mode runtimes, mailbox and presentation synchronization remain authoritative.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import random
@@ -112,11 +112,13 @@ def deterministic_clock():
         random.setstate(saved_random)
 
 
-def _configure(controller, mode, preset: int = 0):
+def _configure(controller, mode, preset: int = 0, overrides=None):
     activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
     model = SpotifyVisualizerSettings.from_mapping(
         activation.resolved_config, apply_preset_overlay=False, resolve_preset_indices=False,
     )
+    if overrides:
+        model = replace(model, **dict(overrides))
     controller.set_mode(mode)
     controller.settings_model = model
     controller.record_resolved_activation(activation)
@@ -141,7 +143,11 @@ def _configure(controller, mode, preset: int = 0):
     state._waiting_for_fresh_engine_frame = False
 
 
-def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0):
+def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0, overrides=None,
+                snapshots_at=()):
+    """Replay ``clip`` through ``mode`` (curated ``preset``, with optional Settings-model
+    ``overrides``). ``snapshots_at``: frame indices whose published Quick snapshot is returned
+    (``result["snapshots"]``, index -> snapshot) for renderer captures."""
     if mode not in (*MODES, *REAL_SCALE_MODES, "control") or present_every < 1:
         raise ValueError("invalid replay mode or presentation interval")
     if mode in REAL_SCALE_MODES and any(frame.real is None for frame in clip.frames):
@@ -157,7 +163,9 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
             engine_factory=lambda _count: engine,
         )
         controller.engine = engine
-        _configure(controller, controller.mode_id, preset)
+        _configure(controller, controller.mode_id, preset, overrides)
+        snapshots = {}
+        wanted = frozenset(snapshots_at)
         sync = QuickVisualizerPresentationSync(
             controller,
             resolve_presentation=lambda: resolve_visualizer_presentation(
@@ -213,6 +221,8 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
                     if not sync.sync_latest():
                         raise RuntimeError(f"Quick snapshot rejected {clip.name}:{index}")
                     presentation_trace.append(index)
+                    if index in wanted:
+                        snapshots[index] = controller.render_bridge.peek()
         finally:
             controller.close_render_admission()
             # Offline replay owns this engine. Retire only its queued QObject
@@ -228,4 +238,5 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
         "mode_metrics": mode_metrics(logical_series),
         "travel_rates": travel_rates,
         "logical_series": logical_series, "presentation_trace": presentation_trace,
+        "snapshots": snapshots,
     }

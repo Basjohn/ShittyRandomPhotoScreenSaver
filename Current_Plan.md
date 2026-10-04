@@ -200,7 +200,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   (`quiet_intro`), "I Said Hi" (`quiet_intro2`), "Human" (`heavy1`, swings hard, a Bubble favourite) and "Into Your
   Room" (`balanced`, light sustain). Loudness median 6-7, p90 ~12, max 18-20; live bass pinned at 2.5 in 80-95% of
   frames; ~200 kicks, ~130 snares, ~90 vocal swells a minute.
-- [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
+- [x] Capture the promotion golden first (captured 2026-10-04; `Docs/Reference/Sphere_Visualizer.md` "Captured"): curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
   evidence so a prettier renderer is not mistaken for a reaction regression.
