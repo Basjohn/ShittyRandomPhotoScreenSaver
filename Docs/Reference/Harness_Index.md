@@ -110,6 +110,9 @@ Keep diagnostic flags with the evidence so sampler cost can be interpreted. `pyt
 `late_overlapping_handoff` for both Visualizer render and draw intervals; absent handoff evidence is unavailable,
 not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and count completions with
 `python tools\image_change_perf_parser.py logs\screensaver_perf.log`. `Current_Plan.md` owns the acceptance status.
+`python toolsrame_trace_cadence.py logs\screensaver_frame_trace.bin [--seconds]` reports Visualizer presentation
+cadence from the same trace: per-second publications/draws/repeated draws by transition state, and publication/swap
+gap frequency and periodicity with the logical dt (Current_Plan N1).
 
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 
