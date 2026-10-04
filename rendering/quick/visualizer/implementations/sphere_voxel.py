@@ -8,7 +8,6 @@ visualizer renderer lifecycle.
 """
 from __future__ import annotations
 
-import ctypes
 import math
 
 import numpy as np
@@ -16,7 +15,7 @@ from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from widgets.spotify_visualizer.render_state import SphereFrame
 
 from ..render_contract import QuickVisualizerRenderFrame
@@ -681,16 +680,42 @@ void main() {
 }
 """
 
+_TRANSFORM_UNIFORMS = (
+    "uMatrix", "uGeometry", "uSectionDrives",
+    "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
+    "uRotationPhase", "uSizePulse", "uVoxelSizeVariation",
+    "uProjectionOffset", "uProjectionScale", "uVoxelScale",
+    "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
+    "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
+    "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
+    "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
+    "uTracerDrive", "uTracerPhase",
+)
+_HERO_UNIFORMS = _TRANSFORM_UNIFORMS + (
+    "uLight", "uGloss", "uSpecular",
+    "uFillColor", "uEdgeColor", "uTracerColor", "uEdgeWeight",
+    "uDepthShading", "uFade", "uCelShading",
+    "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
+)
+_SHADOW_UNIFORMS = _TRANSFORM_UNIFORMS + ("uShadowColor", "uFade", "uLayerAlpha")
+# (key, vertex, fragment): what a first frame compiles, for the prepared reveal.
+_PROGRAMS = (
+    ("hero", _VERTEX_SOURCE, _FRAGMENT_SOURCE),
+    ("shadow", _SHADOW_VERTEX_SOURCE, _SHADOW_FRAGMENT_SOURCE),
+)
+_MESH_ATTRIBUTES = (3, 3)                    # position, normal
+_INSTANCE_ATTRIBUTES = (3, 1, 1)             # centre, seed, radial polarity
+
+
 class QuickSphereVoxelRenderer:
     mode_id = "sphere"
 
     def __init__(self) -> None:
+        self._resources = MeshResources("Quick Sphere voxel")
         self._program = 0
         self._shadow_program = 0
         self._shadow_uniforms: dict[str, int] = {}
         self._vao = 0
-        self._mesh_vbo = 0
-        self._instance_vbo = 0
         self._vertex_count = 0
         self._instance_count = 0
         self._uniforms: dict[str, int] = {}
@@ -700,10 +725,17 @@ class QuickSphereVoxelRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return bool(
-            self._program or self._shadow_program or self._vao
-            or self._mesh_vbo or self._instance_vbo
-        )
+        return self._resources.has_resources
+
+    def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
+        """One unit of what a first visible frame would otherwise compile or build (a program,
+        then the voxel mesh), on a hidden reveal frame; True once nothing is left."""
+        r = self._resources
+        if not warm_programs([(r, *program) for program in _PROGRAMS]):
+            return False
+        if not r.has_mesh("voxels"):
+            self._initialize()
+        return True
 
     @staticmethod
     def _upload_particle_cohorts(uniforms: dict[str, int], cohorts) -> None:
@@ -1130,151 +1162,32 @@ class QuickSphereVoxelRenderer:
         return True
 
     def _initialize(self) -> None:
-        if self.has_resources:
-            self.release_resources()
-        self._program = compile_program(
-            _VERTEX_SOURCE,
-            _FRAGMENT_SOURCE,
-            label="Quick Sphere voxel shell",
-        )
+        """Compile both programs and build the voxel mesh through the shared owner (a prepared
+        reveal has already done each unit; the first frame then finds them)."""
+        r = self._resources
         try:
-            self._shadow_program = compile_program(
-                _SHADOW_VERTEX_SOURCE,
-                _SHADOW_FRAGMENT_SOURCE,
-                label="Quick Sphere projected voxel shadow",
-            )
-            names = (
-                "uMatrix", "uGeometry", "uSectionDrives",
-                "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
-                "uRotationPhase", "uSizePulse", "uVoxelSizeVariation",
-                "uProjectionOffset", "uProjectionScale", "uVoxelScale",
-                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
-                "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
-                "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
-                "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
-                "uTracerDrive", "uTracerPhase",
-                "uLight", "uGloss", "uSpecular",
-                "uFillColor", "uEdgeColor", "uTracerColor", "uEdgeWeight",
-                "uDepthShading", "uFade", "uCelShading",
-                "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
-            )
-            self._uniforms = {
-                name: int(
-                    gl.glGetUniformLocation(
-                        self._program,
-                        (
-                            f"{name}[0]"
-                            if name in {
-                                "uSectionDrives", "uCohortProgress", "uCohortStrength",
-                                "uCohortDensity", "uCohortVelocity", "uCohortBounce",
-                                "uCohortSection", "uCohortLane", "uCohortOuttake",
-                            }
-                            else name
-                        ),
-                    )
-                )
-                for name in names
-            }
-            missing = [name for name, location in self._uniforms.items() if location < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Sphere voxel uniforms are incomplete: " + ", ".join(missing)
-                )
-            shadow_names = (
-                "uMatrix", "uGeometry", "uSectionDrives",
-                "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
-                "uRotationPhase", "uSizePulse", "uVoxelSizeVariation",
-                "uProjectionOffset", "uProjectionScale", "uVoxelScale",
-                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
-                "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
-                "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
-                "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
-                "uTracerDrive", "uTracerPhase",
-                "uShadowColor", "uFade", "uLayerAlpha",
-            )
-            self._shadow_uniforms = {
-                name: int(gl.glGetUniformLocation(self._shadow_program, name))
-                for name in shadow_names
-            }
-            shadow_missing = [
-                name for name, location in self._shadow_uniforms.items() if location < 0
-            ]
-            if shadow_missing:
-                raise RuntimeError(
-                    "Quick Sphere shadow uniforms are incomplete: "
-                    + ", ".join(shadow_missing)
-                )
-
+            self._program = r.program("hero", _VERTEX_SOURCE, _FRAGMENT_SOURCE)
+            self._shadow_program = r.program("shadow", _SHADOW_VERTEX_SOURCE, _SHADOW_FRAGMENT_SOURCE)
+            self._uniforms = r.uniforms("hero", _HERO_UNIFORMS)
+            self._shadow_uniforms = r.uniforms("shadow", _SHADOW_UNIFORMS)
             mesh = build_voxel_cube_mesh()
             instances = build_voxel_shell_instances()
-            self._vertex_count = len(mesh) // VOXEL_VERTEX_STRIDE_FLOATS
+            self._vao, self._vertex_count = r.mesh("voxels", mesh.tobytes(), _MESH_ATTRIBUTES,
+                                                   instances=instances.tobytes(),
+                                                   instance_attributes=_INSTANCE_ATTRIBUTES)
             self._instance_count = len(instances) // VOXEL_INSTANCE_STRIDE_FLOATS
-            self._vao = int(gl.glGenVertexArrays(1))
-            self._mesh_vbo = int(gl.glGenBuffers(1))
-            self._instance_vbo = int(gl.glGenBuffers(1))
-            if not self._vao or not self._mesh_vbo or not self._instance_vbo:
-                raise RuntimeError("Quick Sphere voxel resource creation failed")
-
-            gl.glBindVertexArray(self._vao)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._mesh_vbo)
-            gl.glBufferData(
-                gl.GL_ARRAY_BUFFER,
-                len(mesh) * mesh.itemsize,
-                mesh.tobytes(),
-                gl.GL_STATIC_DRAW,
-            )
-            mesh_stride = VOXEL_VERTEX_STRIDE_FLOATS * 4
-            gl.glEnableVertexAttribArray(0)
-            gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, mesh_stride, ctypes.c_void_p(0))
-            gl.glEnableVertexAttribArray(1)
-            gl.glVertexAttribPointer(1, 3, gl.GL_FLOAT, False, mesh_stride, ctypes.c_void_p(12))
-
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._instance_vbo)
-            gl.glBufferData(
-                gl.GL_ARRAY_BUFFER,
-                len(instances) * instances.itemsize,
-                instances.tobytes(),
-                gl.GL_STATIC_DRAW,
-            )
-            instance_stride = VOXEL_INSTANCE_STRIDE_FLOATS * 4
-            gl.glEnableVertexAttribArray(2)
-            gl.glVertexAttribPointer(2, 3, gl.GL_FLOAT, False, instance_stride, ctypes.c_void_p(0))
-            gl.glVertexAttribDivisor(2, 1)
-            gl.glEnableVertexAttribArray(3)
-            gl.glVertexAttribPointer(3, 1, gl.GL_FLOAT, False, instance_stride, ctypes.c_void_p(12))
-            gl.glVertexAttribDivisor(3, 1)
-            gl.glEnableVertexAttribArray(4)
-            gl.glVertexAttribPointer(4, 1, gl.GL_FLOAT, False, instance_stride, ctypes.c_void_p(16))
-            gl.glVertexAttribDivisor(4, 1)
         except Exception:
             self.release_resources()
             raise
 
     def release_resources(self) -> None:
-        errors: list[str] = []
-        for attribute, deleter in (
-            ("_instance_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
-            ("_mesh_vbo", lambda resource: gl.glDeleteBuffers(1, [resource])),
-            ("_vao", lambda resource: gl.glDeleteVertexArrays(1, [resource])),
-            ("_shadow_program", gl.glDeleteProgram),
-            ("_program", gl.glDeleteProgram),
-        ):
-            resource = getattr(self, attribute)
-            if resource:
-                try:
-                    deleter(resource)
-                except Exception as exc:
-                    errors.append(f"{attribute}: {exc}")
-                else:
-                    setattr(self, attribute, 0)
-        if not errors:
-            self._uniforms.clear()
-            self._shadow_uniforms.clear()
-            self._vertex_count = 0
-            self._instance_count = 0
-            self._parameters = None
-        if errors:
-            raise RuntimeError("Quick Sphere voxel cleanup incomplete: " + " | ".join(errors))
+        self._resources.release_resources()
+        self._program = self._shadow_program = self._vao = 0
+        self._uniforms = {}
+        self._shadow_uniforms = {}
+        self._vertex_count = 0
+        self._instance_count = 0
+        self._parameters = None
 
 
 def create_visualizer_renderer() -> QuickSphereVoxelRenderer:

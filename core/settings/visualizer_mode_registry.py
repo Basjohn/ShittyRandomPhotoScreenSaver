@@ -214,6 +214,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         lender_preset_resolved=False,
         renderer_overflow_setting="sphere_allow_overflow",
         guided_setup_offered=False,
+        prepared_reveal=True,
     ),
     # The first Visualizer on the shared Scene3D foundation. It reuses Spectrum's frame
     # runtime (bars, peaks, R-76 temporal treatment, the shape editor), technical profile

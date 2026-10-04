@@ -141,6 +141,7 @@ class MeshResources:
         self._programs: dict[str, int] = {}
         self._uniforms: dict[str, _UniformLocations] = {}
         self._meshes: dict[str, tuple[int, int, int]] = {}
+        self._instance_buffers: dict[str, int] = {}
 
     @property
     def has_resources(self) -> bool:
@@ -189,8 +190,15 @@ class MeshResources:
         key: str,
         vertices: tuple[float, ...] | bytes,
         attributes: tuple[int, ...],
+        *,
+        instances: tuple[float, ...] | bytes | None = None,
+        instance_attributes: tuple[int, ...] = (),
     ) -> tuple[int, int]:
-        """Upload interleaved float vertices once; *vertices* may be packed C-float bytes."""
+        """Upload interleaved float vertices once; *vertices* may be packed C-float bytes.
+
+        ``instances`` (optional, interleaved floats or packed bytes) is a static per-instance
+        stream on the same VAO (binding 1, divisor 1); its attributes follow the vertex ones
+        (``instance_attributes`` sizes). The caller draws it instanced."""
         held = self._meshes.get(key)
         if held is not None:
             vao, _vbo, count = held
@@ -204,6 +212,12 @@ class MeshResources:
         float_count = len(vertices) // 4 if packed_bytes else len(vertices)
         if not stride or float_count % stride:
             raise ValueError("interleaved mesh must contain complete vertices")
+        instance_data = b""
+        if instances is not None:
+            instance_data = bytes(instances) if isinstance(instances, (bytes, bytearray)) else pack_floats(instances)
+            instance_stride = sum(instance_attributes)
+            if not instance_stride or len(instance_data) % (4 * instance_stride):
+                raise ValueError("interleaved instances must contain complete records")
         vao = _create_one(gl.glCreateVertexArrays)
         self._meshes[key] = (vao, 0, -1)
         vbo = _create_one(gl.glCreateBuffers)
@@ -219,6 +233,20 @@ class MeshResources:
             gl.glVertexArrayAttribFormat(vao, index, size, gl.GL_FLOAT, gl.GL_FALSE, offset * 4)
             gl.glVertexArrayAttribBinding(vao, index, 0)
             offset += size
+        if instances is not None:
+            instance_vbo = _create_one(gl.glCreateBuffers)
+            if not instance_vbo:
+                raise RuntimeError(f"{self.label} instance allocation failed")
+            self._instance_buffers[key] = instance_vbo
+            gl.glNamedBufferStorage(instance_vbo, len(instance_data), instance_data, 0)
+            gl.glVertexArrayVertexBuffer(vao, 1, instance_vbo, 0, sum(instance_attributes) * 4)
+            gl.glVertexArrayBindingDivisor(vao, 1, 1)
+            offset = 0
+            for index, size in enumerate(instance_attributes, start=len(attributes)):
+                gl.glEnableVertexArrayAttrib(vao, index)
+                gl.glVertexArrayAttribFormat(vao, index, size, gl.GL_FLOAT, gl.GL_FALSE, offset * 4)
+                gl.glVertexArrayAttribBinding(vao, index, 1)
+                offset += size
         count = float_count // stride
         self._meshes[key] = (vao, vbo, count)
         return vao, count
@@ -229,6 +257,10 @@ class MeshResources:
             return
         vao, vbo, count = mesh
         # Record each successful deletion even if the following one fails.
+        instance_vbo = self._instance_buffers.get(key)
+        if instance_vbo:
+            gl.glDeleteBuffers(1, [instance_vbo])
+            del self._instance_buffers[key]
         if vbo:
             gl.glDeleteBuffers(1, [vbo])
             vbo = 0

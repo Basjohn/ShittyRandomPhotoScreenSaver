@@ -128,40 +128,21 @@ def test_voxel_renderer_is_sectional_audio_geometry_not_time_motion() -> None:
 
 
 def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
+    from rendering.quick.visualizer.implementations import sphere_voxel as module
+
     source = (
         ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py"
     ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    required = shadow_required = None
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
-        for target_name in ("names", "shadow_names"):
-            if target_name in targets and isinstance(node.value, ast.Tuple):
-                values = {
-                    element.value
-                    for element in node.value.elts
-                    if isinstance(element, ast.Constant) and isinstance(element.value, str)
-                }
-                if target_name == "names":
-                    required = values
-                else:
-                    shadow_required = values
-    assert required is not None and shadow_required is not None
-
-    vertex_shader = source.split('_VERTEX_SOURCE = f"""', 1)[1].split('_FRAGMENT_SOURCE', 1)[0]
-    fragment_shader = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
     # Shadow deliberately compiles the exact hero vertex source so projected
     # geometry cannot drift from rotation/deformation/particle transforms.
     assert "_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE" in source
-    shadow_vertex = vertex_shader
-    shadow_fragment = source.split('_SHADOW_FRAGMENT_SOURCE = """', 1)[1].split('class QuickSphereVoxelRenderer', 1)[0]
+    assert module._SHADOW_VERTEX_SOURCE is module._VERTEX_SOURCE
 
     uniform_pattern = r"^\s*uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
     uniforms = lambda text: set(re.findall(uniform_pattern, text, flags=re.MULTILINE))
-    assert required == uniforms(vertex_shader) | uniforms(fragment_shader)
-    assert shadow_required == uniforms(shadow_vertex) | uniforms(shadow_fragment)
+    # Every declared uniform is set (no dead or missing uniform), for both programs.
+    assert set(module._HERO_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._FRAGMENT_SOURCE)
+    assert set(module._SHADOW_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._SHADOW_FRAGMENT_SOURCE)
     assert "_GHOST_FRAGMENT_SOURCE" not in source
     assert "ghost_names" not in source
 
