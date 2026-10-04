@@ -703,7 +703,7 @@ deferred; the Visualizer presents exactly as in steady state). `describe_transit
 ~115 Hz timer on a 165 Hz display; changes BTF's authored 90 Hz class and costs every mode a third more ticks).
 Bars: `tests/test_qtquick_frame_pacer.py` (the gate under a real JS engine; frames counted only during transitions).
 
-Physical check: Bubble (and any mode) on the 165 Hz display through several transitions; `--frame-trace` repeats in
-transition seconds should fall to steady-state levels (`tools/frame_trace_report.py --timeline-seconds 5`), and the
-transition itself should stay smooth (it now advances at the Visualizer's 90 Hz on that display). Steady seconds with
-no transition still show 12-97 repeats in some seconds (other scene updates); not yet attributed.
+Operator, same day: the micro-flicker happens with or without transitions, so the ride removed surplus frames but
+was **not** the flicker's owner. It stays (less work, no frame duplication during transitions); the flicker is open as
+Current_Plan "Next up" N1. Steady seconds with no transition still show 12-97 repeats in some seconds (other scene
+updates); not yet attributed.

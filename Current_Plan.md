@@ -9,6 +9,49 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 `Docs/Reference/Scene3D_Resources.md`, `Docs/Reference/Transitions.md`, `Docs/Reference/Visualizer_Reference.md` and
 `Docs/Reference/Sphere_Visualizer.md`. Do not create a second parallel 3D plan while this program is active.
 
+## Next up | operator order, 2026-10-04 (work these before resuming section 1)
+
+Each step is one sitting with its own checkpoint. Read the binding docs named in each step first.
+
+**N1. Presentation cadence: extra frames and uneven presentation (WATCH, raised by the operator: "might be more
+important than we realise").** Symptoms: Bubble micro-flicker with or without transitions; DevCurve travel jerks
+roughly every 2 s+ while its swelling is smooth. Already ruled out (2026-10-04): the logical clock (trace: publication
+gaps >16 ms only every ~6-7 s, logical dt p99 11.6 ms); DevCurve's solver (travel integrates rate x dt continuously on
+replay); the transition overlap alone (the transition ride, 05c4057e, removed ~120 surplus frames/s during transitions
+but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temporal_Fidelity.md`), R-62 and R-87
+(+ its 2026-10-04 follow-up) first; never retune Bubble or DevCurve to hide it.
+- [ ] N1a. Attribute the steady-state repeats: seconds with no transition still draw the same Visualizer revision
+  12-97 times (165 Hz D0). Per window frame, classify fresh vs repeat Visualizer draw and name what requested the
+  frame (other QML animations, widget updates such as clock/media/weather, cursor, the other display). If the trace
+  cannot name the requester, add one opt-in `--frame-trace` event at the request edge (zero cost without the flag).
+  Scratch analysers from this session: per-second repeats/own/other transitions, and publication/swap gap
+  periodicity, both reading the trace through `tools/frame_trace_report.py`'s reader; fold the useful one into
+  that tool.
+- [ ] N1b. Measure what the viewer sees, not draw counts: per fresh Visualizer revision, publish -> swap age and its
+  jitter, and whether a fresh frame is delayed when another frame is in flight on the render thread. Repeats are
+  harmless unless they delay fresh frames or make present spacing uneven; prove which before fixing.
+- [ ] N1c. Check DevCurve's highlight streams on the live trace cadence: a stream respawns every ~2-3 s (three
+  streams over a 1.54-unit loop at the passage's travel rate), which matches the reported jerk period; confirm or
+  rule out a visible pop at spawn/exit before blaming presentation.
+- [ ] N1d. Fix at the owner the evidence names (e.g. requesters coalesced onto Visualizer frames while one presents,
+  the pattern the transition ride uses), with a regression bar that fails when the extra frames return.
+  Physical check: Bubble and DevCurve on the 165 Hz and 60 Hz displays.
+
+**N2. Tests and replays stop reading presets and canonical defaults** (detail in Side defects below).
+- [ ] N2a. Inventory: grep tests/ and tools/visualizer_replay for `resolve_visualizer_activation_payload`,
+  `preset=`, `presets/visualizer_modes`, `require_canonical_default` / default-value asserts, and the Guided Setup
+  preview builders (`tools/onboarding_preview_foundry.py`), which resolve curated presets. Known red: Extruded's
+  `test_the_bars_stand_where_spectrums_do...` (the operator's Studio preset).
+- [ ] N2b. Give each its own frozen inputs (as `sphere_golden.py` does: settings frozen at `--write`); replay
+  goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
+  authored content.
+
+**N3. Finish S19 Sphere** (section 4): the Sphere-owned technical profile (replace the hidden Spectrum borrow), then
+per-frame values in one uniform block, then the standard capability/tier lifecycle; physical acceptance on the four
+songs.
+
+**N4. Two stale red tests** (Side defects). **N5. S17** (section 2) as concrete consumers need it.
+
 ## 0. Accepted baseline | do not reopen as work
 
 - [x] **S1-S13 scene3d substrate accepted.** Strict OpenGL 4.6 Core / GLSL 460, shared context-local resource ownership,
@@ -271,9 +314,7 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Side defects (found in passing)
 
-- [ ] **Steady-state repeated Visualizer draws (found 2026-10-04 with the transition ride, R-87 follow-up).** With no
-  transition on either display, some seconds still draw the same Visualizer revision 12-97 times (165 Hz D0, Bubble):
-  another scene update is requesting frames. Attribute it from `--frame-trace` before changing anything.
+- [ ] **Steady-state repeated Visualizer draws / Bubble micro-flicker / DevCurve travel jerk:** see Next up N1.
 - [ ] **Tests and replays must not read presets or canonical defaults as expected values (operator
   2026-10-04: "really checking default settings or presets is not how any tests should ever function because I
   change those often").** After the Bubble cadence fix and once Sphere is accepted: inventory every test, golden and
