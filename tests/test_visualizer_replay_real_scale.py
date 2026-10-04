@@ -106,7 +106,8 @@ def test_the_recorder_keeps_real_scales_and_takes_each_typed_event_once():
         get_energy_bands=lambda: hot, get_pre_agc_energy_bands=lambda: hot, get_bubble_energy_bands=lambda: hot,
         get_live_pre_agc_energy_bands=lambda: EnergyBands(bass=2.5, mid=2.5, high=1.1, overall=2.0),
         get_pre_agc_analysis_spectrum=lambda: tuple(4.0 + k for k in range(48)),
-        get_musical_level=lambda: (12.0, 1.3), get_waveform=lambda: [0.5] * 256,
+        get_musical_level=lambda: (12.0, 1.3), get_waveform=lambda: [0.5] * 128 + [0.0] * 128,
+        get_waveform_count=lambda: 128,
     )
     first = _frame(engine, 1_000_000, [0.4] * 35, scheduler)
     second = _frame(engine, 1_011_111, [0.4] * 35, scheduler)
@@ -115,6 +116,33 @@ def test_the_recorder_keeps_real_scales_and_takes_each_typed_event_once():
     assert first.energy.transient.bass == 1.0 and first.energy.transient.onset_type == "bass"
     assert [e.kind for e in first.real.events] == ["kick"] and second.real.events == ()
     assert len(first.raw_bars) == 32 and len(first.waveform) == 64
+    assert min(first.waveform) == 0.5                       # the block only, never its zero padding
+
+
+def test_recorded_musical_onsets_drive_shockwave_through_the_production_accessor(qt_app):
+    """Recorded MusicalOnsets are re-published with replay serials and taken once by Shockwave
+    Grid's own capture: a big onset in loud music makes a wave, near-silence none."""
+    import dataclasses
+
+    from tools.visualizer_replay.driver import replay_clip
+    from widgets.spotify_visualizer.feature_frame import RecordedOnset
+
+    def with_onset(frame, onset):
+        return dataclasses.replace(frame, mode="shockwave_grid",
+                                   real=dataclasses.replace(frame.real, onsets=(onset,) if onset else ()))
+
+    frames = []
+    for index in range(180):
+        loud = index >= 90
+        frame = _frame(index, loudness=9.0 if loud else 0.0, presence=1.0 if loud else 0.0)
+        onset = RecordedOnset("kick", 1.0, 2.5, 9.0 if loud else 0.05, 1.4 if loud else 0.01) \
+            if index % 30 == 29 else None
+        frames.append(with_onset(frame, onset))
+    result = replay_clip(FeatureClip(name="shockwave_onsets", frames=tuple(frames)), "shockwave_grid")
+    strengths = [event[3] for logical in result["logical_series"] for event in logical.mode_state.events]
+    quiet = [e for logical in result["logical_series"][:90] for e in logical.mode_state.events]
+    assert not quiet and strengths and max(strengths) > 0.5
+    assert FeatureFrame.from_dict(frames[29].to_dict()) == frames[29]
 
 
 def test_sphere_refuses_a_schema_1_clip(qt_app):

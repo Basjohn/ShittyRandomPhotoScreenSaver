@@ -186,8 +186,14 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 - [ ] **Sphere visual upgrade licence (operator):** the migration may make Sphere more visually appealing with the
   shared feature set (materials, lighting, post, reflections, tiers), within the golden-as-reference rules above.
 - [ ] **Reactivity goblin audit of the other modes** (operator: hand-cobbled, use the real-scale knowledge and the
-  historical bugs as warning lights; Bubble excluded, its cadence goblin is already targeted): Spectrum, Oscilloscope,
-  Sine Wave, DevCurve, Extruded Spectrum, Shockwave Grid, measured on the recorded clips.
+  historical bugs as warning lights; Bubble excluded, its cadence goblin is already targeted). Tool:
+  `python -m tools.visualizer_replay.mode_audit` (level, motion, ceiling/zero occupancy per passage-intensity band).
+  First pass on the four songs (2026-10-04): **Spectrum** (and Extruded's bars) healthy, ramping 0.33-0.38 / 0.41-0.49
+  / 0.52-0.60 quiet / usual / loud, never at the ceiling. **DevCurve** suspicious: its curve level is a constant 0.389
+  in every band with almost no motion (0.0004/frame): find whether it reacts to dynamics at all or normalises them
+  away. **Sine Wave**: the replay's output metric is three resolved settings, not its motion; give it a real one.
+  **Oscilloscope** and **Shockwave Grid** wait on a re-recording: the first clips held zero-padded waveforms (recorder
+  bug, fixed) and no MusicalOnsets (now recorded and replayed through `get_onset_events`).
 - [x] **Golden step 1c: recordings** (`logs/visualizer_recordings/`, local): the first 60 s of "Rag Doll"
   (`quiet_intro`), "I Said Hi" (`quiet_intro2`), "Human" (`heavy1`, swings hard, a Bubble favourite) and "Into Your
   Room" (`balanced`, light sustain). Loudness median 6-7, p90 ~12, max 18-20; live bass pinned at 2.5 in 80-95% of

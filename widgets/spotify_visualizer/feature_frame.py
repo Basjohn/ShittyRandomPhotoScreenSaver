@@ -26,10 +26,10 @@ RAW_BAR_COUNT = 32
 WAVEFORM_COUNT = 64
 
 SUPPORTED_MODES = frozenset(
-    {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere"}
+    {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere", "shockwave_grid"}
 )
 # Modes whose inputs exist only in the real-scale lanes (schema 2).
-REAL_SCALE_MODES = frozenset({"sphere"})
+REAL_SCALE_MODES = frozenset({"sphere", "shockwave_grid"})
 TYPED_EVENT_KINDS = frozenset({"kick", "snare", "vocal_swell"})
 LIVE_LANE_CLAMP = 2.5          # get_live_pre_agc_energy_bands' bound
 CONTROL_EVENTS = frozenset({"none", "mode_switch", "visibility_toggle"})
@@ -98,17 +98,41 @@ class TypedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordedOnset:
+    """One transient-bus ``MusicalOnset`` published on its frame (the serial is the replay's own)."""
+
+    kind: str
+    strength: float
+    magnitude: float
+    loudness: float
+    presence: float
+
+    def __post_init__(self) -> None:
+        if self.kind not in TYPED_EVENT_KINDS:
+            raise ValueError(f"unsupported onset kind: {self.kind}")
+        object.__setattr__(self, "strength", _finite_unit_value(self.strength, "strength"))
+        for name in ("magnitude", "loudness", "presence"):
+            object.__setattr__(self, name, _finite_non_negative(getattr(self, name), name))
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "RecordedOnset":
+        return cls(kind=payload["kind"], strength=payload["strength"], magnitude=payload["magnitude"],
+                   loudness=payload["loudness"], presence=payload["presence"])
+
+
+@dataclass(frozen=True, slots=True)
 class RealScaleLanes:
     """Production-unit inputs (schema 2): the live pre-AGC bands as
     ``get_live_pre_agc_energy_bands`` returns them (0..2.5), the transient bus's
     (loudness, presence) as ``get_musical_level`` does (unbounded), the raw pre-shape/pre-AGC
-    analysis spectrum (``get_pre_agc_analysis_spectrum``) and the typed scheduler events
-    available on this frame."""
+    analysis spectrum (``get_pre_agc_analysis_spectrum``), the typed scheduler events available on
+    this frame and the bus's ``MusicalOnset``s published since the previous frame."""
 
     live: tuple[float, float, float, float]
     musical_level: tuple[float, float]
     analysis_spectrum: tuple[float, ...]
     events: tuple[TypedEvent, ...] = ()
+    onsets: tuple[RecordedOnset, ...] = ()
 
     def __post_init__(self) -> None:
         live = tuple(self.live)
@@ -132,6 +156,10 @@ class RealScaleLanes:
         if len({event.kind for event in events}) != len(events):
             raise ValueError("at most one event of each kind per frame")
         object.__setattr__(self, "events", events)
+        onsets = tuple(self.onsets)
+        if any(not isinstance(onset, RecordedOnset) for onset in onsets):
+            raise TypeError("onsets must be RecordedOnset instances")
+        object.__setattr__(self, "onsets", onsets)
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "RealScaleLanes":
@@ -140,6 +168,7 @@ class RealScaleLanes:
             musical_level=tuple(payload["musical_level"]),
             analysis_spectrum=tuple(payload["analysis_spectrum"]),
             events=tuple(TypedEvent.from_dict(event) for event in payload.get("events", ())),
+            onsets=tuple(RecordedOnset.from_dict(onset) for onset in payload.get("onsets", ())),
         )
 
 

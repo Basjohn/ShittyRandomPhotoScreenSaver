@@ -5,7 +5,7 @@ from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.feature_frame import FeatureFrame
 from widgets.spotify_visualizer.transient_bus import (
-    OnsetEvent, PassageIntensity, TransientEnergyBands, TransientEventScheduler,
+    MusicalOnset, OnsetEvent, PassageIntensity, TransientEnergyBands, TransientEventScheduler,
 )
 
 def _bands(source: Any) -> EnergyBands:
@@ -32,6 +32,9 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         # recorded loudness at the frame's own time step.
         self._replay_intensity = PassageIntensity()
         self._replay_last_us: int | None = None
+        # Recorded MusicalOnsets, re-published with the replay's own serials (the last 16, as live).
+        self._replay_onsets: tuple = ()
+        self._replay_onset_serial = 0
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
@@ -61,6 +64,12 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             step = 0.0 if self._replay_last_us is None else (frame.timestamp_us - self._replay_last_us) / 1e6
             self._replay_last_us = frame.timestamp_us
             self._replay_intensity.update(frame.real.musical_level[0], step)
+            for onset in frame.real.onsets:
+                self._replay_onset_serial += 1
+                self._replay_onsets = self._replay_onsets[-15:] + (MusicalOnset(
+                    serial=self._replay_onset_serial, timestamp=frame.timestamp_us / 1_000_000.0, kind=onset.kind,
+                    strength=onset.strength, magnitude=onset.magnitude, loudness=onset.loudness,
+                    presence=onset.presence),)
             for event in frame.real.events:
                 self._replay_scheduler.feed(OnsetEvent(
                     timestamp=frame.timestamp_us / 1_000_000.0, event_type=event.kind, strength=event.strength))
@@ -115,6 +124,11 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def get_musical_level(self) -> tuple[float, float]:
         real = self._replay_real
         return super().get_musical_level() if real is None else tuple(real.musical_level)
+
+    def get_onset_events(self, after_serial: int = 0) -> tuple:
+        if self._replay_real is None:
+            return super().get_onset_events(after_serial)
+        return tuple(onset for onset in self._replay_onsets if onset.serial > after_serial)
 
     def get_musical_intensity(self) -> float:
         return super().get_musical_intensity() if self._replay_real is None else self._replay_intensity.value

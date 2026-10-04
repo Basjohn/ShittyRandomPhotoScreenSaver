@@ -40,7 +40,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/visualizer_replay/v1"
 MODES = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
 # Modes that replay from schema 2 clips only (their inputs are the real-scale lanes).
-REAL_SCALE_MODES = ("sphere",)
+REAL_SCALE_MODES = ("sphere", "shockwave_grid")
 
 
 def sphere_output(state) -> tuple[float, ...]:
@@ -63,6 +63,9 @@ def mode_output(frame):
         return frame.common.bars + state.peaks
     if frame.mode_id == "sphere":
         return sphere_output(state)
+    if frame.mode_id == "shockwave_grid":
+        # The live waves' strengths, newest last (the grid's reaction; its bars are Spectrum's).
+        return tuple(float(event[3]) for event in state.events)
     if frame.mode_id == "sine_wave":
         return tuple(float(state.parameters[key]) for key in (
             "resolved_sensitivity", "resolved_width_reaction", "wave_effect_gate",

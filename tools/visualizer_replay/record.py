@@ -75,10 +75,10 @@ def _configured_engine():
     return controller, engine
 
 
-def _frame(engine, timestamp_us: int, bars, scheduler):
+def _frame(engine, timestamp_us: int, bars, scheduler, onsets=()):
     from widgets.spotify_visualizer.feature_frame import (
-        RAW_BAR_COUNT, REAL_SCALE_SCHEMA_VERSION, WAVEFORM_COUNT, BandEnergy, EnergyLanes, FeatureFrame,
-        RealScaleLanes, TransientEnergy, TypedEvent,
+        RAW_BAR_COUNT, REAL_SCALE_SCHEMA_VERSION, TYPED_EVENT_KINDS, WAVEFORM_COUNT, BandEnergy, EnergyLanes,
+        FeatureFrame, RealScaleLanes, RecordedOnset, TransientEnergy, TypedEvent,
     )
 
     def band(source):
@@ -109,15 +109,19 @@ def _frame(engine, timestamp_us: int, bars, scheduler):
         spectrum = _resample(spectrum, 1024)
     if spectrum and len(spectrum) < 8:
         spectrum = ()
-    waveform = engine.get_waveform()
+    # Only the first ``get_waveform_count`` samples are the latest block; the rest is zero padding.
+    count = max(0, min(len(engine.get_waveform()), int(engine.get_waveform_count())))
+    waveform = engine.get_waveform()[:count] or [0.0]
     return FeatureFrame(
         timestamp_us=timestamp_us, energy=lanes,
         raw_bars=tuple(_unit(v) for v in _resample(bars, RAW_BAR_COUNT)),
-        waveform=tuple(max(-1.0, min(1.0, float(v))) for v in waveform[::max(1, len(waveform) // WAVEFORM_COUNT)][:WAVEFORM_COUNT]),
+        waveform=tuple(max(-1.0, min(1.0, float(v))) for v in _resample(waveform, WAVEFORM_COUNT)),
         playing=True, visible=True, mode="sphere", schema_version=REAL_SCALE_SCHEMA_VERSION,
         real=RealScaleLanes(live=(live.bass, live.mid, live.high, live.overall),
                             musical_level=tuple(engine.get_musical_level()), analysis_spectrum=spectrum,
-                            events=tuple(events)),
+                            events=tuple(events),
+                            onsets=tuple(RecordedOnset(o.kind, _unit(o.strength), o.magnitude, o.loudness, o.presence)
+                                         for o in onsets if o.kind in TYPED_EVENT_KINDS)),
     )
 
 
@@ -136,9 +140,10 @@ def _summary(frames) -> str:
     for frame in frames:
         for event in frame.real.events:
             events[event.kind] = events.get(event.kind, 0) + 1
+    onsets = sum(len(frame.real.onsets) for frame in frames)
     return (f"frames {len(frames)} ({len(frames) * TICK_MS / 1000:.1f} s)\n"
             f"loudness  {spread(loud)}\npresence  {spread(presence)}\n"
-            f"live bass pinned at 2.5: {pinned:.0%} of frames\ntyped events {events}")
+            f"live bass pinned at 2.5: {pinned:.0%} of frames\ntyped events {events}\nmusical onsets {onsets}")
 
 
 def main() -> None:
@@ -157,6 +162,7 @@ def main() -> None:
     engine.set_playback_state(True)
     engine.ensure_started()
     frames = []
+    last_serial = [0]
     start = time.perf_counter()
 
     def tick():
@@ -164,7 +170,11 @@ def main() -> None:
         elapsed = time.perf_counter() - start
         # Looked up every tick, as Sphere's capture does: the inline analysis commits a fresh copy of the
         # worker's DSP state (transient bus and scheduler included) each frame.
-        frames.append(_frame(engine, 1_000_000 + int(elapsed * 1_000_000), bars, engine.get_event_scheduler()))
+        onsets = engine.get_onset_events(last_serial[0])
+        if onsets:
+            last_serial[0] = onsets[-1].serial
+        frames.append(_frame(engine, 1_000_000 + int(elapsed * 1_000_000), bars, engine.get_event_scheduler(),
+                             onsets))
         if elapsed >= args.seconds:
             timer.stop()
             app.quit()
