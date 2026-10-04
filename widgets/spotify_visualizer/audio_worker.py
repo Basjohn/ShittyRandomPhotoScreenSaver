@@ -469,7 +469,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         # bus that packet can still reference.
         try:
             from widgets.spotify_visualizer.transient_bus import TransientBus
-            self._transient_bus = TransientBus()
+            fresh = TransientBus()
+            fresh.adopt_musical_context(self._transient_bus)
+            self._transient_bus = fresh
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replace transient bus", exc_info=True)
 

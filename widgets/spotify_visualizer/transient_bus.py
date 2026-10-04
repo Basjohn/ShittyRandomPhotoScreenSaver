@@ -115,53 +115,57 @@ def passage_ramp(intensity: float, quiet: float) -> float:
 
 
 class PassageIntensity:
-    """How loud the music is against the track's own recent loud level, 0..1, rising fast and
-    falling gently ("everything ramps"): 0 in a passage at or below ``LOW`` of that level (or
-    near-silence), 1 at ``HIGH`` of it and above, so a sustained loud passage stays at 1.
+    """Where the passage being heard sits against the track's usual level, 0..1 ("everything
+    ramps"): ``USUAL`` for a usual passage, toward 1 in a louder one, toward 0 in a quieter one,
+    0 in near-silence.
 
-    The absolute loudness feeds an envelope (``ATTACK_S`` up, ``RELEASE_S`` down) compared with a
-    peak tracker (rises in ``PEAK_RISE_S``, falls over ``PEAK_FALL_S``), seeded by the first music.
-    Mastered music spans only about +-30% of its own loud level (recorded clips 2026-10-04: the
-    envelope sits at 0.6-1.0 of the peak), so a raw ratio barely moves; mapped from ``LOW``-``HIGH``
-    it spreads: p10 0-0.25, p50 ~0.65, p90 ~1 on those clips. Near-silence neither seeds nor moves
-    the peak and reads 0. Time-based, so the analysis and replay rates agree.
+    Loudness flickers with every beat (2-14 within a bar of real music), so the passage is the
+    loudness eased into a level (``LEVEL_RISE_S`` up, ``LEVEL_FALL_S`` down: a lift registers
+    quickly, a dip gently). The track's usual level is the geometric mean of that level: the
+    mean of everything heard so far until ``USUAL_S`` of music, then a ``USUAL_S`` moving mean
+    (a quiet intro or a loud first hit cannot dominate it). The value is ``USUAL`` plus
+    ``SPREAD`` per natural-log unit of level over usual: on the four recorded songs (2026-10-04)
+    passages sit at -0.16..+0.20 of usual (p10..p90), which reads about 0.35..1.
+
+    (Until 2026-10-04 this was the envelope over a slowly falling peak: every reset re-seeded
+    the peak low, so Sphere overreacted for a while, then, once the peak had learned the loudest
+    hit, ordinary loud music read 0.1-0.5: reactions swung between too much and almost none.)
+    Near-silence reads 0 and moves nothing. Time-based, so the analysis and replay rates agree.
     """
 
-    ATTACK_S = 0.06
-    RELEASE_S = 0.8
-    PEAK_RISE_S = 2.0
-    PEAK_FALL_S = 30.0
-    LOW = 0.6
-    HIGH = 1.0
+    LEVEL_RISE_S = 0.4
+    LEVEL_FALL_S = 1.2
+    USUAL_S = 20.0
+    USUAL = 0.65
+    SPREAD = 1.8
 
-    __slots__ = ("_envelope", "_peak", "_value")
+    __slots__ = ("_level", "_log_usual", "_heard", "_value")
 
     def __init__(self) -> None:
-        self._envelope = 0.0
-        self._peak = 0.0
+        self._level = 0.0
+        self._log_usual: float | None = None
+        self._heard = 0.0
         self._value = 0.0
 
     @property
     def value(self) -> float:
         return self._value
 
-    @staticmethod
-    def _follow(level: float, target: float, dt: float, up_s: float, down_s: float) -> float:
-        tau = up_s if target > level else down_s
-        return level + (target - level) * (1.0 - math.exp(-dt / tau))
-
     def update(self, loudness: float, dt: float) -> float:
-        level = max(0.0, float(loudness))
+        loudness = max(0.0, float(loudness))
         dt = max(0.0, min(1.0, float(dt)))
-        self._envelope = self._follow(self._envelope, level, dt, self.ATTACK_S, self.RELEASE_S)
-        if level < MUSICAL_QUIET[0]:
+        if loudness < MUSICAL_QUIET[0]:
             self._value = 0.0
             return self._value
-        if self._peak <= 0.0:                     # the first music seeds the loud level
-            self._peak = level
-        self._peak = self._follow(self._peak, self._envelope, dt, self.PEAK_RISE_S, self.PEAK_FALL_S)
-        ratio = self._envelope / max(self._peak, 1e-6)
-        self._value = max(0.0, min(1.0, (ratio - self.LOW) / (self.HIGH - self.LOW)))
+        if self._log_usual is None:                 # the first music seeds both
+            self._level = loudness
+            self._log_usual = math.log(loudness)
+        tau = self.LEVEL_RISE_S if loudness > self._level else self.LEVEL_FALL_S
+        self._level += (loudness - self._level) * (1.0 - math.exp(-dt / tau))
+        self._heard += dt
+        log_level = math.log(max(self._level, 1e-6))
+        self._log_usual += (log_level - self._log_usual) * min(1.0, dt / max(min(self.USUAL_S, self._heard), 1e-3))
+        self._value = max(0.0, min(1.0, self.USUAL + self.SPREAD * (log_level - self._log_usual)))
         return self._value
 
 
@@ -503,6 +507,14 @@ class TransientBus:
     # ------------------------------------------------------------------
     # Reset
     # ------------------------------------------------------------------
+
+    def adopt_musical_context(self, previous: "TransientBus") -> None:
+        """Keep what describes the music rather than the mode across a reactivity reset: the
+        passage intensity and the running loudness reference. A preset hotswap or a Settings
+        rebuild changes the visuals, not the track; restarting these made Sphere overreact
+        until they re-learned the music (2026-10-04)."""
+        self._intensity = previous._intensity
+        self._loudness_reference = previous._loudness_reference
 
     def reset(self) -> None:
         """Reset all transient state (e.g. on mode switch)."""

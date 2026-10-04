@@ -299,3 +299,64 @@ class TestBeatEngineTransient:
         assert hasattr(result, 'bass_transient')
         assert hasattr(result, 'onset_detected')
         assert hasattr(result, 'onset_type')
+
+
+# --- Passage intensity (operator 2026-10-04: Sphere swung between overreacting after a reset and
+# barely reacting once settled) ---------------------------------------------------------------
+
+def _beats(seconds: float, level: float, rate: float = 90.0):
+    """Real-music-like loudness: a kick-heavy bar flickering 0.4x..1.6x around ``level``."""
+    pattern = (1.6, 1.1, 0.6, 0.4, 1.3, 0.9, 0.5, 0.4)
+    return [level * pattern[int(i / rate * 8) % len(pattern)] for i in range(int(seconds * rate))]
+
+
+def _feed(intensity, samples, rate: float = 90.0):
+    return [intensity.update(value, 1.0 / rate) for value in samples]
+
+
+def test_usual_music_reads_as_usual_and_stays_there():
+    from statistics import fmean
+
+    from widgets.spotify_visualizer.transient_bus import PassageIntensity
+
+    intensity = PassageIntensity()
+    values = _feed(intensity, _beats(120.0, 7.0))
+    early, late = fmean(values[20 * 90:40 * 90]), fmean(values[100 * 90:])
+    assert abs(early - PassageIntensity.USUAL) < 0.1 and abs(late - PassageIntensity.USUAL) < 0.1
+    assert abs(late - early) < 0.05                      # no drift into "almost not reacting"
+
+
+def test_a_fresh_start_does_not_overreact():
+    from statistics import fmean
+
+    from widgets.spotify_visualizer.transient_bus import PassageIntensity
+
+    values = _feed(PassageIntensity(), _beats(3.0, 7.0))
+    assert fmean(values[45:]) < PassageIntensity.USUAL + 0.15
+
+
+def test_louder_passages_read_higher_and_quieter_ones_lower():
+    from statistics import fmean
+
+    from widgets.spotify_visualizer.transient_bus import PassageIntensity
+
+    intensity = PassageIntensity()
+    _feed(intensity, _beats(40.0, 7.0))
+    loud = fmean(_feed(intensity, _beats(4.0, 7.0 * 1.6))[180:])
+    quiet = fmean(_feed(intensity, _beats(4.0, 7.0 * 0.6))[180:])
+    assert loud > 0.9 and quiet < 0.4
+    assert _feed(intensity, [0.01] * 90)[-1] == 0.0       # near-silence reads 0
+
+
+def test_a_reactivity_reset_keeps_the_musical_context():
+    """A preset hotswap or Settings rebuild resets the per-mode DSP, not the track's context."""
+    from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+
+    worker = _SpotifyBeatEngine(4)._audio_worker
+    worker._manual_floor = 0.12                          # as an activation's floor config resolves it
+    bus = worker._transient_bus
+    _feed(bus._intensity, _beats(30.0, 7.0))
+    before = bus.musical_intensity
+    worker.reset_reactivity_state()
+    assert worker._transient_bus is not bus
+    assert worker._transient_bus.musical_intensity == before
