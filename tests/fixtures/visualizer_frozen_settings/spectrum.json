@@ -1,0 +1,793 @@
+{
+ "adaptive_sensitivity": false,
+ "agc_strength": 0.34,
+ "bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "bar_border_opacity": 1.0,
+ "bar_count": 35,
+ "bar_fill_color": [
+  12,
+  12,
+  12,
+  230
+ ],
+ "bubble_adaptive_sensitivity": false,
+ "bubble_agc_strength": 0.0,
+ "bubble_audio_block_size": 128,
+ "bubble_bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "bubble_bar_border_opacity": 1.0,
+ "bubble_bar_count": 48,
+ "bubble_bar_fill_color": [
+  12,
+  12,
+  12,
+  230
+ ],
+ "bubble_big_bass_pulse": 0.67,
+ "bubble_big_contraction_bias": 0.4,
+ "bubble_big_count": 5,
+ "bubble_big_size_clamp": 2.96,
+ "bubble_big_size_max": 0.037,
+ "bubble_big_specular_max_size": 4.03,
+ "bubble_big_visual_smoothing": 1.0,
+ "bubble_bounce_big_pct": 0,
+ "bubble_bounce_big_speed": 0.0,
+ "bubble_bounce_same_only": true,
+ "bubble_bounce_small_pct": 60,
+ "bubble_bounce_small_speed": 0.1,
+ "bubble_collision_pop_mode": "one",
+ "bubble_drift_amount": 0.35,
+ "bubble_drift_direction": "swish_horizontal",
+ "bubble_drift_frequency": 0.5,
+ "bubble_drift_speed": 0.15,
+ "bubble_dynamic_floor": false,
+ "bubble_dynamic_range_enabled": false,
+ "bubble_ghost_alpha": 0.15,
+ "bubble_ghost_decay": 0.5,
+ "bubble_ghosting_enabled": true,
+ "bubble_gradient_dark": [
+  0,
+  4,
+  11,
+  255
+ ],
+ "bubble_gradient_direction": "bottom",
+ "bubble_gradient_light": [
+  43,
+  61,
+  80,
+  255
+ ],
+ "bubble_group_drift": false,
+ "bubble_input_gain": 0.75,
+ "bubble_kick_lane_gain": 1.0,
+ "bubble_manual_floor": 0.3,
+ "bubble_outline_color": [
+  243,
+  250,
+  255,
+  245
+ ],
+ "bubble_pop_color": [
+  138,
+  146,
+  191,
+  255
+ ],
+ "bubble_rotation_amount": 0.0,
+ "bubble_sensitivity": 0.55,
+ "bubble_small_count": 44,
+ "bubble_small_freq_pulse": 1.1,
+ "bubble_small_size_max": 0.01,
+ "bubble_specular_color": [
+  255,
+  255,
+  255,
+  235
+ ],
+ "bubble_specular_direction": "top_left",
+ "bubble_stream_constant_speed": 0.15,
+ "bubble_stream_direction": "up",
+ "bubble_stream_reactivity": 1.35,
+ "bubble_stream_speed_cap": 1.95,
+ "bubble_surface_reach": 1.0,
+ "bubble_tail_opacity": 0.8,
+ "bubble_trail_strength": 0.8,
+ "bubble_transient_clamp": 1.15,
+ "bubble_transient_mix_bass": 0.2,
+ "bubble_transient_mix_vocal": 0.15,
+ "bubble_transient_pulse_gain": 0.05,
+ "devcurve_active_layer": "bass",
+ "devcurve_adaptive_sensitivity": true,
+ "devcurve_agc_strength": 0.5,
+ "devcurve_audio_block_size": 0,
+ "devcurve_bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "devcurve_bar_border_opacity": 1.0,
+ "devcurve_bar_count": 32,
+ "devcurve_bar_fill_color": [
+  255,
+  255,
+  255,
+  230
+ ],
+ "devcurve_base_level": 0.58,
+ "devcurve_dynamic_floor": true,
+ "devcurve_dynamic_range_enabled": false,
+ "devcurve_foreground_shadow_alpha": 0.36,
+ "devcurve_foreground_shadow_darken": 0.42,
+ "devcurve_foreground_shadow_enabled": false,
+ "devcurve_foreground_shadow_offset": 0.1,
+ "devcurve_foreground_specular_alpha": 0.78,
+ "devcurve_foreground_specular_crest_bias": 1.05,
+ "devcurve_foreground_specular_enabled": false,
+ "devcurve_foreground_specular_offset": 0.028,
+ "devcurve_foreground_specular_width": 0.022,
+ "devcurve_ghost_alpha": 0.0,
+ "devcurve_ghost_decay": 0.4,
+ "devcurve_ghosting_enabled": false,
+ "devcurve_idle_motion": 0.2,
+ "devcurve_idle_speed": 0.6,
+ "devcurve_input_gain": 1.0,
+ "devcurve_kick_lane_gain": 1.0,
+ "devcurve_layer_bass_alpha": 0.55,
+ "devcurve_layer_bass_color": [
+  82,
+  167,
+  255,
+  230
+ ],
+ "devcurve_layer_bass_enabled": true,
+ "devcurve_layer_bass_offset": 0.0,
+ "devcurve_layer_bass_order": 1,
+ "devcurve_layer_bass_outline_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "devcurve_layer_bass_outline_width": 0.006,
+ "devcurve_layer_bass_power": 1.0,
+ "devcurve_layer_bass_shape_nodes": [
+  [
+   0.0,
+   0.58
+  ],
+  [
+   0.35,
+   0.64
+  ],
+  [
+   0.7,
+   0.52
+  ],
+  [
+   1.0,
+   0.6
+  ]
+ ],
+ "devcurve_layer_mids_alpha": 0.46,
+ "devcurve_layer_mids_color": [
+  100,
+  145,
+  255,
+  220
+ ],
+ "devcurve_layer_mids_enabled": true,
+ "devcurve_layer_mids_offset": 0.01,
+ "devcurve_layer_mids_order": 3,
+ "devcurve_layer_mids_outline_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "devcurve_layer_mids_outline_width": 0.006,
+ "devcurve_layer_mids_power": 1.0,
+ "devcurve_layer_mids_shape_nodes": [
+  [
+   0.0,
+   0.58
+  ],
+  [
+   0.35,
+   0.64
+  ],
+  [
+   0.7,
+   0.52
+  ],
+  [
+   1.0,
+   0.6
+  ]
+ ],
+ "devcurve_layer_transients_alpha": 0.66,
+ "devcurve_layer_transients_color": [
+  215,
+  240,
+  255,
+  240
+ ],
+ "devcurve_layer_transients_enabled": true,
+ "devcurve_layer_transients_offset": 0.0,
+ "devcurve_layer_transients_order": 4,
+ "devcurve_layer_transients_outline_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "devcurve_layer_transients_outline_width": 0.006,
+ "devcurve_layer_transients_power": 1.15,
+ "devcurve_layer_transients_shape_nodes": [
+  [
+   0.0,
+   0.58
+  ],
+  [
+   0.35,
+   0.64
+  ],
+  [
+   0.7,
+   0.52
+  ],
+  [
+   1.0,
+   0.6
+  ]
+ ],
+ "devcurve_layer_vocals_alpha": 0.42,
+ "devcurve_layer_vocals_color": [
+  136,
+  190,
+  255,
+  220
+ ],
+ "devcurve_layer_vocals_enabled": true,
+ "devcurve_layer_vocals_offset": -0.01,
+ "devcurve_layer_vocals_order": 2,
+ "devcurve_layer_vocals_outline_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "devcurve_layer_vocals_outline_width": 0.006,
+ "devcurve_layer_vocals_power": 1.0,
+ "devcurve_layer_vocals_shape_nodes": [
+  [
+   0.0,
+   0.58
+  ],
+  [
+   0.35,
+   0.64
+  ],
+  [
+   0.7,
+   0.52
+  ],
+  [
+   1.0,
+   0.6
+  ]
+ ],
+ "devcurve_manual_floor": 0.12,
+ "devcurve_motion_power": 1.0,
+ "devcurve_sensitivity": 1.0,
+ "devcurve_smoothness": 0.55,
+ "devcurve_transient_clamp": 1.5,
+ "devcurve_transient_pulse_gain": 1.0,
+ "dynamic_floor": true,
+ "dynamic_range_enabled": true,
+ "enabled": true,
+ "extruded_spectrum_allow_overflow": true,
+ "extruded_spectrum_colouring": "Spectral Faces",
+ "extruded_spectrum_depth": 1.0,
+ "extruded_spectrum_face_mirror": 0.0,
+ "extruded_spectrum_gloss": 0.5,
+ "extruded_spectrum_hue_drift": 0.25,
+ "extruded_spectrum_reflection": 0.35,
+ "extruded_spectrum_smooth_edges": true,
+ "extruded_spectrum_tilt": 0.2222,
+ "extruded_spectrum_turn": 0.0,
+ "input_gain": 0.98,
+ "kick_lane_gain": 1.7,
+ "manual_floor": 0.42,
+ "mode": "spectrum",
+ "mode_activation": {
+  "bubble": true,
+  "devcurve": true,
+  "extruded_spectrum": false,
+  "oscilloscope": false,
+  "shockwave_grid": false,
+  "sine_wave": true,
+  "spectrum": true,
+  "sphere": true
+ },
+ "monitor": "1",
+ "osc_ghost_decay": 0.4,
+ "osc_ghost_intensity": 0.4,
+ "osc_ghost_line2_enabled": true,
+ "osc_ghost_line3_enabled": true,
+ "osc_ghost_line4_enabled": true,
+ "osc_ghost_line5_enabled": true,
+ "osc_ghost_line6_enabled": true,
+ "osc_ghosting_enabled": true,
+ "osc_glow_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "osc_glow_enabled": true,
+ "osc_glow_intensity": 0.6,
+ "osc_glow_reactivity": 1.0,
+ "osc_line2_color": [
+  21,
+  21,
+  21,
+  255
+ ],
+ "osc_line2_glow_color": [
+  255,
+  255,
+  255,
+  230
+ ],
+ "osc_line3_color": [
+  21,
+  21,
+  21,
+  250
+ ],
+ "osc_line3_glow_color": [
+  255,
+  255,
+  255,
+  240
+ ],
+ "osc_line4_color": [
+  255,
+  0,
+  150,
+  230
+ ],
+ "osc_line4_glow_color": [
+  255,
+  0,
+  150,
+  180
+ ],
+ "osc_line5_color": [
+  0,
+  255,
+  200,
+  230
+ ],
+ "osc_line5_glow_color": [
+  0,
+  255,
+  200,
+  180
+ ],
+ "osc_line6_color": [
+  200,
+  100,
+  255,
+  230
+ ],
+ "osc_line6_glow_color": [
+  200,
+  100,
+  255,
+  180
+ ],
+ "osc_line_amplitude": 4.7,
+ "osc_line_color": [
+  0,
+  0,
+  0,
+  255
+ ],
+ "osc_line_count": 1,
+ "osc_line_dim": false,
+ "osc_line_offset_bias": 0.0,
+ "osc_reactive_glow": true,
+ "osc_smoothing": 0.6,
+ "osc_speed": 0.33,
+ "osc_vertical_shift": 25,
+ "oscilloscope_adaptive_sensitivity": true,
+ "oscilloscope_agc_strength": 0.5,
+ "oscilloscope_audio_block_size": 512,
+ "oscilloscope_bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "oscilloscope_bar_border_opacity": 1.0,
+ "oscilloscope_bar_count": 32,
+ "oscilloscope_bar_fill_color": [
+  255,
+  255,
+  255,
+  230
+ ],
+ "oscilloscope_dynamic_floor": true,
+ "oscilloscope_dynamic_range_enabled": false,
+ "oscilloscope_input_gain": 1.0,
+ "oscilloscope_kick_lane_gain": 1.0,
+ "oscilloscope_manual_floor": 0.12,
+ "oscilloscope_sensitivity": 0.4,
+ "oscilloscope_transient_clamp": 1.5,
+ "oscilloscope_transient_pulse_gain": 1.0,
+ "oscilloscope_transient_width_mix": 0.35,
+ "position": "Follow Media",
+ "preset_bubble": 0,
+ "preset_devcurve": 0,
+ "preset_extruded_spectrum": 0,
+ "preset_oscilloscope": 0,
+ "preset_shockwave_grid": 0,
+ "preset_sine_wave": 4,
+ "preset_spectrum": 0,
+ "preset_sphere": 0,
+ "rainbow_enabled": true,
+ "rainbow_speed": 0.6,
+ "sensitivity": 0.97,
+ "shockwave_grid_allow_overflow": true,
+ "shockwave_grid_crest_color": [
+  255,
+  70,
+  210,
+  255
+ ],
+ "shockwave_grid_density": 0.45,
+ "shockwave_grid_floor": 0.55,
+ "shockwave_grid_glow": 0.6,
+ "shockwave_grid_horizon": 0.5,
+ "shockwave_grid_idle": 0.35,
+ "shockwave_grid_line_color": [
+  0,
+  220,
+  255,
+  255
+ ],
+ "shockwave_grid_scroll": 0.3,
+ "shockwave_grid_tilt": 0.22,
+ "shockwave_grid_turn": 0.0,
+ "shockwave_grid_wave_height": 0.55,
+ "shockwave_grid_wave_speed": 0.45,
+ "sine_card_adaptation": 0.24,
+ "sine_crawl_amount": 0.0,
+ "sine_density": 1.6,
+ "sine_displacement": 0.0,
+ "sine_ghost_alpha": 0.12,
+ "sine_ghost_decay": 0.68,
+ "sine_ghost_line2_enabled": true,
+ "sine_ghost_line3_enabled": true,
+ "sine_ghost_line4_enabled": true,
+ "sine_ghost_line5_enabled": true,
+ "sine_ghost_line6_enabled": true,
+ "sine_ghosting_enabled": true,
+ "sine_glow_color": [
+  148,
+  188,
+  255,
+  218
+ ],
+ "sine_glow_enabled": true,
+ "sine_glow_intensity": 0.42,
+ "sine_glow_reactivity": 1.3,
+ "sine_heartbeat": 0.0,
+ "sine_line1_shift": 0.0,
+ "sine_line2_color": [
+  192,
+  224,
+  255,
+  198
+ ],
+ "sine_line2_glow_color": [
+  160,
+  178,
+  255,
+  178
+ ],
+ "sine_line2_shift": 0.22,
+ "sine_line3_color": [
+  230,
+  196,
+  255,
+  190
+ ],
+ "sine_line3_glow_color": [
+  202,
+  148,
+  255,
+  172
+ ],
+ "sine_line3_shift": -0.22,
+ "sine_line4_color": [
+  255,
+  120,
+  50,
+  230
+ ],
+ "sine_line4_glow_color": [
+  255,
+  120,
+  50,
+  180
+ ],
+ "sine_line4_shift": 0.0,
+ "sine_line5_color": [
+  50,
+  255,
+  120,
+  230
+ ],
+ "sine_line5_glow_color": [
+  50,
+  255,
+  120,
+  180
+ ],
+ "sine_line5_shift": 0.0,
+ "sine_line6_color": [
+  255,
+  0,
+  150,
+  230
+ ],
+ "sine_line6_glow_color": [
+  255,
+  0,
+  150,
+  180
+ ],
+ "sine_line6_shift": 0.0,
+ "sine_line_color": [
+  255,
+  255,
+  255,
+  228
+ ],
+ "sine_line_count": 3,
+ "sine_line_dim": false,
+ "sine_line_offset_bias": 0.12,
+ "sine_micro_wobble": 0.08,
+ "sine_reactive_glow": true,
+ "sine_sensitivity": 0.36,
+ "sine_smoothing": 0.7,
+ "sine_speed": 0.42,
+ "sine_travel_line2": 0,
+ "sine_travel_line3": 0,
+ "sine_travel_line4": 0,
+ "sine_travel_line5": 0,
+ "sine_travel_line6": 0,
+ "sine_vertical_shift": 44,
+ "sine_wave_adaptive_sensitivity": true,
+ "sine_wave_agc_strength": 0.62,
+ "sine_wave_audio_block_size": 256,
+ "sine_wave_bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "sine_wave_bar_border_opacity": 1.0,
+ "sine_wave_bar_count": 40,
+ "sine_wave_bar_fill_color": [
+  0,
+  0,
+  0,
+  130
+ ],
+ "sine_wave_dynamic_floor": true,
+ "sine_wave_dynamic_range_enabled": false,
+ "sine_wave_effect": 0.3,
+ "sine_wave_input_gain": 0.44,
+ "sine_wave_kick_lane_gain": 0.85,
+ "sine_wave_manual_floor": 0.12,
+ "sine_wave_sensitivity": 0.36,
+ "sine_wave_transient_clamp": 1.0,
+ "sine_wave_transient_pulse_gain": 1.0,
+ "sine_wave_transient_width_mix": 0.32,
+ "sine_wave_travel": 2,
+ "sine_width_reaction": 0.18,
+ "spectrum_adaptive_sensitivity": false,
+ "spectrum_agc_strength": 0.34,
+ "spectrum_audio_block_size": 128,
+ "spectrum_bar_border_color": [
+  255,
+  255,
+  255,
+  255
+ ],
+ "spectrum_bar_border_opacity": 1.0,
+ "spectrum_bar_count": 35,
+ "spectrum_bar_fill_color": [
+  12,
+  12,
+  12,
+  230
+ ],
+ "spectrum_border_radius": 2.0,
+ "spectrum_drop_speed": 0.72,
+ "spectrum_dynamic_floor": true,
+ "spectrum_dynamic_range_enabled": true,
+ "spectrum_ghost_alpha": 0.59,
+ "spectrum_ghost_decay": 0.18,
+ "spectrum_ghosting_enabled": true,
+ "spectrum_glow_color": [
+  255,
+  255,
+  255,
+  235
+ ],
+ "spectrum_glow_enabled": false,
+ "spectrum_glow_intensity": 0.08,
+ "spectrum_input_gain": 0.98,
+ "spectrum_kick_lane_gain": 1.7,
+ "spectrum_lane_strengths_linear": {
+  "Bass": 0.24,
+  "Hi-Mid": 0.672,
+  "Low-Mid": 0.2868,
+  "Treble": 1.0,
+  "Vocal": 0.4096
+ },
+ "spectrum_lane_strengths_mirrored": {
+  "Bass": 0.1794871794871802,
+  "Low-Mid": 0.2868,
+  "Mid": 0.344,
+  "Vocal": 0.4096
+ },
+ "spectrum_lane_transient_mix": 0.9,
+ "spectrum_link_fill_border": false,
+ "spectrum_manual_floor": 0.42,
+ "spectrum_mirrored": true,
+ "spectrum_notch_positions_linear": [
+  [
+   0.0,
+   "Bass"
+  ],
+  [
+   0.25,
+   "Low-Mid"
+  ],
+  [
+   0.5022879267863428,
+   "Vocal"
+  ],
+  [
+   0.6261879619852164,
+   "Hi-Mid"
+  ],
+  [
+   1.0,
+   "Treble"
+  ]
+ ],
+ "spectrum_notch_positions_mirrored": [
+  [
+   0.0,
+   "Bass"
+  ],
+  [
+   0.2859915611814348,
+   "Mid"
+  ],
+  [
+   0.6861603375527427,
+   "Low-Mid"
+  ],
+  [
+   0.8144303797468355,
+   "Vocal"
+  ]
+ ],
+ "spectrum_profile_floor": 0.2,
+ "spectrum_rainbow_border": true,
+ "spectrum_rainbow_fill": false,
+ "spectrum_render_mode": "bars",
+ "spectrum_sensitivity": 0.97,
+ "spectrum_shape_nodes": [
+  [
+   0.0,
+   1.0
+  ],
+  [
+   0.1299578059071731,
+   1.0
+  ],
+  [
+   0.5704641350210972,
+   0.7438271604938275
+  ],
+  [
+   0.830379746835443,
+   0.9104938271604942
+  ],
+  [
+   0.9930025445292622,
+   0.1882716049382717
+  ]
+ ],
+ "spectrum_transient_clamp": 1.85,
+ "spectrum_transient_pulse_gain": 1.0,
+ "spectrum_unique_colors": true,
+ "spectrum_visual_smoothing": 0.5,
+ "spectrum_visual_smoothing_enabled": true,
+ "spectrum_wave_amplitude": 0.15,
+ "sphere_allow_overflow": true,
+ "sphere_base_rotation_speed": 0.026,
+ "sphere_cel_shading": false,
+ "sphere_depth_shading_enabled": true,
+ "sphere_depth_shading_strength": 0.2,
+ "sphere_edge_color": [
+  190,
+  224,
+  234,
+  255
+ ],
+ "sphere_edge_weight": 1.0,
+ "sphere_fade_incoming_blocks": true,
+ "sphere_fill_color": [
+  95,
+  160,
+  190,
+  255
+ ],
+ "sphere_finish": "Neutral",
+ "sphere_fragment_energy_floor": 0.0,
+ "sphere_fragment_interpolation_enabled": true,
+ "sphere_fragment_strength": 1.1475,
+ "sphere_gloss": 0.2,
+ "sphere_incoming_density_response_enabled": true,
+ "sphere_incoming_transient_velocity_enabled": true,
+ "sphere_light_direction": "NW",
+ "sphere_light_tracer_enabled": true,
+ "sphere_mirror": 0.0,
+ "sphere_particle_amount": 1.0,
+ "sphere_particle_distance": 1.35,
+ "sphere_particle_energy_floor": 0.075,
+ "sphere_particle_outtake_enabled": false,
+ "sphere_perspective_strength": 1.0,
+ "sphere_rotation_speed": 0.32,
+ "sphere_shadow_distance": 1.0,
+ "sphere_shadow_enabled": true,
+ "sphere_shadow_opacity": 1.0,
+ "sphere_shadow_size": 1.0,
+ "sphere_shadow_softness": 0.18,
+ "sphere_size_response": 1.15,
+ "sphere_specular": 0.25,
+ "sphere_taste_the_rainbow_edges": true,
+ "sphere_taste_the_rainbow_enabled": false,
+ "sphere_taste_the_rainbow_surfaces": true,
+ "sphere_tracer_color": [
+  255,
+  242,
+  194,
+  255
+ ],
+ "sphere_vocal_response": 0.95,
+ "sphere_voxel_size_variation": 0.35,
+ "transient_clamp": 1.85,
+ "transient_pulse_gain": 1.0,
+ "visualizers_enabled": true
+}

@@ -88,7 +88,17 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     (keep, but assert structure only).
   - [ ] Default-pinning scan: ~60 tests read canonical defaults; deriving inputs from them is allowed (memory rule),
     pinning a default's *value* is not. Scan each for literal expected values equal to a default.
-- [ ] N2b. Give each its own frozen inputs (as `sphere_golden.py` does: settings frozen at `--write`); replay
+- [ ] N2b. Give each its own frozen inputs
+  - [x] Mechanism: `tools/freeze_visualizer_settings.py` writes complete resolved settings per mode to
+    `tests/fixtures/visualizer_frozen_settings/<mode>.json` (frozen 2026-10-04 from 05c4057e, the tree before the
+    operator's Studio/Mirror Ball edits); tests load them through `tests/_visualizer_frozen_settings.py`.
+  - [x] Guided Setup preview-builder tests take frozen settings (`_build_spectrum_preview_snapshot(..., settings=)`):
+    Extruded (the known red is green), Shockwave, Scene3D quality, 3D reach, prepared reveal. The foundry's own
+    asset test keeps resolving the curated preset on purpose (it checks the preview shows the preset, derived, not
+    pinned).
+  - [ ] Activation-payload tests (list above), replay `driver.py` `preset=` callers and floors goldens built from
+    preset 0.
+  - [ ] Preset-file readers that are not catalogue/manifest machinery tests. (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
 

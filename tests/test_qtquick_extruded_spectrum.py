@@ -34,6 +34,7 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     SPECTRUM_SHADER_INPUT_SCALE,
     spectrum_bar_to_boosted,
 )
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 pytestmark = pytest.mark.qt
 
@@ -115,7 +116,7 @@ def _snapshot(mode: str = "extruded_spectrum", at: float | None = None, **parame
     """The preview snapshot with ``parameters``; ``at`` seconds after its logical time when given."""
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
-    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode)
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode, settings=frozen_visualizer_settings(mode))
     if at is not None:
         logical = dataclasses.replace(snapshot.logical,
                                       logical_timestamp=snapshot.logical.logical_timestamp + float(at))

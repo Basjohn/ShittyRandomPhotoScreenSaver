@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 pytestmark = pytest.mark.qt
 
@@ -39,7 +40,7 @@ def _snapshot(mode, fade, activation=1, **parameters):
     from tests.test_qtquick_extruded_spectrum import H, W
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
-    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode)
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode=mode, settings=frozen_visualizer_settings(mode))
     state = snapshot.logical.mode_state
     state = dataclasses.replace(state, parameters={**dict(state.parameters), **parameters})
     logical = dataclasses.replace(snapshot.logical, mode_state=state, activation_id=activation)
