@@ -104,7 +104,12 @@ but the operator still sees the flicker). Read BTF (`Docs/Guardrails/Bubble_Temp
     replay test and the floors writer (`python -m tools.visualizer_replay`, `load_frozen`) run on the frozen copies;
     84 replay tests and 66 floor cases pass without re-recording. Tuning tools (`mode_audit`, `sphere_ramp`) keep
     reading the live presets on purpose.
-  - [ ] Preset-file readers that are not catalogue/manifest machinery tests. (as `sphere_golden.py` does: settings frozen at `--write`); replay
+  - [x] Preset-file readers: glow-footprint and line-coverage now render the frozen Sine/Oscilloscope settings
+    (were the Wobble Groove / Night Drive files by name); Sphere's per-preset key loops removed (authored content).
+    Kept as structure/machinery: Spectrum's retired-key check, defaults-authority preset structure,
+    `test_visualizer_presets`, `test_visualizer_preset_manifest`, the catalogue test (fixtures only),
+    `test_build_runner` (its own tmp files). 118 passed.
+  - [ ] Default-pinning scan (above) and the temporal golden's `approval_environment_manifest.json`. (as `sphere_golden.py` does: settings frozen at `--write`); replay
   goldens/floors built from preset 0 freeze their resolved settings once; delete tests whose only subject is
   authored content.
 
