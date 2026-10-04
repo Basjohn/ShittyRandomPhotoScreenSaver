@@ -43,7 +43,8 @@ _MAX_BARS = 64
 _BAR_BINDING = 3
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
-             "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap")
+             "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
+             "uBackdropPrevious", "uBackdropBlend")
 
 
 def extruded_quality(parameters) -> tuple[int, float]:
@@ -195,9 +196,13 @@ class QuickExtrudedSpectrumRenderer:
         target_frame = self._target_frame(frame, scene)
         smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
         samples, mirror = extruded_quality(parameters)
-        backdrop = 0
+        backdrop, previous, blend = 0, 0, 1.0
         if mirror > 0.0:
-            backdrop = self._backdrop.texture(parameter(parameters, "backdrop"))   # the displayed wallpaper
+            # The displayed wallpaper, crossfading from the last one (or in from none).
+            backdrop, previous, blend = self._backdrop.textures(parameter(parameters, "backdrop"),
+                                                                logical.logical_timestamp)
+            if not previous:
+                previous, mirror = backdrop, mirror * blend
         elif self._backdrop.has_resources:
             self._backdrop.release()                                # Mirror Faces off: hold nothing
         origin = item_pixel_rect(target_frame)
@@ -230,6 +235,10 @@ class QuickExtrudedSpectrumRenderer:
                 gl.glActiveTexture(gl.GL_TEXTURE1)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, backdrop)
                 gl.glUniform1i(uniforms["uBackdrop"], 1)
+                gl.glActiveTexture(gl.GL_TEXTURE2)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, previous)
+                gl.glUniform1i(uniforms["uBackdropPrevious"], 2)
+                gl.glUniform1f(uniforms["uBackdropBlend"], blend if previous != backdrop else 1.0)
                 gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_DEPTH_TEST)

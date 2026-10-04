@@ -340,6 +340,17 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
             gl.glViewport(0, 0, window_w, window_h)
             gl.glDisable(gl.GL_SCISSOR_TEST)
+            if VISUAL_EXTRA.get(name, {}).get("sphere_mirror"):
+                # The reflection fades in over BackdropEnvironment.BLEND_S of logical time: show the
+                # wallpaper a little longer ago first, so the captured frame is the settled look.
+                from rendering.quick.scene3d.environment import BackdropEnvironment
+
+                earlier = snapshots[name].logical
+                earlier = dataclasses.replace(earlier, logical_timestamp=earlier.logical_timestamp
+                                              - BackdropEnvironment.BLEND_S - 0.5)
+                host.render(snapshot=dataclasses.replace(snapshots[name], logical=earlier),
+                            viewport=(0, 0, window_w, window_h), logical_size=(float(width), float(height)),
+                            matrix_values=matrix)
             gl.glClearColor(0.0, 0.0, 0.0, 0.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
             host.render(snapshot=snapshots[name], viewport=(0, 0, window_w, window_h),

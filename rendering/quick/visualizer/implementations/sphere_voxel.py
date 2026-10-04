@@ -493,6 +493,8 @@ uniform float uRainbowPhase;
 uniform float uMirror;          // polished mirror faces reflecting the wallpaper (never the edges)
 uniform sampler2D uBackdrop;    // the displayed wallpaper, a small mipmapped copy
 uniform vec4 uBackdropMap;      // (gl_FragCoord.xy + xy) / zw is the backdrop's uv
+uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend
+uniform float uBackdropBlend;
 
 vec3 rainbowRgb(float hue) {
     vec3 p = abs(fract(hue + vec3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0);
@@ -626,7 +628,9 @@ void main() {
         vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.5;
         uv = 1.0 - abs(1.0 - mod(uv, 2.0));
         float polish = max(gloss, clamp(uMirror, 0.0, 1.0));
-        vec3 seen = textureLod(uBackdrop, uv, mix(3.0, 0.3, polish)).rgb;
+        float lod = mix(3.0, 0.3, polish);
+        vec3 seen = mix(textureLod(uBackdropPrevious, uv, lod).rgb, textureLod(uBackdrop, uv, lod).rgb,
+                        uBackdropBlend);
         vec3 tint = mix(vec3(1.0), base * 1.35, 0.25);
         vec3 highlight = vec3(1.0, 0.985, 0.95) * (glossSheen + specEnergy + edgeSheen);
         vec3 mirrored = seen * tint + color * 0.1 + pow(highlight, vec3(1.0 / 2.2)) * 0.8;
@@ -685,7 +689,7 @@ _HERO_UNIFORMS = _TRANSFORM_UNIFORMS + (
     "uFillColor", "uEdgeColor", "uTracerColor", "uEdgeWeight",
     "uDepthShading", "uFade", "uCelShading",
     "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
-    "uMirror", "uBackdrop", "uBackdropMap",
+    "uMirror", "uBackdrop", "uBackdropMap", "uBackdropPrevious", "uBackdropBlend",
 )
 _SHADOW_UNIFORMS = _TRANSFORM_UNIFORMS + ("uShadowColor", "uFade", "uLayerAlpha")
 # (key, vertex, fragment): what a first frame compiles, for the prepared reveal.
@@ -887,9 +891,13 @@ class QuickSphereVoxelRenderer:
         # viewport; the scene target hands back framebuffers, viewport and scissor. Sphere also
         # sets the winding, culled face and depth test, so it hands those back itself.
         mirror = sphere_mirror(parameters)
-        backdrop = 0
+        backdrop, previous, blend = 0, 0, 1.0
         if mirror > 0.0:
-            backdrop = self._backdrop.texture(parameter(parameters, "backdrop"))   # the displayed wallpaper
+            # The displayed wallpaper, crossfading from the last one (or in from none).
+            backdrop, previous, blend = self._backdrop.textures(parameter(parameters, "backdrop"),
+                                                                frame.snapshot.logical.logical_timestamp)
+            if not previous:
+                previous, mirror = backdrop, mirror * blend
         elif self._backdrop.has_resources:
             self._backdrop.release()                                # Mirror Cubes off: hold nothing
         front_face = gl_query.get_int(gl.GL_FRONT_FACE)
@@ -963,6 +971,10 @@ class QuickSphereVoxelRenderer:
                     gl.glActiveTexture(gl.GL_TEXTURE1)
                     gl.glBindTexture(gl.GL_TEXTURE_2D, backdrop)
                     gl.glUniform1i(u["uBackdrop"], 1)
+                    gl.glActiveTexture(gl.GL_TEXTURE2)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, previous)
+                    gl.glUniform1i(u["uBackdropPrevious"], 2)
+                    gl.glUniform1f(u["uBackdropBlend"], blend if previous != backdrop else 1.0)
                     gl.glActiveTexture(gl.GL_TEXTURE0)
 
                 gl.glEnable(gl.GL_CULL_FACE)

@@ -588,7 +588,10 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   replaced reading back the target being drawn every 6th frame (a ~0.55 ms GPU stall each): at a full 2560x1440 card
   GPU median (p90) is now 0.097 (0.098) ms with Mirror Faces on, against 0.10 (0.60) before. No GL texture is
   shared with the background, so PR-04's lend/reclaim lifetime is untouched; widgets beneath are no longer
-  reflected, only the wallpaper. With Mirror Faces at 0, or no reflections, nothing is made or held. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
+  reflected, only the wallpaper. The reflection never switches in one frame (operator 2026-10-04): a new wallpaper
+  goes into a second slot and crossfades from the old one over `BackdropEnvironment.BLEND_S` (2 s) of logical time,
+  and the first one fades in from no reflection (Voxel Sphere's Mirror Cubes share this). With Mirror Faces at 0,
+  or no reflections, nothing is made or held. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
   reflection.
 - **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
   binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor

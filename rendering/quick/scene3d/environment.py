@@ -206,65 +206,86 @@ PHOTO_ENVIRONMENT_PROGRAM = ("photo_environment", FULLSCREEN_VERTEX_SOURCE, _COP
 
 
 class BackdropEnvironment:
-    """The wallpaper a Visualizer reflects, as a small mipmapped texture this object owns.
+    """The wallpaper a Visualizer reflects, as small mipmapped textures this object owns.
 
-    ``texture`` uploads a ``VisualizerBackdrop`` (``widgets/spotify_visualizer/backdrop.py``: the
+    ``textures`` uploads a ``VisualizerBackdrop`` (``widgets/spotify_visualizer/backdrop.py``: the
     displayed photograph, downsampled once per image change on the GUI thread, bottom row first)
     when its identity changes, builds its mip levels, and reuses it until the next one: one ~0.6 MB
-    upload per wallpaper. Nothing reads back the target being drawn (which stalled the GPU ~0.55 ms
-    per copy) and no GL texture is shared with the background. Pixel-unpack state and the
-    unpack-buffer binding are handed back as found. Nothing is held once ``release`` runs.
+    upload per wallpaper. The reflection never switches in one frame (operator 2026-10-04): the
+    new wallpaper goes into the other of two slots and the reflection crossfades from the old one
+    over ``BLEND_S`` of the caller's logical time; the first wallpaper fades in from no reflection.
+    Nothing reads back the target being drawn (which stalled the GPU ~0.55 ms per copy) and no GL
+    texture is shared with the background. Pixel-unpack state and the unpack-buffer binding are
+    handed back as found. Nothing is held once ``release`` runs.
     """
+
+    BLEND_S = 2.0
 
     def __init__(self, label: str) -> None:
         self.label = label
-        self._texture = 0
-        self._size: tuple[int, int] | None = None
-        self._identity: str | None = None
+        # Two slots: (texture, size, identity); ``_current`` indexes the newest.
+        self._slots: list[list] = [[0, None, None], [0, None, None]]
+        self._current = 0
+        self._changed_at: float | None = None
+        self._has_previous = False
         self.uploads = 0
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._texture)
+        return any(slot[0] for slot in self._slots)
 
     def warm(self, backdrop) -> bool:
-        """Allocate ahead (one unit) what ``texture`` will use for ``backdrop``; True once done.
-        The first ``texture`` still uploads."""
+        """Allocate ahead (one unit) what ``textures`` will first use for ``backdrop``; True once
+        done. The first ``textures`` still uploads."""
         size = tuple(int(value) for value in backdrop["size"])
-        if self._size != size:
-            self.release()
-            self._allocate(size)
+        slot = self._slots[self._current]
+        if slot[1] != size:
+            self._allocate(self._current, size)
             return False
         return True
 
-    def texture(self, backdrop) -> int:
-        """The texture holding ``backdrop`` (uploaded when it is a new one)."""
-        size = tuple(int(value) for value in backdrop["size"])
-        if self._size != size:
-            self.release()
-            self._allocate(size)
+    def textures(self, backdrop, now: float) -> tuple[int, int, float]:
+        """(current, previous, blend) for ``backdrop`` at logical time ``now``: the reflection is
+        ``previous`` faded to ``current`` by ``blend`` (0..1 over ``BLEND_S`` since it changed).
+        ``previous`` is 0 for the first wallpaper, which then fades in from no reflection."""
         identity = str(backdrop["identity"])
-        if identity != self._identity:
-            self._upload(backdrop["rgba"], size)
-            self._identity = identity
+        size = tuple(int(value) for value in backdrop["size"])
+        now = float(now)
+        current = self._slots[self._current]
+        if current[2] != identity:
+            target = self._current if not current[0] or current[2] is None else 1 - self._current
+            if self._slots[target][1] != size:
+                self._allocate(target, size)
+            self._upload(target, backdrop["rgba"], size)
+            self._slots[target][2] = identity
             self.uploads += 1
-        return self._texture
+            self._has_previous = target != self._current
+            self._current = target
+            self._changed_at = now
+        blend = 1.0
+        if self._changed_at is not None and now >= self._changed_at:
+            blend = min(1.0, (now - self._changed_at) / self.BLEND_S)
+        previous = self._slots[1 - self._current][0] if self._has_previous and blend < 1.0 else 0
+        if blend >= 1.0:
+            self._has_previous = False
+        return self._slots[self._current][0], previous, blend
 
-    def _allocate(self, size: tuple[int, int]) -> None:
+    def _allocate(self, index: int, size: tuple[int, int]) -> None:
+        self._delete(index)
         name = (ctypes.c_uint * 1)()
         gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
-        self._texture = int(name[0])
-        if not self._texture:
+        texture = int(name[0])
+        if not texture:
             raise RuntimeError(f"{self.label} backdrop texture allocation failed")
-        gl.glTextureParameteri(self._texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
-        gl.glTextureParameteri(self._texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+        gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
+        gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
         for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-            gl.glTextureParameteri(self._texture, wrap, gl.GL_CLAMP_TO_EDGE)
-        gl.glTextureStorage2D(self._texture, max(size).bit_length(), gl.GL_RGBA8, *size)
-        self._size = size
-        self._identity = None
+            gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
+        gl.glTextureStorage2D(texture, max(size).bit_length(), gl.GL_RGBA8, *size)
+        self._slots[index] = [texture, size, None]
 
-    def _upload(self, rgba: bytes, size: tuple[int, int]) -> None:
+    def _upload(self, index: int, rgba: bytes, size: tuple[int, int]) -> None:
+        texture = self._slots[index][0]
         if len(rgba) != size[0] * size[1] * 4:
             raise ValueError(f"{self.label} backdrop has {len(rgba)} bytes for {size}")
         prior = {name: gl_query.get_int(name) for name in (
@@ -275,21 +296,26 @@ class BackdropEnvironment:
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
             for name in (gl.GL_UNPACK_ROW_LENGTH, gl.GL_UNPACK_SKIP_ROWS, gl.GL_UNPACK_SKIP_PIXELS):
                 gl.glPixelStorei(name, 0)
-            gl.glTextureSubImage2D(self._texture, 0, 0, 0, size[0], size[1], gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
-                                   rgba)
-            gl.glGenerateTextureMipmap(self._texture)
+            gl.glTextureSubImage2D(texture, 0, 0, 0, size[0], size[1], gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, rgba)
+            gl.glGenerateTextureMipmap(texture)
         finally:
             gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, prior[gl.GL_PIXEL_UNPACK_BUFFER_BINDING])
             for name in (gl.GL_UNPACK_ALIGNMENT, gl.GL_UNPACK_ROW_LENGTH, gl.GL_UNPACK_SKIP_ROWS,
                          gl.GL_UNPACK_SKIP_PIXELS):
                 gl.glPixelStorei(name, prior[name])
 
-    def release(self) -> None:
-        if self._texture:
+    def _delete(self, index: int) -> None:
+        texture = self._slots[index][0]
+        if texture:
             try:
-                gl.glDeleteTextures([self._texture])
+                gl.glDeleteTextures([texture])
             except Exception as exc:
                 raise RuntimeError(f"{self.label} backdrop cleanup incomplete: {exc}") from exc
-            self._texture = 0
-        self._size = None
-        self._identity = None
+        self._slots[index] = [0, None, None]
+
+    def release(self) -> None:
+        for index in (0, 1):
+            self._delete(index)
+        self._current = 0
+        self._changed_at = None
+        self._has_previous = False
