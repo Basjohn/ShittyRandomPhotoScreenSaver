@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QEvent
 
 from .driver import MODES, load_clips, replay_clip
+from tools.freeze_visualizer_settings import load_frozen
 from .floors import calibrate, check_floors
 
 
@@ -23,7 +24,8 @@ def main():
     for name, clip in load_clips().items():
         for mode in (*MODES, "control") if name == "mode_visibility_switch" else MODES:
             case = f"{name}__{mode}"
-            results[case] = replay_clip(clip, mode)
+            # Frozen settings, as the floor tests replay them: curated presets are authored content.
+            results[case] = replay_clip(clip, mode, settings=load_frozen)
             QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     if args.candidate:
         candidate = calibrate(results)

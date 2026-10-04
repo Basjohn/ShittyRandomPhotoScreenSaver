@@ -7,6 +7,7 @@ import shutil
 import pytest
 
 from tools.visualizer_replay.driver import FIXTURES, MODES, load_clips, replay_clip
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from tools.visualizer_replay.engine import ReplayBeatEngine
 from tools.visualizer_replay.floors import REFERENCE, check_floors
 
@@ -24,7 +25,7 @@ def clips():
 @pytest.mark.parametrize("case", CASES)
 def test_current_reactivity_passes_fixed_floors(clips, case):
     fixture, mode = case.split("__")
-    result = replay_clip(clips[fixture], mode)
+    result = replay_clip(clips[fixture], mode, settings=frozen_visualizer_settings)
     assert len(result["metrics"]) == 32
     assert len(result["logical_series"]) == len(clips[fixture].frames)
     check_floors(result, case)
@@ -32,8 +33,8 @@ def test_current_reactivity_passes_fixed_floors(clips, case):
 
 @pytest.mark.parametrize("mode", MODES)
 def test_presentation_stalls_cannot_change_authored_series(clips, mode):
-    ordinary = replay_clip(clips["beats_120_bpm"], mode)
-    stalled = replay_clip(clips["beats_120_bpm"], mode, present_every=7)
+    ordinary = replay_clip(clips["beats_120_bpm"], mode, settings=frozen_visualizer_settings)
+    stalled = replay_clip(clips["beats_120_bpm"], mode, present_every=7, settings=frozen_visualizer_settings)
     assert ordinary["logical_series"] == stalled["logical_series"]
     assert ordinary["metrics"] == stalled["metrics"]
     assert len(stalled["presentation_trace"]) < len(ordinary["presentation_trace"])
@@ -50,7 +51,7 @@ def test_fixture_integrity_rejects_tampering(tmp_path):
 
 def test_silent_bar_regression_fails_floor_at_engine_consumer(clips, monkeypatch):
     monkeypatch.setattr(ReplayBeatEngine, "get_smoothed_bars", lambda self: [0.0] * self._bar_count)
-    result = replay_clip(clips["beats_120_bpm"], "spectrum")
+    result = replay_clip(clips["beats_120_bpm"], "spectrum", settings=frozen_visualizer_settings)
     with pytest.raises(AssertionError, match="below floor"):
         check_floors(result, "beats_120_bpm__spectrum")
 
@@ -64,7 +65,7 @@ def test_frozen_devcurve_runtime_fails_own_output_floor(clips, monkeypatch):
             return self.latest
         return advance(self, **kwargs)
     monkeypatch.setattr(DevCurveFrameRuntime, "advance", freeze_after_first)
-    result = replay_clip(clips["beats_120_bpm"], "devcurve")
+    result = replay_clip(clips["beats_120_bpm"], "devcurve", settings=frozen_visualizer_settings)
     assert result["metrics"]["bar_peak"] > 0.5
     with pytest.raises(AssertionError, match="output_flux=.*below floor"):
         check_floors(result, "beats_120_bpm__devcurve")
@@ -72,7 +73,7 @@ def test_frozen_devcurve_runtime_fails_own_output_floor(clips, monkeypatch):
 
 def test_control_fixture_keeps_mode_and_visibility_events(clips):
     clip = clips["mode_visibility_switch"]
-    result = replay_clip(clip, "control")
+    result = replay_clip(clip, "control", settings=frozen_visualizer_settings)
     assert [frame.mode_id for frame in result["logical_series"]] == [frame.mode for frame in clip.frames]
     assert result["presentation_trace"] == [i for i, frame in enumerate(clip.frames) if frame.visible]
 
@@ -93,8 +94,8 @@ def test_every_retained_v1_case_has_a_floor_entry():
 
 
 def test_sustained_lanes_remain_distinct(clips):
-    bass = replay_clip(clips["sustained_bass"], "spectrum")
-    treble = replay_clip(clips["sustained_treble"], "spectrum")
+    bass = replay_clip(clips["sustained_bass"], "spectrum", settings=frozen_visualizer_settings)
+    treble = replay_clip(clips["sustained_treble"], "spectrum", settings=frozen_visualizer_settings)
     assert bass["metrics"]["bar_centroid"] < treble["metrics"]["bar_centroid"]
 
 
@@ -104,7 +105,7 @@ def test_devcurve_travel_holds_its_passage_through_the_beats(clips):
         DEVCURVE_PASSAGE_TRAVEL as passage,
     )
 
-    rates = replay_clip(clips["beats_180_bpm"], "devcurve")["travel_rates"]
+    rates = replay_clip(clips["beats_180_bpm"], "devcurve", settings=frozen_visualizer_settings)["travel_rates"]
     # The passage sets the cruise (quietest..loudest passage) and nothing else moves it: one
     # steady 180 bpm passage travels at one rate through every beat, never the old per-frame
     # energy throttle (~12x, lurching) nor a transient nudge breathing with the beat.

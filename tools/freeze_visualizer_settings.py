@@ -29,6 +29,11 @@ def resolved_settings(mode: str) -> dict:
     return asdict(model)
 
 
+def load_frozen(mode: str) -> dict:
+    """The frozen settings fixture for ``mode`` (what tests and the replay goldens run on)."""
+    return json.loads((OUTPUT / f"{mode}.json").read_text(encoding="utf-8"))
+
+
 def main() -> None:
     from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 
