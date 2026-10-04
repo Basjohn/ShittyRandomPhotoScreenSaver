@@ -4,8 +4,9 @@ The first Visualizer on the shared Scene3D foundation: a multisampled overlay
 ``SceneTarget`` (frameless: no card, so the bars stand over the wallpaper), the shared unit
 box drawn instanced from one std430 record per bar on a stream ring, and the shared
 physically based material. It consumes only the immutable snapshot; the bars come from
-Spectrum's frame runtime unchanged. With overflow allowed the target and its composite
-reach ``EXTRUDED_OVERFLOW_PAD`` item heights past the item, so the 3D may escape it.
+Spectrum's frame runtime unchanged. With overflow allowed (3D + frameless: not contained to its
+frame) the target covers everything the bars can draw for the view (``extruded_reach``), up to
+the whole window.
 """
 
 from __future__ import annotations
@@ -21,15 +22,14 @@ from rendering.gl_programs.extruded_spectrum_program import (
     EXTRUDED_MAX_DEPTH,
     EXTRUDED_MAX_TILT,
     EXTRUDED_MAX_TURN,
-    EXTRUDED_OVERFLOW_PAD,
     EXTRUDED_VERTEX_SOURCE,
     extruded_draw_order,
     extruded_fit,
-    extruded_overflow_frame,
+    extruded_reach,
 )
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_detail
 from rendering.quick.scene3d.environment import BackdropEnvironment
-from rendering.quick.scene3d.frame import item_pixel_rect
+from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
@@ -90,15 +90,58 @@ class QuickExtrudedSpectrumRenderer:
         r.uniforms("bars", _UNIFORMS)
         r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
 
+    def _scene(self, frame: QuickVisualizerRenderFrame):
+        """(layout, field, centre, depth, tilt, turn, reflection, overflow, fit) for this frame's view
+        and shape, or None when there is nothing to draw; the fit is recomputed only when they change."""
+        snapshot = frame.snapshot
+        presentation = snapshot.presentation
+        parameters = snapshot.logical.mode_state.parameters
+        count = min(_MAX_BARS, int(snapshot.logical.common.bar_count))
+        if count <= 0:
+            return None
+        layout = compute_quick_spectrum_layout(
+            local_content_rect=frame.logical_content_rect,
+            viewport_extent=presentation.logical_viewport_extent,
+            visual_scale=presentation.uniform_visual_scale,
+            bar_count=count,
+        )
+        content_x, content_y, content_width, content_height = layout.content_rect
+        margin_y = 6.0 * presentation.uniform_visual_scale
+        field = (content_x, content_y + margin_y, content_width, content_height - 2.0 * margin_y)
+        height = field[3]
+        if height <= 0.0:
+            return None
+        centre = layout.bars_left + 0.5 * layout.bar_span
+        depth = min(EXTRUDED_MAX_DEPTH, layout.bar_width / height * float(parameter(parameters,
+                                                                                     "extruded_spectrum_depth")))
+        tilt = EXTRUDED_MAX_TILT * float(parameter(parameters, "extruded_spectrum_tilt"))
+        turn = EXTRUDED_MAX_TURN * float(parameter(parameters, "extruded_spectrum_turn"))
+        reflection = float(parameter(parameters, "extruded_spectrum_reflection"))
+        overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
+        key = (round(layout.bar_span / height, 6), round(depth, 6), round(tilt, 6), round(turn, 6),
+               round(reflection, 6), round(content_width / height, 6), overflow)
+        if key != self._fit_key:
+            self._fit = extruded_fit(0.5 * layout.bar_span / height, depth, tilt, reflection, content_width / height,
+                                     turn, overflow)
+            self._fit_key = key
+        return layout, field, centre, depth, tilt, turn, reflection, overflow, self._fit
+
+    def _target_frame(self, frame: QuickVisualizerRenderFrame, scene):
+        """The frame the scene target covers: the item, or with overflow everything the bars can
+        draw, up to the whole window (3D + frameless: not contained to its frame)."""
+        if scene is None or not scene[7]:
+            return frame
+        layout, field, centre, depth, tilt, turn, reflection, _overflow, fit = scene
+        return reach_item_frame(frame, extruded_reach(
+            field, centre, 0.5 * layout.bar_span / field[3], depth, tilt, turn, fit, reflection))
+
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
         allocate (a program, the box mesh, the stream ring, the target, the backdrop copy), on a
         hidden frame; True once nothing is left."""
         parameters = frame.snapshot.logical.mode_state.parameters
-        overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
         samples, mirror = extruded_quality(parameters)
-        target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
-                        if overflow else frame)
+        target_frame = self._target_frame(frame, self._scene(frame))
         r = self._resources
         if not warm_programs([(r, "bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE),
                               *((r, *program) for program in scene_target_programs(samples, False, False,
@@ -128,37 +171,17 @@ class QuickExtrudedSpectrumRenderer:
         if frame.content_rotation_quarters:
             raise ValueError("Extruded Spectrum does not offer content rotation")
         levels, peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
-        layout = compute_quick_spectrum_layout(
-            local_content_rect=frame.logical_content_rect,
-            viewport_extent=presentation.logical_viewport_extent,
-            visual_scale=presentation.uniform_visual_scale,
-            bar_count=count,
-        )
+        scene = self._scene(frame)
+        if scene is None:
+            return
+        layout, field, centre, depth, tilt, turn, reflection, _overflow, _fit = scene
         parameters = mode_state.parameters
         style = logical.common.style
         scale = presentation.uniform_visual_scale
-        content_x, content_y, content_width, content_height = layout.content_rect
-        margin_y = 6.0 * scale
-        field = (content_x, content_y + margin_y, content_width, content_height - 2.0 * margin_y)
         height = field[3]
-        if height <= 0.0:
-            return
-        centre = layout.bars_left + 0.5 * layout.bar_span
-        depth = min(EXTRUDED_MAX_DEPTH, layout.bar_width / height * float(parameter(parameters,
-                                                                                     "extruded_spectrum_depth")))
-        tilt = EXTRUDED_MAX_TILT * float(parameter(parameters, "extruded_spectrum_tilt"))
-        turn = EXTRUDED_MAX_TURN * float(parameter(parameters, "extruded_spectrum_turn"))
-        reflection = float(parameter(parameters, "extruded_spectrum_reflection"))
-        overflow = bool(parameter(parameters, "extruded_spectrum_allow_overflow"))
         colouring = EXTRUDED_COLOURINGS.index(str(parameter(parameters, "extruded_spectrum_colouring")))
         hue_shift = (mode_state.animation_time * EXTRUDED_HUE_DRIFT_RATE
                      * float(parameter(parameters, "extruded_spectrum_hue_drift"))) % 1.0
-        key = (round(layout.bar_span / height, 6), round(depth, 6), round(tilt, 6), round(turn, 6),
-               round(reflection, 6), round(content_width / height, 6), overflow)
-        if key != self._fit_key:
-            self._fit = extruded_fit(0.5 * layout.bar_span / height, depth, tilt, reflection, content_width / height,
-                                     turn, overflow)
-            self._fit_key = key
         ghost_alpha = (max(0.0, min(1.0, float(parameter(parameters, "spectrum_ghost_alpha"))))
                        if bool(parameter(parameters, "spectrum_ghosting_enabled")) else 0.0)
 
@@ -169,8 +192,7 @@ class QuickExtrudedSpectrumRenderer:
         first = (layout.bars_left + 0.5 * layout.bar_width - centre) / height
         order = extruded_draw_order(first, (layout.bar_width + layout.bar_gap) / height, count, tilt, turn)
         records = extruded_bar_records(levels, peaks, count, order)
-        target_frame = (extruded_overflow_frame(frame, EXTRUDED_OVERFLOW_PAD * frame.logical_size[1])
-                        if overflow else frame)
+        target_frame = self._target_frame(frame, scene)
         smooth = bool(parameter(parameters, "extruded_spectrum_smooth_edges"))
         samples, mirror = extruded_quality(parameters)
         backdrop = 0

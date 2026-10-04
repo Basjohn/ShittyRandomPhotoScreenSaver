@@ -175,9 +175,14 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
   `tests/test_visualizer_replay_real_scale.py`.
 - [x] **Golden step 1b: recorder** `tools/visualizer_replay/record.py` (no window, no product cost; Harness_Index).
   Clips start at 1 s so the scheduler's per-type debounce (counted from timestamp 0) drops nothing.
-- [ ] **3D + frameless Visualizers draw unclipped, above everything but the OSD (operator 2026-10-04).** A mode that is
-  both 3D and frameless is not contained to its frame area (Sphere already behaves so; Extruded Spectrum and Shockwave
-  Grid must too); a carded or 2D mode stays clipped. One descriptor-driven rule, not per-mode exceptions.
+- [x] **3D + frameless Visualizers are not contained to their frame (operator 2026-10-04).** Stacking was already right
+  (Visualizer layer above every widget, below the OSD/Edit chrome/menu). Extruded Spectrum and Shockwave Grid composited
+  through a target padded a fixed 0.5 item heights, which cut extreme orbits (Extruded at tilt -1) and Shockwave's
+  wide default view; their targets now cover the projected reach of everything they can draw (`extruded_reach`,
+  `shockwave_reach`, `scene3d/frame.py` `reach_item_frame`: quarter-height steps, clamped to the window), computed
+  identically on the hidden prepare frames. Extruded's default target shrank (0.72 -> 0.46 MP at a 640x360 item);
+  Shockwave's grew to its true visible width (0.72 -> 1.12 MP). Bars: `tests/test_visualizer_3d_reach.py`.
+  Physical check: orbit both to extremes on both displays.
 - [ ] **Sphere visual upgrade licence (operator):** the migration may make Sphere more visually appealing with the
   shared feature set (materials, lighting, post, reflections, tiers), within the golden-as-reference rules above.
 - [ ] **Reactivity goblin audit of the other modes** (operator: hand-cobbled, use the real-scale knowledge and the

@@ -164,6 +164,27 @@ def shockwave_fit(tilt: float, turn: float, half_width: float, ridge: float) -> 
     return scale, SHOCKWAVE_NEAR_LINE + low * scale
 
 
+def shockwave_reach(field, fit: tuple[float, float], tilt: float, turn: float, half_width: float, ridge: float,
+                    wave_height: float, idle: float) -> tuple[float, float, float, float]:
+    """The item-local (left, top, right, bottom) extent of everything the grid can draw for this
+    view: the whole grid, its tallest possible crest (a strength-``SHOCKWAVE_MAX_STRENGTH`` wave
+    plus the idle swell, with the trough below) and the horizon ridge. Fixed per view and shape."""
+    scale, base = fit
+    left, top, width, height = (float(value) for value in field)
+    camera = shockwave_camera(half_width)
+    amplitude = shockwave_amplitude(wave_height)
+    crest = 1.25 * amplitude * SHOCKWAVE_MAX_STRENGTH + amplitude * SHOCKWAVE_IDLE_HEIGHT * max(0.0, idle)
+    # The grid fades out past ``SHOCKWAVE_VISIBLE`` of its half width and depth: nothing beyond is drawn.
+    reach_x = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * half_width
+    reach_z = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * SHOCKWAVE_DEPTH
+    points = [shockwave_project((x, y, z), tilt, turn, camera)
+              for x in (-reach_x, reach_x) for z in (0.0, -reach_z)
+              for y in (-0.5 * crest, max(crest, 1.05 * ridge))]
+    xs = [left + 0.5 * width + p[0] * scale * height for p in points]
+    ys = [top + height * (base - p[1] * scale) for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
 def shockwave_event_records(events, half_width: float) -> list[dict[str, float]]:
     """The std430 records for ``events`` [(age, x share, z, strength), ...]: x in world units."""
     return [{"age": float(age), "x": float(x) * half_width, "z": float(z), "strength": float(strength)}
