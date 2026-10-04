@@ -87,7 +87,7 @@ def test_qml_frame_driver_uses_native_animation_and_per_display_gate() -> None:
     assert "FrameAnimation {" in qml
     assert "running: displayScene.transitionFrameDriverActive" in qml
     assert "transitionFrameTargetHz" in qml
-    assert "const intervalS = 1.0 / targetHz" in qml
+    assert "const intervalS = 1.0 / Math.max(1.0, targetHz)" in qml
     assert "intervalsPassed" in qml
     assert "transitionRenderItem.update()" in qml
     assert "onTransitionFrameTargetHzChanged" in qml
@@ -227,3 +227,108 @@ def test_describe_names_only_actual_custom_quick_demands() -> None:
     pacer, _window, _native = _pacer()
     pacer.set_transition_active(True)
     assert pacer.describe()["demands"] == ["transition"]
+
+
+_GATE_ENGINE = []
+
+
+def _qml_transition_gate():
+    """DisplayScene.qml's pure per-tick gate, evaluated by a real JS engine (one engine for the
+    module; only JSON text crosses it, so no JS value outlives it)."""
+    import json
+
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtQml import QJSEngine
+
+    QCoreApplication.instance() or QCoreApplication([])
+    if not _GATE_ENGINE:
+        qml = (ROOT / "rendering" / "quick" / "qml" / "DisplayScene.qml").read_text(encoding="utf-8")
+        start = qml.index("function transitionFrameGate(")
+        end = qml.index("\n    }\n", start) + len("\n    }\n")
+        body = qml[start:end]
+        engine = QJSEngine()
+        engine.evaluate(body)
+        _GATE_ENGINE.append(engine)
+    engine = _GATE_ENGINE[0]
+
+    def tick(gate, elapsed_s, target_hz, visualizer_frames, fill_s=0.025):
+        text = engine.evaluate(
+            f"JSON.stringify(transitionFrameGate({json.dumps(gate)}, {elapsed_s!r}, {target_hz!r}, "
+            f"{visualizer_frames!r}, {fill_s!r}))"
+        ).toString()
+        result = json.loads(text)
+        return result, {"nextDueS": result["nextDueS"], "lastVisualizerS": result["lastVisualizerS"],
+                        "seenVisualizerFrames": result["seenVisualizerFrames"]}
+
+    return engine, tick
+
+
+def test_transition_rides_visualizer_frames_and_fills_in_when_they_stop() -> None:
+    """Bubble micro-flicker (2026-10-03): on a 165 Hz display the transition's own ~115 Hz ticks,
+    unaligned with the Visualizer's 90 Hz frames, drew ~210 frames a second, ~120 of them an
+    unchanged Visualizer state. While Visualizer frames arrive the transition requests none of
+    its own (it samples wall time on every frame); once they stop it fills in at its own rate."""
+    _engine, tick = _qml_transition_gate()
+    gate = {"nextDueS": 0.0, "lastVisualizerS": -1.0, "seenVisualizerFrames": 0}
+    requests, t, frames = 0, 0.0, 0
+    for i in range(115):                         # one second of ~115 Hz ticks
+        t = i / 115.0
+        frames = int(t * 90.0) + 1               # Visualizer frames requested so far (90 Hz)
+        result, gate = tick(gate, t, 165.0, frames)
+        requests += bool(result["request"])
+    assert requests == 0
+    # The Visualizer stops (pause, mode change): within the fill gap the transition resumes on
+    # its own ticks and never stalls.
+    stopped_at = t
+    own = []
+    for i in range(1, 40):
+        now = stopped_at + i / 115.0
+        result, gate = tick(gate, now, 165.0, frames)
+        if result["request"]:
+            own.append(now)
+    assert own and own[0] - stopped_at <= 0.025 + 1 / 115.0
+    assert len(own) >= 30
+
+
+def test_transition_gate_without_a_visualizer_keeps_its_display_rate() -> None:
+    _engine, tick = _qml_transition_gate()
+    gate = {"nextDueS": 0.0, "lastVisualizerS": -1.0, "seenVisualizerFrames": 0}
+    requests = 0
+    for i in range(1000):                         # 1 kHz ticks for one second, 60 Hz display
+        result, gate = tick(gate, i / 1000.0, 60.0, 0)
+        requests += bool(result["request"])
+    assert 59 <= requests <= 61
+
+
+def test_scene_counts_visualizer_frames_into_the_gate_only_while_a_transition_runs() -> None:
+    """Dormant cost is zero: Visualizer frames touch the QML gate only while this display's
+    transition driver runs."""
+    from PySide6.QtCore import QCoreApplication
+
+    from rendering.quick.scene_controller import QuickSceneController
+
+    QCoreApplication.instance() or QCoreApplication([])
+
+    class _Item:
+        updates = 0
+
+        def update(self) -> None:
+            _Item.updates += 1
+
+    root = QObject()
+    root.setProperty("transitionVisualizerFrames", 0.0)
+    from types import SimpleNamespace
+
+    scene = SimpleNamespace(_visualizer_item=_Item(), _scene_root=root,
+                            _transition_frames_active=False, _transition_visualizer_frames=0)
+
+    assert QuickSceneController.request_visualizer_present(scene)
+    assert root.property("transitionVisualizerFrames") == 0.0
+    scene._transition_frames_active = True
+    for _ in range(3):
+        assert QuickSceneController.request_visualizer_present(scene)
+    assert root.property("transitionVisualizerFrames") == 3.0
+    scene._transition_frames_active = False
+    QuickSceneController.request_visualizer_present(scene)
+    assert root.property("transitionVisualizerFrames") == 3.0
+    assert _Item.updates == 5

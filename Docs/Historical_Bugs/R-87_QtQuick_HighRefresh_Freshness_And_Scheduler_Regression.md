@@ -680,3 +680,30 @@ Do not rediscover these without contradictory new evidence:
 - Bubble renderer p95 does not expose a large safe non-reactive owner; routine Bubble renderer micro-optimization is closed.
 - A numerical win that feels worse, increases state age, weakens loud-passage reaction or alters authored Bubble motion is a regression regardless of averages.
 
+
+### Follow-up 2026-10-04: transitions ride Visualizer frames (Bubble micro-flicker)
+
+Operator report (2026-10-03): Bubble micro-flickers during image transitions. Frame trace of 2026-10-04 15:2x, 165 Hz
+D0 with Bubble: steady seconds draw ~90-100 frames for 90 publications; transition seconds drew **180-211 frames for
+the same 90**, 92-122 of them repeated draws of an unchanged Visualizer state. The 60 Hz D1 overlap cost little
+(~90-106 frames, 6-18 repeats). Cause: with two exposed windows and swap interval 0, Qt's threaded loop advances
+animations from a system timer (~115 Hz measured, the `pacer_native_tick_hz`), unaligned with the Visualizer's 90 Hz
+publications, and the per-display gate requested a transition frame on nearly every tick. Every rendered frame also
+re-renders `RetainedBackgroundSceneNode` (it samples `TransitionRun` from wall time in `render()`; trace: background
+renders equal draws on D1), so the transition does not need frames of its own while the Visualizer supplies them.
+
+Contract now: `QuickSceneController.request_visualizer_present()` counts each Visualizer frame request into
+`DisplayScene.qml` (`transitionVisualizerFrames`) **only while that display's transition driver runs** (dormant cost
+zero). The pure QML `transitionFrameGate` requests no transition frame within `transitionVisualizerFillS` (25 ms) of
+the last observed Visualizer frame; when Visualizer frames stop (pause, mode change, stall) it fills in at the
+display's target Hz again, so a transition never waits on the Visualizer (at most one ~25 ms gap). No timer, no
+frameSwapped loop, no Python per-tick callback, no Visualizer delay (R-62 stays a negative control: nothing is
+deferred; the Visualizer presents exactly as in steady state). `describe_transition_frame_driver()` reports
+`ridden_ticks`. Rejected alternative: raising the logical cadence to 120 Hz (still two unaligned clocks against a
+~115 Hz timer on a 165 Hz display; changes BTF's authored 90 Hz class and costs every mode a third more ticks).
+Bars: `tests/test_qtquick_frame_pacer.py` (the gate under a real JS engine; frames counted only during transitions).
+
+Physical check: Bubble (and any mode) on the 165 Hz display through several transitions; `--frame-trace` repeats in
+transition seconds should fall to steady-state levels (`tools/frame_trace_report.py --timeline-seconds 5`), and the
+transition itself should stay smooth (it now advances at the Visualizer's 90 Hz on that display). Steady seconds with
+no transition still show 12-97 repeats in some seconds (other scene updates); not yet attributed.

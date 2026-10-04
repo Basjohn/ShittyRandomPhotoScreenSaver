@@ -420,6 +420,10 @@ class QuickSceneController(QObject):
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._presentation_image_listener: Callable[[], None] | None = None
+        # While this display's transition frame driver runs, each Visualizer frame request is
+        # counted into DisplayScene.qml so the transition rides those frames (see its gate).
+        self._transition_frames_active = False
+        self._transition_visualizer_frames = 0
         # The photograph a running transition is bringing in, and its duration (seconds), from the
         # transition's start until the scene adopts it.
         self._incoming_image: tuple[PresentationImage, float] | None = None
@@ -1531,6 +1535,7 @@ class QuickSceneController(QObject):
             raise RuntimeError("DisplayScene.qml rejected transition target Hz")
         if not root.setProperty("transitionFrameDriverActive", bool(active)):
             raise RuntimeError("DisplayScene.qml rejected transition frame demand")
+        self._transition_frames_active = bool(active)
 
     def describe_transition_frame_driver(self) -> dict[str, object]:
         """Sample native QML driver counters for low-rate PERF diagnostics."""
@@ -1548,6 +1553,7 @@ class QuickSceneController(QObject):
             "target_hz": float(root.property("transitionFrameTargetHz") or 0.0),
             "animation_ticks": int(root.property("transitionFrameAnimationTicks") or 0),
             "update_requests": int(root.property("transitionFrameUpdateRequests") or 0),
+            "ridden_ticks": int(root.property("transitionFrameRiddenTicks") or 0),
         }
 
     def request_transition_warm_up(self, transition_id: str, parameters) -> None:
@@ -1910,13 +1916,20 @@ class QuickSceneController(QObject):
         logical revisions at unchanged presentation would never re-run
         ``updatePaintNode`` and the retained node would sync once and then freeze.
         This requests exactly one retained sync opportunity when there is genuinely
-        newer state to consume; it owns no clock, cadence, timer or queue.
+        newer state to consume; it owns no clock, cadence, timer or queue. While a
+        transition runs on this display the frame is counted into the QML gate, so
+        the transition rides it instead of adding unaligned frames of its own.
         """
 
         item = self._visualizer_item
         if item is None:
             return False
         item.update()
+        if self._transition_frames_active:
+            root = self._scene_root
+            if root is not None and _qobject_is_alive(root):
+                self._transition_visualizer_frames += 1
+                root.setProperty("transitionVisualizerFrames", float(self._transition_visualizer_frames))
         return True
 
     def quiesce_for_retirement(self) -> None:

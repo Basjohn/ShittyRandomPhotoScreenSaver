@@ -271,20 +271,17 @@ Implement vertical features in this order unless evidence from a preceding slice
 
 ## Side defects (found in passing)
 
-- [ ] **Visualizer cadence during image transitions (operator: Bubble micro-flicker, 2026-10-03).** Frame trace of
-  the 22:42-22:51 run, TV display: steady stretches draw 1:1 (about 450 draws per 450 logical frames per 5 s, ~1
-  repeat), but transition windows draw 500-600 times for the same 450 frames (50-170 repeated draws), so 90 Hz Bubble
-  frames are shown unevenly while the transition drives the display faster. Not new (2026-09-22 trace: 45-87 repeats
-  in the same windows) and not Bubble's logical smoothing (golden unchanged; nothing in its chain changed). Fix at
-  the presentation edge, never by retuning Bubble (Bubble Temporal Fidelity): candidates are pacing visualizer
-  presentation to its own publications during transitions, or visual-only interpolation between published frames.
-  Evidence: `tools/frame_trace_report.py <trace> --timeline-seconds 5`, `repeat_draws` per window.
+- [ ] **Steady-state repeated Visualizer draws (found 2026-10-04 with the transition ride, R-87 follow-up).** With no
+  transition on either display, some seconds still draw the same Visualizer revision 12-97 times (165 Hz D0, Bubble):
+  another scene update is requesting frames. Attribute it from `--frame-trace` before changing anything.
 - [ ] **Tests and replays must not read presets or canonical defaults as expected values (operator
   2026-10-04: "really checking default settings or presets is not how any tests should ever function because I
   change those often").** After the Bubble cadence fix and once Sphere is accepted: inventory every test, golden and
   replay that resolves a curated preset or pins a canonical default (the replay driver's `preset=`, floors goldens
   built from preset 0, default-value asserts) and give each its own frozen inputs, as the Sphere promotion golden
-  now does.
+  now does. Known red from this (2026-10-04): `tests/test_qtquick_extruded_spectrum.py::test_the_bars_stand_where_
+  spectrums_do_coloured_across_the_spectrum_over_an_untouched_card` builds its snapshot through the Guided Setup preview,
+  which resolves the curated Studio preset; the operator's new Studio values (Turn -0.25) fail it (HEAD passes).
 - [ ] **Two stale tests red on HEAD (found 2026-10-04, not from S19):** `tests/test_godzip_foundry_core.py::
   test_run_tab_is_last_and_remains_repo_local` pins the button label `LOCAL vs GIT HEAD` (UI wording; the tool
   changed), and `tests/test_media_io_starvation.py::test_media_transport_command_starts_while_network_stalls_the_io_pool`
