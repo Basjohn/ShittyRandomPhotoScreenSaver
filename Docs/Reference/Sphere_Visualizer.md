@@ -91,7 +91,7 @@ wallpaper (the owner's small copy, `backdrop_setting`, on 3D Detail tiers with r
 rotated normal toward a near virtual eye, so faces show different parts of the picture and it slides across them as
 the shell turns; as sharp as the greater of Gloss and Mirror Cubes, highlights kept on top, faintly tinted by the
 fill, a mirrored face more opaque. Mixed in display space after Sphere's tone map so the photograph reads as itself.
-A new wallpaper crossfades in the reflections over 2 s and the first fades in (`BackdropEnvironment`), never a one-frame switch. Curated **Preset 5 (Mirror Ball)** shows it off: silver cubes, thin graphite edges, full Gloss and Mirror.
+A new wallpaper crossfades in the reflections alongside the image transition that brings it (from its start, over its duration; 2 s without one) and the first fades in (`BackdropEnvironment`), never a one-frame switch. Curated **Preset 5 (Mirror Ball)** shows it off: silver cubes, thin graphite edges, full Gloss and Mirror.
 
 `python -m tools.visualizer_replay.sphere_golden` prints the per-segment summary and what differs; `--visual` writes
 before/after sheets to `logs/sphere_visual_review/` for review by eye. An intended change re-records with `--write` /

@@ -420,6 +420,9 @@ class QuickSceneController(QObject):
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._presentation_image_listener: Callable[[], None] | None = None
+        # The photograph a running transition is bringing in, and its duration (seconds), from the
+        # transition's start until the scene adopts it.
+        self._incoming_image: tuple[PresentationImage, float] | None = None
         self._visualizer_bridge: VisualizerSnapshotBridge | None = None
         self._visualizer_double_click_admission: Any | None = None
         self._visualizer_middle_click_admission: Any | None = None
@@ -1451,6 +1454,7 @@ class QuickSceneController(QObject):
         prior_identity = None if prior is None else prior.identity
         next_identity = None if image is None else image.identity
         self.background_item.set_presentation_image(image)
+        self._incoming_image = None                 # adopted (or replaced): nothing is incoming
         if prior_identity != next_identity:
             listener = self._presentation_image_listener
             if listener is not None:
@@ -1465,9 +1469,31 @@ class QuickSceneController(QObject):
     def presentation_image(self) -> PresentationImage | None:
         return self.background_item.presentation_image
 
+    @property
+    def incoming_image(self) -> tuple[PresentationImage, float] | None:
+        """(photograph, duration in seconds) of the transition bringing it in, from its start until
+        the scene adopts it; ``None`` otherwise."""
+        return self._incoming_image
+
+    def announce_incoming_image(self, image: PresentationImage, duration_s: float) -> None:
+        """A transition toward ``image`` has started: tell the listener now, so what follows the
+        photograph (a reflecting Visualizer's wallpaper) can change with the transition rather
+        than after it. A listener failure never fails the transition."""
+        if not self._readiness.admission_open:
+            return
+        self._incoming_image = (image, max(0.0, float(duration_s)))
+        listener = self._presentation_image_listener
+        if listener is None:
+            return
+        try:
+            listener()
+        except Exception:
+            logger.exception("[QUICK_SCENE] incoming-image listener failed")
+
     def set_presentation_image_listener(self, listener: Callable[[], None] | None) -> None:
-        """One listener told when the displayed photograph changes (the Visualizer owner, whose
-        reflecting modes keep a small copy of it); ``None`` detaches it."""
+        """One listener told when the displayed photograph changes, and when a transition starts
+        bringing in the next one (``incoming_image``): the Visualizer owner, whose reflecting
+        modes keep a small copy of it; ``None`` detaches it."""
         self._presentation_image_listener = listener
 
     def bind_perf_pacer_state_provider(

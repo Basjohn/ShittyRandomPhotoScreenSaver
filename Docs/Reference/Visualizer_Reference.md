@@ -589,8 +589,12 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   GPU median (p90) is now 0.097 (0.098) ms with Mirror Faces on, against 0.10 (0.60) before. No GL texture is
   shared with the background, so PR-04's lend/reclaim lifetime is untouched; widgets beneath are no longer
   reflected, only the wallpaper. The reflection never switches in one frame (operator 2026-10-04): a new wallpaper
-  goes into a second slot and crossfades from the old one over `BackdropEnvironment.BLEND_S` (2 s) of logical time,
-  and the first one fades in from no reflection (Voxel Sphere's Mirror Cubes share this). With Mirror Faces at 0,
+  goes into a second slot and crossfades from the old one, and the first one fades in from no reflection (Voxel
+  Sphere's Mirror Cubes share this). A wallpaper a transition brings in changes with the transition: the runtime
+  announces the destination photograph and duration at the transition's start (`scene_controller.incoming_image`),
+  the owner makes its copy then (~1-1.5 ms on the GUI thread at 1440p-4K, only while a mode reflects) and the
+  reflection crossfades over the transition's duration, so it has finished when the scene adopts the photograph;
+  otherwise over `BackdropEnvironment.BLEND_S` (2 s) of logical time. With Mirror Faces at 0,
   or no reflections, nothing is made or held. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
   reflection.
 - **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at

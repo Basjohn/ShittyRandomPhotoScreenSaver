@@ -213,7 +213,9 @@ class BackdropEnvironment:
     when its identity changes, builds its mip levels, and reuses it until the next one: one ~0.6 MB
     upload per wallpaper. The reflection never switches in one frame (operator 2026-10-04): the
     new wallpaper goes into the other of two slots and the reflection crossfades from the old one
-    over ``BLEND_S`` of the caller's logical time; the first wallpaper fades in from no reflection.
+    over the transition that brings it (the owner hands it over at the transition's start, with its
+    duration) or ``BLEND_S`` otherwise, on the caller's logical time; the first wallpaper fades in
+    from no reflection.
     Nothing reads back the target being drawn (which stalled the GPU ~0.55 ms per copy) and no GL
     texture is shared with the background. Pixel-unpack state and the unpack-buffer binding are
     handed back as found. Nothing is held once ``release`` runs.
@@ -227,6 +229,7 @@ class BackdropEnvironment:
         self._slots: list[list] = [[0, None, None], [0, None, None]]
         self._current = 0
         self._changed_at: float | None = None
+        self._blend_s = self.BLEND_S
         self._has_previous = False
         self.uploads = 0
 
@@ -244,10 +247,11 @@ class BackdropEnvironment:
             return False
         return True
 
-    def textures(self, backdrop, now: float) -> tuple[int, int, float]:
+    def textures(self, backdrop, now: float, blend_s: float | None = None) -> tuple[int, int, float]:
         """(current, previous, blend) for ``backdrop`` at logical time ``now``: the reflection is
-        ``previous`` faded to ``current`` by ``blend`` (0..1 over ``BLEND_S`` since it changed).
-        ``previous`` is 0 for the first wallpaper, which then fades in from no reflection."""
+        ``previous`` faded to ``current`` by ``blend`` (0..1 over ``blend_s``, the bringing
+        transition's duration, else ``BLEND_S``, since it changed). ``previous`` is 0 for the
+        first wallpaper, which then fades in from no reflection."""
         identity = str(backdrop["identity"])
         size = tuple(int(value) for value in backdrop["size"])
         now = float(now)
@@ -262,9 +266,10 @@ class BackdropEnvironment:
             self._has_previous = target != self._current
             self._current = target
             self._changed_at = now
+            self._blend_s = float(blend_s) if blend_s and blend_s > 0.0 else self.BLEND_S
         blend = 1.0
         if self._changed_at is not None and now >= self._changed_at:
-            blend = min(1.0, (now - self._changed_at) / self.BLEND_S)
+            blend = min(1.0, (now - self._changed_at) / self._blend_s)
         previous = self._slots[1 - self._current][0] if self._has_previous and blend < 1.0 else 0
         if blend >= 1.0:
             self._has_previous = False

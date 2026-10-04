@@ -49,6 +49,8 @@ def install_default_presentation_state(state: VisualizerPresentationState) -> No
     apply_presentation_vis_mode_kwargs(state, defaults)
     if not hasattr(state, "_backdrop"):
         state._backdrop = None            # the reflected wallpaper, kept by the owner (backdrop.py)
+    if not hasattr(state, "_backdrop_blend_s"):
+        state._backdrop_blend_s = None    # its crossfade: the bringing transition's duration, if any
 
 
 __all__ = ["VisualizerPresentationState", "install_default_presentation_state"]

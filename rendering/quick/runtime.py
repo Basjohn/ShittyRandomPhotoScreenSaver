@@ -499,6 +499,9 @@ class QuickDisplayRuntime(QObject):
             request,
             on_finalized=_finalize_destination,
         )
+        # What follows the photograph (a reflecting Visualizer's wallpaper) changes with the
+        # transition, from its start and over its duration, not after it.
+        self.scene_controller.announce_incoming_image(request.destination_image, request.duration_ms / 1000.0)
         self.transition_started.emit(run)
         return run
 
