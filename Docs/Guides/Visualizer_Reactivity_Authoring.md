@@ -52,10 +52,15 @@ Consequences, all learned the hard way:
 - **Absolute thresholds in `0..1` units mean "is it silent?" and nothing more.** A gate at 0.09 or a slider floor in
   `0..1` on the live or loudness lanes never closes during music (Sphere's intake gate and energy floors did exactly
   that until 2026-10-03). The absolute numbers also move with the technical profile and the source's own volume.
-- **Judge loudness relative to the track**: presence is the balanced space (about 1 is "this track's normal",
-  0.3 a quiet passage, 1.7+ a big moment). The shared rule in `transient_bus.py` (`musical_weight` for near-silence and
-  far-quieter passages, `musical_emphasis` against the track's usual onset presence, `learn_usual_presence`) is the
-  one definition; Shockwave Grid and Voxel Sphere use it. Use it rather than inventing another.
+- **Read loudness on the fixed real-music scale; never learn a level from the track** (operator 2026-10-04). How loud
+  a passage is (`PassageIntensity`) and how far a hit stands out (`musical_emphasis`) are fixed functions of the real
+  loudness around `MUSICAL_USUAL_LOUDNESS` (8.5: the median onset and eased passage loudness of four recorded songs).
+  Every learned level tried (a slowly falling peak, a 20 s usual level, a learned usual onset presence) flattened a
+  sustained loud chorus as it learned it, so reactions faded inside the same chorus, and resets re-seeded it so modes
+  overreacted after a preset hotswap. A fixed scale follows playback volume instead: quieter listening reacts less,
+  consistently. `musical_weight` still gates near-silence (absolute) and a passage far quieter than the last few
+  seconds (presence against the 6 s running level, which saturates at 0.8 so a sustained chorus is never gated). This
+  is the one definition; Shockwave Grid, Voxel Sphere and DevCurve use it.
 - **A clamp is not a normaliser.** The 2.5 clamp on the live lane is a safety bound; ordinary music saturates it, so
   no contrast survives there.
 - **Silence must not teach a running level.** A running reference that decays through a pause makes the music's

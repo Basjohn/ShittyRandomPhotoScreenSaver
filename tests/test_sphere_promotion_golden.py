@@ -52,13 +52,14 @@ def test_the_golden_holds_the_vocabulary_that_must_not_be_lost(golden):
             a, b = segments[segment]
             return sum(1 for prev, cur in zip(frames[a:b], frames[a + 1:b]) if len(cur["cohorts"]) > len(prev["cohorts"]))
 
-        def peak(segment):
-            a, b = segments[segment]                  # past the previous segment's decay (0.5 s)
-            return max(max(f["section_drives"] or [0.0]) for f in frames[a + 45:b])
+        def peak(segment, settle=0.5):
+            a, b = segments[segment]                  # past the previous segment's decay
+            return max(max(f["section_drives"] or [0.0]) for f in frames[a + int(settle * 90):b])
 
-        # Quiet passages after loud ones (the passage ramp) react less than the loud ones.
+        # Quiet passages after loud ones react far less once the passage level has fallen (it falls
+        # gently, PassageIntensity.LEVEL_FALL_S, as "fast up, gentle down" asks).
         assert launches("flat_low") < launches("kicks") and launches("tail_silence") == 0, name
-        assert peak("flat_low") < 0.75 * peak("kicks") and peak("quiet_outro") < 0.75 * peak("kicks"), name
+        assert peak("flat_low", 1.5) < 0.5 * peak("kicks") and peak("quiet_outro", 1.5) < 0.5 * peak("kicks"), name
         assert peak("big_hit") >= 0.5, name
         outtake = {c["outtake"] for f in frames for c in f["cohorts"]}
         assert outtake == ({True} if preset["overrides"].get("sphere_particle_outtake_enabled") else {False}), name

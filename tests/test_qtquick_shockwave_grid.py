@@ -72,7 +72,7 @@ def test_an_event_is_admitted_once_per_onset_spaced_bounded_and_aged():
     bus.onset(10.3, kind="snare", strength=0.4)
     events = _record(runtime, bus, 10.3)
     assert len(events) == 2 and events[0][0] == pytest.approx(0.295)
-    assert events[1][3] == pytest.approx(shockwave_strength(0.4, 1.0, 1.0, 1.0))   # from its magnitude
+    assert events[1][3] == pytest.approx(shockwave_strength(0.4, 1.0, 1.0))   # from its magnitude
     bus.onset(10.6)
     assert len(_record(runtime, bus, 10.6, playing=False)) == 2             # paused: not admitted...
     assert len(_record(runtime, bus, 10.7)) == 2                            # ...nor later
@@ -235,19 +235,24 @@ def test_quiet_onsets_make_no_wave_and_big_hits_stand_well_apart_from_medium_one
     from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_MAX_STRENGTH, SHOCKWAVE_MIN_STRENGTH
     from widgets.spotify_visualizer.transient_bus import MUSICAL_QUIET
 
-    medium = shockwave_strength(1.5, 1.0, 1.0, 1.0)
-    big = shockwave_strength(3.0, 2.0, 1.6, 1.0)          # louder than the track's usual onsets
+    from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS as usual
+
+    medium = shockwave_strength(1.5, usual, 1.0)
+    big = shockwave_strength(3.0, 1.6 * usual, 1.6)       # a hit well above the usual loudness
     assert SHOCKWAVE_MIN_STRENGTH < medium <= 1.0 and big >= 2.5 * medium and big <= SHOCKWAVE_MAX_STRENGTH
-    assert shockwave_strength(3.0, MUSICAL_QUIET[0], 1.0, 1.0) == 0.0            # near-silent level
-    assert shockwave_strength(3.0, 1.0, 0.1, 1.0) < SHOCKWAVE_MIN_STRENGTH       # quiet passage of a loud track
+    assert shockwave_strength(3.0, MUSICAL_QUIET[0], 1.0) == 0.0                 # near-silent level
+    assert shockwave_strength(3.0, usual, 0.1) < SHOCKWAVE_MIN_STRENGTH          # quiet passage of a loud track
     # More magnitude, loudness or presence never weakens a wave.
-    for low, high in (((1.0, 1.0, 1.0), (2.0, 1.0, 1.0)), ((1.0, 0.3, 1.0), (1.0, 0.6, 1.0)),
-                      ((1.0, 1.0, 0.5), (1.0, 1.0, 1.2))):
-        assert shockwave_strength(*low, 1.0) <= shockwave_strength(*high, 1.0)
+    for low, high in (((1.0, usual, 1.0), (2.0, usual, 1.0)), ((1.0, 0.3 * usual, 1.0), (1.0, 0.6 * usual, 1.0)),
+                      ((1.0, usual, 0.5), (1.0, usual, 1.2))):
+        assert shockwave_strength(*low) <= shockwave_strength(*high)
 
 
-def test_the_runtime_learns_the_usual_onset_so_a_bigger_one_stands_out():
-    from widgets.spotify_visualizer.transient_bus import MusicalOnset
+def test_a_big_hit_stands_out_on_the_fixed_scale_and_a_loud_chorus_keeps_its_emphasis():
+    """Emphasis is read on the fixed loudness scale (operator 2026-10-04): the same loud hit makes
+    the same wave on its first and its twelfth repeat (a learned usual level flattened it), a
+    bigger hit stands out, near-silence makes none."""
+    from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS as usual, MusicalOnset
 
     runtime = ShockwaveGridFrameRuntime()
     serial, now, strengths = 5000, 50.0, []
@@ -263,10 +268,11 @@ def test_the_runtime_learns_the_usual_onset_so_a_bigger_one_stands_out():
         strengths.append(after[-1][3] if len(after) > len(before) or (after and after[-1][0] == 0.0) else None)
 
     for _ in range(12):
-        onset(2.0, 1.8, 1.6)                               # a steady track: presence 1.6 is its usual
-    usual = strengths[-1]
-    onset(3.0, 3.0, 2.6)                                    # a hit well above that
-    assert strengths[-1] is not None and strengths[-1] >= 2.0 * usual
+        onset(2.0, 1.3 * usual, 1.0)                       # a sustained loud chorus
+    assert strengths[0] is not None and strengths[-1] == pytest.approx(strengths[0])
+    chorus = strengths[-1]
+    onset(3.0, 1.9 * usual, 1.6)                           # a hit well above it
+    assert strengths[-1] is not None and strengths[-1] >= 1.6 * chorus
     onset(2.0, 0.05, 0.05)                                  # near-silence between songs
     assert strengths[-1] is None
 
