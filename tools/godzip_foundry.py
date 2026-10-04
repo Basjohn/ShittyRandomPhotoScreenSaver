@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import threading
+import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 import sys
@@ -156,6 +157,7 @@ from godzip_foundry_core import (  # noqa: E402
     git_push_current,
     inspect_godzip,
     is_generated_qrc_python,
+    is_probable_srpss_zip,
     inspect_pull,
     is_transfer_note_markdown,
     launch_run_command,
@@ -203,6 +205,231 @@ def modified_stamp(path: Path) -> str:
         return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
     except OSError:
         return "date unknown"
+
+
+_LOGZIP_NAME_RE = re.compile(r"^logs(?P<head>[0-9a-f]{10})(?:\d+)?\.zip$", re.IGNORECASE)
+_GODZIP_NAME_RE = re.compile(
+    r"^GODZIP_(?P<head>[0-9a-f]{10})(?:_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4})?.*\.zip$",
+    re.IGNORECASE,
+)
+
+
+def _git_archive_relation(
+    repo_root: Path, source_head: str, *, current_head: str | None = None,
+) -> tuple[str, int | None]:
+    """Return a cheap relationship hint for one archive source commit.
+
+    Cleanup is advisory only.  Unknown or foreign commits are never treated as
+    proof of staleness, and no Git mutation is performed here.
+    """
+
+    token = str(source_head or "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", token):
+        return "unknown", None
+    current = str(current_head or git_head(repo_root))
+    if current.casefold().startswith(token.casefold()) or token.casefold().startswith(current.casefold()):
+        return "current", 0
+
+    def run_git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+    resolved = run_git("rev-parse", "--verify", f"{token}^{{commit}}")
+    if resolved.returncode != 0:
+        return "unknown", None
+    full = resolved.stdout.strip()
+    if run_git("merge-base", "--is-ancestor", full, current).returncode == 0:
+        count = run_git("rev-list", "--count", f"{full}..{current}")
+        try:
+            return "behind", int(count.stdout.strip())
+        except (TypeError, ValueError):
+            return "behind", None
+    if run_git("merge-base", "--is-ancestor", current, full).returncode == 0:
+        return "future", None
+    return "diverged", None
+
+
+def _archive_cleanup_record(
+    repo_root: Path,
+    path: Path,
+    stamp: float,
+    *,
+    current_head: str | None = None,
+    relation_cache: dict[str, tuple[str, int | None]] | None = None,
+) -> dict[str, Any] | None:
+    """Classify a direct ZIP as a genuine SRPSS GODZIP or LOGZIP cleanup candidate."""
+
+    name = path.name
+    source_head = ""
+    kind = ""
+    effective_stamp = float(stamp)
+    log_match = _LOGZIP_NAME_RE.fullmatch(name)
+    god_match = _GODZIP_NAME_RE.fullmatch(name)
+
+    if log_match:
+        kind = "LOGZIP"
+        source_head = log_match.group("head")
+    else:
+        manifest: dict[str, Any] | None = None
+        try:
+            with zipfile.ZipFile(path, "r") as archive:
+                names = set(archive.namelist())
+                if ".godzip/manifest.json" in names:
+                    raw = archive.read(".godzip/manifest.json")
+                    payload = json.loads(raw.decode("utf-8"))
+                    if isinstance(payload, dict) and payload.get("format") == "srpss-godzip":
+                        manifest = payload
+        except (OSError, zipfile.BadZipFile, KeyError, UnicodeDecodeError, json.JSONDecodeError):
+            manifest = None
+
+        if manifest is not None:
+            kind = "GODZIP"
+            source_head = str(manifest.get("source_head") or "")
+            generated = str(manifest.get("generated_at_utc") or "").strip()
+            if generated:
+                try:
+                    effective_stamp = datetime.fromisoformat(
+                        generated.replace("Z", "+00:00")
+                    ).timestamp()
+                except ValueError:
+                    pass
+        elif god_match and is_probable_srpss_zip(path):
+            kind = "GODZIP"
+            source_head = god_match.group("head")
+        else:
+            return None
+
+    cache_key = source_head.casefold()
+    cached_relation = relation_cache.get(cache_key) if relation_cache is not None else None
+    if cached_relation is None:
+        cached_relation = _git_archive_relation(
+            repo_root, source_head, current_head=current_head,
+        )
+        if relation_cache is not None:
+            relation_cache[cache_key] = cached_relation
+    relation, commits_behind = cached_relation
+    age_seconds = max(0.0, datetime.now().timestamp() - effective_stamp)
+    age_days = age_seconds / 86400.0
+
+    # "Likelihood" is intentionally conservative.  It is a cleanup aid, not a
+    # deletion authority.  Age and known Git distance raise the hint; unknown
+    # provenance never becomes HIGH merely because it could not be resolved.
+    score = 0
+    if age_days >= 2:
+        score += 1
+    if age_days >= 14:
+        score += 1
+    if age_days >= 60:
+        score += 1
+    if relation == "behind":
+        score += 1
+        if commits_behind is not None and commits_behind >= 10:
+            score += 1
+    elif relation in {"diverged", "future"}:
+        score += 1
+
+    if score >= 4:
+        likelihood = "HIGH"
+    elif score >= 2:
+        likelihood = "MEDIUM"
+    elif score == 1:
+        likelihood = "LOW"
+    else:
+        likelihood = "FRESH"
+
+    if age_days < 1:
+        age_text = f"{max(0, int(age_seconds // 3600))}h old"
+    elif age_days < 60:
+        age_text = f"{int(age_days)}d old"
+    else:
+        age_text = f"{int(age_days // 30)}mo old"
+
+    if relation == "current":
+        git_text = "current HEAD"
+    elif relation == "behind":
+        git_text = (
+            f"{commits_behind} commit{'s' if commits_behind != 1 else ''} behind"
+            if commits_behind is not None
+            else "older ancestor"
+        )
+    elif relation == "future":
+        git_text = "newer than local HEAD"
+    elif relation == "diverged":
+        git_text = "diverged history"
+    else:
+        git_text = "commit unknown"
+
+    return {
+        "path": path.resolve(),
+        "kind": kind,
+        "stamp": float(stamp),
+        "age_stamp": effective_stamp,
+        "source_head": source_head,
+        "likelihood": likelihood,
+        "age_text": age_text,
+        "git_text": git_text,
+        "latest": False,
+    }
+
+
+def _send_to_recycle_bin(paths: Iterable[Path]) -> int:
+    """Send existing files to the OS recycle bin/trash, with no permanent fallback."""
+
+    resolved = [Path(path).resolve() for path in paths if Path(path).is_file()]
+    if not resolved:
+        return 0
+
+    if os.name == "nt":
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", ctypes.c_void_p),
+                ("wFunc", ctypes.c_uint),
+                ("pFrom", ctypes.c_wchar_p),
+                ("pTo", ctypes.c_wchar_p),
+                ("fFlags", ctypes.c_ushort),
+                ("fAnyOperationsAborted", ctypes.c_int),
+                ("hNameMappings", ctypes.c_void_p),
+                ("lpszProgressTitle", ctypes.c_wchar_p),
+            ]
+
+        source = "\0".join(str(path) for path in resolved) + "\0\0"
+        operation = SHFILEOPSTRUCTW()
+        operation.wFunc = 3  # FO_DELETE
+        operation.pFrom = source
+        operation.fFlags = 0x0040 | 0x0010 | 0x0004 | 0x0400  # ALLOWUNDO | NOCONFIRMATION | SILENT | NOERRORUI
+        result = int(ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation)))
+        if result != 0 or operation.fAnyOperationsAborted:
+            raise GodzipError(
+                "Windows Recycle Bin operation failed or was cancelled; no permanent-delete fallback was attempted."
+            )
+        return len(resolved)
+
+    gio = shutil.which("gio")
+    if gio:
+        completed = subprocess.run([gio, "trash", *map(str, resolved)], check=False)
+        if completed.returncode != 0:
+            raise GodzipError("Desktop trash operation failed; no permanent-delete fallback was attempted.")
+        return len(resolved)
+
+    if sys.platform == "darwin":
+        for path in resolved:
+            escaped = str(path).replace("\\", "\\\\").replace('"', '\\"')
+            completed = subprocess.run(
+                ["osascript", "-e", f'tell application "Finder" to delete POSIX file "{escaped}"'],
+                check=False,
+            )
+            if completed.returncode != 0:
+                raise GodzipError("macOS Trash operation failed; no permanent-delete fallback was attempted.")
+        return len(resolved)
+
+    raise GodzipError(
+        "No supported desktop trash command is available. Nothing was deleted because GODZIP CLEAN never falls back to permanent deletion."
+    )
 
 
 def _resolved_foundry_icon(repo_root: Path) -> Path | None:
@@ -721,7 +948,7 @@ class CreateTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         intro = Panel()
@@ -730,14 +957,6 @@ class CreateTab(QWidget):
         title = QLabel("CREATE GOD ZIP")
         title.setObjectName("sectionTitle")
         intro_l.addWidget(title)
-        desc = QLabel(
-            "Git-aware archive creation. Ignored files never enter the source universe. "
-            "Workflow defaults keep ordinary source + all Docs + direct tests/* files selected, "
-            "while app/tool themes, images, goldens and nested test payloads stay off unless explicitly selected."
-        )
-        desc.setWordWrap(True)
-        desc.setObjectName("muted")
-        intro_l.addWidget(desc)
         layout.addWidget(intro)
 
         controls = QHBoxLayout()
@@ -979,7 +1198,7 @@ class ApplyTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         self.context_panel = Panel()
@@ -1677,27 +1896,34 @@ class DebrisTab(QWidget):
         super().__init__(window)
         self.window = window
         self.repo_root = window.repo_root
+        self._clean_mode = False
+        self._clean_records: list[dict[str, Any]] = []
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        intro = Panel()
-        il = QVBoxLayout(intro)
+        self.intro = Panel()
+        il = QVBoxLayout(self.intro)
         il.setContentsMargins(14, 12, 14, 12)
-        title = QLabel("DEBRIS — NEVER DELETE BLINDLY")
-        title.setObjectName("sectionTitle")
-        il.addWidget(title)
-        desc = QLabel(
+        self.title = QLabel("DEBRIS — NEVER DELETE BLINDLY")
+        self.title.setObjectName("sectionTitle")
+        il.addWidget(self.title)
+        self.desc = QLabel(
             "Deletion intent is explicit. Checked paths are moved to /deleteme/<operation>/<original path>, "
             "never permanently deleted. Archive debris instructions appear here automatically."
         )
-        desc.setObjectName("muted")
-        desc.setWordWrap(True)
-        il.addWidget(desc)
-        layout.addWidget(intro)
+        self.desc.setObjectName("muted")
+        self.desc.setWordWrap(True)
+        il.addWidget(self.desc)
+        layout.addWidget(self.intro)
+
+        self.debris_body = QWidget(self)
+        debris_layout = QVBoxLayout(self.debris_body)
+        debris_layout.setContentsMargins(0, 0, 0, 0)
+        debris_layout.setSpacing(10)
 
         row = QHBoxLayout()
         for label, handler in (
@@ -1712,7 +1938,11 @@ class DebrisTab(QWidget):
             b.clicked.connect(handler)
             row.addWidget(b)
         row.addStretch(1)
-        layout.addLayout(row)
+        self.clean_mode_button = QPushButton("GODZIP CLEAN")
+        self.clean_mode_button.setObjectName("cleanModeButton")
+        self.clean_mode_button.clicked.connect(lambda: self.set_clean_mode(True))
+        row.addWidget(self.clean_mode_button)
+        debris_layout.addLayout(row)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Path", "Source", "Exists", "Reason"])
@@ -1727,7 +1957,7 @@ class DebrisTab(QWidget):
         self.tree.setColumnWidth(1, 100)
         self.tree.setColumnWidth(2, 72)
         self.tree.itemChanged.connect(lambda *_: self._changed())
-        layout.addWidget(self.tree, 1)
+        debris_layout.addWidget(self.tree, 1)
 
         bottom = Panel()
         bl = QHBoxLayout(bottom)
@@ -1740,7 +1970,302 @@ class DebrisTab(QWidget):
         self.move_button.setEnabled(False)
         bl.addWidget(self.summary, 1)
         bl.addWidget(self.move_button)
-        layout.addWidget(bottom)
+        debris_layout.addWidget(bottom)
+        layout.addWidget(self.debris_body, 1)
+
+        self.clean_body = QWidget(self)
+        clean_layout = QVBoxLayout(self.clean_body)
+        clean_layout.setContentsMargins(0, 0, 0, 0)
+        clean_layout.setSpacing(10)
+
+        clean_controls = QHBoxLayout()
+        for label, handler in (
+            ("GODZIPS", lambda: self._clean_select_kind("GODZIP")),
+            ("LOGZIPS", lambda: self._clean_select_kind("LOGZIP")),
+            ("ALL", lambda: self._clean_select_all(True)),
+            ("NONE", lambda: self._clean_select_all(False)),
+            ("ALL BUT LATEST", self._clean_select_all_but_latest),
+            ("REFRESH", self.refresh_clean_archives),
+        ):
+            button = QPushButton(label)
+            if label == "ALL BUT LATEST":
+                button.setObjectName("primaryButton")
+            button.clicked.connect(handler)
+            clean_controls.addWidget(button)
+        clean_controls.addStretch(1)
+        back = QPushButton("BACK TO DEBRIS")
+        back.setObjectName("cleanModeButton")
+        back.clicked.connect(lambda: self.set_clean_mode(False))
+        clean_controls.addWidget(back)
+        clean_layout.addLayout(clean_controls)
+
+        self.clean_tree = QTreeWidget()
+        self.clean_tree.setHeaderLabels(["Archive", "Kind", "Stale likelihood", "Location"])
+        self.clean_tree.setAlternatingRowColors(True)
+        self.clean_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.clean_tree.setRootIsDecorated(False)
+        self.clean_tree.setUniformRowHeights(True)
+        self.clean_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.clean_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.clean_tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.clean_tree.header().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.clean_tree.setColumnWidth(1, 90)
+        self.clean_tree.setColumnWidth(2, 285)
+        self.clean_tree.itemChanged.connect(lambda *_: self._clean_changed())
+        clean_layout.addWidget(self.clean_tree, 1)
+
+        clean_bottom = Panel()
+        cbl = QHBoxLayout(clean_bottom)
+        cbl.setContentsMargins(14, 12, 14, 12)
+        self.clean_summary = QLabel("Not scanned yet.")
+        self.clean_summary.setObjectName("muted")
+        self.clean_recycle_button = QPushButton("RECYCLE CHECKED ARCHIVES")
+        self.clean_recycle_button.setObjectName("dangerButton")
+        self.clean_recycle_button.setEnabled(False)
+        self.clean_recycle_button.clicked.connect(self.recycle_clean_archives)
+        cbl.addWidget(self.clean_summary, 1)
+        cbl.addWidget(self.clean_recycle_button)
+        clean_layout.addWidget(clean_bottom)
+        self.clean_body.hide()
+        layout.addWidget(self.clean_body, 1)
+
+    def set_clean_mode(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._clean_mode:
+            return
+        self._clean_mode = enabled
+        self.debris_body.setVisible(not enabled)
+        self.clean_body.setVisible(enabled)
+        if enabled:
+            self.title.setText("GODZIP CLEAN — ARCHIVE HOUSEKEEPING")
+            self.desc.setText(
+                "Recognized GODZIPs and LOGZIPs from the repo-adjacent, remembered output, Downloads and optional drop folders. "
+                "Staleness is advisory. Recycling is direct to the OS Recycle Bin/Trash and never routes through /deleteme."
+            )
+            self.refresh_clean_archives()
+        else:
+            self.title.setText("DEBRIS — NEVER DELETE BLINDLY")
+            self.desc.setText(
+                "Deletion intent is explicit. Checked paths are moved to /deleteme/<operation>/<original path>, "
+                "never permanently deleted. Archive debris instructions appear here automatically."
+            )
+
+    def _clean_search_dirs(self) -> list[Path]:
+        candidates = [Path.home() / "Downloads", *self.window.zip_search_dirs()]
+        result: list[Path] = []
+        seen: set[str] = set()
+        for raw in candidates:
+            path = Path(raw).expanduser()
+            key = os.path.normcase(os.path.abspath(str(path)))
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(path)
+        return result
+
+    def _scan_clean_archives(self) -> list[dict[str, Any]]:
+        found: dict[str, tuple[float, Path]] = {}
+        for directory in self._clean_search_dirs():
+            try:
+                if not directory.is_dir():
+                    continue
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        try:
+                            if not entry.name.lower().endswith(".zip") or not entry.is_file(follow_symlinks=False):
+                                continue
+                            stamp = float(entry.stat(follow_symlinks=False).st_mtime)
+                            path = Path(os.path.abspath(entry.path))
+                        except OSError:
+                            continue
+                        key = os.path.normcase(str(path))
+                        current = found.get(key)
+                        if current is None or stamp > current[0]:
+                            found[key] = (stamp, path)
+            except OSError:
+                continue
+
+        ordered = sorted(found.values(), key=lambda item: (-item[0], item[1].name.casefold()))
+        records: list[dict[str, Any]] = []
+        current_head = git_head(self.repo_root)
+        relation_cache: dict[str, tuple[str, int | None]] = {}
+        # Name-matched SRPSS archives are always checked.  Opaque ZIPs are
+        # bounded so a huge Downloads directory cannot turn cleanup into an
+        # unbounded archive-inspection job.
+        opaque_budget = 120
+        opaque_seen = 0
+        for stamp, path in ordered:
+            name_known = bool(_LOGZIP_NAME_RE.fullmatch(path.name) or _GODZIP_NAME_RE.fullmatch(path.name))
+            if not name_known:
+                if opaque_seen >= opaque_budget:
+                    continue
+                opaque_seen += 1
+            record = _archive_cleanup_record(
+                self.repo_root,
+                path,
+                stamp,
+                current_head=current_head,
+                relation_cache=relation_cache,
+            )
+            if record is not None:
+                records.append(record)
+
+        for kind in ("GODZIP", "LOGZIP"):
+            kind_records = [record for record in records if record["kind"] == kind]
+            if kind_records:
+                max(kind_records, key=lambda record: record["stamp"])["latest"] = True
+        records.sort(key=lambda record: (-record["stamp"], record["kind"], record["path"].name.casefold()))
+        return records
+
+    def refresh_clean_archives(self) -> None:
+        if not self._clean_mode:
+            return
+
+        def completed(records: list[dict[str, Any]]) -> None:
+            self._clean_records = records
+            self.clean_tree.blockSignals(True)
+            try:
+                self.clean_tree.clear()
+                for record in records:
+                    path = record["path"]
+                    latest = bool(record["latest"])
+                    stale_text = (
+                        f"KEEP · latest {record['kind']} · {record['likelihood']} · {record['age_text']} · {record['git_text']}"
+                        if latest
+                        else f"{record['likelihood']} · {record['age_text']} · {record['git_text']}"
+                    )
+                    item = QTreeWidgetItem([
+                        path.name,
+                        record["kind"],
+                        stale_text,
+                        str(path.parent),
+                    ])
+                    item.setData(0, ROLE_PATH, str(path))
+                    item.setData(0, ROLE_KIND, record["kind"])
+                    item.setData(0, ROLE_PAYLOAD, record)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    item.setCheckState(0, Qt.CheckState.Unchecked)
+                    item.setToolTip(0, str(path))
+                    if latest:
+                        for column in range(self.clean_tree.columnCount()):
+                            item.setForeground(column, self.window.theme_qcolor("popup.icon.success"))
+                    self.clean_tree.addTopLevelItem(item)
+            finally:
+                self.clean_tree.blockSignals(False)
+            self._clean_changed()
+            god_count = sum(1 for record in records if record["kind"] == "GODZIP")
+            log_count = sum(1 for record in records if record["kind"] == "LOGZIP")
+            self.window.set_status(
+                f"GODZIP CLEAN scan: {god_count} GODZIP(s), {log_count} LOGZIP(s)"
+            )
+
+        self.window.run_task(
+            "Scanning recognized GODZIP/LOGZIP cleanup locations…",
+            self._scan_clean_archives,
+            completed,
+            error_title="GODZIP CLEAN scan failed",
+        )
+
+    def _clean_select_all(self, checked: bool) -> None:
+        self.clean_tree.blockSignals(True)
+        try:
+            for index in range(self.clean_tree.topLevelItemCount()):
+                self.clean_tree.topLevelItem(index).setCheckState(
+                    0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+                )
+        finally:
+            self.clean_tree.blockSignals(False)
+        self._clean_changed()
+
+    def _clean_select_kind(self, kind: str) -> None:
+        wanted = str(kind).upper()
+        self.clean_tree.blockSignals(True)
+        try:
+            for index in range(self.clean_tree.topLevelItemCount()):
+                item = self.clean_tree.topLevelItem(index)
+                item.setCheckState(
+                    0,
+                    Qt.CheckState.Checked
+                    if str(item.data(0, ROLE_KIND)).upper() == wanted
+                    else Qt.CheckState.Unchecked,
+                )
+        finally:
+            self.clean_tree.blockSignals(False)
+        self._clean_changed()
+
+    def _clean_select_all_but_latest(self) -> None:
+        self.clean_tree.blockSignals(True)
+        try:
+            for index in range(self.clean_tree.topLevelItemCount()):
+                item = self.clean_tree.topLevelItem(index)
+                record = item.data(0, ROLE_PAYLOAD)
+                checked = isinstance(record, dict) and not bool(record.get("latest"))
+                item.setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        finally:
+            self.clean_tree.blockSignals(False)
+        self._clean_changed()
+
+    def _clean_selected_paths(self) -> list[Path]:
+        result: list[Path] = []
+        for index in range(self.clean_tree.topLevelItemCount()):
+            item = self.clean_tree.topLevelItem(index)
+            if item.checkState(0) == Qt.CheckState.Checked:
+                raw = str(item.data(0, ROLE_PATH) or "")
+                if raw:
+                    result.append(Path(raw))
+        return result
+
+    def _clean_changed(self) -> None:
+        paths = self._clean_selected_paths()
+        total_size = 0
+        for path in paths:
+            try:
+                total_size += path.stat().st_size
+            except OSError:
+                pass
+        latest_checked = 0
+        for index in range(self.clean_tree.topLevelItemCount()):
+            item = self.clean_tree.topLevelItem(index)
+            if item.checkState(0) != Qt.CheckState.Checked:
+                continue
+            record = item.data(0, ROLE_PAYLOAD)
+            if isinstance(record, dict) and record.get("latest"):
+                latest_checked += 1
+        text = f"{len(self._clean_records)} recognized archive(s) · {len(paths)} checked · {human_size(total_size)}"
+        if latest_checked:
+            text += f" · WARNING: {latest_checked} latest-of-kind checked"
+        self.clean_summary.setText(text)
+        self.clean_recycle_button.setEnabled(bool(paths))
+
+    def recycle_clean_archives(self) -> None:
+        paths = [path for path in self._clean_selected_paths() if path.is_file()]
+        if not paths:
+            return
+        lines = [str(path) for path in paths]
+        self.window.confirm_file_list(
+            "Recycle GODZIP / LOGZIP archives",
+            "These checked archives will go directly to the OS Recycle Bin/Trash. "
+            "They will NOT be moved into /deleteme, and GODZIP CLEAN has no permanent-delete fallback.",
+            lines,
+            lambda: self._recycle_clean_archives_now(paths),
+        )
+
+    def _recycle_clean_archives_now(self, paths: list[Path]) -> None:
+        def completed(count: int) -> None:
+            self.window.invalidate_zip_discovery_cache()
+            self.window.set_status(f"Recycled {count} GODZIP/LOGZIP archive(s)")
+            self.window.notify(
+                "Archive cleanup complete",
+                f"Sent {count} checked archive(s) to the OS Recycle Bin/Trash.\n\n/deleteme was not used.",
+            )
+            self.refresh_clean_archives()
+
+        self.window.run_task(
+            "Sending checked GODZIP/LOGZIP archives to the OS Recycle Bin/Trash…",
+            lambda: _send_to_recycle_bin(paths),
+            completed,
+            error_title="Archive recycle failed",
+        )
 
     def _add_entry(
         self,
@@ -1945,7 +2470,6 @@ class DebrisTab(QWidget):
         )
 
 
-
 class ConfirmFileListDialog(FoundryPopupDialog):
     """Prominent final confirmation that exposes every affected path."""
 
@@ -1989,7 +2513,7 @@ class LogzipTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         intro = Panel()
         il = QVBoxLayout(intro)
@@ -2193,7 +2717,7 @@ class DiffTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         intro = Panel()
         il = QVBoxLayout(intro)
@@ -2340,7 +2864,7 @@ class PushTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         intro = Panel()
         il = QVBoxLayout(intro)
@@ -2515,7 +3039,7 @@ class PullTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         intro = Panel()
         il = QVBoxLayout(intro)
@@ -2729,7 +3253,7 @@ class RunTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         intro = Panel()
@@ -3159,7 +3683,7 @@ class CommandTab(QWidget):
         scrolling.setFrameShape(QFrame.Shape.NoFrame)
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         scrolling.setWidget(content)
         outer.addWidget(scrolling)
@@ -3772,7 +4296,7 @@ class FoundriesTab(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         intro = Panel()
@@ -3862,7 +4386,7 @@ class GodzipFoundryWindow(QMainWindow):
             | Qt.WindowType.WindowMinMaxButtonsHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setContentsMargins(2, 2, 2, 2)
+        self.setContentsMargins(4, 4, 4, 4)
         self.setAcceptDrops(True)
         self.setMinimumSize(900, 680)
         self._fit_to_screen()

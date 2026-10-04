@@ -225,6 +225,9 @@ output/
 *.rej
 *~
 
+# Jank Ass Shit I Don't Want Being Jank In Public
+/assets/usu
+
 # GODZIP archive metadata, Foundry repo-local state and debris staging.
 # A GODZIP archive embeds its manifest at .godzip/manifest.json; if an archive
 # is manually extracted at repo root that metadata must remain local/untracked.
