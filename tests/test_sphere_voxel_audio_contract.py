@@ -1365,9 +1365,7 @@ def test_particle_outtake_direction_is_captured_at_launch_and_replacement_crossf
     assert "sphere_particle_outtake_enabled" not in shader
 
 
-def test_particle_outtake_is_optional_and_present_in_every_preset() -> None:
-    import json
-
+def test_particle_outtake_is_optional() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"], bool)
@@ -1814,9 +1812,8 @@ def test_a_sustained_loud_chorus_earns_the_same_reward_from_its_first_hit_to_its
     assert runtime._last_reward == 0.0
 
 
-def test_sphere_energy_floor_persistence_and_preset_parity() -> None:
-    """New keys reach canonical defaults, presets, typed settings and configure."""
-    import json
+def test_sphere_energy_floor_persistence() -> None:
+    """New keys reach canonical defaults, typed settings and configure (curated presets are authored content)."""
     from core.settings.default_settings import DEFAULT_SETTINGS
 
     defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
