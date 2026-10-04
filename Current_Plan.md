@@ -187,7 +187,7 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 - [ ] **Sphere visual upgrade licence (operator):** the migration may make Sphere more visually appealing with the
   shared feature set (materials, lighting, post, reflections, tiers), within the golden-as-reference rules above.
   Landed: tier antialiasing through the scene target; **Mirror Cubes** (operator 2026-10-04: mirror cubes, and a
-  preset that shows them off: Preset 5 Mirror Ball). Physical check: Mirror Ball on bright and dark wallpapers.
+  preset that shows them off: Preset 1 Mirror Ball). Physical check: Mirror Ball on bright and dark wallpapers.
 - [x] **Reactivity goblin audit of the other modes** (operator 2026-10-04; Bubble excluded). Tool:
   `python -m tools.visualizer_replay.mode_audit` on the four songs (the second takes). Found and fixed: the engine's
   inline (pool-less) analysis published raw bars only, so recordings carried a zero continuous lane (one commit

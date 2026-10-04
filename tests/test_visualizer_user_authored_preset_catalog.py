@@ -11,6 +11,15 @@ def _copy_as(source: Path, target: Path) -> None:
     shutil.copy2(source, target)
 
 
+def _any_sphere_presets(count: int) -> list[Path]:
+    """Real curated Sphere files as catalogue fixtures: which ones, and what they say, is authored
+    content the operator changes at will, so the tests never depend on it."""
+    source_root = Path(vp.__file__).resolve().parents[2] / "presets" / "visualizer_modes" / "sphere"
+    files = sorted(source_root.glob("preset_*.json"))
+    assert len(files) >= count
+    return files[:count]
+
+
 def _build_sphere_from(tmp_path: Path, monkeypatch):
     root = tmp_path / "visualizer_modes"
     overrides = tmp_path / "visualizer_mode_overrides"
@@ -25,10 +34,10 @@ def _build_sphere_from(tmp_path: Path, monkeypatch):
 
 
 def test_sparse_authored_slots_compact_to_runtime_positions(tmp_path: Path, monkeypatch) -> None:
-    source_root = Path(vp.__file__).resolve().parents[2] / "presets" / "visualizer_modes" / "sphere"
+    first, second = _any_sphere_presets(2)
     root = tmp_path / "visualizer_modes" / "sphere"
-    _copy_as(source_root / "preset_1_glass_current.json", root / "preset_1_glass_current.json")
-    _copy_as(source_root / "preset_2_voxel_bloom.json", root / "preset_5_user_extra.json")
+    _copy_as(first, root / "preset_1_glass_current.json")
+    _copy_as(second, root / "preset_5_user_extra.json")
 
     _root, presets = _build_sphere_from(tmp_path, monkeypatch)
 
@@ -45,9 +54,9 @@ def test_sparse_authored_slots_compact_to_runtime_positions(tmp_path: Path, monk
 
 
 def test_single_high_numbered_authored_preset_is_valid(tmp_path: Path, monkeypatch) -> None:
-    source_root = Path(vp.__file__).resolve().parents[2] / "presets" / "visualizer_modes" / "sphere"
+    (first,) = _any_sphere_presets(1)
     root = tmp_path / "visualizer_modes" / "sphere"
-    _copy_as(source_root / "preset_1_glass_current.json", root / "preset_20_only_survivor.json")
+    _copy_as(first, root / "preset_20_only_survivor.json")
 
     _root, presets = _build_sphere_from(tmp_path, monkeypatch)
 

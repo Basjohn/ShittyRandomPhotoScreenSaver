@@ -27,7 +27,8 @@ from pathlib import Path
 GOLDEN = Path(__file__).resolve().parents[2] / "tests/goldens/visualizer_replay/sphere_promotion.json"
 # Both original goldens as curated, and Voxel Bloom with Particle Outtake on so the outtake half of
 # the vocabulary is covered whatever the curated snapshots currently choose.
-PRESETS = ((0, "glass_current", None), (1, "voxel_bloom", None),
+# Indices only seed the frozen settings at --write (Glass Current moved to slot 5, 2026-10-04).
+PRESETS = ((4, "glass_current", None), (1, "voxel_bloom", None),
            (1, "voxel_bloom_outtake", {"sphere_particle_outtake_enabled": True}))
 FRAME_US = 11_111                           # the logical cadence (90 Hz)
 BANDS = 64

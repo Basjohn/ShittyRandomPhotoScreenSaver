@@ -774,20 +774,6 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
     assert "sphere_rainbow_enabled" not in source
 
 
-def test_voxel_bloom_curated_preset_exists() -> None:
-    import json
-    preset = ROOT / "presets/visualizer_modes/sphere/preset_2_voxel_bloom.json"
-    assert preset.exists()
-    data = json.loads(preset.read_text(encoding="utf-8"))
-    config = data["snapshot"]["widgets"]["spotify_visualizer"]
-    assert isinstance(data["name"], str) and data["name"]
-    assert isinstance(data["preset_index"], int)
-    for key in ("sphere_finish", "sphere_fill_color", "sphere_light_tracer_enabled",
-                "sphere_fragment_interpolation_enabled", "sphere_incoming_density_response_enabled"):
-        assert key in config, key
-    assert "sphere_material" not in config  # retired key
-
-
 def test_sphere_optional_presentation_features_are_mode_owned_in_canonical_schema() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
     from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
@@ -1407,33 +1393,6 @@ def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None
     assert "particleFlow(" in shader
     assert "uCohortProgress" in shader
     assert "uCohortVelocity" in shader
-
-
-def test_glass_current_preset_carries_the_sphere_material_keys() -> None:
-    import json
-
-    data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_1_glass_current.json").read_text(encoding="utf-8"))
-    config = data["snapshot"]["widgets"]["spotify_visualizer"]
-    assert isinstance(data["name"], str) and data["name"]
-    for key in ("sphere_fill_color", "sphere_edge_color"):
-        colour = config[key]
-        assert len(colour) == 4 and all(isinstance(channel, int) and 0 <= channel <= 255 for channel in colour), key
-    assert isinstance(config["sphere_finish"], str)
-    for key in ("sphere_shadow_enabled", "sphere_light_tracer_enabled", "sphere_fragment_interpolation_enabled",
-                "sphere_incoming_density_response_enabled", "sphere_incoming_transient_velocity_enabled",
-                "sphere_particle_outtake_enabled"):
-        assert isinstance(config[key], bool), key
-    for key in ("sphere_shadow_opacity", "sphere_shadow_softness", "sphere_shadow_distance", "sphere_shadow_size"):
-        assert isinstance(config[key], (int, float)), key
-
-
-def test_reactive_finish_presets_keep_overflow_and_incoming_fade_where_authored() -> None:
-    import json
-    for name in ("preset_1_glass_current.json", "preset_2_voxel_bloom.json"):
-        data = json.loads((ROOT / "presets/visualizer_modes/sphere" / name).read_text(encoding="utf-8"))
-        config = data["snapshot"]["widgets"]["spotify_visualizer"]
-        assert config["sphere_allow_overflow"] is True
-        assert config["sphere_fade_incoming_blocks"] is True
 
 
 def test_sphere_owned_controls_do_not_enter_accepted_mode_implementations() -> None:
