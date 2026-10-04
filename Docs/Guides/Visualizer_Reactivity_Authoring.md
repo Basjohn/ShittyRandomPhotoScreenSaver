@@ -172,12 +172,21 @@ ones) until it took the ramp (2026-10-04). Bubble reads the same lane but keeps 
 **Slow passage drive (DevCurve, operator 2026-10-04).** Travel speed, undulation speed and slope must follow the music
 without ever lurching. DevCurve once kept one speed and slope whatever the music did: the undulation drifted on
 the wall clock, and travel was capped at cruise ±10%, a guard against a historic energy throttle that swung it ~12×.
-The pattern that works: ease passage intensity evenly over ~1.5 s (per frame it flickers 0..1 with the beat; eased,
-it follows the passage a viewer hears, ~0.25 quietest / ~0.65 usual / ~0.95 loudest on real music), map it through
-those points to a 0..1 drive where 0.5 is the historical look, and scale travel (0.5–1.6×), phase speed and swing
-from it. Integrate phase and position from rate × dt so a speed change never jumps the picture. A loud passage is
-then faster and steeper; per-frame energy still never touches travel. Classify passages by 2 s windows when
-measuring, not by single frames.
+The pattern that works: ease passage intensity through two even stages of ~1.2 s (per frame it flickers 0..1 with
+the beat; eased, it follows the passage a viewer hears, ~0.25 quietest / ~0.65 usual / ~0.95 loudest on real music;
+two stages make every change an S-curve with no kink where it starts or ends), map it through those points to a 0..1
+drive where 0.5 is the historical look, and scale travel (0.5–1.6×), phase speed and swing from it. Integrate phase
+and position from rate × dt so a speed change never jumps the picture. A loud passage is then faster and steeper.
+Nothing per-beat touches speed: a ±10% transient nudge on travel still made it breathe with the beat, and the
+operator read it as fast/slow/fast/slow (2026-10-04). Classify passages by 2 s windows when measuring, not by single
+frames.
+
+**The pulse is height, and it settles gently (DevCurve, operator 2026-10-04).** Each layer's reaction rises with a
+hit within ~45 ms and settles over ~0.65 s, timed in seconds. A per-frame blend (0.30) fell as fast as it rose
+(~50 ms), so every beat pumped the swing 14–29% and the curves read fast/slow/fast/slow. Measured on the recordings,
+the asymmetric envelope halves the beat-scale pumping and makes the steepest falls ~3× gentler, at ~15–25% more
+mean swing (the height lingers between hits). Never convert a per-frame blend factor into "smoothing" without dt:
+it changes with frame rate.
 
 ### Slow sustained response
 
