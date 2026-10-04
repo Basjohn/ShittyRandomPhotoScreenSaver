@@ -149,7 +149,9 @@ def fresh_presentation(rows, refresh_hz: dict[int, float]) -> None:
 
 
 GUI_WAKE_DELIVER, PREFETCH_BEGIN, PREFETCH_END = 2, 64, 65
-QUICK_BEFORE_SYNC, QUICK_AFTER_SYNC, QUICK_BEFORE_RENDERING, QUICK_AFTER_RENDERING = 49, 50, 51, 54
+QUICK_BEFORE_FRAME, QUICK_BEFORE_SYNC, QUICK_AFTER_SYNC, QUICK_BEFORE_RENDERING, QUICK_AFTER_RENDERING = 48, 49, 50, 51, 54
+EVENT_LABELS = {5: "draw", 6: "swap", 19: "bg_render", 48: "frame_begin", 49: "before_sync", 50: "after_sync",
+                51: "before_render", 52: "before_pass", 53: "after_pass", 54: "after_render"}
 
 
 def stalls(rows, threshold_ms: float, limit: int = 25) -> None:
@@ -179,6 +181,14 @@ def stalls(rows, threshold_ms: float, limit: int = 25) -> None:
             wake_gap = max((y - x) / 1e6 for x, y in zip(edges, edges[1:]))
             handoff = any(begin <= b and end >= a for begin, end in prefetch)
             started = any(a <= t <= b for t in backgrounds) and not any(a - 50e6 <= t < a for t in backgrounds)
+            # Longest silence between consecutive render-thread/Qt-frame events, and the pair around it.
+            frame_events = sorted((t, e) for e in (*range(QUICK_BEFORE_FRAME, QUICK_AFTER_RENDERING + 1),
+                                                   RENDER_DRAW, FRAME_SWAP, BACKGROUND_RENDER_BEGIN)
+                                  for t in events.get(e, []) if a <= t <= b)
+            silence, pair = 0.0, ""
+            for (t0, e0), (t1, e1) in zip(frame_events, frame_events[1:]):
+                if (t1 - t0) / 1e6 > silence:
+                    silence, pair = (t1 - t0) / 1e6, f"{EVENT_LABELS.get(e0, e0)}->{EVENT_LABELS.get(e1, e1)}"
             sync = max(((y - x) / 1e6 for x, y in syncs if a <= x <= b), default=0.0)
             render = max(((y - x) / 1e6 for x, y in renders if a <= x <= b), default=0.0)
             cause = ("prefetch_handoff" if handoff else "transition_start" if started else
@@ -189,7 +199,7 @@ def stalls(rows, threshold_ms: float, limit: int = 25) -> None:
                 printed += 1
                 print(f"stall screen={screen} gap={gap:.1f}ms longest_gui_wake_gap={wake_gap:.1f}ms "
                       f"handoff={handoff} transition_start={started} max_sync={sync:.1f}ms "
-                      f"max_render={render:.1f}ms -> {cause}")
+                      f"max_render={render:.1f}ms silence={silence:.1f}ms {pair} -> {cause}")
     for (screen, cause), n in sorted(causes.items()):
         print(f"stalls screen={screen} {cause}={n}")
 
