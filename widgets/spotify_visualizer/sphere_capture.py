@@ -3,7 +3,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame
+from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame, freeze_render_fields
+
+
+def _render_parameters(widget: Any, parameters: FrozenFields) -> FrozenFields:
+    """The runtime's resolved parameters plus the presentation-owned 3D Detail tier, for the
+    renderer only (the logical runtime never sees it). Rebuilt only when either changes."""
+    from widgets.spotify_visualizer.config_applier import _presentation_source
+
+    tier = str(_presentation_source(widget)._scene3d_detail)
+    cached = getattr(widget, "_sphere_render_parameters", None)
+    if cached is not None and cached[0] is parameters and cached[1] == tier:
+        return cached[2]
+    merged = freeze_render_fields({**dict(parameters), "scene3d_detail": tier})
+    widget._sphere_render_parameters = (parameters, tier, merged)
+    return merged
 
 
 def capture_sphere(widget: Any, engine: Any, context: Any):
@@ -133,7 +147,7 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         incoming_previous_section=resolved.incoming_previous_section,
         incoming_blend=resolved.incoming_blend,
         particle_cohorts=resolved.particle_cohorts,
-        parameters=resolved.parameters,
+        parameters=_render_parameters(widget, resolved.parameters),
     ), extra
 
 

@@ -63,7 +63,7 @@ def _target_rect(window, snapshot):
     parameters = snapshot.logical.mode_state.parameters
     if snapshot.logical.mode_id == "extruded_spectrum":
         return item_pixel_rect(renderer._target_frame(frame, renderer._scene(frame)))
-    return item_pixel_rect(renderer._target_frame(frame, parameters))
+    return item_pixel_rect(renderer._target_frame(frame, parameters))   # Shockwave Grid, Sphere
 
 
 @pytest.mark.parametrize("mode, views", [
@@ -72,6 +72,9 @@ def _target_rect(window, snapshot):
                            dict(extruded_spectrum_tilt=-1.0, extruded_spectrum_turn=-0.6)]),
     ("shockwave_grid", [dict(shockwave_grid_tilt=0.0, shockwave_grid_turn=0.5, shockwave_grid_wave_height=1.0),
                         dict(shockwave_grid_tilt=1.0, shockwave_grid_turn=-0.8, shockwave_grid_horizon=1.0)]),
+    ("sphere", [dict(sphere_particle_distance=2.25, sphere_fragment_strength=3.6, sphere_shadow_enabled=True,
+                     sphere_shadow_distance=2.5, sphere_shadow_size=1.6),
+                dict(sphere_particle_distance=0.5, sphere_shadow_enabled=False)]),
 ])
 def test_a_3d_frameless_mode_leaves_its_frame_and_its_target_never_cuts_it(window, mode, views):
     item = (W, H, 2 * W, 2 * H)                         # left, bottom, right, top in window pixels

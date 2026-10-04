@@ -15,9 +15,14 @@ from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
+from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.quick import gl_query
+from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import SphereFrame
 
+from ..implementation_values import parameter
 from ..render_contract import QuickVisualizerRenderFrame
 from .sphere_voxel_geometry import (
     VOXEL_HALF_EXTENT,
@@ -65,88 +70,33 @@ def sphere_pixel_geometry(presentation) -> tuple[float, float, float]:
     return x - outer_x + width * 0.5, y - outer_y + height * 0.5, radius
 
 
-def sphere_depth_scissor(frame: QuickVisualizerRenderFrame) -> tuple[int, int, int, int]:
-    """Project the assigned viewport so depth clearing cannot escape ownership."""
-
-    p = frame.snapshot.presentation
-    x, y, width, height = p.content_rect
-    x -= p.outer_rect[0]
-    y -= p.outer_rect[1]
-    m = frame.matrix_values
-    if abs(m[1]) > 1e-7 or abs(m[4]) > 1e-7 or abs(m[3]) > 1e-7 or abs(m[7]) > 1e-7:
-        raise ValueError("Sphere depth viewport requires an axis-aligned transform")
-    if abs(m[15]) < 1e-9:
-        raise ValueError("Sphere depth viewport has an invalid homogeneous scale")
-    vx, vy, vw, vh = frame.viewport
-    xs = tuple(vx + ((m[0] * px + m[12]) / m[15] + 1.0) * vw * 0.5 for px in (x, x + width))
-    ys = tuple(vy + ((m[5] * py + m[13]) / m[15] + 1.0) * vh * 0.5 for py in (y, y + height))
-    left, right = max(vx, math.floor(min(xs))), min(vx + vw, math.ceil(max(xs)))
-    bottom, top = max(vy, math.floor(min(ys))), min(vy + vh, math.ceil(max(ys)))
-    return left, bottom, max(0, right - left), max(0, top - bottom)
+# The size pulse's ceiling (the runtime's growth cap at the highest Size Response): the reach is
+# computed at it, so the scene target is stable for a given set of settings, never resized by music.
+SPHERE_MAX_SIZE_PULSE = 0.42
 
 
-def _project_local_rect(
-    frame: QuickVisualizerRenderFrame,
-    rect: tuple[float, float, float, float],
-) -> tuple[int, int, int, int]:
-    """Project one item-local rect to framebuffer scissor coordinates."""
-
-    x, y, width, height = rect
-    m = frame.matrix_values
-    if abs(m[1]) > 1e-7 or abs(m[4]) > 1e-7 or abs(m[3]) > 1e-7 or abs(m[7]) > 1e-7:
-        raise ValueError("Sphere overflow viewport requires an axis-aligned transform")
-    if abs(m[15]) < 1e-9:
-        raise ValueError("Sphere overflow viewport has an invalid homogeneous scale")
-    vx, vy, vw, vh = frame.viewport
-    xs = tuple(vx + ((m[0] * px + m[12]) / m[15] + 1.0) * vw * 0.5 for px in (x, x + width))
-    ys = tuple(vy + ((m[5] * py + m[13]) / m[15] + 1.0) * vh * 0.5 for py in (y, y + height))
-    left, right = max(vx, math.floor(min(xs))), min(vx + vw, math.ceil(max(xs)))
-    bottom, top = max(vy, math.floor(min(ys))), min(vy + vh, math.ceil(max(ys)))
-    return left, bottom, max(0, right - left), max(0, top - bottom)
-
-
-def sphere_overflow_scissor(
-    frame: QuickVisualizerRenderFrame,
-    *,
-    fragment_strength: float,
-    particle_distance: float,
-    shadow_enabled: bool = False,
-    shadow_size: float = 1.0,
-    shadow_distance: float = 1.0,
-    shadow_softness: float = 0.0,
-    size_pulse: float = 0.0,
-) -> tuple[int, int, int, int]:
-    """Return the Sphere-only depth-clear footprint for unclipped overflow.
-
-    The local stencil may be bypassed, but depth ownership must remain bounded.
-    This expands only to the current mode's worst possible radial travel and is
-    clamped to the inherited render target.
-    """
-
-    presentation = frame.snapshot.presentation
+def sphere_reach(presentation, parameters) -> tuple[float, float, float, float]:
+    """The item-local (left, top, right, bottom) bounds of everything Sphere can draw: the shell,
+    its farthest fragment or particle travel and, with the shadow on, the offset silhouette."""
     cx, cy, radius = sphere_pixel_geometry(presentation)
-    fragment_radial = 0.68 * max(0.0, float(fragment_strength))
-    particle_radial = 0.88 + 0.42 * max(0.0, float(particle_distance))
-    max_radial = max(fragment_radial, particle_radial)
-    hero_extent = 1.22 + max_radial
+    fragment_radial = 0.68 * max(0.0, float(parameters["sphere_fragment_strength"]))
+    particle_radial = 0.88 + 0.42 * max(0.0, float(parameters["sphere_particle_distance"]))
+    hero_extent = 1.22 + max(fragment_radial, particle_radial)
     max_extent = hero_extent
-    if shadow_enabled:
-        softness_norm = max(0.0, min(1.0, float(shadow_softness) / 0.45))
-        soft_scale = 1.0 + 0.12 * softness_norm
-        silhouette_extent = (
-            hero_extent
-            * max(0.6, min(1.6, float(shadow_size)))
-            * soft_scale
-        )
-        offset_extent = (
-            0.34 + max(0.0, float(size_pulse)) * 0.55
-        ) * max(0.0, min(2.5, float(shadow_distance)))
+    if bool(parameters["sphere_shadow_enabled"]):
+        softness_norm = max(0.0, min(1.0, float(parameters["sphere_shadow_softness"]) / 0.45))
+        silhouette_extent = (hero_extent * max(0.6, min(1.6, float(parameters["sphere_shadow_size"])))
+                             * (1.0 + 0.12 * softness_norm))
+        offset_extent = ((0.34 + SPHERE_MAX_SIZE_PULSE * 0.55)
+                         * max(0.0, min(2.5, float(parameters["sphere_shadow_distance"]))))
         max_extent = max(max_extent, silhouette_extent + offset_extent)
     extent = radius * max_extent
-    return _project_local_rect(
-        frame,
-        (cx - extent, cy - extent, extent * 2.0, extent * 2.0),
-    )
+    return cx - extent, cy - extent, cx + extent, cy + extent
+
+
+def sphere_samples(parameters) -> int:
+    """The scene target's multisampling for the activation's 3D Detail tier (1: single-sampled)."""
+    return max(1, scene3d_detail(parameter(parameters, "scene3d_detail")).overlay_samples)
 
 
 _VERTEX_SOURCE = f"""#version 460 core
@@ -712,6 +662,7 @@ class QuickSphereVoxelRenderer:
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Sphere voxel")
+        self._target = SceneTarget("Quick Sphere voxel")
         self._program = 0
         self._shadow_program = 0
         self._shadow_uniforms: dict[str, int] = {}
@@ -725,17 +676,29 @@ class QuickSphereVoxelRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources
+        return self._resources.has_resources or self._target.has_resources
+
+    def _target_frame(self, frame: QuickVisualizerRenderFrame, parameters):
+        """The frame the scene target covers: the item, or with overflow everything Sphere can
+        draw, up to the whole window (3D + frameless: not contained to its frame)."""
+        if not bool(parameters["sphere_allow_overflow"]):
+            return frame
+        return reach_item_frame(frame, sphere_reach(frame.snapshot.presentation, parameters))
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
-        """One unit of what a first visible frame would otherwise compile or build (a program,
-        then the voxel mesh), on a hidden reveal frame; True once nothing is left."""
+        """One unit of what a first visible frame would otherwise compile or build (a program, the
+        voxel mesh, the scene target), on a hidden reveal frame; True once nothing is left."""
+        parameters = frame.snapshot.logical.mode_state.parameters
+        samples = sphere_samples(parameters)
         r = self._resources
-        if not warm_programs([(r, *program) for program in _PROGRAMS]):
+        if not warm_programs([*((r, *program) for program in _PROGRAMS),
+                              *((r, *program) for program in scene_target_programs(samples, False, False,
+                                                                                   overlay=True))]):
             return False
         if not r.has_mesh("voxels"):
             self._initialize()
-        return True
+            return False
+        return self._target.warm(item_pixel_rect(self._target_frame(frame, parameters))[2:], samples, overlay=True)
 
     @staticmethod
     def _upload_particle_cohorts(uniforms: dict[str, int], cohorts) -> None:
@@ -869,189 +832,121 @@ class QuickSphereVoxelRenderer:
             )
 
         presentation = frame.snapshot.presentation
-        allow_overflow = bool(parameters["sphere_allow_overflow"])
         fade_incoming = bool(parameters["sphere_fade_incoming_blocks"])
         cel_shading = bool(parameters["sphere_cel_shading"])
-
-        previous_depth_enabled = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
-        previous_blend_enabled = bool(gl.glIsEnabled(gl.GL_BLEND))
-        previous_cull_enabled = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
-        previous_depth_write = bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))
-        previous_depth_function = int(gl.glGetIntegerv(gl.GL_DEPTH_FUNC))
-        previous_clear = float(gl.glGetDoublev(gl.GL_DEPTH_CLEAR_VALUE))
-        previous_cull_face = int(gl.glGetIntegerv(gl.GL_CULL_FACE_MODE))
-        previous_front_face = int(gl.glGetIntegerv(gl.GL_FRONT_FACE))
-        previous_scissor_enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-        previous_scissor = tuple(int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX))
-        previous_src_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_RGB))
-        previous_dst_rgb = int(gl.glGetIntegerv(gl.GL_BLEND_DST_RGB))
-        previous_src_alpha = int(gl.glGetIntegerv(gl.GL_BLEND_SRC_ALPHA))
-        previous_dst_alpha = int(gl.glGetIntegerv(gl.GL_BLEND_DST_ALPHA))
-
-        if allow_overflow:
-            left, bottom, width, height = sphere_overflow_scissor(
-                frame,
-                fragment_strength=float(parameters["sphere_fragment_strength"]),
-                particle_distance=float(parameters["sphere_particle_distance"]),
-                shadow_enabled=bool(parameters["sphere_shadow_enabled"]),
-                shadow_size=float(parameters["sphere_shadow_size"]),
-                shadow_distance=float(parameters["sphere_shadow_distance"]),
-                shadow_softness=float(parameters["sphere_shadow_softness"]),
-                size_pulse=float(state.size_pulse),
-            )
-        else:
-            left, bottom, width, height = sphere_depth_scissor(frame)
-        if previous_scissor_enabled:
-            sx, sy, sw, sh = previous_scissor
-            right, top = min(left + width, sx + sw), min(bottom + height, sy + sh)
-            left, bottom = max(left, sx), max(bottom, sy)
-            width, height = max(0, right - left), max(0, top - bottom)
-        if width <= 0 or height <= 0:
+        samples = sphere_samples(parameters)
+        target_frame = self._target_frame(frame, parameters)
+        if min(item_pixel_rect(target_frame)[2:]) <= 0:
             return
-
+        # The host fences blending, culling and depth enables, the depth mask, program, VAO and
+        # viewport; the scene target hands back framebuffers, viewport and scissor. Sphere also
+        # sets the winding, culled face and depth test, so it hands those back itself.
+        front_face = gl_query.get_int(gl.GL_FRONT_FACE)
+        cull_face = gl_query.get_int(gl.GL_CULL_FACE_MODE)
+        depth_function = gl_query.get_int(gl.GL_DEPTH_FUNC)
         try:
-            # Shadow and hero both use depth only inside the Sphere-owned draw
-            # footprint. The first clear gives the projected voxel silhouette a
-            # clean nearest-surface mask; the second clear below prevents that
-            # shadow depth from participating in the hero draw.
-            gl.glEnable(gl.GL_SCISSOR_TEST)
-            gl.glScissor(left, bottom, width, height)
-            gl.glEnable(gl.GL_DEPTH_TEST)
-            gl.glDepthMask(gl.GL_TRUE)
-            gl.glDepthFunc(gl.GL_LESS)
-            gl.glClearDepth(1.0)
-            gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
+            # Sphere's own colour + depth target (cleared by the scope): the projected shadow's
+            # depth is a silhouette mask, cleared again before the hero so it cannot occlude it.
+            # The content fade stays per fragment (uFade), as Sphere has always drawn it.
+            with self._target.scope(target_frame, samples, self._resources, overlay=1.0):
+                gl.glEnable(gl.GL_DEPTH_TEST)
+                gl.glDepthMask(gl.GL_TRUE)
+                gl.glDepthFunc(gl.GL_LESS)
+                shadow_drawn = self._draw_scene_shadow(
+                    frame,
+                    state=state,
+                    parameters=parameters,
+                    section_drives=section_drives,
+                    fade_incoming=fade_incoming,
+                )
+                if shadow_drawn:
+                    gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
 
-            shadow_drawn = self._draw_scene_shadow(
-                frame,
-                state=state,
-                parameters=parameters,
-                section_drives=section_drives,
-                fade_incoming=fade_incoming,
-            )
-            if shadow_drawn:
-                gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
+                gl.glUseProgram(self._program)
+                u = self._uniforms
+                self._upload_voxel_transform_uniforms(
+                    u,
+                    frame,
+                    state=state,
+                    parameters=parameters,
+                    section_drives=section_drives,
+                    fade_incoming=fade_incoming,
+                )
+                gl.glUniform3f(u["uLight"], *self._light)
+                gl.glUniform1f(u["uGloss"], float(parameters["sphere_gloss"]))
+                gl.glUniform1f(u["uSpecular"], float(parameters["sphere_specular"]))
+                fill_color = tuple(float(v) / 255.0 for v in parameters["sphere_fill_color"])
+                edge_color = tuple(float(v) / 255.0 for v in parameters["sphere_edge_color"])
+                tracer_color = sphere_tracer_color_rgba(parameters["sphere_tracer_color"])
+                gl.glUniform4f(u["uFillColor"], *fill_color)
+                gl.glUniform4f(u["uEdgeColor"], *edge_color)
+                gl.glUniform4f(u["uTracerColor"], *tracer_color)
+                gl.glUniform1f(u["uEdgeWeight"], float(parameters["sphere_edge_weight"]))
+                depth_shading = (
+                    float(parameters["sphere_depth_shading_strength"])
+                    if bool(parameters["sphere_depth_shading_enabled"])
+                    else 0.0
+                )
+                gl.glUniform1f(u["uDepthShading"], depth_shading)
+                gl.glUniform1f(u["uFade"], presentation.scene_fade * presentation.content_fade)
+                gl.glUniform1i(u["uCelShading"], 1 if cel_shading else 0)
+                rainbow_enabled = bool(parameters["sphere_taste_the_rainbow_enabled"])
+                gl.glUniform1i(
+                    u["uRainbowSurfaces"],
+                    1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_surfaces"]) else 0,
+                )
+                gl.glUniform1i(
+                    u["uRainbowEdges"],
+                    1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_edges"]) else 0,
+                )
+                rainbow_phase = math.fmod(
+                    max(0.0, float(frame.snapshot.logical.logical_timestamp)) * 0.05,
+                    1.0,
+                )
+                gl.glUniform1f(u["uRainbowPhase"], rainbow_phase)
 
-            # After the bounded depth clear, restore the inherited scissor for
-            # overflow drawing. If Qt supplied no scissor, the Sphere may draw
-            # across the scene; otherwise its inherited scene bound still wins.
-            if allow_overflow:
-                if previous_scissor_enabled:
-                    gl.glEnable(gl.GL_SCISSOR_TEST)
-                    gl.glScissor(*previous_scissor)
-                else:
-                    gl.glDisable(gl.GL_SCISSOR_TEST)
-
-            gl.glUseProgram(self._program)
-            u = self._uniforms
-            self._upload_voxel_transform_uniforms(
-                u,
-                frame,
-                state=state,
-                parameters=parameters,
-                section_drives=section_drives,
-                fade_incoming=fade_incoming,
-            )
-            gl.glUniform3f(u["uLight"], *self._light)
-            gl.glUniform1f(u["uGloss"], float(parameters["sphere_gloss"]))
-            gl.glUniform1f(u["uSpecular"], float(parameters["sphere_specular"]))
-            fill_color = tuple(float(v) / 255.0 for v in parameters["sphere_fill_color"])
-            edge_color = tuple(float(v) / 255.0 for v in parameters["sphere_edge_color"])
-            tracer_color = sphere_tracer_color_rgba(parameters["sphere_tracer_color"])
-            gl.glUniform4f(u["uFillColor"], *fill_color)
-            gl.glUniform4f(u["uEdgeColor"], *edge_color)
-            gl.glUniform4f(u["uTracerColor"], *tracer_color)
-            gl.glUniform1f(u["uEdgeWeight"], float(parameters["sphere_edge_weight"]))
-            depth_shading = (
-                float(parameters["sphere_depth_shading_strength"])
-                if bool(parameters["sphere_depth_shading_enabled"])
-                else 0.0
-            )
-            gl.glUniform1f(u["uDepthShading"], depth_shading)
-            gl.glUniform1f(u["uFade"], presentation.scene_fade * presentation.content_fade)
-            gl.glUniform1i(u["uCelShading"], 1 if cel_shading else 0)
-            rainbow_enabled = bool(parameters["sphere_taste_the_rainbow_enabled"])
-            gl.glUniform1i(
-                u["uRainbowSurfaces"],
-                1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_surfaces"]) else 0,
-            )
-            gl.glUniform1i(
-                u["uRainbowEdges"],
-                1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_edges"]) else 0,
-            )
-            rainbow_phase = math.fmod(
-                max(0.0, float(frame.snapshot.logical.logical_timestamp)) * 0.05,
-                1.0,
-            )
-            gl.glUniform1f(u["uRainbowPhase"], rainbow_phase)
-
-            gl.glEnable(gl.GL_CULL_FACE)
-            gl.glCullFace(gl.GL_BACK)
-            gl.glFrontFace(
-                gl.GL_CW
-                if frame.matrix_values[0] * frame.matrix_values[5] > 0
-                else gl.GL_CCW
-            )
-            gl.glEnable(gl.GL_BLEND)
-            gl.glBlendFuncSeparate(
-                gl.GL_SRC_ALPHA,
-                gl.GL_ONE_MINUS_SRC_ALPHA,
-                gl.GL_ONE,
-                gl.GL_ONE_MINUS_SRC_ALPHA,
-            )
-            gl.glBindVertexArray(self._vao)
-            gl.glDrawArraysInstanced(
-                gl.GL_TRIANGLES,
-                0,
-                self._vertex_count,
-                self._instance_count,
-            )
-
-            # Outtake source voxels are an optional second draw of the same static
-            # instance buffer. The first pass rendered the canonical replacement
-            # fade; this overlay moves only departing cohort members outward and
-            # fades them away. No extra geometry owner or per-voxel Python state.
-            if fade_incoming and any(cohort.outtake for cohort in state.particle_cohorts):
-                gl.glUniform1i(u["uRenderPass"], 1)
-                gl.glDepthMask(gl.GL_FALSE)
+                gl.glEnable(gl.GL_CULL_FACE)
+                gl.glCullFace(gl.GL_BACK)
+                gl.glFrontFace(
+                    gl.GL_CW
+                    if frame.matrix_values[0] * frame.matrix_values[5] > 0
+                    else gl.GL_CCW
+                )
+                gl.glEnable(gl.GL_BLEND)
+                gl.glBlendFuncSeparate(
+                    gl.GL_SRC_ALPHA,
+                    gl.GL_ONE_MINUS_SRC_ALPHA,
+                    gl.GL_ONE,
+                    gl.GL_ONE_MINUS_SRC_ALPHA,
+                )
+                gl.glBindVertexArray(self._vao)
                 gl.glDrawArraysInstanced(
                     gl.GL_TRIANGLES,
                     0,
                     self._vertex_count,
                     self._instance_count,
                 )
-                gl.glDepthMask(gl.GL_TRUE)
-                gl.glUniform1i(u["uRenderPass"], 0)
 
-        finally:
-            gl.glBlendFuncSeparate(
-                previous_src_rgb,
-                previous_dst_rgb,
-                previous_src_alpha,
-                previous_dst_alpha,
-            )
-            gl.glDepthFunc(previous_depth_function)
-            gl.glDepthMask(gl.GL_TRUE if previous_depth_write else gl.GL_FALSE)
-            gl.glClearDepth(previous_clear)
-            gl.glCullFace(previous_cull_face)
-            gl.glFrontFace(previous_front_face)
-            gl.glScissor(*previous_scissor)
-            if previous_depth_enabled:
-                gl.glEnable(gl.GL_DEPTH_TEST)
-            else:
-                gl.glDisable(gl.GL_DEPTH_TEST)
-            if previous_blend_enabled:
-                gl.glEnable(gl.GL_BLEND)
-            else:
-                gl.glDisable(gl.GL_BLEND)
-            if previous_cull_enabled:
-                gl.glEnable(gl.GL_CULL_FACE)
-            else:
+                # Outtake source voxels are an optional second draw of the same static
+                # instance buffer. The first pass rendered the canonical replacement
+                # fade; this overlay moves only departing cohort members outward and
+                # fades them away. No extra geometry owner or per-voxel Python state.
+                if fade_incoming and any(cohort.outtake for cohort in state.particle_cohorts):
+                    gl.glUniform1i(u["uRenderPass"], 1)
+                    gl.glDepthMask(gl.GL_FALSE)
+                    gl.glDrawArraysInstanced(
+                        gl.GL_TRIANGLES,
+                        0,
+                        self._vertex_count,
+                        self._instance_count,
+                    )
+                    gl.glUniform1i(u["uRenderPass"], 0)
+                # The composite quad must not be culled.
                 gl.glDisable(gl.GL_CULL_FACE)
-            if previous_scissor_enabled:
-                gl.glEnable(gl.GL_SCISSOR_TEST)
-            else:
-                gl.glDisable(gl.GL_SCISSOR_TEST)
+        finally:
+            gl.glFrontFace(front_face)
+            gl.glCullFace(cull_face)
+            gl.glDepthFunc(depth_function)
 
     def _draw_scene_shadow(
         self,
@@ -1181,7 +1076,14 @@ class QuickSphereVoxelRenderer:
             raise
 
     def release_resources(self) -> None:
-        self._resources.release_resources()
+        errors: list[str] = []
+        for release in (self._target.release, self._resources.release_resources):
+            try:
+                release()
+            except Exception as exc:
+                errors.append(str(exc))
+        if errors:
+            raise RuntimeError("Quick Sphere voxel cleanup incomplete: " + " | ".join(errors))
         self._program = self._shadow_program = self._vao = 0
         self._uniforms = {}
         self._shadow_uniforms = {}
@@ -1198,6 +1100,7 @@ __all__ = [
     "QuickSphereVoxelRenderer",
     "SPHERE_RADIUS_FRACTION",
     "create_visualizer_renderer",
-    "sphere_depth_scissor",
     "sphere_pixel_geometry",
+    "sphere_reach",
+    "sphere_samples",
 ]
