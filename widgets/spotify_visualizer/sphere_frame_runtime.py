@@ -20,13 +20,15 @@ The response hierarchy is intentionally split by timescale:
   exact event frame while rendered displacement remains position/velocity-continuous;
 * whole-shell rotation follows current articulation with a short release rather than
   holding near maximum for the duration of active playback;
-* what an admitted event earns (fragment amplitude, cohort travel/population/velocity,
-  tracer travel) follows the shared musical rule of the transient bus (``musical_weight`` x
-  ``musical_emphasis``): nothing in near-silence or in a passage far quieter than the track's
-  running level, the full reward at the track's usual level and above. The live pre-AGC lane is
-  clamped at 2.5 and sits at that cap through ordinary music, so it can no longer tell those
-  apart (operator 2026-10-03: near-silence fragmented as fully as a full blast). The two energy
-  floors apply to this 0..1 musical weight.
+* everything ramps with the music (operator 2026-10-04: "fast ramp up, gentle ramp down"): the
+  passage intensity (``BeatEngine.get_musical_intensity``, where the music sits in the track's own
+  dynamic range, 0..1) sets how *often* fragments, particle cohorts and tracer steps may fire
+  (``_ramp_interval``) and, with the shared near-silence rule (``musical_weight``) and how far the
+  event stands above the track's usual level, how much each earns (fragment amplitude, cohort
+  strength/population/velocity, tracer step and speed) and how fast the shell spins. Quiet
+  passages fire rarely and small, loud ones often and full. The live pre-AGC lane, clamped at 2.5
+  and pinned through ordinary music, cannot tell these apart. Both energy floors gate on the
+  intensity.
 
 The accepted stable-face/bevel renderer contract is independent of all of this and
 must remain anchored to each cube's unrotated local face identity.
@@ -47,7 +49,6 @@ from widgets.spotify_visualizer.render_state import (
 )
 from widgets.spotify_visualizer.transient_bus import (
     learn_usual_presence,
-    musical_emphasis,
     musical_weight,
 )
 
@@ -173,6 +174,13 @@ _FLUX_EVENT_REFRACTORY_S = 0.15
 # rise latches as counterfeit event authorities. Crest remains diagnostic /
 # whole-shell articulation only; generic packet authority is spectral peak-picking.
 _PACKET_MIN_INTERVAL_S = 0.16
+# The ramp (intensity 0 -> 1): the longest gap between fragments / cohorts / tracer steps in a
+# quiet passage, falling to the accepted loud-passage minimum; the reward's quiet-passage share.
+_PACKET_QUIET_INTERVAL_S = 0.9
+_INCOMING_QUIET_INTERVAL_S = 1.6
+_TRACER_QUIET_DEBOUNCE_S = 0.8
+_RAMP_QUIET_REWARD = 0.2
+_RAMP_CURVE = 1.3
 # A packet whose musically weighted amplitude falls below this is not emitted (no flicker of
 # barely-moved sections in near-silence).
 _PACKET_MIN_AMPLITUDE = 0.05
@@ -295,6 +303,20 @@ def _smooth_gate(value: float, low: float, high: float) -> float:
         return 1.0
     x = (value - low) / max(1.0e-6, high - low)
     return x * x * (3.0 - 2.0 * x)
+
+
+def _ramp_interval(quiet_s: float, loud_s: float, intensity: float) -> float:
+    """The minimum gap between two firings at passage ``intensity``: ``quiet_s`` in the track's
+    quietest passage, ``loud_s`` (the accepted loud-passage cadence) in its loudest."""
+    return quiet_s + (loud_s - quiet_s) * _clamp01(intensity)
+
+
+def _ramp_reward(intensity: float, gate: float, standout: float) -> float:
+    """What a firing earns, 0..1: the near-silence ``gate`` (``musical_weight``) times the passage
+    ramp (``_RAMP_QUIET_REWARD`` in the quietest passage, 1 in the loudest, convex) times how far
+    the event stands above the track's usual level (``standout``, 0.6..1.4)."""
+    ramp = _RAMP_QUIET_REWARD + (1.0 - _RAMP_QUIET_REWARD) * pow(_clamp01(intensity), _RAMP_CURVE)
+    return _clamp01(_clamp01(gate) * ramp * max(0.6, min(1.4, float(standout))))
 
 
 def _incoming_motion_intensity(event_strength: float, acoustic_impact: float) -> float:
@@ -435,6 +457,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         # The track's usual event presence (``learn_usual_presence``), from a neutral 1.0.
         self._usual_presence = 1.0
         self._last_reward = 0.0
+        self._intensity_now = 0.0
 
         self._last_diag_ts = 0.0
         self._packets_since_diag = 0
@@ -507,8 +530,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         source: str,
         section: int,
         amplitude: float,
+        min_interval: float = _PACKET_MIN_INTERVAL_S,
     ) -> bool:
-        if now - self._last_packet_ts < _PACKET_MIN_INTERVAL_S:
+        if now - self._last_packet_ts < min_interval:
             return False
         idx = int(section) % SECTION_COUNT
         value = _clamp01(amplitude)
@@ -583,8 +607,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         velocity_response_enabled: bool,
         source: str,
         outtake: bool,
+        min_interval: float = _SPHERE_INCOMING_MIN_INTERVAL_S,
     ) -> None:
-        if now - self._last_incoming_ts < _SPHERE_INCOMING_MIN_INTERVAL_S:
+        if now - self._last_incoming_ts < min_interval:
             return
         value = _clamp01(strength)
         if value <= 0.0:
@@ -795,9 +820,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             )
         return onset_strength, onset_band, flux, threshold, spectrum_level
 
-    def _trigger_tracer(self, *, now: float, strength: float) -> None:
+    def _trigger_tracer(self, *, now: float, strength: float, debounce: float = _TRACER_EVENT_DEBOUNCE_S) -> None:
         value = _clamp01(strength)
-        if value <= 0.0 or now - self._last_tracer_event_ts < _TRACER_EVENT_DEBOUNCE_S:
+        if value <= 0.0 or now - self._last_tracer_event_ts < debounce:
             return
         step = _TRACER_TARGET_STEP_MIN + (
             _TRACER_TARGET_STEP_MAX - _TRACER_TARGET_STEP_MIN
@@ -805,7 +830,9 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         remaining = max(0.0, self._tracer_target_phase - self._tracer_phase)
         queued = min(_TRACER_MAX_BACKLOG, remaining + step)
         self._tracer_target_phase = self._tracer_phase + queued
-        self._tracer_impulse = max(self._tracer_impulse, 0.72 + 0.28 * value)
+        # The tracer's light follows what the step earned (it used to start at 0.72 whatever the
+        # music, and with steps every ~0.3 s sat pinned near 1).
+        self._tracer_impulse = max(self._tracer_impulse, 0.30 + 0.70 * value)
         self._last_tracer_event_ts = now
 
     @retirement_fenced
@@ -821,13 +848,15 @@ class SphereFrameRuntime(RetirableFrameRuntime):
         reactive_energy: VisualizerEnergyState,
         presence_energy: VisualizerEnergyState,
         musical_level: tuple[float, float],
+        musical_intensity: float,
         transient: VisualizerTransientState,
         analysis_spectrum: tuple[float, ...],
         event_scheduler: Any,
         parameters: FrozenFields,
     ) -> SphereResolvedFrame | None:
         """``musical_level`` is the transient bus's (loudness, presence) for this frame
-        (``BeatEngine.get_musical_level``)."""
+        (``BeatEngine.get_musical_level``), ``musical_intensity`` where the music sits in the
+        track's own dynamic range (``BeatEngine.get_musical_intensity``)."""
         if not isinstance(parameters, FrozenFields):
             raise TypeError("Sphere runtime requires configure-owned FrozenFields")
         for value, name in (
@@ -919,6 +948,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             self._source_active = active
             self._usual_presence = 1.0
             self._last_reward = 0.0
+            self._intensity_now = 0.0
             self._last_diag_ts = now
             self._packets_since_diag = 0
             for key in self._packet_sources_since_diag:
@@ -969,8 +999,11 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             if active else (0.0, 0.0)
         )
         musical = musical_weight(level_loudness, level_presence)
-        reward = _clamp01(musical * musical_emphasis(level_presence, self._usual_presence))
+        intensity = _clamp01(musical_intensity) if active else 0.0
+        standout = level_presence / max(self._usual_presence, 1.0e-3)
+        reward = _ramp_reward(intensity, musical, standout)
         self._last_reward = reward
+        self._intensity_now = intensity
         if not active:
             self._incoming_gate_open = False
         elif self._incoming_gate_open:
@@ -1144,7 +1177,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             # Authored acoustic floors are post-qualification admission gates.
             # With their defaults, the accepted typed/onset event contract is identical.
             fragment_energy_floor = _clamp01(float(parameters.get("sphere_fragment_energy_floor", 0.0)))
-            if candidates and musical > 0.0 and musical >= fragment_energy_floor:
+            if candidates and musical > 0.0 and intensity >= fragment_energy_floor:
                 _priority, packet_source, packet_amplitude = max(candidates, key=lambda item: item[0])
                 packet_amplitude *= reward
                 if packet_amplitude >= _PACKET_MIN_AMPLITUDE:
@@ -1159,6 +1192,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                         source=packet_source,
                         section=packet_section,
                         amplitude=packet_amplitude,
+                        min_interval=_ramp_interval(_PACKET_QUIET_INTERVAL_S, _PACKET_MIN_INTERVAL_S, intensity),
                     )
                     _ = emitted
 
@@ -1233,7 +1267,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             # tunes cohort admission on the musical weight, independently of fragmentation.
             authoring_presence = intake_energy >= _INCOMING_AUTHOR_FLOOR
             typed_force_gate = bool(incoming_candidates and authoring_presence)
-            musically_present = musical > 0.0 and musical >= particle_energy_floor
+            musically_present = musical > 0.0 and intensity >= particle_energy_floor
             if (incoming_candidates and authoring_presence and musically_present
                     and (self._incoming_gate_open or typed_force_gate)):
                 _incoming_priority, incoming_source, incoming_section, incoming_strength, event_confidence = max(
@@ -1259,15 +1293,16 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                     velocity_response_enabled=velocity_enabled,
                     source=incoming_source,
                     outtake=outtake_enabled,
+                    min_interval=_ramp_interval(_INCOMING_QUIET_INTERVAL_S, _SPHERE_INCOMING_MIN_INTERVAL_S, intensity),
                 )
             elif not incoming_candidates:
                 self._last_intake_motion_intensity = 0.0
 
-            # Sustained passage weight uses the existing PRE-AGC loudness seam.
-            # The support-shaped Bubble feed is intentionally excellent for
-            # continuous motion, but hardware showed it is the wrong authority for
-            # quiet->heavy body weight because it stays deliberately normalized.
-            fullness = loudness_now
+            # Sustained passage weight follows the passage intensity (already relative to the
+            # track and fast up / gentle down). The live pre-AGC lane it used to read is clamped
+            # at 2.5 and pinned through ordinary music (80-95% of recorded frames), so the body
+            # barely grew between a verse and a chorus.
+            fullness = intensity
             sustained_target = fullness
             if not self._fullness_initialized:
                 self._fullness_floor = fullness
@@ -1314,7 +1349,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             ))
             tracer_event_strength *= reward
             if tracer_enabled and tracer_event_strength > 0.0:
-                self._trigger_tracer(now=now, strength=tracer_event_strength)
+                self._trigger_tracer(now=now, strength=tracer_event_strength, debounce=_ramp_interval(
+                    _TRACER_QUIET_DEBOUNCE_S, _TRACER_EVENT_DEBOUNCE_S, intensity))
             if candidates or incoming_candidates:
                 self._usual_presence = learn_usual_presence(self._usual_presence, level_presence)
 
@@ -1325,7 +1361,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 _event_packet(vocal_event_strength) * 0.76,
                 onset_strength * 0.74,
                 sustained_target * 0.08 * max(bass_presence_gate, vocal_presence_gate),
-            ))
+            )) * (0.30 + 0.70 * pow(intensity, _RAMP_CURVE)) * _clamp01(musical / 0.5)
 
         relative_fullness = 0.0
         staged_growth = 0.0
@@ -1344,13 +1380,8 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             size_response = max(0.0, min(2.54, float(parameters["sphere_size_response"])))
             max_growth = min(0.42, 0.040 + 0.150 * size_response)
             if active:
-                dynamic_span = max(
-                    _FULLNESS_MIN_SPAN,
-                    self._fullness_peak - self._fullness_floor,
-                )
-                relative_fullness = _clamp01(
-                    (self._sustained_drive - self._fullness_floor) / dynamic_span
-                )
+                # The intensity is already the position in the track's own range.
+                relative_fullness = _clamp01(self._sustained_drive)
                 # Do not let near-silence calibrate itself into a false top stage.
                 relative_fullness *= _smooth_gate(self._sustained_drive, 0.04, 0.16)
                 # Four visibly separated song-relative stages. The first three are
@@ -1383,15 +1414,18 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 moving = remaining > _TRACER_SETTLE_EPS
                 if moving:
                     backlog = _clamp01(remaining / _TRACER_MAX_BACKLOG)
-                    phase_speed = _TRACER_PHASE_SPEED_MIN + (
+                    phase_speed = (_TRACER_PHASE_SPEED_MIN + (
                         _TRACER_PHASE_SPEED_MAX - _TRACER_PHASE_SPEED_MIN
-                    ) * backlog
+                    ) * backlog) * (0.5 + 0.5 * self._intensity_now)
                     self._tracer_phase += min(remaining, phase_speed * dt)
-                    tracer_target = max(0.72, self._tracer_impulse)
+                    tracer_target = max(0.30 + 0.42 * self._intensity_now, self._tracer_impulse)
                 else:
                     self._tracer_phase = self._tracer_target_phase
-                    self._tracer_impulse = _decay(self._tracer_impulse, dt, 0.30)
                     tracer_target = self._tracer_impulse
+                # The light's impulse fades while the tracer travels too: with steps queued it is
+                # rarely at rest, and an impulse that only faded at rest held the brightest step
+                # ever reached (recorded music: ~0.9-1.0 in every passage).
+                self._tracer_impulse = _decay(self._tracer_impulse, dt, 0.30)
             tracer_tau = _TRACER_ATTACK_S if tracer_target > self._tracer_drive else _TRACER_RELEASE_S
             self._tracer_drive = _ema(self._tracer_drive, tracer_target, dt, tracer_tau)
 
@@ -1477,7 +1511,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 "[SPHERE_AUDIO] active=%s reactive=%.3f/%.3f/%.3f live=%.3f/%.3f/%.3f presence=%.3f/%.3f "
                 "activity=%.3f/%.3f spectrum=%.5f flux=%.4f threshold=%.4f spectral_evt=%.3f/%d crest=%.3f crest_bmh=%.3f/%.3f/%.3f shape=%.3f envelope=%.3f "
                 "events=%.3f/%.3f/%.3f onset=%.3f loudness=%.3f floor=%.3f peak=%.3f sustained=%.3f relative=%.3f stage=%.3f body=%.3f tracer=%.3f tracer_phase=%.3f tracer_target=%.3f tracer_remaining=%.3f rotation=%.3f target=%.3f velocity=%.4f phase=%.3f intake=%.3f gate=%s density=%.3f impact=%.3f motion=%.3f cohorts=%d in/out=%d/%d progress=%.3f-%.3f cohort_v=%.3f-%.3f incoming=%.3f/%d<-%d@%.2f section_target=%.3f section_visual=%.3f active_sections=%d packets=%d packet_src=%d/%d/%d/%d/%d "
-                "musical=%.3f/%.3f usual=%.3f reward=%.3f",
+                "musical=%.3f/%.3f usual=%.3f intensity=%.3f reward=%.3f",
                 active,
                 bass_now,
                 mid_now,
@@ -1547,6 +1581,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 level_loudness,
                 level_presence,
                 self._usual_presence,
+                self._intensity_now,
                 reward,
             )
             self._last_diag_ts = now

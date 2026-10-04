@@ -1669,6 +1669,12 @@ class _SpotifyBeatEngine(QObject):
         bus = getattr(self._audio_worker, '_transient_bus', None)
         return bus.musical_level if bus is not None else (0.0, 0.0)
 
+    def get_musical_intensity(self) -> float:
+        """Where the music sits in the track's own dynamic range, 0..1, rising fast and falling
+        gently (``transient_bus.PassageIntensity``). 0 before any analysis or in near-silence."""
+        bus = getattr(self._audio_worker, '_transient_bus', None)
+        return bus.musical_intensity if bus is not None else 0.0
+
     def get_event_scheduler(self) -> "TransientEventScheduler | None":
         """Return the event micro-scheduler (§2.4) if the transient bus exists.
 

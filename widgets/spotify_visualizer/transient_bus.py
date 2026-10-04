@@ -103,6 +103,57 @@ def musical_emphasis(presence: float, usual: float) -> float:
     return max(0.5, min(2.0, float(presence) / max(float(usual), 1e-3))) ** 1.5
 
 
+class PassageIntensity:
+    """How loud the music is against the track's own recent loud level, 0..1, rising fast and
+    falling gently ("everything ramps"): 0 in a passage at or below ``LOW`` of that level (or
+    near-silence), 1 at ``HIGH`` of it and above, so a sustained loud passage stays at 1.
+
+    The absolute loudness feeds an envelope (``ATTACK_S`` up, ``RELEASE_S`` down) compared with a
+    peak tracker (rises in ``PEAK_RISE_S``, falls over ``PEAK_FALL_S``), seeded by the first music.
+    Mastered music spans only about +-30% of its own loud level (recorded clips 2026-10-04: the
+    envelope sits at 0.6-1.0 of the peak), so a raw ratio barely moves; mapped from ``LOW``-``HIGH``
+    it spreads: p10 0-0.25, p50 ~0.65, p90 ~1 on those clips. Near-silence neither seeds nor moves
+    the peak and reads 0. Time-based, so the analysis and replay rates agree.
+    """
+
+    ATTACK_S = 0.06
+    RELEASE_S = 0.8
+    PEAK_RISE_S = 2.0
+    PEAK_FALL_S = 30.0
+    LOW = 0.6
+    HIGH = 1.0
+
+    __slots__ = ("_envelope", "_peak", "_value")
+
+    def __init__(self) -> None:
+        self._envelope = 0.0
+        self._peak = 0.0
+        self._value = 0.0
+
+    @property
+    def value(self) -> float:
+        return self._value
+
+    @staticmethod
+    def _follow(level: float, target: float, dt: float, up_s: float, down_s: float) -> float:
+        tau = up_s if target > level else down_s
+        return level + (target - level) * (1.0 - math.exp(-dt / tau))
+
+    def update(self, loudness: float, dt: float) -> float:
+        level = max(0.0, float(loudness))
+        dt = max(0.0, min(1.0, float(dt)))
+        self._envelope = self._follow(self._envelope, level, dt, self.ATTACK_S, self.RELEASE_S)
+        if level < MUSICAL_QUIET[0]:
+            self._value = 0.0
+            return self._value
+        if self._peak <= 0.0:                     # the first music seeds the loud level
+            self._peak = level
+        self._peak = self._follow(self._peak, self._envelope, dt, self.PEAK_RISE_S, self.PEAK_FALL_S)
+        ratio = self._envelope / max(self._peak, 1e-6)
+        self._value = max(0.0, min(1.0, (ratio - self.LOW) / (self.HIGH - self.LOW)))
+        return self._value
+
+
 def learn_usual_presence(usual: float, presence: float) -> float:
     """The track's usual onset presence after an onset at ``presence`` (start from 1.0, neutral):
     only an onset clearly part of the music moves it, and no more than the most it can stand out
@@ -184,8 +235,10 @@ class TransientBus:
         # Published onsets (replaced, never mutated) and the running loudness.
         self._recent_onsets: tuple[MusicalOnset, ...] = ()
         self._loudness_reference: float = 0.0
-        # The latest frame's (loudness, presence), replaced whole (readers never see half).
+        # The latest frame's (loudness, presence), replaced whole (readers never see half), and
+        # where the music sits in the track's own dynamic range (``PassageIntensity``).
         self._musical_level: tuple[float, float] = (0.0, 0.0)
+        self._intensity = PassageIntensity()
 
         # Timing
         self._last_onset_ts: float = 0.0
@@ -232,6 +285,7 @@ class TransientBus:
                 self._loudness_reference += (level - self._loudness_reference) * alpha
             reference = self._loudness_reference
             self._musical_level = (level, level / reference if reference > 1e-6 else 0.0)
+            self._intensity.update(level, elapsed)
 
         if not self._has_prev:
             # First frame — seed previous values, no flux yet
@@ -398,6 +452,11 @@ class TransientBus:
     def musical_level(self) -> tuple[float, float]:
         """The latest frame's (loudness, presence), as an onset there would carry them."""
         return self._musical_level
+
+    @property
+    def musical_intensity(self) -> float:
+        """Where the music sits in the track's own dynamic range, 0..1 (``PassageIntensity``)."""
+        return self._intensity.value
 
     def get_scheduler(self) -> "TransientEventScheduler":
         """Return the event micro-scheduler, creating it on first access."""

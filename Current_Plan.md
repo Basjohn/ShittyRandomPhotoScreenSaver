@@ -161,20 +161,11 @@ Sphere is the legacy exception that predates the shared Scene3D foundation. Prom
 GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel-for-pixel visual stasis.
 `Docs/Reference/Sphere_Visualizer.md` owns the behavioural golden and the Bubble golden remains unrelated and untouchable.
 
-- [x] **Pre-golden reactivity fix (operator 2026-10-03):** near-silence fragmented and threw particles as fully as a
-  full blast. Sphere's reward now follows the shared musical rule Shockwave uses, and both energy floors act on that
-  weight. Contract: `Docs/Reference/Sphere_Visualizer.md` "Musical reward". The golden below captures this behaviour.
-- [ ] **Sphere reaction ramp (operator 2026-10-03 22:42-22:51 log, open):** after the musical reward, Sphere still
-  reads as reacting to small sounds with little ramp, and doubling the floors changed less than expected. Measured:
-  packets fire ~2 per 0.5 s at every level (admission frequency is untouched; only amplitude scales); quiet frames
-  still earn reward 0.15-0.35; the absolute quiet edge never engages (the bus loudness lane reads 3-17 in music);
-  floors gate on the presence weight, which is 1 for most frames. (A pause had also drained the running level and
-  corrupted the learned usual level; fixed in the bus, 1c5ca05e.) Part of the migration (operator 2026-10-04: the
-  golden is not literal; today's reactivity numbers are known poor). Measured on the real-scale replay, not by ear: admission frequency
-  scaled by the reward, a convex reward curve, floors on the reward. **Everything ramps, fast up and gentle down**
-  (operator): particle population/power, fragmentation power and frequency, tracer speed, spin velocity. Calibrate in
-  the real scales (`Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A: loudness 3-17 in music, presence ~1), not
-  `0..1` absolutes.
+- [x] **Everything ramps (operator 2026-10-03/04)**, measured on recorded music: every Sphere reaction (how often and
+  how strongly fragments, particles and tracer fire, tracer light/speed, spin, body growth) ramps on the shared passage
+  intensity (`transient_bus.PassageIntensity`, fast up / gentle down, relative to the track's recent loud level);
+  floors gate on it. Before/after numbers and contract: `Docs/Reference/Sphere_Visualizer.md` "Everything ramps";
+  measure with `python -m tools.visualizer_replay.sphere_ramp`. Physical check: the four songs live.
 - [x] **Golden step 1a: real-scale replay.** `FeatureFrame` schema 1 validated every lane into `0..1` and could not
   carry real music. Schema 2 (additive; schema 1 serialises byte-identically) adds `RealScaleLanes` in production
   units, uncapped: live pre-AGC bands, `(loudness, presence)`, the raw analysis spectrum, typed events.
@@ -192,12 +183,10 @@ GPU plumbing and hidden technical-profile debt; it is **not** a demand for pixel
 - [ ] **Reactivity goblin audit of the other modes** (operator: hand-cobbled, use the real-scale knowledge and the
   historical bugs as warning lights; Bubble excluded, its cadence goblin is already targeted): Spectrum, Oscilloscope,
   Sine Wave, DevCurve, Extruded Spectrum, Shockwave Grid, measured on the recorded clips.
-- [ ] **Golden step 1c (operator): record the real music.** First clips (2026-10-04, first 60 s of "Rag Doll",
-  "I Said Hi", "Human"; Human swings hard and is a Bubble favourite): loudness median 6-7, p90 ~12, max 18-20, live
-  bass pinned at 2.5 in 80-94% of frames. They lacked typed events (recorder bug, fixed 05ddc577) and showed the
-  cold-start presence spike (fixed); kept as `*_noevents`, re-recorded with the fix. `python -m tools.visualizer_replay.record NAME --seconds
-  60` while playing: a quiet intro, vocals, kicks/drops, a sustained loud passage, a pause and its return (one or more
-  clips). The first recording also confirms the analysis spectrum arrives (silence leaves it empty).
+- [x] **Golden step 1c: recordings** (`logs/visualizer_recordings/`, local): the first 60 s of "Rag Doll"
+  (`quiet_intro`), "I Said Hi" (`quiet_intro2`), "Human" (`heavy1`, swings hard, a Bubble favourite) and "Into Your
+  Room" (`balanced`, light sustain). Loudness median 6-7, p90 ~12, max 18-20; live bass pinned at 2.5 in 80-95% of
+  frames; ~200 kicks, ~130 snares, ~90 vocal swells a minute.
 - [ ] Capture the promotion golden first: curated presets, the exact currently resolved hidden Spectrum-backed technical
   profile, deterministic FeatureFrame/logical replay, representative renderer captures, extreme CUSTOM geometry and
   silence/vocal/kick/sustained passages. Split the comparison explicitly into **behavioural** evidence and **visual**
