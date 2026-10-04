@@ -7,8 +7,8 @@ import pytest
 
 from widgets.spotify_visualizer.devcurve_runtime import (
     DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE,
-    DEVCURVE_MATERIAL_TRAVEL_VARIATION,
     DEVCURVE_PASSAGE_USUAL,
+    DEVCURVE_SWING_RELEASE_S,
     DevCurveRuntimeState,
     solve_devcurve_frame,
 )
@@ -31,7 +31,9 @@ def _shapes():
     return {name: [list(node) for node in nodes] for name in _LAYERS}
 
 
-def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: float = DEVCURVE_PASSAGE_USUAL):
+def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: float = DEVCURVE_PASSAGE_USUAL,
+           transient: float | None = None):
+    transient = energy if transient is None else transient
     return solve_devcurve_frame(
         state,
         dt=0.016,
@@ -44,9 +46,9 @@ def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: f
             overall=energy,
         ),
         transient_bus=TransientEnergyBands(
-            bass_transient=energy,
-            mid_transient=energy,
-            high_transient=energy,
+            bass_transient=transient,
+            mid_transient=transient,
+            high_transient=transient,
         ),
         layer_shape_nodes=_shapes(),
         base_level=0.58,
@@ -62,25 +64,40 @@ def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: f
     )
 
 
-def test_devcurve_material_travel_is_gently_bounded_not_energy_throttled():
+def test_devcurve_travel_never_follows_the_beat():
+    """Operator 2026-10-04: travel breathing with the beat read fast/slow/fast/slow. Within one
+    passage, hammering energy and transients between their extremes leaves travel exactly at
+    the passage's cruise (never the old ~12x energy throttle, nor the +/-10% transient nudge)."""
     state = DevCurveRuntimeState()
-    low = _solve(state, now=1000.0, energy=0.0)
-    rates = [float(low["foreground_travel_rate"])]
-
-    # Hammer the energy target between its extremes. The material cruise may
-    # breathe, but it must never return to the old ~12x 0.014->0.170 throttle.
-    for i in range(1, 90):
+    rates = []
+    for i in range(90):
         frame = _solve(state, now=1000.0 + i * 0.016, energy=2.0 if i % 2 else 0.0)
         rates.append(float(frame["foreground_travel_rate"]))
-        assert frame["foreground_travel_rate"] == pytest.approx(
-            frame["specular_travel_rate"]
-        )
+        assert frame["foreground_travel_rate"] == pytest.approx(frame["specular_travel_rate"])
+    assert max(rates) - min(rates) < 1e-12
+    assert rates[0] == pytest.approx(DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE)
 
-    cruise = DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE
-    variation = DEVCURVE_MATERIAL_TRAVEL_VARIATION
-    assert min(rates) >= cruise * (1.0 - variation) - 1e-12
-    assert max(rates) <= cruise * (1.0 + variation) + 1e-12
-    assert max(abs(b - a) for a, b in zip(rates, rates[1:])) < cruise * 0.02
+
+def test_devcurve_height_rises_at_once_and_settles_gently():
+    """The reaction is the curves' height: a hit lifts it within a few frames, and once the hit
+    has gone it settles over the release (never in the ~50 ms the old per-frame blend fell in)."""
+    state = DevCurveRuntimeState()
+    for i in range(120):
+        _solve(state, now=50.0 + i * 0.016, energy=0.1)
+    rest = state.smooth_energy["bass"]
+    for i in range(8):                                   # a 130 ms hit
+        _solve(state, now=52.0 + i * 0.016, energy=1.2)
+    peak = state.smooth_energy["bass"]
+    assert peak - rest > 0.85 * (1.2 - 0.1)
+    held = []
+    for i in range(int(DEVCURVE_SWING_RELEASE_S / 0.016)):
+        _solve(state, now=53.0 + i * 0.016, energy=0.1)
+        held.append(state.smooth_energy["bass"])
+    # After one release time a third of the hit remains (an exponential settle), and no frame
+    # drops more than its share of a gentle settle.
+    assert held[-1] - rest == pytest.approx((peak - rest) / math.e, rel=0.05)
+    drops = [a - b for a, b in zip([peak, *held], held)]
+    assert max(drops) <= (peak - rest) * 0.016 / DEVCURVE_SWING_RELEASE_S + 1e-9
 
 
 def test_devcurve_material_position_integrates_smoothed_rate_without_rephasing():
@@ -126,7 +143,8 @@ def test_devcurve_travel_speed_and_swing_follow_the_passage():
 
 def test_devcurve_passage_changes_ease_in_without_jumps():
     """A passage flipping every frame never jitters travel, and a real quiet->loud change eases
-    in over seconds: no frame moves the rate or the curves by a visible jump."""
+    in over seconds along an S-curve: it starts and ends gently, and no frame moves the rate or
+    the curves by a visible jump."""
     state, _ = _settle(0.0)
     rates, curves = [], []
     for i in range(400):
@@ -140,4 +158,5 @@ def test_devcurve_passage_changes_ease_in_without_jumps():
         curves.append(frame["layers"]["bass"])
     steps = [abs(b - a) for a, b in zip(rates[400:], rates[401:])]
     assert max(steps) < 0.02 * DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE
+    assert steps[0] < 0.1 * max(steps)                    # no kink where the change starts
     assert max(max(abs(b - a) for a, b in zip(c0, c1)) for c0, c1 in zip(curves, curves[1:])) < 0.02

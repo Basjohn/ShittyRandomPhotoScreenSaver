@@ -98,17 +98,17 @@ def test_sustained_lanes_remain_distinct(clips):
     assert bass["metrics"]["bar_centroid"] < treble["metrics"]["bar_centroid"]
 
 
-def test_devcurve_travel_reacts_within_its_passage_range_and_never_lurches(clips):
+def test_devcurve_travel_holds_its_passage_through_the_beats(clips):
     from widgets.spotify_visualizer.devcurve_runtime import (
         DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE as cruise,
-        DEVCURVE_MATERIAL_TRAVEL_VARIATION as variation,
         DEVCURVE_PASSAGE_TRAVEL as passage,
     )
 
     rates = replay_clip(clips["beats_180_bpm"], "devcurve")["travel_rates"]
-    # The passage sets the cruise (quietest..loudest passage); transients breathe it +/-10%.
-    # Never the old per-frame energy throttle (~12x, lurching): each step moves the rate gently.
-    assert min(rates) >= cruise * passage[0] * (1.0 - variation) - 1e-9
-    assert max(rates) <= cruise * passage[1] * (1.0 + variation) + 1e-9
-    assert max(rates) - min(rates) > 1e-5
+    # The passage sets the cruise (quietest..loudest passage) and nothing else moves it: one
+    # steady 180 bpm passage travels at one rate through every beat, never the old per-frame
+    # energy throttle (~12x, lurching) nor a transient nudge breathing with the beat.
+    assert min(rates) >= cruise * passage[0] - 1e-9
+    assert max(rates) <= cruise * passage[1] + 1e-9
+    assert max(rates) - min(rates) < 1e-9
     assert max(abs(b - a) for a, b in zip(rates, rates[1:])) < 0.02 * cruise
