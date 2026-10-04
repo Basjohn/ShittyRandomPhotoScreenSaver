@@ -148,6 +148,52 @@ def fresh_presentation(rows, refresh_hz: dict[int, float]) -> None:
         print(line)
 
 
+GUI_WAKE_DELIVER, PREFETCH_BEGIN, PREFETCH_END = 2, 64, 65
+QUICK_BEFORE_SYNC, QUICK_AFTER_SYNC, QUICK_BEFORE_RENDERING, QUICK_AFTER_RENDERING = 49, 50, 51, 54
+
+
+def stalls(rows, threshold_ms: float, limit: int = 25) -> None:
+    """Each swap gap above ``threshold_ms``: what overlapped it. GUI-thread starvation shows as a long gap
+    between Visualizer GUI wakes; a prefetch handoff (image upload) or a transition start (background
+    render begin after none) inside it; and the longest Qt sync / render phase in it."""
+    by_screen = defaultdict(lambda: defaultdict(list))
+    for ts, event, screen, _revision, _logical, _aux in rows:
+        by_screen[screen][event].append(ts)
+    prefetch = sorted(zip(sorted(t for s in by_screen.values() for t in s.get(PREFETCH_BEGIN, [])),
+                          sorted(t for s in by_screen.values() for t in s.get(PREFETCH_END, []))))
+    causes = defaultdict(int)
+    for screen, events in sorted(by_screen.items()):
+        swaps = sorted(events.get(FRAME_SWAP, []))
+        wakes = sorted(events.get(GUI_WAKE_DELIVER, []))
+        backgrounds = sorted(events.get(BACKGROUND_RENDER_BEGIN, []))
+        syncs = list(zip(sorted(events.get(QUICK_BEFORE_SYNC, [])), sorted(events.get(QUICK_AFTER_SYNC, []))))
+        renders = list(zip(sorted(events.get(QUICK_BEFORE_RENDERING, [])),
+                           sorted(events.get(QUICK_AFTER_RENDERING, []))))
+        printed = 0
+        for a, b in zip(swaps, swaps[1:]):
+            gap = (b - a) / 1e6
+            if gap <= threshold_ms or gap > 1000:
+                continue
+            inside = [w for w in wakes if a <= w <= b]
+            edges = [a, *inside, b]
+            wake_gap = max((y - x) / 1e6 for x, y in zip(edges, edges[1:]))
+            handoff = any(begin <= b and end >= a for begin, end in prefetch)
+            started = any(a <= t <= b for t in backgrounds) and not any(a - 50e6 <= t < a for t in backgrounds)
+            sync = max(((y - x) / 1e6 for x, y in syncs if a <= x <= b), default=0.0)
+            render = max(((y - x) / 1e6 for x, y in renders if a <= x <= b), default=0.0)
+            cause = ("prefetch_handoff" if handoff else "transition_start" if started else
+                     "gui_starved" if wake_gap > threshold_ms else "render" if render > threshold_ms / 2 else
+                     "sync" if sync > threshold_ms / 2 else "unattributed")
+            causes[(screen, cause)] += 1
+            if printed < limit:
+                printed += 1
+                print(f"stall screen={screen} gap={gap:.1f}ms longest_gui_wake_gap={wake_gap:.1f}ms "
+                      f"handoff={handoff} transition_start={started} max_sync={sync:.1f}ms "
+                      f"max_render={render:.1f}ms -> {cause}")
+    for (screen, cause), n in sorted(causes.items()):
+        print(f"stalls screen={screen} {cause}={n}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("trace", type=Path)
@@ -164,6 +210,7 @@ def main() -> None:
     gaps(rows, publish_ms=args.publish_gap_ms, swap_ms=args.swap_gap_ms)
     refresh = {int(k): float(v) for k, v in (item.split("=", 1) for item in args.refresh)}
     fresh_presentation(rows, refresh)
+    stalls(rows, args.swap_gap_ms)
 
 
 if __name__ == "__main__":
