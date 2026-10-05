@@ -197,6 +197,9 @@ A deactivated family remains deactivated even if a saved layout contained it.
 
 ## Lifecycle
 
+
+One active Visualizer may own mode-specific logical work. Registered but inactive modes contribute zero per-tick function calls, zero renderer calls, zero simulation, zero compute, zero GPU allocations, zero wallpaper preparation, zero workers and zero recurring timing sources.
+
 Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
 owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
 

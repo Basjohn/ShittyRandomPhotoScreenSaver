@@ -108,6 +108,41 @@ Settings write, geometry replay, fade restart, worker submission, signal fan-out
 regeneration. Attribute work to its real domain (GUI thread, Quick render thread, Python/GIL, logical runtime, provider,
 or OS presentation) before changing architecture.
 
+#### Effect dormancy and count invariance
+
+Registered but inactive effects must contribute no recurring runtime cost to the effect currently in use. This applies to
+Visualizer modes, transitions, and any future selectable render/effect family. Registration, activation eligibility and
+persisted configuration are metadata; they are not runtime admission.
+
+At runtime, only effects explicitly admitted for the current presentation may own effect-specific logical evolution,
+simulation, compute dispatch, renderer work, GPU resources, history buffers, environment preparation, workers, callbacks or
+timing sources. A bounded, explicitly reserved next-transition warm-up is also admitted because it is the known next run, not
+speculative work across the registry. Every other inactive effect may retain only cheap registry/configuration state and
+explicitly sanctioned shared infrastructure.
+
+Adding another registered effect must not add another per-tick, per-frame, per-transition-frame or per-image dispatch/check to
+unrelated active effects. Do not grow common hot paths into one unconditional `dispatch_*()`, `update_*()` or equivalent call
+per registered implementation, even when those calls immediately return. Resolve the admitted implementation at the relevant
+activation/run boundary and invoke only that owner.
+
+For transitions, the current run owns only its selected implementation and the shared Scene3D/resources it actually requires;
+the one explicitly reserved next run may perform its bounded gradual warm-up. Unselected transitions do not prepare shaders,
+advance simulations, allocate targets/buffers, maintain histories or perform source/destination processing merely because they
+are registered. Replacing the reserved next run retires any preparation no longer owned by the replacement.
+
+For Visualizers, exactly the active mode may own mode-specific logical and render work. A replacement mode may prepare behind
+its admitted hidden reveal, but unrelated inactive modes are not advanced, queried, rendered or allowed to retain
+consumer-specific runtime/GPU resources after retirement.
+
+The scaling invariant is:
+
+**N registered effects + one admitted active effect remains approximately the runtime cost of that admitted effect, not N
+dormant effects.** The only intentional exception is the bounded work/resources of one explicitly reserved next-transition
+warm-up while that reservation exists.
+
+Tests must guard against mode/effect-count scaling in common hot paths and prove that inactive implementations do not acquire
+or retain effect-specific runtime resources.
+
 The speculative image process remains an approved isolation boundary, not a second presentation owner: foreground image
 work cannot queue behind it; parent-owned generation/byte/backlog bounds admit at most one speculative request at a time;
 late generations are tombstoned; failure skips speculative warm-up rather than falling back into the main-process compute

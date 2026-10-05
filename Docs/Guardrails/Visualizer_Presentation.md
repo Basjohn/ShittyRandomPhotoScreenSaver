@@ -62,6 +62,28 @@ Needing the shared BeatEngine is not a reason to retain a QWidget owner.
 
 Accepted audio-analysis ownership is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.
 
+### 1A. Active-mode dormancy and mode-count invariance
+
+The canonical family-wide rule is `Docs/Guardrails/Performance_Optimization_Contract.md` P5, **Effect dormancy and count
+invariance**. Visualizer registration, enablement and persisted mode state are not runtime admission.
+
+With one product Visualizer active, exactly its current mode may own mode-specific logical evolution, simulation, frame-runtime
+work, capture work, renderer work or consumer-specific GPU resources. During an admitted mode replacement the target mode may
+perform its bounded hidden `prepared_reveal` work; the outgoing mode retires at the existing ownership boundary. No unrelated
+inactive mode may continue logical/audio queries, simulation, history advancement, renderer preparation or GPU ownership.
+
+The common logical/render hot paths must remain independent of the number of registered modes. Do not add one unconditional
+`dispatch_*()`, `update_*()`, heartbeat/helper call or equivalent branch per mode and rely on each inactive implementation to
+return immediately. Resolve the active mode's optional logical/runtime work at activation and invoke only that owner. Adding
+mode N+1 must not add recurring work to mode N.
+
+Disabled or unselected mode Settings bodies, frame runtimes and renderers stay lazy under their existing contracts. A retired
+mode's logical state and consumer-owned resources do not remain parked for possible reuse unless a resource is genuinely shared
+infrastructure explicitly sanctioned by the Scene3D/resource contract.
+
+Dormancy coverage must scale from the canonical registry, so adding a mode automatically joins import/construction, logical
+advance/query, repeated-switch retirement and resource-ownership regression coverage.
+
 ## 2. One logical clock
 
 Forbidden logical owners:
