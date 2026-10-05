@@ -1,0 +1,25 @@
+{
+  "mode": "extruded_spectrum",
+  "name": "Preset 1 (Silver Shine)",
+  "preset_index": 0,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "extruded_spectrum",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "extruded_spectrum_depth": 0.8,
+        "extruded_spectrum_tilt": 0.01,
+        "extruded_spectrum_gloss": 0.07,
+        "extruded_spectrum_reflection": 0.92,
+        "extruded_spectrum_face_mirror": 1.0,
+        "extruded_spectrum_hue_drift": 0.03,
+        "extruded_spectrum_turn": -0.42,
+        "extruded_spectrum_colouring": "Bar Colours",
+        "extruded_spectrum_allow_overflow": true,
+        "extruded_spectrum_smooth_edges": true,
+        "mode": "extruded_spectrum"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}

@@ -31,6 +31,36 @@ The expansion capabilities remain **deactivated by default** unless explicitly a
 Detailed shared resource ownership, DSA/immutable allocation, multi-bind and GL state-restoration contracts live in
 `Docs/Reference/Scene3D_Resources.md`; the effect-specific looks and physical acceptance remain here.
 
+### Transition dormancy and transition-count invariance
+
+The canonical family-wide rule is `Docs/Guardrails/Performance_Optimization_Contract.md` P5, **Effect dormancy and count
+invariance**. A transition being registered, activated, eligible for Random, or carrying persisted Settings does not admit its
+implementation to runtime work.
+
+During a transition, only the selected run may own effect-specific simulation/evaluation, render passes, per-run buffers,
+targets, histories, prepared geometry or other consumer resources. The one transition explicitly reserved as the next run may
+also perform the existing bounded gradual warm-up described under **Preparing runs (S11)**. That reservation is the sole
+look-ahead exception: it is a known next run with resolved parameters/seed, not speculative work for the registry.
+
+All other transitions remain dormant. They do not instantiate renderers merely to be checked, compile or warm programs,
+allocate scene targets/buffers, advance state, preprocess source/destination images, dispatch compute, or retain per-run
+resources because they are registered or activated. Random selection may inspect cheap registry/configuration metadata without
+constructing candidate implementations.
+
+Common transition hot paths must be independent of transition count. Do not add one unconditional per-frame, per-image-change,
+or per-run `dispatch_*()`, `update_*()`, warm/check or equivalent call per registered transition and depend on inactive
+implementations to return. Resolve the selected implementation at run admission, resolve the single reserved-next
+implementation at reservation, and invoke only those admitted owners.
+
+If the reserved next run is replaced before presentation, preparation no longer owned by the replacement must retire through
+the existing legal owner. Shared context-local programs/meshes may remain warm only where they are genuinely shared
+infrastructure under `Scene3D_Resources.md`; transition-specific per-run resources do not become a cache merely because future
+reuse is possible.
+
+Registry-scaled tests must prove that adding transitions does not increase recurring work for an unrelated running transition,
+that non-selected implementations are not constructed/advanced/warmed, and that repeated run/reservation replacement returns
+transition-specific resources to the expected parked floor.
+
 - Direction and seed resolve once before request admission. Renderers consume explicit immutable parameters; no per-frame Settings access or random choices.
 - Random rotation is session memory. The engine picks the transition (plus a Slide/Wipe direction, with anti-repeat) and hands `RandomTransitionSelection` to `DisplayManager`, which resolves one batch spec from it; Previous reuses the current pick. Rotation never writes Settings and never overwrites the authored Slide/Wipe `direction`; a persisted `random_choice` from older builds is ignored. Random mode always randomizes the Slide/Wipe direction, whatever direction is authored; outside Random mode a direction set to `Random` is randomized per batch.
 - Glass and Crumble share deterministic closed fracture prisms. Glass uses screen-space transmission/refraction and analytic offscreen departure without a shrink retirement; Crumble first draws growing recessed cracks along those same polygon borders while the image stays still, then releases thick chunks and small irregular seam debris. Debris uses an asymmetric solid seed shape plus deterministic per-instance XYZ deformation and size variation, avoiding a repeated box/diamond stamp. Rough stone sides and release weighting remain. Glass keeps the jittered-grid fracture; Crumble's own seeded layout (`crumble_cells`) changes every run: each seed picks an impact point (small shards near it, large slabs away from it), stress clusters or an organic warp, and crack complexity (0.5–2.0) sets how far the layout departs from the grid over its whole range. Cells stay convex Voronoi cells of the wall (gap-free; minimum site spacing prevents slivers), so the crack stage still draws on real shared borders. Debris is seeded per run too: a fine/mixed/chunky grain and a hot spot that concentrates chips along nearby cracks; the debris amount drives both chip count and chip size. Crumble accepts 4–128 pieces, depth 0.2–1.5 and thickness/debris 0–1; its float seed remains intact across its deterministic geometry and debris.
@@ -66,7 +96,7 @@ Detailed shared resource ownership, DSA/immutable allocation, multi-bind and GL 
 
 ## Verification and remaining acceptance
 
-`tests/test_qtquick_future_transition_gl.py` renders through the real driver and production host to check exact/near endpoints, repeatability, parameter and direction sensitivity, and resource retirement. Focused `crumble_volume`, `melt_surface`, `organic_surfaces`, `transition_material_settings` and `tile_departure` tests cover bounded topology, material controls and continuous departure; registry/request/Settings/run/fence suites cover integration.
+`tests/test_qtquick_future_transition_gl.py` renders through the real driver and production host to check exact/near endpoints, repeatability, parameter and direction sensitivity, and resource retirement. Dormancy/count-invariance coverage must also derive from the canonical transition registry: unselected implementations stay unconstructed/unadvanced/unwarmed, only the current run plus one explicitly reserved next run may own transition-specific runtime preparation, and adding a registered transition must not add recurring dispatch work to an unrelated run. Focused `crumble_volume`, `melt_surface`, `organic_surfaces`, `transition_material_settings` and `tile_departure` tests cover bounded topology, material controls and continuous departure; registry/request/Settings/run/fence suites cover integration.
 
 `tools/transition_contact_sheet.py` produces textured progression frames, optional supplied-image contact sheets, and a 60-frame/two-second WebP with `--animate`. It accepts `--source` and `--destination` photos, and `TransitionCapture.run(..., duration_ms=)` renders real-time motion (Exploding Tiles' rumble) at an authored duration instead of the 1000 ms default; `--quick-smoke` reuses the existing threaded QQuickWindow lifecycle harness. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of performance neutrality.
 

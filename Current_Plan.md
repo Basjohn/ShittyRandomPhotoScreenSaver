@@ -12,6 +12,33 @@ This file is the **sole live 3D execution decomposition**. Landed substrate cont
 ## Next up | operator order, 2026-10-04 (work these before resuming section 1)
 
 Each step is one sitting with its own checkpoint. Read the binding docs named in each step first.
+Important Flicker was actually JUDDER. All flicker assumptions should therefor be discarded unless they are pure net improvements. This document is stale in those regards.
+Devcurve is currently working well. Keep unexplained usage under watch.
+
+The last agents work with bubble judder was:
+###
+The gate's delta term saturates almost instantly, so frame-to-frame noise in raw energy flips it between 0 and 1, directly driving the drawn radius via the hero render seam. I'll now check how the two pulse-factor functions consume this gate.
+
+The judder comes from frame-level noise flipping the gate, causing big bubbles to yank toward the pulse and small bubbles to jitter ±0.03 each frame—both unrelated to actual beats. I'll add a gate envelope with a ~100ms release to filter noisy single frames while still responding to real drops, and since this affects Bubble's protected golden output, I'll measure the impact fully but hold off on committing any golden change until you approve.
+
+Big bubbles are clean now, but tiny bubbles still show target sizes alternating (~5.1/4.5/5.2/4.6px) despite a smoothly rising pulse and a gate stuck at 1, suggesting another per-frame input—likely small_freq_pulse—is affecting them. I'll locate where that value is computed.
+
+I'll apply the same instant-attack, 100ms-release envelope to _render_body_energy and _sustained_loud_energy, since both are currently raw per-frame values (despite "sustained" in the name) that feed into tiny-bubble gain, hero hold, crest boosts, headroom clamping, and display smoothing.
+
+Radius judder dropped 79–98% across all four songs, while position judder stayed roughly flat within tracker noise. Next I'll check Bubble's protected reaction metrics on the fixtures against baseline.
+
+That approach alters Bubble's feel too much, so instead I'll keep the raw values for pulse integration and simulation unchanged, and only use smoothed/enveloped gate and loudness copies for the drawn radius (hero pull, gain, boosts, smoothing). Now checking where each value is read.
+
+Render-only fixes cut judder by 73–82%, somewhat less than the full version since small bubbles' pulse still integrates raw flips. Now checking the protected metrics.
+
+9 of 12 fixtures stay unchanged within 2%, with the real deltas showing up on noisy inputs—broadband noise overshoot down 40%, music centroid speed down 20%/overshoot down 13%, and bass overshoot down 9%, likely reflecting the chatter fix itself. Now running Bubble's golden and reactivity tests to see exactly what they flag.
+
+The golden and Bubble tests remain unaffected by this fix. Now I'll add a regression test using a near-zero release time as a negative control, and measure judder on the committed fixtures both ways.
+
+The broadband-noise fixture clearly shows the difference: 400 judder steps without the fix versus 196 with it, so I'll run the test in-process requiring at least a 40% reduction to catch any regression.
+###
+As well as claiming to have pushed/commited this small bubble judder fix, however it remains, operator is suspicious fix did not finish landing or testing or that 196 steps with fix is still highly noticeable?
+Check repo commit messages.
 
 **N1. Presentation cadence: extra frames and uneven presentation (WATCH, raised by the operator: "might be more
 important than we realise").** Symptoms: Bubble micro-flicker with or without transitions; DevCurve travel jerks
