@@ -871,6 +871,42 @@ def test_report_splits_chk26_shared_capture_and_tail_without_rewriting_old_stage
     assert "clip_begin_refined_p95_tail_stage=mask_state_programming" in out
 
 
+def test_frame_trace_writer_uses_owned_bytes_not_exported_memoryviews(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "screensaver_frame_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    # Force multiple segment boundaries so the exact branch that used to
+    # replace a live memoryview with another exported slice is exercised.
+    segment_bytes = header.size + (3 * record.size)
+    sink = FrameTraceSink(
+        path,
+        capacity=512,
+        segment_bytes=segment_bytes,
+        retained_segments=4,
+    )
+    payload = b"".join(
+        record.pack(10_000 + revision, 1, 0, revision, 0, 0)
+        for revision in range(11)
+    )
+    assert sink._write_trace_data(payload) == 11
+    metrics = sink.close()
+    assert metrics["write_errors"] == 0
+    assert metrics["rotations"] == 3
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "performance"
+        / "frame_trace.py"
+    ).read_text(encoding="utf-8")
+    writer_body = source.split("def _write_trace_data", 1)[1].split(
+        "def close", 1
+    )[0]
+    assert "memoryview(" not in writer_body
+
+
 def test_frame_trace_rolls_disk_segments_instead_of_growing_without_bound(
     tmp_path: Path,
 ) -> None:

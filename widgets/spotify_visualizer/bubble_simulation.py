@@ -48,6 +48,22 @@ TRAIL_SMEAR_DECAY_PER_SEC = 0.9  # how fast strength fades when slowing
 # the next on frame-level energy noise, so a bubble caught between breathing states vibrated 1-2 px (operator
 # 2026-10-04). The simulation (pulse integration, motion) keeps the raw values; a real drop still shows within a beat.
 RENDER_SIZE_RELEASE_S = 0.10
+# Tiny-bubble presentation assist. This is deliberately a render seam, not an
+# audio/simulation filter: a small bubble whose raw rendered target chatters by
+# 1-2 physical pixels is allowed to commit to one direction before a tiny
+# reversal becomes visible. One established micro-breath may also receive at
+# most one extra physical pixel of travel; strong edges and pulse endpoints
+# bypass the assist entirely. Set TINY_BREATH_ASSIST_PX to 0.0 for the exact
+# negative-control path used by the replay/test harness.
+TINY_BREATH_ASSIST_PX = 1.0
+TINY_BREATH_MAX_RENDER_RADIUS_PX = 8.0
+TINY_BREATH_STYLE_BOUNDARY_PX = 4.0
+TINY_BREATH_STYLE_EPSILON_PX = 0.001
+TINY_BREATH_MICRO_STEP_MIN_PX = 0.35
+TINY_BREATH_MICRO_STEP_MAX_PX = 2.0
+TINY_BREATH_STRONG_EDGE_PX = 2.5
+TINY_BREATH_ENDPOINT_LOW = 0.08
+TINY_BREATH_ENDPOINT_HIGH = 0.92
 TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 35.0  # convert offset distance → brightness (higher = brighter sooner)
 TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
 IMPULSE_DAMPING_PER_SEC = 10.5
@@ -94,8 +110,12 @@ class BubbleState:
     exiting: bool = False       # bubble head left the card; trail draining out
     exit_timer: float = 0.0     # time since exit began (safety destroy after grace)
     bounce_glide: float = 0.0   # short post-collision window where drift/stream are damped
-    display_radius: float = 0.0  # display-only hero radius smoothing state
+    display_radius: float = 0.0  # display-only rendered radius state (hero smoothing / tiny breath assist)
     size_gate_energy: float = 0.0  # size gate as drawn: instant open, RENDER_SIZE_RELEASE_S close (hero render seam)
+    tiny_target_radius: float = 0.0  # previous raw tiny-bubble render target; presentation-only
+    tiny_breath_direction: int = 0  # -1 shrink, +1 grow; never simulation/audio authority
+    tiny_reverse_pending: bool = False  # one micro reversal must persist before it is shown
+    tiny_assist_used: bool = False  # at most one +1px commitment per established half-breath
     fade_in_duration: float = 0.0  # alpha-only birth fade; never a geometry/reactivity authority
 
 
@@ -2185,6 +2205,179 @@ class BubbleSimulation:
         )
         return base_radius * clamp_factor * (1.0 + loud_headroom + supra_headroom)
 
+    def _apply_tiny_breath_assist(
+        self,
+        bubble: BubbleState,
+        target_radius: float,
+    ) -> float:
+        """Commit tiny drawn radii to a breath without filtering Bubble audio.
+
+        The remaining post-R-105 defect lives in the presentation seam: a tiny
+        bubble can receive a one-frame 1-2px target reversal while the underlying
+        breath is otherwise travelling in one direction.  Showing every one of
+        those reversals reads as a stuck/vibrating breath.
+
+        This helper uses only the cached committed viewport height and per-bubble
+        presentation state.  It never changes ``pulse_energy``, motion, collision
+        authority, clocks or scheduling.  A micro reversal must persist for a
+        second target sample before it becomes authoritative. Once per established
+        half-breath, a natural 0.35-2px step may receive up to one extra physical
+        pixel in the same direction. Reversal suppression is itself capped so the
+        display can never sit more than that one pixel from the authored target.
+        The assist also stays on the raw target's side of the shader's 4px
+        dot/outline boundary, so it cannot manufacture a representation switch.
+        Strong edges, promoted/pop/exit bubbles and pulse endpoints retain exact
+        raw render authority.
+        """
+
+        target_radius = max(0.001, float(target_radius))
+        height = max(1.0, float(self._viewport_profile.height))
+        current = bubble.display_radius if bubble.display_radius > 0.0 else target_radius
+        previous_target = (
+            bubble.tiny_target_radius
+            if bubble.tiny_target_radius > 0.0
+            else target_radius
+        )
+        bubble.tiny_target_radius = target_radius
+
+        if (
+            TINY_BREATH_ASSIST_PX <= 0.0
+            or bubble.is_big
+            or bubble.promoted
+            or bubble.popping
+            or bubble.exiting
+        ):
+            bubble.tiny_breath_direction = 0
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = False
+            bubble.display_radius = target_radius
+            return target_radius
+
+        pulse = max(0.0, float(bubble.pulse_energy))
+        target_px = target_radius * height
+        current_px = current * height
+        base_px = bubble.radius * height
+        if (
+            max(target_px, current_px) > TINY_BREATH_MAX_RENDER_RADIUS_PX
+            or target_px - base_px <= 0.10
+            or target_px >= TINY_BREATH_MAX_RENDER_RADIUS_PX - 0.10
+            or pulse <= TINY_BREATH_ENDPOINT_LOW
+            or pulse >= TINY_BREATH_ENDPOINT_HIGH
+        ):
+            bubble.tiny_breath_direction = 0
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = False
+            bubble.display_radius = target_radius
+            return target_radius
+
+        raw_step_px = (target_radius - previous_target) * height
+        step_abs_px = abs(raw_step_px)
+        if step_abs_px <= 1e-4:
+            # A paused raw target is an observable endpoint/plateau. Give raw
+            # authority back immediately so the one-pixel commitment cannot sit
+            # parked beyond a completed breath. No look-ahead frame is added.
+            bubble.tiny_breath_direction = 0
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = False
+            bubble.display_radius = target_radius
+            return target_radius
+
+        direction = 1 if raw_step_px > 0.0 else -1
+        if step_abs_px >= TINY_BREATH_STRONG_EDGE_PX:
+            bubble.tiny_breath_direction = direction
+            # A strong edge owns this half-breath completely. Do not add a
+            # micro commitment later until a real reversal establishes the
+            # next direction.
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = True
+            bubble.display_radius = target_radius
+            return target_radius
+
+        if bubble.tiny_breath_direction == 0:
+            bubble.tiny_breath_direction = direction
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = False
+            bubble.display_radius = target_radius
+            return target_radius
+
+        if direction != bubble.tiny_breath_direction:
+            if (
+                step_abs_px <= TINY_BREATH_MICRO_STEP_MAX_PX
+                and not bubble.tiny_reverse_pending
+            ):
+                # First tiny reversal: do not render the chatter.  If the next
+                # raw target continues this way it is a real breath reversal and
+                # is admitted immediately on that second sample.
+                bubble.tiny_reverse_pending = True
+                # Hold the established breath, but never let suppression place
+                # the drawn radius more than the one-pixel experiment away from
+                # the current authored target.
+                offset_px = bubble.tiny_breath_direction * (current_px - target_px)
+                held_offset_px = min(TINY_BREATH_ASSIST_PX, max(0.0, offset_px))
+                held_px = target_px + bubble.tiny_breath_direction * held_offset_px
+                if target_px < TINY_BREATH_STYLE_BOUNDARY_PX <= held_px:
+                    held_px = TINY_BREATH_STYLE_BOUNDARY_PX - TINY_BREATH_STYLE_EPSILON_PX
+                elif target_px >= TINY_BREATH_STYLE_BOUNDARY_PX > held_px:
+                    held_px = TINY_BREATH_STYLE_BOUNDARY_PX
+                held = held_px / height
+                bubble.display_radius = held
+                return held
+            bubble.tiny_breath_direction = direction
+            bubble.tiny_reverse_pending = False
+            bubble.tiny_assist_used = False
+            bubble.display_radius = target_radius
+            return target_radius
+
+        bubble.tiny_reverse_pending = False
+
+        # A prior +1px commitment may temporarily sit ahead of the raw target.
+        # Never "pay it back" with a backwards frame; simply wait for the
+        # authored target to catch up.
+        if bubble.tiny_breath_direction * (target_radius - current) < 0.0:
+            offset_px = bubble.tiny_breath_direction * (current_px - target_px)
+            held_offset_px = min(TINY_BREATH_ASSIST_PX, max(0.0, offset_px))
+            held_px = target_px + bubble.tiny_breath_direction * held_offset_px
+            if target_px < TINY_BREATH_STYLE_BOUNDARY_PX <= held_px:
+                held_px = TINY_BREATH_STYLE_BOUNDARY_PX - TINY_BREATH_STYLE_EPSILON_PX
+            elif target_px >= TINY_BREATH_STYLE_BOUNDARY_PX > held_px:
+                held_px = TINY_BREATH_STYLE_BOUNDARY_PX
+            held = held_px / height
+            bubble.display_radius = held
+            return held
+
+        if (
+            not bubble.tiny_assist_used
+            and TINY_BREATH_MICRO_STEP_MIN_PX <= step_abs_px <= TINY_BREATH_MICRO_STEP_MAX_PX
+        ):
+            # Full extra pixel by a natural 1px step, eased down for sub-pixel
+            # movement.  This is one commitment per half-breath, not a gain
+            # applied every frame.
+            denominator = max(
+                1e-6,
+                1.0 - TINY_BREATH_MICRO_STEP_MIN_PX,
+            )
+            assist_mix = _smoothstep01(
+                (step_abs_px - TINY_BREATH_MICRO_STEP_MIN_PX) / denominator
+            )
+            assist_px = TINY_BREATH_ASSIST_PX * assist_mix
+            candidate_px = target_px + bubble.tiny_breath_direction * assist_px
+            # Never shrink below the authored radius, promote this tiny-only path
+            # out of its physical band, or cross the shader's 4px dot/outline
+            # boundary unless the authored target itself crossed it.
+            candidate_px = max(base_px, min(TINY_BREATH_MAX_RENDER_RADIUS_PX, candidate_px))
+            if target_px < TINY_BREATH_STYLE_BOUNDARY_PX <= candidate_px:
+                candidate_px = TINY_BREATH_STYLE_BOUNDARY_PX - TINY_BREATH_STYLE_EPSILON_PX
+            elif target_px >= TINY_BREATH_STYLE_BOUNDARY_PX > candidate_px:
+                candidate_px = TINY_BREATH_STYLE_BOUNDARY_PX
+            if abs(candidate_px - target_px) >= 0.10:
+                bubble.tiny_assist_used = True
+                candidate = candidate_px / height
+                bubble.display_radius = candidate
+                return candidate
+
+        bubble.display_radius = target_radius
+        return target_radius
+
     def _apply_big_display_radius_smoothing(
         self,
         bubble: BubbleState,
@@ -3008,12 +3201,18 @@ class BubbleSimulation:
                 target_radius = min(target_radius, clamp_limit)
 
             resolved_target_radius = max(0.001, target_radius)
-            r = self._apply_big_display_radius_smoothing(
-                b,
-                resolved_target_radius,
-                big_visual_smoothing,
-                track_diagnostics=b is tracked_big,
-            )
+            if b.is_big:
+                r = self._apply_big_display_radius_smoothing(
+                    b,
+                    resolved_target_radius,
+                    big_visual_smoothing,
+                    track_diagnostics=b is tracked_big,
+                )
+            else:
+                r = self._apply_tiny_breath_assist(
+                    b,
+                    resolved_target_radius,
+                )
 
             if b.is_big:
                 big_render_diag["big_render_count"] += 1.0

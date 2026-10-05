@@ -305,26 +305,39 @@ class FrameTraceSink:
         self._rotations += 1
 
     def _write_trace_data(self, data: bytes) -> int:
-        """Write record-aligned data across bounded rolling segments."""
+        """Write record-aligned data across bounded rolling segments.
 
-        view = memoryview(data)
+        ``data`` is already an owned ``bytes`` batch copied out of the ring by
+        ``_take_batch``. Keep the writer on that ownership model instead of
+        wrapping it in ``memoryview`` and exporting that view through buffered
+        file I/O. Apart from being unnecessary here, an exported memoryview is
+        a poor diagnostic-side lifetime to carry through CPython GC/debugger
+        activity: failures in ``memoryview.tp_clear`` report at whatever Python
+        frame happens to be executing, which can falsely implicate unrelated GL
+        code. Byte slices exist only at a rolling-segment boundary and this
+        entire writer is explicit ``--frame-trace`` diagnostics.
+        """
+
+        offset = 0
+        data_size = len(data)
         written_records = 0
-        while view:
+        while offset < data_size:
             remaining_bytes = self._segment_bytes_limit - self._segment_bytes_written
             writable = (remaining_bytes // _RECORD.size) * _RECORD.size
             if writable <= 0:
                 self._rotate_segment()
                 continue
-            take = min(len(view), writable)
+            take = min(data_size - offset, writable)
             take -= take % _RECORD.size
             if take <= 0:
                 self._rotate_segment()
                 continue
-            self._file.write(view[:take])
+            end = offset + take
+            self._file.write(data[offset:end])
             self._segment_bytes_written += take
             written_records += take // _RECORD.size
-            view = view[take:]
-            if view:
+            offset = end
+            if offset < data_size:
                 self._rotate_segment()
         return written_records
 
