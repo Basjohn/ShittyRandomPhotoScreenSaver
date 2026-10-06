@@ -18,6 +18,8 @@ exact current source
 - `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md` describe the current product contracts. `Future_Work.md` routes deferred feature ideas, not completed products.
 - `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records durable Edit paint/role and test-oracle failures; use the live source and targeted tests for any new defect.
 
+Local-repo transition concept mock references currently used by the plan live under `tmp/mocks/` in the checked-out repository (for example `TBlockPuzzle.png`, `TVolu.png`, `TVHS.png`, `TLens.png`, `TMemb.png`, `TGroup.png`). They are visual review artifacts, not separate product authorities, and are intentionally not treated as normal GODZIP handoff payload.
+
 ## Directory roles
 
 | Location | Role |
@@ -60,7 +62,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| transitions and material surfaces (open physical acceptance at the end of the reference) | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
+| transitions and material surfaces (open physical acceptance at the end of the reference); active transition expansion order and local mock references | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §8 |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
 | Usu character authoring source and static review renders | `assets/usu/README.md`; all modelling review notes remain inside the asset directory |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
@@ -80,7 +82,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Sphere current experimental contract | `Docs/Reference/Sphere_Visualizer.md` |
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` then `Docs/Historical_Bugs/README.md` |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
-| deferred features, 3D transition/Visualizer ideas and their admission rules | `Future_Work.md` |
+| deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |
 | Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
 | system master-volume OSD | `Docs/Reference/System_Volume_OSD.md` |
 

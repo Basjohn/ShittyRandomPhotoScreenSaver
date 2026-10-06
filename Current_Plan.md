@@ -30,6 +30,12 @@ reaction, elasticity, attack, settling, loud-passage variation, motion, collisio
   sections, min/max size, pop/exit and CUSTOM extremes. Reject the candidate if it feels flatter/slower even when the metric
   improves.
 
+The canonical local real-music corpus for B1-B3 is under `logs/visualizer_recordings/`: `balanced.jsonl`, `heavy1.jsonl`,
+`quiet_intro.jsonl` and `quiet_intro2.jsonl`. These are operator-authored schema-2 captures and are intentionally local/large;
+`*_vN` and `*_noevents` files are retained archived/derived takes, not additional canonical corpus members. The production
+`recorded_clips()` selector excludes those suffixed takes automatically. Synthetic fixtures and committed goldens remain separate
+negative-control/regression evidence and must not be substituted for the real-music corpus when B1-B3 require recorded music.
+
 Focused automation:
 
 ```powershell
@@ -138,7 +144,80 @@ Release/readme media only. Generated captures never enter runtime QRCs or normal
 
 ---
 
-## 8. Shared 3D primitives and next consumers
+## 8. Transition expansion tranche (immediately after Sphere)
+
+These transition concepts are promoted into the active roadmap rather than left as distant-future backlog. The current
+visual mocks are local-repo references only and should be preserved for implementation review:
+
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TBlockPuzzle.png` — clean-room jigsaw/puzzle-piece
+  flip replacement concept.
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TVolu.png` — Volumetric Dissolve concept.
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TVHS.png` — VHS Distortion concept.
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TLens.png` — Liquid Lens concept.
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TMemb.png` — Membrane Turnover concept.
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TGroup.png` — grouped second-batch concepts in
+  this fixed order: Surface Tension Merge, Edge Bloom Reveal, Chromatic Shear, Depth Card Cascade, Capillary Bloom.
+
+The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
+
+- [ ] **T1. Jigsaw Piece Flip (clean-room Block Puzzle replacement).** Implement this as a **new** transition rather than
+  mutating the existing Block Puzzle Flip implementation. The goal is the originally intended behavior: puzzle outlines draw or
+  fade in, then one piece at a time flips from Top Left / Top Right / Bottom Left / Bottom Right / Random ordered starts /
+  fully unordered piece order, each flipped piece carrying its own portion of the destination image and clearing its local puzzle
+  outline once landed. Useful existing architecture: canonical transition registry, per-display transition gating, retained Quick
+  presentation ownership, current transition timing/identity plumbing, and any reusable shared 3D card-flip mesh/math that does
+  **not** drag in old Block Puzzle behavior. New useful architecture: a shared transition-piece layout generator plus bounded
+  per-piece scheduling/order-planning helper so future tiled/card effects can reuse the same geometry/order substrate. Leave the
+  legacy Block Puzzle Flip installed for now; remove it only after this clean-room successor is accepted and the operator chooses
+  retirement timing.
+- [ ] **T2. Volumetric Dissolve.** Use the mock as the target feeling: the outgoing image disintegrates into colored particles,
+  mist and shallow volume while the incoming image resolves behind/through it. Useful existing architecture: Scene3D lifecycle,
+  shared uniform/state ownership, retained presentation control, and any particle infrastructure admitted by the shared 3D
+  primitives work. New useful architecture: bounded reduced-resolution smoke/fog volume support, color-carrying image emitters,
+  depth-aware compositing/OIT where justified, and reusable transition-side particle emission masks.
+- [ ] **T3. VHS Distortion.** Treat this as a deliberate stylized transition, not a joke/glitch throwaway: horizontal tearing,
+  scanline interference, chroma drift, dropout bands and unstable tracking carrying the source toward the destination. Useful
+  existing architecture: fullscreen material/post passes, transition registry/timing, retained Quick presentation authority and
+  the current transition harness/capture path. New useful architecture: a reusable distortion/noise primitive set (scanline,
+  dropout, luma wobble, chroma offset, line displacement) so VHS can ship cleanly without becoming a bespoke hard-coded pile.
+- [ ] **T4. Edge Bloom Reveal.** Promote the grouped mock's second concept into the first-wave batch: strong edges from the
+  destination image appear as luminous structural lines over the source, thicken, and fill into full image regions. Useful
+  existing architecture: fullscreen shader passes, existing mask/reveal sequencing, transition registry and capture harness. New
+  useful architecture: a shared edge/gradient-mask generation pass and controllable region-growth/fill helper that later reveal
+  transitions can reuse.
+- [ ] **T5. Liquid Lens.** The destination image is seen first through a moving/refractive lens that expands and distorts until
+  it consumes the frame. Useful existing architecture: current transition timing/identity plumbing, fullscreen distortion passes,
+  retained presentation authority. New useful architecture: shared restrained refraction/thickness/dispersion helpers from the
+  3D primitives program, kept bounded and consumer-owned.
+- [ ] **T6. Membrane Turnover.** A taut glossy sheet deforms, stretches and turns through itself to reveal the destination
+  image. Useful existing architecture: any shared mesh deformation/card surface math admitted by Scene3D primitives plus current
+  transition sequencing. New useful architecture: a reusable deformable-sheet or low-resolution transition mesh substrate rather
+  than a one-off transition-only simulation.
+- [ ] **T7. Surface Tension Merge.** Source and destination behave like two fluids separated by a moving meniscus boundary;
+  rounded pools swell, merge and take territory. Useful existing architecture: fullscreen passes, mask/reveal sequencing,
+  transition registry. New useful architecture: a shared organic-boundary/meniscus field helper that can also serve capillary or
+  liquid-family effects.
+- [ ] **T8. Chromatic Shear.** A clean prismatic transition where the source image splits into offset spectral layers and broad
+  shear slices before reconverging as the destination. Useful existing architecture: fullscreen post/material passes and timing
+  plumbing. New useful architecture: shared chromatic-channel displacement/spectral-slice helpers so the effect stays elegant
+  rather than duplicating ad-hoc RGB math.
+- [ ] **T9. Depth Card Cascade.** The outgoing image separates into a small number of large shallow-Z cards that tilt/slide past
+  the viewer, exposing the destination behind them. Useful existing architecture: retained presentation authority, Scene3D
+  lifecycle, per-display gating, and any shared flip/card primitive introduced by Jigsaw Piece Flip. New useful architecture: a
+  reusable card/depth-layer primitive with stable ordering, shadows only where justified, and transition-owned parallax rather
+  than bespoke transition-local geometry.
+- [ ] **T10. Capillary Bloom.** The destination image spreads through the source like dye moving through wet fibres: branching
+  tendrils, joins and bloom fronts, but the final destination image resolves cleanly. Useful existing architecture: fullscreen
+  material passes, reveal/mask sequencing. New useful architecture: a shared organic propagation field / capillary-front helper,
+  preferably compatible with Surface Tension Merge rather than an isolated solver.
+
+Implementation order inside this tranche is deliberate: **Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom
+Reveal first; then Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth Card Cascade and Capillary
+Bloom.**
+
+---
+
+## 9. Shared 3D primitives and next consumers
 
 Resume only after the immediate Bubble/shared-runtime/lifecycle work above is under control.
 

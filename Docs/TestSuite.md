@@ -324,6 +324,8 @@ Permanent shared-mode work must preserve source freshness, authored logical cade
 
 **Bubble is the strongest protected canary.** Idle traces are insufficient for any production change that touches Bubble cadence, simulation, payload/coalescing, reactive uniforms, event admission, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion or presentation timing. Such a change requires an explicit active-music installed lane plus operator feel. Never retune Bubble merely to satisfy a benchmark or stale golden.
 
+For offline real-music measurement, the canonical operator-authored schema-2 corpus is local under `logs/visualizer_recordings/`: `balanced.jsonl`, `heavy1.jsonl`, `quiet_intro.jsonl`, and `quiet_intro2.jsonl`. `tools.visualizer_replay.record.recorded_clips()` owns current-corpus selection and deliberately ignores archived/derived `*_vN` and `*_noevents` takes. These recordings complement rather than replace committed fixtures/goldens: use the latter for deterministic regression bars and the former when the acceptance contract explicitly requires real-scale musical dynamics.
+
 Voxel Sphere remains experimental while using the current low-level scene3d substrate promotion. Its behavioural/state contract remains private and golden-protected while that migration is incomplete. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.

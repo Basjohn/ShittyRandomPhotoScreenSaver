@@ -116,8 +116,11 @@ Focused synthetic negative control in `tests/test_bubble_render_judder.py`:
 - ON output: `[4, 5, 7, 6.4, 6.4, 7.4]` px.
 
 The replay analyser now also counts tiny-radius alternating runs and dot/outline-boundary runs, and can run an exact OFF/ON
-comparison in one process. Run the committed broadband fixture first, then the operator's four recordings. The candidate is
-not accepted merely because the synthetic contract changes output; the real replay numbers and physical feel still decide it.
+comparison in one process. Run the committed broadband fixture first, then the operator's four canonical local recordings:
+`balanced.jsonl`, `heavy1.jsonl`, `quiet_intro.jsonl` and `quiet_intro2.jsonl` in `logs/visualizer_recordings/`. Archived/derived
+`*_vN` and `*_noevents` takes remain useful forensic references but are excluded by `recorded_clips()` and are not extra
+acceptance-corpus members. The candidate is not accepted merely because the synthetic contract changes output; the real replay
+numbers and physical feel still decide it.
 
 Commands from repo root:
 
