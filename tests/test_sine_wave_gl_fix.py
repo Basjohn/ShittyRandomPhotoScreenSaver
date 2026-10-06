@@ -1,8 +1,8 @@
 """Regression tests for sine_wave visualizer mode GL overlay fix.
 
 Verifies that:
-- sine_wave is accepted by the GL overlay's vis_mode validation
-- The mode cycle order includes Spectrum, Oscilloscope, Sine Wave, and Bubble
+- sine_wave remains a registered worker-backed visualizer mode
+- registry and worker identity agree for sine_wave
 - Card height growth labels use 'x' multiplier format (not '%')
 """
 from __future__ import annotations
@@ -11,45 +11,12 @@ import pytest
 from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 
 class TestSineWaveGLOverlayFix:
-    def test_sine_wave_in_allowed_modes(self):
-        """sine_wave must be in the GL overlay's allowed mode set."""
-        allowed = ('spectrum', 'oscilloscope', 'sine_wave', 'bubble')
-        assert 'sine_wave' in allowed
-
-    def test_sine_wave_not_rejected_to_spectrum(self):
-        """Simulate the GL overlay's mode validation — sine_wave should NOT fall back."""
-        vis_mode = 'sine_wave'
-        result = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'sine_wave', 'bubble'
-        ) else 'spectrum'
-        assert result == 'sine_wave', f"sine_wave was rejected, got: {result}"
-
-    def test_mode_cycle_order(self):
-        """Verify the supported visualizer cycle order."""
+    def test_sine_wave_is_registered_and_worker_backed(self):
+        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from widgets.spotify_visualizer.audio_worker import VisualizerMode
-        _CYCLE_MODES = [
-            VisualizerMode.SPECTRUM,
-            VisualizerMode.OSCILLOSCOPE,
-            VisualizerMode.SINE_WAVE,
-            VisualizerMode.BUBBLE,
-        ]
-        assert _CYCLE_MODES[0] == VisualizerMode.SPECTRUM
-        assert _CYCLE_MODES[1] == VisualizerMode.OSCILLOSCOPE
-        assert _CYCLE_MODES[2] == VisualizerMode.SINE_WAVE
-        assert _CYCLE_MODES[3] == VisualizerMode.BUBBLE
 
-    def test_mode_cycle_wraps(self):
-        """Cycling from Bubble should wrap back to Spectrum."""
-        from widgets.spotify_visualizer.audio_worker import VisualizerMode
-        _CYCLE_MODES = [
-            VisualizerMode.SPECTRUM,
-            VisualizerMode.OSCILLOSCOPE,
-            VisualizerMode.SINE_WAVE,
-            VisualizerMode.BUBBLE,
-        ]
-        idx = _CYCLE_MODES.index(VisualizerMode.BUBBLE)
-        next_mode = _CYCLE_MODES[(idx + 1) % len(_CYCLE_MODES)]
-        assert next_mode == VisualizerMode.SPECTRUM
+        assert "sine_wave" in VISUALIZER_MODE_IDS
+        assert VisualizerMode.SINE_WAVE.name.lower() == "sine_wave"
 
     def test_sine_wave_shader_registered(self):
         """sine_wave.frag must be in the shader registry."""

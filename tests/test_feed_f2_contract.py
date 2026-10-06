@@ -16,29 +16,26 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_feeds_family_is_bounded_and_dormant_by_default():
+def test_feeds_family_catalog_and_defaults_are_authority_owned():
     from core.feeds.config import FEED_WIDGET_IDS
 
     family = get_widget_family_descriptor("feeds")
     assert family is not None
-    assert family.member_widget_ids == FEED_WIDGET_IDS == (
-        "feeds_custom_1",
-        "feeds_custom_2",
-        "feeds_custom_3",
-        "feeds_custom_4",
-        "feeds_news_world",
-        "feeds_news_us",
-        "feeds_news_politics",
-        "feeds_news_gaming",
-        "feeds_news_tech",
-        "feeds_news_anime",
-    )
-    assert require_canonical_default("widgets.family_activation.feeds") is False
+    assert family.member_widget_ids == FEED_WIDGET_IDS
+    assert FEED_WIDGET_IDS and len(set(FEED_WIDGET_IDS)) == len(FEED_WIDGET_IDS)
+
+    # Values are mutable product defaults. The durability contract here is that
+    # they exist at the canonical authority with the expected schema, not that
+    # today's authored booleans/minutes can never change.
+    assert isinstance(require_canonical_default("widgets.family_activation.feeds"), bool)
     for widget_id in FEED_WIDGET_IDS:
-        assert require_canonical_default(f"widgets.{widget_id}.enabled") is False
+        assert isinstance(require_canonical_default(f"widgets.{widget_id}.enabled"), bool)
         # One family cadence (widgets.feeds), never a per-card refresh period.
         assert "refresh_minutes" not in require_canonical_default(f"widgets.{widget_id}")
-    assert require_canonical_default("widgets.feeds") == {"refresh_minutes": 15}
+    family_defaults = require_canonical_default("widgets.feeds")
+    assert set(family_defaults) == {"refresh_minutes"}
+    assert isinstance(family_defaults["refresh_minutes"], int)
+    assert family_defaults["refresh_minutes"] > 0
 
 
 def test_every_feed_card_runs_the_same_runtime_descriptor():
@@ -75,11 +72,14 @@ def test_feeds_settings_section_is_lazy_descriptor_owned_for_every_feed_card():
     assert descriptor.persisted_widget_keys == ("feeds",) + FEED_WIDGET_IDS
 
 
-def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
-    for index in range(1, 5):
-        assert require_canonical_default(
-            f"widgets.feeds_custom_{index}.show_subtitle"
-        ) is True
+def test_feed_subtitle_toggle_has_canonical_boolean_default_for_every_custom_slot():
+    from core.feeds.config import FEED_WIDGET_IDS
+
+    for widget_id in (item for item in FEED_WIDGET_IDS if item.startswith("feeds_custom_")):
+        assert isinstance(
+            require_canonical_default(f"widgets.{widget_id}.show_subtitle"),
+            bool,
+        )
     settings = _text("ui/tabs/widgets_tab_feeds.py")
     assert 'QCheckBox("Show Feed Subtitle")' in settings
     assert '"show_subtitle": bool(_control(tab, widget_id, "show_subtitle").isChecked())' in settings

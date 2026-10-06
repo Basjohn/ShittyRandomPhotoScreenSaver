@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
     get_visualizer_presentation_policy,
 )
 from rendering.quick.visualizer.implementations.sine_wave import (
@@ -363,16 +364,7 @@ def test_quick_sine_registry_is_lazy_and_resource_dormant(monkeypatch) -> None:
 
     monkeypatch.setattr(implementation_registry, "import_module", _tracked_import)
     descriptors = implementation_registry.iter_quick_visualizer_implementations()
-    assert tuple(descriptor.mode_id for descriptor in descriptors) == (
-        "spectrum",
-        "oscilloscope",
-        "sine_wave",
-        "bubble",
-        "devcurve",
-        "sphere",
-        "extruded_spectrum",
-        "shockwave_grid",
-    )
+    assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
     assert imported == []
 
     renderer = implementation_registry.resolve_quick_visualizer_renderer(

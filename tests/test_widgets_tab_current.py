@@ -1237,9 +1237,10 @@ class TestWidgetsTab:
                 else:
                     assert saved_shadows[key] == expected
             assert "offset" not in saved_shadows
-            assert widgets_cfg["global"]["card_border_width_px"] == 4
-            assert widgets_cfg["global"]["child_collision_enabled"] is False
-            assert widgets_cfg["global"]["stacking_enabled"] is True
+            for key in ("card_border_width_px", "child_collision_enabled", "stacking_enabled"):
+                assert widgets_cfg["global"][key] == require_canonical_default(
+                    f"widgets.global.{key}"
+                )
         finally:
             tab.deleteLater()
 
@@ -1425,23 +1426,24 @@ def test_spinbox_stylesheet_attached(qt_app, settings_manager):
 
 
 
-def test_widget_bucket_toggles_default_closed(qt_app, settings_manager):
-    """Non-Gmail widget buckets should start collapsed on a fresh profile."""
+def test_widget_bucket_toggles_follow_canonical_bucket_state(qt_app, settings_manager):
+    """Fresh bucket UI follows the canonical authored state map, whatever its values."""
     tab = WidgetsTab(settings_manager)
     try:
+        canonical = require_canonical_default("ui.widget_bucket_states")
         checks = (
-            (tab._clock_controls_container, "Time Content"),
-            (tab._weather_controls_container, "Location & Layout"),
-            (tab._media_controls_container, "Provider & Layout"),
-            (tab._reddit_controls_container, "Reddit 1"),
-            (tab._reddit_controls_container, "Link Behavior"),
-            (tab._reddit_controls_container, "Shared Layout"),
-            (tab._reddit_controls_container, "Shared Appearance"),
+            (tab._clock_controls_container, "Time Content", "clock:time"),
+            (tab._weather_controls_container, "Location & Layout", "weather:source_layout"),
+            (tab._media_controls_container, "Provider & Layout", "media:provider_layout"),
+            (tab._reddit_controls_container, "Reddit 1", "reddit:reddit1"),
+            (tab._reddit_controls_container, "Link Behavior", "reddit:interaction"),
+            (tab._reddit_controls_container, "Shared Layout", "reddit:shared_layout"),
+            (tab._reddit_controls_container, "Shared Appearance", "reddit:shared_appearance"),
         )
-        for container, text in checks:
+        for container, text, state_key in checks:
             toggle = _find_toggle(container, text)
             assert toggle is not None, f"Missing bucket toggle: {text}"
-            assert toggle.isChecked() is False
+            assert toggle.isChecked() is bool(canonical[state_key])
     finally:
         tab.deleteLater()
 

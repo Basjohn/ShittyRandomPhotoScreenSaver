@@ -1,6 +1,6 @@
-"""Owner-shaped all-five destination-chain proof (H Finding F).
+"""Owner-shaped carded-mode destination-chain proof (H Finding F).
 
-From resolved canonical settings, prove every visualizer mode can:
+From resolved canonical settings, prove every carded visualizer mode can:
   configure (logical + presentation, via the neutral authorities)
   -> bind the render source
   -> advance the authored logical step against controller-owned state
@@ -19,6 +19,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.settings.defaults import get_default_settings
+from core.settings.visualizer_mode_registry import (
+    VisualizerShellPolicy,
+    iter_visualizer_mode_descriptors,
+)
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
@@ -107,29 +112,20 @@ class _Engine:
         pass
 
 
-# Resolved canonical settings per mode: authored-logical + presentation styling.
-_MODE_CASES = {
-    "spectrum": (
-        {"spectrum_visual_smoothing": 0.3, "spectrum_ghost_decay": 0.5},
-        {"spectrum_glow_color": [0, 120, 255, 255], "bar_fill_color": [10, 20, 30, 255]},
-    ),
-    "oscilloscope": (
-        {"osc_speed": 0.5, "osc_line_amplitude": 4.0, "osc_ghost_decay": 0.6},
-        {"osc_glow_color": [200, 50, 50, 255], "osc_line_color": [1, 2, 3, 255]},
-    ),
-    "sine_wave": (
-        {"sine_speed": 0.6, "sine_width_reaction": 0.4, "sine_wave_travel": 1},
-        {"sine_glow_color": [50, 220, 120, 255], "sine_line_color": [9, 8, 7, 255]},
-    ),
-    "bubble": (
-        {"bubble_big_count": 10, "bubble_stream_direction": "up"},
-        {"bubble_gradient_light": [210, 170, 120, 255], "bubble_outline_color": [255, 255, 255, 230]},
-    ),
-    "devcurve": (
-        {"devcurve_base_level": 0.62, "devcurve_motion_power": 1.3},
-        {},
-    ),
-}
+# Family membership is registry/capability-owned. The test needs any complete
+# valid settings payload, so derive that payload from canonical defaults rather
+# than copying today's authored mode values into a second authority.
+_MODE_IDS = tuple(
+    descriptor.mode_id
+    for descriptor in iter_visualizer_mode_descriptors()
+    if descriptor.presentation_policy.shell_policy is VisualizerShellPolicy.CARD
+)
+
+
+def _mode_config(mode: str) -> dict:
+    config = dict(get_default_settings()["widgets"]["spotify_visualizer"])
+    config["mode"] = mode
+    return config
 
 
 def _make_runtime(qt_app, generation: int):
@@ -161,10 +157,12 @@ def _quiet(monkeypatch) -> None:
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("mode", list(_MODE_CASES.keys()))
+@pytest.mark.parametrize("mode", _MODE_IDS)
 def test_owner_publishes_complete_snapshot_for_every_mode(qt_app, monkeypatch, mode) -> None:
     _quiet(monkeypatch)
-    logical_kwargs, presentation_kwargs = _MODE_CASES[mode]
+    config = _mode_config(mode)
+    logical_kwargs = config
+    presentation_kwargs = config
     runtime, factory = _make_runtime(qt_app, 50)
     try:
         owner = _make_owner(

@@ -1570,6 +1570,7 @@ class TestVisualizerModeBinding:
         assert tab.rainbow_updates == 1
 
     def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
+        from core.settings.default_contract import require_canonical_default
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_rainbow_state,
         )
@@ -1607,8 +1608,16 @@ class TestVisualizerModeBinding:
         assert payload["bubble_rainbow_speed"] == pytest.approx(0.63)
         assert payload["spectrum_rainbow_enabled"] is False
         assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
-        assert payload["oscilloscope_rainbow_enabled"] is False
-        assert payload["oscilloscope_rainbow_speed"] == pytest.approx(0.50)
+        assert payload["oscilloscope_rainbow_enabled"] is bool(
+            require_canonical_default(
+                "widgets.spotify_visualizer.oscilloscope_rainbow_enabled"
+            )
+        )
+        assert payload["oscilloscope_rainbow_speed"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.oscilloscope_rainbow_speed"
+            )
+        )
 
     def test_rainbow_controls_are_hidden_outside_custom_preset(self):
         from ui.tabs.widgets_tab import WidgetsTab

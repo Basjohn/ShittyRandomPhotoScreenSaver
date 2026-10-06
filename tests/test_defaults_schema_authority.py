@@ -5,6 +5,7 @@ from core.settings.defaults_snapshot_builder import build_defaults_snapshot, bui
 import ast
 import json
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -152,9 +153,9 @@ def test_fresh_profile_widget_sections_are_well_formed_and_architecture_safe() -
     visualizer = widgets["spotify_visualizer"]
     mode_activation = visualizer["mode_activation"]
     assert isinstance(mode_activation, dict)
-    assert {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"}.issubset(
-        mode_activation
-    )
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+
+    assert set(mode_activation) == set(VISUALIZER_MODE_IDS)
     assert all(isinstance(flag, bool) for flag in mode_activation.values())
     assert "enabled_modes" not in visualizer
 
@@ -276,14 +277,20 @@ def test_curated_visualizer_preset_assets_remain_separate_authored_inputs() -> N
         # A shipped mode needs authored content, but count/slot numbering are not
         # defaults authority: users may add/delete presets and sparse slots are valid.
         assert files, mode
-        authored_slots: set[int] = set()
+        filename_slots: set[int] = set()
         for path in files:
             payload = json.loads(path.read_text(encoding="utf-8"))
             snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
             assert snapshot["mode"] == mode
-            slot = int(payload["preset_index"])
-            assert slot not in authored_slots, (mode, slot)
-            authored_slots.add(slot)
+            # Filename slot is the catalogue authority. The payload's legacy
+            # preset_index may lag an operator rename/reorder and the loader
+            # deliberately repairs/ignores that mismatch. Do not turn today's
+            # payload metadata into a second slot authority here.
+            match = re.match(r"preset_(\d+)", path.name, flags=re.IGNORECASE)
+            assert match is not None, path
+            slot = int(match.group(1)) - 1
+            assert slot >= 0 and slot not in filename_slots, (mode, slot)
+            filename_slots.add(slot)
             # Presets are authored overlays, not copies of the whole defaults
             # authority. They must retain substantive mode-owned content.
             assert len(snapshot) > 5

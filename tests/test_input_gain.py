@@ -122,11 +122,11 @@ class TestInputGainModelRoundTrip:
 
     def test_defaults_follow_canonical_per_mode_authority(self):
         from core.settings.default_contract import require_canonical_default
-        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.models import PER_MODE_TECHNICAL_MODES, SpotifyVisualizerSettings
         from core.settings.visualizer_mode_registry import get_technical_profile_mode
 
         model = SpotifyVisualizerSettings()
-        for mode in ("spectrum", "bubble", "sine_wave", "oscilloscope", "devcurve"):
+        for mode in PER_MODE_TECHNICAL_MODES:
             key = f"{mode}_input_gain"
             assert getattr(model, key) == pytest.approx(
                 require_canonical_default(f"widgets.spotify_visualizer.{key}")

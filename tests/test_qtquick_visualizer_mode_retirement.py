@@ -148,12 +148,20 @@ def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkey
     renderers: dict[str, _FakeRenderer] = {}
     _install_host_render_stubs(monkeypatch, host, renderers)
 
-    modes = ("spectrum", "oscilloscope", "sine_wave", "bubble", "sphere")
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+
+    # Registry-derived so every newly registered mode automatically joins the
+    # repeated-switch retirement torture test. The >=100-switch stress target is
+    # fixture-owned; the exact total/final owner derive from registry size/order.
+    modes = tuple(VISUALIZER_MODE_IDS)
+    minimum_completed_switches = 100
+    cycles = max(1, (minimum_completed_switches + len(modes) - 1) // len(modes))
+    expected_completed = cycles * len(modes)
     quad_vao = host._quad_vao
     completed = 0
     previous_mode = None
     previous_renderer = None
-    for cycle in range(22):  # 22 * 5 = 110 completed mode changes
+    for _cycle in range(cycles):
         for mode in modes:
             assert _render_mode(host, mode) == mode
             completed += 1
@@ -181,15 +189,16 @@ def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkey
             assert after.mode_boundary_seq == snap.mode_boundary_seq
             assert after.renderer_resolve_count == snap.renderer_resolve_count
 
-    assert completed == 110
+    assert completed == expected_completed
+    assert completed >= minimum_completed_switches
     lifecycle = host.lifecycle_snapshot()
-    # 4: release/resolve counts track real boundaries, not rendered frames.
-    # 110 switches: first mode of the whole run has no predecessor to retire.
-    assert lifecycle.mode_boundary_seq == 110
-    assert lifecycle.renderer_resolve_count == 110
-    assert lifecycle.inactive_release_successes == 109
+    # 4: release/resolve counts track real boundaries, not rendered frames. The
+    # first mode of the whole run has no predecessor to retire.
+    assert lifecycle.mode_boundary_seq == expected_completed
+    assert lifecycle.renderer_resolve_count == expected_completed
+    assert lifecycle.inactive_release_successes == expected_completed - 1
     assert lifecycle.inactive_release_failures == 0
-    assert lifecycle.resolved_mode_ids == ("sphere",)
+    assert lifecycle.resolved_mode_ids == (modes[-1],)
     assert lifecycle.quad_vao_owned is True
 
     # 8: full host release leaves no implementations and no host quad resources.

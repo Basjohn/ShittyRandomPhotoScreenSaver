@@ -1,35 +1,24 @@
 """V7 top-level Visualizers tab lazy-body and retirement contracts."""
 from __future__ import annotations
 
-import ui.tabs.media.spectrum_builder as spectrum_builder
-import ui.tabs.media.oscilloscope_builder as oscilloscope_builder
-import ui.tabs.media.sine_wave_builder as sine_wave_builder
-import ui.tabs.media.bubble_builder as bubble_builder
-import ui.tabs.media.devcurve_builder as devcurve_builder
-import ui.tabs.media.sphere_builder as sphere_builder
+import importlib
 
-from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+from core.settings.visualizer_mode_registry import (
+    build_visualizer_mode_activation,
+    iter_visualizer_mode_descriptors,
+)
 from core.settings.visualizer_presets import get_custom_preset_index
 from rendering.widget_descriptors import get_widgets_tab_settings_section_descriptors
 from ui.tabs.visualizers_tab import VisualizersTab
 
 
 _BUILDERS = {
-    "spectrum": (spectrum_builder, "build_spectrum_ui"),
-    "oscilloscope": (oscilloscope_builder, "build_oscilloscope_ui"),
-    "sine_wave": (sine_wave_builder, "build_sine_wave_ui"),
-    "bubble": (bubble_builder, "build_bubble_ui"),
-    "devcurve": (devcurve_builder, "build_devcurve_ui"),
-    "sphere": (sphere_builder, "build_sphere_ui"),
-}
-
-_CONTAINER_ATTR = {
-    "spectrum": "_spectrum_settings_container",
-    "oscilloscope": "_osc_settings_container",
-    "sine_wave": "_sine_wave_settings_container",
-    "bubble": "_bubble_settings_container",
-    "devcurve": "_devcurve_settings_container",
-    "sphere": "_sphere_settings_container",
+    descriptor.mode_id: (
+        importlib.import_module(descriptor.settings_builder_module),
+        descriptor.settings_builder_factory,
+    )
+    for descriptor in iter_visualizer_mode_descriptors()
+    if descriptor.settings_builder_module and descriptor.settings_builder_factory
 }
 
 

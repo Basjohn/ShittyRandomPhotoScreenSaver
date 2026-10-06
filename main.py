@@ -7,6 +7,7 @@ import sys
 import os
 import shutil
 import ctypes
+import math
 import time
 from pathlib import Path
 from enum import Enum
@@ -32,7 +33,7 @@ from rendering.quick.bootstrap import (
 configure_quick_environment()
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
@@ -128,6 +129,98 @@ def _restore_windows_timer_resolution(resolution_ms: int = 1) -> None:
     except Exception as e:
         logger.debug("[MAIN] Exception suppressed: %s", e)
 
+
+_EXIT_AFTER_PREFIX = "--exit-after"
+_QT_TIMER_MAX_MS = 2_147_483_647
+
+
+def _parse_exit_after_seconds(argv: list[str] | tuple[str, ...]) -> float | None:
+    """Return the RUN-only self-exit delay requested on the CLI.
+
+    Accepted forms are ``--exit-after 15`` and ``--exit-after=15``. The
+    countdown is armed only after the RUN runtime has started successfully.
+    """
+    value: float | None = None
+    i = 1
+    while i < len(argv):
+        token = str(argv[i]).strip()
+        raw: str | None = None
+        if token == _EXIT_AFTER_PREFIX:
+            if i + 1 >= len(argv):
+                raise ValueError("--exit-after requires a duration in seconds")
+            raw = str(argv[i + 1]).strip()
+            i += 1
+        elif token.startswith(_EXIT_AFTER_PREFIX + "="):
+            raw = token.split("=", 1)[1].strip()
+
+        if raw is not None:
+            if value is not None:
+                raise ValueError("--exit-after may be supplied only once")
+            try:
+                seconds = float(raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("--exit-after requires a numeric duration in seconds") from exc
+            if not math.isfinite(seconds) or seconds <= 0.0:
+                raise ValueError("--exit-after must be a finite duration greater than zero")
+            milliseconds = int(round(seconds * 1000.0))
+            if milliseconds < 1 or milliseconds > _QT_TIMER_MAX_MS:
+                raise ValueError(
+                    f"--exit-after must resolve to 1..{_QT_TIMER_MAX_MS} milliseconds"
+                )
+            value = seconds
+        i += 1
+    return value
+
+
+def _args_without_exit_after(argv: list[str] | tuple[str, ...]) -> list[str]:
+    """Remove the value-taking self-exit switch before Windows mode parsing."""
+    stripped: list[str] = []
+    i = 0
+    while i < len(argv):
+        token = str(argv[i])
+        if token == _EXIT_AFTER_PREFIX:
+            i += 2
+            continue
+        if token.startswith(_EXIT_AFTER_PREFIX + "="):
+            i += 1
+            continue
+        stripped.append(token)
+        i += 1
+    return stripped
+
+
+def _arm_cli_exit_after(engine, seconds: float | None) -> bool:
+    """Arm one GUI-thread terminal shutdown request for an admitted RUN test.
+
+    This is intentionally a Qt one-shot rather than ThreadManager work: the
+    callback's only authority is the existing GUI-thread terminal
+    ``ScreensaverEngine.stop()`` path. No timer exists without the CLI switch.
+    """
+    if seconds is None:
+        return False
+    delay_ms = int(round(float(seconds) * 1000.0))
+
+    def _request_terminal_shutdown() -> None:
+        logger.info(
+            "[AUTO_EXIT] Deadline reached after %.3f s; requesting normal terminal shutdown",
+            float(seconds),
+        )
+        try:
+            engine.stop(reason="cli_exit_after")
+        except Exception:
+            logger.exception("[AUTO_EXIT] Engine terminal stop failed")
+            from engine.runtime_destruction import request_application_quit
+
+            request_application_quit("cli_exit_after_stop_failed")
+
+    QTimer.singleShot(delay_ms, _request_terminal_shutdown)
+    logger.info(
+        "[AUTO_EXIT] Armed normal terminal shutdown after %.3f s",
+        float(seconds),
+    )
+    return True
+
+
 class ScreensaverMode(Enum):
     """Screensaver execution modes based on Windows arguments."""
     RUN = "run"          # /s - Run screensaver
@@ -155,7 +248,9 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --perf - Enable performance logging
     - --usage - Enable low-cadence CPU/GPU/memory/thread logging
     - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
-    - --frame-trace - Explicit binary publication->Quick->draw trace (not diagnostic-all)
+    - --frame-trace - Explicit low-observer binary publication->Quick->draw trace
+    - --gui-stall-stacks - With --frame-trace, capture all Python stacks on steady-state GUI stalls
+    - --exit-after <seconds> - RUN-only one-shot normal terminal shutdown for bounded tests
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -172,7 +267,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Filter out debug/viz/dev-gate flags
     _filtered = {
         "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam", "--feeds",
-        "--noupdates", "--frame-trace",
+        "--noupdates", "--frame-trace", "--gui-stall-stacks",
         "--fresh", "--devsteam",
     }
     # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
@@ -182,9 +277,10 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     from core.diagnostics.experiment_flags import experiment_flag_tokens
 
     _experiment_tokens = set(experiment_flag_tokens(sys.argv))
+    _mode_argv = _args_without_exit_after(sys.argv)
     args = [
         arg
-        for arg in sys.argv
+        for arg in _mode_argv
         if arg not in _filtered and arg not in _experiment_tokens
     ]
 
@@ -445,6 +541,7 @@ def run_screensaver(
     *,
     usage_enabled: bool = False,
     handle_attribution_enabled: bool = False,
+    exit_after_seconds: float | None = None,
 ) -> int:
     """
     Run the screensaver.
@@ -453,6 +550,8 @@ def run_screensaver(
         app: Qt application instance
         usage_enabled: Start opt-in low-cadence resource telemetry.
         handle_attribution_enabled: Admit the heavyweight Windows handle sidecar.
+        exit_after_seconds: Optional RUN-only test deadline. When set, arm one
+            Qt one-shot that requests the normal terminal engine stop path.
     
     Returns:
         Exit code
@@ -678,6 +777,7 @@ def run_screensaver(
         from PySide6.QtCore import QTimer as _GCFreezeTimer
 
         _GCFreezeTimer.singleShot(45_000, gc_policy.freeze_stable_generation)
+        _arm_cli_exit_after(engine, exit_after_seconds)
         try:
             return app.exec()
         finally:
@@ -1000,14 +1100,23 @@ def main(*, entrypoint: str = "main"):
 
         if mode == ScreensaverMode.RUN:
             logger.info("Starting screensaver in RUN mode")
-            # Request 1ms timer resolution for smooth 60fps+ animations
-            timer_res_set = _set_windows_timer_resolution(1)
-            if timer_res_set:
-                logger.info("Windows timer resolution set to 1ms for smooth animations")
-            else:
-                logger.debug("Could not set Windows timer resolution (non-Windows or failed)")
+            try:
+                exit_after_seconds = _parse_exit_after_seconds(sys.argv)
+            except ValueError as exc:
+                logger.error("[AUTO_EXIT] Invalid CLI: %s", exc)
+                exit_code = 2
+                exit_after_seconds = None
+            if exit_code == 2:
+                logger.error("RUN startup aborted because --exit-after is invalid")
+            # Request 1ms timer resolution for smooth animations only when RUN is admitted.
+            if exit_code != 2:
+                timer_res_set = _set_windows_timer_resolution(1)
+                if timer_res_set:
+                    logger.info("Windows timer resolution set to 1ms for smooth animations")
+                else:
+                    logger.debug("Could not set Windows timer resolution (non-Windows or failed)")
             profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
-            if profile_flag in ("1", "true", "on", "yes"):
+            if exit_code != 2 and profile_flag in ("1", "true", "on", "yes"):
                 import cProfile
 
                 profiler = cProfile.Profile()
@@ -1016,6 +1125,7 @@ def main(*, entrypoint: str = "main"):
                     app,
                     usage_enabled=usage_mode,
                     handle_attribution_enabled=handle_attribution_mode,
+                    exit_after_seconds=exit_after_seconds,
                 )
                 profiler.disable()
                 try:
@@ -1024,11 +1134,12 @@ def main(*, entrypoint: str = "main"):
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
                 except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
-            else:
+            elif exit_code != 2:
                 exit_code = run_screensaver(
                     app,
                     usage_enabled=usage_mode,
                     handle_attribution_enabled=handle_attribution_mode,
+                    exit_after_seconds=exit_after_seconds,
                 )
             
         elif mode == ScreensaverMode.PREVIEW:

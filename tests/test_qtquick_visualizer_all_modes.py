@@ -65,6 +65,9 @@ from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame, Shock
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 
 
+# EXACT-VALUE INVARIANT: this is an exhaustive fixture-constructor map, not a
+# product catalog copy. A newly registered mode must supply its concrete render-state
+# fixture here so the all-mode lifecycle test cannot silently skip its unique payload.
 _MODE_STATES = {
     "spectrum": SpectrumFrame,
     "oscilloscope": OscilloscopeFrame,

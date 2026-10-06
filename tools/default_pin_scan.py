@@ -1,8 +1,9 @@
 """Flag test asserts that pin a canonical default's current value: python tools/default_pin_scan.py
 
-Heuristic for Current_Plan N2 (tests must not depend on values the operator edits): an assert that names a
-canonical settings key and compares against a literal equal to that key's current default. Expect false
-positives (a test that sets a value and checks it round-trips); review each file before changing it.
+Review-only companion to ``Docs/Guides/Test_Durability.md``: an assert that names a canonical settings
+leaf and compares against a literal equal to one of that leaf name's current authored defaults. Expect false
+positives (for example a fixture that sets a value and checks it round-trips); review each hit before changing it.
+The blocking high-confidence bar is ``tools/test_durability_audit.py``.
 """
 import ast
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.settings.default_settings import DEFAULT_SETTINGS  # noqa: E402
+from core.settings.default_contract import get_raw_default_settings  # noqa: E402
 
 
 def flatten(node, out):
@@ -23,7 +24,7 @@ def flatten(node, out):
     return out
 
 
-defaults = flatten(DEFAULT_SETTINGS, {})
+defaults = flatten(get_raw_default_settings(), {})
 hits = []
 for path in sorted((ROOT / "tests").glob("test_*.py")):
     try:

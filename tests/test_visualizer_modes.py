@@ -35,12 +35,17 @@ class TestVisualizerModeEnum:
         from widgets.spotify_visualizer.audio_worker import VisualizerMode
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         modes = list(VisualizerMode)
-        assert len(modes) == 5
-        assert modes[0] == VisualizerMode.SPECTRUM
-        # Modes that borrow another mode's technical profile have no worker mode of their own.
+        # Worker-owned modes are derived from the registry. Modes that borrow another
+        # mode's technical profile intentionally have no worker enum of their own.
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-        borrowing = {m for m in VISUALIZER_MODE_IDS if get_visualizer_mode_descriptor(m).technical_profile_mode}
-        assert {m.name.lower() for m in modes} == set(VISUALIZER_MODE_IDS) - borrowing
+
+        expected_worker_ids = tuple(
+            mode_id
+            for mode_id in VISUALIZER_MODE_IDS
+            if not get_visualizer_mode_descriptor(mode_id).technical_profile_mode
+        )
+        assert tuple(mode.name.lower() for mode in modes) == expected_worker_ids
+        assert modes[0] == VisualizerMode.SPECTRUM
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""

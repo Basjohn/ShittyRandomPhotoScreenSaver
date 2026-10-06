@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
     get_visualizer_presentation_policy,
 )
 from widgets.spotify_visualizer import mode_capabilities
@@ -599,14 +600,7 @@ def test_all_registered_modes_claim_viewport_resize_capability() -> None:
     # G4 deterministic reflow is complete for every mode, including Bubble's
     # baseline-relative logical domain, so every registered mode is
     # viewport-resize-capable, including frameless Sphere.
-    for mode_id in (
-        "spectrum",
-        "oscilloscope",
-        "sine_wave",
-        "devcurve",
-        "bubble",
-        "sphere",
-    ):
+    for mode_id in VISUALIZER_MODE_IDS:
         assert get_visualizer_presentation_policy(mode_id).viewport_resize_capable
 
 
@@ -617,16 +611,7 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     )
 
     descriptors = iter_quick_visualizer_implementations()
-    assert tuple(descriptor.mode_id for descriptor in descriptors) == (
-        "spectrum",
-        "oscilloscope",
-        "sine_wave",
-        "bubble",
-        "devcurve",
-        "sphere",
-        "extruded_spectrum",
-        "shockwave_grid",
-    )
+    assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")
     assert renderer is not None
@@ -670,23 +655,24 @@ def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation()
     assert "ghost = apply_spectrum_rainbow(ghost, bar_index)" in source
 
 
-def test_organs_preset_keeps_black_fill_static_while_border_and_ghost_ride_rainbow() -> None:
-    import json
-    from pathlib import Path
+def test_spectrum_rainbow_participation_contract_does_not_depend_on_curated_preset_payloads() -> None:
+    """Preset JSON is authored data; the renderer contract is field independence."""
+    from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
 
-    preset = json.loads(
-        (Path(__file__).resolve().parents[1]
-         / "presets" / "visualizer_modes" / "spectrum" / "preset_1_organs.json")
-        .read_text(encoding="utf-8")
+    values = normalize_visualizer_mode_payload(
+        "spectrum",
+        {
+            "mode": "spectrum",
+            "spectrum_rainbow_enabled": True,
+            "spectrum_unique_colors": True,
+            "spectrum_rainbow_fill": False,
+            "spectrum_rainbow_border": True,
+            "spectrum_ghosting_enabled": True,
+        },
     )
-    values = preset["snapshot"]["widgets"]["spotify_visualizer"]
     assert values["spectrum_rainbow_enabled"] is True
     assert values["spectrum_unique_colors"] is True
-    # The near-black bar FILL stays out of the rainbow so the bar bodies read dark.
     assert values["spectrum_rainbow_fill"] is False
-    # The later visual-parity/customization pass opted the white BORDER into the
-    # rainbow (the shader keeps fill/border/ghost participation independent). The
-    # curated preset is authoritative for this design choice.
     assert values["spectrum_rainbow_border"] is True
     assert values["spectrum_ghosting_enabled"] is True
 

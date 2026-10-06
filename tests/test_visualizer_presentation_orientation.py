@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from core.settings.visualizer_mode_registry import (
+    get_visualizer_presentation_policy,
+    iter_all_visualizer_mode_descriptors,
+)
 from tests._visualizer_presentation import (
     resolve_presentation as resolve_visualizer_presentation,
 )
@@ -55,14 +58,16 @@ def test_per_mode_rotation_map_is_sparse_capability_gated_and_legacy_safe() -> N
     assert resolve_content_rotation_for_mode(rotations, "sphere") == 0
     assert resolve_content_rotation_for_mode({}, "bubble", legacy_value=2) == 2
     migrated = content_rotation_map_from_legacy(2)
-    assert migrated == {
-        "spectrum": 2,
-        "oscilloscope": 2,
-        "sine_wave": 2,
-        "bubble": 2,
-        "devcurve": 2,
+    rotation_capable_modes = {
+        descriptor.mode_id
+        for descriptor in iter_all_visualizer_mode_descriptors()
+        if descriptor.presentation_policy.content_rotation_capable
     }
-    assert "sphere" not in migrated
+    assert migrated == {mode_id: 2 for mode_id in rotation_capable_modes}
+    assert all(
+        get_visualizer_presentation_policy(mode_id).content_rotation_capable
+        for mode_id in migrated
+    )
 
     rotations = set_content_rotation_for_mode(rotations, "bubble", 2)
     rotations = set_content_rotation_for_mode(rotations, "devcurve", 1)
@@ -130,10 +135,17 @@ def test_rotation_changes_logical_domain_without_changing_physical_custom_geomet
     assert rotated.current_aspect_ratio == pytest.approx(280.0 / 630.0)
 
 
-def test_only_accepted_carded_modes_admit_custom_content_rotation() -> None:
-    for mode_id in ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"):
-        assert get_visualizer_presentation_policy(mode_id).content_rotation_capable is True
-    assert get_visualizer_presentation_policy("sphere").content_rotation_capable is False
+def test_content_rotation_capability_tracks_carded_presentation_policy() -> None:
+    from core.settings.visualizer_mode_registry import (
+        VisualizerShellPolicy,
+        iter_visualizer_mode_descriptors,
+    )
+
+    for descriptor in iter_visualizer_mode_descriptors():
+        policy = descriptor.presentation_policy
+        assert policy.content_rotation_capable is (
+            policy.shell_policy is VisualizerShellPolicy.CARD
+        ), descriptor.mode_id
 
 
 def test_per_mode_rotation_roundtrip_stays_on_existing_custom_layout_owner() -> None:

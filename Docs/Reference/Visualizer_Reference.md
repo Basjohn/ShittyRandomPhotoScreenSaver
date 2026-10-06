@@ -4,25 +4,18 @@ Current visualizer behavior and accepted presentation architecture.
 
 ## 1. Modes
 
-Visualizer uses its own logical production and viewport/scale geometry; the ordinary-widget retained-child semantic Edit role and normalization contracts do not apply to its paint or cadence. A widget Edit performance fix must not introduce a second Visualizer scheduler, alter Bubble temporal fidelity, or substitute a QML child-role rectangle for the renderer-owned viewport.
+Visualizer uses its own logical production and viewport/scale geometry; ordinary-widget retained-child Edit normalization does
+not own its paint or cadence.
 
-Canonical current mode ids remain owned by the settings/mode registry:
+`core/settings/visualizer_mode_registry.py` is the sole catalog authority. `VISUALIZER_MODE_IDS` / descriptors own current
+membership, display names, shell/clip policy, lazy runtime/renderer/Settings/capture wiring and capability metadata. **Do not
+mirror the registry here as a hand-counted list.** Adding a descriptor must automatically join registry-derived Settings,
+dormancy, switching and harness coverage.
 
-- `spectrum`
-- `oscilloscope`
-- `sine_wave`
-- `bubble`
-- `devcurve`
-- `sphere` — experimental, FRAMELESS, dormant by default
-- `extruded_spectrum` — FRAMELESS, dormant by default; Spectrum's bars as lit 3D columns
-- `shockwave_grid` — FRAMELESS, dormant by default; a neon grid floor rippled by onset shockwaves
-
-The first five are the established carded technical modes. Extruded Spectrum (section 16A) is a permanent mode that
-borrows Spectrum's frame runtime, technical profile and bar colours and owns only its 3D presentation (Shockwave Grid,
-16B, likewise). A borrower sees the lender as the lender shows itself: the activation payload resolves each lender
-(`get_profile_lender_modes`) through the lender's own active preset after the borrower's, so Extruded Spectrum reacts
-exactly as Spectrum's selected preset does; before 2026-10-03 it read the raw stored `spectrum_*` keys or Spectrum's
-factory defaults and could sit pinned at full height. Sphere is a registered experimental mode with separate frameless presentation policy and, **before S19**, no user-facing technical-controls profile; it temporarily resolves a hidden Spectrum-backed technical state that S19 will replace deliberately after golden capture. The mode registry may also own cheap presentation/capability metadata. Do not put renderer objects or heavy implementation imports into it.
+This reference documents shared policy plus mode-specific exceptions where they matter. Experimental status is an admission
+state, not permission to create a private scheduler/presentation engine. Shared-profile borrowing is explicit descriptor
+routing; a borrower resolves through the lender's current authored preset/configuration unless a preserved migration contract
+says otherwise. Heavy implementation resources remain lazy and retire through the normal owner.
 
 ## 1A. Registered modes vs enabled modes
 
@@ -36,7 +29,7 @@ currently enabled modes
     -> Settings mode pills, selection/cycling, frame-runtime construction, renderer import/construction
 ```
 
-Disabled modes retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any registered mode may be the sole enabled mode when explicitly admitted. The default enabled-mode set intentionally excludes experimental Sphere, so Sphere remains dormant until the user enables it. Admission must remain behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
+Disabled modes retain their configuration without contributing meaningful runtime work. If the Visualizer family is enabled, at least one mode remains enabled, but any registered mode may be the sole enabled mode when explicitly admitted. Canonical per-mode activation defaults decide initial admission; experimental modes should remain dormant by default unless product acceptance explicitly promotes them. Admission must remain behaviorally transparent to cadence, source freshness, presets, renderer transfer, scale/extent and Bubble/BTF.
 
 ### 1B. Experimental mode policy after the shared Scene3D foundation
 
@@ -49,28 +42,18 @@ admission/status/defaults and close acceptance gates, not require reimplementing
 
 ## 2. Capability model
 
-| Mode | Idle reveal | Idle self-animation | Presentation-owned idle scene | Fresh current source required for **live audio reactivity** |
-|---|---:|---:|---:|---:|
-| Bubble | yes | yes | no | yes |
-| Spectrum | yes | no | yes | yes |
-| Sine | yes | yes | no | yes |
-| Oscilloscope | yes | yes | no | yes |
-| DevCurve | yes | yes | no | yes |
-| Sphere (experimental) | yes | yes | no | yes |
-| Extruded Spectrum | yes | no | yes | yes |
-| Shockwave Grid | yes | no | yes | yes |
+Capability is mode-owned and registry/test-discovered, not inferred from catalog position or a fixed number of modes. Shared
+rules are:
 
-Paused Spectrum remains intentionally mixed:
+- every admitted mode participates in the retained Visualizer reveal/fade and lifecycle owner;
+- live audio reactivity requires a fresh current source; playback/presence semantics remain mode-specific;
+- idle self-animation and presentation-owned idle scenes are explicit mode behavior, never a generic clock entitlement;
+- shell/clip/viewport/orbit/overflow/rotation/prepared-reveal behavior comes from descriptor capability or the mode's immutable
+  presentation parameters;
+- new modes extend registry-derived capability tests instead of requiring prose count updates.
 
-```text
-presentation_ready = true
-reactive_source_ready = false
-source identity = absent
-```
-
-While paused, the shared BeatEngine synthesizes idle waveform *samples* only when the logical step declares Oscilloscope as the active mode (`set_idle_waveform_demand`, set before every tick); every paused tick still advances the waveform generation that Sine/Oscilloscope readiness keys on, and idle bars/energy still animate for every mode.
-
-Idle reveal/self-animation and live audio reactivity are separate contracts. A mode may remain visibly alive while paused or while awaiting a fresh source, but real music must not be treated as current reactive input until generation/activation identity is authoritative. Healthy authored cadence or idle motion therefore does not prove live-source reactivity.
+Paused Spectrum remains intentionally mixed: presentation may remain ready while reactive source readiness is false. That
+exception does not create a second source/cadence authority.
 
 ## 3. Logical cadence
 
@@ -143,8 +126,7 @@ Sampling the bus's per-frame onset flag instead depended on the analysis and log
 `BeatEngine.get_musical_level()` reads the latest frame's (loudness, presence), the same measurement an onset there
 carries, for modes whose events come from elsewhere (Voxel Sphere); near-silence does not drain the running level.
 What an onset *earns* follows one shared rule beside them (`musical_weight`, `musical_emphasis` on the fixed
-loudness scale; nothing learned from the track). Real scales (loudness 3-17 in music, presence about 1): `Docs/Guides/
-Visualizer_Reactivity_Authoring.md` 2A. Bars: `tests/test_transient_bus.py`.
+loudness scale; nothing learned from the track). Real scales (loudness 3-17 in music, presence about 1): `Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A. Bars: `tests/test_transient_bus.py`.
 
 **Shared 3D view and lines.** Every 3D Visualizer orbits and projects through `SCENE3D_ORBIT_GLSL` /
 `scene3d_orbit_project` (`rendering/gl_programs/scene3d.py`): turn about the vertical axis, tilt toward the camera
@@ -202,19 +184,7 @@ clip:
     VIEWPORT_RECT
 ```
 
-The five established technical modes remain:
-
-```text
-CARD + CARD_INTERIOR
-```
-
-Experimental Sphere is currently:
-
-```text
-FRAMELESS + VIEWPORT_RECT
-```
-
-Future modes must declare one of these policies explicitly.
+Descriptors that use the shared card path select `CARD + CARD_INTERIOR`; free-standing modes may select `FRAMELESS + VIEWPORT_RECT`. New modes must declare policy explicitly. The registry, not this prose, owns which modes currently use each policy.
 
 That removes card background/frame/shadow while preserving the same QQuickWindow, presentation root,
 fade/lifecycle and assigned viewport.
@@ -265,7 +235,7 @@ Frameless modes normally use a rectangular viewport clip.
 
 ## 10. Card / frameless shell
 
-### Current carded modes
+### Carded policy
 
 Preserve visual fidelity:
 
@@ -279,7 +249,7 @@ Preserve visual fidelity:
 
 Stable shell pixels must not be expensively rebuilt every visualizer frame.
 
-### Frameless modes
+### Frameless policy
 
 Architecture permits a mode to omit:
 
@@ -287,7 +257,7 @@ Architecture permits a mode to omit:
 - border/frame;
 - card shadow.
 
-Sphere and Extruded Spectrum are the current examples: free-standing 3D objects using FRAMELESS + VIEWPORT_RECT while remaining inside the same retained Quick scene/lifecycle. With Allow Overflow on, Extruded Spectrum's node is unbounded and its scene may extend past the viewport rectangle; there is still no card to draw.
+FRAMELESS + VIEWPORT_RECT remains inside the same retained Quick scene/lifecycle; it omits card chrome rather than creating another surface. A mode may additionally declare overflow capability, in which case its renderer can extend beyond the local viewport without inventing a card or second presentation owner.
 
 Frameless does not mean display-global or separate-window rendering.
 
@@ -307,13 +277,13 @@ Those values altered card height independently of common width and were already 
 geometry owned the old visualizer. They are not authored mode behavior and are not current
 settings.
 
-The five established carded modes share one canonical baseline viewport aspect ratio. A mode switch or
+Modes using the shared card policy share one canonical baseline viewport aspect ratio. A mode switch or
 preset load does not change viewport/card shape.
 
 That canonical baseline aspect is **1.5**. It is the sensible DEFAULT shape for ordinary non-CUSTOM
 layout, not a universal invariant. Distinguish three concepts:
 
-- **default/baseline aspect (1.5)** — the default card shape shared by the five established carded modes;
+- **default/baseline aspect (1.5)** — the default shape for the shared card policy;
 - **resolved runtime size** — for normal non-CUSTOM layout the layout owner resolves an appropriate
   width from widget/media/free-space rules and derives height from the 1.5 baseline aspect (screen-fit
   clamps uniformly); mode presets tune authored visual behaviour, never viewport/card dimensions;
@@ -361,7 +331,7 @@ Expected adaptation at constant scale:
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - Sphere uses aspect-correct projection and stays round.
 
-All six registered modes are viewport-resize-capable through their declared presentation policy; the five established carded modes share the card geometry contract, while Sphere uses its frameless viewport policy. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.
+Every registered mode is viewport-resize-capable through its declared presentation policy; carded and frameless policies adapt their authored domain through their own geometry contract. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.
 
 ## 12. Bubble / BTF
 
@@ -419,7 +389,7 @@ top/bottom     -> viewport height
 Viewport resizing is part of the current CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
 
-The five established carded modes also admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Voxel Sphere remains excluded through descriptor capability metadata so this feature cannot couple the isolated frameless 3-D mode back into the carded-mode contract.
+Modes whose descriptor sets `content_rotation_capable` admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Modes without `content_rotation_capable` remain excluded through descriptor capability metadata, so the feature cannot couple an ineligible frameless mode back into the carded-mode contract.
 
 ## 14A. Visualizer display admission / semantic mode + preset cycles
 
@@ -486,7 +456,7 @@ Sphere is the active promotion target and remains behaviourally private until it
   drag does not reallocate per frame), released in the renderer's `release_resources` when the mode retires or is
   disabled. Nothing is allocated per frame.
 - **Cost / quality:** continuous Visualizers and one-shot transitions retain separate internal budget tables because
-  their sustainable cost differs, but the eventual user-facing 3D Settings surface uses one vocabulary: **Auto / High /
+  their sustainable cost differs, while the current shared 3D Settings surface uses one vocabulary: **Auto / High /
   Balanced / Performance / KAK** plus explicit per-feature disable/override controls. `Auto` resolves before admission,
   never per frame; `KAK` is the minimum-viable base effect with optional expensive facilities off. Each mode may still
   own artistic parameters and explicit overrides. Per-frame Python GL calls remain the primary CPU hazard.
@@ -512,18 +482,18 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   ridge along the far edge (Horizon). Lines are analytic in the fragment shader (anti-aliased by their on-screen
   width), turning toward the crest colour on crests and the ridge, over a dark translucent floor (Floor). The grid
   fades out at its far edge and sides.
-- **Reactivity** (operator 2026-10-03: too lively at near-silence, big hits drowned among medium ones, wanted idle
+- **Reactivity:** near-silence stays calm, big hits retain clear separation from medium ones, and idle
   motion and brighter glow where it is loudest). A wave's strength is `shockwave_strength` of the onset's magnitude,
   loudness and presence (`MusicalOnset`) under the shared musical rule in `transient_bus.py` (Voxel Sphere uses the
   same rule): no wave below an absolute loudness (`MUSICAL_QUIET`) or when quiet against the running level
   (`MUSICAL_PRESENCE`: a near-silent passage of a loud track) (`musical_weight`), and the onset's loudness on the fixed
-  scale (`musical_emphasis`, around `MUSICAL_USUAL_LOUDNESS`; 2026-10-04: a learned usual presence flattened a sustained
+  scale (`musical_emphasis`, around `MUSICAL_USUAL_LOUDNESS`; learned track-relative normalization is forbidden because it flattens a sustained
   loud chorus) sets how much it stands out: a hit 1.6x the usual loudness reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
   wave grows taller more slowly, widens, brightens and trails an echo ring at 0.62 of its speed, so the biggest
   moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
   brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge
   smoothly from side to side over 11 s, so the grid moves between beats (it keeps the animation clock running).
-  **Everything ramps (2026-10-04):** the emphasis is relative to the track's usual onset, so on recorded music a soft
+  **Everything ramps:** the emphasis is relative to the track's usual onset, so on recorded music a soft
   passage's onsets stood out like a loud one's: ~9 waves/s at every level, strength flat ~0.45, big waves commonest
   in quiet passages. Both now ramp on the passage intensity (`BeatEngine.get_musical_intensity`): the gap between
   waves (`shockwave_gap`, 0.6 s in the quietest passage down to 0.09 s in the loudest) and the strength's share
@@ -565,7 +535,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 - **Edge lines** are drawn by the shader along each face's border. Smooth Edges (on by default) measures them in true
   screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
   pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line
-  instead of one foreshortened below a pixel (the jagged edges reported 2026-10-03); head-on (Glass Floor) the lines
+  instead of one foreshortened below a pixel; head-on (Glass Floor) the lines
   are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also doubles the tier's multisampling
   (High 8x instead of 4x: +0.035 ms GPU at a full 2560x1440 card).
 - **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling,
@@ -578,7 +548,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   once; its alpha becomes the opacity its front and back faces used to add up to, a(2 - a), clamped first (the
   reflection's authored alpha exceeds 1 above the floor line).
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
-  the wallpaper (operator 2026-10-03: a made-up studio read as washout and sheen). The displayed photograph is
+  the wallpaper; an invented studio environment reads as washout/sheen and is not the product contract. The displayed photograph is
   downsampled once per image change (`widgets/spotify_visualizer/backdrop.py`, 512 on the longer side, ~1.3 ms on
   the GUI thread at 4K) by the Visualizer's owner, only while the mode reflects (the descriptor's
   `backdrop_setting` above zero on a tier with reflections; the scene tells the owner when the photograph changes),
@@ -588,7 +558,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   replaced reading back the target being drawn every 6th frame (a ~0.55 ms GPU stall each): at a full 2560x1440 card
   GPU median (p90) is now 0.097 (0.098) ms with Mirror Faces on, against 0.10 (0.60) before. No GL texture is
   shared with the background, so PR-04's lend/reclaim lifetime is untouched; widgets beneath are no longer
-  reflected, only the wallpaper. The reflection never switches in one frame (operator 2026-10-04): a new wallpaper
+  reflected, only the wallpaper. The reflection never switches in one frame: a new wallpaper
   goes into a second slot and crossfades from the old one, and the first one fades in from no reflection (Voxel
   Sphere's Mirror Cubes share this). A wallpaper a transition brings in changes with the transition: the runtime
   announces the destination photograph and duration at the transition's start (`scene_controller.incoming_image`),
@@ -612,7 +582,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   shown" to every display's input owner on owner creation/retirement and mode completion (an event fact, no provider
   read per key). While it is shown, W/S tilt the camera up/down and A/D move it left/right at a steady 30 steps a
   second (60 degrees) while held, several keys at once. The rate runs on the logical clock, never on OS key repeat
-  (which stops repeating an older key once another is pressed: the "stuck" orbit of 2026-10-03): the input owner
+  (which stops repeating an older key once another is pressed): the input owner
   publishes the held keys' combined direction when it changes, the GUI thread replaces one immutable
   `ViewOrbitMotion` (view at a moment + rates) on the presentation state, and the logical capture evaluates it at its
   own frame time (`widgets/spotify_visualizer/view_orbit.py`). The GUI thread is the only writer; release settles the
@@ -652,5 +622,5 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   while orbiting; W/A/S/D feel (step size, key-repeat pace), the view surviving a restart, and a curated preset
   becoming Custom after an orbit; Allow Overflow near screen edges.
 - **Guided Setup preview:** rendered by the foundry through the production capture and renderer
-  (`_RENDERED_VISUALIZER_PREVIEWS`), since the operator's screenshot sheet predates the mode.
+  (`_RENDERED_VISUALIZER_PREVIEWS`); legacy screenshot sheets are not catalog authority.
 

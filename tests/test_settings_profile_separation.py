@@ -93,11 +93,13 @@ class TestMCDefaults:
     
     def test_mc_always_on_top_default_is_current_profile_contract(self, tmp_path):
         """The MC profile owns the canonical always-on-top default."""
+        from core.settings.default_contract import require_canonical_default
         from core.settings.settings_manager import SettingsManager
 
         settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
+        expected = bool(require_canonical_default("mc.always_on_top", "Screensaver_MC"))
 
-        assert settings.get_bool("mc.always_on_top", False) is True
+        assert settings.get_bool("mc.always_on_top", not expected) is expected
 
 
 class TestExportImportIsolation:

@@ -94,7 +94,15 @@ def test_ink_bloom_parameters_have_no_direction_authority():
         random_source=rng,
     )
     assert resolved.direction is None
-    assert resolved.parameter_dict() == {"detail": pytest.approx(0.5), "seed": 4321, "depth": .65, "gloss": .6}
+    params = resolved.parameter_dict()
+    assert params["detail"] == pytest.approx(0.5)
+    assert params["seed"] == 4321
+    assert params["depth"] == pytest.approx(
+        float(require_canonical_default("transitions.ink_bloom.depth"))
+    )
+    assert params["gloss"] == pytest.approx(
+        float(require_canonical_default("transitions.ink_bloom.gloss"))
+    )
 
 
 def test_diffuse_resolves_shape_name_and_block_size():

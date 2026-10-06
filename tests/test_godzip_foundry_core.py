@@ -593,18 +593,15 @@ def test_windows_run_console_auto_closes_unless_keep_open_is_explicit(monkeypatc
     assert kept_kwargs["creationflags"] == direct_kwargs["creationflags"]
 
 
-def test_run_tab_is_last_and_remains_repo_local() -> None:
+def test_run_and_diff_tabs_remain_repo_local_without_copy_wording_or_global_settings() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
     assert "class RunTab" in source
     assert "class DiffTab" in source
-    assert 'self.tabs.addTab(self.diff_tab, "DIFF")' in source
-    assert 'self.tabs.addTab(self.run_tab, "RUN")' in source
-    assert source.index('self.tabs.addTab(self.debris_tab, "DEBRIS")') < source.index('self.tabs.addTab(self.run_tab, "RUN")')
+    assert 'self.tabs.addTab(self.diff_tab' in source
+    assert 'self.tabs.addTab(self.run_tab' in source
+    assert source.index('self.tabs.addTab(self.debris_tab') < source.index('self.tabs.addTab(self.run_tab')
     assert '"run_flags"' in source
     assert '"run_entrypoint"' in source
-    assert "COPY TO CLIPBOARD" in source
-    assert 'QPushButton("LOCAL vs GIT HEAD")' in source
-    assert 'QPushButton("GODZIP vs LOCAL")' in source
     assert '"--diff-local"' in source
     assert '"--diff-godzip"' in source
     assert '"--diff-output"' in source
@@ -619,7 +616,6 @@ def test_run_tab_is_last_and_remains_repo_local() -> None:
 def test_run_auto_logzip_waits_for_process_exit_without_polling_and_is_repo_local() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
 
-    assert 'QCheckBox("LogZIP after run automatically")' in source
     assert '"run_auto_logzip_after_exit"' in source
     assert "process.wait()" in source
     assert "process.poll()" not in source
@@ -632,7 +628,6 @@ def test_run_auto_logzip_waits_for_process_exit_without_polling_and_is_repo_loca
 def test_create_and_logzip_expose_shell_open_for_remembered_output_without_console_spawn() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
 
-    assert source.count('QPushButton("Open Saved Folder")') >= 2
     assert "QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))" in source
     assert "def open_saved_folder" in source
     assert "explorer.exe" not in source

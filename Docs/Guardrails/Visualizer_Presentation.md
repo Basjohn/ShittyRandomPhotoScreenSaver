@@ -171,19 +171,19 @@ clip:
     VIEWPORT_RECT
 ```
 
-The five established technical modes remain:
+Registry membership does not imply one shell. Each descriptor declares a presentation policy. Modes using the shared card path select:
 
 ```text
 CARD + CARD_INTERIOR
 ```
 
-Experimental Sphere currently uses:
+Free-standing modes may select:
 
 ```text
 FRAMELESS + VIEWPORT_RECT
 ```
 
-Future modes must declare one of these policies explicitly.
+New modes must declare policy explicitly; this document does not encode a fixed catalog size.
 
 `FRAMELESS` removes card background/frame/shadow only. It does not create a new native window and does
 not grant unrestricted display-wide drawing.
@@ -245,7 +245,7 @@ Card frame and custom GL may not use competing geometry calculations.
 
 ## 9. Geometry: one baseline aspect; scale and viewport extent are distinct
 
-The five established carded modes share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
+Modes using the shared card policy share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
 
 The visualizer geometry model must distinguish:
 
@@ -268,7 +268,7 @@ left/right edge -> viewport width only
 top/bottom edge -> viewport height only
 ```
 
-All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes, including Bubble, share this current operation; Sphere uses its frameless viewport policy. The core capability policy is landed; do not reintroduce a false Bubble gate as a workaround for viewport defects.
+Every registered mode must remain viewport-resize-capable through its declared policy. CARD + CARD_INTERIOR modes use the shared card operation; FRAMELESS + VIEWPORT_RECT modes adapt through their frameless viewport policy. The core capability policy is landed; do not reintroduce a false Bubble gate as a workaround for viewport defects.
 
 Do not implement wide/tall visualizers by stretching a rendered texture or scaling X and Y independently. Do not use a
 retired per-mode growth value as a hidden viewport-extent alias.

@@ -10,7 +10,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 ---
 
-## Features 
+## Features
 A look at the current features. Developer contracts and work-in-progress details live under `Docs/`.
 
 - **Random Image Slideshow**
@@ -18,30 +18,7 @@ A look at the current features. Developer contracts and work-in-progress details
   - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds) with a one click "Just Make It Work" button to fill feeds for you.
   - Mixed mode (folders + RSS) support with ratio control
   - High‑quality scaling with optional sharpening
-  - Transitions:
-    - Ripple
-    - 3D Block Spin (Actual 3D like 1998!)
-    - Crumble (More work than it was worth!)
-    - Particle (Somehow does not look shit!)
-    - Warp Dissolve
-    - Crossfade
-    - Slide
-    - Wipe
-    - Diffuse
-    - Block Puzzle Flip
-    - Blinds
-    - Burn
-    - Glass Shatter
-    - Exploding Tiles
-    - Directional Pixel Accretion
-    - Ink Bloom
-    - Melt Drip
-    - Page Curl
-    - Disintegrate
-    - Accordion Fold
-    - Relief Rise
-    - Cube Turn
-    - Beam
+  - **Transitions** are registry-driven and include everything from the simple classics (Crossfade, Slide, Wipe, Ripple) to the considerably less sensible 3D/material effects such as Glass Shatter, Exploding Tiles, Page Curl, Accordion Fold, Relief Rise and Cube Turn. The application registry is the catalog authority; `Docs/Reference/Transitions.md` documents effect-specific behavior without freezing a transition count into the README.
 
   - Multi‑monitor aware: same image on all screens or independent images per screen
 
@@ -50,12 +27,12 @@ A look at the current features. Developer contracts and work-in-progress details
   - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
   - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), Extruded Spectrum (Spectrum's bars as lit 3D columns, orbit with W/A/S/D), Shockwave Grid (a neon grid floor that beats send shockwaves across), an optional isolated experimental Sphere and a preset/Custom system.
+  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. Registry-driven 2D/3D modes include Bubble, Spectrum, Oscilloscope, Curve/Dev Curve, Sine, Extruded Spectrum, Shockwave Grid and the optional experimental Voxel Sphere, with curated presets and a user-owned Custom slot. The source registry owns the catalog, so documentation and tooling do not depend on a fixed mode count.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
   - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
   - **FEEDS** Ten retained feed cards: four Custom RSS/Atom/JSON/h-feed slots plus six News categories, with List/Grid/Compact layouts, optional locally cached article artwork, clickable HTTP/S stories and validated magnet actions.
   - **System Audio OSD** Optional retained master-volume/mute overlay driven from the shared Windows audio source.
-  
+
 - **Custom Layouts**
 
   - **Edit Mode** Right click, go into edit mode and resize and repositions widgets however your kinky ass wants, right click save to confirm it.
@@ -63,7 +40,7 @@ A look at the current features. Developer contracts and work-in-progress details
 
 - **Settings dialog (config mode)**
   - Dark, fully themeable, frameless UI
- 
+
   ## This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
   <img width="2038" height="1247" alt="image" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
 
@@ -77,21 +54,21 @@ A look at the current features. Developer contracts and work-in-progress details
     - **Themes** – Settings and Widget theme selection/customisation.
     - **About** – version, credits, SST/JSON-based settings Import/Export, emergency defaults button and preset import/export.
     - **Quick Start** – lazy guided shortcuts for setup and layout changes after first run.
-    
+
 - **Interaction Mode & Interaction Gating**
   - Optional "Interaction" mode: ordinary mouse movement/clicks no longer exit; explicit external-link actions can hand off to the desktop and exit cleanly.
   - Ctrl‑driven halo to interact with overlays (e.g. media controls and admitted Reddit/Gmail/FEEDS/Steam actions) while the screensaver stays active.
 
   Why? Because you can actually click the things that are meant to be clicked: Reddit/Gmail/FEEDS/Steam links and media controls. I never clicked the clock or weather though, you probably shouldn't try it.
 
-  Ctrl holding gives you a temporary interaction mode that lets you move/see/click the mouse without exiting. An admitted external-link action can then hand off to the desktop and close the saver normally.  
+  Ctrl holding gives you a temporary interaction mode that lets you move/see/click the mouse without exiting. An admitted external-link action can then hand off to the desktop and close the saver normally.
 
   Interaction Mode on the other hand keeps ordinary pointer interaction inside the saver; `Esc`/`Q`, the context menu and explicit external-link handoff remain exit paths. (This is replicated in the SRPSS_MC release version)
   While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
   MC/Media Center Builds are designed for Interaction Mode especially. These come with it turned on and run in the background with minimal resource usage.
 
-  (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
+  (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)
 ---
 
 Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
@@ -129,7 +106,7 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
   - **Right Click Context Menu**
     - Right Click while holding Ctrl and a glorious context menu is born.
     - Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
-    - 
+    -
 
 - **Ctrl Halo interaction**
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
@@ -184,7 +161,7 @@ In the **Screen Saver Settings** dialog:
 ### 3. Settings
 
   - Set your sources! Either a folder (or multiple) on your system with your wallpapers or RSS/JSON feeds or....both with a weird ratio slider!
-  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.  
+  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.
   - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
   - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
   - Reddit can be set to any kinky ass subreddit you want.
@@ -194,10 +171,10 @@ In the **Screen Saver Settings** dialog:
 ### 4. Layout
 
   - Right Click (With CNTRL held or Interaction Mode on) to open your betrothed context menu and choose Edit.
-  - In this sexy new mode drag around the widgets, resize them by the corners or your scroll wheel however you like, even across displays. 
+  - In this sexy new mode drag around the widgets, resize them by the corners or your scroll wheel however you like, even across displays.
   - When things look positioned like you'd like choose save in the context menu (or press enter like a bitch who cannot handle context menus) and it will apply.
   - Revert in Edit is for going back to non-custom mode or saving yourself from weird changes. Each widget has a reset button in Edit mode and the Spotify widget even has an extra one for if the visualizer gets lost.
-  
+
 
 ## Credits
 

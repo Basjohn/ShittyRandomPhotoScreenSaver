@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from core.settings.default_contract import require_canonical_default
+from rendering.image_quality import RESAMPLE_FILTERS
 from core.settings.resample_filter_input_compat import (
     LEGACY_USE_LANCZOS_KEY,
     RESAMPLE_FILTER_KEY,
@@ -84,10 +85,11 @@ def test_invalid_resample_filter_repairs_to_canonical_smooth(tmp_path) -> None:
         storage_base_dir=tmp_path / "invalid",
     )
 
-    assert require_canonical_default(RESAMPLE_FILTER_KEY) == "smooth"
-    assert reloaded.get(RESAMPLE_FILTER_KEY) == "smooth"
+    canonical = require_canonical_default(RESAMPLE_FILTER_KEY)
+    assert canonical in RESAMPLE_FILTERS
+    assert reloaded.get(RESAMPLE_FILTER_KEY) == canonical
     assert normalize_resample_filter("Lanczos") == "lanczos"
-    assert normalize_resample_filter("bicubic") == "smooth"
+    assert normalize_resample_filter("bicubic") == canonical
 
 
 def test_sst_import_promotes_legacy_filter_and_current_enum_wins(tmp_path) -> None:

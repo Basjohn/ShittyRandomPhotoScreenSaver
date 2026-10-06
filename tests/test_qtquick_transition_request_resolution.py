@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.settings.default_contract import require_canonical_default
 from rendering.quick.transitions.request_resolution import (
     RandomTransitionSelection,
     resolve_quick_transition_spec,
@@ -65,7 +66,9 @@ def test_manual_transition_resolves_canonical_duration_and_direction() -> None:
     assert spec.selected_from_random is False
     assert spec.duration_ms == 321
     assert spec.direction == "left"
-    assert dict(spec.parameters) == {"motion_style": "Linear"}
+    assert dict(spec.parameters) == {
+        "motion_style": str(require_canonical_default("transitions.slide.motion_style"))
+    }
 
 
 def test_random_direction_is_resolved_once_into_the_batch_value() -> None:

@@ -110,7 +110,7 @@ No queue, scheduler, worker, readback or polling exists: work runs on the owning
   bound every frame (about 8-15 us), more total CPU per run than the scan it removes.
 - Bloom: still one pass per level with a barrier each, so compute removes no calls.
 - Motion blur's separable tile max (two fragment passes into two targets) and neighbour max (a third) were the one
-  consumer where compute removes passes, targets and calls, shared by all five 3D transitions.
+  consumer where compute removes passes, targets and calls for every admitted shared-Scene3D transition that enables Motion Blur.
 
 The tile max is one dispatch, one workgroup per K x K tile: an invocation per tile row finds the first strictly longest
 motion left to right, then the first invocation takes the first strictly longest row top to bottom, which is exactly
@@ -120,7 +120,7 @@ rows are held in a fixed 256-row shared array; a target needing larger tiles (ov
 The dispatch issues `GL_TEXTURE_FETCH_BARRIER_BIT` for the gather's sampled read. Motion Blur Off compiles, allocates
 and dispatches nothing.
 
-Measured: 84 frames across five transitions, two sizes (2560x1440; 1366x768 with partial tiles) and Exploding
+Measured on the then-current shared-3D transition cohort: 84 frames across two sizes (2560x1440; 1366x768 with partial tiles) and Exploding
 Tiles' High/Balanced/trails setups are byte-identical to the fragment passes. GL calls per frame with Motion Blur fall
 by 14 (Tiles 260 -> 246, Glass 191 -> 177, Crumble 199 -> 185, Accretion 183 -> 169, Block Spins 182 -> 168). Owned
 memory per motion target falls by two textures and three framebuffers (about 0.42 MB at 2560x1440). Separate-process
@@ -196,7 +196,7 @@ The expanded fence deliberately pays for the previously missing state; the isola
   reflection and multisample texture sentinels across a scene pass and a thrown renderer.
 - `test_qtquick_bootstrap.py`: each required entry point must resolve on the actual context; no frame-time probing.
 - Existing transition warm-up, scene foundation, target, environment and Motion Trails tests protect pixels,
-  gradual preparation, parked resources and disabled-feature dormancy across the five shared 3D transitions.
+  gradual preparation, parked resources and disabled-feature dormancy across registry-discovered shared-Scene3D transition consumers.
 
 - `test_scene3d_stream.py`: driver-reported std430 offsets/strides equal the layout and values arrive through the
   ring; indexed ranges restored and generic bindings untouched for uniform and storage targets; every reused slot
@@ -215,5 +215,5 @@ The expanded fence deliberately pays for the previously missing state; the isola
   single-texel and still fields with partial edge tiles (a non-strict tie rule fails it); the dispatch is followed by a
   texture-fetch barrier before the gather; dispatches name groups and barriers; image units come back (bound or
   unbound, after a failure, and across a real motion-blurred frame); runs without Motion Blur compile and dispatch no
-  compute on all five transitions; fixed loud tile capacity; release returns to zero and rebuilds; failed compute
+  compute for every covered transition consumer; fixed loud tile capacity; release returns to zero and rebuilds; failed compute
   compiles/links leave no shader or program.

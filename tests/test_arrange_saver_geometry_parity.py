@@ -333,7 +333,7 @@ def test_a_reset_widget_stays_authored_and_shows_where_the_saver_puts_it() -> No
     bucket = load_custom_layout_map(committed)["displays"][display.identity]
     assert "reddit" not in bucket
     assert {"media", "spotify_visualizer", "reddit2"} <= set(bucket)
-    assert committed["reddit"]["position"] == "Bottom Right"
+    assert committed["reddit"]["position"] == DEFAULT_SETTINGS["widgets"]["reddit"]["position"]
 
 
 def _clock_face_widgets() -> dict:

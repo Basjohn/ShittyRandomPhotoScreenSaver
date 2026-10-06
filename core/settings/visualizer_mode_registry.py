@@ -40,7 +40,7 @@ class VisualizerModePresentationPolicy:
 _REFLOWING_CARDED_POLICY = VisualizerModePresentationPolicy(
     shell_policy=VisualizerShellPolicy.CARD,
     clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
-    # All five current modes recompute their domain from committed geometry
+    # Carded modes recompute their domain from committed geometry
     # (Bubble via its baseline-relative logical domain), so every mode is
     # viewport-resize-capable. The deterministic G4 implementation is complete;
     # installed eyes-on acceptance is deferred until Quick is production
@@ -61,7 +61,7 @@ class VisualizerModeDescriptor:
     # the actual module is imported on demand by the owning caller
     # (quick_display_visualizer_owner for the frame runtime, the Quick renderer
     # implementation_registry for the renderer). This is the single source of
-    # per-mode runtime/renderer wiring; the previous duplicate five-way tables
+    # per-mode runtime/renderer wiring; previous duplicate per-mode tables
     # now derive from here.
     frame_runtime_module: str
     frame_runtime_class: str

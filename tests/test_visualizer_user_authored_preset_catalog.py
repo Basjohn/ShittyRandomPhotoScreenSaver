@@ -1,23 +1,37 @@
 from __future__ import annotations
 
-import shutil
+import json
 from pathlib import Path
 
 from core.settings import visualizer_presets as vp
 
 
-def _copy_as(source: Path, target: Path) -> None:
+def _write_sphere_preset(target: Path, *, slot: int, authored_name: str) -> None:
+    """Write a self-owned valid Sphere preset fixture.
+
+    Catalogue mechanics must not depend on whichever curated Sphere presets happen
+    to ship today.  The filename supplies the stable source slot/name semantics;
+    the payload only needs one mode-owned setting to be usable.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target)
-
-
-def _any_sphere_presets(count: int) -> list[Path]:
-    """Real curated Sphere files as catalogue fixtures: which ones, and what they say, is authored
-    content the operator changes at will, so the tests never depend on it."""
-    source_root = Path(vp.__file__).resolve().parents[2] / "presets" / "visualizer_modes" / "sphere"
-    files = sorted(source_root.glob("preset_*.json"))
-    assert len(files) >= count
-    return files[:count]
+    target.write_text(
+        json.dumps(
+            {
+                "mode": "sphere",
+                "name": authored_name,
+                "preset_index": slot,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": "sphere",
+                            "sphere_gloss": 0.42,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _build_sphere_from(tmp_path: Path, monkeypatch):
@@ -34,10 +48,9 @@ def _build_sphere_from(tmp_path: Path, monkeypatch):
 
 
 def test_sparse_authored_slots_compact_to_runtime_positions(tmp_path: Path, monkeypatch) -> None:
-    first, second = _any_sphere_presets(2)
     root = tmp_path / "visualizer_modes" / "sphere"
-    _copy_as(first, root / "preset_1_glass_current.json")
-    _copy_as(second, root / "preset_5_user_extra.json")
+    _write_sphere_preset(root / "preset_1_glass_current.json", slot=0, authored_name="ignored")
+    _write_sphere_preset(root / "preset_5_user_extra.json", slot=4, authored_name="ignored")
 
     _root, presets = _build_sphere_from(tmp_path, monkeypatch)
 
@@ -54,9 +67,8 @@ def test_sparse_authored_slots_compact_to_runtime_positions(tmp_path: Path, monk
 
 
 def test_single_high_numbered_authored_preset_is_valid(tmp_path: Path, monkeypatch) -> None:
-    (first,) = _any_sphere_presets(1)
     root = tmp_path / "visualizer_modes" / "sphere"
-    _copy_as(first, root / "preset_20_only_survivor.json")
+    _write_sphere_preset(root / "preset_20_only_survivor.json", slot=19, authored_name="ignored")
 
     _root, presets = _build_sphere_from(tmp_path, monkeypatch)
 

@@ -33,6 +33,12 @@ def _find_toggle(container, text: str) -> QToolButton | None:
     return None
 
 
+def _set_combo_data(combo, value: object) -> None:
+    index = combo.findData(value)
+    assert index >= 0, f"Missing combo data {value!r}"
+    combo.setCurrentIndex(index)
+
+
 def _with_steam_gate(enabled: bool):
     prior = is_steam_enabled()
     force_gate(steam=enabled)
@@ -241,10 +247,10 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
             tab.steam_progress_font_family.setCurrentFont(QFont("Jost"))
             tab.steam_progress_font_size.setValue(18)
-            tab.achievement_pulse_selection_mode.setCurrentIndex(5)
+            _set_combo_data(tab.achievement_pulse_selection_mode, "custom")
             tab.achievement_pulse_custom_appid.setValue(367520)
             tab.achievement_pulse_show_artwork.setChecked(False)
-            tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
+            _set_combo_data(tab.achievement_pulse_artwork_shape, "square")
             tab.achievement_pulse_square_artwork_size.setValue(190)
             tab.achievement_pulse_double_capsules.setChecked(False)
             tab.achievement_pulse_progress_pulse.setChecked(False)
@@ -258,7 +264,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_show_source.setChecked(False)
             tab.achievement_pulse_capsule_fill_color_btn.color_changed.emit(QColor(12, 34, 56, 78))
             tab.achievement_pulse_capsule_border_color_btn.color_changed.emit(QColor(90, 87, 65, 43))
-            tab.abandonment_issues_selection_mode.setCurrentIndex(1)
+            _set_combo_data(tab.abandonment_issues_selection_mode, "pinned_game")
             tab.abandonment_issues_pinned_game.addItem("Fixture Game", 101)
             tab.abandonment_issues_pinned_game.setCurrentIndex(
                 tab.abandonment_issues_pinned_game.count() - 1
@@ -269,7 +275,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_minimum_inactivity_weeks.setValue(24)
             tab.abandonment_issues_preferred_minimum_inactivity_weeks.setValue(52)
             tab.abandonment_issues_never_show_appids.setText("440, 570; 440")
-            tab.abandonment_issues_artwork_shape.setCurrentIndex(1)
+            _set_combo_data(tab.abandonment_issues_artwork_shape, "wide")
             tab.abandonment_issues_artwork_size.setValue(175)
             tab.abandonment_issues_guilt_desaturater.setChecked(True)
             tab.abandonment_issues_guilt_desaturation_strength.setValue(65)
@@ -280,7 +286,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_accent_color_btn.color_changed.emit(
                 QColor(180, 110, 55, 170)
             )
-            tab.friend_pulse_view_mode.setCurrentIndex(1)
+            _set_combo_data(tab.friend_pulse_view_mode, "rows")
             tab.friend_pulse_visible_row_capacity.setValue(12)
             tab.friend_pulse_show_names.setChecked(False)
             tab.friend_pulse_show_online_count.setChecked(False)

@@ -24,26 +24,16 @@ import pytest
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     build_visualizer_mode_activation,
+    get_visualizer_mode_descriptor,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
 )
 
 REPO = Path(__file__).resolve().parents[1]
 
-_ALL_RENDERER_MODULES = {
-    mode_id: f"rendering.quick.visualizer.implementations.{mode_id}"
+_FRAME_RUNTIME_MODULES = {
+    mode_id: get_visualizer_mode_descriptor(mode_id).frame_runtime_module
     for mode_id in VISUALIZER_MODE_IDS
-}
-_ALL_FRAME_RUNTIME_MODULES = {
-    "spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "oscilloscope": "widgets.spotify_visualizer.oscilloscope_frame_runtime",
-    "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
-    "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
-    "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
-    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
-    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
-    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
 }
 
 
@@ -138,18 +128,6 @@ def test_enable_state_resolution_introduces_no_timer_or_thread():
 # --- Lead-C / V4 real-runtime dormancy (the common capture module must not
 #     import every mode's frame runtime, and a real sole-enabled tick must import
 #     only the active mode's runtime) --------------------------------------------
-
-_FRAME_RUNTIME_MODULES = {
-    "spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "oscilloscope": "widgets.spotify_visualizer.oscilloscope_frame_runtime",
-    "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
-    "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
-    "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
-    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
-    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
-    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
-}
 
 
 def test_warming_logical_frame_capture_imports_no_frame_runtime():
@@ -256,16 +234,13 @@ for _ in range(3):
         # work; a later data failure does not affect the dormancy assertion.
         pass
 
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    get_visualizer_mode_descriptor,
+)
 runtimes = {
-    "spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "oscilloscope": "widgets.spotify_visualizer.oscilloscope_frame_runtime",
-    "sine_wave": "widgets.spotify_visualizer.sine_frame_runtime",
-    "bubble": "widgets.spotify_visualizer.bubble_frame_runtime",
-    "devcurve": "widgets.spotify_visualizer.devcurve_frame_runtime",
-    "sphere": "widgets.spotify_visualizer.sphere_frame_runtime",
-    # Extruded Spectrum borrows Spectrum's frame runtime through its descriptor.
-    "extruded_spectrum": "widgets.spotify_visualizer.spectrum_frame_runtime",
-    "shockwave_grid": "widgets.spotify_visualizer.shockwave_frame_runtime",
+    mode_id: get_visualizer_mode_descriptor(mode_id).frame_runtime_module
+    for mode_id in VISUALIZER_MODE_IDS
 }
 print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
 """

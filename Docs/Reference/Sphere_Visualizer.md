@@ -4,7 +4,7 @@ Status: **ACCEPTED EXPERIMENTAL — LOW-LEVEL SUBSTRATE PROMOTION ACTIVE.** Sphe
 
 ## Current golden
 
-Sphere remains a separate, disabled-by-default experimental Visualizer mode; its accepted look and response are preservation inputs, not permission to promote its implementation into the established five modes. Ordinary-widget semantic Edit/lifetime machinery is not part of Sphere's viewport ownership.
+Sphere remains a separate, disabled-by-default experimental Visualizer mode; its accepted look and response are preservation inputs, not permission to collapse its behavior into the shared carded-mode implementation. Ordinary-widget semantic Edit/lifetime machinery is not part of Sphere's viewport ownership.
 
 The accepted representation is the stepped voxel shell, not the retired smooth icosphere. The musical *vocabulary* is the preservation target: strong/local detached fragmentation, granular event-owned intake/outtake cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and the vocal-linked intake recoil. Its reaction *numbers* are not (operator 2026-10-04): the S19 ramp retune makes small sounds and near-silence deliberately calmer. Presentation or cleanup work may not make loud passages or big hits quieter or slower to react, nor the mode less spatially articulate or more ambient/free-running.
 
@@ -61,7 +61,7 @@ Before any architectural promotion into shared/permanent ownership, capture both
 - fixed deterministic `FeatureFrame` / existing Visualizer replay input covering silence, flat/low qualified events, vocals, kicks/drums and sustained passages;
 - Sphere logical outputs important to behaviour: event admission/source, section drives, tracer phase/drive, size pulse, rotation, cohort admission/density/velocity/direction/progress and vocal recoil;
 - representative renderer captures at ordinary and extreme CUSTOM aspect/scale where the existing capture seam can provide deterministic evidence;
-- baseline replay evidence for the five accepted permanent modes over the same shared-analysis change boundary.
+- baseline replay evidence for every accepted comparison mode represented by the maintained replay-floor cohort over the same shared-analysis change boundary.
 
 **Captured 2026-10-04** (`tools/visualizer_replay/sphere_golden.py`, `tests/test_sphere_promotion_golden.py`):
 
@@ -77,7 +77,7 @@ Before any architectural promotion into shared/permanent ownership, capture both
   resolver: `tests/goldens/visualizer_replay/sphere_visual/` (bit-identical run to run).
 - *Cost* (`tools/visualizer_cost_probe.py sphere --size 2560x1440`): CPU submit median 0.44 ms / p90 0.47, GPU
   0.03 ms, 17 Python GL calls per frame.
-- *The five accepted modes:* the existing replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
+- *Accepted comparison cohort:* the maintained replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
 
 Presets are authored content and never tested against (operator 2026-10-04): each case is seeded from its curated
 preset only when recorded, and its resolved Sphere settings are frozen into the golden; replays use that frozen copy,
