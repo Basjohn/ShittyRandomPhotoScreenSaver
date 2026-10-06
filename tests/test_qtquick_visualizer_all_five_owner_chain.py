@@ -111,6 +111,21 @@ class _Engine:
     def reconfigure_bar_count(self, *args, **kwargs):
         pass
 
+    def set_spectrum_mirrored(self, *args, **kwargs):
+        pass
+
+    def set_spectrum_shape_nodes(self, *args, **kwargs):
+        pass
+
+    def set_notch_positions(self, *args, **kwargs):
+        pass
+
+    def set_spectrum_shape_config(self, *args, **kwargs):
+        pass
+
+    def set_drop_speed(self, *args, **kwargs):
+        pass
+
 
 # Family membership is registry/capability-owned. The test needs any complete
 # valid settings payload, so derive that payload from canonical defaults rather

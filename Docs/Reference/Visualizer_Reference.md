@@ -377,6 +377,21 @@ Control UI may remain QWidget if appropriate.
 Live runtime pixels belong to the Quick scene; edit plumbing must not recreate a
 second accelerated presentation surface.
 
+**Current CUSTOM geometry-family limitation (active repair).** The generic CUSTOM schema already supports arbitrary
+`geometry_variant` values under one widget/display key, but the Visualizer currently resolves `default` for every mode. A
+retained 2D↔3D hot-swap therefore inherits the same outer rect/viewport even when that pose is unsuitable for the target
+presentation family. `Current_Plan.md` §3A repairs this by selecting `planar` versus `freeform_3d` through canonical mode
+metadata while keeping the existing CUSTOM session/commit/hydration owner. This is intentionally not per-mode geometry and
+not a second 2D/3D settings store.
+
+For `freeform_3d`, the saved rectangle is a **stage/viewport**, not a promise that the currently projected scene fills that
+rectangle. Edit should therefore keep that rectangle as the only persisted geometry while also showing a derived projected
+content envelope/hull and orbit pivot from the renderer's existing CPU reach/bounds calculation. Extruded already has
+`extruded_reach(...)`; Shockwave has `shockwave_reach(...)`; Sphere promotion should expose the corresponding shared Scene3D
+bound. Those bounds are view/shape dependent rather than per-audio-frame, which makes them suitable for event-driven Edit
+chrome without another geometry cadence. The derived envelope is never a snap/collision/persistence authority and orbit never
+auto-resizes the saved stage.
+
 Required visualizer resize semantics:
 
 ```text
@@ -547,8 +562,9 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   a box never blends over itself (winding-independent, so the mirrored reflection is right too). Each box now blends
   once; its alpha becomes the opacity its front and back faces used to add up to, a(2 - a), clamped first (the
   reflection's authored alpha exceeds 1 above the floor line).
-- **Mirror Faces** (0 by default) gives the faces, never the edge lines, a faintly brushed mirror surface reflecting
-  the wallpaper; an invented studio environment reads as washout/sheen and is not the product contract. The displayed photograph is
+- **Mirror Faces** (0 by default) gives the faces, never the edge lines, a polished mirror surface reflecting
+  the wallpaper; procedural brushed/hash grain is intentionally absent because it produced visible vertical ribbing across
+  bright reflected faces. An invented studio environment reads as washout/sheen and is not the product contract. The displayed photograph is
   downsampled once per image change (`widgets/spotify_visualizer/backdrop.py`, 512 on the longer side, ~1.3 ms on
   the GUI thread at 4K) by the Visualizer's owner, only while the mode reflects (the descriptor's
   `backdrop_setting` above zero on a tier with reflections; the scene tells the owner when the photograph changes),
@@ -591,8 +607,11 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   mid-height. Nothing is saved while orbiting: the result is written once, through the atomic runtime-preset
   persistence, when no key is held and no drag is on, when the Visualizer retires mid-orbit, or never if a preset
   replaced the view (held keys then carry on from the preset's view). On a curated preset the edit moves the mode to
-  Custom holding what was shown (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. With no 3D view
-  shown W/A/S/D exit like any other key. The S key no longer opens Settings (the context menu does).
+  Custom holding what was shown (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. This persistence is
+  deliberately **mode/preset state**, not CUSTOM outer geometry: Extruded and Shockwave can share a future `freeform_3d`
+  placement/size profile while retaining independent turn/tilt values and independent Custom snapshots. Sphere does not
+  currently declare the descriptor orbit seam; its promotion work owns that parity decision. With no 3D view shown W/A/S/D
+  exit like any other key. The S key no longer opens Settings (the context menu does).
 - **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it too: a step per 4 pixels, the
   scene turning toward the drag and the camera rising as you drag down. The display runtime lends its own input
   owner the scene's `visualizer_contains_scene_position` hit test; the input owner drops it (with any held keys or
@@ -614,6 +633,11 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   gesture); teardown, Settings and layout slots treat it as an open session (`is_active`). Nothing is held between
   gestures. Bars: `tests/test_visualizer_direct_gestures.py` (the input owner, and the real display unit + Visualizer
   + owner seam).
+  While Edit is active, keep CUSTOM's normal product-input block in place. Route the same Alt semantics through the selected
+  3D edit frame instead: Alt-left uses the existing orbit resolver; Alt-right and Alt-wheel use the active CUSTOM session's
+  move/resize operations. Do not start the outside-Edit direct gesture session underneath Edit. Geometry Save/Cancel owns the
+  move/scale result; orbit remains mode/preset view state on its existing orbit-finish boundary.
+
 - **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
   submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
   backdrop copy.

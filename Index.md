@@ -59,6 +59,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
 | stable display identity, saved CUSTOM replay and Clock face overrides | `Spec.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
+| Visualizer planar/freeform CUSTOM geometry split and hot-swap acceptance | `Current_Plan.md` §3A; `Spec.md` → Visualizer geometry; `Docs/Guides/Visualizer_Change_Checklist.md` §7A |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |

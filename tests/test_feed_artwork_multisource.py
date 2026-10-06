@@ -159,12 +159,16 @@ def teardown_function():
     feed_runtime.reset_shared_feed_runtime_for_tests()
 
 
-def test_one_source_never_evicts_what_another_source_published_after_it_started(tmp_path, monkeypatch):
-    """A's artwork job is queued; B then publishes an older cached image; A evicts.
+def test_serialized_source_artwork_preserves_already_published_peer_artwork(tmp_path, monkeypatch):
+    """Published peer art remains protected while the next source warms.
 
-    With a submit-time copy of the published set, A did not know about B's
-    image and evicted it first (it was the oldest file).
+    Remote FEEDS bundles are serialized now, so the old test state where A and
+    B had overlapping artwork workers is intentionally impossible. The separate
+    cache-level test above still proves protection is read at eviction time;
+    this integration bar proves that published peer artwork survives the next
+    serialized source bundle.
     """
+    monkeypatch.setattr(feed_runtime, "_REMOTE_SOURCE_STAGGER_S", 0.0)
     cache = FeedArtworkCache(tmp_path / "artwork")
     seeded = cache.warm([_item("x", "https://cdn.example.test/x.png")],
                         fetch_bytes=lambda _u: _picture("red"), still_needed=lambda: True)
@@ -175,18 +179,30 @@ def test_one_source_never_evicts_what_another_source_published_after_it_started(
     }
     _wire(monkeypatch, tmp_path, sources)
     manager = _DeferredManager()
-    lease_a, _shown_a = _lease(manager, "feeds_custom_1", "https://a.example.test/rss")
     lease_b, shown_b = _lease(manager, "feeds_custom_2", "https://b.example.test/rss")
-    assert lease_a.start() and lease_b.start()
-    manager.finish(*manager.take())          # A: cache-first text -> queues A's artwork job
-    manager.finish(*manager.take())          # B: cache-first text -> queues B's artwork job
-    a_artwork, b_artwork = manager.take(), manager.take()
-    manager.finish(*b_artwork)                # B publishes x (a cache hit) after A was queued
+    lease_a, _shown_a = _lease(manager, "feeds_custom_1", "https://a.example.test/rss")
+    assert lease_b.start() and lease_a.start()
+
+    # Cache reads may overlap, but only one remote/artwork bundle may own the
+    # family lane. Finish B's cache first and retain A's cache callback.
+    b_cache = manager.take()
+    a_cache = manager.take()
+    manager.finish(*b_cache)
+    b_artwork = manager.take()
+    manager.finish(*b_artwork)
     assert dict(shown_b.accepted[-1].local_artwork_by_item)["x"] == seeded.local_by_item["x"]
+
+    # A now becomes eligible; its warm must see B's published x in the owner's
+    # current protected set and preserve it while writing a.png.
+    manager.finish(*a_cache)
+    a_artwork = manager.take()
     monkeypatch.setattr(artwork, "CACHE_MAX_FILES", 1)
-    manager.finish(*a_artwork)                # A writes a.png and evicts over the cap
+    manager.finish(*a_artwork)
     assert cache.cached("https://cdn.example.test/x.png") == seeded.local_by_item["x"]
     assert cache.cached("https://cdn.example.test/a.png")
+
+    lease_a.retire()
+    lease_b.retire()
 
 
 def test_a_retired_source_during_its_artwork_job_evicts_nothing(tmp_path, monkeypatch):

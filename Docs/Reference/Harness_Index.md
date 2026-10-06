@@ -158,7 +158,9 @@ not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and 
 cadence from the same trace: per-second publications/draws/repeated draws by transition state, and publication/swap
 gap frequency and periodicity with the logical dt, and classifies each presentation stall (Current_Plan N1). Plain
 `--frame-trace` remains the low-observer binary trace. Add `--gui-stall-stacks` only when all-thread Python stacks are
-needed for a steady-state GUI-wake stall; that companion is separately admitted and disarms during lifecycle windows.
+needed for a steady-state GUI-wake stall; that companion is separately admitted and disarms during lifecycle windows. Its
+dedicated observer thread is created/retired through the central affinity-lane threading infrastructure so the sampler remains
+independent of product work queues without owning a raw ad-hoc thread or a second product cadence.
 
 
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.

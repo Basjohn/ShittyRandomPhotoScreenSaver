@@ -324,9 +324,15 @@ def test_pipeline_cancellation_completes_one_job_and_a_fresh_owner_can_rerun(
         True,
     )
 
-    first.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
-    first.expected_artifact.write_bytes(b"fresh-success")
-    fresh_process, fresh_job = _FakeProcess(), _FakeJob()
+    class _FreshProcess(_FakeProcess):
+        def wait(self, timeout: float | None = None) -> int:
+            # run_job intentionally clears the previous published payload before
+            # launch; the fake compiler must create the new artifact while it runs.
+            first.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
+            first.expected_artifact.write_bytes(b"fresh-success")
+            return super().wait(timeout)
+
+    fresh_process, fresh_job = _FreshProcess(), _FakeJob()
     fresh_owner = _fake_owner(fresh_process, fresh_job)
     result = real_run_job(
         first,

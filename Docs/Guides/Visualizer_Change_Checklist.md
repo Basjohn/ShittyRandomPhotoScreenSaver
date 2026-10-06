@@ -147,6 +147,34 @@ Expected adaptation:
 
 Persist and restore uniform scale and viewport extent separately through Save/Cancel, geometry variants and layout slots.
 
+## 7A. Geometry-profile / mode-family changes
+
+When a mode change may select a different CUSTOM geometry profile:
+
+- [ ] Reuse the existing `(widget_id, display_identity, geometry_variant)` persistence axis and the one
+      `CustomLayoutSession`/commit/hydration owner. Do not add parallel 2D/3D layout maps or per-mode rect Settings.
+- [ ] Profile membership comes from canonical mode capability/descriptor metadata, not a renderer-name conditional scattered
+      through input, hydration and Edit code. Classify by layout behavior, not merely "is 3D".
+- [ ] Same-profile mode changes are geometry no-ops. Cross-profile changes apply the target rect/viewport only while the target
+      is hidden during the existing activation transaction; there is no visible outgoing-pose frame on the new mode.
+- [ ] Edit, Arrange and direct Alt move/resize write only the active variant and preserve dormant sibling variants. A
+      cross-profile activation does not retarget an in-flight `CustomLayoutSessionItem` halfway through a gesture.
+- [ ] 3D turn/tilt/orbit remains mode/preset state. Geometry variants own outer placement/size/viewport only.
+- [ ] Layout slots retain the complete variant map and restore active Visualizer mode before geometry hydration chooses a
+      profile. Cross-display moves preserve inactive sibling variants and display-signature canonicalization.
+- [ ] Legacy/default Visualizer geometry is compatibility input, not a permanent competing authority. Missing opposite-family
+      geometry falls back to that family's authored baseline, never a blind copy of the source-family pose.
+- [ ] Repeated planar→freeform→planar switching proves exact pose restoration with no viewport/scale drift, no owner rebuild
+      solely for geometry, and no regression to global CUSTOM stacking/Media-adjacency dormancy.
+- [ ] For `freeform_3d`, Edit distinguishes the persisted stage/viewport from the derived projected scene extent. Reuse
+      the renderer's CPU reach/bounds authority; do not duplicate projection math in QML or persist the derived envelope.
+- [ ] Orbit alone leaves the saved CUSTOM rect unchanged. The content envelope may update only on relevant authored view/shape
+      changes, never as a per-audio-frame geometry feed or automatic layout mutation.
+- [ ] Alt-left orbit, Alt-right move and Alt-wheel resize work while Edit is active without weakening CUSTOM's product-input
+      block. Orbit routes to the existing view resolver; move/scale route to the active `CustomLayoutSession`.
+- [ ] Geometry Save/Cancel/undo continues to own Edit move/scale. Orbit remains mode/preset state rather than being folded into
+      layout geometry merely because the gesture happened while Edit was visible.
+
 ## 8. Bubble
 
 BTF is binding. Geometry changes are configuration, never another clock. Do not retune Bubble simulation to hide

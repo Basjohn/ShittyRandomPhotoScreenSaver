@@ -468,7 +468,10 @@ def test_imap_bootstrap_does_not_report_missing_oauth_client_secrets_as_error(tm
     monkeypatch.setattr(gmail_bootstrap_module, "load_encrypted", lambda _path: None)
 
     with caplog.at_level("DEBUG"):
-        snapshot = prepare_gmail_backend_bootstrap(app_data_path=app_data)
+        snapshot = prepare_gmail_backend_bootstrap(
+            app_data_path=app_data,
+            oauth_credentials_path=app_data / "missing_client_secrets.json",
+        )
 
     assert snapshot.backend_mode == "imap"
     missing = [record for record in caplog.records if "client_secrets.json not found" in record.getMessage()]

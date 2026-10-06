@@ -23,6 +23,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
     _COMMON_UNIFORMS,
     _PROJECTION_GLSL,
     EXTRUDED_CEILING,
+    EXTRUDED_FRAGMENT_SOURCE,
     EXTRUDED_MAX_TILT,
     EXTRUDED_MAX_TURN,
     EXTRUDED_REFLECTION_SPACE,
@@ -65,6 +66,19 @@ def test_the_fit_keeps_the_tallest_scene_inside_the_bar_field():
                     assert floor + sy * scale >= EXTRUDED_REFLECTION_SPACE * reflection - 1e-9
     # Untilted and shallow, the scene is exactly Spectrum's: no fit shrink, the floor at the bottom.
     assert extruded_fit(1.0, 0.0, 0.0, 0.0, 3.0) == (1.0, 0.0)
+
+
+def test_mirror_faces_are_polished_without_procedural_brushed_grain():
+    """Mirror Faces must not reintroduce the old hash-grain that became vertical ribbing.
+
+    This is an intentional shader-source negative contract: the removed noise was presentation-only
+    material decoration, not simulation behavior, and its exact absence prevents a visually identical
+    banding regression from hiding behind a different runtime path.
+    """
+    assert "grainAt" not in EXTRUDED_FRAGMENT_SOURCE
+    assert "float grain" not in EXTRUDED_FRAGMENT_SOURCE
+    assert "0.94 + 0.12" not in EXTRUDED_FRAGMENT_SOURCE
+    assert "vec3 mirror = seen * tint + lit * 0.15;" in EXTRUDED_FRAGMENT_SOURCE
 
 
 def test_the_projection_and_heights_match_their_mirrors_on_the_gpu(qt_app):

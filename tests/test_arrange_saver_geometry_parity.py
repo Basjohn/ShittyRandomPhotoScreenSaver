@@ -316,6 +316,7 @@ def test_viewing_or_loading_an_authored_slot_commits_nothing() -> None:
 
 def test_a_reset_widget_stays_authored_and_shows_where_the_saver_puts_it() -> None:
     widgets, display = _reported_layout()
+    authored_position = widgets["reddit"]["position"]
     model = ArrangeModel(widgets, (display,))
     items = {item.model_identity: item for item in model.session.items()}
     model.move(items["reddit2"].source_key, items["reddit2"].current_global_rect.translated(-40, 0), snap=False)
@@ -333,7 +334,7 @@ def test_a_reset_widget_stays_authored_and_shows_where_the_saver_puts_it() -> No
     bucket = load_custom_layout_map(committed)["displays"][display.identity]
     assert "reddit" not in bucket
     assert {"media", "spotify_visualizer", "reddit2"} <= set(bucket)
-    assert committed["reddit"]["position"] == DEFAULT_SETTINGS["widgets"]["reddit"]["position"]
+    assert committed["reddit"]["position"] == authored_position
 
 
 def _clock_face_widgets() -> dict:
