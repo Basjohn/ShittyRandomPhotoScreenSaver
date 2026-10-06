@@ -45,9 +45,16 @@ def test_paused_idle_self_animating_modes_are_unaffected():
 
 
 def test_capability_table_matches_the_gate_premise():
-    # Only Spectrum is presentation-owned-idle; guards against a silent reclassify.
+    # Spectrum remains the original presentation-owned-idle case, while newer
+    # 3D modes may intentionally share that capability. Derive membership from
+    # the capability authority instead of freezing an old one-mode catalog.
     assert mode_capabilities.has_presentation_owned_idle_scene("spectrum") is True
-    assert mode_capabilities.is_idle_self_animating("spectrum") is False
-    for mode in VISUALIZER_MODE_IDS:
-        if mode != "spectrum":
-            assert mode_capabilities.has_presentation_owned_idle_scene(mode) is False
+    presentation_owned = tuple(
+        mode for mode in VISUALIZER_MODE_IDS
+        if mode_capabilities.has_presentation_owned_idle_scene(mode)
+    )
+    assert presentation_owned
+    for mode in presentation_owned:
+        assert mode_capabilities.is_idle_self_animating(mode) is False
+        assert _gate(mode, playing=False) is True
+        assert _gate(mode, playing=True) is False

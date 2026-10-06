@@ -519,6 +519,18 @@ while digital/analogue rects remain variant geometry. A numbered slot must round
 before the fenced rebuild; an empty saved override map clears later overrides rather than inheriting them. Legacy slots that
 never recorded overrides replay their saved shared baseline. Cross-display transfer has one live retained pixel owner and
 preserves logical runtime/model identity.
+
+Visualizer geometry-family separation must reuse this same variant-key architecture. The active repair in
+`Current_Plan.md` §3A introduces profile selection through canonical Visualizer mode metadata while retaining one Visualizer
+widget, one `custom_layout` root and one CUSTOM transaction owner. Family profile is geometry state; 3D orbit/view settings
+remain mode/preset state. A cross-family hot-swap may select another saved variant only at an event-bound hidden activation
+seam; it may not add a second geometry clock, duplicate retained item or parallel persistence map.
+Freeform-3D Edit framing may show **two views of that one owner**: the persisted CUSTOM rectangle is the stage/viewport, while
+an orbit-aware projected content envelope/hull plus pivot is derived from the same CPU reach/bounds authority the renderer uses.
+The derived envelope is presentation-only: it never persists, snaps, collides or auto-resizes/repositions the stage as orbit
+changes. CUSTOM's native pointer block remains binding; Alt-left orbit, Alt-right move and Alt-wheel scale in Edit must route
+semantically through the existing orbit resolver and current `CustomLayoutSession`, never a second direct session or duplicated
+pointer/geometry math.
 Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
 reconstruction, reinjection or provider restart. Clock variant/action context follows the receiving display owner.
 A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption

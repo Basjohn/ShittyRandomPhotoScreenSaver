@@ -136,12 +136,19 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
     assert manager.submissions == 2  # cache read + event-admitted artwork, no extra feed GET
     assert deadlines and all(delay >= 300000 for delay, _ in deadlines)  # existing feed deadline only
     assert source.reads == 1 and source.fetches == 0
-    assert len(consumer.accepted) == 2
+    # Cache text publishes first, artwork settles second, then the family-wide
+    # startup barrier republishes metadata only with initial_admission_complete.
+    assert len(consumer.accepted) == 3
     first, _ = consumer.accepted[0]
-    final, _ = consumer.accepted[1]
-    assert first.snapshot == final.snapshot
+    warmed, _ = consumer.accepted[1]
+    final, _ = consumer.accepted[2]
+    assert first.snapshot == warmed.snapshot == final.snapshot
     assert first.local_artwork_by_item == ()
-    assert len(final.local_artwork_by_item) == 2
+    assert len(warmed.local_artwork_by_item) == 2
+    assert final.local_artwork_by_item == warmed.local_artwork_by_item
+    assert first.initial_admission_complete is False
+    assert warmed.initial_admission_complete is False
+    assert final.initial_admission_complete is True
     assert len(requested) == 2
     shown = project_feed(final.snapshot, view_mode="grid", item_limit=3,
                          local_artwork_by_item=dict(final.local_artwork_by_item))
@@ -161,7 +168,8 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
                              task_priority=0)
     later.attach_consumer(second)
     assert later.start()
-    assert len(second.accepted) == 2
+    assert len(second.accepted) == 3
+    assert second.accepted[-1][0].initial_admission_complete is True
     assert second.accepted[-1][0].local_artwork_by_item == final.local_artwork_by_item
     assert len(requested) == 2
     later.retire()
@@ -203,6 +211,10 @@ def test_artwork_warms_only_rows_an_active_card_can_show(tmp_path, monkeypatch):
     from core.feeds import artwork_transport
     from core.settings import storage_paths
 
+    # This test uses a synchronous fake worker and intentionally never pumps the
+    # owner's real cooldown timer. Collapse only the test's inter-source gap;
+    # production remains serialized and staggered.
+    monkeypatch.setattr(feed_runtime, "_REMOTE_SOURCE_STAGGER_S", 0.0)
     monkeypatch.setattr(storage_paths, "get_feed_cache_dir", lambda profile=None: tmp_path)
     requested = []
 
@@ -269,6 +281,9 @@ def test_a_news_card_warms_art_only_for_the_rows_it_merges(tmp_path, monkeypatch
     from core.settings import storage_paths
     from widgets.feed_runtime import NewsRuntimeConfig, NewsRuntimeService
 
+    # Synchronous fake workers do not execute the production cooldown callback;
+    # remove only that delay so each serialized publisher can finish its share.
+    monkeypatch.setattr(feed_runtime, "_REMOTE_SOURCE_STAGGER_S", 0.0)
     monkeypatch.setattr(storage_paths, "get_feed_cache_dir", lambda profile=None: tmp_path)
     requested = []
 
@@ -306,14 +321,33 @@ def test_a_news_card_warms_art_only_for_the_rows_it_merges(tmp_path, monkeypatch
         "enabled": True, "providers": ["cbs_world", "bbc_world", "npr_world"],
         "item_limit": 12, "show_images": True, "view_mode": "list",
     })
+    class DeferredManager:
+        """Worker-shaped queue: completions never recurse inside submission."""
+
+        def __init__(self):
+            self.tasks = []
+
+        def submit_io_task(self, work, *, callback, **_kwargs):
+            self.tasks.append((work, callback))
+
+        def drain(self):
+            while self.tasks:
+                work, callback = self.tasks.pop(0)
+                try:
+                    callback(SimpleNamespace(success=True, result=work()))
+                except Exception as error:
+                    callback(SimpleNamespace(success=False, error=error, result=None))
+
+    manager = DeferredManager()
     service = NewsRuntimeService(
-        config=NewsRuntimeConfig.from_news(config, 15), generation=46, manager=Manager(),
+        config=NewsRuntimeConfig.from_news(config, 15), generation=46, manager=manager,
         ui_dispatch=lambda callback: callback(), schedule=lambda _delay, _callback: (lambda: None),
         task_priority=0,
     )
     consumer = Consumer()
     service.attach_consumer(consumer)
     assert service.start()
+    manager.drain()
 
     from core.feeds.artwork import MAX_IMAGES_PER_WARM
 

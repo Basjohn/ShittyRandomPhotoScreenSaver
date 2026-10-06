@@ -55,10 +55,13 @@ def test_media_transport_command_starts_while_network_stalls_the_io_pool(saturat
     class _Controller(BaseMediaController):
         _command_inflight = False
 
-        def _run_coro_in_isolated_loop(self, _factory, on_error=None):
+        def _run_coro_on_work_loop(self, _factory, on_error=None):
             lane_threads.append(threading.current_thread().name)
             ran.set()
             return True
+
+        def _run_coro_in_isolated_loop(self, _factory, on_error=None):
+            raise AssertionError("owner-injected Media lane must use the retained work loop")
 
     controller = _Controller()
     owner = _SharedMediaRuntimeOwner(

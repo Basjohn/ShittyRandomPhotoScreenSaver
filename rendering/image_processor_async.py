@@ -148,6 +148,7 @@ class AsyncImageProcessor:
                 img_size.height(),
                 scale_width,
                 scale_height,
+                "smooth",
             )
 
         if scaled.width() > screen_size.width() or scaled.height() > screen_size.height():

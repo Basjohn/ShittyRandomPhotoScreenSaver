@@ -249,17 +249,17 @@ def test_f3_feed_grid_uses_local_artwork_and_geometry_visible_admission(qt_app, 
         frame = visual(root, "feedGridArtworkFrame0")
         assert first is not None and frame is not None
         assert frame.isVisible()
-        assert Path(first.property("source").toLocalFile()) == files[0]
+        assert Path(QUrl(first.property("source")).toLocalFile()) == files[0]
         root.setHeight(620.0)  # All three image-capable rows visible; third art is missing.
         qt_app.processEvents()
         assert frame.isVisible()
-        assert Path(first.property("source").toLocalFile()) == files[0]
+        assert Path(QUrl(first.property("source")).toLocalFile()) == files[0]
         third_frame = visual(root, "feedGridArtworkFrame2")
         assert third_frame is not None and not third_frame.isVisible()
         root.setHeight(178.0)
         qt_app.processEvents()
         assert frame.isVisible()
-        assert Path(first.property("source").toLocalFile()) == files[0]
+        assert Path(QUrl(first.property("source")).toLocalFile()) == files[0]
 
         # FEEDS is an ordinary CUSTOM widget, not a presentation special case.
         # Outer X/Y extent and stable semantic children must use the shared

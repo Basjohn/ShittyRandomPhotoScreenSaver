@@ -28,7 +28,7 @@ Edges measures them in screen pixels (``fwidth`` of the face coordinates) and ke
 least 1.2 smoothed pixels wide, so a face seen at an angle keeps a ramped line instead of one
 foreshortened below a pixel; head-on nothing changes.
 
-Mirror Faces gives the faces (never the edge lines) a polished, faintly brushed
+Mirror Faces gives the faces (never the edge lines) a polished
 mirror surface reflecting the wallpaper: the displayed photograph, downsampled once per image change
 (``widgets/spotify_visualizer/backdrop.py``) into a small mipmapped texture (``BackdropEnvironment``).
 A face shows the wallpaper
@@ -264,7 +264,7 @@ void main() {
         // sits, displaced by the reflected ray toward a near virtual eye at mid-bar height (the
         // real camera is far, so a flat face would mirror one patch), mirrored past the screen's
         // edges, sharper with Gloss. The picture slides across the bars as the view turns.
-        // Faintly brushed, lightly tinted by the face's colour, stronger at grazing angles.
+        // Lightly tinted by the face's colour, stronger at grazing angles.
         // Edge lines stay as they are.
         vec3 v = normalize(vec3(0.0, 0.4, 1.6) - vWorld);
         vec3 r = reflect(-v, n);
@@ -273,10 +273,8 @@ void main() {
         float lod = mix(3.0, 0.4, uGloss);
         vec3 seen = mix(textureLod(uBackdropPrevious, uv, lod).rgb, textureLod(uBackdrop, uv, lod).rgb,
                         uBackdropBlend);
-        vec2 grainAt = floor(vec2(vLocal.x * vSize.x + vLocal.z * vSize.z, vLocal.y * vSize.y * 0.02) * 0.7);
-        float grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))) * 43758.5453);
         vec3 tint = mix(vec3(1.0), body * 1.35, 0.25);
-        vec3 mirror = seen * tint * (0.94 + 0.12 * grain) + lit * 0.15;
+        vec3 mirror = seen * tint + lit * 0.15;
         float fresnel = 0.8 + 0.2 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         lit = mix(lit, mirror, uMirror * fresnel * (1.0 - rim * trimAlpha));
     }

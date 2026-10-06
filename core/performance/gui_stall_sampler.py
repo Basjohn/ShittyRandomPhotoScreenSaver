@@ -28,6 +28,8 @@ import traceback
 from pathlib import Path
 from typing import Callable
 
+from core.threading.affinity_lanes import AffinityLaneScheduler
+
 
 class GuiStallSampler:
     def __init__(
@@ -54,8 +56,21 @@ class GuiStallSampler:
         self._last_wake = 0.0
         self._stalls = 0
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._thread = threading.Thread(target=self._loop, name="gui_stall_sampler", daemon=True)
-        self._thread.start()
+        # The sampler needs its own independent observer thread so it can notice
+        # GUI silence without sharing a potentially stalled product work queue.
+        # Thread creation/lifecycle still belongs to the central threading
+        # infrastructure rather than this diagnostic constructing raw threads.
+        self._scheduler = AffinityLaneScheduler(thread_name="gui_stall_sampler")
+        self._lane = self._scheduler.register_lane(
+            lane_id=f"gui_stall_sampler_{id(self):x}",
+            category="gui_stall_sampler",
+            runtime_generation=None,
+            owner_class=type(self).__name__,
+            owner_id=id(self),
+        )
+        if not self._lane.submit(self._loop):
+            self._scheduler.shutdown(wait=True, timeout=1.0)
+            raise RuntimeError("could not start GUI stall sampler observer")
 
     @property
     def path(self) -> Path:
@@ -87,7 +102,16 @@ class GuiStallSampler:
         with self._lock:
             self._closed = True
         self._wake.set()
-        self._thread.join(timeout)
+        # Let the active observer packet return, then retire its dedicated
+        # scheduler thread. No polling/cadence owner is introduced here.
+        self._lane.stop(wait=True, timeout=timeout)
+        self._scheduler.shutdown(wait=True, timeout=timeout)
+
+    @property
+    def worker_running(self) -> bool:
+        """Diagnostic lifecycle proof for focused tests/teardown checks."""
+
+        return bool(self._scheduler.diagnostic_snapshot().get("worker_threads", 0))
 
     def _loop(self) -> None:
         active = False

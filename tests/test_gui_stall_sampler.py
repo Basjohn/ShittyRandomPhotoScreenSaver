@@ -142,7 +142,7 @@ def test_stack_sampler_requires_its_own_explicit_admission(tmp_path):
         frame_trace.close_frame_trace()
 
     assert frame_trace.current_gui_stall_sampler() is None
-    assert not sampler._thread.is_alive()
+    assert sampler.worker_running is False
 
 
 def test_main_filters_stack_sampler_flag_from_screensaver_mode_parsing(monkeypatch):

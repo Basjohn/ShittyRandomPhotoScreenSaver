@@ -449,7 +449,11 @@ separate viewport and visual-scale intents. New-widget implementation starts wit
 [authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
-Clock digital/analogue are the first required example.
+Clock digital/analogue are the first required example. **That existing variant axis is also the only admitted persistence seam
+for any Visualizer presentation-family split.** A Visualizer family split must remain inside the same `custom_layout` map,
+`CustomLayoutSession` and commit/hydration owner; it may not introduce parallel 2D/3D layout roots, per-mode X/Y settings or a
+second geometry service. `Current_Plan.md` §3A owns the active planar/freeform-3D implementation and migration work; until that
+lands, current Visualizer entries continue to resolve the legacy/default variant.
 
 Edit-mode X changes working session only: duplicate removal or singleton ordinary-enabled OFF. Never family capability
 deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/enabled state.
