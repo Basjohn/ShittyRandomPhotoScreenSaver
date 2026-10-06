@@ -35,13 +35,14 @@ QRhi cannot expose and must remain isolated rather than becoming parallel perman
 
 ## 3. Deferred visual concepts
 
-These remain concept backlog until the prerequisite shared primitives are accepted and measured:
+Only genuinely deferred concepts live here. The currently admitted transition expansion batch (Jigsaw Piece Flip, Volumetric
+Dissolve, VHS Distortion, Edge Bloom Reveal, Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth
+Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than this backlog.
 
 - **Volumetric music chamber** — bounded fog volume, light shafts and spectrum-driven emitters.
 - **Audio aurora / ribbon volume** — translucent ribbons with OIT, glow and slow logical-history advection.
 - **Photo fracture portal** — depth-bearing source shell around a destination-space portal.
 - **Voxel morph field** — deterministic compute/SSBO rearrangement between shapes/topologies, distinct from Voxel Sphere.
-- **Fluid lens transition** — refractive displaced surface with restrained highlight/caustic treatment; SDR only.
 - **Reactive Liquid / Audio Melt Pool** — bounded 2D/2.5D height+velocity field or deformable sheet; do not restart the rejected
   SDF route or jump directly to full 3D SPH without measured justification.
 - **Holographic depth slices** — layered photo/spectrum planes only if the result reads as actual depth rather than cards.
