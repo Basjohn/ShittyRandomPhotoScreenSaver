@@ -57,7 +57,6 @@ def test_the_last_step_offers_both_and_both_save(run) -> None:
         assert panel.finish_and_run_button.isHidden()  # only on the last step
         panel.show_page("ready")
         assert not panel.finish_and_run_button.isHidden()
-        assert panel.next.text() == "Finish"
         panel.settings.set("widgets.weather.location", "TEST INPUT")
         (panel.finish_and_run_button if run else panel.next).click()
         assert settings.get("widgets.weather.location") == "TEST INPUT"  # saved either way

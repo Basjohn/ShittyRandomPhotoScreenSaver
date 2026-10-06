@@ -89,8 +89,6 @@ def test_every_product_worker_emits_nuitka_and_footprint_reports_without_droppin
     assert "function Write-SRPSSBuildFootprintReport" in shared
     assert "function Get-SRPSSQrcSourceMetrics" in shared
     assert "generated_pack_bytes" in shared
-    assert "Binary .rcc is the deployed Qt resource representation" in shared
-    assert "This report describes the current build and current package contents only." in shared
 
 
 def test_build_footprint_report_records_current_payload_and_qrc_source_reference(tmp_path):

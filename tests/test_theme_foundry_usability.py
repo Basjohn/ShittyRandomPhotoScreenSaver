@@ -58,9 +58,9 @@ def test_foundry_defaults_to_human_view_but_preserves_complete_advanced_schema()
 def test_widget_foundry_usability_lessons_are_present_without_a_second_theme_schema() -> None:
     source = FOUNDRY.read_text(encoding="utf-8")
     assert "discover_settings_theme_files" in source
-    assert 'self.open_selected_btn = QPushButton("OPEN SELECTED")' in source
+    assert "self.open_selected_btn = QPushButton(" in source
     assert 'self.color_hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")' in source
-    assert 'self.color_copy_rgba_btn = QPushButton("COPY RGBA")' in source
+    assert "self.color_copy_rgba_btn = QPushButton(" in source
     assert "replace_matching_color_roles" in source
     assert "most_used_colors" in source
     assert '"SRPSSTheme.ico"' in source

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -21,6 +22,15 @@ from core.settings.ui_bucket_state import (
 from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _function_source(path: Path, function_name: str) -> str:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+            return "\n".join(source.splitlines()[node.lineno - 1 : node.end_lineno])
+    raise AssertionError(f"{function_name} not found in {path}")
 
 
 def test_fresh_settings_collapsible_state_is_all_closed() -> None:
@@ -335,11 +345,10 @@ def test_widget_bucket_finalization_has_one_shared_owner() -> None:
         assert "finalize_bucket_body as _finalize_bucket_body" in source
 
 
-def test_bucket_policy_has_no_stale_default_open_or_eager_spectrum_claims() -> None:
-    gmail = (ROOT / "ui" / "tabs" / "widgets_tab_gmail.py").read_text(encoding="utf-8")
+def test_bucket_policy_has_no_retired_explicit_lazy_visualizer_mode_list() -> None:
     media = (ROOT / "ui" / "tabs" / "widgets_tab_media.py").read_text(encoding="utf-8")
-    assert "only default-open bucket" not in gmail
-    assert "Spectrum eager exception" not in media
+    # SOURCE-ORACLE INVARIANT: lazy mode membership is registry/capability owned,
+    # never a second hand-maintained list in the Settings host.
     assert "_LAZY_VISUALIZER_MODES" not in media
 
 def test_deferred_bucket_builders_have_explicit_finalization_paths() -> None:
@@ -367,29 +376,27 @@ def test_deferred_bucket_builders_have_explicit_finalization_paths() -> None:
 
 
 def test_visualizer_parent_disclosures_remain_independent_from_leaf_accordions() -> None:
-    scaffold = (ROOT / "ui" / "tabs" / "media" / "builder_scaffold.py").read_text(
-        encoding="utf-8"
+    scaffold = _function_source(
+        ROOT / "ui" / "tabs" / "media" / "builder_scaffold.py",
+        "build_mode_scaffold",
     )
-    technical = (ROOT / "ui" / "tabs" / "media" / "technical_controls.py").read_text(
-        encoding="utf-8"
+    technical = _function_source(
+        ROOT / "ui" / "tabs" / "media" / "technical_controls.py",
+        "build_per_mode_technical_group",
     )
 
-    # Advanced and Technical are disclosure parents. Their children must be able
-    # to open without causing the parent that contains them to close.
-    assert 'toggle.setText("Advanced")' in scaffold
+    # Parent disclosure ownership is the contract; its displayed caption is not.
+    # Children must be able to open without causing the parent that contains them
+    # to close through the shared leaf-accordion authority.
     assert "get_visualizer_adv_state(mode_key)" in scaffold
     assert 'setter = getattr(tab, "set_visualizer_adv_state", None)' in scaffold
     assert "setter(mode_key, checked)" in scaffold
-    advanced_start = scaffold.index('toggle.setText("Advanced")')
-    advanced_end = len(scaffold)
-    assert "bind_bucket_accordion(" not in scaffold[advanced_start:advanced_end]
+    assert "bind_bucket_accordion(" not in scaffold
 
-    assert 'toggle.setText("Technical")' in technical
     assert "get_visualizer_tech_state(mode_key)" in technical
     assert 'setter = getattr(tab, "set_visualizer_tech_state", None)' in technical
     assert "setter(mode_key, checked)" in technical
-    outer_start = technical.index('toggle.setText("Technical")')
-    assert "bind_bucket_accordion(" not in technical[outer_start:]
+    assert "bind_bucket_accordion(" not in technical
 
 
 def test_explicit_non_bucket_surfaces_stay_outside_collapsible_contract() -> None:

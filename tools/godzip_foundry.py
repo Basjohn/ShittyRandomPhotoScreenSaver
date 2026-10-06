@@ -138,6 +138,7 @@ from godzip_foundry_core import (  # noqa: E402
     RUN_DEFAULT_FLAGS,
     RUN_ENTRYPOINTS,
     apply_godzip,
+    archive_source_relation,
     build_run_command,
     collect_log_files,
     collect_repo_files,
@@ -214,46 +215,6 @@ _GODZIP_NAME_RE = re.compile(
 )
 
 
-def _git_archive_relation(
-    repo_root: Path, source_head: str, *, current_head: str | None = None,
-) -> tuple[str, int | None]:
-    """Return a cheap relationship hint for one archive source commit.
-
-    Cleanup is advisory only.  Unknown or foreign commits are never treated as
-    proof of staleness, and no Git mutation is performed here.
-    """
-
-    token = str(source_head or "").strip()
-    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", token):
-        return "unknown", None
-    current = str(current_head or git_head(repo_root))
-    if current.casefold().startswith(token.casefold()) or token.casefold().startswith(current.casefold()):
-        return "current", 0
-
-    def run_git(*args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", "-C", str(repo_root), *args],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-
-    resolved = run_git("rev-parse", "--verify", f"{token}^{{commit}}")
-    if resolved.returncode != 0:
-        return "unknown", None
-    full = resolved.stdout.strip()
-    if run_git("merge-base", "--is-ancestor", full, current).returncode == 0:
-        count = run_git("rev-list", "--count", f"{full}..{current}")
-        try:
-            return "behind", int(count.stdout.strip())
-        except (TypeError, ValueError):
-            return "behind", None
-    if run_git("merge-base", "--is-ancestor", current, full).returncode == 0:
-        return "future", None
-    return "diverged", None
-
-
 def _archive_cleanup_record(
     repo_root: Path,
     path: Path,
@@ -307,7 +268,7 @@ def _archive_cleanup_record(
     cache_key = source_head.casefold()
     cached_relation = relation_cache.get(cache_key) if relation_cache is not None else None
     if cached_relation is None:
-        cached_relation = _git_archive_relation(
+        cached_relation = archive_source_relation(
             repo_root, source_head, current_head=current_head,
         )
         if relation_cache is not None:
@@ -1085,7 +1046,8 @@ class CreateTab(QWidget):
 
     def select_changed(self) -> None:
         # Generated QRC Python is deliberately opt-in even when Git marks it
-        # changed; the compact QRC sources/assets are enough for regeneration.
+        # changed. The heavyweight ui/assets source tree is not part of normal
+        # GODZIP transfer at all and is filtered before entries reach this view.
         self.tree.set_leaf_checks(
             lambda payload: bool(payload.status) and not is_generated_qrc_python(payload.path)
         )
@@ -1160,7 +1122,8 @@ class CreateTab(QWidget):
                 f"Created:\n{output}\n\n"
                 f"HEAD: {manifest['source_head'][:10]}\n"
                 f"Dirty worktree: {'yes' if manifest['dirty_worktree'] else 'no'}\n"
-                "Manifest: .godzip/manifest.json\n\n"
+                "Manifest: .godzip/manifest.json\n"
+                "Workflow: .godzip/workflow.md\n\n"
                 "The archive passed CRC validation before publication.",
             )
             self._auto_name = suggested_godzip_name(self.repo_root)

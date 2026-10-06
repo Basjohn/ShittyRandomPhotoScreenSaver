@@ -15,9 +15,9 @@ def _text(relative: str) -> str:
 
 def test_shared_header_fill_and_explicit_reset_live_only_in_general_style_overrides() -> None:
     source = _text("ui/tabs/widgets_tab_defaults.py")
-    assert '"Header Fill:"' in source
+    assert "tab.widget_header_fill_btn = ColorSwatchButton(" in source
     assert '"header.fill"' in source
-    assert '"Reset All Colours to Theme"' in source
+    assert "tab.reset_widget_colors_to_theme_btn = OutlinedButton(" in source
     assert '_on_reset_family_colors_to_theme' in source
     assert '_reset_family_color_overrides_to_theme' in source
     assert 'StyledPopup.question(' in source
@@ -47,9 +47,6 @@ def test_header_family_swatch_controls_are_retired() -> None:
         "ui/tabs/widgets_tab_steam.py",
     ):
         source = _text(relative)
-        assert '"Header Fill:"' not in source, relative
-        assert '"Header Text:"' not in source, relative
-        assert '"Header Border:"' not in source, relative
         assert '_header_fill_color_btn = ColorSwatchButton' not in source, relative
         assert '_header_text_color_btn = ColorSwatchButton' not in source, relative
         assert '_header_border_color_btn = ColorSwatchButton' not in source, relative

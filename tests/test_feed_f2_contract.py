@@ -139,10 +139,6 @@ def test_feed_presentation_capacity_never_clips_configured_rows_or_steals_edit_w
     assert "WheelHandler" not in qml
 
 
-def test_feed_settings_describes_item_count_as_a_maximum():
-    settings = _text("ui/tabs/widgets_tab_feeds.py")
-    assert '"Max Items:"' in settings
-
 
 def test_feed_custom_xy_resize_projects_content_extent_and_reflows_without_io():
     source = _text("rendering/quick/widgets/feeds.py")

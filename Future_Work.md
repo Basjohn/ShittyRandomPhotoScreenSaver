@@ -64,6 +64,10 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 - wallpaper-feed consolidation only where shared normalization simplifies code without merging cache/scheduling authorities;
 - persistent shader/program cache only for a measured residual cold-compile hitch after gradual warm-up;
 - bindless/sparse texture extension research only for a concrete consumer and without a permanent duplicate renderer path.
+- optional long-tail test-oracle cleanup from the completed durability tranche: manually review remaining default-pin,
+  source-string and exact-UI-copy advisory candidates only when touched or when they obscure a real contract. Preserve deliberate
+  compatibility mappings, goldens, geometry/state oracles, architecture-negative bars and wording contracts; do not turn the
+  advisory queues into a standing release blocker or a project-wide rewrite campaign.
 
 ## 5. Boundary
 

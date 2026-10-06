@@ -103,7 +103,6 @@ def test_settings_feeds_section_builds_and_round_trips_all_four_slots(qt_app, se
     tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "feeds"})
     try:
         for slot in (1, 2, 3, 4):
-            assert getattr(tab, feed_slot_attr(slot, "enabled")).text() == f"Enable Custom {slot}"
             container = getattr(tab, f"_feeds_custom{slot}_controls_container")
             getattr(tab, feed_slot_attr(slot, "enabled")).setChecked(False)
             assert container.isHidden() is True

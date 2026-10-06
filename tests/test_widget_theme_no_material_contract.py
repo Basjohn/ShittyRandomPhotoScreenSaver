@@ -82,15 +82,12 @@ def test_widget_theme_schema_is_colour_only_v3() -> None:
     assert "effective_card_material_mode" not in compatibility
     assert "get_active_widget_material_mode" not in active
 
-def test_style_overrides_keep_colours_and_border_width_but_no_surface_style() -> None:
+def test_style_overrides_keep_colour_and_border_width_controls_but_no_surface_style() -> None:
     source = _text(ROOT / "ui" / "tabs" / "widgets_tab_defaults.py")
-    style_bucket = source.index('"Style Overrides"')
-    layout_bucket = source.index('"Layout"', style_bucket)
-    assert style_bucket < layout_bucket
-    assert 'style_overrides_layout,\n        "Card Surface:"' in source
-    assert 'style_overrides_layout,\n        "Card Border:"' in source
-    assert 'style_overrides_layout,\n        "Card Border Width:"' in source
-    assert '"Surface Style:"' not in source
+    # Control ownership is the contract. Human-facing row captions are free to change.
+    assert "tab.widget_card_surface_btn = ColorSwatchButton(" in source
+    assert "tab.widget_card_border_btn = ColorSwatchButton(" in source
+    assert "tab.card_border_width_spin = QSpinBox()" in source
     assert "widget_surface_style_combo" not in source
 
 
