@@ -42,11 +42,8 @@ def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> 
     requested = _canonical_activation()
     requested["oscilloscope"] = False
     requested["bubble"] = False
-    assert resolve_effective_enabled_modes(requested) == (
-        "spectrum",
-        "sine_wave",
-        "devcurve",
-        "sphere",
+    assert resolve_effective_enabled_modes(requested) == tuple(
+        mode_id for mode_id in VISUALIZER_MODE_IDS if requested[mode_id]
     )
 
     # Persisted all-off state cannot strand an active Visualizer family.
@@ -57,27 +54,17 @@ def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> 
 
 
 def test_model_serializes_only_current_mode_activation_schema() -> None:
+    selected = ("spectrum", "bubble", "sphere")
     model = SpotifyVisualizerSettings.from_mapping(
-        {
-            "mode_activation": build_visualizer_mode_activation(
-                ("spectrum", "bubble", "sphere")
-            )
-        }
+        {"mode_activation": build_visualizer_mode_activation(selected)}
     )
     payload = model.to_dict()
 
     assert not any(key.endswith(".enabled_modes") for key in payload)
     assert payload["widgets.spotify_visualizer.mode_activation"] == {
-        "spectrum": True,
-        "oscilloscope": False,
-        "sine_wave": False,
-        "bubble": True,
-        "devcurve": False,
-        "sphere": True,
-        "extruded_spectrum": False,
-        "shockwave_grid": False,
+        mode_id: mode_id in selected for mode_id in VISUALIZER_MODE_IDS
     }
-    assert model.enabled_modes == ("spectrum", "bubble", "sphere")
+    assert model.enabled_modes == selected
 
 
 def test_retired_enabled_modes_is_migrated_once_and_removed(caplog) -> None:
@@ -90,14 +77,8 @@ def test_retired_enabled_modes_is_migrated_once_and_removed(caplog) -> None:
         )
 
     assert "enabled_modes" not in migrated
+    selected = {"spectrum", "bubble"}
     assert migrated["mode_activation"] == {
-        "spectrum": True,
-        "oscilloscope": False,
-        "sine_wave": False,
-        "bubble": True,
-        "devcurve": False,
-        "sphere": False,
-        "extruded_spectrum": False,
-        "shockwave_grid": False,
+        mode_id: mode_id in selected for mode_id in VISUALIZER_MODE_IDS
     }
     assert "Retired enabled_modes was relied on" in caplog.text

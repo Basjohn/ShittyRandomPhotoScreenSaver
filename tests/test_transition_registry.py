@@ -68,6 +68,8 @@ def test_transition_registry_runtime_identity_resolves_internal_labels_and_class
 
 
 def test_transition_registry_owns_each_authored_progress_curve() -> None:
+    # EXACT-VALUE INVARIANT: each transition must make a deliberate authored easing
+    # choice. A new registry member should fail here until that semantic is reviewed.
     assert {
         descriptor.stable_id: descriptor.easing_curve
         for descriptor in iter_transition_descriptors()

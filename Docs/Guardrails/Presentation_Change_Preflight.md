@@ -43,7 +43,7 @@ left/right edge        -> viewport width
  top/bottom edge       -> viewport height
 ```
 
-All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes include Bubble; experimental Sphere uses its frameless viewport policy. Bubble viewport changes are spatial
+Every registered mode must remain viewport-resize-capable through its declared policy. CARD + CARD_INTERIOR modes use the shared card geometry contract; FRAMELESS + VIEWPORT_RECT modes use their frameless viewport policy. Bubble viewport changes are spatial
 configuration and remain subordinate to BTF; they are not grounds for algorithm/cadence retuning.
 
 R-69 is a hard preflight veto: do not make wide/tall geometry look tidier by globally shrinking authored response amplitude, Bubble head radius, motion or already-normalized Ghost/history displacement. Apply the same principle to every mode. Extreme-tail polish must target only the proven visual tail.

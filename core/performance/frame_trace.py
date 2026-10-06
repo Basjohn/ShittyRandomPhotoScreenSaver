@@ -455,8 +455,14 @@ def frame_trace_requested(argv: list[str] | tuple[str, ...]) -> bool:
     return any(str(arg).strip().lower() == "--frame-trace" for arg in argv)
 
 
+def gui_stall_stacks_requested(argv: list[str] | tuple[str, ...]) -> bool:
+    """Heavy all-thread stack sampling is separately admitted from the binary trace."""
+
+    return any(str(arg).strip().lower() == "--gui-stall-stacks" for arg in argv)
+
+
 def start_frame_trace(log_dir: Path, argv: list[str] | tuple[str, ...]) -> FrameTraceSink | None:
-    """Start only for explicit ``--frame-trace`` admission."""
+    """Start the binary trace; heavy stack sampling has separate admission."""
 
     if not frame_trace_requested(argv):
         return None
@@ -466,10 +472,15 @@ def start_frame_trace(log_dir: Path, argv: list[str] | tuple[str, ...]) -> Frame
             return _active_sink
         sink = FrameTraceSink(Path(log_dir) / "screensaver_frame_trace.bin")
         _active_sink = sink
-        # The trace's companion: GUI-thread stacks when Visualizer GUI wakes stall (N1e).
-        from core.performance.gui_stall_sampler import GuiStallSampler
+        # N1e all-thread stack formatting is intentionally heavier than the
+        # binary trace. Keep historical --frame-trace low-observer-effect and
+        # admit the sampler only through its own explicit CLI switch.
+        if gui_stall_stacks_requested(argv):
+            from core.performance.gui_stall_sampler import GuiStallSampler
 
-        _active_stall_sampler = GuiStallSampler(Path(log_dir) / "gui_stall_stacks.log")
+            _active_stall_sampler = GuiStallSampler(Path(log_dir) / "gui_stall_stacks.log")
+        else:
+            _active_stall_sampler = None
         return sink
 
 
@@ -480,7 +491,7 @@ def current_frame_trace() -> FrameTraceSink | None:
 
 
 def current_gui_stall_sampler():
-    """The ``--frame-trace`` GUI stall sampler; ordinary runtime receives ``None``."""
+    """The separately admitted GUI stall sampler; otherwise return ``None``."""
 
     return _active_stall_sampler
 
@@ -515,6 +526,7 @@ __all__ = [
     "close_frame_trace",
     "current_frame_trace",
     "frame_trace_requested",
+    "gui_stall_stacks_requested",
     "logical_timestamp_ns",
     "start_frame_trace",
 ]

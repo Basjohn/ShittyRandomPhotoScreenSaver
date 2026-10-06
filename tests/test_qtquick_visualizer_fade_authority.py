@@ -21,15 +21,17 @@ from pathlib import Path
 
 import pytest
 
+from core.settings.visualizer_mode_registry import (
+    VisualizerShellPolicy,
+    iter_visualizer_mode_descriptors,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
-_RENDERERS = ROOT / "rendering" / "quick" / "visualizer" / "implementations"
 _MODE_FILES = {
-    "spectrum": _RENDERERS / "spectrum.py",
-    "oscilloscope": _RENDERERS / "oscilloscope.py",
-    "sine_wave": _RENDERERS / "sine_wave.py",
-    "bubble": _RENDERERS / "bubble.py",
-    "devcurve": _RENDERERS / "devcurve.py",
+    descriptor.mode_id: ROOT / (descriptor.renderer_module.replace(".", "/") + ".py")
+    for descriptor in iter_visualizer_mode_descriptors()
+    if descriptor.presentation_policy.shell_policy is VisualizerShellPolicy.CARD
 }
 
 

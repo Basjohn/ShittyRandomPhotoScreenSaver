@@ -1408,26 +1408,20 @@ def test_sphere_owned_controls_do_not_enter_accepted_mode_implementations() -> N
         "sphere_incoming_transient_velocity_enabled",
         "sphere_particle_outtake_enabled",
     )
-    accepted_mode_ids = (
-        "bubble",
-        "spectrum",
-        "oscilloscope",
-        "sine",
-        "devcurve",
-    )
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
 
-    implementation_root = ROOT / "rendering/quick/visualizer/implementations"
-    runtime_root = ROOT / "widgets/spotify_visualizer"
-    for mode_id in accepted_mode_ids:
-        implementation = implementation_root / f"{mode_id}.py"
-        if implementation.exists():
-            source = implementation.read_text(encoding="utf-8")
-            assert all(key not in source for key in keys), mode_id
+    for descriptor in iter_visualizer_mode_descriptors():
+        if descriptor.mode_id == "sphere":
+            continue
+        implementation = ROOT / Path(*descriptor.renderer_module.split("."))
+        implementation = implementation.with_suffix(".py")
+        source = implementation.read_text(encoding="utf-8")
+        assert all(key not in source for key in keys), descriptor.mode_id
 
-        runtime = runtime_root / f"{mode_id}_frame_runtime.py"
-        if runtime.exists():
-            source = runtime.read_text(encoding="utf-8")
-            assert all(key not in source for key in keys), mode_id
+        runtime = ROOT / Path(*descriptor.frame_runtime_module.split("."))
+        runtime = runtime.with_suffix(".py")
+        source = runtime.read_text(encoding="utf-8")
+        assert all(key not in source for key in keys), descriptor.mode_id
 
     shared_node = (ROOT / "rendering/quick/visualizer/node.py").read_text(encoding="utf-8")
     shared_capture = (ROOT / "widgets/spotify_visualizer/logical_frame_capture.py").read_text(encoding="utf-8")

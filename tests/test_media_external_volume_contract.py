@@ -71,10 +71,13 @@ def test_visualizer_volume_wheel_is_event_only_and_custom_gated() -> None:
     assert 'root.setProperty("volumeWheelEnabled", True)' in controller
 
 
-def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> None:
+def test_media_settings_expose_collapsed_appearance_seek_and_volume_buckets() -> None:
     source = _text("ui/tabs/widgets_tab_media.py")
-    for label in ("Appearance", "Seek Bar", "Volume Control"):
-        assert f'"{label}"' in source
+    # Bucket identity/state is the behavior contract. Human-facing captions are
+    # editable copy and must not become source-string oracles.
+    for state_key in ("appearance", "seek_bar", "volume_control"):
+        assert f'get_widget_bucket_state("media", "{state_key}")' in source
+        assert f'set_widget_bucket_state("media", "{state_key}", checked)' in source
     for attr in (
         "media_volume_track_color_btn",
         "media_volume_fill_color_btn",
@@ -88,14 +91,19 @@ def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> Non
 
 
 def test_media_new_visual_role_defaults_are_persisted() -> None:
+    from core.settings.default_contract import require_canonical_default
+
     payload = build_defaults_snapshot()
     media = payload["widgets"]["media"]
-    assert media["spotify_volume_track_color"] == [35, 35, 35, 255]
-    assert media["spotify_volume_fill_color"] == [79, 79, 79, 150]
-    assert media["spotify_volume_border_color"] == [255, 255, 255, 255]
-    assert media["playback_progress_track_color"] == [255, 255, 255, 74]
-    assert media["playback_progress_fill_color"] == [255, 255, 255, 230]
-    assert media["playback_progress_shadow_color"] == [0, 0, 0, 102]
+    for key in (
+        "spotify_volume_track_color",
+        "spotify_volume_fill_color",
+        "spotify_volume_border_color",
+        "playback_progress_track_color",
+        "playback_progress_fill_color",
+        "playback_progress_shadow_color",
+    ):
+        assert media[key] == require_canonical_default(f"widgets.media.{key}")
 
 
 def test_steam_family_headers_use_alpha_cropped_logo_asset() -> None:

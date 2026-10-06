@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
     get_visualizer_presentation_policy,
 )
 from rendering.quick.visualizer.implementations.devcurve import (
@@ -441,16 +442,7 @@ def test_quick_devcurve_registry_is_static_lazy_and_resource_dormant(
     from rendering.quick.visualizer import implementation_registry
 
     descriptors = implementation_registry.iter_quick_visualizer_implementations()
-    assert tuple(descriptor.mode_id for descriptor in descriptors) == (
-        "spectrum",
-        "oscilloscope",
-        "sine_wave",
-        "bubble",
-        "devcurve",
-        "sphere",
-        "extruded_spectrum",
-        "shockwave_grid",
-    )
+    assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
     imported: list[str] = []
     real_import = implementation_registry.import_module
 

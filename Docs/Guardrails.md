@@ -137,7 +137,7 @@ uniform_visual_scale   # wheel/corner whole-size scaling
 viewport_extent        # independent world/playroom width/height
 ```
 
-All six registered modes are viewport-resize-capable through their declared presentation policy. The five established carded technical modes share the card geometry path; experimental Sphere uses FRAMELESS + VIEWPORT_RECT. Edge viewport resize is configuration, not a clock. Bubble
+Every registered mode must declare a viewport-resize-capable presentation policy. Modes using CARD + CARD_INTERIOR share the card geometry path; FRAMELESS + VIEWPORT_RECT modes use their frameless viewport path. Edge viewport resize is configuration, not a clock. Bubble
 must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
 remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
 non-baseline layout to canonical by confusing "no override" with "baseline".

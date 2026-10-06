@@ -14,6 +14,7 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Docs/Reference/` | current lookup/reference/harness material |
 | `Docs/Historical_Bugs/` | permanent regression, root-cause and failed-method evidence |
 | `Docs/TestSuite.md` | live test inventory/status authority |
+| `Docs/Guides/Test_Durability.md` | test-authoring authority for mutable versus intentionally exact expectations |
 | `Docs/Architecture/Persisted_Input_Compatibility.md` | persisted-input compatibility-bridge guard (user-data protection, horizon-gated — not a backlog) |
 | `Future_Work.md` | deferred ideas, their admission rules and dormant ordering (the single future-work router) |
 
@@ -31,6 +32,19 @@ Do **not** create or route new live authority through parallel `Fossils`, `audit
 4. rely on source control for the full chronological body.
 
 A promoted implementation program belongs in `Current_Plan.md`; dormant ideas belong in the single root `Future_Work.md`. Do not keep a second live decomposition merely because it once carried more detail. If a maintained Guide/Reference already contains the durable contract, delete any byte-identical or superseded planning copy rather than keeping two authorities.
+
+## Extensible catalogs are count-neutral
+
+Live docs must not encode the current cardinality of an extensible registry as a product invariant. Visualizer modes,
+transitions, providers and similar catalogs grow over time. Write contracts against the owning registry/descriptor/capability:
+
+- **good:** "every registered Visualizer mode declares a presentation policy";
+- **good:** "enumerate the canonical transition registry at capture/test time";
+- **bad:** "all six modes" / "the 23 transitions" when the number is merely today's membership count.
+
+A numeric count is appropriate only when the number itself is product behavior, a fixed protocol/resource bound, or explicitly
+historical evidence. Current catalog membership belongs to source registries and registry-derived tests/tools. Reference docs may
+describe mode/effect-specific exceptions without pretending their prose list is a second membership authority.
 
 ## These are not changelogs
 
@@ -75,6 +89,10 @@ For Settings theme/backdrop ownership changes also inspect `Docs/Architecture/Se
 When caller-dead implementation is retired, delete implementation-only tombstone tests with it unless a real surviving behavior needs rehomed coverage. Never resurrect museum architecture because an old test imports it.
 
 For Qt/QQuick-heavy profiles, subprocess isolation is a valid test-harness boundary when one target can poison later targets through queued callbacks/scenegraph teardown. Isolation must expose the owning failure, not hide it.
+
+## Test authority hygiene
+
+Test expectations follow the same source-of-truth rule as documentation. Mutable defaults, extensible registry/catalog membership and authored preset/theme payloads must not be copied into unrelated tests as a second authority. Authored Markdown prose is explanatory authority, not a substitute behavioral oracle: tests prove the runtime/source contract itself unless a generated document is explicitly the product artifact under test. Use `Docs/Guides/Test_Durability.md` and the blocking `tools/test_durability_audit.py` bar. Exact regression pins remain desirable when the value itself is the contract.
 
 ## Import dormancy wording
 

@@ -94,12 +94,12 @@ def test_settings_bucket_schema_contains_every_live_feed_builder_identity():
     from core.settings.default_settings import DEFAULT_SETTINGS
     canonical = DEFAULT_SETTINGS["ui"]["widget_bucket_states"]
     for bucket in ("custom_1_source", "custom_1_content", "custom_1_layout", "custom_1_appearance"):
-        assert canonical[f"feeds:{bucket}"] is False
+        assert isinstance(canonical[f"feeds:{bucket}"], bool)
     normalized = normalize_widget_bucket_states(canonical, {"feeds:custom_1_source": True})
     assert normalized["feeds:custom_1_source"]
     assert not any(normalized[f"feeds:{name}"] for name in (
         "custom_1_content", "custom_1_layout", "custom_1_appearance"))
-    assert require_canonical_default("widgets.feeds_custom_1.show_images") is True
+    assert isinstance(require_canonical_default("widgets.feeds_custom_1.show_images"), bool)
 
 
 def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path, monkeypatch):

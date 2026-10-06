@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -22,6 +22,7 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **ACTIVE / PHYSICAL ACCEPTANCE OPEN**. The first render-only chatter repair is baseline; the tiny-radius presentation-only candidate still requires recording A/B plus Bubble fidelity acceptance.
 - [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **AWAITING VALIDATION**. Windows dual-monitor built check in `Current_Plan.md`.
 - [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
@@ -40,6 +41,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-106 — Visualizer Dormancy Audit and Frame-Trace Observer Pressure](Historical_Bugs/R-106_Visualizer_Dormancy_And_Shutdown_Ownership_Followup.md) — **CLOSED / 10 OF 10 PHYSICAL GREEN**. Plain frame trace was restored to low-observer behavior; all-thread stall stacks became separately admitted/lifecycle-suppressed; ten bounded startup/reveal/normal-terminal-shutdown cycles completed without memoryview/native faults. Remaining dormancy/Python-owner cleanup is live work, not incident closure debt.
 - [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Pure-Python remote parsing moved to one lazy spawned family process; durable warm artwork bindings and coherent presentation states restore cache-first startup and remove the recurring parser/GIL hitch.
 - [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](Historical_Bugs/R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. One retained Media-owner Proactor loop/manager replaces per-query kernel-object churn; deterministic reuse and real Windows handle gates pass.
 - [R-102 — Frozen Qt Quick Runtime Pruned PySide6.QtOpenGL](Historical_Bugs/R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) — **SOLVED**. Frozen dependency pruning now respects Qt Quick's binding/runtime graph while the unrelated OpenGLWidgets layer stays pruned.

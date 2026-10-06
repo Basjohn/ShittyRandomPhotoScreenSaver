@@ -11,7 +11,7 @@ Global presets control *which widgets are visible*; visualizer presets control
 
 Usage:
     from core.settings.visualizer_presets import get_presets, apply_preset, MODES
-    presets = get_presets("spectrum")   # list of 4 VisualizerPreset
+    presets = get_presets("spectrum")   # authored VisualizerPreset entries + trailing Custom
     apply_preset(settings_manager, "spectrum", 0)  # apply Preset 1
 """
 from __future__ import annotations

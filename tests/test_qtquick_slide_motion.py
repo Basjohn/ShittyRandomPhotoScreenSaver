@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.settings.default_contract import require_canonical_default
 from rendering.quick.transitions.implementations.slide import (
     _slide_elastic_arrival,
     _slide_partition_sample,
@@ -124,7 +125,8 @@ def test_slide_resolution_falls_back_to_canonical_motion_style(invalid):
     # default would raise.
     spec = resolve_quick_transition_spec(_Settings(invalid))
     assert spec is not None
-    assert dict(spec.parameters) == {"motion_style": "Linear"}
+    expected = str(require_canonical_default("transitions.slide.motion_style"))
+    assert dict(spec.parameters) == {"motion_style": expected}
 
 
 @pytest.mark.parametrize("direction", ("left", "right", "up", "down"))

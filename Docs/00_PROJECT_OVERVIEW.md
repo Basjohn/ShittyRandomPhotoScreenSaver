@@ -33,13 +33,13 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
-FEEDS is an active product family of ten retained cards on the shared bounded feed transport/parser/cache/runtime path: four CUSTOM slots (any feed or website address) and six NEWS categories that merge vetted no-signup publisher feeds. The implemented contract, invariants and remaining physical acceptance live in `Docs/Reference/Feeds.md`.
+FEEDS is an active product family whose retained cards are owned by the canonical feed catalog and share one bounded transport/parser/cache/runtime path. CUSTOM cards accept feed or website addresses; NEWS categories merge vetted no-signup publisher feeds. The implemented contract, invariants and remaining physical acceptance live in `Docs/Reference/Feeds.md`.
 
 Games You Follow and the independently enabled master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 
 ## Visualizer geometry
 
-Visualizer mode identity now has two useful sets: five established carded technical modes (Spectrum, Oscilloscope, Sine, Bubble, DevCurve) plus the separately registered experimental Sphere. All registered modes use the current scale/extent ownership model; Sphere is FRAMELESS + VIEWPORT_RECT and dormant by default.
+Visualizer identity is registry-driven. Each descriptor declares shell/clip policy, viewport-resize capability and lazy runtime/renderer/Settings wiring; membership is not duplicated here as a fixed count. Carded and frameless modes share the current scale/extent ownership model through their declared policies. Experimental admission is a descriptor/default state, not a second renderer architecture.
 
 ```text
 wheel/corners -> uniform scale

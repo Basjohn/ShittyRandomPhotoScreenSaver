@@ -81,6 +81,42 @@ For FEEDS source/artwork identity investigations, add `--feeds`. This opts into 
 
 Use `Docs/Reference/Harness_Index.md` plus `Docs/TestSuite.md` before preserving an old script; absent retired tooling belongs to source history, not a recreated audit file. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
 
+### Bounded self-terminating RUN sessions
+
+For repeated startup, soak or teardown acceptance, prefer the RUN-only `--exit-after` CLI over an external process kill or window-close script:
+
+```powershell
+python main_mc.py --exit-after 15 /s
+python main_mc.py --exit-after=60 /s
+```
+
+The value is seconds. The countdown is armed only after `ScreensaverEngine.start()` succeeds and immediately before the RUN Qt event loop begins. It owns one `QTimer.singleShot` callback and no recurring cadence, worker or ThreadManager task. The callback requests the existing terminal authority with `engine.stop(reason="cli_exit_after")`; Quick retirement, worker/service shutdown, persistence durability and `QApplication.quit()` therefore follow the normal product path. Without `--exit-after`, no timer/callback is created. The switch is ignored outside RUN mode. Invalid, non-finite or non-positive values fail RUN startup with exit code 2 rather than leaving an unattended test running forever.
+
+Ten-run startup/terminal-retirement acceptance can therefore stay deliberately simple:
+
+```powershell
+$FaultPattern = "Windows fatal exception|access violation|BufferError|memoryview has 1 exported buffer"
+
+1..10 | ForEach-Object {
+    Write-Host "`n========== RUN $_ / 10 =========="
+    python main_mc.py --debug --frame-trace --fresh --exit-after 15 /s
+
+    $Code = $LASTEXITCODE
+    $Fault = ((Test-Path ".\logs\native_faults.log") -and
+              (Select-String ".\logs\native_faults.log" -Pattern $FaultPattern -Quiet)) -or
+             ((Test-Path ".\logs\screensaver.log") -and
+              (Select-String ".\logs\screensaver.log" -Pattern $FaultPattern -Quiet))
+
+    if ($Code -ne 0 -or $Fault) {
+        Write-Host "FAILED ON RUN $_ : EXIT=$Code FAULT=$Fault"
+        break
+    }
+    Write-Host "PASS $_ / 10"
+}
+```
+
+This is intentionally blocking: each child owns its own normal terminal shutdown and PowerShell advances only after that process has fully exited. Do not replace it with `Stop-Process`, parent-Python termination or broadcast `WM_CLOSE`; those bypass the runtime-destruction authority and can also terminate the GODZIP Foundry host that launched the script.
+
 Current independent resource observation:
 
 ```powershell
@@ -110,11 +146,12 @@ Keep diagnostic flags with the evidence so sampler cost can be interpreted. `pyt
 `late_overlapping_handoff` for both Visualizer render and draw intervals; absent handoff evidence is unavailable,
 not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and count completions with
 `python tools\image_change_perf_parser.py logs\screensaver_perf.log`. `Current_Plan.md` owns the acceptance status.
-`python toolsrame_trace_cadence.py logs\screensaver_frame_trace.bin [--seconds]` reports Visualizer presentation
+`python tools\frame_trace_cadence.py logs\screensaver_frame_trace.bin [--seconds]` reports Visualizer presentation
 cadence from the same trace: per-second publications/draws/repeated draws by transition state, and publication/swap
-gap frequency and periodicity with the logical dt, and classifies each presentation stall (Current_Plan N1). The
-same `--frame-trace` admission writes `logs\gui_stall_stacks.log`: every thread's Python stack once per stall of
-the Visualizer's GUI wakes (> 40 ms), then the stall's length.
+gap frequency and periodicity with the logical dt, and classifies each presentation stall (Current_Plan N1). Plain
+`--frame-trace` remains the low-observer binary trace. Add `--gui-stall-stacks` only when all-thread Python stacks are
+needed for a steady-state GUI-wake stall; that companion is separately admitted and disarms during lifecycle windows.
+
 
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 

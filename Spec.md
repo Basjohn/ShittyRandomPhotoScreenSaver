@@ -488,7 +488,7 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
 simulation cadence.
 
-All six current modes share a default/baseline 1.5 aspect and support two distinct CUSTOM operations:
+Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect; every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
 
 ```text
 uniform_visual_scale
@@ -500,8 +500,7 @@ viewport_extent
     corner -> width + height independently, opposite corner anchored
 ```
 
-Viewport extent is world/layout playroom, not final-pixel X/Y stretch. All six current modes—Spectrum,
-Oscilloscope, Sine, Bubble, DevCurve and Sphere—must reflow/adapt to wide/tall extents. Bubble's viewport bounds are spatial
+Viewport extent is world/layout playroom, not final-pixel X/Y stretch. Every registered mode must remain viewport-resize-capable through its descriptor policy and adapt its authored domain to wide/tall extents without anisotropic final-pixel stretch. Bubble's viewport bounds are spatial
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
 must not create another clock. Bubble position/trail coordinates normalize from that expanded world. Stream/drift deltas
 are renderer-content-relative: each nonbaseline movement axis projects once onto the corresponding expanded domain axis,
@@ -534,7 +533,7 @@ stream-burst state. They must not add a clock, mutate authored motion settings, 
 authority. Motion diagnostics report renderer-normalized, pre-collision stream/drift contributions; final trajectory can
 still be changed by the existing impulse and collision stages.
 
-The all-six-mode viewport capability policy is part of the destination contract and the core Bubble reflow path has landed.
+Registry-wide viewport capability is part of the destination contract and the core Bubble reflow path has landed.
 Bubble's per-head specular mutation and light ellipse use the canonical content aspect at the current
 uniform scale/inset; edge resizing changes playroom without stretching or rotating the local highlight.
 Do not reintroduce a Bubble false capability gate to conceal a viewport ownership or spatial-domain defect. **R-69 is golden for optimization:** wide/tall geometry may not globally compress renderer-facing Bubble head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme Bubble full-expansion tail is too large, fix only that proven tail.
@@ -557,7 +556,7 @@ Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visibl
 420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
 Glow size/intensity and line-core antialiasing remain independent.
 
-Sphere is an **accepted experimental**, independently enabled sixth mode; existing profiles retain the original five enabled modes. The current representation is **Voxel Sphere (Experimental)**: a frameless transparent stepped-voxel shell using one static cube mesh and one static instance buffer with vertex-shader deformation. Its current musical behaviour—event-owned fragmentation/cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and vocal-linked intake recoil—is a golden preservation target. Presentation or maintenance work may not reduce its reactivity/freshness or introduce ambient/private cadence.
+Sphere is an **accepted experimental** registered mode. Canonical per-mode activation defaults keep it dormant unless explicitly admitted; registry growth must not require rewriting this contract. The current representation is **Voxel Sphere (Experimental)**: a frameless transparent stepped-voxel shell using one static cube mesh and one static instance buffer with vertex-shader deformation. Its current musical behaviour—event-owned fragmentation/cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and vocal-linked intake recoil—is a golden preservation target. Presentation or maintenance work may not reduce its reactivity/freshness or introduce ambient/private cadence.
 
 Sphere's promotion onto the shared low-level scene3d substrate is authorised and active, but its behavioural architecture remains private until that migration passes the Sphere golden. Its descriptor lazily resolves its Settings builder, capture, frame runtime and renderer; heavy implementation resources stay dormant while disabled and retire through the normal render-context lifecycle. Canonical state remains in the `sphere_*` namespace, while shared technical/Rainbow/bar-appearance ownership is explicitly opted out. Sphere currently resolves its hidden technical profile through canonical Spectrum settings; those resolved values are behavioural input and must be recorded before migration. Sphere-local Taste The Rainbow is implemented independently inside the voxel renderer and does not make the shared Rainbow family an owner.
 
@@ -592,7 +591,7 @@ another display must not require or construct a duplicate Media presentation on 
 
 ## Transitions
 
-Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Ink Bloom, Melt Drip, Page Curl, Disintegrate, Accordion Fold, Relief Rise, Cube Turn and Beam use the canonical catalog and lazy Quick host, deactivated by default until accepted (Glass and Melt are accepted, activated and pooled by default). Glass uses closed beveled fracture prisms with independent optical material controls, plus optional build-time shard collisions and in-flight re-shattering; Tiles are blown apart by an analytic blast (cracks and rumble, a detonation flash and shock front, impulse flight toward the viewer, sparks and soft shadows) on the shared 3D scene library, whose cost follows the canonical 3D Detail tier; Ink uses a raised vortical pigment mesh; and Melt melts the photograph itself from a chosen origin under gravity — sag, soft drips and a thinning film (the earlier ray-marched volume and narrow wet-band front were both rejected). Tendril Reveal was rejected and is fully retired from the product capability set; canonical normalization strips stale persisted Tendril state rather than preserving a hidden compatibility renderer. Crumble shares the fracture solids, with a crack-formation stage before collapse, rough broken sides and parent-seam debris. Melt is accepted in its current origin-driven form. Accretion uses bounded instanced translating micro-tiles. Slide Perspective Push remains one Slide motion option and uses a true tilted-plane projective mapping with sealed coverage. See `Docs/Reference/Transitions.md` for appearance, ownership, limits and its live operator-acceptance checklist.
+Transition membership is owned by the canonical transition registry and lazy Quick implementation host; this specification does not duplicate a fixed catalog count. Registry entries resolve immutable request parameters once, remain dormant while unselected and retire effect-local resources through the shared owner. Effect-specific appearance, defaults, accepted/rejected variants and physical acceptance live in `Docs/Reference/Transitions.md`; persisted state for retired identities is normalized away rather than preserving hidden compatibility renderers. Shared options such as Slide Perspective Push remain options of their owning transition identity rather than creating duplicate registry entries.
 
 Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering. Old
 `GLCompositor*Transition` pixels are not destination authority after caller proof.

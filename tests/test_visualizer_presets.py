@@ -53,14 +53,15 @@ def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path,
     """A marked snapshot overrides an authored curated slot's settings.
 
     Post-migration the builder is fail-loud: curated slots are authored and
-    contiguous, and a marked snapshot overrides an existing slot's settings
+    may be sparse, and a marked snapshot overrides an existing slot's settings
     (keeping the curated slot name) rather than standing alone or growing count.
     """
 
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
     snapshots_root.mkdir()
-    _seed_curated_slots(curated_root, "sine_wave", 5)
+    curated_count = 5
+    _seed_curated_slots(curated_root, "sine_wave", curated_count)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
@@ -85,7 +86,7 @@ def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path,
 
     presets = vp._build_presets_for_mode("sine_wave")
 
-    assert len(presets) == 6  # 5 authored curated slots + Custom
+    assert len(presets) == curated_count + 1  # authored slots + trailing Custom
     overridden = presets[4]
     # Override replaces settings but keeps the authored curated slot name.
     assert overridden.name.startswith("Preset 5")
@@ -276,7 +277,8 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
     snapshots_root.mkdir()
-    _seed_curated_slots(curated_root, "spectrum", 4)
+    curated_count = 4
+    _seed_curated_slots(curated_root, "spectrum", curated_count)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
@@ -296,8 +298,8 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
 
     presets = vp._build_presets_for_mode("spectrum")
     # No explicit override marker -> snapshot should be ignored; authored slots
-    # stay as seeded (4 curated + Custom).
-    assert len(presets) == 5
+    # stay at the fixture-owned curated allocation plus Custom.
+    assert len(presets) == curated_count + 1
 
     # Rebuild without the markerless snapshot: slot 0 must be identical, proving
     # the generic SST contributed nothing (it did not override the authored slot).
@@ -311,7 +313,8 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
     snapshots_root.mkdir()
-    _seed_curated_slots(curated_root, "spectrum", 4)
+    curated_count = 4
+    _seed_curated_slots(curated_root, "spectrum", curated_count)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
@@ -335,8 +338,8 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
     presets = vp._build_presets_for_mode("spectrum")
 
     # Marker-less snapshots reuse the existing curated slot; they no longer grow
-    # the preset count beyond the curated allocation (4 curated + Custom).
-    assert len(presets) == 5
+    # the preset count beyond the fixture-owned curated allocation plus Custom.
+    assert len(presets) == curated_count + 1
     slot = presets[2]
     assert slot.settings["spectrum_drop_speed"] == 1.9
     assert slot.settings["spectrum_profile_floor"] == 0.2
@@ -1147,35 +1150,62 @@ def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload
     assert payload["snapshot"]["widgets"]["spotify_visualizer"]["devcurve_growth"] == pytest.approx(3.14)
 
 
-def test_sine_wave_6_line_preset_roundtrip_preserves_all_line_settings():
-    """Sine wave curated presets include line 4-6 settings after repair tool migration."""
-    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "sine_wave"
-    
-    # Verify all curated sine wave presets have line 4-6 settings
-    for preset_path in sorted(presets_root.glob("*.json")):
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        
-        # Verify line 4-6 ghost enabled flags exist
-        assert "sine_ghost_line4_enabled" in sv, f"{preset_path.name} missing sine_ghost_line4_enabled"
-        assert "sine_ghost_line5_enabled" in sv, f"{preset_path.name} missing sine_ghost_line5_enabled"
-        assert "sine_ghost_line6_enabled" in sv, f"{preset_path.name} missing sine_ghost_line6_enabled"
-        
-        # Verify line 4-6 color settings exist
-        assert "sine_line4_color" in sv, f"{preset_path.name} missing sine_line4_color"
-        assert "sine_line4_glow_color" in sv, f"{preset_path.name} missing sine_line4_glow_color"
-        assert "sine_line5_color" in sv, f"{preset_path.name} missing sine_line5_color"
-        assert "sine_line5_glow_color" in sv, f"{preset_path.name} missing sine_line5_glow_color"
-        assert "sine_line6_color" in sv, f"{preset_path.name} missing sine_line6_color"
-        assert "sine_line6_glow_color" in sv, f"{preset_path.name} missing sine_line6_glow_color"
-        
-        # Verify line 4-6 travel and shift settings exist
-        assert "sine_travel_line4" in sv, f"{preset_path.name} missing sine_travel_line4"
-        assert "sine_travel_line5" in sv, f"{preset_path.name} missing sine_travel_line5"
-        assert "sine_travel_line6" in sv, f"{preset_path.name} missing sine_travel_line6"
-        assert "sine_line4_shift" in sv, f"{preset_path.name} missing sine_line4_shift"
-        assert "sine_line5_shift" in sv, f"{preset_path.name} missing sine_line5_shift"
-        assert "sine_line6_shift" in sv, f"{preset_path.name} missing sine_line6_shift"
+@pytest.mark.parametrize(
+    ("mode", "owned_settings"),
+    (
+        (
+            "sine_wave",
+            {
+                "sine_ghost_line4_enabled": True,
+                "sine_ghost_line5_enabled": False,
+                "sine_ghost_line6_enabled": True,
+                "sine_line4_color": [1, 2, 3, 4],
+                "sine_line4_glow_color": [5, 6, 7, 8],
+                "sine_line5_color": [9, 10, 11, 12],
+                "sine_line5_glow_color": [13, 14, 15, 16],
+                "sine_line6_color": [17, 18, 19, 20],
+                "sine_line6_glow_color": [21, 22, 23, 24],
+                "sine_travel_line4": 1,
+                "sine_travel_line5": 2,
+                "sine_travel_line6": 1,
+                "sine_line4_shift": 0.14,
+                "sine_line5_shift": 0.25,
+                "sine_line6_shift": 0.36,
+            },
+        ),
+        (
+            "oscilloscope",
+            {
+                "osc_ghost_line4_enabled": True,
+                "osc_ghost_line5_enabled": False,
+                "osc_ghost_line6_enabled": True,
+                "osc_line4_color": [1, 2, 3, 4],
+                "osc_line4_glow_color": [5, 6, 7, 8],
+                "osc_line5_color": [9, 10, 11, 12],
+                "osc_line5_glow_color": [13, 14, 15, 16],
+                "osc_line6_color": [17, 18, 19, 20],
+                "osc_line6_glow_color": [21, 22, 23, 24],
+            },
+        ),
+    ),
+)
+def test_multiline_preset_parser_preserves_authored_optional_line_settings(mode, owned_settings):
+    """Optional line-4..6 fields are parser capability, not required shipped content."""
+    payload = {
+        "mode": mode,
+        "name": "Fixture",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {"mode": mode, **owned_settings}
+            }
+        },
+    }
+    parsed = vp._parse_preset_payload(Path("preset_1_fixture.json"), payload, mode)
+    assert parsed is not None
+    _index, preset = parsed
+    for key, expected in owned_settings.items():
+        assert preset.settings[key] == expected
 
 
 def test_repair_file_preserves_authored_metadata_and_non_visualizer_blocks(tmp_path, monkeypatch):
@@ -1255,29 +1285,6 @@ def test_repair_file_bootstraps_parseable_snapshot_block_from_flat_settings_payl
     assert sv["mode"] == mode
     assert sv["spectrum_growth"] == pytest.approx(1.9)
     assert "bubble_growth" not in sv
-
-
-def test_oscilloscope_6_line_preset_roundtrip_preserves_all_line_settings():
-    """Oscilloscope curated presets include line 4-6 settings after repair tool migration."""
-    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "oscilloscope"
-    
-    # Verify all curated oscilloscope presets have line 4-6 settings
-    for preset_path in sorted(presets_root.glob("*.json")):
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        
-        # Verify line 4-6 ghost enabled flags exist
-        assert "osc_ghost_line4_enabled" in sv, f"{preset_path.name} missing osc_ghost_line4_enabled"
-        assert "osc_ghost_line5_enabled" in sv, f"{preset_path.name} missing osc_ghost_line5_enabled"
-        assert "osc_ghost_line6_enabled" in sv, f"{preset_path.name} missing osc_ghost_line6_enabled"
-        
-        # Verify line 4-6 color settings exist
-        assert "osc_line4_color" in sv, f"{preset_path.name} missing osc_line4_color"
-        assert "osc_line4_glow_color" in sv, f"{preset_path.name} missing osc_line4_glow_color"
-        assert "osc_line5_color" in sv, f"{preset_path.name} missing osc_line5_color"
-        assert "osc_line5_glow_color" in sv, f"{preset_path.name} missing osc_line5_glow_color"
-        assert "osc_line6_color" in sv, f"{preset_path.name} missing osc_line6_color"
-        assert "osc_line6_glow_color" in sv, f"{preset_path.name} missing osc_line6_glow_color"
 
 
 def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
@@ -1491,26 +1498,33 @@ def test_reindex_curated_presets_regenerates_shipped_artifacts_once(tmp_path, mo
     assert calls == [root]
 
 
-def test_primary_visualizer_modes_ship_at_least_one_curated_preset():
+def test_registered_visualizer_modes_ship_a_loadable_curated_catalogue():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
-    required_modes = tuple(vp.MODES)
 
-    for mode in required_modes:
-        mode_dir = presets_root / mode
-        payloads = sorted(mode_dir.glob("*.json"))
-        assert payloads, f"{mode} should ship at least one curated preset"
+    for mode in vp.MODES:
+        payloads = sorted((presets_root / mode).glob("*.json"))
+        assert payloads, f"{mode} currently requires at least one authored preset"
 
-        first_slot = False
+        # Slot numbers, filenames, names, counts and payload values are authored
+        # data.  Only the loadability/schema contract belongs in this test.
+        seen_slots: set[int] = set()
         for preset_path in payloads:
             payload = json.loads(preset_path.read_text(encoding="utf-8"))
-            if payload.get("preset_index") == 0:
-                first_slot = True
-                break
+            assert payload.get("mode") == mode
+            slot = vp._infer_preset_index_from_name(preset_path.stem)
+            assert slot is not None and slot >= 0, preset_path
+            assert slot not in seen_slots, (mode, slot)
+            seen_slots.add(slot)
+            # payload preset_index is repairable legacy metadata. The curated
+            # loader deliberately prefers the filename slot when the two drift.
+            preset_index = payload.get("preset_index")
+            assert preset_index is None or isinstance(preset_index, int)
+            snapshot = payload.get("snapshot", {})
+            section = snapshot.get("widgets", {}).get("spotify_visualizer", {})
+            assert section.get("mode") == mode
 
-        assert first_slot, f"{mode} should still ship a Preset 1 / slot 0 payload"
 
-
-def test_curated_presets_have_unique_slot_numbers_per_mode():
+def test_curated_presets_have_unique_filename_slots_per_mode():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
 
     for mode_dir in sorted(presets_root.iterdir()):
@@ -1519,15 +1533,14 @@ def test_curated_presets_have_unique_slot_numbers_per_mode():
 
         seen = {}
         for preset_path in sorted(mode_dir.glob("*.json")):
-            payload = json.loads(preset_path.read_text(encoding="utf-8"))
-            preset_index = payload.get("preset_index")
-            assert isinstance(preset_index, int), f"{preset_path} missing preset_index"
-            if preset_index in seen:
+            slot = vp._infer_preset_index_from_name(preset_path.stem)
+            assert slot is not None, f"{preset_path} has no parseable filename slot"
+            if slot in seen:
                 raise AssertionError(
-                    f"{mode_dir.name} duplicate preset_index {preset_index}: "
-                    f"{seen[preset_index].name} and {preset_path.name}"
+                    f"{mode_dir.name} duplicate filename slot {slot}: "
+                    f"{seen[slot].name} and {preset_path.name}"
                 )
-            seen[preset_index] = preset_path
+            seen[slot] = preset_path
 
 
 def test_curated_visualizer_tree_audits_clean():

@@ -477,8 +477,7 @@ uniform_visual_scale     # wheel/corners
 viewport_extent          # left/right width; top/bottom height
 ```
 
-All six current modes must support viewport extent and the core capability policy is now all-six-mode capable. Bubble is
-not an exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
+Every registered Visualizer mode must support viewport extent through its declared presentation capability. Bubble is not an exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
 following the operator rejection of height-only aspect coupling. The full logical radius waveform remains

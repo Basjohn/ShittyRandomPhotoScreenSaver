@@ -43,8 +43,9 @@ def test_absent_sliders_write_no_preset_key():
     collect_visualizer_preset_indices(tab, config)
 
     assert config == {get_preset_key("bubble"): 1}
-    for mode in ("spectrum", "oscilloscope", "sine_wave", "devcurve"):
-        assert get_preset_key(mode) not in config
+    for descriptor in iter_visualizer_mode_descriptors():
+        if descriptor.mode_id != "bubble":
+            assert get_preset_key(descriptor.mode_id) not in config
 
 
 def test_absent_slider_does_not_overwrite_persisted_index():

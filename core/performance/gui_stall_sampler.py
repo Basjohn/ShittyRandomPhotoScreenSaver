@@ -1,15 +1,23 @@
-"""GUI-thread stall stacks for ``--frame-trace`` runs (Current_Plan N1e).
+"""Opt-in GUI-thread stall stacks for traced steady-state investigation.
 
-The frame trace shows Visualizer presentation stalling 45-200 ms while the logical clock keeps time: the GUI
-thread delivered no Visualizer wake (``frame_trace_cadence.py`` "gui_starved"). The trace cannot say what the
-GUI thread was doing. This sampler can: every Visualizer GUI wake notes itself here, and when none arrives within
-``threshold_s`` the sampler writes every thread's Python stack once for that stall, then the stall's total length
-when wakes resume. ``late_ms`` is how late the sampler itself woke: a large value means some thread held the GIL
-(a long C call), not that the GUI thread ran Python.
+The binary ``--frame-trace`` is intentionally low-observer-effect. Full Python
+stack snapshots are much heavier: ``sys._current_frames()`` plus
+``traceback.format_stack()`` allocates and linecache-walks every live Python
+thread. Those snapshots therefore require the separate
+``--gui-stall-stacks`` admission in addition to ``--frame-trace``.
 
-It exists only under ``--frame-trace`` (created and closed with the trace sink), does nothing until the first
-wake, and stops waiting with a timeout once wakes stop for ``idle_s`` (a paused or retired Visualizer): no
-polling at rest. It only observes.
+Startup, Settings replacement and teardown are binding lifecycle windows, not
+stall points. While that window is open this sampler disarms completely: no
+stack capture, no stall count and no carry-over silence interval. The next GUI
+wake after the window closes starts a fresh steady-state observation period.
+
+Once admitted and outside a lifecycle window, every Visualizer GUI wake notes
+itself here. If none arrives within ``threshold_s`` the sampler writes every
+thread's Python stack once for that stall, then the stall's total length when
+wakes resume. ``late_ms`` is how late the sampler itself woke: a large value
+means some thread held the GIL (a long C call), not that the GUI thread ran
+Python. It still does nothing before the first wake and returns to indefinite
+wait after ``idle_s`` without wakes.
 """
 from __future__ import annotations
 
@@ -18,15 +26,28 @@ import threading
 import time
 import traceback
 from pathlib import Path
+from typing import Callable
 
 
 class GuiStallSampler:
-    def __init__(self, path: Path, *, threshold_s: float = 0.040, idle_s: float = 2.0,
-                 gui_thread_ident: int | None = None) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        threshold_s: float = 0.040,
+        idle_s: float = 2.0,
+        gui_thread_ident: int | None = None,
+        suppress_predicate: Callable[[], bool] | None = None,
+    ) -> None:
         self._path = Path(path)
         self._threshold_s = float(threshold_s)
         self._idle_s = float(idle_s)
         self._gui_ident = gui_thread_ident if gui_thread_ident is not None else threading.main_thread().ident
+        if suppress_predicate is None:
+            from core.diagnostics.lifecycle_window import is_open as lifecycle_window_is_open
+
+            suppress_predicate = lifecycle_window_is_open
+        self._suppress_predicate = suppress_predicate
         self._wake = threading.Event()
         self._lock = threading.Lock()
         self._closed = False
@@ -45,9 +66,22 @@ class GuiStallSampler:
         return self._stalls
 
     def note_wake(self) -> None:
-        """One Visualizer GUI wake (called on the GUI thread, trace runs only)."""
+        """One Visualizer GUI wake (called on the GUI thread, admitted diagnostics only)."""
+        if self._suppressed():
+            # Wake the sampler so an already-active steady-state observation can
+            # disarm immediately. Do not seed a post-lifecycle silence interval.
+            self._last_wake = 0.0
+            self._wake.set()
+            return
         self._last_wake = time.perf_counter()
         self._wake.set()
+
+    def _suppressed(self) -> bool:
+        try:
+            return bool(self._suppress_predicate())
+        except Exception:
+            # Diagnostics must fail closed rather than perturb product runtime.
+            return True
 
     def close(self, timeout: float = 2.0) -> None:
         with self._lock:
@@ -65,6 +99,15 @@ class GuiStallSampler:
                 if self._closed:
                     return
             now = time.perf_counter()
+            if self._suppressed():
+                # Lifecycle work is intentionally noisy and already has its own
+                # deadline/trace markers. Never format all-thread stacks here,
+                # and never carry its silence into the next steady-state sample.
+                self._wake.clear()
+                self._last_wake = 0.0
+                active = False
+                reported_at = None
+                continue
             if woke:
                 self._wake.clear()
                 if reported_at is not None:

@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
     get_visualizer_presentation_policy,
 )
 import rendering.quick.visualizer.implementations.bubble as quick_bubble_module
@@ -618,16 +619,7 @@ def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:
     )
 
     descriptors = iter_quick_visualizer_implementations()
-    assert tuple(descriptor.mode_id for descriptor in descriptors) == (
-        "spectrum",
-        "oscilloscope",
-        "sine_wave",
-        "bubble",
-        "devcurve",
-        "sphere",
-        "extruded_spectrum",
-        "shockwave_grid",
-    )
+    assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
     renderer = resolve_quick_visualizer_renderer("bubble")
     assert isinstance(renderer, QuickBubbleRenderer)
     assert renderer.has_resources is False

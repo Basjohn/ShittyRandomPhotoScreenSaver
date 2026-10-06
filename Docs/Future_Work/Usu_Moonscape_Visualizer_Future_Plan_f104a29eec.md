@@ -1,8 +1,8 @@
 # USU MOONSCAPE VISUALIZER — DISTANT FUTURE IMPLEMENTATION PLAN
 
-> **STALE-BY-DESIGN HANDOFF DOCUMENT**  
-> **Project HEAD when authored:** `f104a29eec`  
-> **Authored:** 2026-10-02  
+> **STALE-BY-DESIGN HANDOFF DOCUMENT**
+> **Project HEAD when authored:** `f104a29eec`
+> **Authored:** 2026-10-02
 > **Status:** distant future concept / implementation handoff, **not current roadmap authority**
 >
 > Any agent reading this after `f104a29eec` must assume the renderer, Scene3D substrate, Visualizer registry, quality system, settings surface, asset pipeline, tests and roadmap may have changed substantially. **Re-orient from the then-current `Current_Plan.md`, `Future_Work.md`, GODZIP handoff and canonical Visualizer docs before implementing anything here.** Preserve the intent of this document, not stale file-level assumptions.
@@ -403,7 +403,7 @@ Avoid turning this simple mode into a Settings spreadsheet.
 
 ## 10. SHARED 3D QUALITY SETTINGS
 
-This mode should consume the project's shared 3D quality vocabulary if/when that system exists:
+This mode must consume the project's existing shared 3D quality vocabulary:
 
 `AUTO -> HIGH -> BALANCED -> PERFORMANCE -> KAK`
 
@@ -422,7 +422,7 @@ Possible tier-controlled facilities:
 
 `KAK` must remain a true minimum viable scene: Usu, basic moon, basic stars/background and the essential locomotion effect, with expensive optional decoration effectively off.
 
-Manual user-authored feature overrides must survive profile switching according to the future shared 3D Settings contract.
+Manual user-authored feature overrides must survive profile switching according to the shared 3D Settings contract.
 
 ---
 
@@ -655,6 +655,6 @@ At that point in the project:
 - Sphere was the legacy experimental migration case;
 - the project had explicitly adopted the rule that future experimental modes join shared architecture from day one;
 - shared future 3D quality vocabulary was planned as `Auto / High / Balanced / Performance / KAK`;
-- `Visualizer_Reactivity_Authoring.md` captured the hard-won separation between presence, event admission, event reward, sustained response, presentation smoothing and idle motion.
+- `Docs/Guides/Visualizer_Reactivity_Authoring.md` captures the hard-won separation between presence, event admission, event reward, sustained response, presentation smoothing and idle motion.
 
 **Do not assume any of those implementation details are still current when this mode is finally built.** Reconcile this concept with the current tree first. The durable intent is Usu, the rounded moonscape, honest live-audio locomotion, strong reactivity discipline, shared architecture, smooth/simple art direction and staged approval that prevents late-project disappointment.

@@ -154,21 +154,9 @@ def test_random_rotation_never_writes_settings_or_authored_directions() -> None:
 
 
 def test_random_transition_distribution_is_approximately_uniform_for_enabled_pool() -> None:
-    expected_types = {
-        "Crossfade",
-        "Slide",
-        "Wipe",
-        "Diffuse",
-        "Block Puzzle Flip",
-        "Blinds",
-        "3D Block Spins",
-        "Ripple",
-        "Warp Dissolve",
-        "Crumble",
-        "Particle",
-        "Burn",
-    }
-    # Exhaustive pool: transitions registered later stay out unless listed.
+    expected_types = set(get_transition_setting_names())
+    # Membership is registry-owned: newly registered transitions automatically join
+    # the uniformity bar instead of requiring ceremonial test-list maintenance.
     transitions = {
         "type": "Random",
         "random_always": True,
@@ -208,11 +196,7 @@ def test_deactivated_transition_is_excluded_from_random_pool() -> None:
     transitions = {
         "type": "Random",
         "random_always": True,
-        "pool": {name: True for name in (
-            "Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip",
-            "Blinds", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble",
-            "Particle", "Burn",
-        )},
+        "pool": {name: True for name in get_transition_setting_names()},
         "activation": {
             **{name: True for name in get_transition_setting_names()},
             "Burn": False,

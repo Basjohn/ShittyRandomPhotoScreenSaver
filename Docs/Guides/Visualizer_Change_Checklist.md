@@ -132,7 +132,7 @@ top/bottom     -> viewport height; scale unchanged
 Viewport expansion changes available world/layout and current aspect; it never stretches final pixels independently on
 X/Y.
 
-**All six registered modes must remain viewport-resize-capable through their declared policy.** The five established carded modes, including Bubble, share the card geometry contract; Sphere uses FRAMELESS + VIEWPORT_RECT. The capability policy is landed;
+**Every registered mode must remain viewport-resize-capable through its declared policy.** CARD + CARD_INTERIOR modes share the card geometry contract; FRAMELESS + VIEWPORT_RECT modes use the frameless viewport contract. The capability policy is registry-wide;
 do not reintroduce a false Bubble gate to mask a resize/reflow bug.
 
 For viewport changes also verify ownership precedence: ordinary committed extent remains truth outside CUSTOM, the working
@@ -187,7 +187,7 @@ GPU resources retire on the legal render owner.
 
 ## 11. Required proof for geometry changes
 
-- the five established technical modes from canonical settings/preset resolution through technical-engine/logical/presentation ownership, plus Sphere through its separate experimental capture/render path,
+- every registered mode, discovered from the canonical registry, through its declared settings/preset, logical/capture and presentation ownership path,
   logical publication and complete retained Quick snapshot consumption;
 - baseline + wide + tall extents;
 - no anisotropic final-pixel stretch;

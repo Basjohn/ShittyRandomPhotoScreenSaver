@@ -35,9 +35,11 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     transitions_cfg = settings_manager.get('transitions', {}) or {}
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
-    canonical_wipe_direction = get_default_settings()["transitions"]["wipe"]["direction"]
+    defaults = get_default_settings()["transitions"]
+    canonical_slide_direction = defaults["slide"]["direction"]
+    canonical_wipe_direction = defaults["wipe"]["direction"]
 
-    assert slide_cfg.get('direction', 'Random') == 'Random'
+    assert slide_cfg.get('direction') == canonical_slide_direction
     assert wipe_cfg.get('direction') == canonical_wipe_direction
 
     # Set Slide to Left to Right, keep Wipe at its default

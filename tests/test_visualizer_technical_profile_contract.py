@@ -220,7 +220,10 @@ def test_legacy_shared_bar_migration_does_not_synthesize_sphere_keys() -> None:
     assert "sphere_bar_fill_color" not in migrated
     assert "sphere_bar_border_color" not in migrated
     assert "sphere_bar_border_opacity" not in migrated
-    for mode in ("spectrum", "bubble", "sine_wave", "oscilloscope", "devcurve"):
+    for descriptor in iter_all_visualizer_mode_descriptors():
+        if not descriptor.shared_bar_appearance:
+            continue
+        mode = descriptor.mode_id
         assert migrated[f"{mode}_bar_fill_color"] == [1, 2, 3, 4]
         assert migrated[f"{mode}_bar_border_color"] == [5, 6, 7, 8]
         assert migrated[f"{mode}_bar_border_opacity"] == 0.4

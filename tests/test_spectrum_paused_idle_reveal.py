@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
@@ -34,8 +35,12 @@ def test_playing_spectrum_still_waits_for_fresh_source():
 
 
 def test_paused_idle_self_animating_modes_are_unaffected():
-    # These clear their own fence via engine idle ticks; the exception is not theirs.
-    for mode in ("bubble", "sine_wave", "oscilloscope", "devcurve", "sphere"):
+    # Self-animating modes clear their own fence via engine idle ticks; the exception is not theirs.
+    self_animating = tuple(
+        mode for mode in VISUALIZER_MODE_IDS if mode_capabilities.is_idle_self_animating(mode)
+    )
+    assert self_animating
+    for mode in self_animating:
         assert _gate(mode, playing=False) is False
 
 
@@ -43,5 +48,6 @@ def test_capability_table_matches_the_gate_premise():
     # Only Spectrum is presentation-owned-idle; guards against a silent reclassify.
     assert mode_capabilities.has_presentation_owned_idle_scene("spectrum") is True
     assert mode_capabilities.is_idle_self_animating("spectrum") is False
-    for mode in ("bubble", "sine_wave", "oscilloscope", "devcurve", "sphere"):
-        assert mode_capabilities.has_presentation_owned_idle_scene(mode) is False
+    for mode in VISUALIZER_MODE_IDS:
+        if mode != "spectrum":
+            assert mode_capabilities.has_presentation_owned_idle_scene(mode) is False

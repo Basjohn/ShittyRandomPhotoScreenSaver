@@ -12,10 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    get_visualizer_mode_descriptor,
+)
 from widgets.spotify_visualizer import logical_frame_capture, mode_capabilities
 
 ROOT = Path(__file__).resolve().parents[1]
-_ALL_MODES = ("spectrum", "bubble", "sine_wave", "oscilloscope", "devcurve", "sphere")
+_ALL_MODES = VISUALIZER_MODE_IDS
 
 
 class _Engine:
@@ -54,28 +58,42 @@ def _state():
     return state
 
 
-def test_only_oscilloscope_is_declared_a_waveform_sample_consumer() -> None:
-    consumers = {mode for mode in _ALL_MODES if mode_capabilities.consumes_waveform_samples(mode)}
-    assert consumers == {"oscilloscope"}
+def test_declared_waveform_sample_consumers_are_real_renderer_consumers() -> None:
+    consumers = {
+        mode for mode in _ALL_MODES if mode_capabilities.consumes_waveform_samples(mode)
+    }
+    # Oscilloscope's identity is waveform rendering, so losing its declaration
+    # is a semantic regression. Future waveform-driven modes may join without
+    # requiring this test to be rewritten.
+    assert "oscilloscope" in consumers
+    for mode in consumers:
+        descriptor = get_visualizer_mode_descriptor(mode)
+        renderer_path = ROOT / (descriptor.renderer_module.replace(".", "/") + ".py")
+        source = renderer_path.read_text(encoding="utf-8").replace(
+            "common.waveform_count", ""
+        )
+        assert "common.waveform" in source, (
+            f"{mode} declares waveform-sample consumption but its renderer does not read it"
+        )
 
 
 def test_only_declared_consumers_read_common_waveform_in_their_renderer() -> None:
     """A future renderer may not silently read the payload other modes omit."""
 
-    implementations = ROOT / "rendering" / "quick" / "visualizer" / "implementations"
-    readers = {
-        path.stem
-        for path in implementations.glob("*.py")
-        if "common.waveform" in path.read_text(encoding="utf-8").replace(
+    readers: set[str] = set()
+    for mode in _ALL_MODES:
+        descriptor = get_visualizer_mode_descriptor(mode)
+        renderer_path = ROOT / (descriptor.renderer_module.replace(".", "/") + ".py")
+        source = renderer_path.read_text(encoding="utf-8").replace(
             "common.waveform_count", ""
         )
-    }
-    assert readers, "the Oscilloscope renderer must still read the samples"
-    for stem in readers:
-        assert mode_capabilities.consumes_waveform_samples(stem), (
-            f"{stem} reads common.waveform but is not declared in "
-            "mode_capabilities._WAVEFORM_SAMPLE_CONSUMERS"
-        )
+        if "common.waveform" in source:
+            readers.add(mode)
+            assert mode_capabilities.consumes_waveform_samples(mode), (
+                f"{mode} renderer reads common.waveform but the mode is not declared "
+                "as a waveform-sample consumer"
+            )
+    assert "oscilloscope" in readers
 
 
 @pytest.mark.parametrize("mode", _ALL_MODES)

@@ -963,7 +963,11 @@ class TestSettingsManagerManualFloorClamp:
         vis = manager.get("widgets")["spotify_visualizer"]
         assert vis["bubble_manual_floor"] == pytest.approx(1.0)
         assert vis["spectrum_manual_floor"] == pytest.approx(0.05)
-        assert vis["oscilloscope_manual_floor"] == pytest.approx(0.12)
+        assert vis["oscilloscope_manual_floor"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.oscilloscope_manual_floor"
+            )
+        )
         assert {
             "widgets.spotify_visualizer.bubble_manual_floor",
             "widgets.spotify_visualizer.oscilloscope_manual_floor",

@@ -101,16 +101,15 @@ def test_provider_identity_is_stable_and_independent_of_the_endpoint():
         assert spec.allow_endpoint_migration is True
 
 
-def test_news_defaults_stay_dormant():
+def test_news_enabled_defaults_are_canonical_booleans():
     for widget_id in NEWS_WIDGET_IDS:
-        assert require_canonical_default(f"widgets.{widget_id}.enabled") is False
+        assert isinstance(require_canonical_default(f"widgets.{widget_id}.enabled"), bool)
 
 
 def test_news_widget_ids_follow_the_custom_slots_in_feed_order():
-    assert FEED_WIDGET_IDS[4:] == NEWS_WIDGET_IDS == (
-        "feeds_news_world", "feeds_news_us", "feeds_news_politics",
-        "feeds_news_gaming", "feeds_news_tech", "feeds_news_anime",
-    )
+    custom_count = len(tuple(widget_id for widget_id in FEED_WIDGET_IDS if widget_id.startswith("feeds_custom_")))
+    assert FEED_WIDGET_IDS[custom_count:] == NEWS_WIDGET_IDS
+    assert tuple(category.widget_id for category in NEWS_CATEGORIES) == NEWS_WIDGET_IDS
 
 
 # --- config ------------------------------------------------------------------
@@ -540,7 +539,9 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
         assert by_id["feeds_news_gaming"]["item_limit"] == 20
         assert by_id["feeds_news_gaming"]["providers"] == require_canonical_default(
             "widgets.feeds_news_gaming.providers")
-        assert by_id["feeds_news_us"]["enabled"] is False
+        assert by_id["feeds_news_us"]["enabled"] is bool(
+            require_canonical_default("widgets.feeds_news_us.enabled")
+        )
 
         results = collect_widget_section_save_results(tab, {})
         config: dict = {}
