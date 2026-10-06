@@ -111,7 +111,7 @@ Do **not** weaken tests merely to avoid maintenance. Exact assertions are approp
 - protocol or binary-format constants;
 - hard resource/capacity bounds whose number is itself the requirement;
 - accepted goldens and negative controls;
-- Bubble temporal/reactivity guardrails and other operator-accepted feel contracts;
+- Bubble temporal/reactivity guardrails and other explicit feel/visual contracts;
 - exact geometry/pixel/state restoration where approximation would hide a regression;
 - fixture-owned round trips where the fixture deliberately sets a value and must receive that same value back;
 - one-shot/cardinality/lifecycle assertions such as "exactly one callback" when singular ownership is the architecture.
@@ -158,7 +158,7 @@ Run:
 
 ```powershell
 python tools/test_durability_audit.py
-python -m pytest tests/test_test_suite_durability.py -q
+python -m pytest tests/test_test_suite_durability.py tests/test_default_pin_scan.py tests/test_test_oracle_review.py -q
 ```
 
 The audit intentionally flags only high-confidence authority-copy patterns. It is a maintained regression bar, not a general style linter.
@@ -183,7 +183,50 @@ python tools/default_pin_scan.py --summary
 python tools/default_pin_scan.py
 ```
 
-This deliberately produces false positives. Review candidates manually. Do not mechanically rewrite them. A hit may be a perfectly correct fixture round trip, migration contract, geometry oracle or negative control.
+This deliberately remains review-only, but it suppresses one high-confidence false-positive class: when the same test explicitly authors a literal ``{key: value}`` mapping before asserting that same key/value, the value is treated as fixture-owned rather than an unexplained copy of the production default. Computed mappings, control setters and helper-driven setup stay in the queue for human classification. Do not mechanically rewrite the remaining hits; a candidate may still be a correct migration contract, geometry oracle or negative control.
+
+
+## 5.1 Source-string and UI-copy oracles are review-only by default
+
+Static source tests are not inherently bad. They are valuable when the **absence or presence of a source construct is itself the architecture contract**, such as forbidding a polling call, retired import, fallback presenter or per-frame Settings read. They are brittle when they merely freeze today's method name, button caption, source layout, branch spelling or helper call.
+
+Prefer behavioral tests whenever there is a cheap deterministic seam. Keep a source oracle when behavior would require constructing the wrong subsystem merely to prove a negative architecture rule. When the exact spelling is intentionally the contract, annotate it near the assertion:
+
+```python
+# SOURCE-ORACLE INVARIANT: process polling would reintroduce a forbidden scheduler.
+assert "process.poll()" not in source
+```
+
+Run the advisory review queue with:
+
+```powershell
+python tools/test_oracle_review.py
+```
+
+It does not fail CI. The queue distinguishes source-string implementation oracles, exact ``widget.text() == ...`` UI-copy oracles, and potentially intrusive window operations. Exact UI text remains appropriate when wording/formatting itself is the product contract; otherwise assert the stable semantic state or action instead. Intentional exact copy may be annotated with ``UI-COPY INVARIANT`` near the assertion. **A review finding never justifies skipping, xfail-ing, deselecting or stopping the test that produced it, and it is not an operator-action request.** Agents should keep the suite running and either make a high-confidence durability improvement in the same slice or leave the candidate in the review queue.
+
+## 5.2 Tests should not punish the operator
+
+The development machine is also the operator's only physical acceptance machine. Automated tests should therefore be silent and non-intrusive whenever the evidence level allows it.
+
+Use the least intrusive surface that still proves the contract:
+
+1. no top-level window for pure model/signal/geometry tests;
+2. `QT_QPA_PLATFORM=offscreen` for tests that do not need the native GL/window-system path;
+3. `tests._invisible_windows.keep_off_screen()` or `WA_DontShowOnScreen` for real native/GL windows that must be shown/exposed to initialize correctly;
+4. a deliberately visible/focused window only when real focus, OS input routing, taskbar/DWM behavior or physical pixels are the contract. Such tests belong in an explicit physical/operator gate, not a routine suite.
+
+Do not replace a real-GL test with software/offscreen rendering merely to hide it. Visibility containment must preserve the evidence being claimed. Avoid `raise_()`, `activateWindow()`, fullscreen display and focus theft in automated profiles unless the test explicitly owns that behavior. **Do not solve operator intrusion by skipping the test:** if native visibility/focus is truly part of the contract, the test still runs; if it is not, contain the same test surface invisibly/minimized without weakening its assertions.
+
+`tools/test_oracle_review.py` also reports potentially visible window operations that lack a recognized containment pattern. This is advisory because only the test owner can decide whether a native visible surface is essential.
+
+## 5.3 Async/runtime-shaped fixtures must preserve callback topology
+
+A synchronous fake may execute expensive work immediately for speed, but it must not invent callback re-entrancy that production never has. If production submits work and receives completion later, a deterministic test fake should queue the completion and let the test drain that queue explicitly. This keeps ordering/lifecycle assertions meaningful without sleeps, polling or real worker threads.
+
+Do not "simplify" a shared-owner/runtime test by invoking its completion callback from inside ``submit_*`` when the real owner receives that callback asynchronously. That can create impossible nested state transitions, invert cache/fresh metadata, or turn serialized admission into recursion. Prefer a tiny fixture-owned completion queue plus ``drain_one()``/``drain()`` helpers.
+
+Likewise, do not pin an incidental callback count when the contract is a state boundary such as "remain loading until all providers settle." Step the deterministic queue through that boundary and assert the semantic state before and after it.
 
 ## 6. Review questions
 

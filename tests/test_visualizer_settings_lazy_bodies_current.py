@@ -337,8 +337,6 @@ def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
         ]
         assert _bucket_titles(tab._spectrum_advanced) == ["Render", "Audio", "Ghost"]
         assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
-        assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"
-        assert tab.spectrum_render_mode_buttons["segment"].text() == "SEGMENTS"
         assert tab._spectrum_render_mode in {"bars", "segment"}
     finally:
         tab.deleteLater()
@@ -358,8 +356,6 @@ def test_spectrum_technical_bucket_visibility_persists_per_mode(qt_app, settings
         assert agc_toggle is not None
         assert transient_toggle is not None
 
-        assert agc_toggle.text() == "AGC"
-        assert transient_toggle.text() == "Transient"
 
         # Technical leaves share the same mode-page accordion as Custom leaves.
         tab._rainbow_bucket_toggle.setChecked(True)

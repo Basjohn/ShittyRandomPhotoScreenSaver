@@ -145,10 +145,17 @@ def test_stack_sampler_requires_its_own_explicit_admission(tmp_path):
     assert not sampler._thread.is_alive()
 
 
-def test_main_filters_stack_sampler_flag_from_screensaver_mode_parsing():
-    from pathlib import Path
+def test_main_filters_stack_sampler_flag_from_screensaver_mode_parsing(monkeypatch):
+    import main as app_main
 
-    main = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
-    assert '"--gui-stall-stacks"' in main
-    filtered_block = main.split("_filtered = {", 1)[1].split("}", 1)[0]
-    assert '"--gui-stall-stacks"' in filtered_block
+    monkeypatch.setattr(app_main, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(
+        app_main.sys,
+        "argv",
+        ["main.py", "--frame-trace", "--gui-stall-stacks", "/s"],
+    )
+
+    mode, preview_hwnd = app_main.parse_screensaver_args()
+
+    assert mode is app_main.ScreensaverMode.RUN
+    assert preview_hwnd is None

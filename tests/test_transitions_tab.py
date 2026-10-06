@@ -407,7 +407,7 @@ def test_optional_3d_choices_live_in_a_closed_advanced_bucket(qapp, settings_man
         tab._activation_checkboxes[name].setChecked(True)
         tab._on_nav_selected(name)
         toggle, body = getattr(tab, f"{section}_advanced_toggle"), getattr(tab, f"{section}_advanced_body")
-        assert toggle.text() == "Advanced" and not toggle.isChecked() and body.isHidden()
+        assert not toggle.isChecked() and body.isHidden()
         for field, *_rest in tab._SCENE3D_CHOICES[section]:
             assert body.isAncestorOf(getattr(tab, f"{section}_{field}_combo")), (section, field)
         # Controls that shape the effect itself stay on the page.

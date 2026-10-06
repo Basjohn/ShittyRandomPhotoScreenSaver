@@ -26,5 +26,3 @@ def test_particle_settings_labels_match_persisted_shader_indices():
     assert '''self.particle_light_combo.addItems([\n            "NW",\n            "NE",\n            "Front",\n            "SW",\n            "SE",\n        ])''' in source
     assert '''self.particle_swirl_order_combo.addItems([\n            "Typical",\n            "Center Outward",\n            "Edges Inward",\n        ])''' in source
 
-    resolution = RESOLUTION.read_text(encoding="utf-8")
-    assert "the persisted values remain integer indices" in resolution

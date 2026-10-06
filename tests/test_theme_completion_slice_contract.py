@@ -60,7 +60,6 @@ def test_foundry_widget_export_uses_shared_counterpart_authority() -> None:
     foundry = _text("tools/theme_foundry.py")
     generator = _text("tools/generate_widget_theme_mirrors.py")
 
-    assert 'QPushButton("Save Widget Counterpart…")' in foundry
     assert "def save_widget_counterpart(self) -> None:" in foundry
     assert "widget_counterpart_for_settings_theme(" in foundry
     assert "save_widget_theme_file(widget_theme, path)" in foundry

@@ -14,11 +14,18 @@ The first render-only release-envelope repair is accepted as the baseline. A sec
 breath assist is implemented behind an exact negative control; it must earn acceptance without changing Bubble's authored
 reaction, elasticity, attack, settling, loud-passage variation, motion, collision or cadence.
 
-- [ ] **B1. Measure the candidate on the operator recordings.** Run the same clips with the tiny-breath seam forced OFF and
-  ON; retain per-clip tiny-radius alternating-step counts and dot/outline-boundary crossings. If the visible defect is not
-  concentrated in the eligible physical-radius band, change eligibility rather than audio/simulation gain.
-- [ ] **B2. Re-run protected Bubble automation.** Existing golden/reactivity suites remain green with no golden rewrite;
-  impulse/BPM/ramp/step/silence behavior remains within its existing tolerance; no attack/excursion/hot-passage regression.
+- [ ] **B1. Agent-measure the candidate on the operator recordings.** The accepting agent must run the same clips with the
+  tiny-breath seam forced OFF and ON and retain a per-clip report of tiny-radius alternating-step counts, dot/outline-boundary
+  crossings, all-radius chatter, first-response frame, peak/turn timing and response excursion/amplitude. "Looks solved" is not
+  acceptance. If the defect is not concentrated in the eligible physical-radius band, change eligibility rather than
+  audio/simulation gain. The helper only passes if judder improves without a measurable reaction-delay or authored-amplitude
+  tradeoff.
+- [ ] **B2. Measure reaction fidelity and latency, not only judder.** Extend/use the replay evidence so OFF vs ON reports the
+  frame-aligned response around impulses/ramps/strong hits: first-response frame, peak/turn timing and excursion must not move;
+  outside the eligible tiny-radius band the presentation must remain identical, and inside it the helper may reshape at most its
+  documented physical-pixel bound. Existing golden/reactivity suites remain green with no golden rewrite; impulse/BPM/ramp/step/
+  silence behavior remains within its existing tolerance. Reject any attack, latency, authored-amplitude, excursion or
+  hot-passage change even if the tiny-radius judder metric improves.
 - [ ] **B3. Physical acceptance on both displays.** Judge the same tracks at quiet breathing, strong hits, sustained loud
   sections, min/max size, pop/exit and CUSTOM extremes. Reject the candidate if it feels flatter/slower even when the metric
   improves.
@@ -107,25 +114,15 @@ Release/readme media only. Generated captures never enter runtime QRCs or normal
 
 ---
 
-## 6. Test durability and unattended acceptance tooling
+## 6. Run-matrix acceptance harness
 
-- [ ] **Windows durability gate after each tranche.** Run `tools/test_durability_audit.py`,
-  `tests/test_test_suite_durability.py` and the touched Settings/preset/registry suites on the real PySide tree. Treat missing
-  dependencies as environment-blocked, but resolve any product/test RED before accepting the tranche.
-- [ ] Continue the **manual** pass over `tools/default_pin_scan.py` review candidates. The blocking audit owns only
-  high-confidence smells: copied canonical defaults (including transitive aliases), named shipped-preset dependencies, fixed
-  extensible-registry counts/catalog copies and authored-Markdown prose used as a behavior oracle. Convert accidental authority
-  copies; preserve fixture round trips, schema/range checks, compatibility mappings, goldens, geometry/state oracles and negative
-  controls.
-- [ ] Review **source-string tests** separately. Preserve high-value forbidden-import/call/ownership negative bars where no
-  practical runtime seam exists; replace tests that merely pin human-facing copy, incidental implementation spelling or source
-  layout when behavior can be exercised directly. Do not turn this into a blanket ban on static architecture tests.
-- [ ] Reconcile remaining stale test-side expectations unrelated to authored defaults, including Media I/O-starvation stubs
-  against the controller's current work-loop entry point.
-- [ ] Add a small external **run-matrix harness** over the accepted `--exit-after` terminal-shutdown CLI. Cases should be
-  declarative, run sequentially by default, capture exit/fault/log artifact paths and never own a second shutdown mechanism or
-  force-kill the parent Foundry process. Use it for repeatable startup/teardown, diagnostic-flag, display and selected mode/effect
-  acceptance matrices without adding product-runtime scheduling.
+- [ ] Add a small external **run-matrix harness** over the accepted `--exit-after` terminal-shutdown CLI. Cases are
+  declarative and run sequentially by default, capture exit/fault/log artifact paths, and never own a second shutdown mechanism
+  or force-kill the parent Foundry process.
+- [ ] Use the harness for repeatable startup/teardown, diagnostic-flag, display and selected mode/effect acceptance matrices
+  without adding product-runtime scheduling or another cadence owner.
+- [ ] Keep matrix output compact and machine-readable enough for later agent comparison while preserving the underlying logs as
+  the evidence source. A matrix runner coordinates existing product entry points; it does not become a new runtime authority.
 
 ---
 
@@ -167,12 +164,22 @@ Resume only after the immediate Bubble/shared-runtime/lifecycle work above is un
 - [ ] **State:** touched GL state is fence-restored on success and failure.
 - [ ] **Memory:** targets/buffers/volumes/history are bounded, consumer-owned and retired deterministically.
 - [ ] **Settings:** canonical defaults/descriptor resolution happen before admission; renderers do not read Settings per frame.
+- [ ] **Test authority:** the blocking durability audit stays green for touched areas. Tests derive defaults, preset/catalog
+  membership and other mutable authorities from their current canonical owner unless an exact literal is itself the contract.
+  Advisory pin/source-copy queues are review aids, not automatic project debt.
+- [ ] **Unattended evidence:** do not skip, xfail or deselect a test merely because it exposes a window. Preserve the evidence and
+  move it offscreen/non-intrusive where the same native Qt/GL/input contract can be retained. Keep `Docs/TestSuite.md` aligned
+  with material test-infrastructure changes.
 - [ ] **Physical:** both displays, cold/warm use, switching, CUSTOM, Play/Pause/Resume, real photos and representative music.
 
 ## Handoff rules
 
-The supplied/latest GODZIP is the working-tree authority. Significant slices return a full-file superseding GODZIP, never a
-partial patch. Do not include oversized generated media, recordings, frame traces, build outputs or unchanged giant assets/tests.
-GODZIP manifests are produced/validated with `tools/godzip_foundry_core.py`; `.godzip/*` is archive metadata, never a repository
-replacement target. No environment-variable feature gates. Rejected experiments are removed rather than retained as fallback
-architecture.
+For remote/archive handoffs, the supplied/latest GODZIP is the working-tree authority. Significant handed-off slices return a
+full-file superseding GODZIP, never a partial patch. Do not include oversized generated media, recordings, frame traces, build
+outputs or unchanged giant assets/tests. GODZIP manifests are produced/validated with `tools/godzip_foundry_core.py`; every
+generated archive also carries `.godzip/workflow.md` with transfer rules for that archive-handoff workflow. Those transfer rules
+do **not** govern Codex, Claude or another local-repository application that is already operating directly in the checked-out
+repo; local repo agents follow the operator's workspace/repository instructions and should not switch themselves into GODZIP
+mode merely because `.godzip/workflow.md` exists. `.godzip/*` is archive metadata, never a repository replacement target, and
+`ui/assets/` is a hard normal-GODZIP exclusion rather than optional handoff payload. No environment-variable feature gates.
+Rejected experiments are removed rather than retained as fallback architecture.

@@ -4,7 +4,7 @@ from tests._invisible_windows import keep_off_screen  # real but never on screen
 from copy import deepcopy
 import json
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog, QFontComboBox
 
@@ -398,6 +398,7 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
 
         def _modal_picker(*_args, **_kwargs):
             dialog = QDialog(editor)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
             QTimer.singleShot(0, dialog.accept)
             assert dialog.exec() == QDialog.DialogCode.Accepted
             return next(picker_results)

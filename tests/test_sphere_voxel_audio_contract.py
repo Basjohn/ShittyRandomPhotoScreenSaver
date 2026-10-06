@@ -536,9 +536,10 @@ def test_dead_experimental_controls_are_retired_and_sustained_growth_is_live() -
         assert name not in config
         assert name not in defaults
         assert name not in model
-    assert "Inactive Compatibility Controls" not in builder
-    assert "sustained passage-weight growth" in builder
-    assert "Continuous authored rotation floor/idle velocity" in builder
+    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+
+    # Live behavior is proved by the runtime tests below; Settings copy is not an oracle.
+    assert {"sphere_size_response", "sphere_base_rotation_speed"} <= set(_SPHERE_SETTING_KEYS)
 
 
 def test_quiet_background_contour_cannot_author_packets_without_presence() -> None:
@@ -899,8 +900,6 @@ def test_scene_shadow_cel_and_arrival_fade_are_sphere_renderer_only() -> None:
     assert "-light_x * radius * (0.34 + float(state.size_pulse) * 0.55) * distance" in source
     assert "-light_y * radius * (0.34 + float(state.size_pulse) * 0.55) * distance" in source
     assert "uLayerAlpha" in source
-    assert "ground ellipse" not in source
-    assert "soft disc" not in source
 
 
 def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is_retired() -> None:
@@ -912,8 +911,12 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
     for key in ("sphere_fill_color", "sphere_edge_color", "sphere_shadow_enabled"):
         assert f'"{key}"' in config_applier
     assert "ColorSwatchButton" in builder
-    assert "Finish Preset:" in builder and "Fill Color:" in builder and "Edge Color:" in builder
-    assert "Drop Shadow:" in builder and "Toon Shading:" in builder
+    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+
+    assert {
+        "sphere_finish",
+        "sphere_shadow_enabled",
+    } <= set(_SPHERE_SETTING_KEYS)
     for key in (
         "sphere_shadow_opacity",
         "sphere_shadow_softness",
@@ -926,7 +929,7 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
     assert "apply_shadow_dependency" in builder
     assert "sphere_finish" in binding and "sphere_fill_color" in binding and "sphere_edge_color" in binding
     for rejected in (
-        "Rainbow Ghosting:",
+        "sphere_rainbow_ghosting",
         "_GHOST_FRAGMENT_SOURCE",
         "_ghost_program",
         "_ghost_history",
@@ -934,7 +937,7 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
         "uGhostHue",
     ):
         assert rejected not in source
-        if rejected in {"sphere_rainbow_ghosting", "Rainbow Ghosting:"}:
+        if rejected == "sphere_rainbow_ghosting":
             assert rejected not in builder
             assert rejected not in binding
             assert rejected not in config_applier
@@ -949,15 +952,15 @@ def test_sphere_builder_uses_shared_circular_toggle_style_and_real_advanced_buck
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert 'control.setProperty("circleIndicator", True)' in builder
     assert 'scaffold.advanced_layout' in builder
-    for title in (
-        'title="Appearance"',
-        'title="Particle Flow"',
-        'title="Reactivity"',
-        'title="Rotation"',
-        'title="Effects"',
+    for bucket_key in (
+        'bucket_key="appearance"',
+        'bucket_key="particle_flow"',
+        'bucket_key="reaction"',
+        'bucket_key="rotation"',
+        'bucket_key="effects"',
     ):
-        assert title in builder
-    assert 'title="Inactive Compatibility Controls"' not in builder
+        assert bucket_key in builder
+    assert 'bucket_key="inactive_compatibility"' not in builder
     assert "apply_flow_dependency" in builder
     assert "RecommendedMarkSlider" in builder
     assert "_RECOMMENDED_SLIDER_VALUES" in builder
@@ -965,9 +968,10 @@ def test_sphere_builder_uses_shared_circular_toggle_style_and_real_advanced_buck
 def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
     runtime_source = (ROOT / "widgets/spotify_visualizer/sphere_frame_runtime.py").read_text(encoding="utf-8")
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
+    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+
     assert "sphere_light_tracer_enabled" in runtime_source
-    assert "Light Tracer:" in builder
+    assert "sphere_light_tracer_enabled" in _SPHERE_SETTING_KEYS
     fragment = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
     spec_chunk = fragment.split("float specExponent", 1)[1].split("vec3 base", 1)[0]
     assert "vScreenCenter" not in spec_chunk
@@ -1000,7 +1004,7 @@ def test_incoming_population_rank_is_stable_and_cohorts_partition_the_population
     assert "_INCOMING_RECYCLE_PROGRESS = 0.90" in runtime_source
 
 
-def test_fragment_interpolation_is_visual_only_and_preset_enabled() -> None:
+def test_fragment_interpolation_is_visual_only_and_settings_owned() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     energy = render_state.VisualizerEnergyState(bass=0.28, mid=0.48, high=0.31, overall=0.39)
     runtime = sphere_runtime.SphereFrameRuntime()
@@ -1032,9 +1036,9 @@ def test_fragment_interpolation_is_visual_only_and_preset_enabled() -> None:
     assert raw_hit is not None
     assert max(raw_hit.section_drives) > first_peak
 
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    assert "Fragment Interpolation:" in builder
-    assert "visual only" in builder
+    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+
+    assert "sphere_fragment_interpolation_enabled" in _SPHERE_SETTING_KEYS
 
 
 def test_generic_crest_cannot_author_fragments_or_incoming_and_regions_walk() -> None:

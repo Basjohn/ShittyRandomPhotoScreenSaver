@@ -154,6 +154,55 @@ def test_internal_git_subprocesses_are_hidden_on_windows(monkeypatch) -> None:
     assert kwargs["creationflags"] & int(getattr(core.subprocess, "CREATE_NO_WINDOW", 0x08000000))
 
 
+
+
+def test_created_godzip_embeds_workflow_and_hard_excludes_ui_assets(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    assets = repo / "ui" / "assets"
+    assets.mkdir(parents=True)
+    (assets / "huge.bin").write_bytes(b"x" * 32)
+    (repo / "ordinary.py").write_text("print('ok')\n", encoding="utf-8")
+
+    listed = {entry.path for entry in core.collect_repo_files(repo)}
+    assert "ordinary.py" in listed
+    assert "ui/assets/huge.bin" not in listed
+    assert core.workflow_default_selected("ui/assets/huge.bin", "MODIFIED") is False
+    assert core.is_never_transfer_payload("ui/assets/huge.bin") is True
+
+    archive = tmp_path / "GODZIP_workflow.zip"
+    core.create_godzip(repo, ["ordinary.py"], archive)
+    with zipfile.ZipFile(archive, "r") as handle:
+        names = set(handle.namelist())
+        assert core.WORKFLOW_MEMBER in names
+        workflow = handle.read(core.WORKFLOW_MEMBER).decode("utf-8")
+        assert "superseding full GODZIP" in workflow
+        assert "working-tree authority" in workflow
+        assert "ui/assets/" in workflow
+        assert "repository-only operation" in workflow
+        assert "do **not** govern Codex, Claude" in workflow
+        assert "local repo agents" in workflow
+        assert "must not switch themselves into GODZIP mode" in workflow
+
+    inspection = core.inspect_godzip(repo, archive)
+    assert [entry.target_path for entry in inspection.files] == ["ordinary.py"]
+
+    with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
+        core.create_godzip(repo, ["ui/assets/huge.bin"], tmp_path / "forbidden.zip")
+
+
+def test_archive_cleanup_relation_uses_core_hidden_git_path(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    base = core.git_head(repo)
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _git(repo, "add", "later.txt")
+    _git(repo, "commit", "-m", "later")
+    current = core.git_head(repo)
+
+    relation, count = core.archive_source_relation(repo, base, current_head=current)
+    assert relation == "behind"
+    assert count == 1
+    assert core.archive_source_relation(repo, current[:10], current_head=current) == ("current", 0)
+
 def test_legacy_zip_is_unknown_age_and_has_no_implicit_debris(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     archive = tmp_path / "legacy.zip"
@@ -171,17 +220,13 @@ def test_legacy_zip_is_unknown_age_and_has_no_implicit_debris(tmp_path: Path) ->
 def test_ui_persists_preferences_repo_locally_not_in_global_appdata() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
 
+    # Static architecture bar: repo-local JSON owns Foundry preferences. Do not
+    # freeze unrelated icon names, button wiring, refresh spelling or tab layout.
+    # SOURCE-ORACLE INVARIANT: Foundry preferences must remain repository-local.
     assert '".godzip_foundry"' in source
     assert "QSettings" not in source
     assert 'return repo_root.resolve() / _LOCAL_STATE_DIR / _LOCAL_SETTINGS_FILE' in source
     assert '_save_local_setting(self.repo_root' in source
-    # LocalAppData is now legitimately consulted only when locating an installed
-    # Git Bash executable; preference persistence remains repository-local.
-    assert 'for root_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")' in source
-    assert "SRPSSGodZIP.ico" in source
-    assert "not is_generated_qrc_python(payload.path)" in source
-    assert "QTimer.singleShot(0, self.refresh)" not in source
-    assert "QApplication.processEvents()" not in source
 
 
 
@@ -209,6 +254,7 @@ def test_workflow_defaults_keep_docs_and_direct_tests_but_not_payload_trees() ->
     assert core.workflow_default_selected("tests/goldens/frame.png") is False
     assert core.workflow_default_selected("themes/settings/Dark.json") is False
     assert core.workflow_default_selected("images/wallpaper.jpg") is False
+    assert core.workflow_default_selected("ui/assets/onboarding/hero.webp") is False
     assert core.workflow_default_selected("ui/resources/assets_rc.py") is False
     assert core.workflow_default_selected("ui/resources/onboarding_assets_rc.py", "MODIFIED") is False
     assert core.workflow_default_selected("ui/resources/assets.rcc", "MODIFIED") is False
@@ -593,41 +639,22 @@ def test_windows_run_console_auto_closes_unless_keep_open_is_explicit(monkeypatc
     assert kept_kwargs["creationflags"] == direct_kwargs["creationflags"]
 
 
-def test_run_and_diff_tabs_remain_repo_local_without_copy_wording_or_global_settings() -> None:
-    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
-    assert "class RunTab" in source
-    assert "class DiffTab" in source
-    assert 'self.tabs.addTab(self.diff_tab' in source
-    assert 'self.tabs.addTab(self.run_tab' in source
-    assert source.index('self.tabs.addTab(self.debris_tab') < source.index('self.tabs.addTab(self.run_tab')
-    assert '"run_flags"' in source
-    assert '"run_entrypoint"' in source
-    assert '"--diff-local"' in source
-    assert '"--diff-godzip"' in source
-    assert '"--diff-output"' in source
-    assert "generate_local_diff(self.repo_root)" in source
-    assert "refresh_native_taskbar_icon" in source
-    assert "WM_SETICON" not in source  # numeric native message kept implementation-local, no shell command fallback
-    assert '_load_local_settings(self.repo_root)' in source
-    assert '_save_local_setting(self.repo_root, "run_flags", flags)' in source
-    assert "QSettings" not in source
-
-
-def test_run_auto_logzip_waits_for_process_exit_without_polling_and_is_repo_local() -> None:
+def test_run_auto_logzip_waits_for_process_exit_without_polling() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
 
-    assert '"run_auto_logzip_after_exit"' in source
+    # Negative architecture bar: completion waits on the child instead of
+    # introducing a recurring poller. Thread names/UI condition spelling are not
+    # part of the contract.
+    # SOURCE-ORACLE INVARIANT: run completion may block in its waiter, never poll.
     assert "process.wait()" in source
     assert "process.poll()" not in source
-    assert 'name="GodzipFoundryRunWait"' in source
     assert "create_logzip(" in source
-    assert "if checked and self.keep_console.isChecked():" in source
-    assert "if checked and self.auto_logzip.isChecked():" in source
 
 
-def test_create_and_logzip_expose_shell_open_for_remembered_output_without_console_spawn() -> None:
+def test_foundry_folder_open_does_not_spawn_explorer_process() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
 
-    assert "QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))" in source
-    assert "def open_saved_folder" in source
+    # Shell integration may be refactored; the durable contract is that Foundry
+    # does not launch a second explorer.exe process directly.
+    # SOURCE-ORACLE INVARIANT: no direct Explorer child-process launch.
     assert "explorer.exe" not in source

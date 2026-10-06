@@ -214,11 +214,9 @@ def test_gmail_text_limits_and_balance_use_distinct_controls() -> None:
     """Word limits stay concise while the row width split uses one ratio slider."""
     source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
 
-    assert 'text_limit_row = _aligned_row(appearance_inner, "Text Limits:")' in source
     assert "text_limit_grid = QGridLayout()" in source
     assert "text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)" in source
     assert "text_limit_grid.addWidget(tab.gmail_max_subject_words, 0, 3)" in source
-    assert 'balance_row = _aligned_row(appearance_inner, "Text Balance:")' in source
     assert "tab.gmail_sender_subject_ratio = QSlider" in source
     assert "gmail_sender_column_width = QSpinBox" not in source
     assert "gmail_max_subject_chars = QSpinBox" not in source

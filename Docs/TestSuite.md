@@ -1,10 +1,5 @@
 # Test Suite Guide
 
-### System-audio owner / OSD source gate
-
-The read-only native callback registration module runs directly on Windows with `python -m pytest tests/test_core_audio_callback_native_probe.py -q --tb=short`; no environment-variable gate is used. The current shared system-audio source and Media lease integration are covered by `tests/test_audio_shared_source.py`, `tests/test_audio_event_qt_bridge.py`, `tests/test_audio_event_session.py`, `tests/test_system_mute_runtime.py` and `tests/test_media_generation_recreation.py`. Native registration alone cannot prove external event arrival. The implemented event-driven Media/OSD source is operator-accepted; repeat hardware checks only when its actual callback or device-lifecycle behavior changes.
-
-
 This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.
 
 `Current_Plan.md` owns execution order. The exact source tree plus `tests/run_chunked.py` own executable inventory. `Docs/Reference/Harness_Index.md` owns operator-tool/harness lookup.
@@ -17,9 +12,9 @@ The live `test_*.py` inventory and maintained destination targets are resolved f
 
 The destination profile is **target-isolated**: each selected target runs in its own fresh pytest subprocess so queued Qt/QQuick teardown from one target cannot poison another target's result.
 
-The maintained `destination` profile has not been established by the current FEEDS-focused Windows gate. Re-evaluate its actual target count from `tests/run_chunked.py` and report that profile only from a real current-tree run. The separate accepted R-87/CHK26 performance landmark is documented in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
+Do not record a transient focused-run status or checkpoint-era target count in this guide. Re-evaluate the maintained profile from `tests/run_chunked.py` and report PASS/RED only from an actual run on the tree being discussed. Historical performance landmarks belong in `Docs/Historical_Bugs/` and the relevant Guardrails, not in current suite inventory prose.
 
-**Evidence rule:** Targeted Windows Qt tests and operator-observed behavior are distinct claims. Previously accepted unrelated families need not be rerun merely to document another family. A focused green selection establishes only the submitted tests on that exact tree, not full-suite completion, a live-network benchmark or universal physical visual acceptance. For subsequent code changes, execute the affected tests against that changed tree.
+**Evidence rule:** Targeted Windows Qt tests and operator-observed behavior are distinct claims. Unrelated families need not be rerun merely to document another family. A focused green selection establishes only the submitted tests on that exact tree, not full-suite completion, a live-network benchmark or universal physical visual acceptance. For subsequent code changes, execute the affected tests against that changed tree.
 
 The maintained `destination` profile's status must come from its actual current run, not from piecing together passing focused counts from other checkpoints.
 
@@ -29,14 +24,16 @@ The current agent/container may lack PySide6/OpenGL. In that environment, a coll
 
 Tests are strict about product contracts, not accidental copies of today's authored data. Mutable defaults, extensible registry membership/cardinality and curated preset payloads remain owned by their canonical source. Authored Markdown explains contracts and is never a proxy runtime oracle. Behavior tests derive expectations from the owning source or use self-owned fixtures; exact literal pins remain appropriate when the literal itself is a protocol, compatibility, golden, geometry, ownership or negative-control invariant. The blocking audit follows canonical-default aliases transitively so an intermediate `widgets = defaults[...]` assignment cannot hide a copied authored value.
 
+Runtime-shaped worker fixtures must preserve production callback topology. A fake may execute work synchronously, but when production completion is asynchronous it should queue that completion and let the test drain it explicitly; do not invoke completion re-entrantly from inside ``submit_*``. For shared FEEDS/NEWS owners this is required so cache admission, serialized remote work and family settlement are tested without sleeps/polling or impossible nested callbacks.
+
 The maintained blocking bar is:
 
 ```powershell
 python tools/test_durability_audit.py
-python -m pytest tests/test_test_suite_durability.py -q
+python -m pytest tests/test_test_suite_durability.py tests/test_default_pin_scan.py tests/test_test_oracle_review.py -q
 ```
 
-`tools/default_pin_scan.py` is deliberately review-only and may report legitimate exact fixtures. Never mass-edit its output. Full policy, examples and exact-value markers live in `Docs/Guides/Test_Durability.md`.
+`tools/default_pin_scan.py` is deliberately review-only. It filters literal dict values explicitly authored by the same test, but computed/control-driven fixture values and legitimate exact contracts may still appear and require review. `tools/test_oracle_review.py` is also review-only: it separates source-string implementation oracles, exact UI-copy oracles and potentially intrusive window operations for classification. Neither review queue changes test selection or acceptance: do not skip, xfail, deselect, stop a run or request operator action solely because a candidate exists. Never mass-edit either queue. Full policy, examples, source/UI-copy markers and non-intrusive-window guidance live in `Docs/Guides/Test_Durability.md`.
 
 ## 1.2 Qt delivery and painted-geometry evidence
 
@@ -75,9 +72,9 @@ The selected Edit mapper must project actual QML paint through inherited item/QM
 
 `tests/test_qtquick_child_mapped_geometry.py::test_selected_mapper_tracks_nested_qml_scale_translate_clips_and_role_readiness` verifies dynamic and direct applied-object QML transforms, ancestor clipping, retained role identity and both geometries with **different independent oracles**. The Qt test performs direct QML transform writes via a QML-owned function and `QQmlExpression`; do not fetch `QQuickTranslate*` with Python `QObject.property()` because PySide6 has no converter for that pointer. On PySide6 builds where `QQmlExpression.evaluate()` returns `(value, isUndefined)`, unwrap the primitive and assert `isUndefined` is false before checking the requested applied transform value; do not compare the tuple to a scalar. While a clip is active the exact visible intersection in the fixture's axis-aligned clipping-parent coordinates is projected into the Edit frame, and only after clip-off are all four uncut target corners compared. A full-target bounding box must never be substituted for the clipped visible paint inside the 24-update stress phase. `tests/test_qtquick_other_family_owner_save_reopen.py::test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit` checks exact painted target object and its actual exposed rectangle on the third generation, plus Cancel/no-write preservation. `tests/test_qtquick_media_presentation.py::test_media_volume_opposite_axis_reflow_updates_live_edit_proxy` finds the live visual delegate, varies supported normalized volume-bar X/Y offsets and moves the parent across the display centre to exercise automatic accessory-side relocation. It compares the proxy to the actual painted track without ever asserting an artificial direct `slider.x/y` move against `anchors.fill`. The nested-transform Qt gate captures and rejects selected-mapper non-bindable-property and binding-loop warnings across repeated retained-transform edits. The source gates reject reading `node.transform` or `ancestor.transform` inside the selected Edit mapper. These Qt cases require **Windows/PySide6 execution** when affected behavior changes; syntax/source checks alone cannot certify real-time drag responsiveness.
 
-**Live-normalization / role-lifetime gate:** `tests/test_live_normalization_role_lifetime_contract.py` protects stable semantic arrays in Media, Reddit/Reddit2, Gmail, Weather, System Stats, Friend Pulse, Achievement Pulse and Abandonment Issues, including the external-volume distinction, the whole metric-stack role and named `baseAuthoredWidth/Height` on dense families. `tests/test_qtquick_child_mapped_geometry.py::test_selected_roles_retain_identity_when_live_normalization_baselines_change` uses a native retained QML object to change the card's independent X/Y, Media-like accessory X and dense family's named authored X/Y baselines twenty times while checking all three original delegate identities, bindable baseline values, actual painted target/blue rectangle agreement, role hide/reveal and full Edit teardown without Qt warning cascades. Pair these with existing real-family Media opposite-side volume, Reddit/Gmail header/refresh and shared owner tests; source-only passes are not native proof, and the accepted whole-list column rails must not be reinterpreted as individually editable row positions. Clock's separate changing preferred text dimensions continue through the same selected-only normalization path. This gate adds no normal-runtime observation.
+**Live-normalization / role-lifetime gate:** `tests/test_live_normalization_role_lifetime_contract.py` protects stable semantic arrays in Media, Reddit/Reddit2, Gmail, Weather, System Stats, Friend Pulse, Achievement Pulse and Abandonment Issues, including the external-volume distinction, the whole metric-stack role and named `baseAuthoredWidth/Height` on dense families. `tests/test_qtquick_child_mapped_geometry.py::test_selected_roles_retain_identity_when_live_normalization_baselines_change` uses a native retained QML object to change the card's independent X/Y, Media-like accessory X and dense family's named authored X/Y baselines twenty times while checking all three original delegate identities, bindable baseline values, actual painted target/blue rectangle agreement, role hide/reveal and full Edit teardown without Qt warning cascades. Pair these with existing real-family Media opposite-side volume, Reddit/Gmail header/refresh and shared owner tests; source-only passes are not native proof, and whole-list column rails must not be reinterpreted as individually editable row positions. Clock's separate changing preferred text dimensions continue through the same selected-only normalization path. This gate adds no normal-runtime observation.
 
-**Selected child snap-guide churn gate:** `tests/test_custom_layout_guides_contract.py::test_child_snap_guide_chrome_is_retained_and_idempotent_during_selected_edit` protects two Edit-only retained guide items, no per-sample guide arrays or Repeaters and no extra scheduler/persistence path. `tests/test_qtquick_child_mapped_geometry.py::test_child_snap_guides_retain_one_item_per_axis_during_repeated_pointer_samples` uses the actual selected retained QML scene to verify unchanged guide QQuickItem and role-delegate identities through 24 repeated samples per position, both axes, two semantic styles, hide/reveal and teardown. The Edit-only guide-publisher test does not by itself prove end-to-end physical drag latency or wider outer peer-guide performance; no repeat physical checks for already accepted families are required solely because this guide chrome changed.
+**Selected child snap-guide churn gate:** `tests/test_custom_layout_guides_contract.py::test_child_snap_guide_chrome_is_retained_and_idempotent_during_selected_edit` protects two Edit-only retained guide items, no per-sample guide arrays or Repeaters and no extra scheduler/persistence path. `tests/test_qtquick_child_mapped_geometry.py::test_child_snap_guides_retain_one_item_per_axis_during_repeated_pointer_samples` uses the actual selected retained QML scene to verify unchanged guide QQuickItem and role-delegate identities through 24 repeated samples per position, both axes, two semantic styles, hide/reveal and teardown. The Edit-only guide-publisher test does not by itself prove end-to-end physical drag latency or wider outer peer-guide performance; require a physical check only when the changed seam can affect those properties.
 
 ## Current child-geometry and owner lifecycle gates
 
@@ -122,10 +119,10 @@ presentation scale. A QML source literal or unscaled logical-gap assertion is
 insufficient: both alignments and all rows must retain visible separation between
 AGO and the title, without changing the 01HR/AGO internal gap.
 
-**Repeated-list semantic rail swap (Qt/physical acceptance complete):** `tests/test_column_rails_contract.py` validates all permutations, no-op and invalid input. `tests/test_qtquick_custom_layout_owner.py::test_column_rail_swap_is_one_bounded_owner_undo_action_and_restores_authored_order` checks one whole-list discrete Undo transaction without Settings I/O. `tests/test_qtquick_reddit_presentation.py::test_three_semantic_column_rails_reorder_every_retained_post_and_rehydrate` and `tests/test_qtquick_gmail_presentation.py::test_gmail_semantic_column_rails_reorder_all_retained_message_rows` check actual retained painted positions in all rows, order reversal, header-flip independence, Y/width reflow and retained delegate identity. The operator accepted the Windows and physical rail checks; retain this suite as regression coverage. The canonical CUSTOM payload is `column_rails`, never per-row `x_offset`; no normal-runtime rail observer, and a dedicated column-order notification
+**Repeated-list semantic rail swap gate:** `tests/test_column_rails_contract.py` validates all permutations, no-op and invalid input. `tests/test_qtquick_custom_layout_owner.py::test_column_rail_swap_is_one_bounded_owner_undo_action_and_restores_authored_order` checks one whole-list discrete Undo transaction without Settings I/O. `tests/test_qtquick_reddit_presentation.py::test_three_semantic_column_rails_reorder_every_retained_post_and_rehydrate` and `tests/test_qtquick_gmail_presentation.py::test_gmail_semantic_column_rails_reorder_all_retained_message_rows` check actual retained painted positions in all rows, order reversal, header-flip independence, Y/width reflow and retained delegate identity. Retain the native Qt suite as regression coverage; repeat physical rail checks only when paint/input behavior can change. The canonical CUSTOM payload is `column_rails`, never per-row `x_offset`; no normal-runtime rail observer, and a dedicated column-order notification
 so child-geometry changes do not churn the list columns. See `Docs/Guides/Custom_Child_Placement_And_Headers.md`.
 
-**Normal-runtime cross-family churn gate:** `tests/test_qtquick_normal_runtime_publication_churn.py` protects unchanged versus independent effective QQuickItem property writes, QML-side divergence and repeated retained menu-model binding. Pair it with the real ordinary-host/context-menu Qt suites when that path changes; static/recording-target passes do not establish measured pointer latency or repaint cost. Do not rerun unrelated accepted families solely to refresh a count.
+**Normal-runtime cross-family churn gate:** `tests/test_qtquick_normal_runtime_publication_churn.py` protects unchanged versus independent effective QQuickItem property writes, QML-side divergence and repeated retained menu-model binding. Pair it with the real ordinary-host/context-menu Qt suites when that path changes; static/recording-target passes do not establish measured pointer latency or repaint cost. Do not rerun unrelated families solely to refresh a count.
 
 ## 2. Status vocabulary
 
@@ -140,7 +137,7 @@ Use these labels consistently:
 
 A green static/source test is never a substitute for a required Qt/QML, real-GL or installed physical gate.
 
-**Cross-family Edit and repeated-role gate:** The retained QML geometry checks cover Clock digital/analogue mapped child targets, System Stats' single retained metric-stack Edit role against the union of all enabled painted cards (both header orientations, compact/expanded X/Y and shared block offsets), with no per-metric ghost Edit handles, and Friend Pulse's row/grid first painted frame, avatar and username against its grouped targets under live resize. System Stats' import-free role/rail guard in `tests/test_system_stats_reflow_contract.py` rejects overlapping metric child editors; the real selected-Edit Qt gate checks the three retained roles, exact mapped group bounds, all painted panels and absence of role-delegate reconstruction during repeated flip/move updates. A physically accepted family is not retested solely because a test-only fixture changed. The 0.02px tolerance applies to exact painted target/proxy bounds; the Clock's non-painted Column layout-box containment alone permits 1.0 logical px for fractional text metrics. The selected Edit lifetime test also covers 20 independent card, accessory and dense authored-baseline updates, three retained delegate identities, exact paint and warning absence. Native Qt is required for retained scene truth and no-warning evidence; source-only validation cannot establish drag latency or formal performance neutrality.
+**Cross-family Edit and repeated-role gate:** The retained QML geometry checks cover Clock digital/analogue mapped child targets, System Stats' single retained metric-stack Edit role against the union of all enabled painted cards (both header orientations, compact/expanded X/Y and shared block offsets), with no per-metric ghost Edit handles, and Friend Pulse's row/grid first painted frame, avatar and username against its grouped targets under live resize. System Stats' import-free role/rail guard in `tests/test_system_stats_reflow_contract.py` rejects overlapping metric child editors; the real selected-Edit Qt gate checks the three retained roles, exact mapped group bounds, all painted panels and absence of role-delegate reconstruction during repeated flip/move updates. A family is not sent through an unrelated physical gate solely because a test-only fixture changed. The 0.02px tolerance applies to exact painted target/proxy bounds; the Clock's non-painted Column layout-box containment alone permits 1.0 logical px for fractional text metrics. The selected Edit lifetime test also covers 20 independent card, accessory and dense authored-baseline updates, three retained delegate identities, exact paint and warning absence. Native Qt is required for retained scene truth and no-warning evidence; source-only validation cannot establish drag latency or formal performance neutrality.
 
 ## 3. Standard commands
 
@@ -175,6 +172,16 @@ pytest path\to\test_file.py -q --tb=short
 ```
 
 Then widen to the maintained profile and installed/physical gates only when the change actually requires them.
+
+### 3.5 Test-authority hygiene
+
+```powershell
+python tools/test_durability_audit.py
+python tools/default_pin_scan.py --summary
+python tools/test_oracle_review.py
+```
+
+`test_durability_audit.py` is blocking and intentionally high-confidence. The other two commands are review queues and always remain advisory. A review queue never changes suite selection, creates a skip/xfail, stops execution or becomes a request for operator action.
 
 ## 4. Evidence levels
 
@@ -317,7 +324,7 @@ Permanent shared-mode work must preserve source freshness, authored logical cade
 
 **Bubble is the strongest protected canary.** Idle traces are insufficient for any production change that touches Bubble cadence, simulation, payload/coalescing, reactive uniforms, event admission, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion or presentation timing. Such a change requires an explicit active-music installed lane plus operator feel. Never retune Bubble merely to satisfy a benchmark or stale golden.
 
-Voxel Sphere is accepted experimental architecture with an active low-level scene3d substrate promotion. Its behavioural/state contract remains private and golden-protected while that migration is incomplete. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
+Voxel Sphere remains experimental while using the current low-level scene3d substrate promotion. Its behavioural/state contract remains private and golden-protected while that migration is incomplete. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
 
@@ -339,7 +346,7 @@ Cost: `tools/visualizer_cost_probe.py` (offscreen, production host; median/p90 C
 
 ### 6.5 Visualizer performance/trace authority
 
-R-87 is closed and **CHK26 / `a0bf70932c` is the accepted performance/freshness GOLDEN**. The frame-trace sidecar remains useful diagnostic authority and must not be removed merely because the investigation closed.
+The frame-trace sidecar remains current diagnostic authority for Visualizer performance/freshness attribution. Historical R-87/CHK26 measurements and their comparison baseline live in `Docs/Historical_Bugs/` and `Docs/Guardrails/Performance_Optimization_Contract.md`; do not duplicate checkpoint status here.
 
 High-value permanent guards include:
 
@@ -372,6 +379,8 @@ Real-GL/capture oracles supplement source/uniform tests when visual effect seman
 
 Shared service tests target current service ownership directly. Old `MediaWidget`/deleted manager anchor setup is not integration authority.
 
+**System-audio / OSD gate:** the read-only native callback registration module runs directly on Windows with `python -m pytest tests/test_core_audio_callback_native_probe.py -q --tb=short`; no environment-variable gate is used. Shared system-audio source and Media lease integration are covered by `tests/test_audio_shared_source.py`, `tests/test_audio_event_qt_bridge.py`, `tests/test_audio_event_session.py`, `tests/test_system_mute_runtime.py` and `tests/test_media_generation_recreation.py`. Native registration alone cannot prove external event arrival; require bounded hardware evidence when the callback/device-lifecycle seam changes.
+
 Current injection/admission belongs to `rendering/widget_runtime_services.py`, retained Quick family binders/models and the actual runtime-service implementations. Preserve event-driven media ownership, bounded reconciliation/watchdogs, generation fencing and clean family dormancy/retirement.
 
 Shared scene3d resource regression routes are in `Docs/Reference/Scene3D_Resources.md`: real DSA mesh drawing and
@@ -393,9 +402,9 @@ Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms
 `test_image_prefetcher.py` protects bounded source batching, cooldown, cancellation and stale-cache fencing.
 `test_image_prefetch_transport.py` crosses the production construction/packed-response seam, including a spawned worker's near-aspect FILL request, detached QImage lifetime and malformed/cancelled shared-memory retirement. Manifest rejection retains expected/actual geometry and complete spaced paths in console diagnostics.
 `test_image_worker_prefetch_batch.py` spawns the image worker, proves Qt byte parity for ordinary Smooth and exact
-foreground/batch parity for all three filters with/without sharpening, and rejects repeated source decodes,
+foreground/batch parity for every canonical resample filter with/without sharpening, and rejects repeated source decodes,
 mixed-quality inputs and over-budget batches. Transport fixtures reject mismatched filter/sharpen manifests as well
-as geometry, and pipeline fixtures isolate all six quality cache identities.
+as geometry, and pipeline fixtures isolate every canonical filter/sharpen quality cache identity.
 `test_image_quality.py` guards bounded visible-region FILL work, sharpening halo, severe-reduction detail and opaque
 source ownership; `test_resample_filter_settings.py` and `test_display_tab.py` preserve old Lanczos selections and
 round-trip the new enum without retaining a second setting. The mechanism and measured scope are in
@@ -416,7 +425,15 @@ and the shared dead-family exclusion surface so a new QML namespace cannot silen
 `test_installer_contract.py` protects the two self-contained Inno 6.7.2+ dark installer contracts, Build Foundry
 Inno 7/6 discovery, pre-compile stale-output retirement, transparent-ICO Setup/Uninstall branding, retired-BMP boundary,
 QRC-owned-image boundary, ICO-first solid-compression ordering and MC single-payload-copy rule. These are static packaging bars; successful Inno 7.1 compilation and eyes-on
-installed wizard/DPI behavior remain operator acceptance.
+installed wizard/DPI behavior remain physical/operator evidence when that seam changes.
+
+`tests/test_godzip_foundry_core.py` owns the GODZIP transfer-safety contract: manifest/hash/debris semantics, reversible apply,
+repository-local Foundry state, hidden internal Git child processes, embedded `.godzip/workflow.md`, and the hard exclusion of
+`ui/assets/` from normal handoff payloads even when a caller attempts to force-select it. The embedded workflow is explicitly an
+archive-handoff contract; it must not redirect Codex, Claude or another application already working directly in the local repo.
+GODZIP CLEAN age classification must
+reuse the core hidden Git path; a cleanup scan may inspect many archives and must never spawn a visible console per relation query.
+These tests do not authorize deletion: cleanup likelihood remains advisory and only explicit debris/recycle actions mutate files.
 
 ## 7. Test infrastructure rules
 
@@ -474,18 +491,13 @@ Examples:
 
 A unit/static green never overrules a reproducible installed visual or interaction regression.
 
-## 9. Current accepted physical landmarks
+## 9. Physical evidence routing
 
-These are useful current acceptance landmarks, not instructions to rerun unrelated work:
+This guide does not maintain a list of historically accepted checkpoints or completed visual reviews. Closed evidence belongs in `Docs/Historical_Bugs/` or the owning Guardrail/Reference document. Current tests should state **when** a physical gate is required, not preserve a diary of when one once passed.
 
-- **Qt Quick runtime cutover:** accepted; no fallback presenter is supported.
-- **Settings base stylesheet retirement:** accepted with `themes/dark.qss` physically absent; no replacement monolith/fallback loader.
-- **Clock face-state + geometry slots:** accepted across live face switching and saved slot replay.
-- **Settings bucket single-open/reachability:** accepted; sparse state and lazy page/mode reconstruction remain guarded.
-- **R-82/R-83 soak repairs:** accepted; orphaned derivative budget and Reddit zero-delay re-entry are closed.
-- **R-87 performance/freshness:** CHK26 / `a0bf70932c` accepted GOLDEN; CHK27-29 mapped the apparent residuals and closed further generic fishing. Sidecar instrumentation remains retained.
+Rerun a physical gate only when the changed seam can affect what that gate observes: pixels, authored reaction/timing, native focus/input, DWM/taskbar behavior, real driver/context behavior, multi-monitor ownership, or installed lifecycle. Do not rerun unrelated families merely to refresh a suite count or checkpoint label.
 
-Detailed dates, metrics and failed methods belong in Historical Bugs rather than being duplicated here.
+When a native Qt/GL test needs a genuinely shown/exposed window for scene-graph/context creation, keep it invisible to the operator with `tests._invisible_windows.keep_off_screen()` (or the established equivalent) unless visibility/focus itself is the contract. Offscreen-QPA/software rendering is appropriate only when it preserves the evidence level being claimed.
 
 ## 10. Maintenance and completion rule
 
@@ -498,11 +510,9 @@ When changing tests or this guide:
 5. delete obsolete whole-file tests once surviving assertions are rehomed;
 6. mark **NEEDS RUN** only for current tests that genuinely require another environment;
 7. remove NEEDS RUN only after an actual intended-environment execution;
-8. update this file when test authority/architecture changes materially, not for every small assertion edit;
+8. update this file in the same slice whenever test authority, maintained routing, evidence level, durability policy or operator-containment policy changes materially; do not append per-run diary entries;
 9. put failure archaeology in Historical Bugs, not numbered checkpoint sections here;
-10. never show a window on screen: a test that needs a real shown window (native handle, layout pass, compositor)
-    uses `tests/_invisible_windows.keep_off_screen` or `WA_DontShowOnScreen`; hover/focus behaviour that needs a live
-    platform runs in an offscreen-QPA subprocess;
+10. keep routine tests non-intrusive without changing selection: pure/model tests create no top-level window; compatible Qt tests use offscreen QPA; a real native/GL window that must be shown/exposed uses `tests._invisible_windows.keep_off_screen` or `WA_DontShowOnScreen`; only an explicitly physical focus/input/DWM contract may intentionally become visible or steal focus, and such a test still runs rather than being skipped merely for operator convenience;
 11. never pin what the operator or user can edit (defaults, presets, copy): derive it from its owner or assert
     structure, and mark a genuinely fixed literal `EXACT-VALUE INVARIANT:` (`Docs/Guardrails.md`).
 
@@ -521,17 +531,18 @@ Git and `Docs/Historical_Bugs/` preserve history. `Docs/TestSuite.md` should rem
 ### Feeds family regression routing
 
 `tests/test_feed_core.py` protects feed normalization, image-optional validity, URL/magnet normalization, bounded conditional transport, last-good cache durability/backoff and endpoint-isolated CUSTOM identity. `tests/test_feed_projection.py` protects List/Grid/Compact projection and sparse per-story artwork. `tests/test_feed_runtime.py` protects generation-shared source ownership, same-endpoint deduplication, active-lease cadence recomputation, cache-first scheduling, manual refresh and retirement/callback detachment. `tests/test_feed_news.py` protects the NEWS categories discovered from the canonical feed catalog, stable provider identity, newest-first merge, publisher attribution, failure isolation, one lease per selected publisher and Settings round-trip. `tests/test_feed_custom_slots.py`, `tests/test_feed_artwork_multisource.py` and the live-artwork tests protect simultaneous CUSTOM/NEWS sources, cancellation/pruning, artwork eviction fencing and bounded warming.
+Synchronous FEEDS fixtures must still model the production cadence contract: accepted runtime results carry a current success timestamp, failures carry a retry/backoff floor, and any test-only collapse of the inter-source stagger may remove elapsed waiting but must not bypass serialization or create a second scheduler. Do not add sleeps to make serialized NEWS tests pass.
 
 `tests/test_feed_f2_contract.py` is the family admission contract for **every registered FEEDS card**: every runtime descriptor is identical apart from identity, every card supports the same independent X/Y `content_extent`, the Settings section is descriptor-owned/lazy, QML owns no network/timer/remote image source, and foreground actions are HTTP/S pages or validated magnets only. `tests/test_qtquick_feed_component_load.py` is the mandatory native `QQmlComponent` compile/retained-visual gate and exercises sparse local Grid art, X/Y extent, stable child roles, real-artwork Edit proxy, authored-surface containment and widget-wide semantic flip. `tests/test_feed_custom_reflow_contract.py`, `tests/test_feed_header_parity_contract.py` and `tests/test_click_affordance_parity.py` protect freeform artwork reflow, shared header/monogram semantics and hover language. Source-string checks do not replace the native component gate.
 
-No deterministic FEEDS test should require live publisher access. `tools/feed_probe.py --catalog` is the separate native endpoint probe. Remaining operator-only lifecycle/visual checks are the live checklist in `Docs/Reference/Feeds.md`; there is no Custom-1-to-Custom-2/NEWS promotion gate because the ten-card family is already admitted.
+No deterministic FEEDS test should require live publisher access. `tools/feed_probe.py --catalog` is the separate native endpoint probe. Remaining operator-only lifecycle/visual checks are the live checklist in `Docs/Reference/Feeds.md`; there is no per-card promotion gate for already-admitted FEEDS identities; family membership is owned by the canonical FEEDS registry/configuration, not by a copied card count.
 
 ### Steam inline imagery and disk-budget gate
 
 `tests/test_steam_followed_inline_news_artwork.py` covers complete Steam Clan image-macro removal from preview prose, up to three validated local article thumbnails, offline restart, invalid reference rejection, failed lookup negative caching, independent game/inline cache pruning, and recovery of pre-thumbnail ranked/per-game cached article rows whose preview contained image paths without image-reference fields. Assert cache-first visual metadata and full text sanitation before the affected game's next rolling-news batch, with a second offline source lifetime; fresh-news fixtures alone do not protect existing user caches. `tests/test_steam_profile_assets_events.py` additionally guards the shared Steam asset writer/pruner. Source and cache fixtures retain game news and hub click eligibility when old records have no source URL or contain a rejected article target; Qt staging verifies no extra public row publication is required for a private link revision, portable QUrl file-path identity, a responsive thumbnail rail and preview text based on the actual displayed thumbnail count. `tests/test_qtquick_games_you_follow_staging.py::test_followed_inline_article_thumbnails_keep_local_sources_and_retained_slots` is the *native* QML role/border/geometry/source-release gate; a green Python source fixture cannot certify appearance. Disk caps are per-profile/per-cache-family, not proof of an aggregate installation-wide budget.
 
-**Retained refresh and inner-shadow gate:** The native `tests/test_qtquick_games_you_follow_staging.py` exercise must distinguish locally cached third-image availability from the image source of a third *painted* frame, including a narrower two-image tile and a broad tall single-column three-image tile on the same retained model. It also checks that artwork and thumbnail contacts exist while the tile's cached frame shadow stays separate. `tests/test_qtquick_reddit_presentation.py` (both Reddit identities), `tests/test_qtquick_gmail_presentation.py` and `tests/test_qtquick_feed_component_load.py` cover real retained refresh controls and QML readiness; hover treatment and cursor require native interaction/physical acceptance, not source-string assertions; the current shared highlight behavior has operator acceptance, so future changes must preserve or deliberately re-open that evidence. `tests/test_qtquick_friend_pulse_presentation.py` covers row/grid frame and avatar contact targets with unchanged authored dimensions. Preserve stable child-role identity, no new image shaders, retained shadow-direction projection and safe normal/Edit hitbox gating. The source-only Steam news tests do not establish Qt painted-state or shadow acceptance.
+**Retained refresh and inner-shadow gate:** The native `tests/test_qtquick_games_you_follow_staging.py` exercise must distinguish locally cached third-image availability from the image source of a third *painted* frame, including a narrower two-image tile and a broad tall single-column three-image tile on the same retained model. It also checks that artwork and thumbnail contacts exist while the tile's cached frame shadow stays separate. `tests/test_qtquick_reddit_presentation.py` (both Reddit identities), `tests/test_qtquick_gmail_presentation.py` and `tests/test_qtquick_feed_component_load.py` cover real retained refresh controls and QML readiness; hover treatment and cursor require native interaction/physical evidence when that seam changes, not source-string assertions; automated source tests alone never certify the painted interaction. `tests/test_qtquick_friend_pulse_presentation.py` covers row/grid frame and avatar contact targets with unchanged authored dimensions. Preserve stable child-role identity, no new image shaders, retained shadow-direction projection and safe normal/Edit hitbox gating. The source-only Steam news tests do not establish Qt painted-state or shadow acceptance.
 
 ### Games You Follow | current regression routing
 
-`tests/test_steam_games_followed_source.py`, `tests/test_steam_games_followed_projection.py`, `tests/test_steam_games_followed_g0.py`, `tests/test_steam_games_followed_news_g0.py`, `tests/test_steam_followed_shared_runtime.py` and `tests/test_games_followed_live_admission_contract.py` cover followed-set provenance, bounded newest-first source selection, durable private cache and incremental maintenance, generation/shared-owner retirement, projection and admitted runtime behavior. `tests/test_steam_games_followed_g2_staging_contract.py` protects the staging/presentation contracts although the family is now live; the filename is not a claim that the product remains unadmitted. `tests/test_steam_followed_metadata_and_artwork.py` covers durable AppID name hydration/restart/negative retry, correct attribution without title text, mixed/corrupt artwork and stale snapshots without live network. `tests/test_qtquick_games_you_follow_staging.py` exercises actual Qt/QML retained slot identity, paint-capacity equivalence, reflow, game-name projection and mixed-image rail/placeholder admission on Windows. A green automated gate still does not prove real provider language accuracy, Steam's personalized What's New parity, hardware/network cost or every live article route. The current display/name/thumbnail/hover behavior is accepted; the remaining independent live check is a newly refreshed syndicated story that actually carries its validated original article URL, because legacy cached rows without one correctly fall back to the app news hub.
+`tests/test_steam_games_followed_source.py`, `tests/test_steam_games_followed_projection.py`, `tests/test_steam_games_followed_g0.py`, `tests/test_steam_games_followed_news_g0.py`, `tests/test_steam_followed_shared_runtime.py` and `tests/test_games_followed_live_admission_contract.py` cover followed-set provenance, bounded newest-first source selection, durable private cache and incremental maintenance, generation/shared-owner retirement, projection and admitted runtime behavior. `tests/test_steam_games_followed_g2_staging_contract.py` protects the staging/presentation contracts although the family is now live; the filename is not a claim that the product remains unadmitted. `tests/test_steam_followed_metadata_and_artwork.py` covers durable AppID name hydration/restart/negative retry, correct attribution without title text, mixed/corrupt artwork and stale snapshots without live network. `tests/test_qtquick_games_you_follow_staging.py` exercises actual Qt/QML retained slot identity, paint-capacity equivalence, reflow, game-name projection and mixed-image rail/placeholder admission on Windows. A green automated gate still does not prove real provider language accuracy, Steam's personalized What's New parity, hardware/network cost or every live article route. Automated coverage does not certify a real provider article route. When link-routing/provider ingestion changes, use a newly refreshed syndicated story that actually carries its validated original article URL; legacy cached rows without one correctly fall back to the app news hub.

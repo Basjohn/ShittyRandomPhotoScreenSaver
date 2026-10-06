@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import time
 from urllib.parse import urlsplit
 
 import pytest
@@ -55,6 +56,32 @@ def _providers(*provider_ids):
 
 def _failed(failure="FeedTransportError"):
     return FeedRefreshResult("unavailable", None, FeedHealth(consecutive_failures=1), failure=failure)
+
+
+def _runtime_result(*items, status="available"):
+    """Fresh accepted result for synchronous runtime fixtures.
+
+    Runtime cadence uses ``last_success_at`` as an absolute wall-clock timestamp.
+    Merge/parser fixtures may use tiny synthetic timestamps, but a runtime fixture
+    must look freshly fetched or the production owner correctly treats it as due
+    again immediately.
+    """
+    return _result(*items, status=status, fetched_at=time.time())
+
+
+def _runtime_failed(failure="FeedTransportError"):
+    """Production-shaped failed refresh with a bounded retry floor.
+
+    Real ``FeedSource`` failures persist backoff. A synchronous fake without it
+    would be immediately due again and can recurse forever when the stagger is
+    collapsed to zero for deterministic unit execution.
+    """
+    return FeedRefreshResult(
+        "unavailable",
+        None,
+        FeedHealth(consecutive_failures=1, backoff_until=time.time() + 60.0),
+        failure=failure,
+    )
 
 
 # --- catalog -----------------------------------------------------------------
@@ -234,13 +261,32 @@ def test_a_failed_publisher_never_blanks_the_healthy_ones():
 class _Manager:
     def __init__(self):
         self.submissions = 0
+        self._completed = []
 
     def submit_io_task(self, work, *, callback, **_kwargs):
+        """Execute fake IO now but deliver completion after the submit returns.
+
+        Production Feed callbacks are asynchronous. Calling ``callback`` inside
+        ``submit_io_task`` makes artwork follow-ons re-enter the cache callback
+        and can invert presentation metadata in ways the real owner cannot.
+        """
         self.submissions += 1
         try:
-            callback(SimpleNamespace(success=True, result=work()))
+            task_result = SimpleNamespace(success=True, result=work())
         except Exception as exc:
-            callback(SimpleNamespace(success=False, result=None, error=exc))
+            task_result = SimpleNamespace(success=False, result=None, error=exc)
+        self._completed.append((callback, task_result))
+
+    def drain_one(self) -> bool:
+        if not self._completed:
+            return False
+        callback, task_result = self._completed.pop(0)
+        callback(task_result)
+        return True
+
+    def drain(self):
+        while self.drain_one():
+            pass
 
 
 class _Source:
@@ -283,6 +329,11 @@ def _service(monkeypatch, sources, *, widget_id="feeds_news_world", values=None)
         return state.source
 
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    # The production owner deliberately inserts a short wall-clock gap between
+    # publisher bundles. These unit tests own synchronous fake IO and care about
+    # serialization/merge semantics, not the elapsed cooldown itself. Remove only
+    # that delay so every selected publisher can settle without sleeps or polling.
+    monkeypatch.setattr(feed_runtime, "_REMOTE_SOURCE_STAGGER_S", 0.0)
     config = NewsFeedConfig.from_mapping(widget_id, values or {"enabled": True})
     manager = _Manager()
     service = NewsRuntimeService(
@@ -297,13 +348,14 @@ def _service(monkeypatch, sources, *, widget_id="feeds_news_world", values=None)
 def test_news_service_runs_each_publisher_as_an_ordinary_lease_on_the_shared_owner(monkeypatch):
     no_cache = FeedRefreshResult("unavailable", None, FeedHealth(), failure="no_cache")
     sources = {
-        "news_cbs_world": _Source(no_cache, _result(_item("a", 300))),
-        "news_bbc_world": _Source(no_cache, _result(_item("x", 200))),
-        "news_npr_world": _Source(no_cache, _failed()),
+        "news_cbs_world": _Source(no_cache, _runtime_result(_item("a", 300))),
+        "news_bbc_world": _Source(no_cache, _runtime_result(_item("x", 200))),
+        "news_npr_world": _Source(no_cache, _runtime_failed()),
     }
     service, consumer, _manager = _service(
         monkeypatch, sources, values={"enabled": True, "providers": ["cbs_world", "bbc_world", "npr_world"]})
     assert service.start() is True
+    _manager.drain()
     assert service.is_running() is True
     assert feed_runtime.shared_feed_owner_count() == 1
     # Cache misses never publish a failed card; the first merge carries stories.
@@ -322,28 +374,40 @@ def test_news_service_runs_each_publisher_as_an_ordinary_lease_on_the_shared_own
 def test_news_service_reports_unavailable_only_after_every_publisher_failed(monkeypatch):
     no_cache = FeedRefreshResult("unavailable", None, FeedHealth(), failure="no_cache")
     sources = {
-        f"news_{pid}": _Source(no_cache, _failed()) for pid in ("cbs_us", "abc_us", "npr_us")
+        f"news_{pid}": _Source(no_cache, _runtime_failed())
+        for pid in ("cbs_us", "abc_us", "npr_us")
     }
     service, consumer, _manager = _service(
         monkeypatch, sources, widget_id="feeds_news_us",
         values={"enabled": True, "providers": ["cbs_us", "abc_us", "npr_us"]})
     service.start()
-    assert len(consumer.accepted) == 1
-    result, from_cache = consumer.accepted[0]
-    assert result.snapshot is None and result.status == "unavailable"
-    assert from_cache is False
+    # Three cache misses settle first. The serialized remote lane then fails one
+    # publisher at a time. NEWS must remain loading while any publisher still
+    # has its first remote attempt outstanding.
+    for _ in range(5):
+        assert _manager.drain_one() is True
+        assert consumer.accepted == []
+    assert _manager.drain_one() is True
+    assert consumer.accepted
+    assert all(
+        result.snapshot is None and result.status == "unavailable" and from_cache is False
+        for result, from_cache in consumer.accepted
+    )
+    assert all(source.refresh_calls == 1 for source in sources.values())
     service.retire()
 
 
 def test_news_service_publishes_cached_stories_first_and_only_selected_publishers(monkeypatch):
-    cached = _result(_item("old", 50), status="available")
-    sources = {"news_bbc_world": _Source(cached, _result(_item("new", 60)))}
+    cached = _runtime_result(_item("old", 50), status="available")
+    sources = {"news_bbc_world": _Source(cached, _runtime_result(_item("new", 60)))}
     service, consumer, manager = _service(
         monkeypatch, sources, values={"enabled": True, "providers": ["bbc_world"]})
     service.start()
+    manager.drain()
     first, first_cached = consumer.accepted[0]
     assert [item.item_id for item in first.snapshot.document.items] == ["bbc_world:old"]
     assert first_cached is True
+    assert sources["news_bbc_world"].refresh_calls == 0
     assert manager.submissions >= 1
     service.retire()
 
@@ -506,7 +570,6 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
     try:
         for category in NEWS_CATEGORIES:
             checkbox = getattr(tab, feed_attr(category.widget_id, "enabled"))
-            assert checkbox.text() == f"Enable {category.label}"
             container = getattr(tab, f"_{category.widget_id}_controls_container")
             checkbox.setChecked(True)
             assert container.isHidden() is False

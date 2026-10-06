@@ -74,8 +74,6 @@ def test_sources_page_is_two_large_buckets_and_adds_custom_feeds(qapp, settings)
     try:
         for toggle in (page.folders_toggle, page.feeds_toggle):
             assert toggle.property("bucketSize") == "large"
-        assert page.feeds_toggle.text() == "Online Wallpaper Feeds"
-        assert page.feeds_enabled.text() == "Online Wallpaper Feeds"
         page.custom_feed.setText("example.org/wallpapers.rss")
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == ["https://example.org/wallpapers.rss"]
