@@ -77,6 +77,12 @@ measured repeated allocation/task machinery
 
 Further GC work is admitted only when a similarly clear mechanism exists.
 
+`RuntimeGCPolicy` freezes the stable tracked set once per RUN after the existing startup warmup. It does not freeze on
+each display/mode generation. The existing boundary log reports `freeze_boundary_ms` for freeze, active-threshold restoration
+and frozen-object count observation; `snapshot()` retains that one observation. This adds no recurring sampler and never logs
+from a GC callback. Measure a loaded RUN before attributing a stall to this boundary; historical cost estimates are not bounds.
+The original thresholds and frozen set are restored on policy stop. Resource retirement must still break its own references.
+
 - [ ] Do not tune GC thresholds merely to reduce collection counts.
 - [ ] Do not trade immutable/stable input snapshots for shared mutable state without a correctness proof.
 - [ ] Do not reduce publication cadence or transient fidelity to reduce tracked allocations.

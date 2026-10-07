@@ -40,6 +40,8 @@ class GCPolicySnapshot:
     slow_collections: tuple[int, int, int]
     duration_ms: tuple[float, float, float]
     duration_max_ms: tuple[float, float, float]
+    freeze_duration_ms: float | None
+    frozen_object_count: int
 
 
 def derive_runtime_thresholds(
@@ -108,6 +110,8 @@ class RuntimeGCPolicy:
         self._warmup_thresholds = derive_warmup_thresholds(self._active_thresholds)
         self._active = False
         self._frozen = False
+        self._freeze_duration_ms: float | None = None
+        self._frozen_object_count = 0
         self._starts_ns = [0, 0, 0]
         self._collections = [0, 0, 0]
         self._collected = [0, 0, 0]
@@ -132,9 +136,10 @@ class RuntimeGCPolicy:
         stable, long-lived set that gen2 rescans for ~28-142 ms while freeing
         almost nothing (``collected=0``), and each scan stalls the pure-Python
         Visualizer cadence thread (a ~32 ms gen2 produced a ~43 ms Bubble tick
-        spike). ``gc.freeze()`` splices that set into a permanent generation in
-        O(1) (~0.01 ms) that future collections never scan, so recurring gen2 no
-        longer causes those stalls.
+        spike). ``gc.freeze()`` moves that set into a permanent generation that
+        future collections never scan. The one-shot boundary records its actual
+        cost (freeze, threshold restoration and count observation) in this RUN;
+        historical measurements are not a bound on a current runtime.
 
         Precise lifetime semantics (this is NOT disabling GC), proven in
         `tests/test_gc_freeze_lifetime.py`:
@@ -158,6 +163,7 @@ class RuntimeGCPolicy:
         with self._lock:
             if not self._active or self._frozen:
                 return False
+            started_ns = time.perf_counter_ns()
             gc.freeze()
             # The stable set is now excluded from every future gen2 scan, so the
             # warmup gen2 deferral has done its job: restore the normal active
@@ -166,12 +172,17 @@ class RuntimeGCPolicy:
             gc.set_threshold(*self._active_thresholds)
             self._frozen = True
             frozen_count = gc.get_freeze_count()
+            self._frozen_object_count = frozen_count
+            self._freeze_duration_ms = max(
+                0.0, (time.perf_counter_ns() - started_ns) / 1_000_000.0
+            )
         logger.info(
             "[GC_POLICY] Froze %d stable objects into the permanent generation "
             "(excluded from future gen2 scans; released on stop); restored active "
-            "thresholds=%s for post-freeze collection",
+            "thresholds=%s for post-freeze collection freeze_boundary_ms=%.3f",
             frozen_count,
             self._active_thresholds,
+            self._freeze_duration_ms,
         )
         return True
 
@@ -262,6 +273,8 @@ class RuntimeGCPolicy:
                 slow_collections=tuple(self._slow_collections),
                 duration_ms=tuple(self._duration_ms),
                 duration_max_ms=tuple(self._duration_max_ms),
+                freeze_duration_ms=self._freeze_duration_ms,
+                frozen_object_count=self._frozen_object_count,
             )
 
     def _gc_callback(self, phase: str, info: dict[str, Any]) -> None:

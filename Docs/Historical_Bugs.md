@@ -22,7 +22,7 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
-- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **ACTIVE / PHYSICAL ACCEPTANCE OPEN**. The first render-only chatter repair is baseline; the tiny-radius presentation-only candidate still requires recording A/B plus Bubble fidelity acceptance.
+- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **ACTIVE / PHYSICAL ACCEPTANCE OPEN**. The render-release repair is baseline; the tiny-breath helper failed recorded/fixture A/B and was removed. Remaining physical localization and acceptance stay in the live plan.
 - [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **AWAITING VALIDATION**. Windows dual-monitor built check in `Current_Plan.md`.
 - [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
