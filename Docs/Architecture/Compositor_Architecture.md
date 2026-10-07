@@ -292,6 +292,12 @@ Topology, Settings/recreate, Edit, and shutdown remain generation-owned.
 
 Old generation retires before replacement gains authority.
 
+Successful Visualizer retirement joins its sole logical runtime, releases its engine lease and detaches presentation routes
+before dropping Quick-runtime references. A failed join retains ownership and blocks display retirement. A display unit drops
+its runtime/presenter edges only at the real `retirement_completed` boundary, retaining scalar identity for diagnostics.
+This breaks signal-callback cycles even for a startup-frozen Python generation; neither forced collection nor a longer
+destruction-barrier deadline is a release authority.
+
 Quick scene/render resources are destroyed on the legal render/context owner for the selected
 `QSGRenderNode` contract.
 

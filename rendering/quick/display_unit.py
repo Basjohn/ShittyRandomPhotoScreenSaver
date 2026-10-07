@@ -61,20 +61,32 @@ class QuickDisplayUnit:
         self._presenter = presenter
         self._ctrl_coordinator = ctrl_coordinator
         self._ctrl_key = ctrl_key
+        # Keep scalar identity after the terminal callback severs the runtime
+        # graph.  DisplayManager's queued retirement notification is keyed by
+        # this value, while the heavyweight runtime/presenter references must
+        # not keep a frozen startup generation cyclically reachable.
+        self._screen_index = int(runtime.screen_index)
+        self._runtime_generation = int(runtime.runtime_generation)
         self._visualizer_owner: Any | None = None
         self._retired = False
 
     @property
     def runtime(self) -> QuickDisplayRuntime:
-        return self._runtime
+        runtime = self._runtime
+        if runtime is None:
+            raise RuntimeError("Quick display runtime has retired")
+        return runtime
 
     @property
     def presenter(self) -> QuickDisplayPresenter:
-        return self._presenter
+        presenter = self._presenter
+        if presenter is None:
+            raise RuntimeError("Quick display presenter has retired")
+        return presenter
 
     @property
     def screen_index(self) -> int:
-        return self._runtime.screen_index
+        return self._screen_index
 
     @property
     def is_retired(self) -> bool:
@@ -284,10 +296,18 @@ class QuickDisplayUnit:
         generation owners and must also release before replacement proceeds.
         """
 
-        python_owners = [self, self._presenter]
+        runtime = self._runtime
+        presenter = self._presenter
+        if runtime is None or presenter is None:
+            # The runtime's retirement signal has already run.  A late
+            # diagnostic collection must see this generation as released,
+            # rather than recreate a Python root by traversing retired state.
+            return ((), ())
+
+        python_owners = [self, presenter]
         if self._visualizer_owner is not None:
             python_owners.append(self._visualizer_owner)
-        return ((self._runtime, self._runtime.window), tuple(python_owners))
+        return ((runtime, runtime.window), tuple(python_owners))
 
     def resource_ownership_snapshot(
         self,
@@ -300,6 +320,8 @@ class QuickDisplayUnit:
         recover physical presenter objects or inspect QSG/Qt-owned internals.
         """
 
+        runtime = self._runtime
+        presenter = self._presenter
         visualizer = self._visualizer_owner
         identity = getattr(visualizer, "render_identity", None)
         visualizer_identities: list[dict[str, object]] = []
@@ -321,14 +343,16 @@ class QuickDisplayUnit:
                     }
                 )
 
-        live = not self._retired
+        live = not self._retired and runtime is not None and presenter is not None
         return {
-            "runtime_generation": self._runtime.runtime_generation,
+            "runtime_generation": self._runtime_generation,
             "display_units": 1,
             "quick_runtimes": int(live),
             "quick_windows": int(live),
             "runtime_managers": int(live),
-            "family_presentations": len(self._presenter.bound_widget_ids),
+            "family_presentations": (
+                len(presenter.bound_widget_ids) if presenter is not None else 0
+            ),
             "visualizer_owners": int(visualizer_live),
             "first_frames_ready": int(bool(first_frame_ready)),
             "visualizer_identities": visualizer_identities,
@@ -347,8 +371,11 @@ class QuickDisplayUnit:
         """
         from dataclasses import asdict
 
+        runtime = self._runtime
+        if runtime is None:
+            return None
         try:
-            item = self._runtime.scene_controller.visualizer_item
+            item = runtime.scene_controller.visualizer_item
         except Exception:
             return None
         if item is None:
@@ -393,10 +420,34 @@ class QuickDisplayUnit:
             self._visualizer_owner = None
         self._retired = True
         self._presenter.retire()
-        self._runtime.retirement_completed.connect(self._runtime.deleteLater)
-        closed = self._runtime.close_runtime()
+        runtime = self._runtime
+        runtime.retirement_completed.connect(
+            self._release_terminal_generation_references
+        )
+        runtime.retirement_completed.connect(runtime.deleteLater)
+        closed = runtime.close_runtime()
         self._ctrl_coordinator.forget(self._ctrl_key)
         return closed
+
+    def _release_terminal_generation_references(self, generation: int) -> None:
+        """Break the retired unit/runtime cycle after normal Quick teardown.
+
+        Runtime signal routes capture this unit for its live generation.  Before
+        the one-shot RUN GC freeze, that makes ``unit -> presenter -> runtime
+        -> route -> unit`` cyclic garbage which cannot be reclaimed until
+        process stop.  The runtime emits only after its window, scene and
+        generation-owned resources have drained, so this is the legal point to
+        release the unit's owning edges.  Do not run this on a failed retirement:
+        ``retire`` keeps the full graph intact until the real completion signal.
+        """
+
+        if int(generation) != self._runtime_generation:
+            raise RuntimeError("Quick display retirement generation mismatch")
+        runtime = self._runtime
+        if runtime is None:
+            return
+        self._runtime = None
+        self._presenter = None
 
 
 def create_quick_display_unit(

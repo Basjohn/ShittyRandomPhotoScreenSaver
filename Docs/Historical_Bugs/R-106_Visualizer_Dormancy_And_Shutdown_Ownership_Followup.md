@@ -38,9 +38,11 @@ resource retirement and hot-path cost independent of registry cardinality. Hand-
 
 ## Separate terminal Python-owner smell
 
-One supplied shutdown timed out after Qt/resources/thread work had drained while Python ownership still listed
-`QuickDisplayUnit`, `QuickDisplayPresenter` and `QuickDisplayVisualizerOwner`. That remains an ownership-order investigation,
-not evidence of surviving GL resources. Do not fix it by lengthening the destruction-barrier timeout or forcing GC.
+One supplied shutdown timed out after Qt/resources/thread work drained while Python ownership still listed display units,
+presenters and Visualizer owners. The cycle was `unit -> presenter -> runtime -> signal lambda(display=unit) -> unit`;
+startup freezing prevents cyclic collection of that generation. Display completion now severs the unit's runtime/presenter
+edges, and successful Visualizer retirement drops its runtime routes after the logical join/engine release. Frozen-generation
+weakref and replacement tests protect release without forced collection or deadline changes. Remaining RUN evidence is live.
 
 ## GC freeze attribution
 

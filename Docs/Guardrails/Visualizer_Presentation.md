@@ -77,6 +77,10 @@ The common logical/render hot paths must remain independent of the number of reg
 return immediately. Resolve the active mode's optional logical/runtime work at activation and invoke only that owner. Adding
 mode N+1 must not add recurring work to mode N.
 
+`VisualizerRuntimeController` retains the one optional callable returned by descriptor-owned
+`load_mode_logical_tick_hook()` at construction or mode activation. The common tick invokes only that callable.
+Sine heartbeat checks active identity before any energy/transient/event query, including a concurrent replacement fence.
+
 Disabled or unselected mode Settings bodies, frame runtimes and renderers stay lazy under their existing contracts. A retired
 mode's logical state and consumer-owned resources do not remain parked for possible reuse unless a resource is genuinely shared
 infrastructure explicitly sanctioned by the Scene3D/resource contract.

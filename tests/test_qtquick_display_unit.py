@@ -174,6 +174,74 @@ def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app, qtbot) -> None
 
 
 @pytest.mark.qt
+def test_unit_terminal_retirement_breaks_frozen_generation_owner_edges(
+    qt_app, qtbot
+) -> None:
+    """Normal Quick teardown releases the Python cycle before RUN stop.
+
+    A startup-frozen unit used to retain ``unit -> presenter -> runtime`` while
+    runtime signal routes retained the unit.  The runtime completion edge must
+    sever those owning links without relying on ``gc.unfreeze()`` or a forced
+    collection, so a later replacement has no stale Python owner root.
+    """
+
+    import gc
+    import weakref
+
+    coord = SharedCtrlCoordinator()
+    unit, factory = _make_unit(qt_app, 100, coord)
+    runtime = unit.runtime
+    presenter = unit.presenter
+    window = runtime.window
+    unit_ref = weakref.ref(unit)
+    presenter_ref = weakref.ref(presenter)
+    froze = False
+    try:
+        # Match the production DisplayManager route: the Qt signal retains a
+        # lambda default-argument reference to this unit. Together with the
+        # unit -> presenter -> runtime chain this is the frozen cycle L4 fixes.
+        runtime.display_identity_changed.connect(
+            lambda _identity, display=unit: display.reanchor_for_current_bounds()
+        )
+        gc.freeze()
+        froze = True
+        assert unit.retire() is True
+        qtbot.waitUntil(
+            lambda: not is_valid_qobject(window) and not is_valid_qobject(runtime),
+            timeout=1000,
+        )
+        assert unit._runtime is None
+        assert unit._presenter is None
+        assert unit.runtime_retirement_roots() == ((), ())
+        assert unit.resource_ownership_snapshot(first_frame_ready=False) == {
+            "runtime_generation": 100,
+            "display_units": 1,
+            "quick_runtimes": 0,
+            "quick_windows": 0,
+            "runtime_managers": 0,
+            "family_presentations": 0,
+            "visualizer_owners": 0,
+            "first_frames_ready": 0,
+            "visualizer_identities": [],
+            "visualizer_render_host": None,
+        }
+
+        # Drop every direct test edge. Refcount destruction must suffice even
+        # though this unit was part of the frozen startup generation.
+        del presenter
+        del window
+        del runtime
+        del unit
+        assert unit_ref() is None
+        assert presenter_ref() is None
+    finally:
+        if froze:
+            gc.unfreeze()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_unit_visualizer_owner_is_single_and_blocks_runtime_retirement(qt_app) -> None:
     class _VisualizerOwner:
         def __init__(self) -> None:
