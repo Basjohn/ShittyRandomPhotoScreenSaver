@@ -113,6 +113,51 @@ python main_mc.py --exit-after=60 /s
 
 The value is seconds. The countdown is armed only after `ScreensaverEngine.start()` succeeds and immediately before the RUN Qt event loop begins. It owns one `QTimer.singleShot` callback and no recurring cadence, worker or ThreadManager task. The callback requests the existing terminal authority with `engine.stop(reason="cli_exit_after")`; Quick retirement, worker/service shutdown, persistence durability and `QApplication.quit()` therefore follow the normal product path. Without `--exit-after`, no timer/callback is created. The switch is ignored outside RUN mode. Invalid, non-finite or non-positive values fail RUN startup with exit code 2 rather than leaving an unattended test running forever.
 
+For declarative sequential matrices over the same product-owned terminal path, use `tools/run_matrix.py`:
+
+```powershell
+python tools/run_matrix.py --matrix <matrix.json> --output-dir <new-evidence-directory>
+```
+
+The version-1 JSON document contains 1–100 `cases`. Each case has a unique `name`, an optional canonical `entrypoint`
+(`main_mc.py` by default, or explicit `main.py`), an `argv` list containing `/s` exactly once plus admitted diagnostic flags,
+and a positive `exit_after_seconds` value (maximum 3600). The harness appends `--exit-after` itself. Example:
+
+```json
+{
+  "schema_version": 1,
+  "cases": [
+    {"name": "ordinary-run", "argv": ["/s"], "exit_after_seconds": 15},
+    {"name": "diagnostic-run", "entrypoint": "main_mc.py", "argv": ["/s", "--debug", "--life", "--fresh"], "exit_after_seconds": 15}
+  ]
+}
+```
+
+Admitted optional flags are `--debug`/`-d`, `--verbose`/`-v`, `--perf`, `--usage`, `--handle-attribution`, `--viz`, `--geo`,
+`--life`, `--cache`, `--steam`, `--feeds`, `--noupdates`, `--set`, `--fresh`, `--frame-trace` and `--gui-stall-stacks`; the last
+requires `--frame-trace`. `--set` enables settings diagnostics. `--fresh` explicitly clears product log files at startup;
+completed snapshots in evidence subdirectories remain preserved. Arbitrary values and caller-supplied `--exit-after` are rejected.
+
+The MC wrapper sets persisted `input.interaction_mode=True` through the canonical Settings manager, making its ordinary
+interactive RUN route less disruptive; explicit `main.py` exercises the ordinary screensaver entrypoint. The coordinator
+itself never writes settings or supplies an environment override. `main_diagnostic.py` is excluded because it resolves a
+different per-user diagnostic log root. Choose a new dedicated evidence directory, for example `logs/run_matrix/<name>`;
+existing directories are refused. After each child exits, the harness snapshots canonical logs and retained rotations,
+including settings diagnostics and binary frame-trace segments, before launching the next child. `run_matrix.json` and
+one-line JSON on stdout record source path/hash, Git revision/status, local source-tree digest (including JSON settings/presets), exact argv, exit code,
+matched fault lines and artifact paths. Attribution failures are explicit. Stdout/stderr are preserved beside each snapshot.
+
+Cases continue sequentially after failed or unavailable cases. A nonzero child exit or current-run native-fault match marks
+a case failed. Passing also requires new main RUN and AUTO_EXIT armed/deadline markers plus matching QML session start/end.
+Missing markers, unreadable evidence or a run boundary lost to truncation/retention produce `unavailable`, not a pass. Fault
+scanning follows the pre-run byte boundary across rotations so retained old faults do not fail a new run. The matrix exits
+nonzero for failed or unavailable evidence.
+
+This coordinates the current saved RUN configuration and diagnostic CLI flags; it does not select persisted display,
+Visualizer or transition settings. Physical display, mode/effect and visual acceptance still requires the relevant operator
+configuration and evidence. The harness has no external timeout or kill path: `--exit-after` remains the sole bounded shutdown
+mechanism.
+
 Ten-run startup/terminal-retirement acceptance can therefore stay deliberately simple:
 
 ```powershell
