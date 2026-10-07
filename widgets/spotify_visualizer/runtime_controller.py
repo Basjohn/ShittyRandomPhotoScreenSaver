@@ -19,6 +19,7 @@ from typing import Any
 from core.settings.visualizer_mode_registry import (
     VisualizerModePresentationPolicy,
     coerce_visualizer_mode_id,
+    load_mode_logical_tick_hook,
     get_visualizer_presentation_policy,
 )
 from widgets.spotify_visualizer.logical_runtime import (
@@ -65,6 +66,12 @@ class VisualizerRuntimeController:
         self._bar_count = max(1, int(bar_count))
         self._mode_id = coerce_visualizer_mode_id(initial_mode)
         self._presentation_policy = get_visualizer_presentation_policy(
+            self._mode_id
+        )
+        # Descriptor-owned optional logical work is resolved once for the
+        # active mode.  The sole common logical tick reads this pointer; it
+        # never grows a mode-by-mode dispatch table as registry membership grows.
+        self._active_logical_tick_hook = load_mode_logical_tick_hook(
             self._mode_id
         )
 
@@ -172,10 +179,22 @@ class VisualizerRuntimeController:
     def presentation_policy(self) -> VisualizerModePresentationPolicy:
         return self._presentation_policy
 
+    @property
+    def active_logical_tick_hook(self) -> Callable[[Any, float], None] | None:
+        """The one optional mode-owned hook admitted on the logical hot path."""
+
+        return self._active_logical_tick_hook
+
     def set_mode(self, mode: Any) -> str:
         raw = getattr(mode, "name", mode)
         mode_id = coerce_visualizer_mode_id(str(raw or "").lower())
         retired_states: tuple[Any, ...] = ()
+        active_hook = None
+        if mode_id != self._mode_id:
+            # Resolve before changing visible identity.  Import work remains at
+            # the activation boundary, and a malformed descriptor cannot leave
+            # the controller half-switched.
+            active_hook = load_mode_logical_tick_hook(mode_id)
         with self._lock:
             if mode_id != self._mode_id:
                 # A render admission is generation + activation + mode scoped.
@@ -183,6 +202,7 @@ class VisualizerRuntimeController:
                 self._render_bridge.close_admission()
                 retired_states = tuple(self._logical_mode_states.values())
                 self._logical_mode_states.clear()
+                self._active_logical_tick_hook = active_hook
             self._mode_id = mode_id
             self._presentation_policy = get_visualizer_presentation_policy(
                 mode_id
