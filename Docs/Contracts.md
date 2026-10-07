@@ -389,6 +389,11 @@ delay fresh metadata.
 
 ### Wallpaper image cache and prefetch
 
+The wallpaper RSS pool index remains owned by `sources/rss/cache.py`. Each save makes one unique exclusive temporary-file
+creation in its canonical state directory and atomically replaces the index. A filesystem failure logs immediately,
+preserves the last-good index and removes an owned incomplete temporary file; it never retries denied writes or changes
+storage paths. This keeps cache durability failure bounded during startup (R-107).
+
 The image cache (`utils/image_cache.py`, bounded by `cache.max_items`/`cache.max_memory_mb`) holds speculative display-ready derivatives until a display consumes them. The parent has no speculative raw-decode producer or Qt scaling path.
 
 `engine.image_pipeline.build_image_prefetcher` is the single construction authority for engine bootstrap and source reinitialisation. `ImagePrefetcher` owns bounded per-source derivative intents, generation fencing and the post-transition cooldown. Each admitted source batch decodes once in the existing `IMAGE_PREFETCH` worker role and computes all planned derivatives there, byte-identical to the foreground branch for the same resolved request. Smooth without sharpening uses `AsyncImageProcessor` in both roles; Hamming, Lanczos and sharpened requests use shared opaque-RGB Pillow mechanics in `rendering/image_quality.py`. Its source image retires at batch end. The foreground `IMAGE` worker retains its separate requested-image queue; the speculative process remains lower priority. Selected quality never disables lookahead. `Docs/Reference/Image_Quality.md` owns the filter and processing details.

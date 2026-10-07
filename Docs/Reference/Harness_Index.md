@@ -153,6 +153,11 @@ Missing markers, unreadable evidence or a run boundary lost to truncation/retent
 scanning follows the pre-run byte boundary across rotations so retained old faults do not fail a new run. The matrix exits
 nonzero for failed or unavailable evidence.
 
+Full MC runs need write access to their canonical per-user settings and cache directories as well as the repository log
+directory. Use the tool's normal approval boundary when a restricted shell denies those writes. A child stalled before
+RUN never reaches the product-owned countdown; preserve a deliberately interrupted investigation as failed/aborted
+evidence, rather than treating it as a shutdown acceptance case. R-107 records the denied-write startup mechanism.
+
 This coordinates the current saved RUN configuration and diagnostic CLI flags; it does not select persisted display,
 Visualizer or transition settings. Physical display, mode/effect and visual acceptance still requires the relevant operator
 configuration and evidence. The harness has no external timeout or kill path: `--exit-after` remains the sole bounded shutdown

@@ -22,8 +22,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import tempfile
 import time
+import uuid
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from sources.base_provider import ImageMetadata, ImageSourceType
@@ -330,17 +330,31 @@ class RSSCache:
                               if isinstance(v, list) and len(v) == 3}
 
     def _write_state(self) -> None:
+        temp = None
+        created = False
         try:
             self.state_dir.mkdir(parents=True, exist_ok=True)
             payload = {"version": _STATE_VERSION, "entries": self._index,
                        "retired": sorted(self._retired), "rejected": self._rejected}
-            with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.state_dir,
-                                             prefix=".pool.", suffix=".tmp", delete=False) as handle:
+            # Windows tempfile retries PermissionError while os.access says
+            # this directory is writable. A sandbox can deny creation despite
+            # that ACL check, turning an index write into billions of retries.
+            # One exclusive unique create preserves atomic replacement while
+            # surfacing the actual denial immediately, with no alternate path.
+            temp = self.state_dir / f".pool.{uuid.uuid4().hex}.tmp"
+            with temp.open("x", encoding="utf-8") as handle:
+                created = True
                 json.dump(payload, handle, separators=(",", ":"))
-                temp = Path(handle.name)
             os.replace(temp, self._state_file)
+            created = False
         except OSError as e:
             logger.warning(f"[RSS_CACHE] Pool index write failed: {e}")
+        finally:
+            if created and temp is not None:
+                try:
+                    temp.unlink()
+                except OSError as exc:
+                    logger.warning("[RSS_CACHE] Failed to remove incomplete pool index %s: %s", temp.name, exc)
 
     @staticmethod
     def _unlink(path: Path) -> None:
