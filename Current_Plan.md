@@ -243,21 +243,11 @@ The declarative input, evidence scoping and source attribution contract lives in
 Sphere's move from experimental/private plumbing to a standard Visualizer is also its authoring-surface graduation. Do not
 promote the renderer while leaving it dependent on hidden Spectrum settings or a thinner Settings contract than older modes.
 
-- [ ] **S1. Prove consumed controls first.** Inventory every analysis/reaction/material/presentation value Sphere actually
-  consumes and prove which controls materially change those seams. Expose the useful controls; remove/avoid dead controls. Refresh the stale smooth/Magma/Water Sphere paragraph in
-  `Docs/Contracts.md` against the current Voxel owners rather than restoring retired controls.
-- [ ] **S2. Sphere-owned technical/analysis profile.** Replace hidden whole-Spectrum technical-profile borrowing with
-  Sphere-owned descriptor/capability metadata and canonical persisted values, using the same registry-derived shared authoring
-  substrate from §4. Preserve compatibility for missing persisted keys by seeding from the currently accepted behavior once,
-  not by continuing a live dependency on Spectrum's active preset.
-- [ ] **S3. Standard-mode Settings parity.** Sphere gets the normal per-mode guarantees: its own technical response controls
-  where consumed, direct fill/edge colour **and alpha**, proper Rainbow controls (including speed/extent where meaningful),
-  complete preset/Custom/default/Reset persistence, and lazy Settings-body ownership. Keep and organize its richer 3D-specific
-  controls for voxel variation, lighting, mirror, particle intake/outtake, fragmentation, size/vocal response, rotation, shadow,
-  depth shading, tracer/cel effects and overflow. Parity is a floor; Sphere-specific useful controls are the plus.
-- [ ] **S4. Presets are self-contained authored looks.** Each Sphere preset must restore all values that materially define its
-  look/reaction without depending on whichever Spectrum preset happens to be active. User-authored Custom survives preset
-  round-trips. No preset may rely on a hidden lender value that is absent from its own resolved snapshot.
+The consumed analysis inventory, mode-owned technical profile, selected frequency splits, direct RGBA alpha and Rainbow
+speed/extent have source, PCM and real-GL proof. Startup, legacy Custom-cache and SST promotion preserve RAW Spectrum values
+once before defaults, while curated Sphere looks restore complete owned snapshots. `Docs/Reference/Sphere_Visualizer.md`
+owns current controls and migration details. Remaining product admission and acceptance:
+
 - [ ] **S5. Standard promotion semantics.** Remove the experimental-only product treatment once acceptance lands: standard
   registry/preset/reset behavior, normal enable/selection semantics and Guided Setup eligibility as appropriate, without losing
   lazy import/construction or inactive dormancy.

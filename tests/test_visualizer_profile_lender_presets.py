@@ -38,7 +38,8 @@ def test_3d_modes_own_profiles_and_keep_only_spheres_preserved_raw_reference() -
         assert descriptor.technical_controls and descriptor.spectrum_shape_controls
         assert descriptor.profile_migration_source_mode == "spectrum"
     sphere = get_visualizer_mode_descriptor("sphere")
-    assert sphere.technical_profile_mode == "spectrum" and get_profile_lender_modes("sphere") == ()
+    assert sphere.technical_profile_mode == "" and get_profile_lender_modes("sphere") == ()
+    assert sphere.profile_migration_source_mode == "spectrum" and not sphere.lender_preset_resolved
 
 
 @pytest.mark.parametrize("mode", ("extruded_spectrum", "shockwave_grid"))

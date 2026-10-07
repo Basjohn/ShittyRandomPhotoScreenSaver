@@ -51,6 +51,8 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_particle_amount",
     "sphere_perspective_strength",
     "sphere_taste_the_rainbow_enabled",
+    "sphere_taste_the_rainbow_speed",
+    "sphere_taste_the_rainbow_extent",
     "sphere_taste_the_rainbow_surfaces",
     "sphere_taste_the_rainbow_edges",
     "sphere_base_rotation_speed",
@@ -124,6 +126,9 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             setattr(host, f"_{key}", bool(kwargs[key]))
     # bundle. The voxel renderer consumes that snapshot without a second
     # settings/runtime authority or per-frame Python geometry rebuild.
+    for key in ('sphere_taste_the_rainbow_speed', 'sphere_taste_the_rainbow_extent'):
+        if key in kwargs:
+            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.0, 1.0, key))
     for key in ('sphere_fill_color', 'sphere_edge_color', 'sphere_tracer_color'):
         if key in kwargs:
             raw = kwargs[key]

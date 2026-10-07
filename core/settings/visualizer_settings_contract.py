@@ -123,7 +123,7 @@ def migrate_profile_lender_owned_settings(
 
         suffixes: set[str] = set()
         if bool(descriptor.technical_controls):
-            suffixes.update(key for key, _coerce in PER_MODE_BASELINE_KEYS)
+            suffixes.update(get_owned_mode_setting_keys(descriptor.mode_id, "technical"))
         if bool(getattr(descriptor, "spectrum_shape_controls", False)):
             suffixes.update(
                 {
@@ -144,6 +144,19 @@ def migrate_profile_lender_owned_settings(
         if bool(getattr(descriptor, "spectrum_ghost_controls", False)):
             suffixes.update({"ghosting_enabled", "ghost_alpha", "ghost_decay"})
         suffixes.update(get_owned_mode_setting_keys(descriptor.mode_id, "shared_bar"))
+        analysis_key = descriptor.analysis_notch_setting
+        if not descriptor.lender_preset_resolved:
+            # The old Sphere borrowed RAW source state, including its selected
+            # notch record. Do this before importing the curated catalog.
+            for suffix in suffixes:
+                target_key = f"{descriptor.mode_id}_{suffix}"
+                if not present(target_key):
+                    migrated[target_key] = deepcopy(read(f"{source_mode}_{suffix}"))
+            if analysis_key and not present(analysis_key):
+                from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
+                selected = "mirrored" if read(f"{source_mode}_mirrored") else "linear"
+                migrated[analysis_key] = normalize_sphere_analysis_notches(read(f"{source_mode}_notch_positions_{selected}"))
+            continue
         if any(not present(f"{descriptor.mode_id}_{suffix}") for suffix in suffixes):
             migration_targets.append((descriptor, source_mode, suffixes))
 
@@ -331,6 +344,8 @@ def build_visualizer_mode_kwargs(
     kwargs: Dict[str, Any] = {}
     for mode in VISUALIZER_MODE_IDS:
         for key, coerce in PER_MODE_BASELINE_KEYS:
+            if key not in get_owned_mode_setting_keys(mode, "technical"):
+                continue
             fallback = baselines.get(key, _LEGACY_GLOBAL_MIGRATION_BASELINES.get(key))
             raw = read_per_mode_value(mode, key, fallback)
             if coerce is bool:
@@ -390,6 +405,8 @@ def migrate_legacy_global_technical_keys(
 
     for mode in VISUALIZER_MODE_IDS:
         for key, _coerce in PER_MODE_BASELINE_KEYS:
+            if key not in get_owned_mode_setting_keys(mode, "technical"):
+                continue
             if key not in shared_values:
                 continue
             plain_mode_key = f"{mode}_{key}"

@@ -33,7 +33,8 @@ remain authoritative for persisted fields and ranges.
 | Logical body/tracer motion | `size_response`, `light_tracer_enabled`, `base_rotation_speed`, `rotation_speed` | Body growth, event-stepped tracer travel, continuous base rotation and musical velocity reaction |
 | Voxel transform | `fragment_strength`, `particle_distance`, `particle_amount`, `perspective_strength`, `voxel_size_variation`, `fade_incoming_blocks` | The same hero/shadow vertex transform; bounded section displacement, travel/population, projection, cube size and replacement fade |
 | Surface material | `fill_color`, `edge_color`, `tracer_color`, `edge_weight`, `gloss`, `specular`, `light_direction`, `cel_shading`, `depth_shading_enabled`, `depth_shading_strength` | Literal independent RGBA, face lighting, edge thresholds, tracer colour, cel quantization and rear-depth luminance; audio does not recolour the material |
-| Rainbow | `taste_the_rainbow_enabled`, `taste_the_rainbow_surfaces`, `taste_the_rainbow_edges` | Independent surface/edge switches for the moving partial-spectrum field; speed `0.05` and extent `0.22` remain renderer constants pending authoring graduation |
+| Rainbow | `taste_the_rainbow_enabled`, `taste_the_rainbow_surfaces`, `taste_the_rainbow_edges`, `taste_the_rainbow_speed`, `taste_the_rainbow_extent` | Independent surface/edge switches, phase speed and spatial hue extent; canonical `0.05` / `0.22` preserve the accepted field |
+| Shared source analysis | `bar_count`, `audio_block_size`, `adaptive_sensitivity`, `sensitivity`, `dynamic_floor`, `manual_floor`, `input_gain`, `transient_clamp`, `analysis_notch_positions` | Analysis band count, PCM block size, FFT sensitivity/floor/gain, transient clamp and exact two selected frequency splits |
 | Projected shadow | `shadow_enabled`, `shadow_opacity`, `shadow_softness`, `shadow_distance`, `shadow_size` | Actual voxel silhouette, optionally one expanded feather layer; disabled/zero-opacity does not issue a shadow draw |
 | Presentation resources | `allow_overflow`, `mirror`, shared `scene3d_detail` and displayed `backdrop` | Stable authored reach, tier multisampling/reflection admission and window-owned wallpaper copy; no music-driven target resize |
 | Settings-only finish bundle | `finish` | UI selection writes Gloss/Specular; the renderer consumes those two axes, not a separate material selector |
@@ -41,9 +42,11 @@ remain authoritative for persisted fields and ranges.
 Source input is generation/activation-fenced current playback. Support-aware bands supply spatial articulation; live
 pre-AGC energy supplies body presence; the immutable pre-shape/pre-AGC spectrum supplies generic onsets; musical level and
 intensity supply passage-relative qualification; the existing typed event scheduler supplies kick/snare/vocal/onset packets.
-No Sphere FFT, source manager or audio clock exists. `get_technical_profile_mode("sphere")` currently selects Spectrum's
-resolved analysis profile; moving consumed analysis controls to a Sphere-owned profile remains the authoring graduation
-boundary. Spectrum shape/ghost presentation controls are not Sphere controls. Existing audio-contract tests and the frozen
+No Sphere FFT, source manager or audio clock exists. `get_technical_profile_mode("sphere")` selects Sphere's own profile.
+Descriptor metadata selects only its eight consumed technical fields; the complete shared-worker API resolves unused output
+knobs from canonical engine defaults, never mutable Spectrum settings. The selected notch record owns only the first and
+penultimate interior fractions consumed by the worker, with no unused Spectrum shaper nodes. Spectrum shape/ghost
+presentation controls are not Sphere controls. Existing audio-contract tests and the frozen
 promotion golden protect event/response vocabulary; visual control usability and standard-mode promotion still require the
 operator acceptance gate.
 
@@ -51,7 +54,8 @@ operator acceptance gate.
 
 Hero and shadow programs declare the same `SphereFrameBlock` through `Scene3DBlockLayout`. Its fixed-size section/cohort
 arrays use standard std140 strides; one shared `UniformBlock` streams the immutable transform and material values through
-the existing context-local `StreamRing`. Shadow layer overrides and outtake pass selection write separate bounded copies,
+the existing context-local `StreamRing`. The current block has **50 fields / 1008 bytes**, including authored Rainbow extent;
+its aligned hero/shadow/outtake copies remain within the existing fixed ring capacity. Shadow layer overrides and outtake pass selection write separate bounded copies,
 so submitted draws retain their own projection/pass values. Sampler-unit assignments occur once per linked program;
 wallpaper names are bound together per frame. Shader arithmetic, mesh/instance identity, draw order and reaction state stay
 Sphere-owned.
@@ -64,8 +68,9 @@ background preparation or cleanup poller exists.
 
 - The descriptor remains independently enabled/disabled with lazy Settings builder, capture, frame runtime and renderer. Heavy resources stay dormant while disabled and retire through the existing render-context lifecycle.
 - Canonical persisted state remains in the existing `sphere_*` namespace. Do not invent a private Settings manager/default store, and do not promote Sphere into shared setting families merely for tidiness.
-- **Pre-S19 current state:** Sphere declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Capture that current state before migration; do not reinterpret it as the final desired technical-control model.
-- **Pre-promotion state:** the descriptor resolves its hidden technical profile through canonical **Spectrum** technical settings. Those exact resolved values are behavioural golden input for the migration. `Current_Plan.md` §7 explicitly replaces this hidden whole-profile borrowing with a Sphere-owned resolved technical profile and per-control capability metadata, exposing only controls that demonstrably affect Sphere's analysis inputs. Dead controls are forbidden.
+- Sphere declares its consumed technical subset and its private Taste the Rainbow controls. Shared bar appearance and the older generic Rainbow family remain absent; its literal fill/edge/tracer RGBA and richer field stay Sphere-owned.
+- Visualizer schema v10 seeds missing owned analysis fields once from the former **RAW** Spectrum profile, including the selected mirrored/linear notch fractions, before default filling. An active Spectrum preset never supplies this bridge. Explicit Sphere fields survive, subsequent Spectrum edits cannot alter them, and Custom snapshots normalize through the same canonical model.
+- Legacy mode-local Custom snapshots seed missing analysis from the same persisted RAW source section, preserving explicit cached fields. SST normalization passes the complete incoming RAW source to that same cache authority before processing sections, so nested/flat payloads and cache-first order retain exact historical analysis values.
 - Existing BeatEngine spectrum/live-pre-AGC/musical-level (`get_musical_level`) seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
 - Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The active promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
 
@@ -78,6 +83,12 @@ Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphe
 ## Current Settings hygiene
 
 Sphere Custom now uses the shared themed circular checkbox styling and collapsible bucket scaffold while all persisted/runtime ownership remains Sphere-local. Recommended slider notches are presentation-only hints matching the accepted **Glass Current** baseline; they are not defaults and do not alter saved or runtime values.
+
+The lazy Settings body exposes the descriptor-selected analysis controls as **Analysis Bands**, PCM block size,
+sensitivity, noise floor, input gain and transient clamp, with two **Frequency Zones** splits. Direct fill, edge and tracer
+opacity edit each existing RGBA alpha byte; there is no competing opacity setting. Quiet preset hydration preserves exact
+analysis fractions and does not save or switch to Custom. Each curated look explicitly owns the complete consumed analysis
+record and Rainbow speed/extent; default/Reset and Custom persistence use the normal Settings/preset authorities.
 
 The following experimental-era controls had no live runtime/render authority and are fully retired rather than displayed disabled: `sphere_surface_detail` (old Block Relief), `sphere_bass_response`, `sphere_mid_response`, `sphere_high_response`, `sphere_energy_curve`, and `sphere_idle_motion` (old Idle Drift). **Base Rotation** is the sole continuous idle rotation authority; **Velocity Reaction** adds music-driven rotation velocity.
 
@@ -150,7 +161,7 @@ A new wallpaper crossfades in the reflections alongside the image transition tha
 before/after sheets to `logs/sphere_visual_review/` for review by eye. An intended change re-records with `--write` /
 `--write-visual` and states the measured difference in its commit.
 
-After the candidate promotion, replay identical evidence. Sphere's behavioural golden is a **reference, not a lock** (operator 2026-10-04): its current reaction numbers are known to be poor and the migration is expected to retune them (the ramp, `Current_Plan.md` S19). Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
+After the candidate promotion, replay identical evidence. Sphere's behavioural golden is a **reference, not a lock** (operator 2026-10-04): its current reaction numbers are known to be poor and the migration is expected to retune them (the ramp, `Current_Plan.md` S19). Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the formerly hidden RAW resolved values are preserved behavioural input at migration.
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 

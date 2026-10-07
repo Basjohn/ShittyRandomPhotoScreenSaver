@@ -157,6 +157,7 @@ _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (
     ('uRainbowSurfaces', 'int'),
     ('uRainbowEdges', 'int'),
     ('uRainbowPhase', 'float'),
+    ('uRainbowExtent', 'float'),
     ('uMirror', 'float'),
     ('uBackdropMap', 'vec4'),
     ('uBackdropBlend', 'float'),
@@ -572,7 +573,7 @@ void main() {
     vec3 base = max(uFillColor.rgb, vec3(0.001));
     vec3 edgeColor = uEdgeColor.rgb;
     if (uRainbowSurfaces != 0 || uRainbowEdges != 0) {
-        float rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate);
+        float rainbowHue = fract(uRainbowPhase + uRainbowExtent * vRainbowCoordinate);
         vec3 rainbowColor = rainbowRgb(rainbowHue);
         if (uRainbowSurfaces != 0) base = max(rainbowColor, vec3(0.001));
         if (uRainbowEdges != 0) edgeColor = rainbowColor;
@@ -916,7 +917,8 @@ class QuickSphereVoxelRenderer:
             "uCelShading": 1 if cel_shading else 0,
             "uRainbowSurfaces": 1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_surfaces"]) else 0,
             "uRainbowEdges": 1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_edges"]) else 0,
-            "uRainbowPhase": math.fmod(max(0.0, float(frame.snapshot.logical.logical_timestamp)) * 0.05, 1.0),
+            "uRainbowPhase": math.fmod(max(0.0, float(frame.snapshot.logical.logical_timestamp)) * float(parameters["sphere_taste_the_rainbow_speed"]), 1.0),
+            "uRainbowExtent": float(parameters["sphere_taste_the_rainbow_extent"]),
             "uMirror": mirror,
             "uBackdropMap": (origin[0] - vx, origin[1] - vy, vw, vh),
             "uBackdropBlend": blend if previous != backdrop else 1.0,

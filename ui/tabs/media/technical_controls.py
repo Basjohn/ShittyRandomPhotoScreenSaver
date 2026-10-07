@@ -1,7 +1,7 @@
 """Shared per-mode technical controls for Spotify visualizer modes."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, Mapping, Optional
 
 from PySide6.QtCore import Qt
@@ -430,7 +430,11 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
 
 
 def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
-    defs = [defn for defn in _BASE_CONTROL_DEFS if defn.modes is None or mode_key in defn.modes]
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys, get_visualizer_mode_descriptor
+    owned = get_owned_mode_setting_keys(mode_key, "technical")
+    defs = [defn for defn in _BASE_CONTROL_DEFS if defn.config_key in owned and (defn.modes is None or mode_key in defn.modes)]
+    if get_visualizer_mode_descriptor(mode_key).analysis_notch_setting:
+        defs = [replace(defn, label_text="Analysis Bands:", suffix_text="bands") if defn.config_key == "bar_count" else defn for defn in defs]
     mix_meta = _TRANSIENT_MIX_META.get(mode_key)
     if mix_meta is not None:
         mix_key, mix_label, mix_tip, mix_lo, mix_hi = mix_meta
@@ -809,6 +813,9 @@ def _build_bucket_sections(tab, layout: QVBoxLayout, mode_key: str) -> tuple[Dic
     sections: Dict[str, QWidget] = {}
     toggles: Dict[str, QToolButton] = {}
     for bucket in _BUCKET_DEFS:
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+        if bucket.key == "agc" and "agc_strength" not in get_owned_mode_setting_keys(mode_key, "technical"):
+            bucket = replace(bucket, label="Input", helper_text="Visibility only. Hidden input controls keep their saved values and remain active.")
         toggle, section = _build_visibility_toggle(
             tab,
             layout,

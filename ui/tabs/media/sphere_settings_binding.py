@@ -1,6 +1,8 @@
 """Persistence binding for the lazy Sphere Settings body."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PySide6.QtGui import QColor
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
@@ -33,6 +35,8 @@ _SPHERE_SETTING_KEYS = (
     "sphere_taste_the_rainbow_enabled",
     "sphere_taste_the_rainbow_surfaces",
     "sphere_taste_the_rainbow_edges",
+    "sphere_taste_the_rainbow_speed",
+    "sphere_taste_the_rainbow_extent",
     "sphere_base_rotation_speed",
     "sphere_rotation_speed",
     "sphere_gloss",
@@ -45,18 +49,32 @@ _SPHERE_SETTING_KEYS = (
 
 
 def load_sphere_mode_settings(tab, config) -> None:
+    notches = deepcopy(config.get("sphere_analysis_notch_positions", tab._widget_default("spotify_visualizer", "sphere_analysis_notch_positions")))
+    tab._sphere_analysis_notch_positions = notches
+    for name, index in (("bass", 1), ("high", 2)):
+        control = getattr(tab, f"sphere_analysis_{name}_boundary", None)
+        if control is not None:
+            previous = control.blockSignals(True)
+            control.setValue(round(notches[index][0] * 1000))
+            control.blockSignals(previous)
+            control._sphere_refresh_label()
     for key in _SPHERE_SETTING_KEYS:
         control = getattr(tab, key, None)
         if control is None:
             continue
         default = tab._widget_default("spotify_visualizer", key)
         value = config.get(key, default)
+        previous = control.blockSignals(True)
         if hasattr(control, "setCurrentText"):
             control.setCurrentText(str(value))
         elif hasattr(control, "setChecked"):
             control.setChecked(bool(value))
         else:
-            control.setValue(round(float(value) * (1000 if key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor") else 100)))
+            control.setValue(round(float(value) * (1000 if key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor", "sphere_taste_the_rainbow_speed") else 100)))
+        control.blockSignals(previous)
+        refresh_label = getattr(control, "_sphere_refresh_label", None)
+        if refresh_label is not None:
+            refresh_label()
 
     for key, attr, button_attr in (
         ("sphere_fill_color", "_sphere_fill_color", "sphere_fill_color_btn"),
@@ -65,18 +83,28 @@ def load_sphere_mode_settings(tab, config) -> None:
     ):
         default = tab._widget_default("spotify_visualizer", key)
         raw = config.get(key, default)
-        try:
-            color = QColor(*raw)
-        except Exception:
-            color = QColor(*default)
+        color = QColor(*raw)
+        if not color.isValid():
+            raise ValueError(f"Sphere Settings requires resolved RGBA for {key}")
         setattr(tab, attr, color)
         button = getattr(tab, button_attr, None)
         if button is not None and hasattr(button, "set_color"):
             button.set_color(color)
+        alpha = getattr(tab, key.replace("_color", "_alpha"), None)
+        if alpha is not None:
+            previous = alpha.blockSignals(True)
+            alpha.setValue(color.alpha())
+            alpha.blockSignals(previous)
+            alpha._sphere_refresh_label()
+
+    refresh_dependencies = getattr(tab, "_refresh_sphere_dependencies", None)
+    if refresh_dependencies is not None:
+        refresh_dependencies()
 
 
 def collect_sphere_mode_settings(tab) -> dict:
     return {
+        "sphere_analysis_notch_positions": deepcopy(tab._sphere_analysis_notch_positions),
         "sphere_finish": tab.sphere_finish.currentText(),
         "sphere_allow_overflow": tab.sphere_allow_overflow.isChecked(),
         "sphere_cel_shading": tab.sphere_cel_shading.isChecked(),
@@ -98,6 +126,8 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_taste_the_rainbow_enabled": tab.sphere_taste_the_rainbow_enabled.isChecked(),
         "sphere_taste_the_rainbow_surfaces": tab.sphere_taste_the_rainbow_surfaces.isChecked(),
         "sphere_taste_the_rainbow_edges": tab.sphere_taste_the_rainbow_edges.isChecked(),
+        "sphere_taste_the_rainbow_speed": tab.sphere_taste_the_rainbow_speed.value() / 1000.0,
+        "sphere_taste_the_rainbow_extent": tab.sphere_taste_the_rainbow_extent.value() / 100.0,
         "sphere_light_direction": tab.sphere_light_direction.currentText(),
         "sphere_fragment_energy_floor": tab.sphere_fragment_energy_floor.value() / 1000.0,
         "sphere_particle_energy_floor": tab.sphere_particle_energy_floor.value() / 1000.0,

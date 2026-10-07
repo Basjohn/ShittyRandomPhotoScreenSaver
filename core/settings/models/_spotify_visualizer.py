@@ -15,6 +15,7 @@ from core.settings.bubble_gradient_semantics import (
 from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     get_preset_key,
+    get_owned_mode_setting_keys,
     get_setting_prefixes,
     normalize_visualizer_mode_activation,
     resolve_effective_enabled_modes,
@@ -70,12 +71,9 @@ def _visualizer_default(key: str) -> Any:
 def _active_visualizer_default(key: str) -> Any:
     """Return the default active-mode mirror for a non-persisted model field.
 
-    These mirror fields (bar_* visuals + the technical audio profile) exist only
-    for modes in ``PER_MODE_TECHNICAL_MODES``. A mode without its own technical
-    profile (e.g. ``sphere``, which reacts through its own sphere_* keys) mirrors
-    them from the reference technical mode instead of resolving a non-existent
-    ``sphere_<key>`` canonical default -- matching ``_normalize_mode_name`` used
-    for per-mode attr resolution elsewhere in this model.
+    These non-persisted mirror fields describe the canonical default mode.
+    Activation resolves each mode's consumed subset separately; unused worker
+    outputs do not require dead mode-owned persisted fields.
     """
 
     from core.settings.visualizer_mode_registry import get_technical_profile_mode
@@ -575,6 +573,9 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
+    'sphere_analysis_notch_positions': list,
+    'sphere_taste_the_rainbow_speed': float,
+    'sphere_taste_the_rainbow_extent': float,
     'sphere_finish': str,
     'sphere_fill_color': list,
     'sphere_edge_color': list,
@@ -1514,6 +1515,17 @@ class SpotifyVisualizerSettings:
     sphere_particle_energy_floor: float = field(default_factory=lambda: _visualizer_default('sphere_particle_energy_floor'))
     sphere_particle_amount: float = field(default_factory=lambda: _visualizer_default('sphere_particle_amount'))
     sphere_perspective_strength: float = field(default_factory=lambda: _visualizer_default('sphere_perspective_strength'))
+    sphere_bar_count: int = field(default_factory=lambda: _visualizer_default('sphere_bar_count'))
+    sphere_audio_block_size: int = field(default_factory=lambda: _visualizer_default('sphere_audio_block_size'))
+    sphere_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('sphere_adaptive_sensitivity'))
+    sphere_sensitivity: float = field(default_factory=lambda: _visualizer_default('sphere_sensitivity'))
+    sphere_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('sphere_dynamic_floor'))
+    sphere_manual_floor: float = field(default_factory=lambda: _visualizer_default('sphere_manual_floor'))
+    sphere_input_gain: float = field(default_factory=lambda: _visualizer_default('sphere_input_gain'))
+    sphere_transient_clamp: float = field(default_factory=lambda: _visualizer_default('sphere_transient_clamp'))
+    sphere_analysis_notch_positions: list = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_analysis_notch_positions')))
+    sphere_taste_the_rainbow_speed: float = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_speed'))
+    sphere_taste_the_rainbow_extent: float = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_extent'))
     sphere_taste_the_rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_enabled'))
     sphere_taste_the_rainbow_surfaces: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_surfaces'))
     sphere_taste_the_rainbow_edges: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_edges'))
@@ -1652,6 +1664,10 @@ class SpotifyVisualizerSettings:
 
     def _apply_sphere_defaults(self) -> None:
         _apply_canonical_list_defaults(self, _SPHERE_SERIALIZERS)
+        from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
+        self.sphere_analysis_notch_positions = normalize_sphere_analysis_notches(self.sphere_analysis_notch_positions)
+        for attr in ('sphere_taste_the_rainbow_speed', 'sphere_taste_the_rainbow_extent'):
+            _clamp_attr_range(self, attr, 0.0, 1.0)
         self.sphere_allow_overflow = bool(self.sphere_allow_overflow)
         self.sphere_cel_shading = bool(self.sphere_cel_shading)
         self.sphere_light_tracer_enabled = bool(self.sphere_light_tracer_enabled)
@@ -1901,7 +1917,7 @@ class SpotifyVisualizerSettings:
             serializers = {
                 suffix: serializer
                 for suffix, serializer in _PER_MODE_TECHNICAL_SERIALIZERS.items()
-                if suffix not in _ACTIVE_MODE_SHARED_VISUAL_KEYS
+                if suffix in get_owned_mode_setting_keys(mode_name, "technical")
             }
             if mode_has_shared_bar_appearance(mode_name):
                 serializers.update(
@@ -1946,6 +1962,12 @@ class SpotifyVisualizerSettings:
 
     def _resolve_mode_value_with(self, mode: str, base_key: str) -> Any:
         resolver = _PER_MODE_RESOLVERS[base_key]
+        normalized = self._normalize_mode_name(mode)
+        owned = set(get_owned_mode_setting_keys(normalized, "technical")) | set(get_owned_mode_setting_keys(normalized, "shared_bar"))
+        if base_key not in owned:
+            if base_key in _ACTIVE_MODE_SHARED_VISUAL_KEYS:
+                raise ValueError(f"{normalized} does not own shared bar appearance")
+            return resolver(_visualizer_default(f"spectrum_{base_key}"))
         attr_name = self._mode_attr_name(mode, base_key)
         value = getattr(self, attr_name)
         if value is None:

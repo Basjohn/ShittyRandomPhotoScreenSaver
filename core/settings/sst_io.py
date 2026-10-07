@@ -507,6 +507,15 @@ def preview_import_from_sst(mgr: "SettingsManager", path: str, merge: bool = Tru
 def normalize_sst_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
     """Coerce legacy flat SST snapshots into the canonical nested form."""
     normalized: Dict[str, Any] = {}
+    # Read the complete incoming RAW profile before normalizing its mode-local
+    # Custom cache; section order must not replace borrowed historical values
+    # with canonical defaults before the one-time ownership bridge runs.
+    raw_profile_source = dict(snapshot)
+    raw_widgets = snapshot.get("widgets")
+    if isinstance(raw_widgets, Mapping):
+        raw_visualizer = raw_widgets.get("spotify_visualizer")
+        if isinstance(raw_visualizer, Mapping):
+            raw_profile_source.update(raw_visualizer)
 
     def assign(section: str, subkey: str, value: Any) -> None:
         container = normalized.get(section)
@@ -519,7 +528,7 @@ def normalize_sst_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
         if key in STRUCTURED_SETTINGS_ROOTS:
             if isinstance(value, Mapping):
                 normalized[key] = (
-                    normalize_visualizer_custom_snapshot_cache(value)
+                    normalize_visualizer_custom_snapshot_cache(value, raw_profile_source=raw_profile_source)
                     if key == 'visualizer_custom_presets'
                     else dict(value)
                 )

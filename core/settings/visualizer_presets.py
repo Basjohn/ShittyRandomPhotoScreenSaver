@@ -150,6 +150,7 @@ def normalize_visualizer_custom_snapshot_cache(
     cache: Mapping[str, Any],
     *,
     unchanged_from: Mapping[str, Any] | None = None,
+    raw_profile_source: Mapping[str, Any] | None = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Return the canonical ``mode -> snapshot`` Custom-cache mapping.
 
@@ -204,6 +205,21 @@ def normalize_visualizer_custom_snapshot_cache(
         if mode_key in stored and stored[mode_key] == payload:
             continue
         owned = _filter_snapshot_payload_ownership(mode_key, payload)
+        if isinstance(raw_profile_source, Mapping):
+            from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+            from core.settings.visualizer_settings_contract import migrate_profile_lender_owned_settings
+            descriptor = get_visualizer_mode_descriptor(mode_key)
+            if descriptor.profile_migration_source_mode and not descriptor.lender_preset_resolved:
+                # Historical mode-local Custom snapshots did not contain the
+                # RAW borrowed analysis profile. Promote it from the same
+                # persisted section before canonical filling can erase it.
+                source_prefix = f"{descriptor.profile_migration_source_mode}_"
+                source_values = {
+                    key: value for key, value in raw_profile_source.items()
+                    if str(key).removeprefix("widgets.spotify_visualizer.").startswith(source_prefix)
+                }
+                migrated = migrate_profile_lender_owned_settings({**source_values, **owned})
+                owned = _filter_snapshot_payload_ownership(mode_key, migrated)
         nested[mode_key] = normalize_visualizer_mode_payload(mode_key, owned)
     return nested
 

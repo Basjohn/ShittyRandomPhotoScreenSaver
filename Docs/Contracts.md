@@ -506,6 +506,11 @@ depth/cel shading, partial-spectrum Rainbow and tier-gated wallpaper Mirror Cube
 than audio-authored palette changes. Shared SceneTarget, MeshResources and BackdropEnvironment resources belong to
 their Quick window/context and retire through one-shot render events on admission changes, independently of whether
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
+Sphere owns only the descriptor-declared technical inputs its analysis consumes, plus the two selected frequency splits.
+Startup, legacy Custom-cache and SST migration seed absent owned values from the former RAW Spectrum profile once before
+defaults; later Spectrum preset or Custom changes cannot affect Sphere. Shared worker outputs that Sphere does not consume
+use canonical engine configuration without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent
+retain direct renderer consumers; the mode's curated snapshots and Custom cache own their complete authored values.
 
 ## Geometry / CUSTOM
 

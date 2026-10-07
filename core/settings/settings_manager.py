@@ -77,7 +77,7 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 9
+    _VISUALIZER_SCHEMA_VERSION = 10
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -688,7 +688,8 @@ class SettingsManager(QObject):
                 if raw_cache is not None:
                     try:
                         normalized_cache = normalize_visualizer_custom_snapshot_cache(
-                            raw_cache
+                            raw_cache,
+                            raw_profile_source=vis_section if isinstance(widgets, Mapping) and isinstance(vis_section, Mapping) else None,
                         )
                     except (TypeError, ValueError):
                         logger.warning(

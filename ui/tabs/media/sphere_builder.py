@@ -1,7 +1,10 @@
 """Lazy Settings body for the isolated experimental voxel Sphere visualizer."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QLabel, QCheckBox
 
 from ui.tabs.media.builder_scaffold import (
@@ -50,10 +53,8 @@ _RECOMMENDED_SLIDER_VALUES: dict[str, float] = {
 def build_sphere_ui(tab, parent_layout) -> None:
     """Build Sphere's Settings UI without changing its experimental ownership.
 
-    Sphere remains deliberately isolated from shared visualizer setting families.
-    This builder may reuse generic *UI widgets/scaffolding*, but all controls below
-    persist only canonical ``sphere_*`` state and may not silently acquire shared
-    Rainbow, technical-profile, or accepted-mode ownership.
+    Controls persist canonical ``sphere_*`` state. Experimental product admission
+    stays separate from its own consumed analysis and presentation authoring.
     """
 
     scaffold = build_mode_scaffold(
@@ -67,6 +68,11 @@ def build_sphere_ui(tab, parent_layout) -> None:
         advanced_toggle_attr="_sphere_adv_toggle",
         advanced_helper_attr="_sphere_adv_helper",
         advanced_attr="_sphere_advanced",
+    )
+
+    _, analysis = build_collapsible_bucket(
+        tab, scaffold.normal_layout, mode_key="sphere", bucket_key="analysis", title="Frequency Zones",
+        helper_text="Sphere's own bass, mid and treble boundaries for spatial response and source events.",
     )
 
     _, appearance = build_collapsible_bucket(
@@ -157,6 +163,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
             value.setText(f"{number / divisor:.3f}{suffix}" if divisor == 1000.0 else f"{number / divisor:.2f}{suffix}")
 
         update(control.value())
+        control._sphere_refresh_label = lambda: update(control.value())
         control.valueChanged.connect(update)
         bind_setting_signal(tab, control.valueChanged, auto_switch=True)
         setattr(tab, attr, control)
@@ -164,9 +171,71 @@ def build_sphere_ui(tab, parent_layout) -> None:
         content.addWidget(value)
         return control
 
+    def alpha(layout, channel, title):
+        _widget, content = row(layout, title)
+        control = NoWheelSlider(Qt.Orientation.Horizontal)
+        control.setRange(0, 255)
+        control.setValue(getattr(tab, f"_sphere_{channel}_color").alpha())
+        control.setToolTip("Independent opacity stored in this colour's existing RGBA value.")
+        value = QLabel()
+
+        def update(number):
+            value.setText(f"{number / 255.0:.0%}")
+
+        def set_alpha(number):
+            color = QColor(getattr(tab, f"_sphere_{channel}_color"))
+            color.setAlpha(number)
+            setattr(tab, f"_sphere_{channel}_color", color)
+            getattr(tab, f"sphere_{channel}_color_btn").set_color(color)
+            update(number)
+
+        def color_changed(color):
+            previous = control.blockSignals(True)
+            control.setValue(color.alpha())
+            control.blockSignals(previous)
+            update(control.value())
+
+        update(control.value())
+        control._sphere_refresh_label = lambda: update(control.value())
+        bind_setting_signal(tab, control.valueChanged, updater=set_alpha, auto_switch=True)
+        getattr(tab, f"sphere_{channel}_color_btn").color_changed.connect(color_changed)
+        setattr(tab, f"sphere_{channel}_alpha", control)
+        content.addWidget(control)
+        content.addWidget(value)
+        return control
+
     # ------------------------------------------------------------------
     # Appearance
     # ------------------------------------------------------------------
+    tab._sphere_analysis_notch_positions = deepcopy(tab._widget_default("spotify_visualizer", "sphere_analysis_notch_positions"))
+
+    for name, index, title in (("bass", 1, "Bass / Mid:"), ("high", 2, "Mid / Treble:")):
+        _widget, content = row(analysis, title)
+        control = NoWheelSlider(Qt.Orientation.Horizontal)
+        control.setRange(0, 1000)
+        control.setValue(round(tab._sphere_analysis_notch_positions[index][0] * 1000))
+        control.setToolTip("Boundary within the shared logarithmic analysis bands. This changes Sphere's frequency routing only.")
+        value = QLabel()
+
+        def refresh(control=control, value=value):
+            value.setText(f"{control.value() / 1000.0:.3f}")
+
+        def update(number, index=index, control=control, refresh=refresh):
+            notches = tab._sphere_analysis_notch_positions
+            position = min(number / 1000.0, notches[2][0]) if index == 1 else max(number / 1000.0, notches[1][0])
+            notches[index][0] = position
+            previous = control.blockSignals(True)
+            control.setValue(round(position * 1000))
+            control.blockSignals(previous)
+            refresh()
+
+        refresh()
+        control._sphere_refresh_label = refresh
+        bind_setting_signal(tab, control.valueChanged, updater=update, auto_switch=True)
+        setattr(tab, f"sphere_analysis_{name}_boundary", control)
+        content.addWidget(control)
+        content.addWidget(value)
+
     _widget, content = row(appearance, "Finish Preset:")
     tab.sphere_finish = StyledComboBox()
     tab.sphere_finish.addItems(["Custom", *_FINISH_PRESETS.keys()])
@@ -193,6 +262,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
     )
     content.addWidget(tab.sphere_fill_color_btn)
     content.addStretch()
+    alpha(appearance, "fill", "Fill Opacity:")
 
     _widget, content = row(appearance, "Edge Color:")
     tab._sphere_edge_color = tab._color_from_default("spotify_visualizer", "sphere_edge_color")
@@ -209,6 +279,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
     )
     content.addWidget(tab.sphere_edge_color_btn)
     content.addStretch()
+    alpha(appearance, "edge", "Edge Opacity:")
 
     slider(appearance, "sphere_edge_weight", "sphere_edge_weight", "Edge Weight:", 175, "x", 100.0, 25)
     tab.sphere_edge_weight.setToolTip(
@@ -243,9 +314,15 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Apply rainbow to voxel edges",
         "Replaces Edge RGB with the same coherent moving partial-spectrum gradient while preserving the independently authored Edge alpha.",
     )
+    rainbow_speed = slider(appearance, "sphere_taste_the_rainbow_speed", "sphere_taste_the_rainbow_speed",
+                           "Rainbow Speed:", 1000, " cycles/s", 1000.0)
+    rainbow_speed.setToolTip("How fast the voxel colour field travels. Zero holds its colours still.")
+    rainbow_extent = slider(appearance, "sphere_taste_the_rainbow_extent", "sphere_taste_the_rainbow_extent",
+                            "Rainbow Extent:", 100, "", 100.0)
+    rainbow_extent.setToolTip("How much of the colour wheel spans the voxel field; zero gives one uniform hue.")
 
     def apply_rainbow_dependency(enabled: bool) -> None:
-        for control in (rainbow_surfaces, rainbow_edges):
+        for control in (rainbow_surfaces, rainbow_edges, rainbow_speed, rainbow_extent):
             control.setEnabled(bool(enabled))
 
     rainbow_master.toggled.connect(apply_rainbow_dependency)
@@ -526,9 +603,11 @@ def build_sphere_ui(tab, parent_layout) -> None:
     )
     content.addWidget(tab.sphere_tracer_color_btn)
     content.addStretch()
+    tracer_alpha = alpha(effects, "tracer", "Tracer Opacity:")
 
     def apply_tracer_dependency(enabled: bool) -> None:
         tab.sphere_tracer_color_btn.setEnabled(bool(enabled))
+        tracer_alpha.setEnabled(bool(enabled))
 
     tracer_master.toggled.connect(apply_tracer_dependency)
     apply_tracer_dependency(tracer_master.isChecked())
@@ -541,6 +620,15 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Allow blocks outside the visualizer bounds",
         "Sphere-only render capability. Other visualizer modes remain on the existing clipped path.",
     )
+
+    def refresh_dependencies():
+        apply_rainbow_dependency(rainbow_master.isChecked())
+        apply_flow_dependency(flow_master.isChecked())
+        apply_shadow_dependency(shadow_master.isChecked())
+        apply_depth_dependency(depth_master.isChecked())
+        apply_tracer_dependency(tracer_master.isChecked())
+
+    tab._refresh_sphere_dependencies = refresh_dependencies
 
 
 
