@@ -46,8 +46,7 @@ _COLOURS = (
 
 
 def build_shockwave_grid_ui(tab, parent_layout) -> None:
-    """Build Shockwave Grid's body. Its bars, analysis and technical response come from
-    Spectrum's settings; the grid, its shockwaves and the view are its own."""
+    """Build Shockwave Grid's body and its consumed source/technical profile."""
 
     scaffold = build_mode_scaffold(
         tab,
@@ -64,11 +63,15 @@ def build_shockwave_grid_ui(tab, parent_layout) -> None:
     _, waves = build_collapsible_bucket(
         tab, scaffold.normal_layout, mode_key="shockwave_grid", bucket_key="waves", title="Waves",
         helper_text=("Beats send shockwaves across a neon grid; Spectrum's bars raise its horizon. "
-                     "Bar count and response follow Spectrum's settings."),
+                     "This grid owns the horizon's bar count and response."),
     )
     _, look = build_collapsible_bucket(
         tab, scaffold.advanced_layout, mode_key="shockwave_grid", bucket_key="look", title="Look",
         helper_text="Colours, density, glow, the floor, scrolling and whether the grid may leave its rectangle.",
+    )
+    _, response = build_collapsible_bucket(
+        tab, scaffold.normal_layout, mode_key="shockwave_grid", bucket_key="response", title="Bar Response",
+        helper_text="The shared Spectrum shaper is reused, while this grid owns its layout, nodes, lanes and response.",
     )
 
     def row(layout, label):
@@ -95,6 +98,49 @@ def build_shockwave_grid_ui(tab, parent_layout) -> None:
 
     for spec in _WAVE_SLIDERS:
         slider(waves, *spec)
+
+    content = row(response, "Mirrored Layout:")
+    tab.shockwave_grid_mirrored = QCheckBox("Center-Out (Mirrored Shape)")
+    tab.shockwave_grid_mirrored.setProperty("circleIndicator", True)
+    tab.shockwave_grid_mirrored.setChecked(
+        tab._default_bool("spotify_visualizer", "shockwave_grid_mirrored"))
+    tab.shockwave_grid_mirrored.setToolTip(
+        "On: use the center-out profile. Off: use the left-to-right profile.")
+    bind_setting_signal(tab, tab.shockwave_grid_mirrored.stateChanged, auto_switch=True)
+    content.addWidget(tab.shockwave_grid_mirrored)
+    content.addStretch()
+
+    hint = QLabel("Left-click to add a control node (max 5). Right-click a node to remove it. Drag to reshape.")
+    hint.setWordWrap(True)
+    response.addWidget(hint)
+    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+    tab.shockwave_grid_shape_editor = SpectrumShapeEditor(
+        parent=None,
+        mirrored=tab._default_bool("spotify_visualizer", "shockwave_grid_mirrored"),
+        default_nodes=tab._widget_default("spotify_visualizer", "shockwave_grid_shape_nodes"),
+        default_notches_mirrored=tab._widget_default("spotify_visualizer", "shockwave_grid_notch_positions_mirrored"),
+        default_notches_linear=tab._widget_default("spotify_visualizer", "shockwave_grid_notch_positions_linear"),
+        default_lane_strengths_mirrored=tab._widget_default("spotify_visualizer", "shockwave_grid_lane_strengths_mirrored"),
+        default_lane_strengths_linear=tab._widget_default("spotify_visualizer", "shockwave_grid_lane_strengths_linear"),
+    )
+    tab.shockwave_grid_shape_editor.nodes_changed.connect(tab._save_settings)
+    tab.shockwave_grid_shape_editor.notch_positions_changed.connect(tab._save_settings)
+    tab.shockwave_grid_shape_editor.lane_strengths_changed.connect(tab._save_settings)
+    response.addWidget(tab.shockwave_grid_shape_editor)
+    tab.shockwave_grid_mirrored.stateChanged.connect(
+        lambda state: tab.shockwave_grid_shape_editor.set_mirrored(bool(state))
+    )
+    for spec in (
+        ("shockwave_grid_wave_amplitude", "Reactivity:", 0, 100,
+         "Overall horizon response after the authored lane routing."),
+        ("shockwave_grid_profile_floor", "Shape Floor:", 5, 30,
+         "Minimum bar field retained by the authored profile."),
+        ("shockwave_grid_drop_speed", "Falloff:", 50, 300,
+         "How quickly the shared bar field falls after an energy drop."),
+    ):
+        slider(response, *spec)
+    from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
+    build_spectrum_smoothing_controls(tab, response, mode_key="shockwave_grid")
     for key, label, title, tooltip in _COLOURS:
         content = row(look, label)
         colour = tab._color_from_default("spotify_visualizer", key)

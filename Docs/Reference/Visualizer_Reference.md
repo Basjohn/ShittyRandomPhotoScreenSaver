@@ -13,13 +13,14 @@ mirror the registry here as a hand-counted list.** Adding a descriptor must auto
 dormancy, switching and harness coverage.
 
 This reference documents shared policy plus mode-specific exceptions where they matter. Experimental status is an admission
-state, not permission to create a private scheduler/presentation engine. Shared-profile borrowing is explicit descriptor
-routing; a borrower resolves through the lender's current authored preset/configuration unless a preserved migration contract
-says otherwise. Heavy implementation resources remain lazy and retire through the normal owner.
+state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
+metadata. Spectrum-family 3D modes reuse its source implementation but own their persisted technical and shaper profiles;
+the former borrowed profile is copied once only when an old input lacks those owned keys. Sphere retains its separately
+documented raw Spectrum reference. Heavy implementation resources remain lazy and retire through the normal owner.
 
 ## 1A. Registered modes vs enabled modes
 
-Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `enabled_modes` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The ownership distinction is:
+Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `mode_activation` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The ownership distinction is:
 
 ```text
 all registered canonical modes
@@ -464,9 +465,9 @@ A test name does not prove it exercises the real output path.
 
 ## 16. 3D scene foundation (optional for modes)
 
-A mode may build on the shared 3D foundation the transitions use. No Visualizer has completed adoption yet; Voxel
-Sphere is the active promotion target and remains behaviourally private until its S19 golden passes. Plan and hazards:
-`Current_Plan.md`. The binding lessons in
+Extruded Spectrum and Shockwave Grid use the shared 3D foundation the transitions use. Voxel Sphere also uses its GPU
+resource/ring substrate while its reaction semantics remain mode-owned and its authoring/product promotion remains in
+`Current_Plan.md` §7. The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
@@ -497,7 +498,9 @@ Sphere is the active promotion target and remains behaviourally private until it
 A neon grid floor in perspective (`rendering/quick/visualizer/implementations/shockwave_grid.py`, GLSL and CPU
 mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visualizer with its own authored events.
 
-- **Authored state:** Spectrum's frame runtime, technical profile and bar colours, extended by
+- **Authored state:** Shockwave owns the technical and Spectrum-shaper values it consumes (bar count/response, mirrored
+  layout, nodes, notches, lane strengths, wave amplitude, floor, falloff and temporal bar treatment). It projects that profile once per
+  activation onto the single Spectrum source implementation, then extends it through
   `ShockwaveGridFrameRuntime` (`widgets/spotify_visualizer/shockwave_frame_runtime.py`) with a bounded event ring:
   each musical onset the transient bus publishes (at least `shockwave_gap` after the last, only while playing) becomes one
   event, born when the onset happened, with a deterministic origin (from its admission number; kicks nearer the
@@ -552,13 +555,15 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
 The first Visualizer on the shared foundation (`rendering/quick/visualizer/implementations/extruded_spectrum.py`,
 GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 
-- **Authored state:** Spectrum's. The descriptor names Spectrum's frame runtime, technical profile and shared-bar
-  profile, so bars, peaks, the R-76 temporal treatment, the shape editor and energy distribution are Spectrum's own.
-  `ExtrudedSpectrumFrame` is a `SpectrumFrame` with the mode's presentation parameters; the height transfer equals
+- **Authored state:** Extruded Spectrum reuses Spectrum's frame-runtime and one source/shaper implementation, while it
+  owns its technical response, bar fill/border/opacity, mirrored layout, nodes, notches, lane strengths, profile floor,
+  falloff, ghosts, smoothing and solid-bar stabilization. Old inputs missing those fields receive a one-time promoted copy of the selected Spectrum preset;
+  no runtime setting follows Spectrum's later selection. `ExtrudedSpectrumFrame` is a `SpectrumFrame` with the mode's
+  presentation parameters; the height transfer equals
   Spectrum's (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
 - **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral
-  Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, smooth edges, allow overflow. Hue drift advances
-  with logical time only.
+  Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, body alpha, smooth edges, optional shared Scene3D
+  shadow and allow overflow. Hue drift advances with logical time only.
 - **Edge lines** are drawn by the shader along each face's border. Smooth Edges (on by default) measures them in true
   screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
   pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line
@@ -567,13 +572,20 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   (High 8x instead of 4x: +0.035 ms GPU at a full 2560x1440 card).
 - **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling,
   Balanced 2x, Performance single-sampled; Mirror Faces on those, off at KAK (the tier's `reflections`).
-- **Translucent order** (ghost columns, floor reflection): exact for any view without OIT. The bar records reach the
+- **Translucent order** (body, ghost columns, floor reflection): exact for any view without OIT. The bar records reach the
   shader in a painter's order (`extruded_draw_order`: farthest from the orbit's eye along the row first, the eye from
   `scene3d_orbit_eye`; the boxes occupy disjoint x slabs, so that order is exact and two bars on opposite sides of the
   eye never cover each other), each carrying its bar index; the translucent passes drop faces turned from the eye, so
   a box never blends over itself (winding-independent, so the mirrored reflection is right too). Each box now blends
-  once; its alpha becomes the opacity its front and back faces used to add up to, a(2 - a), clamped first (the
-  reflection's authored alpha exceeds 1 above the floor line).
+  once. Ghost/reflection alpha retains the opacity its front and back faces used to add up to, a(2 - a), clamped first
+  (the reflection's authored alpha exceeds 1 above the floor line). Body alpha remains its directly authored opacity.
+- **Material alpha:** fill RGBA controls face coverage; the border alpha independently retains edge coverage. Body Alpha
+  multiplies that combined surface alpha. Spectral Edges supplies its own opaque spectral edge colour; Bar Colours uses
+  the authored edge RGBA. Fully opaque bodies use depth writes; translucent bodies use the same ordered visible-face path
+  without depth writes. Ghost and floor-reflection opacity remain independent authored axes.
+- **Shadow:** the optional Scene3D directional pass projects bar top faces onto the floor using the canonical shadow
+  direction/style and mode-owned strength. It uses the shared pass/state fence; disabled or transparent shadows draw no pass.
+  Its fixed ceiling-height sweep participates in render-target reach, so it cannot be clipped by the body-only bounds.
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a polished mirror surface reflecting
   the wallpaper; procedural brushed/hash grain is intentionally absent because it produced visible vertical ribbing across
   bright reflected faces. An invented studio environment reads as washout/sheen and is not the product contract. The displayed photograph is
@@ -595,9 +607,10 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   otherwise over `BackdropEnvironment.BLEND_S` (2 s) of logical time. With Mirror Faces at 0,
   or no reflections, nothing is made or held. Preset 4 (Chrome Organ) pairs it with Spectral Edges and the floor
   reflection.
-- **Rendering:** one instanced box draw per pass from per-bar std430 records (level, peak) on the stream ring at
-  binding 3, into a 4× multisampled `SceneTarget` laid over the card in overlay mode. Passes: opaque bars, the floor
-  reflection (fades to zero at the field bottom), translucent ghost columns for the peaks. S17 material lighting.
+- **Rendering:** one instanced box draw per admitted pass from per-bar std430 records (level, peak) on the stream ring at
+  binding 3, into a tier-resolved multisampled `SceneTarget` laid over the card in overlay mode. Passes: optional directional
+  shadow, opaque or translucent bars, floor reflection (fades to zero at the field bottom), and ghost columns for the peaks.
+  S17 material lighting.
 - **Fit:** `extruded_fit` frames the projected bounding box of the tallest possible field for the current tilt, turn,
   depth and reflection, so no setting can push the scene out of the rectangle; with overflow on (default), the scene
   keeps its front-on scale and is not contained to its frame: the target covers everything the bars can draw for the
@@ -659,4 +672,3 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   becoming Custom after an orbit; Allow Overflow near screen edges.
 - **Guided Setup preview:** rendered by the foundry through the production capture and renderer
   (`_RENDERED_VISUALIZER_PREVIEWS`); legacy screenshot sheets are not catalog authority.
-

@@ -138,6 +138,7 @@ def resolvable_key_gaps() -> List[Tuple[str, str, str]]:
         _PER_MODE_RESOLVERS,
     )
     from core.settings.models._visualizer_helpers import PER_MODE_TECHNICAL_MODES
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 
     canon: Dict[str, Any] = {}
 
@@ -162,6 +163,8 @@ def resolvable_key_gaps() -> List[Tuple[str, str, str]]:
     per_mode_keys = sorted(set(_PER_MODE_TECHNICAL_SERIALIZERS) | set(_PER_MODE_RESOLVERS))
     for mode in PER_MODE_TECHNICAL_MODES:
         for key in per_mode_keys:
+            if key in {"bar_fill_color", "bar_border_color", "bar_border_opacity"} and key not in get_owned_mode_setting_keys(mode, "shared_bar"):
+                continue
             if not has("spotify_visualizer", f"{mode}_{key}"):
                 gaps.append(("spotify_visualizer", f"{mode}_{key}", "per-mode-technical"))
 

@@ -35,6 +35,7 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     SPECTRUM_SHADER_INPUT_SCALE,
     spectrum_bar_to_boosted,
 )
+from widgets.spotify_visualizer.render_state import freeze_render_fields
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 pytestmark = pytest.mark.qt
@@ -380,7 +381,7 @@ def test_resources_are_released_with_the_mode(target):
         assert not renderer.has_resources
 
 
-def test_the_mode_borrows_spectrums_runtime_and_stays_dormant_until_it_renders():
+def test_the_mode_reuses_spectrum_runtime_with_an_owned_profile_and_lazy_renderer():
     from core.settings.visualizer_mode_registry import (
         get_resolved_mode_setting_profile,
         get_technical_profile_mode,
@@ -391,8 +392,8 @@ def test_the_mode_borrows_spectrums_runtime_and_stays_dormant_until_it_renders()
     spectrum = get_visualizer_mode_descriptor("spectrum")
     assert (descriptor.frame_runtime_module, descriptor.frame_runtime_class) == (
         spectrum.frame_runtime_module, spectrum.frame_runtime_class)
-    assert get_technical_profile_mode("extruded_spectrum") == "spectrum"
-    assert get_resolved_mode_setting_profile("extruded_spectrum", "shared_bar") == "spectrum"
+    assert get_technical_profile_mode("extruded_spectrum") == descriptor.mode_id
+    assert get_resolved_mode_setting_profile("extruded_spectrum", "shared_bar") == descriptor.mode_id
     code = ("import sys\n"
             "import core.settings.visualizer_mode_registry, rendering.quick.visualizer.implementation_registry\n"
             "import widgets.spotify_visualizer.logical_frame_capture\n"
@@ -428,6 +429,162 @@ def test_translucent_bars_draw_in_a_painters_order_for_any_view():
                 # Of two bars on the same side of the eye, the nearer one draws later.
                 if (xa - eye[0]) * (xb - eye[0]) > 0 and abs(xa - eye[0]) < abs(xb - eye[0]):
                     assert position[a] > position[b]
+
+
+def _with_shadow_style(snapshot, *, offset, color=(0, 0, 0, 255)):
+    """Replace only the already-resolved canonical shell-shadow projection for a frame."""
+    style = snapshot.presentation.shell_style.as_dict()
+    style.update(shadow_offset=tuple(offset), shadow_color=tuple(color))
+    presentation = dataclasses.replace(snapshot.presentation, shell_style=freeze_render_fields(style))
+    return dataclasses.replace(snapshot, presentation=presentation)
+
+
+def _with_bar_alpha(snapshot, *, fill_alpha, border_alpha):
+    style = snapshot.logical.common.style.as_dict()
+    style["fill_color"] = (*style["fill_color"][:3], fill_alpha)
+    style["border_color"] = (*style["border_color"][:3], border_alpha)
+    common = dataclasses.replace(snapshot.logical.common, style=freeze_render_fields(style))
+    return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, common=common))
+
+
+def test_authored_fill_alpha_blends_body_and_preserves_independent_border_alpha(target):
+    capture, host = target
+    base = _snapshot(
+        extruded_spectrum_body_alpha=1.0,
+        extruded_spectrum_face_mirror=0.0,
+        extruded_spectrum_reflection=0.0,
+        extruded_spectrum_colouring="Bar Colours",
+        spectrum_ghosting_enabled=False,
+        extruded_spectrum_tilt=0.16,
+        extruded_spectrum_turn=0.0,
+    )
+    backdrop = (19 / 255, 43 / 255, 97 / 255, 1.0)
+    opaque = capture.render(host, _with_bar_alpha(base, fill_alpha=255, border_alpha=0), backdrop)
+    empty = capture.render(host, _with_bar_alpha(base, fill_alpha=0, border_alpha=0), backdrop)
+    half = capture.render(host, _with_bar_alpha(base, fill_alpha=128, border_alpha=0), backdrop)
+    body = np.abs(opaque[..., :3] - empty[..., :3]).max(axis=2) > 18
+    expected = opaque * (128 / 255) + empty * (127 / 255)
+    assert body.sum() > 800
+    assert np.quantile(np.abs(half[..., :3] - expected[..., :3]).max(axis=2)[body], 0.99) <= 3
+    assert np.abs(empty[..., :3] - np.array([19, 43, 97])).max() <= 1
+    edges = capture.render(host, _with_bar_alpha(base, fill_alpha=0, border_alpha=255), backdrop)
+    changed = np.abs(edges[..., :3] - empty[..., :3]).max(axis=2) > 8
+    assert changed.sum() > 100
+    assert changed.sum() < body.sum() / 2
+
+
+def test_body_alpha_is_a_real_transparent_surface_and_uses_the_bar_painter_order(target, monkeypatch):
+    """A transparent body blends over the already-drawn wallpaper; reversing its documented
+    far-to-near bar order changes pixels on the real driver at an overlapping orbit."""
+    capture, host = target
+    common = dict(
+        extruded_spectrum_body_alpha=1.0,
+        extruded_spectrum_face_mirror=0.0,
+        extruded_spectrum_reflection=0.0,
+        spectrum_ghosting_enabled=False,
+        extruded_spectrum_tilt=0.16,
+        extruded_spectrum_turn=0.0,
+    )
+    backdrop = (19 / 255, 43 / 255, 97 / 255, 1.0)
+    opaque = capture.render(host, _snapshot(**common), backdrop=backdrop)
+    empty = capture.render(host, _snapshot(**{**common, "extruded_spectrum_body_alpha": 0.0}), backdrop=backdrop)
+    translucent = capture.render(
+        host, _snapshot(**{**common, "extruded_spectrum_body_alpha": 0.5}), backdrop=backdrop,
+    )
+    body = np.abs(opaque[..., :3] - empty[..., :3]).max(axis=2) > 18
+    assert body.sum() > 800
+    expected = np.rint((opaque.astype(float) + empty.astype(float)) / 2.0)
+    alpha_error = np.abs(translucent[..., :3] - expected[..., :3]).max(axis=2)
+    # Multisample edge coverage is resolved before the transparent target composite, so a small
+    # silhouette fringe rounds differently; covered face interiors remain the exact half blend.
+    assert np.quantile(alpha_error[body], 0.99) <= 3
+
+    from rendering.quick.visualizer.implementations import extruded_spectrum as implementation
+
+    overlap = _snapshot(**{
+        **common,
+        "extruded_spectrum_body_alpha": 0.5,
+        "extruded_spectrum_tilt": 0.42,
+        "extruded_spectrum_turn": 0.72,
+    })
+    ordered = capture.render(host, overlap, backdrop=backdrop)
+    original_order = implementation.extruded_draw_order
+    monkeypatch.setattr(
+        implementation,
+        "extruded_draw_order",
+        lambda *args: list(reversed(original_order(*args))),
+    )
+    reversed_order = capture.render(host, overlap, backdrop=backdrop)
+    assert np.abs(ordered - reversed_order).max() > 8
+
+
+def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_target(target):
+    """The off switch has no pixel/pass effect; enabling the direct pass changes only the
+    projected floor and changing the resolved canonical direction changes that projection."""
+    from rendering.quick.scene3d.shadows import directional_shadow_vector
+
+    assert directional_shadow_vector((4.0, 4.0), 0.22) == pytest.approx((0.22, 0.22))
+    assert directional_shadow_vector((0.0, -4.0), 0.22) == pytest.approx((0.0, -0.22))
+    capture, host = target
+    base = _snapshot(
+        extruded_spectrum_body_alpha=1.0,
+        extruded_spectrum_face_mirror=0.0,
+        extruded_spectrum_reflection=0.0,
+        spectrum_ghosting_enabled=False,
+        extruded_spectrum_tilt=0.35,
+        extruded_spectrum_turn=0.28,
+        extruded_spectrum_shadow_strength=1.0,
+    )
+    se = _with_shadow_style(base, offset=(5.0, 5.0))
+    nw = _with_shadow_style(base, offset=(-5.0, -5.0))
+    backdrop = (0.88, 0.73, 0.49, 1.0)
+    disabled = capture.render(
+        host,
+        dataclasses.replace(
+            se,
+            logical=dataclasses.replace(
+                se.logical,
+                mode_state=dataclasses.replace(
+                    se.logical.mode_state,
+                    parameters={**dict(se.logical.mode_state.parameters), "extruded_spectrum_shadow_enabled": False},
+                ),
+            ),
+        ),
+        backdrop=backdrop,
+    )
+    renderer = host._implementations["extruded_spectrum"]
+    allocation = renderer._target.allocation
+    enabled_se = capture.render(
+        host,
+        dataclasses.replace(
+            se,
+            logical=dataclasses.replace(
+                se.logical,
+                mode_state=dataclasses.replace(
+                    se.logical.mode_state,
+                    parameters={**dict(se.logical.mode_state.parameters), "extruded_spectrum_shadow_enabled": True},
+                ),
+            ),
+        ),
+        backdrop=backdrop,
+    )
+    enabled_nw = capture.render(
+        host,
+        dataclasses.replace(
+            nw,
+            logical=dataclasses.replace(
+                nw.logical,
+                mode_state=dataclasses.replace(
+                    nw.logical.mode_state,
+                    parameters={**dict(nw.logical.mode_state.parameters), "extruded_spectrum_shadow_enabled": True},
+                ),
+            ),
+        ),
+        backdrop=backdrop,
+    )
+    assert renderer._target.allocation == allocation
+    assert np.abs(enabled_se - disabled).max() > 8
+    assert np.abs(enabled_se - enabled_nw).max() > 8
 
 
 

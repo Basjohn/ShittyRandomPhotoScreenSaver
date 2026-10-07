@@ -64,7 +64,7 @@ def _configured_engine():
     from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
     from widgets.spotify_visualizer.quick_technical_config import apply_controller_technical_config
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
-    from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mode_kwargs
+    from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mode_kwargs, resolve_mode_source_config
     from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 
     section = SettingsManager().get("widgets.spotify_visualizer") or {}
@@ -87,7 +87,7 @@ def _configured_engine():
         apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, "sphere"),
                                           reason="replay_recording")
         engine = controller.ensure_engine()
-        apply_engine_vis_mode_kwargs(engine, asdict(model))
+        apply_engine_vis_mode_kwargs(engine, resolve_mode_source_config("sphere", asdict(model)))
         return controller, engine
     except Exception:
         if controller is not None and controller.engine is not None:

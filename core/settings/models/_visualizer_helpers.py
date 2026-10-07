@@ -77,13 +77,19 @@ def _normalize_spectrum_lane_strengths(value: Any, defaults: Mapping[str, float]
     return normalized
 
 
-PER_MODE_TECHNICAL_MODES: Tuple[str, ...] = (
-    "spectrum",
-    "bubble",
-    "sine_wave",
-    "oscilloscope",
-    "devcurve",
-)
+def _technical_mode_ids() -> Tuple[str, ...]:
+    """Return canonical technical-profile owners from descriptor capabilities."""
+
+    from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+
+    return tuple(
+        descriptor.mode_id
+        for descriptor in iter_all_visualizer_mode_descriptors()
+        if descriptor.technical_controls
+    )
+
+
+PER_MODE_TECHNICAL_MODES: Tuple[str, ...] = _technical_mode_ids()
 
 _ACTIVE_MODE_TECHNICAL_KEYS: Tuple[str, ...] = tuple(
     key for key, _coerce in PER_MODE_BASELINE_KEYS
@@ -160,7 +166,11 @@ def _build_live_visualizer_mode_shared_visual_kwargs(
     default_model: "SpotifyVisualizerSettings",
 ) -> Dict[str, Any]:
     kwargs: Dict[str, Any] = {}
+    from core.settings.visualizer_mode_registry import mode_has_shared_bar_appearance
+
     for mode in PER_MODE_TECHNICAL_MODES:
+        if not mode_has_shared_bar_appearance(mode):
+            continue
         kwargs[f"{mode}_bar_fill_color"] = deepcopy(
             read_per_mode_value(mode, "bar_fill_color", getattr(default_model, f"{mode}_bar_fill_color"))
         )
@@ -205,11 +215,9 @@ def _resolve_active_mode_shared_visual_state(
 
     profile = get_resolved_mode_setting_profile(mode_key, "shared_bar")
     if profile is None:
-        raise ValueError(f"visualizer mode {mode_key!r} has no resolved shared-bar profile")
+        return {}
 
     resolved: Dict[str, Any] = {}
     for key in _ACTIVE_MODE_SHARED_VISUAL_KEYS:
         resolved[key] = deepcopy(per_mode_kwargs[f"{profile}_{key}"])
     return resolved
-
-

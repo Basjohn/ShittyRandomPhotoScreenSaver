@@ -218,11 +218,11 @@ def test_waves_change_the_grid_and_the_glow_only_adds_light(target):
     assert not renderer.has_resources
 
 
-def test_the_mode_borrows_spectrums_bars_and_stays_dormant_until_it_renders():
+def test_the_mode_owns_its_shared_source_profile_and_keeps_renderer_import_lazy():
     from core.settings.visualizer_mode_registry import get_technical_profile_mode, get_visualizer_mode_descriptor
 
     descriptor = get_visualizer_mode_descriptor("shockwave_grid")
-    assert get_technical_profile_mode("shockwave_grid") == "spectrum"
+    assert get_technical_profile_mode("shockwave_grid") == descriptor.mode_id
     assert descriptor.view_orbit_settings == ("shockwave_grid_turn", "shockwave_grid_tilt")
     code = ("import sys\n"
             "import core.settings.visualizer_mode_registry, rendering.quick.visualizer.implementation_registry\n"

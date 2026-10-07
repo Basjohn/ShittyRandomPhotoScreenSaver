@@ -8,6 +8,8 @@ inputs only; canonical runtime and persisted payloads are mode-owned.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from copy import deepcopy
+import sys
 from typing import Any, Dict
 
 from core.settings.default_contract import require_canonical_default
@@ -63,6 +65,138 @@ SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Callable[[Any], Any]], ...] = 
     ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", float),
     ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", float),
 )
+
+
+def migrate_profile_lender_owned_settings(
+    data: Mapping[str, Any] | None,
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Promote old borrowed profile values into new per-mode owners once.
+
+    A descriptor may name a ``profile_migration_source_mode`` after it stops
+    borrowing that profile at runtime.  This bridge uses the source mode's
+    resolved curated preset only at the persisted-input boundary, writes the
+    new owner's keys, and never leaves a live dependency on another mode's
+    selected preset.
+    """
+
+    if not isinstance(data, Mapping):
+        return {}
+
+    from core.settings.visualizer_mode_registry import (
+        get_owned_mode_setting_keys,
+        iter_all_visualizer_mode_descriptors,
+    )
+
+    migrated = dict(data)
+    scoped_prefix = f"{prefix}."
+    descriptors = tuple(
+        descriptor
+        for descriptor in iter_all_visualizer_mode_descriptors()
+        if str(getattr(descriptor, "profile_migration_source_mode", "")).strip()
+    )
+    # This function is also reached while visualizer_presets is importing its
+    # curated tree.  With no active bridge there is nothing to resolve, and
+    # importing that partially-initialized module would be a false cycle.
+    if not descriptors:
+        return migrated
+
+    def present(key: str) -> bool:
+        return key in migrated or f"{scoped_prefix}{key}" in migrated
+
+    def read(key: str) -> Any:
+        if key in migrated:
+            return migrated[key]
+        dotted = f"{scoped_prefix}{key}"
+        if dotted in migrated:
+            return migrated[dotted]
+        return require_canonical_default(f"{prefix}.{key}")
+
+    migration_targets: list[tuple[Any, str, set[str]]] = []
+    for descriptor in descriptors:
+        source_mode = str(
+            getattr(descriptor, "profile_migration_source_mode", "")
+        ).strip().lower()
+        if not source_mode:
+            continue
+
+        suffixes: set[str] = set()
+        if bool(descriptor.technical_controls):
+            suffixes.update(key for key, _coerce in PER_MODE_BASELINE_KEYS)
+        if bool(getattr(descriptor, "spectrum_shape_controls", False)):
+            suffixes.update(
+                {
+                    "mirrored",
+                    "shape_nodes",
+                    "notch_positions_mirrored",
+                    "notch_positions_linear",
+                    "lane_strengths_mirrored",
+                    "lane_strengths_linear",
+                    "wave_amplitude",
+                    "profile_floor",
+                    "drop_speed",
+                    "visual_smoothing_enabled",
+                    "visual_smoothing",
+                    "solid_bar_hysteresis_enabled",
+                }
+            )
+        if bool(getattr(descriptor, "spectrum_ghost_controls", False)):
+            suffixes.update({"ghosting_enabled", "ghost_alpha", "ghost_decay"})
+        suffixes.update(get_owned_mode_setting_keys(descriptor.mode_id, "shared_bar"))
+        if any(not present(f"{descriptor.mode_id}_{suffix}") for suffix in suffixes):
+            migration_targets.append((descriptor, source_mode, suffixes))
+
+    # Canonical defaults already contain every owned key. Avoid importing the
+    # curated preset catalog while normalising those defaults, because the
+    # catalog itself depends on the resolved defaults.
+    if not migration_targets:
+        return migrated
+
+    preset_module = sys.modules.get("core.settings.visualizer_presets")
+    if preset_module is not None and not hasattr(preset_module, "apply_preset_to_config"):
+        # Curated presets are normalised while their module builds the catalog.
+        # They are already authored under their own namespace, and persisted
+        # user input reaches this bridge after the catalog is complete.
+        return migrated
+
+    from core.settings.visualizer_presets import (
+        apply_preset_to_config,
+        resolve_preset_index_from_mapping,
+    )
+
+    for descriptor, source_mode, suffixes in migration_targets:
+        source_index = resolve_preset_index_from_mapping(
+            source_mode, migrated, prefix=prefix
+        )
+        source_values = dict(apply_preset_to_config(source_mode, source_index, dict(migrated)))
+        for suffix in suffixes:
+            target_key = f"{descriptor.mode_id}_{suffix}"
+            if present(target_key):
+                continue
+            source_key = f"{source_mode}_{suffix}"
+            if suffix == "solid_bar_hysteresis_enabled":
+                source_value = normalize_spectrum_render_mode(
+                    source_values.get(f"{source_mode}_render_mode", read(f"{source_mode}_render_mode")),
+                    str(require_canonical_default(f"{prefix}.{source_mode}_render_mode")),
+                ) == "bars"
+            else:
+                source_value = source_values[source_key] if source_key in source_values else read(source_key)
+            # The former 3D implementation ignored Spectrum's fill alpha and
+            # therefore rendered existing borrowed profiles as opaque. Its new
+            # owned fill is now consumed by the shader, so preserve that
+            # accepted appearance while promoting only a missing old key. An
+            # explicitly persisted Extruded RGBA value remains authoritative.
+            if (
+                descriptor.mode_id == "extruded_spectrum"
+                and suffix == "bar_fill_color"
+                and isinstance(source_value, (list, tuple))
+                and len(source_value) >= 3
+            ):
+                source_value = [*source_value[:3], 255]
+            migrated[target_key] = deepcopy(source_value)
+
+    return migrated
 
 _SPECTRUM_RENDER_MODE_ALIASES: dict[str, str] = {
     "segment": "segment",
@@ -350,7 +484,19 @@ def migrate_legacy_global_visual_keys(
                 continue
             dotted_mode_key = f"{scoped_prefix}{mode_key}"
             if mode_key not in migrated and dotted_mode_key not in migrated:
-                migrated[mode_key] = shared_values[shared_key]
+                value = shared_values[shared_key]
+                # Extruded Spectrum used to ignore the shared fill alpha. When
+                # a legacy generic fill becomes its first owned value, retain
+                # the accepted opaque body; an explicit owned RGBA value is
+                # deliberately never rewritten here.
+                if (
+                    mode == "extruded_spectrum"
+                    and shared_key == "bar_fill_color"
+                    and isinstance(value, (list, tuple))
+                    and len(value) >= 3
+                ):
+                    value = [*value[:3], 255]
+                migrated[mode_key] = value
 
     ghost_mode_key_map = {
         "spectrum": ("spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay"),

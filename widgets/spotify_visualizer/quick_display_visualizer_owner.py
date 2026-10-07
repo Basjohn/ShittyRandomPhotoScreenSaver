@@ -207,13 +207,27 @@ class QuickDisplayVisualizerOwner:
 
         controller = self._controller
         state = controller.logical_tick_state
+        from widgets.spotify_visualizer.source_config_applier import (
+            resolve_mode_source_config,
+        )
+
+        resolved_logical_kwargs = (
+            resolve_mode_source_config(controller.mode_id, logical_kwargs)
+            if logical_kwargs is not None
+            else None
+        )
+        resolved_presentation_kwargs = (
+            resolve_mode_source_config(controller.mode_id, presentation_kwargs)
+            if presentation_kwargs is not None
+            else None
+        )
         install_default_logical_tick_state(state, bar_count=controller.bar_count)
         install_default_presentation_state(controller.presentation_state)
-        if logical_kwargs:
-            apply_logical_vis_mode_kwargs(state, logical_kwargs)
-        if presentation_kwargs:
+        if resolved_logical_kwargs:
+            apply_logical_vis_mode_kwargs(state, resolved_logical_kwargs)
+        if resolved_presentation_kwargs:
             apply_presentation_vis_mode_kwargs(
-                controller.presentation_state, presentation_kwargs
+                controller.presentation_state, resolved_presentation_kwargs
             )
         if is_viz_diagnostics_enabled():
             presentation_state = controller.presentation_state
@@ -238,9 +252,9 @@ class QuickDisplayVisualizerOwner:
         # time.  ``logical_kwargs`` is the canonical settings payload in
         # production; presentation is only a fallback for focused callers.
         source_kwargs = (
-            logical_kwargs
-            if logical_kwargs is not None
-            else presentation_kwargs
+            resolved_logical_kwargs
+            if resolved_logical_kwargs is not None
+            else resolved_presentation_kwargs
         )
         if source_kwargs:
             from widgets.spotify_visualizer.source_config_applier import (
