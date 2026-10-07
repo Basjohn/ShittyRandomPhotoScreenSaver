@@ -32,6 +32,19 @@ comparison/history but are excluded from the current corpus automatically. Keep 
 recordings conceptually separate: fixtures/goldens provide deterministic regression contracts; the four recordings provide
 real-scale musical dynamics for reaction/judder/ramp measurement.
 
+Bubble radius evidence uses production-object identity rather than nearest-position matching. The accepted render-release
+envelope has an instant-release negative control:
+
+```powershell
+python -m tools.visualizer_replay.bubble_judder --compare-release --px-per-unit 300 --min-px 0.5 --report logs/bubble_judder_acceptance/release_recordings.json
+python -m pytest tests/test_bubble_render_judder.py tests/test_bubble_fidelity_report.py -q
+```
+
+Add `--fixtures --frozen --clip broadband_noise` for committed fixture evidence. Reports retain input/settings/source
+fingerprints, all/tiny-radius alternation, dot/outline crossings, paired frame-aligned extrema/excursion and bounded
+input-window examples. `--px-per-unit` supplies a radius projection; the tool does not measure a display. First radius
+movement during already moving music is not a causal audio-latency oracle. Physical delivery and isolated response bars remain separate.
+
 Prefer the smallest test set that can falsify the current slice:
 
 ```powershell

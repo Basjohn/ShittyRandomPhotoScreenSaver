@@ -326,6 +326,11 @@ Permanent shared-mode work must preserve source freshness, authored logical cade
 
 For offline real-music measurement, the canonical operator-authored schema-2 corpus is local under `logs/visualizer_recordings/`: `balanced.jsonl`, `heavy1.jsonl`, `quiet_intro.jsonl`, and `quiet_intro2.jsonl`. `tools.visualizer_replay.record.recorded_clips()` owns current-corpus selection and deliberately ignores archived/derived `*_vN` and `*_noevents` takes. These recordings complement rather than replace committed fixtures/goldens: use the latter for deterministic regression bars and the former when the acceptance contract explicitly requires real-scale musical dynamics.
 
+`test_bubble_render_judder.py` protects the accepted release-envelope negative control and exact authored small-radius
+snapshot targets. `test_bubble_fidelity_report.py` protects identity-preserving observation, truthful frame indices,
+delay/pixel-bound/representation/simulation-change detection and unchanged production logical/Quick output while observing.
+The replay report uses supplied projection pixels; first radius movement in a moving musical window is not causal latency.
+
 Voxel Sphere remains experimental while using the current low-level scene3d substrate promotion. Its behavioural/state contract remains private and golden-protected while that migration is incomplete. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.

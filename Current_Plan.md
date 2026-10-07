@@ -4,31 +4,31 @@ This is the **live forward checklist**. It contains open work and acceptance deb
 `Spec.md`, `Docs/Contracts.md`, Architecture/Guardrail/Guide/Reference documents, and useful failure history belongs in
 `Docs/Historical_Bugs/`.
 
-Work top-to-bottom unless the operator redirects a slice. Significant slices return a superseding GODZIP.
+Work top-to-bottom unless the operator redirects a slice or a stated physical-evidence gate remains open.
+Local checkouts make narrow validated checkpoints; archive handoffs return a superseding GODZIP under the handoff rules below.
 
 ---
 
 ## 1. Bubble tiny-radius judder | protect feel first
 
-The first render-only release-envelope repair is accepted as the baseline. A second, deliberately tiny presentation-only
-breath assist is implemented behind an exact negative control; it must earn acceptance without changing Bubble's authored
-reaction, elasticity, attack, settling, loud-passage variation, motion, collision or cadence.
+The accepted render-release envelope remains the baseline. The tiny-breath experiment was rejected by recorded-music and
+fixture A/B evidence and removed completely; R-105 owns the failure mechanism. Small drawn radii follow each authored
+target directly. There is no disabled candidate or fallback implementation.
 
-- [ ] **B1. Agent-measure the candidate on the operator recordings.** The accepting agent must run the same clips with the
-  tiny-breath seam forced OFF and ON and retain a per-clip report of tiny-radius alternating-step counts, dot/outline-boundary
-  crossings, all-radius chatter, first-response frame, peak/turn timing and response excursion/amplitude. "Looks solved" is not
-  acceptance. If the defect is not concentrated in the eligible physical-radius band, change eligibility rather than
-  audio/simulation gain. The helper only passes if judder improves without a measurable reaction-delay or authored-amplitude
-  tradeoff.
-- [ ] **B2. Measure reaction fidelity and latency, not only judder.** Extend/use the replay evidence so OFF vs ON reports the
-  frame-aligned response around impulses/ramps/strong hits: first-response frame, peak/turn timing and excursion must not move;
-  outside the eligible tiny-radius band the presentation must remain identical, and inside it the helper may reshape at most its
-  documented physical-pixel bound. Existing golden/reactivity suites remain green with no golden rewrite; impulse/BPM/ramp/step/
-  silence behavior remains within its existing tolerance. Reject any attack, latency, authored-amplitude, excursion or
-  hot-passage change even if the tiny-radius judder metric improves.
-- [ ] **B3. Physical acceptance on both displays.** Judge the same tracks at quiet breathing, strong hits, sustained loud
-  sections, min/max size, pop/exit and CUSTOM extremes. Reject the candidate if it feels flatter/slower even when the metric
-  improves.
+- [~] **B1. Awaiting Validation / Logs: localize the remaining physical defect on the restored baseline.** Match the affected
+  song passage to the canonical recording, mode/preset, CUSTOM viewport/uniform scale and display DPR. Identity-preserving
+  replay found no alternating runs in the <=8px band at the supplied 300px projection. Establish the actual affected radius
+  band and distinguish radius reversal from dot/outline representation chatter or shared delivery stalls before another repair.
+- [ ] **B2. Evidence-led presentation repair.** Only after B1 reproduces the defect, fix the owning seam without changing audio,
+  simulation gain or cadence. Pixel eligibility/bounds must use the actual renderer response-height projection plus scale/DPR,
+  not logical viewport height. Retain per-clip frame-aligned radius differences, boundary crossings and extrema/excursion;
+  verify isolated first response, attack, peak/turn timing and authored amplitude with existing golden/reactivity bars.
+  Input-window first radius movement on already moving music is not proof of causal audio latency. No golden rewrite.
+- [~] **B3. Awaiting Validation: physical acceptance on both displays.** Check the restored baseline and any subsequently admitted
+  repair at quiet breathing, strong hits, sustained loud sections, min/max size, pop/exit and CUSTOM extremes. Reject a repair
+  that feels flatter/slower even when the judder metric improves.
+
+Until physical localization is available, proceed with the shared-runtime/lifecycle work below. Do not invent another Bubble filter.
 
 The canonical local real-music corpus for B1-B3 is under `logs/visualizer_recordings/`: `balanced.jsonl`, `heavy1.jsonl`,
 `quiet_intro.jsonl` and `quiet_intro2.jsonl`. These are operator-authored schema-2 captures and are intentionally local/large;
@@ -39,14 +39,14 @@ negative-control/regression evidence and must not be substituted for the real-mu
 Focused automation:
 
 ```powershell
-python -m pytest tests/test_bubble_render_judder.py -q
-python -m tools.visualizer_replay.bubble_judder --fixtures --clip broadband_noise --frozen --compare-tiny-assist --px-per-unit 300 --min-px 0.5
+python -m pytest tests/test_bubble_render_judder.py tests/test_bubble_fidelity_report.py -q
+python -m tools.visualizer_replay.bubble_judder --fixtures --clip broadband_noise --frozen --compare-release --px-per-unit 300 --min-px 0.5 --report logs/bubble_judder_acceptance/release_fixture.json
 ```
 
 Real recordings:
 
 ```powershell
-python -m tools.visualizer_replay.bubble_judder --compare-tiny-assist --px-per-unit 300 --min-px 0.5
+python -m tools.visualizer_replay.bubble_judder --compare-release --px-per-unit 300 --min-px 0.5 --report logs/bubble_judder_acceptance/release_recordings.json
 ```
 
 Durable mechanism/negative controls: `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md` and
@@ -280,7 +280,8 @@ Sphere's move from experimental/private plumbing to a standard Visualizer is als
 promote the renderer while leaving it dependent on hidden Spectrum settings or a thinner Settings contract than older modes.
 
 - [ ] **S1. Prove consumed controls first.** Inventory every analysis/reaction/material/presentation value Sphere actually
-  consumes and prove which controls materially change those seams. Expose the useful controls; remove/avoid dead controls.
+  consumes and prove which controls materially change those seams. Expose the useful controls; remove/avoid dead controls. Refresh the stale smooth/Magma/Water Sphere paragraph in
+  `Docs/Contracts.md` against the current Voxel owners rather than restoring retired controls.
 - [ ] **S2. Sphere-owned technical/analysis profile.** Replace hidden whole-Spectrum technical-profile borrowing with
   Sphere-owned descriptor/capability metadata and canonical persisted values, using the same registry-derived shared authoring
   substrate from §4. Preserve compatibility for missing persisted keys by seeding from the currently accepted behavior once,
