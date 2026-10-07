@@ -285,10 +285,10 @@ promote the renderer while leaving it dependent on hidden Spectrum settings or a
 - [ ] **S5. Standard promotion semantics.** Remove the experimental-only product treatment once acceptance lands: standard
   registry/preset/reset behavior, normal enable/selection semantics and Guided Setup eligibility as appropriate, without losing
   lazy import/construction or inactive dormancy.
-- [ ] **S6. Shared Scene3D migration.** Move Sphere per-frame values into the shared uniform block, finish shared
-  Scene3D lifecycle/resource/dormancy migration, and remove superseded Sphere-local low-level plumbing after parity. Prefer new
-  reusable primitives (transparency, shadows, refraction/lighting helpers) where they also benefit Extruded, Shockwave or the
-  transition tranche.
+- [~] **S6. Awaiting Validation: loaded-desktop GPU tail.** The shared per-frame uniform block, ring/resource/lifecycle
+  migration has focused driver, retirement and unchanged-golden proof. Investigate the measured whole-host GPU p90 increase
+  under actual loaded display use before claiming performance neutrality; the lower CPU submit/GL-call count and near-neutral
+  isolated draw time do not close that gate. `Docs/Reference/Sphere_Visualizer.md` owns the scoped measurements.
 - [ ] **S7. Physical/golden acceptance.** Behavioral vocabulary preserved or stronger; Mirror Ball / Mirror Cubes, tier AA,
   overflow, wallpaper reflection, opaque/translucent looks, Rainbow, particle/fragment extremes and distinct preset-owned
   reactions on bright/dark images and both displays. The promotion must not regress current Sphere goldens merely to satisfy a

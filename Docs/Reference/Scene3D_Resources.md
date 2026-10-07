@@ -81,8 +81,13 @@ first frame, kept warm across `park()` and released with the renderer. A ring no
 `Scene3DStorageLayout` (import-safe, `rendering/gl_programs/scene3d.py`) declares one std430 record array: GLSL struct and
 buffer block, member offsets, record stride (rounded to the largest member alignment only, so three floats stride 12),
 `pack(records)` and an equivalent numpy structured `dtype()`. Records bind through the same ring at a consumer-chosen
-storage binding. No current consumer moves to storage buffers: a two-array Visualizer upload would trade two calls for
-four, and Sphere's eight cohort arrays plus section drives belong to its S19 promotion; S15-S18 consumers use it first.
+storage binding. Sphere's bounded section drives and cohort arrays instead travel together in its shared
+`SphereFrameBlock`: `Scene3DBlockLayout` supports fixed-size std140 scalar/vector/matrix arrays with their standard padded
+strides. Hero and projected-shadow programs share that declaration and one renderer-owned ring. Intake uses one bounded
+scope with distinct immutable shadow/hero copies; outtake uses bounded per-layer scopes with its extra pass patched inside
+each. Program attachment is allocation
+free, prepared reveal warms the ring only for admitted Sphere, and the normal renderer retirement releases it. The detailed
+consumer/ownership contract is in `Sphere_Visualizer.md` → Shared frame upload and retirement.
 
 Measured (960x540 offscreen Exploding Tiles, three interleaved HEAD/new process pairs, 210 warm frames each, flush per
 frame; 28 frames across four setups byte-identical): GL calls per frame 215 -> 211 by default and 281 -> 267 with Motion
@@ -184,6 +189,18 @@ bindings to Qt, including after a renderer raises. Existing program, VAO, array-
 depth and stencil restoration remains binding. DSA construction does not remove draw-time inherited-state duties.
 The expanded fence deliberately pays for the previously missing state; the isolated binding measurement excludes it.
 
+## Direct translucent bodies and directional shadows
+
+Extruded Spectrum keeps its opaque body draw unchanged at body alpha 1. Below that value it draws only each box's
+eye-facing faces, in the existing far-to-near bar order, with depth writes disabled; this is exact for the row's
+disjoint x slabs and lets the photographed backdrop remain visible. This is not an Extruded-local OIT target.
+
+`directional_shadow_vector()` and `directional_shadow_pass()` are target-free shared Scene3D primitives. A consumer
+derives orientation only from the already-resolved canonical `widgets.shadows.direction` projection, keeps its own
+shadow magnitude/strength, and draws into its existing scene target. An off shadow therefore creates no target,
+program, texture or background cadence; an active shadow adds one direct silhouette draw. Consumers explicitly restore
+their following body-pass depth state, and the existing visualizer fence still owns inherited Quick state.
+
 ## Change boundaries and regression routes
 
 - `test_scene3d_resources.py`: real static mesh pixels, immutable storage, untouched generic bindings, one sampler
@@ -217,3 +234,6 @@ The expanded fence deliberately pays for the previously missing state; the isola
   unbound, after a failure, and across a real motion-blurred frame); runs without Motion Blur compile and dispatch no
   compute for every covered transition consumer; fixed loud tile capacity; release returns to zero and rebuilds; failed compute
   compiles/links leave no shader or program.
+- `test_qtquick_extruded_spectrum.py`: real-driver alpha compositing over an existing backdrop, order-sensitive
+  overlapping translucent bars, directional-shadow positive/negative pixels, and unchanged target ownership across
+  the shadow switch.

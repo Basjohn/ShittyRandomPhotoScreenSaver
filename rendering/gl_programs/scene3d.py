@@ -1017,6 +1017,35 @@ _STD140 = {
 }
 
 
+@lru_cache(maxsize=64)
+def _std140_type(glsl_type: str) -> tuple[str, int, int, int]:
+    """(element type, count, alignment, stride) for a fixed-size block field."""
+    match = re.fullmatch(r"(\w+)\[([1-9]\d*)\]", glsl_type)
+    element, count = (match.group(1), int(match.group(2))) if match else (glsl_type, 1)
+    alignment, size, _format = _STD140[element]
+    if match:
+        alignment = -(-alignment // 16) * 16
+        size = -(-size // alignment) * alignment
+    return element, count, alignment, size
+
+
+def _pack_std140_value(glsl_type: str, value) -> bytes:
+    import struct
+
+    element, count, _alignment, stride = _std140_type(glsl_type)
+    fmt = "<" + _STD140[element][2]
+    if "[" not in glsl_type:
+        items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+        return struct.pack(fmt, *items)
+    if len(value) != count:
+        raise ValueError(f"{glsl_type} requires exactly {count} elements")
+    data = bytearray(count * stride)
+    for index, item in enumerate(value):
+        items = tuple(item) if isinstance(item, (tuple, list)) else (item,)
+        struct.pack_into(fmt, data, index * stride, *items)
+    return bytes(data)
+
+
 @dataclass(frozen=True)
 class Scene3DBlockLayout:
     """One per-frame uniform block: its GLSL declaration, std140 offsets and packing
@@ -1031,14 +1060,18 @@ class Scene3DBlockLayout:
     def of(cls, name: str, fields: tuple[tuple[str, str], ...]) -> "Scene3DBlockLayout":
         offsets, cursor = [], 0
         for _field, glsl_type in fields:
-            alignment, size, _format = _STD140[glsl_type]
+            _element, count, alignment, stride = _std140_type(glsl_type)
             cursor = -(-cursor // alignment) * alignment
             offsets.append(cursor)
-            cursor += size
+            cursor += count * stride
         return cls(name, tuple(fields), tuple(offsets), -(-cursor // 16) * 16)
 
     def glsl(self) -> str:
-        members = "".join(f"    {glsl_type} {field};\n" for field, glsl_type in self.fields)
+        members = ""
+        for field, glsl_type in self.fields:
+            element, count, _alignment, _stride = _std140_type(glsl_type)
+            suffix = f"[{count}]" if "[" in glsl_type else ""
+            members += f"    {element} {field}{suffix};\n"
         return f"layout(std140) uniform {self.name} {{\n{members}}};\n"
 
     def pack(self, values) -> bytes:
@@ -1047,9 +1080,14 @@ class Scene3DBlockLayout:
         data = bytearray(self.size)
         for (field, glsl_type), offset in zip(self.fields, self.offsets):
             value = values[field]
-            fmt = _STD140[glsl_type][2]
-            items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
-            struct.pack_into("<" + fmt, data, offset, *items)
+            if "[" in glsl_type:
+                packed = _pack_std140_value(glsl_type, value)
+                data[offset:offset + len(packed)] = packed
+            else:
+                # Preserve the direct scalar/vector path for existing consumers:
+                # array support must not add a temporary allocation per member.
+                items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+                struct.pack_into("<" + _STD140[glsl_type][2], data, offset, *items)
         return bytes(data)
 
     def pack_fields(self, values) -> tuple[tuple[int, bytes], ...]:
@@ -1063,10 +1101,22 @@ class Scene3DBlockLayout:
                 glsl_type, offset = members[field]
             except KeyError as exc:
                 raise KeyError(f"{self.name} has no field {field!r}") from exc
-            fmt = _STD140[glsl_type][2]
-            items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
-            packed.append((offset, struct.pack("<" + fmt, *items)))
+            if "[" in glsl_type:
+                part = _pack_std140_value(glsl_type, value)
+            else:
+                items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+                part = struct.pack("<" + _STD140[glsl_type][2], *items)
+            packed.append((offset, part))
         return tuple(packed)
+
+    def patch(self, data: bytes, values) -> bytes:
+        """Patch one already packed immutable frame without repacking other fields."""
+        if len(data) != self.size:
+            raise ValueError(f"{self.name} requires {self.size} packed bytes")
+        patched = bytearray(data)
+        for offset, part in self.pack_fields(values):
+            patched[offset:offset + len(part)] = part
+        return bytes(patched)
 
 
 @dataclass(frozen=True)
