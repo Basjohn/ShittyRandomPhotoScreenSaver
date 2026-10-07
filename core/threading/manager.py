@@ -1382,9 +1382,9 @@ class ThreadManager:
             or not background_shutdown_complete
         ):
             logger.critical(
-                "Thread manager shutdown retained live lane workers "
+                "Thread manager shutdown retained lane workers or native resources "
                 "(compute_complete=%s affinity_complete=%s background_complete=%s); "
-                "lifecycle accounting remains armed until they exit",
+                "lifecycle accounting remains armed until ownership drains",
                 lane_shutdown_complete,
                 affinity_shutdown_complete,
                 background_shutdown_complete,

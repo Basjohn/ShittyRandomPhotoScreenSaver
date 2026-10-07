@@ -21,7 +21,12 @@ from PySide6.QtCore import QObject
 from core.logging.logger import get_logger, is_verbose_logging
 from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
-from utils.audio_capture import create_audio_capture, AudioCaptureConfig
+from utils.audio_capture import (
+    CAPTURE_FIRST_CALLBACK_GRACE_S,
+    CAPTURE_STALE_AFTER_S,
+    AudioCaptureConfig,
+    create_audio_capture,
+)
 
 
 logger = get_logger(__name__)
@@ -308,6 +313,55 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._spectrum_shape_nodes: Optional[list] = None
         self._effective_block_size: int = 0
         self._capture_callback_failures: int = 0
+        # Native loopback backends create and release COM/audio resources.  The
+        # BeatEngine injects one ThreadManager affinity lane before the worker
+        # can admit capture.  Do not create a thread or run a synchronous
+        # compatibility path here: the lane is the sole native-capture owner.
+        self._capture_lane = None
+        self._capture_lock = threading.RLock()
+        self._capture_generation: int = 0
+        self._capture_start_pending = False
+        self._capture_restart_pending = False
+        self._capture_stop_pending = False
+        self._capture_owner_scheduled = False
+        self._capture_desired_running = False
+        self._backend_generation = 0
+        self._capture_release_failed = False
+        self._capture_config_epoch = 0
+        self._capture_applied_config_epoch = 0
+        self._capture_started_monotonic = 0.0
+        self._capture_last_callback_monotonic = 0.0
+
+    def set_capture_lane(self, lane) -> None:
+        """Install the one engine-owned serial native-capture lane.
+
+        This must happen before a capture start.  Replacing a live owner would
+        allow two native streams to overlap, so it is deliberately rejected.
+        """
+        with self._capture_lock:
+            if lane is self._capture_lane:
+                return
+            if (
+                self._running
+                or self._capture_start_pending
+                or self._capture_stop_pending
+                or self._capture_owner_scheduled
+                or self._backend is not None
+            ):
+                raise RuntimeError("cannot replace an active audio capture owner")
+            self._capture_lane = lane
+
+    def has_capture_owner_work(self) -> bool:
+        """Whether native capture still owns or is retiring a lane transaction."""
+        with self._capture_lock:
+            return bool(
+                self._running
+                or self._backend is not None
+                or self._capture_start_pending
+                or self._capture_restart_pending
+                or self._capture_stop_pending
+                or self._capture_owner_scheduled
+            )
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         rec = bool(recommended)
@@ -335,32 +389,34 @@ class SpotifyVisualizerAudioWorker(QObject):
 
     def set_audio_block_size(self, block_size: int) -> None:
         value = max(0, int(block_size))
-        previous = self._preferred_block_size
-        if value == previous:
-            return
-        self._preferred_block_size = value
-        if not self._running or self._backend is None:
-            return
+        with self._capture_lock:
+            previous = self._preferred_block_size
+            if value == previous:
+                return
+            self._preferred_block_size = value
+            self._capture_config_epoch += 1
+            running = self._running and self._capture_desired_running
+            admitted = True
+            if running:
+                # Mutate the desired configuration and admit its drain together;
+                # a fast owner must not complete it before an extra GUI restart
+                # request is submitted for the same configuration.
+                self._capture_restart_pending = True
+                admitted = self._schedule_capture_owner_locked()
+                if not admitted:
+                    self._capture_restart_pending = False
 
-        backend_cfg = getattr(self._backend, "_config", None)
-        if backend_cfg is not None:
-            backend_cfg.block_size = value
+        if not running:
+            return
 
         logger.info(
             "[SPOTIFY_VIS] Audio block size changed while running (%s -> %d); restarting capture",
             previous,
             value,
         )
-        restarted = self.restart_capture()
-        if restarted:
-            logger.info(
-                "[SPOTIFY_VIS] Audio capture restarted for block size change (preferred=%d effective=%d)",
-                value,
-                self._effective_block_size,
-            )
-        else:
+        if not admitted:
             logger.warning(
-                "[SPOTIFY_VIS] Audio capture restart failed after block size change (preferred=%d)",
+                "[SPOTIFY_VIS] Audio capture restart was not admitted after block size change (preferred=%d)",
                 value,
             )
 
@@ -500,7 +556,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self.reset_reactivity_state()
 
     def is_running(self) -> bool:
-        return self._running
+        with self._capture_lock:
+            return self._running
 
     # Bounded reporting for a capture callback that is running but cannot
     # publish. The installed run proved why this matters: a NameError in the
@@ -542,122 +599,300 @@ class SpotifyVisualizerAudioWorker(QObject):
         )
 
     def start(self) -> None:
-        """Start audio capture using centralized audio_capture module."""
-        if self._running:
-            return
+        """Queue a native-capture start on the engine-owned affinity lane."""
+        with self._capture_lock:
+            if self._capture_release_failed:
+                raise RuntimeError("audio capture admission is closed after native release failure")
+            if self._capture_desired_running:
+                return
+            if self._preferred_block_size is None:
+                raise RuntimeError("visualizer audio block-size configuration is unresolved")
+            lane = self._capture_lane
+            if lane is None or bool(getattr(lane, "is_stopped", False)):
+                raise RuntimeError("visualizer audio capture requires its affinity lane")
+            self._capture_generation += 1
+            self._capture_desired_running = True
+            self._capture_start_pending = True
+            self._capture_started_monotonic = 0.0
+            self._capture_last_callback_monotonic = 0.0
+            if not self._schedule_capture_owner_locked():
+                self._capture_desired_running = False
+                self._capture_start_pending = False
+                raise RuntimeError("visualizer audio capture affinity lane rejected start")
 
+    def _schedule_capture_owner_locked(self) -> bool:
+        """Admit one drain packet; later requests replace its desired state.
+
+        Admission and desired-state mutation share the lock, so concurrent
+        stop/start cannot invert submissions. Native work never holds it.
+        """
+        if self._capture_owner_scheduled:
+            return True
+        lane = self._capture_lane
+        if lane is None or bool(getattr(lane, "is_stopped", False)):
+            return False
+        self._capture_owner_scheduled = True
         try:
-            import numpy as np
-        except ImportError as exc:
-            logger.info("[SPOTIFY_VIS] numpy not available: %s", exc)
-            return
-        self._np = np
+            accepted = bool(lane.submit(self._drain_capture_on_owner))
+        except Exception:
+            self._capture_owner_scheduled = False
+            logger.exception("[SPOTIFY_VIS] Audio capture affinity lane submission failed")
+            raise
+        if not accepted:
+            self._capture_owner_scheduled = False
+        return accepted
 
-        if self._preferred_block_size is None:
-            raise RuntimeError("visualizer audio block-size configuration is unresolved")
-        block_size = self._preferred_block_size if self._preferred_block_size > 0 else 0
-        config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=block_size)
-        self._backend = create_audio_capture(config)
-        
-        if self._backend is None:
-            logger.info("[SPOTIFY_VIS] No audio capture backend available")
-            return
-
-        def _on_audio_samples(samples) -> None:
-            """Process incoming audio samples."""
-            try:
-                np_mod = self._np
-                if samples is None or len(samples) == 0:
+    def _on_audio_samples(self, generation: int, samples) -> None:
+        """Process a backend callback only while its owner generation is live."""
+        try:
+            with self._capture_lock:
+                if generation != self._capture_generation or not (
+                    self._running or self._capture_start_pending
+                ):
                     return
-                
-                if hasattr(samples, "ndim") and samples.ndim > 1:
-                    arr = np_mod.asarray(samples, dtype=np_mod.float32)
-                    channel_count = arr.shape[1] if arr.ndim > 1 else 1
-                    if channel_count <= 1:
-                        mono = arr.reshape(-1)
-                    else:
-                        selected = arr
-                        if channel_count > 2:
-                            try:
-                                energy = np_mod.sum(arr * arr, axis=0)
-                                top_k = min(2, channel_count)
-                                top_idx = np_mod.argsort(energy)[-top_k:]
-                                selected = arr[:, top_idx]
-                            except Exception as e:
-                                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                                selected = arr[:, :2]
-                        mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
-                else:
-                    mono = np_mod.asarray(samples, dtype=np_mod.float32)
-                
-                if mono.dtype == np_mod.int16:
-                    mono = mono.astype(np_mod.float32) / 32768.0
-                
-                if mono.size > 2048:
-                    mono = mono[-2048:]
-                
-                self._buffer.publish(_AudioFrame(
-                    samples=mono.copy(),
-                    activation_id=getattr(self, "_activation_id", None),
-                    capture_ts=time.time(),
-                ))
-                if self._capture_callback_failures:
-                    self._note_capture_callback_recovered()
-                
-                if is_verbose_logging():
-                    peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
-                    self._frame_debug_counter += 1
-                    if self._frame_debug_counter % 60 == 1:
-                        logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
-            except Exception as exc:
-                self._report_capture_callback_failure(exc)
+                activation_id = getattr(self, "_activation_id", None)
+                buffer = self._buffer
+            np_mod = self._np
+            if samples is None or len(samples) == 0:
+                return
+            callback_ts = time.monotonic()
+            capture_ts = time.time()
 
-        if self._backend.start(_on_audio_samples):
-            self._running = True
-            self._effective_block_size = int(getattr(self._backend, "_negotiated_block_size", 0) or 0)
-            logger.info(
-                "[SPOTIFY_VIS] Audio worker started (%s, %dHz, %d channels, effective_block=%d, preferred=%d)",
-                self._backend.__class__.__name__,
-                self._backend.sample_rate,
-                self._backend.channels,
-                self._effective_block_size,
-                self._preferred_block_size,
+            if hasattr(samples, "ndim") and samples.ndim > 1:
+                arr = np_mod.asarray(samples, dtype=np_mod.float32)
+                channel_count = arr.shape[1] if arr.ndim > 1 else 1
+                if channel_count <= 1:
+                    mono = arr.reshape(-1)
+                else:
+                    selected = arr
+                    if channel_count > 2:
+                        energy = np_mod.sum(arr * arr, axis=0)
+                        top_k = min(2, channel_count)
+                        top_idx = np_mod.argsort(energy)[-top_k:]
+                        selected = arr[:, top_idx]
+                    mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
+            else:
+                mono = np_mod.asarray(samples, dtype=np_mod.float32)
+
+            # Both selected native backends deliver normalized float32 PCM.
+            # Integer conversion is not a second supported capture format.
+            if mono.size > 2048:
+                mono = mono[-2048:]
+
+            frame = _AudioFrame(
+                samples=mono.copy(),
+                activation_id=activation_id,
+                capture_ts=capture_ts,
             )
-        else:
-            logger.info("[SPOTIFY_VIS] Failed to start audio capture")
-            self._backend = None
+            with self._capture_lock:
+                if generation != self._capture_generation or not (
+                    self._running or self._capture_start_pending
+                ):
+                    return
+                if activation_id != getattr(self, "_activation_id", None) or buffer is not self._buffer:
+                    return
+                # Only the tiny final publication is atomic with stop admission;
+                # channel selection/conversion/copy must not block the GUI lock.
+                buffer.publish(frame)
+                self._capture_last_callback_monotonic = callback_ts
+            if self._capture_callback_failures:
+                self._note_capture_callback_recovered()
+
+            if is_verbose_logging():
+                peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
+                self._frame_debug_counter += 1
+                if self._frame_debug_counter % 60 == 1:
+                    logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
+        except Exception as exc:
+            self._report_capture_callback_failure(exc)
+
+    def _release_capture_backend_on_owner(self, backend) -> None:
+        try:
+            backend.stop()
+            self._capture_lane.set_resource_held(False)
+        except Exception:
+            logger.exception("[SPOTIFY_VIS] Audio capture stop failed on owner lane")
+            with self._capture_lock:
+                # Retain a backend whose close failed even if its open was
+                # rejected. Losing the local reference would hide native debt
+                # and allow another stream to overlap unresolved resources.
+                self._backend = backend
+                self._backend_generation = -1
+                self._capture_generation += 1
+                self._capture_desired_running = False
+                self._running = False
+                self._capture_start_pending = False
+                self._capture_restart_pending = False
+                self._capture_stop_pending = True
+                self._capture_owner_scheduled = False
+                self._capture_release_failed = True
+            raise
+
+    def _drain_capture_on_owner(self) -> None:
+        """Reconcile one native backend with the newest admitted lifecycle state.
+
+        There is one executing/queued transaction and one overwriteable desired
+        state, never a FIFO of start/stop closures. Retired resources close before
+        any replacement opens, including when a driver blocks during start.
+        """
+        while True:
+            with self._capture_lock:
+                backend = self._backend
+                generation = self._capture_generation
+                desired = self._capture_desired_running
+                if backend is not None and (
+                    not desired or self._backend_generation != generation
+                ):
+                    action = "stop"
+                elif not desired:
+                    self._capture_stop_pending = False
+                    self._capture_owner_scheduled = False
+                    return
+                elif backend is None:
+                    action = "start"
+                elif (
+                    self._capture_restart_pending
+                    or self._capture_applied_config_epoch != self._capture_config_epoch
+                ):
+                    action = "restart"
+                    self._capture_restart_pending = True
+                    self._capture_started_monotonic = 0.0
+                    self._capture_last_callback_monotonic = 0.0
+                else:
+                    self._capture_owner_scheduled = False
+                    return
+                config_epoch = self._capture_config_epoch
+                preferred = int(self._preferred_block_size or 0)
+
+            if action == "stop":
+                # Keep the pointer until release succeeds. A failed native close
+                # must remain visible and cannot admit an overlapping backend.
+                self._release_capture_backend_on_owner(backend)
+                with self._capture_lock:
+                    self._backend = None
+                continue
+
+            if action == "start":
+                backend = None
+                try:
+                    # A first NumPy import is part of cold capture preparation,
+                    # so it belongs off the GUI thread with native construction.
+                    import numpy as np
+                    self._np = np
+                    config = AudioCaptureConfig(
+                        sample_rate=48000, channels=2, block_size=preferred
+                    )
+                    backend = create_audio_capture(config)
+                    if backend is None:
+                        logger.error("[SPOTIFY_VIS] No audio capture backend available")
+                        succeeded = False
+                    else:
+                        self._capture_lane.set_resource_held(True)
+                        succeeded = bool(backend.start(
+                            lambda samples, epoch=generation: self._on_audio_samples(epoch, samples)
+                        ))
+                        if not succeeded:
+                            logger.error("[SPOTIFY_VIS] Audio capture backend rejected start")
+                except Exception:
+                    logger.exception("[SPOTIFY_VIS] Audio capture start failed on owner lane")
+                    succeeded = False
+            else:
+                try:
+                    backend_cfg = getattr(backend, "_config", None)
+                    if backend_cfg is not None:
+                        backend_cfg.block_size = preferred
+                    logger.info("[SPOTIFY_VIS] Restarting audio capture on its owner lane")
+                    succeeded = bool(backend.restart())
+                    if not succeeded:
+                        logger.error("[SPOTIFY_VIS] Audio capture restart failed")
+                except Exception:
+                    logger.exception("[SPOTIFY_VIS] Audio capture restart failed on owner lane")
+                    succeeded = False
+
+            with self._capture_lock:
+                current = (
+                    generation == self._capture_generation
+                    and self._capture_desired_running
+                )
+                adopted = current and succeeded
+                if adopted:
+                    self._backend = backend
+                    self._backend_generation = generation
+                    self._running = True
+                    self._capture_start_pending = False
+                    self._capture_stop_pending = False
+                    # The grace starts at native success, not GUI admission.
+                    # A callback from inside start/restart already proved health;
+                    # adoption must preserve that observation.
+                    self._capture_started_monotonic = time.monotonic()
+                    self._capture_applied_config_epoch = config_epoch
+                    self._capture_restart_pending = False
+                    self._effective_block_size = int(
+                        getattr(backend, "_negotiated_block_size", 0) or 0
+                    )
+                elif current:
+                    # A failed operation is terminal until another explicit
+                    # start/wake. Never spin a native retry/fallback loop.
+                    self._capture_desired_running = False
+                    self._running = False
+                    self._capture_start_pending = False
+                    self._capture_restart_pending = False
+                    self._capture_started_monotonic = 0.0
+                    self._capture_last_callback_monotonic = 0.0
+                    self._effective_block_size = 0
+
+            if not adopted and backend is not None:
+                self._release_capture_backend_on_owner(backend)
+                with self._capture_lock:
+                    if self._backend is backend:
+                        self._backend = None
+            if adopted:
+                logger.info(
+                    "[SPOTIFY_VIS] Audio capture %s on owner lane (%s, effective_block=%d, preferred=%d)",
+                    "started" if action == "start" else "restarted",
+                    backend.__class__.__name__,
+                    self._effective_block_size,
+                    preferred,
+                )
+            # Requests arriving during native work are read once more here.
+            # A stop fences callbacks immediately and this drain releases the
+            # old backend exactly once before processing the newest start.
 
     def stop(self) -> None:
-        """Stop audio capture."""
-        if not self._running:
-            return
-        self._running = False
-        if self._backend is not None:
-            try:
-                self._backend.stop()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            self._backend = None
-        self._effective_block_size = 0
-        logger.info("[SPOTIFY_VIS] Audio worker stopped")
+        """Fence capture immediately; its admitted drain releases native state."""
+        with self._capture_lock:
+            if not (
+                self._capture_desired_running or self._backend is not None
+                or self._capture_owner_scheduled
+            ):
+                return
+            self._capture_generation += 1
+            self._capture_desired_running = False
+            self._running = False
+            self._capture_start_pending = False
+            self._capture_restart_pending = False
+            self._effective_block_size = 0
+            self._capture_started_monotonic = 0.0
+            self._capture_last_callback_monotonic = 0.0
+            self._capture_stop_pending = True
+            if not self._schedule_capture_owner_locked():
+                raise RuntimeError("visualizer audio capture affinity lane rejected stop")
 
     def is_capture_healthy(self) -> bool:
         """Check if audio capture is receiving data (callback firing)."""
-        if self._backend is None:
-            return False
-        try:
-            return self._backend.is_healthy()
-        except Exception:
-            return False
+        with self._capture_lock:
+            if not self._running or self._capture_last_callback_monotonic <= 0.0:
+                return False
+            return (time.monotonic() - self._capture_last_callback_monotonic) < CAPTURE_STALE_AFTER_S
 
     def is_capture_starting(self) -> bool:
         """True while a started stream is still waiting for its first callback."""
-        if self._backend is None:
-            return False
-        try:
-            return bool(self._backend.is_capture_starting())
-        except Exception:
-            return False
+        with self._capture_lock:
+            if self._capture_start_pending:
+                return True
+            if not self._running or self._capture_last_callback_monotonic > 0.0:
+                return False
+            return (time.monotonic() - self._capture_started_monotonic) < CAPTURE_FIRST_CALLBACK_GRACE_S
 
     def is_capture_stale(self) -> bool:
         """True only for a capture that ran (or should have) and then went quiet.
@@ -665,25 +900,33 @@ class SpotifyVisualizerAudioWorker(QObject):
         This is the only condition that authorizes a wake-driven restart; a
         just-started capture is deliberately not stale.
         """
-        if self._backend is None:
-            return False
-        try:
-            return bool(self._backend.is_capture_stale())
-        except Exception:
-            return False
+        with self._capture_lock:
+            if self._capture_start_pending or not self._running:
+                return False
+            observed = self._capture_last_callback_monotonic or self._capture_started_monotonic
+            if observed <= 0.0:
+                return False
+            threshold = (
+                CAPTURE_STALE_AFTER_S
+                if self._capture_last_callback_monotonic > 0.0
+                else CAPTURE_FIRST_CALLBACK_GRACE_S
+            )
+            return (time.monotonic() - observed) >= threshold
 
     def restart_capture(self) -> bool:
-        """Restart the audio capture stream."""
-        if self._backend is None:
-            return False
-        try:
-            logger.info("[SPOTIFY_VIS] Restarting audio capture...")
-            restarted = self._backend.restart()
-            if restarted:
-                self._effective_block_size = int(getattr(self._backend, "_negotiated_block_size", 0) or 0)
-            return restarted
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Failed to restart capture: %s", e)
+        """Return admission/coalescing success, not asynchronous native outcome."""
+        with self._capture_lock:
+            if not self._capture_desired_running:
+                return False
+            if self._capture_start_pending or self._capture_restart_pending:
+                return True
+            if not self._running or self._backend is None:
+                return False
+            self._capture_restart_pending = True
+            if self._schedule_capture_owner_locked():
+                return True
+            self._capture_restart_pending = False
+            logger.error("[SPOTIFY_VIS] Audio capture affinity lane rejected restart")
             return False
 
     # ------------------------------------------------------------------
@@ -805,4 +1048,3 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Delegates to widgets.spotify_visualizer.bar_computation."""
         from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
         return compute_bars_from_samples(self, samples)
-

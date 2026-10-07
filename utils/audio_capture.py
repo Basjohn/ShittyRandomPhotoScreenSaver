@@ -1,8 +1,8 @@
 """
 Audio capture utilities for system loopback audio.
 
-Provides a unified interface for capturing system audio output using
-either PyAudioWPatch (preferred on Windows) or sounddevice as fallback.
+Captures Windows system output through PyAudioWPatch. The non-Windows platform
+boundary uses sounddevice; selected-backend failure never switches implementations.
 """
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional, Any
-import os
 import platform
 import time
 
@@ -104,6 +103,39 @@ class AudioCaptureBackend(ABC):
     _capture_state: CaptureState = CaptureState.STOPPED
     _capture_started_ts: float = 0.0
     _last_callback_ts: float = 0.0
+    _native_release_failed: bool = False
+    _native_callback_failures: int = 0
+
+    def _report_native_callback_failure(self) -> None:
+        self._native_callback_failures += 1
+        if self._native_callback_failures == 1 or self._native_callback_failures % 1000 == 0:
+            logger.error(
+                "[AUDIO] %s native PCM callback failed; packet rejected (failures=%d)",
+                type(self).__name__, self._native_callback_failures, exc_info=True,
+            )
+
+    def _note_native_callback_recovered(self) -> None:
+        if self._native_callback_failures:
+            logger.info(
+                "[AUDIO] %s native PCM callback recovered after %d rejected packets",
+                type(self).__name__, self._native_callback_failures,
+            )
+            self._native_callback_failures = 0
+
+    def _check_native_release_failure(self) -> None:
+        if self._native_release_failed:
+            raise RuntimeError(
+                f"{type(self).__name__} native release previously failed; "
+                "retained resources cannot be retried or reopened"
+            )
+
+    def _report_native_release_failure(self, operation: str) -> None:
+        self._native_release_failed = True
+        self._note_capture_failed()
+        logger.error(
+            "[AUDIO] %s native %s failed; unresolved resource handles are retained",
+            type(self).__name__, operation, exc_info=True,
+        )
 
     def _note_capture_starting(self) -> None:
         """Record a stream that opened successfully but has no callback yet."""
@@ -172,15 +204,6 @@ class AudioCaptureBackend(ABC):
         pass
 
 
-def _build_block_size_candidates(preferred: int) -> list[int]:
-    """Return the prioritized block size list honoring user preference."""
-
-    ordered = [128, 256, 512, 1024]
-    if preferred and preferred in ordered:
-        return [preferred] + [size for size in ordered if size != preferred]
-    return ordered
-
-
 class PyAudioWPatchBackend(AudioCaptureBackend):
     """Audio capture using PyAudioWPatch WASAPI loopback (Windows only)."""
     
@@ -202,9 +225,11 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             import pyaudiowpatch as pyaudio
             wasapi_info = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
         except OSError:
+            logger.exception("[AUDIO] Selected WASAPI host API is unavailable")
             return None
         
         if wasapi_info is None:
+            logger.error("[AUDIO] Selected WASAPI host API could not be resolved")
             return None
             
         # Get default output device
@@ -212,11 +237,12 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             default_speakers = pa.get_device_info_by_index(
                 wasapi_info["defaultOutputDevice"]
             )
-        except Exception as e:
-            logger.debug("[AUDIO] Exception suppressed: %s", e)
+        except Exception:
+            logger.exception("[AUDIO] Selected default WASAPI output device could not be resolved")
             return None
         
         if default_speakers is None:
+            logger.error("[AUDIO] Selected default WASAPI output device is missing")
             return None
             
         # If already a loopback device, use it directly
@@ -226,20 +252,21 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         # Find matching loopback device
         try:
             base_name = str(default_speakers.get("name", ""))
-            chosen = None
             for loopback in pa.get_loopback_device_info_generator():
                 loop_name = str(loopback.get("name", ""))
-                if chosen is None:
-                    chosen = loopback
                 if base_name and base_name in loop_name:
-                    chosen = loopback
-                    break
-            return chosen
-        except Exception as e:
-            logger.debug("[AUDIO] Exception suppressed: %s", e)
+                    return loopback
+            logger.error(
+                "[AUDIO] No WASAPI loopback matches selected default output %r; capture start rejected",
+                base_name,
+            )
+            return None
+        except Exception:
+            logger.exception("[AUDIO] Selected default WASAPI output loopback lookup failed")
             return None
     
     def start(self, callback: Callable[[Any], None]) -> bool:
+        self._check_native_release_failure()
         if self._running:
             return True
         started = self._start_stream(callback)
@@ -285,12 +312,14 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         
         # Get device parameters
         try:
-            self._channels = int(device.get("maxInputChannels", 0) or 0)
-            self._sample_rate = int(device.get("defaultSampleRate", 48000) or 48000)
-        except Exception as e:
-            logger.debug("[AUDIO] Exception suppressed: %s", e)
-            self._channels = 2
-            self._sample_rate = 48000
+            self._channels = int(device["maxInputChannels"])
+            self._sample_rate = int(device["defaultSampleRate"])
+            if self._channels <= 0 or self._sample_rate <= 0:
+                raise ValueError("native capture channels and sample rate must be positive")
+        except Exception:
+            logger.exception("[AUDIO] Invalid selected PyAudioWPatch device metadata; capture start rejected")
+            self._cleanup_pa()
+            return False
         
         if is_verbose_logging():
             logger.debug(
@@ -301,74 +330,55 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 self._sample_rate,
             )
         
-        if self._channels <= 0 or self._sample_rate <= 0:
-            self._cleanup_pa()
-            return False
-        
         # Create stream callback
         self._callback = callback  # Store for restart
         
         def stream_callback(in_data, frame_count, time_info, status):
             try:
-                self._note_capture_callback()
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
-                try:
-                    ch = int(self._channels) if self._channels else 1
-                except Exception as e:
-                    logger.debug("[AUDIO] Exception suppressed: %s", e)
-                    ch = 1
-                if ch > 1:
-                    try:
-                        frames = int(samples.size // ch)
-                        if frames > 0 and (frames * ch) == int(samples.size):
-                            samples = samples.reshape(frames, ch)
-                    except Exception as e:
-                        logger.debug("[AUDIO] Exception suppressed: %s", e)
+                frames = int(frame_count)
+                if frames <= 0 or samples.size != frames * self._channels:
+                    raise ValueError("native float32 PCM packet does not match resolved frame/channel shape")
+                samples = samples.reshape(frames, self._channels)
                 callback(samples)
-            except Exception as e:
-                logger.debug("[AUDIO] Exception suppressed: %s", e)
+                self._note_capture_callback()
+                self._note_native_callback_recovered()
+            except Exception:
+                self._report_native_callback_failure()
             return (None, pyaudio.paContinue)
         
-        # Build priority-ordered block size list: user preference first, then fallbacks
-        preferred = self._config.block_size if self._config.block_size > 0 else 0
-        block_candidates = _build_block_size_candidates(preferred)
-
-        for block_size in block_candidates:
-            try:
-                self._stream = self._pa.open(
-                    format=pyaudio.paFloat32,
-                    channels=self._channels,
-                    rate=self._sample_rate,
-                    input=True,
-                    input_device_index=device["index"],
-                    frames_per_buffer=block_size,
-                    stream_callback=stream_callback,
-                )
-                self._stream.start_stream()
-                self._running = True
+        # The settings authority selects one exact block size. Zero is the
+        # native PortAudio unspecified size (Settings: Auto (Driver)); a failed
+        # explicit request must not silently substitute another authored size.
+        block_size = max(0, int(self._config.block_size))
+        try:
+            self._note_capture_starting()
+            self._stream = self._pa.open(
+                format=pyaudio.paFloat32,
+                channels=self._channels,
+                rate=self._sample_rate,
+                input=True,
+                input_device_index=device["index"],
+                frames_per_buffer=block_size,
+                stream_callback=stream_callback,
+            )
+            self._stream.start_stream()
+            self._running = True
+            if self._last_callback_ts <= 0.0:
                 self._note_capture_starting()
-                self._negotiated_block_size = int(block_size)
-                logger.info(
-                    "[AUDIO] PyAudioWPatch stream running (device=%s, negotiated_block=%d, preferred=%d)",
-                    device.get("name", "<unknown>"),
-                    block_size,
-                    preferred,
-                )
-                return True
-            except Exception as e:
-                if self._stream:
-                    try:
-                        self._stream.stop_stream()
-                        self._stream.close()
-                    except Exception as e2:
-                        logger.debug("[AUDIO] Exception suppressed: %s", e2)
-                    self._stream = None
-                if is_verbose_logging():
-                    logger.debug("[AUDIO] Block size %d failed: %s", block_size, e)
-        
-        self._cleanup_pa()
-        return False
-    
+            self._negotiated_block_size = block_size
+            logger.info(
+                "[AUDIO] PyAudioWPatch stream running (device=%s, negotiated_block=%d, requested=%d)",
+                device.get("name", "<unknown>"), block_size, block_size,
+            )
+            return True
+        except Exception:
+            logger.exception("[AUDIO] PyAudioWPatch stream open failed (requested_block=%d)", block_size)
+            if self._stream is not None:
+                self._close_stream()
+            self._cleanup_pa()
+            return False
+
     def restart(self) -> bool:
         """Restart the capture stream."""
         self.stop()
@@ -378,25 +388,32 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
 
     def _cleanup_pa(self) -> None:
         """Clean up PyAudio resources."""
-        if self._pa:
+        self._check_native_release_failure()
+        if self._pa is not None:
             try:
                 self._pa.terminate()
-            except Exception as e:
-                logger.debug("[AUDIO] Exception suppressed: %s", e)
+            except Exception:
+                self._report_native_release_failure("PyAudio termination")
+                raise
             self._pa = None
-    
-    def stop(self) -> None:
-        self._running = False
-        self._note_capture_stopped()
-        if self._stream:
+
+    def _close_stream(self) -> None:
+        self._check_native_release_failure()
+        if self._stream is not None:
             try:
                 self._stream.stop_stream()
                 self._stream.close()
-            except Exception as e:
-                logger.debug("[AUDIO] Exception suppressed: %s", e)
+            except Exception:
+                self._report_native_release_failure("stream close")
+                raise
             self._stream = None
-        self._negotiated_block_size = 0
+
+    def stop(self) -> None:
+        self._running = False
+        self._close_stream()
         self._cleanup_pa()
+        self._negotiated_block_size = 0
+        self._note_capture_stopped()
     
     def is_running(self) -> bool:
         return self._running
@@ -411,7 +428,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
 
 
 class SounddeviceBackend(AudioCaptureBackend):
-    """Audio capture using sounddevice (cross-platform fallback)."""
+    """Audio capture for the non-Windows sounddevice platform boundary."""
     
     def __init__(self, config: AudioCaptureConfig = None):
         self._config = config or AudioCaptureConfig()
@@ -493,6 +510,7 @@ class SounddeviceBackend(AudioCaptureBackend):
         return None
     
     def start(self, callback: Callable[[Any], None]) -> bool:
+        self._check_native_release_failure()
         if self._running:
             return True
         started = self._start_stream(callback)
@@ -528,30 +546,34 @@ class SounddeviceBackend(AudioCaptureBackend):
         
         # Get device parameters
         try:
-            self._channels = min(2, int(device.get("max_input_channels", 2)))
-            self._sample_rate = int(device.get("default_samplerate", 48000))
-        except Exception as e:
-            logger.debug("[AUDIO] Exception suppressed: %s", e)
-            self._channels = 2
-            self._sample_rate = 48000
+            self._channels = int(device["max_input_channels"])
+            self._sample_rate = int(device["default_samplerate"])
+            if self._channels <= 0 or self._sample_rate <= 0:
+                raise ValueError("native capture channels and sample rate must be positive")
+        except Exception:
+            logger.exception("[AUDIO] Invalid selected sounddevice metadata; capture start rejected")
+            return False
         
         # Create callback wrapper
         self._callback = callback  # Store for restart
 
         def stream_callback(indata, frames, time_info, status):
             try:
+                if (
+                    indata.ndim != 2 or indata.dtype != self._np.float32
+                    or frames <= 0 or indata.shape != (frames, self._channels)
+                ):
+                    raise ValueError("native float32 PCM packet does not match resolved frame/channel shape")
+                # Channel selection/mixing belongs to the shared audio worker.
+                callback(indata)
                 self._note_capture_callback()
-                # Mix to mono if stereo
-                if indata.shape[1] > 1:
-                    samples = indata.mean(axis=1).astype(self._np.float32)
-                else:
-                    samples = indata[:, 0].astype(self._np.float32)
-                callback(samples)
-            except Exception as e:
-                logger.debug("[AUDIO] Exception suppressed: %s", e)
+                self._note_native_callback_recovered()
+            except Exception:
+                self._report_native_callback_failure()
         
         # Open stream
         try:
+            self._note_capture_starting()
             device_idx = device.get("index") if isinstance(device, dict) else None
             self._stream = self._sd.InputStream(
                 device=device_idx,
@@ -563,7 +585,8 @@ class SounddeviceBackend(AudioCaptureBackend):
             )
             self._stream.start()
             self._running = True
-            self._note_capture_starting()
+            if self._last_callback_ts <= 0.0:
+                self._note_capture_starting()
             self._negotiated_block_size = int(self._config.block_size or 0)
             logger.info(
                 "[AUDIO] sounddevice started (device=%s, negotiated_block=%d, preferred=%d, rate=%dHz, channels=%d)",
@@ -574,21 +597,24 @@ class SounddeviceBackend(AudioCaptureBackend):
                 self._channels,
             )
             return True
-        except Exception as e:
-            logger.debug("[AUDIO] sounddevice stream failed: %s", e)
+        except Exception:
+            logger.exception("[AUDIO] sounddevice stream open failed")
+            self.stop()
             return False
     
     def stop(self) -> None:
         self._running = False
-        self._note_capture_stopped()
-        if self._stream:
+        self._check_native_release_failure()
+        if self._stream is not None:
             try:
                 self._stream.stop()
                 self._stream.close()
-            except Exception as e:
-                logger.debug("[AUDIO] Exception suppressed: %s", e)
+            except Exception:
+                self._report_native_release_failure("stream close")
+                raise
             self._stream = None
         self._negotiated_block_size = 0
+        self._note_capture_stopped()
     
     def is_running(self) -> bool:
         return self._running
@@ -611,8 +637,9 @@ class SounddeviceBackend(AudioCaptureBackend):
 
 def create_audio_capture(config: AudioCaptureConfig = None) -> Optional[AudioCaptureBackend]:
     """Create the best available audio capture backend.
-    
-    Tries PyAudioWPatch first on Windows, then falls back to sounddevice.
+
+    Windows owns the PyAudioWPatch WASAPI loopback path.  Other platforms use
+    the sounddevice implementation selected by their platform boundary.
     
     Args:
         config: Optional capture configuration
@@ -620,9 +647,7 @@ def create_audio_capture(config: AudioCaptureConfig = None) -> Optional[AudioCap
     Returns:
         AudioCaptureBackend instance or None if no backend available
     """
-    force_sounddevice = os.environ.get("SRPSS_FORCE_SOUNDDEVICE", "").lower() in ("1", "true", "yes")
-    
-    if platform.system().lower().startswith("win") and not force_sounddevice:
+    if platform.system().lower().startswith("win"):
         backend = PyAudioWPatchBackend(config)
         # We don't start here - just return the backend
         return backend

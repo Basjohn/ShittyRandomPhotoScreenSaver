@@ -160,6 +160,7 @@ class _SpotifyBeatEngine(QObject):
         self._pending_analysis_capture_ts: float = 0.0
         self._thread_manager: Optional[ThreadManager] = None
         self._analysis_lane: Any = None
+        self._capture_lane: Any = None
         self._analysis_lane_last_diag_log_ts: float = 0.0
         # The serial compute lane owns one detached DSP state per admitted
         # gate/activation.  Reusing it across frames avoids deep-copying the
@@ -243,10 +244,58 @@ class _SpotifyBeatEngine(QObject):
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         if thread_manager is not self._thread_manager:
+            if self._audio_worker.has_capture_owner_work():
+                raise RuntimeError(
+                    "cannot replace ThreadManager while visualizer audio capture is active"
+                )
+            self._retire_capture_lane()
             self._stop_analysis_lane()
             self._thread_manager = thread_manager
         if thread_manager is not None:
             self._ensure_analysis_lane()
+
+    def _ensure_capture_lane(self):
+        lane = self._capture_lane
+        if lane is not None and not bool(getattr(lane, "is_stopped", False)):
+            return lane
+        if self._audio_worker.has_capture_owner_work():
+            raise RuntimeError("cannot replace audio capture lane while native retirement is pending")
+        tm = self._thread_manager
+        if tm is None:
+            raise RuntimeError("visualizer audio capture requires ThreadManager")
+        try:
+            lane = tm.create_affinity_lane(
+                lane_id=f"spotify_visualizer.audio_capture:{id(self)}",
+                category="visualizer.audio_capture",
+                owner=self,
+                worker="audio_capture",
+            )
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS] Required audio-capture affinity lane creation failed",
+                exc_info=True,
+            )
+            raise
+        try:
+            self._audio_worker.set_capture_lane(lane)
+        except Exception:
+            # An unexpected concurrent owner rejection must not leave an empty
+            # registered lane behind or retain a second lifecycle owner.
+            lane.stop(wait=False)
+            raise
+        self._capture_lane = lane
+        return lane
+
+    def _retire_capture_lane(self) -> None:
+        lane = self._capture_lane
+        self._capture_lane = None
+        if lane is None:
+            return
+        # The worker queues native release before the logical lane closes.  The
+        # lane's queued packet is allowed to finish on its creating thread; the
+        # GUI never waits for a blocked driver/COM open or close here.
+        self._audio_worker.stop()
+        lane.stop(wait=False)
 
     def _ensure_analysis_lane(self):
         lane = self._analysis_lane
@@ -611,11 +660,14 @@ class _SpotifyBeatEngine(QObject):
             self._stop_worker()
 
     def ensure_started(self) -> None:
+        if self._audio_worker.is_running() or self._audio_worker.is_capture_starting():
+            return
+        self._ensure_capture_lane()
         try:
-            if not self._audio_worker.is_running():
-                self._audio_worker.start()
+            self._audio_worker.start()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
+            logger.error("[SPOTIFY_VIS] Failed to admit audio capture", exc_info=True)
+            raise
 
     def force_stop(self) -> None:
         """Unconditionally stop the audio worker regardless of ref count.
@@ -636,13 +688,15 @@ class _SpotifyBeatEngine(QObject):
         self._ref_count = 0
         self._capture_keepalive_deadline = 0.0
         self._stop_worker()
+        self._retire_capture_lane()
         self._stop_analysis_lane()
 
     def _stop_worker(self) -> None:
         try:
             self._audio_worker.stop()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
+            logger.error("[SPOTIFY_VIS] Failed to retire audio capture", exc_info=True)
+            raise
 
     def _schedule_worker_stop_after_grace(self) -> None:
         grace = max(0.0, float(self._capture_keepalive_grace))
@@ -1724,7 +1778,7 @@ class _SpotifyBeatEngine(QObject):
             self.ensure_started()
             
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Wake failed", exc_info=True)
+            logger.error("[SPOTIFY_VIS] Wake failed", exc_info=True)
 
 
 class BeatEngineRegistry:
@@ -1767,14 +1821,24 @@ class BeatEngineRegistry:
             logger.debug("[SPOTIFY_VIS] Injected engine could not reconfigure to requested bar count", exc_info=True)
         self._engine = engine
 
-    def clear(self) -> None:
-        """Clear all engines (for testing)."""
+    def clear(self) -> bool:
+        """Release the canonical engine only after native capture has drained.
+
+        Terminal callers may close admission while a driver is still opening.
+        Retain the real Python/backend owner through that transaction or a
+        failed close; lane metadata alone cannot retain native handles safely.
+        """
         if self._engine is not None:
             try:
                 self._engine.force_stop()
             except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to stop shared beat engine during registry clear", exc_info=True)
+                logger.error("[SPOTIFY_VIS] Registry retains shared beat engine after capture retirement failed", exc_info=True)
+                return False
+            if self._engine._audio_worker.has_capture_owner_work():
+                logger.info("[SPOTIFY_VIS] Registry retains shared beat engine until native capture ownership drains")
+                return False
         self._engine = None
+        return True
 
 
 # Backward compatibility: module-level singleton via registry

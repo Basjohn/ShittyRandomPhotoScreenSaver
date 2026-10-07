@@ -65,11 +65,10 @@ class TestSpotifyVisualizerIntegration:
         worker = SpotifyVisualizerAudioWorker(bar_count=32)
         worker.set_audio_block_size(1024)  # resolve fail-closed block-size guard
         
-        # CRITICAL: Start the worker to initialize numpy
-        try:
-            worker.start()
-        except Exception as e:
-            raise Exception("Failed to start worker: {}".format(e))
+        # This is an FFT-only unit test. Native capture now belongs solely to
+        # the BeatEngine's affinity owner, so seed the DSP dependency directly
+        # instead of admitting a real loopback stream.
+        worker._np = np
         
         try:
             # Initialize with current default settings
@@ -135,10 +134,8 @@ class TestSpotifyVisualizerIntegration:
         worker = SpotifyVisualizerAudioWorker(bar_count=32)
         worker.set_audio_block_size(1024)  # resolve fail-closed block-size guard
         
-        try:
-            worker.start()
-        except Exception as e:
-            raise Exception("Failed to start worker: {}".format(e))
+        # Native capture is intentionally outside this FFT-only test seam.
+        worker._np = np
         
         try:
             # Initialize with current default settings

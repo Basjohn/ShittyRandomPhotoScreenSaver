@@ -62,6 +62,16 @@ Needing the shared BeatEngine is not a reason to retain a QWidget owner.
 
 Accepted audio-analysis ownership is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.
 
+Native loopback capture is a separate, one-owner boundary.  The shared BeatEngine admits exactly one
+`visualizer.audio_capture` affinity lane on ThreadManager's dedicated `audio_capture` worker; backend construction,
+stream open/restart and release all execute there, never on the GUI/logical thread. One admitted drain reconciles the
+newest desired state; blocked native work cannot accumulate a start/stop FIFO. A queued start counts as `STARTING`,
+and native success starts the first-callback grace. Restart returns admission success, not the asynchronous native
+outcome. Stop fences publication immediately; after conversion the callback rechecks capture generation, activation
+and buffer identity atomically with its small final publish. A failed native close retains the backend and the lane's
+`resource_held` observation even after its worker exits; lifecycle accounting cannot report that debt as drained.
+Do not add a raw thread, synchronous compatibility path, polling clock, native retry or a second capture owner.
+
 ### 1A. Active-mode dormancy and mode-count invariance
 
 The canonical family-wide rule is `Docs/Guardrails/Performance_Optimization_Contract.md` P5, **Effect dormancy and count

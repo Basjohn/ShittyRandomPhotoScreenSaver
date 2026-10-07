@@ -60,6 +60,7 @@ def _configured_engine():
     from core.settings.models import SpotifyVisualizerSettings
     from core.settings.settings_manager import SettingsManager
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from core.threading.manager import ThreadManager
     from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
     from widgets.spotify_visualizer.quick_technical_config import apply_controller_technical_config
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
@@ -70,20 +71,48 @@ def _configured_engine():
     activation = resolve_visualizer_activation_payload(dict(section), mode="sphere")
     model = SpotifyVisualizerSettings.from_mapping(activation.resolved_config, apply_preset_overlay=False,
                                                    resolve_preset_indices=False)
-    engines = []
+    thread_manager = ThreadManager.create_helper_manager()
 
     def factory(count):
-        engines.append(_SpotifyBeatEngine(count))
-        return engines[-1]
+        engine = _SpotifyBeatEngine(count)
+        engine.set_thread_manager(thread_manager)
+        return engine
 
-    controller = VisualizerRuntimeController(runtime_generation=0, initial_mode="sphere", engine_factory=factory)
-    controller.settings_model = model
-    controller.technical_config_cache = build_technical_cache(None, model)
-    apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, "sphere"),
-                                      reason="replay_recording")
-    engine = controller.ensure_engine()
-    apply_engine_vis_mode_kwargs(engine, asdict(model))
-    return controller, engine
+    controller = None
+    try:
+        controller = VisualizerRuntimeController(runtime_generation=0, initial_mode="sphere", engine_factory=factory)
+        controller.thread_manager = thread_manager
+        controller.settings_model = model
+        controller.technical_config_cache = build_technical_cache(None, model)
+        apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, "sphere"),
+                                          reason="replay_recording")
+        engine = controller.ensure_engine()
+        apply_engine_vis_mode_kwargs(engine, asdict(model))
+        return controller, engine
+    except Exception:
+        if controller is not None and controller.engine is not None:
+            _close_configured_engine(controller, controller.engine)
+        elif not thread_manager.shutdown(wait=True, timeout=5.0):
+            raise RuntimeError("recorder ThreadManager did not drain after configuration failure")
+        raise
+
+
+def _close_configured_engine(controller, engine) -> None:
+    """Close private recording admission and join its canonical worker owners."""
+    try:
+        engine.set_playback_state(False)
+    finally:
+        try:
+            engine.release()
+        finally:
+            try:
+                engine.force_stop()
+            finally:
+                try:
+                    controller.close_render_admission()
+                finally:
+                    if not controller.thread_manager.shutdown(wait=True, timeout=5.0):
+                        raise RuntimeError("recorder audio capture or analysis ownership did not drain")
 
 
 def _frame(engine, timestamp_us: int, bars, scheduler, onsets=()):
@@ -169,9 +198,6 @@ def main() -> None:
         parser.error(f"refusing to overwrite {path}")
     app = QCoreApplication.instance() or QCoreApplication([])
     controller, engine = _configured_engine()
-    engine.acquire()
-    engine.set_playback_state(True)
-    engine.ensure_started()
     frames = []
     last_serial = [0]
     start = time.perf_counter()
@@ -179,8 +205,8 @@ def main() -> None:
     def tick():
         bars = engine.tick() or []
         elapsed = time.perf_counter() - start
-        # Looked up every tick, as Sphere's capture does: the inline analysis commits a fresh copy of the
-        # worker's DSP state (transient bus and scheduler included) each frame.
+        # The persistent analysis lane publishes the latest detached DSP state.
+        # Take its current scheduler events once on the recorder's existing tick.
         onsets = engine.get_onset_events(last_serial[0])
         if onsets:
             last_serial[0] = onsets[-1].serial
@@ -191,17 +217,18 @@ def main() -> None:
             app.quit()
 
     timer = QTimer()
-    timer.setTimerType(Qt.TimerType.PreciseTimer)
-    timer.timeout.connect(tick)
-    timer.start(TICK_MS)
-    print(f"recording {args.seconds:.0f} s of live audio ...", flush=True)
     try:
+        engine.acquire()
+        engine.set_playback_state(True)
+        engine.ensure_started()
+        timer.setTimerType(Qt.TimerType.PreciseTimer)
+        timer.timeout.connect(tick)
+        timer.start(TICK_MS)
+        print(f"recording {args.seconds:.0f} s of live audio ...", flush=True)
         app.exec()
     finally:
-        engine.set_playback_state(False)
-        engine.release()
-        engine.force_stop()
-        controller.close_render_admission()
+        timer.stop()
+        _close_configured_engine(controller, engine)
     clip = FeatureClip(name=args.name, frames=tuple(frames))
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with path.open("xb") as out:
