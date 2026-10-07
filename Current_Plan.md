@@ -60,8 +60,6 @@ Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualize
 
 - [ ] **P2. Play-start audio capture.** Move expensive backend construction off the GUI thread while preserving one bounded
   capture owner and current wake/freshness semantics.
-- [ ] **P3. GC freeze.** Measure `gc_policy.freeze_stable_generation` cadence/cost in the current runtime and either bound the
-  owning work or prove it is no longer material.
 - [ ] **P4. Re-trace after P1-P3.** Investigate native/swap/sync ownership only if unattributed presentation holes survive.
   Do not add a compositor timer or `frameSwapped -> requestUpdate()` loop.
 - [ ] **P5. Physical bar.** Unattended two-display Bubble + DevCurve run with no Settings/mouse interaction; compare
@@ -84,6 +82,7 @@ The binding invariant is count-independent: registry growth must not add recurri
 - [ ] **L4. Terminal Python-owner timeout.** Find why `QuickDisplayUnit`, `QuickDisplayPresenter` and
   `QuickDisplayVisualizerOwner` can remain strongly reachable after Qt/resources/thread work have drained. Fix reference
   ownership/order rather than extending the destruction-barrier deadline; add normal-stop and replacement-generation bars.
+  Include the observed bounded-RUN process exit of 1 despite a logged application exit of 0; do not treat the log as the process result.
 
 Durable invariants: `Docs/Guardrails/Performance_Optimization_Contract.md` P5 and
 `Docs/Guardrails/Visualizer_Presentation.md` 1A.

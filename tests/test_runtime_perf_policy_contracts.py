@@ -100,20 +100,65 @@ def test_runtime_gc_policy_freezes_stable_generation_once_and_unfreezes_on_stop(
         # No freeze before the policy is active.
         assert policy.freeze_stable_generation() is False
         assert policy.frozen is False
+        assert policy.snapshot().freeze_duration_ms is None
 
         assert policy.start() is True
         retained = [{"k": [1, 2, 3]} for _ in range(1000)]
         assert policy.freeze_stable_generation() is True
         assert policy.frozen is True
         assert gc.get_freeze_count() > baseline
+        frozen_snapshot = policy.snapshot()
+        assert frozen_snapshot.freeze_duration_ms is not None
+        assert frozen_snapshot.freeze_duration_ms >= 0.0
+        # Frozen objects can still die immediately through reference counting;
+        # the boundary count describes that instant, not a later live query.
+        assert frozen_snapshot.frozen_object_count >= gc.get_freeze_count() > baseline
         # Idempotent: a second freeze is a no-op.
         assert policy.freeze_stable_generation() is False
+        assert policy.snapshot().freeze_duration_ms == frozen_snapshot.freeze_duration_ms
+        assert policy.snapshot().frozen_object_count == frozen_snapshot.frozen_object_count
         assert retained  # keep the frozen set alive across the freeze
     finally:
         policy.stop()
         gc.unfreeze()  # belt-and-suspenders: never leak freeze state to other tests
     # stop() released the pinned snapshot and cleared the flag.
     assert policy.frozen is False
+
+
+def test_freeze_boundary_measures_owning_work_and_reports_once(monkeypatch):
+    import core.performance.gc_policy as gc_policy
+
+    policy = gc_policy.RuntimeGCPolicy()
+    now_ns = 10_000_000
+    calls: list[str] = []
+    reports: list[tuple] = []
+
+    def freeze():
+        nonlocal now_ns
+        calls.append("freeze")
+        now_ns += 4_000_000
+
+    def restore_thresholds(*thresholds):
+        nonlocal now_ns
+        calls.append("thresholds")
+        now_ns += 250_000
+
+    monkeypatch.setattr(gc_policy.gc, "freeze", freeze)
+    monkeypatch.setattr(gc_policy.gc, "set_threshold", restore_thresholds)
+    monkeypatch.setattr(gc_policy.gc, "get_freeze_count", lambda: 1234)
+    monkeypatch.setattr(gc_policy.time, "perf_counter_ns", lambda: now_ns)
+    monkeypatch.setattr(gc_policy.logger, "info", lambda *args: reports.append(args))
+    # Isolate this boundary from automatic collector callbacks: normal start/
+    # stop restoration and real freeze semantics have separate coverage above.
+    policy._active = True
+    assert policy.freeze_stable_generation() is True
+    snapshot = policy.snapshot()
+    assert snapshot.freeze_duration_ms == 4.25
+    assert snapshot.frozen_object_count == 1234
+    assert len(reports) == 1 and "freeze_boundary_ms" in reports[0][0]
+    assert reports[0][-1] == 4.25
+    assert policy.freeze_stable_generation() is False
+    assert calls == ["freeze", "thresholds"] and len(reports) == 1
 
 
 def test_derive_warmup_thresholds_defers_only_gen2():

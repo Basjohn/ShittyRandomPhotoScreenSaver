@@ -41,6 +41,14 @@ One supplied shutdown timed out after Qt/resources/thread work had drained while
 `QuickDisplayUnit`, `QuickDisplayPresenter` and `QuickDisplayVisualizerOwner`. That remains an ownership-order investigation,
 not evidence of surviving GL resources. Do not fix it by lengthening the destruction-barrier timeout or forcing GC.
 
+## GC freeze attribution
+
+The 2026-10-07 loaded two-display RUN observed the existing one-shot freeze at 45 seconds: 145,142 tracked objects,
+`freeze_boundary_ms=6.567` (freeze, threshold restoration and count observation). It is not a recurring timer or a standalone
+explanation for >25 ms presentation holes in that run; no threshold/cadence change was admitted. Local source/argv/log/trace
+evidence is retained under `logs/shared_runtime_acceptance/gc_freeze_20261007_140929/`. This all-diagnostics run does not close
+the low-observer Bubble/DevCurve physical bar, and its process exit mismatch remains owned by the live retirement task.
+
 ## Intermittent exported-memoryview startup failure
 
 ### Symptom
