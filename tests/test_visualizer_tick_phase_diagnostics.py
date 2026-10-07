@@ -23,9 +23,7 @@ _PHASES = (
     "perf_accounting",
     "engine_consume",
     "teardown_check",
-    "heartbeat",
-    "bubble_step",
-    "devcurve_dispatch",
+    "mode_hook",
     "publish",
 )
 

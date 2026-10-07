@@ -20,15 +20,16 @@ checklist.
 
 ### Inactive Sine heartbeat
 
-The common logical tick can call Sine heartbeat work without first requiring Sine to be active. A user-authored non-zero Sine
-heartbeat value can therefore retain mode-specific energy/transient/event queries after switching away. The durable correction
-is active-mode ownership: inactive Sine contributes zero heartbeat work.
+The common logical tick previously called Sine heartbeat without first requiring Sine to be active, so a saved non-zero value
+could retain energy/transient/event queries after switching away. The correction resolves heartbeat only for active Sine and
+fences before those queries during replacement; inactive Sine contributes zero heartbeat work.
 
 ### Per-mode early-return dispatch growth
 
 The common tick historically called mode-specific helpers and relied on each inactive helper to return immediately. That cost is
 small for a few modes but violates count invariance if repeated for every new registry entry. The durable destination is one
-optional logical-step hook resolved at activation, not one hot-path branch/call per registered mode.
+optional logical-step hook resolved at activation. The controller now retains that one callable; registry-derived switching,
+lazy-import and synthetic-growth tests protect it against accumulating hot-path dispatches.
 
 ### Registry-derived proof
 

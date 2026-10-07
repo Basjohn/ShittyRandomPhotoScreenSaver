@@ -18,8 +18,9 @@ Design:
 - The remaining authored per-tick logical fields (heartbeat, perf-tick,
   devcurve, bubble, mode-transition-readiness, source freshness, smoothing) live
   here as plain attributes, populated by the existing initialization/tick code.
-- The five logical hooks the tick pipeline invokes are thin delegators to the
-  existing presentation-neutral module functions, passing this host.
+- The common tick invokes at most one descriptor-resolved mode hook, retained
+  by the active controller; inactive mode hooks are never polled or imported
+  from this shared state path.
 
 No QML/QQuickItem/QScreen/render-thread object ever enters this state. This is an
 ownership migration; authored algorithms, timing and semantics are unchanged.

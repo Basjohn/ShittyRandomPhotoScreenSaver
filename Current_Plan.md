@@ -72,13 +72,6 @@ Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualize
 
 The binding invariant is count-independent: registry growth must not add recurring work to an unrelated active mode.
 
-- [ ] **L1. Sine heartbeat active-mode ownership.** Resolve heartbeat work only while Sine is the active mode; inactive Sine
-  performs zero heartbeat energy/transient/event queries regardless of persisted Custom values.
-- [ ] **L2. One activation-resolved logical hook.** Replace accumulating common-tick early-return dispatches with one optional
-  callable resolved at mode activation. The hot path must not grow one branch/call per registered mode.
-- [ ] **L3. Registry-derived dormancy tests.** Repeated-switch, lazy-import/construction and negative-work coverage derives
-  from the canonical Visualizer registry. Synthetic registry growth must not increase steady common-tick work for the one
-  active owner.
 - [ ] **L4. Terminal Python-owner timeout.** Find why `QuickDisplayUnit`, `QuickDisplayPresenter` and
   `QuickDisplayVisualizerOwner` can remain strongly reachable after Qt/resources/thread work have drained. Fix reference
   ownership/order rather than extending the destruction-barrier deadline; add normal-stop and replacement-generation bars.

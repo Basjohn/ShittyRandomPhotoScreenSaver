@@ -126,6 +126,11 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 def process_heartbeat(widget: Any, now_ts: float) -> None:
     """Detect bass energy spikes and produce a decay envelope for sine heartbeat."""
+    # The active controller resolves this hook only for Sine.  Keep this fence
+    # for a concurrent mode replacement: it must run before *any* engine/event
+    # query, so persisted Sine values cannot create background audio work.
+    if widget._vis_mode_str != "sine_wave":
+        return
     if widget._sine_heartbeat <= 0.001 or widget._engine is None:
         return
 
@@ -1526,23 +1531,20 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
                 present_frame=False
             )
 
-    # Heartbeat transient detection for sine mode
-    process_heartbeat(widget, now_ts)
-    _record_tick_phase("heartbeat")
-
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return _publish_logical_state(
             widget, now_ts, changed=False, mode_reveal_ready=mode_reveal_ready,
             present_frame=False
         )
 
-    # Bubble logical step
-    dispatch_bubble_simulation(widget, now_ts)
-    _record_tick_phase("bubble_step")
-
-    # DEVCURVE liquid field solve (UI-thread, cheap: ~32 sources)
-    dispatch_devcurve_field(widget, now_ts)
-    _record_tick_phase("devcurve_dispatch")
+    # Exactly one descriptor-resolved active-mode hook may own mode-specific
+    # logical work.  Do not add mode-by-mode common-tick dispatches here:
+    # inactive modes must perform no queries, simulation, or helper calls, and
+    # adding a registry entry must not change the work for the active owner.
+    mode_hook = widget.runtime_controller.active_logical_tick_hook
+    if mode_hook is not None:
+        mode_hook(widget, now_ts)
+    _record_tick_phase("mode_hook")
 
     # Publish the latest logical frame. The slot is latest-wins, so a GUI thread
     # that cannot keep up loses freshness rather than accumulating a backlog -
