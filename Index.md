@@ -55,6 +55,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
+| Bubble drawn-radius release and remaining judder evidence | `Current_Plan.md` §1; `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md`; `Docs/Reference/Harness_Index.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
 | stable display identity, saved CUSTOM replay and Clock face overrides | `Spec.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md` |

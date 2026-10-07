@@ -123,19 +123,13 @@ That means:
   `python -m tools.visualizer_replay.bubble_judder`;
 - no architecture may obtain smooth-looking motion by reducing source/logical cadence, hiding
   transients, averaging away edges, or reducing authored reactivity;
-- **remaining tiny-radius judder candidate (2026-10-05):** the first render-only release fix is confirmed landed, but
-  non-big bubbles can still take raw-derived `pulse_energy` straight to a 1-2 physical px target reversal and the shader
-  changes from a filled dot to the normal outline/specular path at roughly 4 physical px radius. The admissible follow-up
-  is now explicit: `BubbleSimulation._apply_tiny_breath_assist()` may operate only on the drawn radius, using the cached
-  committed viewport height. It is bounded to <=8 physical px rendered radius, suppresses/attenuates only the first <=2 px
-  reversal of an established direction, never lets the drawn radius sit more than 1 physical px from the authored target,
-  allows at most one additional physical pixel per half-breath, stays on the authored target's side of the shader's 4 px
-  dot/outline boundary, and returns to raw authority immediately when the target pauses so an assisted pixel cannot remain
-  parked beyond a completed breath. Promotion/pop/exit, pulse endpoints and >=2.5 px strong edges bypass it immediately. `TINY_BREATH_ASSIST_PX = 0.0` is the exact negative control. The seam must never feed `pulse_energy`,
-  collision/motion authority, clocks or scheduling. It remains a candidate until replay + physical acceptance prove no
-  loss of Bubble attack, excursion, elasticity or hot-passage variation. Bar: `tests/test_bubble_render_judder.py`; A/B:
-  `python -m tools.visualizer_replay.bubble_judder --fixtures --clip broadband_noise --frozen --compare-tiny-assist`.
-  Durable investigation: `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md`.
+- Small drawn radii follow the current authored target directly. The rejected tiny-breath experiment must not return as a
+  disabled filter, threshold hold or fallback: recorded-music evidence worsened chatter and reference-height thresholds
+  did not prove physical-pixel bounds. Any future localized presentation repair needs a reproduced affected band, the actual
+  renderer response-height/uniform-scale/DPR projection, frame-aligned extrema/excursion evidence and unchanged isolated
+  response/attack/latency. Input-window first radius change during ongoing motion is not causal audio-response evidence.
+  `tools.visualizer_replay.bubble_judder --compare-release --report <path>` observes the accepted release envelope against
+  its instant-release negative control; it measures offline output, not installed delivery. R-105 preserves the rejected mechanism.
 
 “Smooth” here means **temporally continuous visual evolution**.
 
