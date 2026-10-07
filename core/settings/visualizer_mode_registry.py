@@ -122,6 +122,12 @@ class VisualizerModeDescriptor:
     # A setting whose value above zero means the mode reflects the displayed wallpaper; its owner
     # then keeps a small copy of it in the mode's parameters (``widgets/spotify_visualizer/backdrop.py``).
     backdrop_setting: str = ""
+    # Optional sole-logical-clock work, resolved once when this mode activates.
+    # Keep lazy module/name strings here for the same import-dormancy reason as
+    # frame runtimes and renderers.  The common logical tick calls only the
+    # selected callable; it must never enumerate descriptor hooks per tick.
+    logical_tick_hook_module: str = ""
+    logical_tick_hook_factory: str = ""
 
     @property
     def preset_key(self) -> str:
@@ -164,6 +170,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.sine_wave",
         settings_builder_module="ui.tabs.media.sine_wave_builder",
         settings_builder_factory="build_sine_wave_ui",
+        logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
+        logical_tick_hook_factory="process_heartbeat",
     ),
     VisualizerModeDescriptor(
         "bubble",
@@ -176,6 +184,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.bubble",
         settings_builder_module="ui.tabs.media.bubble_builder",
         settings_builder_factory="build_bubble_ui",
+        logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
+        logical_tick_hook_factory="dispatch_bubble_simulation",
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -188,6 +198,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.devcurve",
         settings_builder_module="ui.tabs.media.devcurve_builder",
         settings_builder_factory="build_devcurve_ui",
+        logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
+        logical_tick_hook_factory="dispatch_devcurve_field",
     ),
     VisualizerModeDescriptor(
         "sphere",
@@ -327,6 +339,33 @@ def load_mode_settings_builder(mode_id: str):
         raise KeyError(f"Mode {mode_id!r} has no Settings builder wiring")
     module = import_module(descriptor.settings_builder_module)
     return getattr(module, descriptor.settings_builder_factory)
+
+
+def load_mode_logical_tick_hook(mode_id: str):
+    """Resolve one mode's optional sole-clock hook at activation.
+
+    The descriptor owns the wiring as lazy strings.  The hot logical path keeps
+    the returned callable on the active controller, so registry growth cannot
+    add a common-tick branch, import, or call for unrelated modes.
+    """
+
+    from importlib import import_module
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    module_name = descriptor.logical_tick_hook_module
+    factory_name = descriptor.logical_tick_hook_factory
+    if not module_name and not factory_name:
+        return None
+    if not module_name or not factory_name:
+        raise ValueError(
+            f"visualizer mode {descriptor.mode_id!r} has incomplete logical hook wiring"
+        )
+    hook = getattr(import_module(module_name), factory_name)
+    if not callable(hook):
+        raise TypeError(
+            f"visualizer mode {descriptor.mode_id!r} logical hook is not callable"
+        )
+    return hook
 
 
 
