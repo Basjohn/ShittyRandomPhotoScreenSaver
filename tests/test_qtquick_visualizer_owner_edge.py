@@ -153,6 +153,7 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         assert logical is not None
         assert logical.is_running() is True
         assert engine.acquire_count == 1
+        owner._committed_layout_profile_resolver = lambda _mode: None
 
         assert owner.retire() is True
         # The sole logical runtime is joined/stopped and detached from the controller.
@@ -162,6 +163,10 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         assert owner._sync is None
         assert owner._pending_mode_activation is None
         assert owner._presentation_resolver is None
+        assert owner._committed_layout_profile_resolver is None
+        assert owner._runtime is None
+        assert owner.presentation_runtime is None
+        assert owner.render_identity is None
         # Idempotent.
         assert owner.retire() is False
     finally:
@@ -233,6 +238,9 @@ def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypa
         # Replacement retires the old owner's sole logical runtime first.
         assert first.retire() is True
         assert first_logical.is_running() is False
+        assert first._runtime is None
+        assert first.presentation_runtime is None
+        assert first.render_identity is None
     finally:
         first_runtime.close_runtime()
         first_factory.deleteLater()

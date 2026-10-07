@@ -1152,11 +1152,26 @@ class QuickDisplayVisualizerOwner:
             self._engine_acquired = False
         self._retired = True
         self._controller.close_render_admission()
+        # All product/runtime routes have detached, the sole authored logical
+        # runtime has joined, and the engine release fence has been applied
+        # above. Explicitly sever the remaining
+        # owner -> Quick-runtime links before the display starts window
+        # retirement.  Those links otherwise complete a signal/closure cycle
+        # through the live scene that a startup-frozen generation cannot
+        # collect until process stop.  Keep the controller for post-retirement
+        # diagnostics (and its stopped-runtime contract), but never leave it
+        # reachable through a retired Quick scene.
+        self._runtime = None
+        self._presentation_runtime = None
         self._sync = None
         self._publication_wake = None
         self._pending_mode_activation = None
         self._preparing_activation = None
         self._presentation_resolver = None
+        self._committed_layout_profile_resolver = None
+        self._render_identity = None
+        self._started = False
+        self._bound = False
         self._card_shadow_kwargs.clear()
         return True
 

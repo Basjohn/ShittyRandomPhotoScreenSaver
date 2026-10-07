@@ -72,10 +72,10 @@ Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualize
 
 The binding invariant is count-independent: registry growth must not add recurring work to an unrelated active mode.
 
-- [ ] **L4. Terminal Python-owner timeout.** Find why `QuickDisplayUnit`, `QuickDisplayPresenter` and
-  `QuickDisplayVisualizerOwner` can remain strongly reachable after Qt/resources/thread work have drained. Fix reference
-  ownership/order rather than extending the destruction-barrier deadline; add normal-stop and replacement-generation bars.
-  Include the observed bounded-RUN process exit of 1 despite a logged application exit of 0; do not treat the log as the process result.
+- [~] **L4. Awaiting Validation / Logs: terminal owner release.** After P2, run normal MC stop and replacement-generation
+  checks after the startup freeze. Confirm Python-owner release through the destruction barrier and the actual child process
+  result. Investigate the observed diagnostic process exit of 1 despite a logged application exit of 0; the log is not the
+  process result. The frozen signal-cycle repair has focused weakref/replacement proof; do not extend deadlines or force GC.
 
 Durable invariants: `Docs/Guardrails/Performance_Optimization_Contract.md` P5 and
 `Docs/Guardrails/Visualizer_Presentation.md` 1A.
