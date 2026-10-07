@@ -254,13 +254,13 @@ Release/readme media only. Generated captures never enter runtime QRCs or normal
 
 ## 6. Run-matrix acceptance harness
 
-- [ ] Add a small external **run-matrix harness** over the accepted `--exit-after` terminal-shutdown CLI. Cases are
-  declarative and run sequentially by default, capture exit/fault/log artifact paths, and never own a second shutdown mechanism
-  or force-kill the parent Foundry process.
-- [ ] Use the harness for repeatable startup/teardown, diagnostic-flag, display and selected mode/effect acceptance matrices
-  without adding product-runtime scheduling or another cadence owner.
-- [ ] Keep matrix output compact and machine-readable enough for later agent comparison while preserving the underlying logs as
-  the evidence source. A matrix runner coordinates existing product entry points; it does not become a new runtime authority.
+- [~] **Awaiting Validation / Logs: run the bounded acceptance cases.** Use `tools/run_matrix.py` with ordinary and diagnostic
+  `main_mc.py` cases, including a duration beyond startup freeze, then inspect actual child exit, current-session Qt/QML and
+  retirement evidence. L4 owns the terminal-owner acceptance gate. Repeat relevant cases after operator-selected display,
+  mode/effect configurations; the harness exercises current saved settings rather than inventing CLI selectors.
+
+The declarative input, evidence scoping and source attribution contract lives in
+`Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions. Raw logs remain the evidence authority.
 
 ---
 

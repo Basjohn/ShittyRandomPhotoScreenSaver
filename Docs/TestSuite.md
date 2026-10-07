@@ -4,6 +4,10 @@ This file is the **current test/acceptance authority** for SRPSS. It describes w
 
 `Current_Plan.md` owns execution order. The exact source tree plus `tests/run_chunked.py` own executable inventory. `Docs/Reference/Harness_Index.md` owns operator-tool/harness lookup.
 
+`tools/run_matrix.py` is the maintained bounded RUN coordinator. Its JSON case contract, source/argument allowlists, per-run log
+snapshots, output schema and physical-acceptance limits are documented in `Docs/Reference/Harness_Index.md` → Bounded
+self-terminating RUN sessions. It is operator tooling, not a test-runner facade or product runtime owner.
+
 ## 1. Current authority and inventory
 
 The maintained product profile is `destination` in `tests/run_chunked.py`.

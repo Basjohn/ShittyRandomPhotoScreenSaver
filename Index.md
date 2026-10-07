@@ -77,7 +77,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | test inventory / acceptance authority | `Docs/TestSuite.md` |
 | durable test authoring / mutable-authority hygiene | `Docs/Guides/Test_Durability.md` |
 | harness commands | `Docs/Reference/Harness_Index.md` |
-| bounded self-terminating RUN / repeated startup-teardown acceptance | `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions (`--exit-after`) |
+| bounded self-terminating RUN / repeated startup-teardown acceptance | `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions (`main_mc.py`, `tools/run_matrix.py`, `--exit-after`) |
 | Steam source/auth/privacy contract | `Docs/Reference/Steam_Source_Contracts.md` |
 | Friend Pulse current contract | `Docs/Reference/Steam_Friend_Pulse.md` |
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |
