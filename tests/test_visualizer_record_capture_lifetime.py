@@ -170,3 +170,80 @@ def test_recorder_refuses_success_when_private_shutdown_reports_native_debt(conf
         assert calls == [{"wait": True, "timeout": 5.0}]
     finally:
         assert shutdown(wait=True, timeout=1.0) is True
+
+
+@pytest.mark.parametrize("outcome", ["failed", "pending", "silent_valid"])
+def test_recorder_main_requires_first_valid_native_callback_before_writing_clip(
+    configured, monkeypatch, tmp_path, outcome
+):
+    controller, engine = configured
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Backend(_RecorderBackend):
+        def start(self, callback):
+            entered.set()
+            if outcome == "failed":
+                return False
+            if outcome == "pending":
+                assert release.wait(2.0)
+            self._callback = callback
+            callback(np.zeros((32, 2), dtype="float32"))
+            return True
+
+    backend = Backend()
+    monkeypatch.setattr("widgets.spotify_visualizer.audio_worker.create_audio_capture", lambda _: backend)
+    monkeypatch.setattr(record, "_configured_engine", lambda: (controller, engine))
+    monkeypatch.setattr(record, "OUTPUT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["record", "first_pcm", "--seconds", "1"])
+    clock = iter([0.0, 2.0])
+    monkeypatch.setattr(record, "time", SimpleNamespace(perf_counter=lambda: next(clock)))
+    timers = []
+
+    class Timer:
+        def __init__(self):
+            self.callback = None
+            self.timeout = SimpleNamespace(connect=lambda callback: setattr(self, "callback", callback))
+            timers.append(self)
+
+        def setTimerType(self, _kind):
+            pass
+
+        def start(self, interval):
+            assert interval == record.TICK_MS
+
+        def stop(self):
+            pass
+
+    class Application:
+        def quit(self):
+            pass
+
+        def exec(self):
+            assert entered.wait(1.0)
+            if outcome != "pending":
+                engine._capture_lane.call(lambda: None, timeout=1.0)
+            timers[0].callback()
+
+    monkeypatch.setattr(record, "QTimer", Timer)
+    monkeypatch.setattr(record, "QCoreApplication", SimpleNamespace(instance=lambda: Application()))
+    shutdown = controller.thread_manager.shutdown
+
+    def release_native_open_and_join(**kwargs):
+        release.set()
+        return shutdown(**kwargs)
+
+    monkeypatch.setattr(controller.thread_manager, "shutdown", release_native_open_and_join)
+    try:
+        if outcome == "silent_valid":
+            record.main()
+            assert (tmp_path / "first_pcm.jsonl").is_file()
+        else:
+            with pytest.raises(RuntimeError, match="recording rejected"):
+                record.main()
+            assert not (tmp_path / "first_pcm.jsonl").exists()
+        assert controller.thread_manager._shutdown is True
+        assert backend.stop_calls == 1
+        assert engine._audio_worker.has_capture_owner_work() is False
+    finally:
+        release.set()
