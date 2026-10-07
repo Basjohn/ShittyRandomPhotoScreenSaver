@@ -58,8 +58,6 @@ Durable mechanism/negative controls: `Docs/Historical_Bugs/R-105_Bubble_Remainin
 
 Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualizer to hide GUI/runtime stalls.
 
-- [ ] **P1. FEEDS model updates.** Replace whole-model reset where practical with bounded row change/insert/remove
-  notification so ordinary refresh does not rebuild the full delegate tree.
 - [ ] **P2. Play-start audio capture.** Move expensive backend construction off the GUI thread while preserving one bounded
   capture owner and current wake/freshness semantics.
 - [ ] **P3. GC freeze.** Measure `gc_policy.freeze_stable_generation` cadence/cost in the current runtime and either bound the

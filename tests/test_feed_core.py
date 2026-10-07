@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 
 import pytest
@@ -202,6 +203,39 @@ def test_cache_round_trip_and_corruption_quarantine(tmp_path: Path):
     path.write_text("{broken", encoding="utf-8")
     assert store.read("source") is None
     assert path.with_suffix(".json.corrupt").exists()
+
+
+def test_cache_quarantines_duplicate_article_identities(tmp_path: Path):
+    store = FeedCacheStore(tmp_path)
+    document = parse_feed_bytes(RSS, source_url="https://example.test/feed")
+    from core.feeds.models import FeedSnapshot
+    record = FeedCacheRecord(
+        source_id="source",
+        endpoint_fingerprint=endpoint_fingerprint("https://example.test/feed"),
+        snapshot=FeedSnapshot(document=document, fetched_at=123.0),
+        health=FeedHealth(last_checked_at=123.0, last_success_at=123.0),
+    )
+    path = store.write("source", record)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["snapshot"]["document"]["items"].append(
+        dict(payload["snapshot"]["document"]["items"][0])
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert store.read("source") is None
+    assert path.with_suffix(".json.corrupt").exists()
+
+
+def test_feed_document_rejects_duplicate_article_identities():
+    from core.feeds.models import FeedDocument, FeedItem
+
+    with pytest.raises(ValueError, match="duplicate item identities"):
+        FeedDocument(
+            "Feed", "https://example.test/feed", "rss20",
+            (
+                FeedItem("same", "First", "https://example.test/first"),
+                FeedItem("same", "Second", "https://example.test/second"),
+            ),
+        )
 
 
 class _SequenceTransport:

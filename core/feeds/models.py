@@ -50,6 +50,12 @@ class FeedDocument:
     format: str
     items: tuple[FeedItem, ...]
 
+    def __post_init__(self) -> None:
+        """Keep item identity usable by cache, artwork and retained rows."""
+        item_ids = tuple(item.item_id for item in self.items)
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("feed document contains duplicate item identities")
+
     @property
     def image_item_count(self) -> int:
         return sum(1 for item in self.items if item.images)
