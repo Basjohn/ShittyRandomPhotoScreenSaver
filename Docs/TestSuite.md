@@ -364,6 +364,11 @@ High-value permanent guards include:
 
 - `tests/test_visualizer_logical_hook_dormancy.py` — active-only Sine queries, activation-resolved hooks, registry-derived
   repeated switching, lazy import, malformed-descriptor rejection and synthetic registry growth without common-tick work;
+- `tests/test_p2_audio_capture_lane.py` — backend create/open/restart/release are serial on the dedicated capture
+  owner; blocked opens leave the GUI free, newest-state admission stays bounded, callback conversion cannot publish
+  after stop, and rejected/failed native operations release exactly once or retain explicit ownership debt;
+- `tests/test_affinity_lane_resource_ownership.py` — native ownership remains visible after task drain and worker join,
+  while successful owner-thread release clears the existing lifecycle observation;
 - `tests/test_qtquick_runtime_purity_source.py` — forbids retired Python pacing/live-state ghosts and other source-level regressions;
 - `tests/test_frame_trace.py` — binary trace format, bounded rolling retention, optional phase/clip/Bubble attribution and backward-compatible reporting;
 - `tests/test_lifecycle_window.py` — startup/teardown are not stall points: every display teardown opens the lifecycle window before anything is torn down and the current generation's coordinated reveal closes it; inside it the event-loop recorder, Visualizer latency and slow-tick warnings stay silent and count again after; the trace report keeps lifecycle frames out of steady-state spacing and flags late frames in the 2 s after a reveal;

@@ -58,8 +58,6 @@ Durable mechanism/negative controls: `Docs/Historical_Bugs/R-105_Bubble_Remainin
 
 Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualizer to hide GUI/runtime stalls.
 
-- [ ] **P2. Play-start audio capture.** Move expensive backend construction off the GUI thread while preserving one bounded
-  capture owner and current wake/freshness semantics.
 - [ ] **P4. Re-trace after P1-P3.** Investigate native/swap/sync ownership only if unattributed presentation holes survive.
   Do not add a compositor timer or `frameSwapped -> requestUpdate()` loop.
 - [ ] **P5. Physical bar.** Unattended two-display Bubble + DevCurve run with no Settings/mouse interaction; compare

@@ -21,6 +21,7 @@ worker's buffer. Nothing here builds an ``_AudioFrame`` by hand.
 from __future__ import annotations
 
 import logging
+import threading
 
 import pytest
 
@@ -107,6 +108,19 @@ class _FakeBackend(AudioCaptureBackend):
         self._callback(samples)
 
 
+class _ImmediateCaptureLane:
+    """Explicit owner seam for callback/DSP tests, never a production fallback."""
+
+    is_stopped = False
+
+    def set_resource_held(self, held):
+        self.resource_held = bool(held)
+
+    def submit(self, func):
+        func()
+        return True
+
+
 @pytest.fixture
 def worker(qt_app, np_module, monkeypatch):
     """A real worker whose only fake is the capture backend."""
@@ -122,6 +136,7 @@ def worker(qt_app, np_module, monkeypatch):
     )
     buffer = TripleBuffer()
     instance = SpotifyVisualizerAudioWorker(16, buffer)
+    instance.set_capture_lane(_ImmediateCaptureLane())
     instance._activation_id = 7
     # start() fail-closes unless the block size has been resolved (deliberate
     # unresolved-config guard); resolve it as the runtime owner would.
@@ -210,6 +225,79 @@ class TestRealCallbackPublishes:
         assert frame is not None
         assert float(np_module.asarray(frame.samples).ravel()[0]) == pytest.approx(0.3)
         assert buffer.consume_latest() is None
+
+
+@pytest.mark.parametrize("boundary", ["stop", "activation", "buffer"])
+def test_retirement_during_real_callback_conversion_fences_publication(
+    worker, np_module, boundary
+):
+    instance, backend, buffer = worker
+    entered = threading.Event()
+    release = threading.Event()
+
+    class GatedNumpy:
+        def __getattr__(self, name):
+            return getattr(np_module, name)
+
+        def mean(self, *args, **kwargs):
+            entered.set()
+            assert release.wait(2.0), "sample conversion was not released"
+            return np_module.mean(*args, **kwargs)
+
+    instance._np = GatedNumpy()
+    callback_thread = threading.Thread(target=backend.deliver, args=(_block(np_module),))
+    callback_thread.start()
+    try:
+        assert entered.wait(1.0)
+        # Each boundary must fence work already in native sample conversion.
+        if boundary == "stop":
+            instance.stop()
+        elif boundary == "activation":
+            instance._activation_id = 9
+        else:
+            instance._buffer = TripleBuffer()
+        release.set()
+        callback_thread.join(1.0)
+        assert not callback_thread.is_alive()
+        assert buffer.consume_latest() is None, "retired callback published after stop"
+        assert instance._buffer.consume_latest() is None
+        assert instance._capture_callback_failures == 0
+    finally:
+        release.set()
+        callback_thread.join(2.0)
+
+
+def test_channel_energy_failure_is_loud_bounded_and_publishes_no_degraded_frame(
+    worker, np_module, worker_errors
+):
+    instance, backend, buffer = worker
+
+    class FailingChannelEnergy:
+        def __getattr__(self, name):
+            return getattr(np_module, name)
+
+        def sum(self, *_args, **_kwargs):
+            raise RuntimeError("channel energy selection failed")
+
+    instance._np = FailingChannelEnergy()
+    for _ in range(50):
+        backend.deliver(_block(np_module, channels=6))
+    assert buffer.consume_latest() is None
+    assert instance._capture_callback_failures == 50
+    assert len(worker_errors) == 1
+    assert backend.start_calls == 1
+
+
+def test_normalized_float_pcm_keeps_two_most_energetic_channels(worker, np_module):
+    _instance, backend, buffer = worker
+    block = np_module.tile(
+        np_module.asarray([0.01, 0.02, -0.3, -0.5], dtype="float32"), (32, 1)
+    )
+    backend.deliver(block)
+    frame = buffer.consume_latest()
+    assert frame.samples.dtype == np_module.float32
+    assert frame.samples.tolist() == pytest.approx([-0.4] * 32)
+
 
 
 class TestReintroducingTheDefectFailsThisBar:

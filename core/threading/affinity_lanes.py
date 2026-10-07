@@ -35,6 +35,7 @@ class _AffinityLaneState:
     stopped: bool = False
     pending: int = 0
     active: int = 0
+    resource_held: bool = False
     metrics: dict[str, float | int] = field(
         default_factory=lambda: {
             "submitted": 0,
@@ -87,6 +88,14 @@ class AffinityLaneHandle:
 
     def diagnostic_snapshot(self) -> dict[str, Any]:
         return self._scheduler.lane_snapshot(self._state)
+
+    def set_resource_held(self, held: bool) -> None:
+        """Observe native ownership; only the native owner performs release.
+
+        Mark after construction/before opening and clear only after successful
+        native close. This adds no task, retry, or deletion authority.
+        """
+        self._scheduler.set_resource_held(self._state, held)
 
 
 class AffinityLaneScheduler:
@@ -152,6 +161,16 @@ class AffinityLaneScheduler:
     def is_lane_stopped(self, state: _AffinityLaneState) -> bool:
         with self._condition:
             return bool(state.stopped)
+
+    def set_resource_held(self, state: _AffinityLaneState, held: bool) -> None:
+        with self._condition:
+            if self._states.get(state.lane_id) is not state:
+                raise RuntimeError(f"Cannot mark native ownership on a retired lane: {state.lane_id}")
+            state.resource_held = bool(held)
+            if state.stopped and not state.pending and not state.active and not state.resource_held:
+                self._states.pop(state.lane_id, None)
+            self._refresh_counts_locked()
+            self._condition.notify_all()
 
     def submit(self, state: _AffinityLaneState, func: Callable[[], Any]) -> bool:
         if not callable(func):
@@ -225,10 +244,10 @@ class AffinityLaneScheduler:
                     if remaining <= 0.0:
                         return False
                     self._condition.wait(remaining)
-            if not state.pending and not state.active:
+            if not state.pending and not state.active and not state.resource_held:
                 self._states.pop(state.lane_id, None)
             self._refresh_counts_locked()
-            return not state.pending and not state.active
+            return not state.pending and not state.active and not state.resource_held
 
     def lane_snapshot(self, state: _AffinityLaneState) -> dict[str, Any]:
         with self._condition:
@@ -242,6 +261,7 @@ class AffinityLaneScheduler:
                 "stopped": state.stopped,
                 "pending": state.pending,
                 "active": state.active,
+                "resource_held": state.resource_held,
             }
 
     def diagnostic_snapshot(self) -> dict[str, Any]:
@@ -266,9 +286,10 @@ class AffinityLaneScheduler:
                     "runtime_generation": state.runtime_generation,
                     "active": bool(state.active),
                     "pending": bool(state.pending),
+                    "resource_held": state.resource_held,
                 }
                 for state in self._states.values()
-                if not state.stopped or state.pending or state.active
+                if not state.stopped or state.pending or state.active or state.resource_held
             )
 
     def shutdown(self, *, wait: bool = True, timeout: float | None = None) -> bool:
@@ -281,16 +302,20 @@ class AffinityLaneScheduler:
             thread = self._thread
         if wait and thread is not None and thread is not threading.current_thread():
             thread.join(timeout=None if timeout is None else max(0.0, float(timeout)))
-        complete = thread is None or not thread.is_alive()
-        if complete:
+        thread_complete = thread is None or not thread.is_alive()
+        if thread_complete:
             with self._condition:
                 self._thread = None
-                self._states.clear()
                 self._ready.clear()
                 self._worker_ident = None
                 self._metrics["worker_threads"] = 0
+                self._states = {
+                    lane_id: state for lane_id, state in self._states.items()
+                    if state.resource_held
+                }
                 self._refresh_counts_locked()
-        return complete
+        with self._condition:
+            return thread_complete and not any(state.resource_held for state in self._states.values())
 
     def _refresh_counts_locked(self) -> None:
         self._metrics["queue_depth"] = len(self._ready)
@@ -334,7 +359,7 @@ class AffinityLaneScheduler:
                 self._metrics["worker_active"] = 0
                 self._metrics["tasks_completed"] = int(self._metrics["tasks_completed"]) + 1
                 self._metrics["last_execution_ms"] = execution_ms
-                if state.stopped and not state.pending and not state.active:
+                if state.stopped and not state.pending and not state.active and not state.resource_held:
                     self._states.pop(state.lane_id, None)
                 self._refresh_counts_locked()
                 self._condition.notify_all()

@@ -151,6 +151,18 @@ once, shared with the 3D transitions once those have run). Bars: `tests/test_vis
 
 Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the current architecture.
 
+System loopback capture has one separate native owner: the shared BeatEngine lazily creates its
+`visualizer.audio_capture` affinity lane on ThreadManager's dedicated `audio_capture` worker.  Device/backend creation,
+open, restart and release remain serial on that worker. The GUI changes one newest desired state and admits at most one
+drain; a blocked open cannot grow a lifecycle queue. Pending open is `STARTING`, and callback grace begins at native
+success. Restart reports admission; failure is logged by the owner. Stop immediately fences generation, activation and
+buffer identity at final callback publication. Failed close retains native ownership in the backend and the affinity
+lane's `resource_held` observation; a joined worker alone does not close the lifecycle barrier. The Windows selector is
+the canonical PyAudioWPatch WASAPI path; it is not an environment-variable switch to another backend.
+Capture opens the authored block once: positive values are exact and Auto uses the native driver's unspecified value
+`0`. Rejected opens are loud failures, not admission to a sequence of alternative block sizes. The shared BeatEngine
+registry retains the actual owner graph while capture is opening, draining or holding failed-release resources.
+
 Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are
 presentation-neutral resolved configuration; renderer-only style/chrome is presentation-owned. Legacy widget attribute
 location and Settings subsection are not ownership rules.
