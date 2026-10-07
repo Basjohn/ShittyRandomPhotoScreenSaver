@@ -170,7 +170,7 @@ def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> Non
     assert "uRainbowPhase" in fragment
     assert "vDrive" not in fragment
     assert "uSectionDrives" not in fragment
-    assert "rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate)" in fragment
+    assert "rainbowHue = fract(uRainbowPhase + uRainbowExtent * vRainbowCoordinate)" in fragment
     assert 'values["uVoxelSizeVariation"] = float(parameters["sphere_voxel_size_variation"])' in source
     assert "uBlockRelief" not in source
     assert "uMaterialFx" not in fragment
@@ -762,7 +762,7 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
     # not reuse the shared per-mode Rainbow settings family. One partial-spectrum
     # field drives surfaces and edges independently inside the existing draw.
     assert "vRainbowCoordinate" in fragment
-    assert "0.22 * vRainbowCoordinate" in fragment
+    assert "uRainbowExtent * vRainbowCoordinate" in fragment
     assert "uRainbowSurfaces" in fragment and "uRainbowEdges" in fragment
     assert "uPerspectiveStrength" in source
     assert "turnedPosition.z * uPerspectiveStrength" in source

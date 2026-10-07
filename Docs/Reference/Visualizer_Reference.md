@@ -15,8 +15,9 @@ dormancy, switching and harness coverage.
 This reference documents shared policy plus mode-specific exceptions where they matter. Experimental status is an admission
 state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
 metadata. Spectrum-family 3D modes reuse its source implementation but own their persisted technical and shaper profiles;
-the former borrowed profile is copied once only when an old input lacks those owned keys. Sphere retains its separately
-documented raw Spectrum reference. Heavy implementation resources remain lazy and retire through the normal owner.
+the former borrowed profile is copied once only when an old input lacks those owned keys. Sphere owns its consumed analysis
+profile too; its one-time bridge preserves the former RAW Spectrum values. Heavy implementation resources remain lazy and
+retire through the normal owner.
 
 ## 1A. Registered modes vs enabled modes
 

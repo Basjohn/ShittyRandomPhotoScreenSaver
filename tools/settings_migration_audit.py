@@ -133,10 +133,6 @@ def resolvable_key_gaps() -> List[Tuple[str, str, str]]:
     canonical default and no by-design derivation."""
     from core.settings.default_contract import require_canonical_default
     from rendering.widget_descriptors import get_widget_default_init_descriptors
-    from core.settings.models._spotify_visualizer import (
-        _PER_MODE_TECHNICAL_SERIALIZERS,
-        _PER_MODE_RESOLVERS,
-    )
     from core.settings.models._visualizer_helpers import PER_MODE_TECHNICAL_MODES
     from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 
@@ -158,13 +154,11 @@ def resolvable_key_gaps() -> List[Tuple[str, str, str]]:
         if not has(d.section, d.key):
             gaps.append((d.section, d.key, f"descriptor:{d.attr_name}"))
 
-    # Per-mode x per-key: only modes with a technical profile are required to
-    # define these; other modes derive from the reference mode (by design).
-    per_mode_keys = sorted(set(_PER_MODE_TECHNICAL_SERIALIZERS) | set(_PER_MODE_RESOLVERS))
+    # Descriptor ownership excludes outputs a mode never consumes, rather than
+    # requiring dead persisted keys to complete the worker API.
     for mode in PER_MODE_TECHNICAL_MODES:
-        for key in per_mode_keys:
-            if key in {"bar_fill_color", "bar_border_color", "bar_border_opacity"} and key not in get_owned_mode_setting_keys(mode, "shared_bar"):
-                continue
+        per_mode_keys = set(get_owned_mode_setting_keys(mode, "technical")) | set(get_owned_mode_setting_keys(mode, "shared_bar"))
+        for key in sorted(per_mode_keys):
             if not has("spotify_visualizer", f"{mode}_{key}"):
                 gaps.append(("spotify_visualizer", f"{mode}_{key}", "per-mode-technical"))
 

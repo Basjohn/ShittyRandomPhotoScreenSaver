@@ -45,7 +45,35 @@
         "sphere_light_direction": "NW",
         "sphere_vocal_response": 1.35,
         "sphere_size_response": 2.54,
-        "mode": "sphere"
+        "mode": "sphere",
+        "sphere_bar_count": 33,
+        "sphere_audio_block_size": 512,
+        "sphere_adaptive_sensitivity": true,
+        "sphere_sensitivity": 0.4,
+        "sphere_dynamic_floor": true,
+        "sphere_manual_floor": 0.12,
+        "sphere_input_gain": 1.0,
+        "sphere_transient_clamp": 1.5,
+        "sphere_analysis_notch_positions": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.3,
+            "Mid"
+          ],
+          [
+            0.65,
+            "Treble"
+          ],
+          [
+            1.0,
+            "End"
+          ]
+        ],
+        "sphere_taste_the_rainbow_speed": 0.05,
+        "sphere_taste_the_rainbow_extent": 0.22
       }
     }
   },

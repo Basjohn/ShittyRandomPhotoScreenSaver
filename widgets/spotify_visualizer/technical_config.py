@@ -11,6 +11,8 @@ from typing import Any, Dict
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.models._visualizer_helpers import PER_MODE_TECHNICAL_MODES
 from core.settings.visualizer_mode_registry import get_technical_profile_mode
+from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+from core.settings.default_contract import require_canonical_default
 
 
 def build_technical_cache(
@@ -44,7 +46,11 @@ def build_technical_cache(
             # The one shared BeatEngine always has a Spectrum transient lane.
             # Every mode therefore carries this resolved source value instead
             # of letting the worker own a second 0.65 baseline.
-            "spectrum_lane_transient_mix": spectrum_lane_transient_mix,
+            "spectrum_lane_transient_mix": (
+                spectrum_lane_transient_mix
+                if get_visualizer_mode_descriptor(mode_key).technical_setting_suffixes is None
+                else require_canonical_default("widgets.spotify_visualizer.spectrum_lane_transient_mix")
+            ),
         }
         if mode_key == "bubble":
             mode_config["bubble_transient_mix_bass"] = (

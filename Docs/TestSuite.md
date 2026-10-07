@@ -351,7 +351,11 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
 - `tests/test_scene3d_quality_settings.py` — the 3D Settings tab, the tier resolver (General / family / entry, Auto by
   GPU), the `transitions.detail_3d` bridge, each tier's levers in the renderers;
-- `tests/test_visualizer_profile_lender_presets.py` — a borrowed Spectrum profile resolves through Spectrum's preset;
+- `tests/test_visualizer_profile_lender_presets.py`, `tests/test_3d_curated_preset_ownership.py` — descriptor-declared
+  borrowing, one-time ownership promotion and complete preset isolation through persisted startup and production callers;
+- `tests/test_sphere_authoring_contract.py`, `tests/test_sphere_analysis_consumers.py`,
+  `tests/test_sphere_render_authoring.py` — consumed technical ownership, RAW startup/Custom/SST promotion, real PCM analysis
+  and GL proof for direct alpha plus Rainbow speed/extent;
 - `tests/test_gl_error_policy.py` — per-call PyOpenGL error checking off at every entry, one check per node frame.
 
 Cost: `tools/visualizer_cost_probe.py` (offscreen, production host; median/p90 CPU submit and GPU, GL-call counts).

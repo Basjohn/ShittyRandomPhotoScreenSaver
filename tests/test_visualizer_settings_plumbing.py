@@ -696,6 +696,7 @@ class TestPerModeTechnicalRoundTrip:
 
     def _sample_payload(self):
         from core.settings.models import PER_MODE_TECHNICAL_MODES
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 
         payload = {}
         per_mode = {}
@@ -710,6 +711,7 @@ class TestPerModeTechnicalRoundTrip:
                 "sensitivity": round(0.5 + idx * 0.15, 2),
             }
             prefix = f"widgets.spotify_visualizer.{mode}_"
+            overrides = {key: value for key, value in overrides.items() if key in get_owned_mode_setting_keys(mode, "technical")}
             for key, value in overrides.items():
                 payload[f"{prefix}{key}"] = value
             per_mode[mode] = overrides
@@ -720,15 +722,20 @@ class TestPerModeTechnicalRoundTrip:
             assert model.resolve_bar_count(mode) == overrides["bar_count"]
             assert model.resolve_manual_floor(mode) == overrides["manual_floor"]
             assert model.resolve_dynamic_floor(mode) == overrides["dynamic_floor"]
-            assert model.resolve_dynamic_range_enabled(mode) == overrides["dynamic_range_enabled"]
+            if "dynamic_range_enabled" in overrides:
+                assert model.resolve_dynamic_range_enabled(mode) == overrides["dynamic_range_enabled"]
             assert model.resolve_audio_block_size(mode) == overrides["audio_block_size"]
             assert model.resolve_adaptive_sensitivity(mode) == overrides["adaptive_sensitivity"]
             assert model.resolve_sensitivity(mode) == overrides["sensitivity"]
 
     def _assert_dict_matches(self, data, per_mode):
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
         for mode, overrides in per_mode.items():
             prefix = f"widgets.spotify_visualizer.{mode}_"
             for key, value in overrides.items():
+                if key not in get_owned_mode_setting_keys(mode, "technical"):
+                    assert f"{prefix}{key}" not in data
+                    continue
                 assert data[f"{prefix}{key}"] == value
         legacy_globals = {
             "widgets.spotify_visualizer.bar_count",
@@ -811,7 +818,7 @@ class TestPerModeTechnicalRoundTrip:
             expected_floor = (
                 spectrum_source.resolve_manual_floor("spectrum")
                 if mode in {"extruded_spectrum", "shockwave_grid"}
-                else (0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode))
+                else (0.41 if mode in {"spectrum", "sphere"} else defaults.resolve_manual_floor(mode))
             )
             assert model.resolve_bar_count(mode) == expected.resolve_bar_count(source_mode)
             assert model.resolve_manual_floor(mode) == pytest.approx(expected_floor)
@@ -833,7 +840,7 @@ class TestPerModeTechnicalRoundTrip:
             {
                 mode: {
                     "bar_count": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_bar_count("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
-                    "manual_floor": (spectrum_source.resolve_manual_floor("spectrum") if mode in {"extruded_spectrum", "shockwave_grid"} else (0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode))),
+                    "manual_floor": (spectrum_source.resolve_manual_floor("spectrum") if mode in {"extruded_spectrum", "shockwave_grid"} else (0.41 if mode in {"spectrum", "sphere"} else defaults.resolve_manual_floor(mode))),
                     "dynamic_floor": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_dynamic_floor("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
                     "dynamic_range_enabled": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_dynamic_range_enabled("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
                     "audio_block_size": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_audio_block_size("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),

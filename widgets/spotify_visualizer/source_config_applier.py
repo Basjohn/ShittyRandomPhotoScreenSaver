@@ -99,6 +99,17 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 
     descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
+    if descriptor.analysis_notch_setting:
+        from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
+        resolved = dict(kwargs)
+        # Sphere reads pre-shape FFT and the selected two splits. Unused
+        # Spectrum shaper outputs keep the canonical engine API configuration.
+        for key in SPECTRUM_SOURCE_CONFIG_KEYS:
+            resolved[key] = deepcopy(_canonical(key))
+        notches = normalize_sphere_analysis_notches(kwargs[descriptor.analysis_notch_setting])
+        for kind in ("mirrored", "linear"):
+            resolved[f"spectrum_notch_positions_{kind}"] = deepcopy(notches)
+        return resolved
     if not bool(getattr(descriptor, "spectrum_shape_controls", False)):
         return dict(kwargs)
     resolved = dict(kwargs)

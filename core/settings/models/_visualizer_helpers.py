@@ -136,9 +136,13 @@ def _build_live_visualizer_mode_kwargs(
     default_model: "SpotifyVisualizerSettings",
 ) -> Dict[str, Any]:
     kwargs: Dict[str, Any] = {}
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 
     for mode in PER_MODE_TECHNICAL_MODES:
+        owned = get_owned_mode_setting_keys(mode, "technical")
         for key, coerce in PER_MODE_BASELINE_KEYS:
+            if key not in owned:
+                continue
             fallback = getattr(default_model, f"{mode}_{key}")
             raw = read_per_mode_value(mode, key, fallback)
             if coerce is bool:
@@ -202,8 +206,14 @@ def _resolve_active_mode_technical_state(
     normalized_mode = _resolve_technical_profile_mode(mode_key)
 
     resolved: Dict[str, Any] = {}
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+    from core.settings.default_contract import require_canonical_default
+    owned = get_owned_mode_setting_keys(normalized_mode, "technical")
     for key in _ACTIVE_MODE_TECHNICAL_KEYS:
-        resolved[key] = per_mode_kwargs[f"{normalized_mode}_{key}"]
+        resolved[key] = (
+            per_mode_kwargs[owned[key]] if key in owned
+            else require_canonical_default(f"widgets.spotify_visualizer.spectrum_{key}")
+        )
     return resolved
 
 

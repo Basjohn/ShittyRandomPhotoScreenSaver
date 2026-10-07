@@ -79,6 +79,10 @@ class VisualizerModeDescriptor:
     capture_module: str = ""
     capture_factory: str = ""
     technical_controls: bool = True
+    # None owns the complete shared technical API; a subset owns only settings
+    # the mode consumes. Unused worker outputs are configured at resolution.
+    technical_setting_suffixes: tuple[str, ...] | None = None
+    analysis_notch_setting: str = ""
     # Whether this mode participates in the shared per-mode Rainbow settings
     # contract. Experimental modes may deliberately omit that product surface;
     # callers must consult the descriptor rather than assume every mode owns
@@ -107,9 +111,9 @@ class VisualizerModeDescriptor:
     # source profile. The source preset is read only while missing owned keys
     # are promoted; runtime resolution remains wholly mode-local afterwards.
     profile_migration_source_mode: str = ""
-    # A borrower sees the lender (technical / shared-bar profile mode) as the lender itself
-    # shows: resolved through the lender's own active preset. False keeps the raw stored
-    # lender keys; only Sphere, whose S19 golden must reproduce today's hidden profile exactly.
+    # Live borrowers resolve through the lender's active preset. A former RAW
+    # borrower keeps False at its one-time migration boundary so promotion
+    # preserves stored analysis values rather than selecting a curated preset.
     lender_preset_resolved: bool = True
     # Optional renderer-only overflow wiring. Empty means the mode can never
     # bypass the canonical local visualizer clip. This is capability/routing
@@ -228,11 +232,15 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_sphere_ui",
         capture_module="widgets.spotify_visualizer.sphere_capture",
         capture_factory="capture_sphere",
-        technical_controls=False,
+        technical_controls=True,
+        technical_setting_suffixes=(
+            "bar_count", "audio_block_size", "adaptive_sensitivity", "sensitivity",
+            "dynamic_floor", "manual_floor", "input_gain", "transient_clamp",
+        ),
+        analysis_notch_setting="sphere_analysis_notch_positions",
         rainbow_controls=False,
         shared_bar_appearance=False,
-        shared_bar_profile_mode="spectrum",
-        technical_profile_mode="spectrum",
+        profile_migration_source_mode="spectrum",
         lender_preset_resolved=False,
         renderer_overflow_setting="sphere_allow_overflow",
         guided_setup_offered=False,
@@ -400,7 +408,7 @@ def get_technical_profile_mode(mode_id: str) -> str:
 
 def get_profile_lender_modes(mode_id: str) -> tuple[str, ...]:
     """The other modes whose settings ``mode_id`` borrows, each to be resolved through the
-    lender's own active preset (empty for a mode that owns its profiles, and for Sphere)."""
+    lender's own active preset (empty for a mode that owns its profiles)."""
 
     descriptor = get_visualizer_mode_descriptor(mode_id)
     if not descriptor.lender_preset_resolved:
@@ -427,6 +435,8 @@ def mode_owns_setting_family(mode_id: str, family: str) -> bool:
     """
 
     descriptor = get_visualizer_mode_descriptor(mode_id)
+    if family == "technical":
+        return bool(descriptor.technical_controls)
     if family == "rainbow":
         return bool(descriptor.rainbow_controls)
     if family == "shared_bar":
@@ -441,7 +451,14 @@ def get_owned_mode_setting_keys(mode_id: str, family: str) -> dict[str, str]:
     rather than manufacturing ``{mode}_{suffix}`` keys independently.
     """
 
-    suffixes = _MODE_SETTING_FAMILY_SUFFIXES.get(family)
+    if family == "technical":
+        from core.settings.visualizer_settings_contract import PER_MODE_BASELINE_KEYS
+        descriptor = get_visualizer_mode_descriptor(mode_id)
+        suffixes = descriptor.technical_setting_suffixes
+        if suffixes is None:
+            suffixes = tuple(key for key, _coerce in PER_MODE_BASELINE_KEYS)
+    else:
+        suffixes = _MODE_SETTING_FAMILY_SUFFIXES.get(family)
     if suffixes is None:
         raise KeyError(f"Unknown visualizer setting family: {family!r}")
     if not mode_owns_setting_family(mode_id, family):

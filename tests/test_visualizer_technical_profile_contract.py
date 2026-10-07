@@ -30,16 +30,17 @@ def _load_technical_config_module():
     return module
 
 
-def test_sphere_declares_reference_technical_profile_without_technical_ui() -> None:
+def test_sphere_declares_only_consumed_owned_technical_controls() -> None:
     descriptor = get_visualizer_mode_descriptor("sphere")
-    assert descriptor.technical_controls is False
+    assert descriptor.technical_controls is True
     assert descriptor.rainbow_controls is False
     assert mode_has_rainbow_controls("sphere") is False
     assert descriptor.shared_bar_appearance is False
     assert mode_has_shared_bar_appearance("sphere") is False
     assert get_owned_mode_setting_keys("sphere", "shared_bar") == {}
-    assert get_resolved_mode_setting_profile("sphere", "shared_bar") == "spectrum"
-    assert get_technical_profile_mode("sphere") == "spectrum"
+    assert get_resolved_mode_setting_profile("sphere", "shared_bar") is None
+    assert get_technical_profile_mode("sphere") == "sphere"
+    assert len(get_owned_mode_setting_keys("sphere", "technical")) == 8
 
 
 def test_normal_modes_resolve_their_own_technical_profile() -> None:
@@ -64,9 +65,9 @@ def test_absent_bar_capability_is_explicit_but_invalid_declared_profile_still_fa
 
 def test_technical_cache_resolution_is_descriptor_driven() -> None:
     technical_config = _load_technical_config_module()
-    spectrum = {"bar_count": 24, "sentinel": object()}
-    cache = {"spectrum": spectrum}
-    assert technical_config.resolve_technical_config(cache, "sphere") is spectrum
+    sphere = {"bar_count": 24, "sentinel": object()}
+    cache = {"sphere": sphere}
+    assert technical_config.resolve_technical_config(cache, "sphere") is sphere
 
 
 def test_rejected_smooth_sphere_settings_are_not_canonical_defaults() -> None:
@@ -426,13 +427,12 @@ def test_all_resolved_shared_bar_profiles_point_at_canonical_owned_keys() -> Non
             assert persisted_key in visualizer
 
 
-def test_sphere_runtime_presentation_defaults_use_resolved_profile_not_sphere_keys(monkeypatch) -> None:
+def test_sphere_runtime_presentation_defaults_use_own_literal_material_without_bar_profile(monkeypatch) -> None:
     """Exercise the runtime seam that previously crashed owner construction.
 
     ``install_default_presentation_state`` must never manufacture
-    ``sphere_bar_*`` keys. Sphere consumes the descriptor-declared Spectrum
-    shared-bar profile while the values themselves still come only from
-    canonical defaults.
+    shared bar appearance keys. Sphere consumes its own literal RGBA material,
+    while values themselves still come only from canonical defaults.
     """
     import sys
     import types
@@ -472,10 +472,10 @@ def test_sphere_runtime_presentation_defaults_use_resolved_profile_not_sphere_ke
     install_default_presentation_state(state)
 
     visualizer = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    assert captured["bar_fill_color"] == visualizer["spectrum_bar_fill_color"]
-    assert captured["bar_border_color"] == visualizer["spectrum_bar_border_color"]
-    assert captured["bar_border_opacity"] == visualizer["spectrum_bar_border_opacity"]
-    assert not any(key.startswith("sphere_bar_") for key in captured)
+    assert all(key not in captured for key in ("bar_fill_color", "bar_border_color", "bar_border_opacity"))
+    assert captured["sphere_fill_color"] == visualizer["sphere_fill_color"]
+    assert captured["sphere_edge_color"] == visualizer["sphere_edge_color"]
+    assert all(f"sphere_{key}" not in captured for key in ("bar_fill_color", "bar_border_color", "bar_border_opacity"))
 
 
 
