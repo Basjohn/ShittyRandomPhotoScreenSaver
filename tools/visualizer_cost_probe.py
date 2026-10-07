@@ -122,8 +122,10 @@ class _CallCounter:
     _MODULES = ("rendering.quick.visualizer.render_host", "rendering.quick.scene3d.target",
                 "rendering.quick.scene3d.post", "rendering.quick.scene3d.stream",
                 "rendering.quick.scene3d.resources", "rendering.quick.scene3d.environment",
+                "rendering.quick.scene3d.uniforms",
                 "rendering.quick.visualizer.implementations.extruded_spectrum",
                 "rendering.quick.visualizer.implementations.shockwave_grid",
+                "rendering.quick.visualizer.implementations.sphere_voxel",
                 "rendering.quick.visualizer.gl_state", "rendering.quick.gl_query")
 
     def __init__(self, gl) -> None:
@@ -153,8 +155,20 @@ class _CallCounter:
             if getattr(module, "gl", None) is real:
                 module.gl = self._proxy
                 self._swapped.append(module)
+        # The shared stream uses the raw multi-bind entry point, so count it
+        # alongside wrapped GL calls rather than omitting its per-pass writes.
+        from OpenGL.raw.GL.VERSION import GL_4_4
+
+        self._raw_stream_bind = GL_4_4.glBindBuffersRange
+        def bind_range(*args, **kwargs):
+            counter.count += 1
+            return self._raw_stream_bind(*args, **kwargs)
+        GL_4_4.glBindBuffersRange = bind_range
 
     def uninstall(self) -> None:
+        from OpenGL.raw.GL.VERSION import GL_4_4
+
+        GL_4_4.glBindBuffersRange = self._raw_stream_bind
         for module in self._swapped:
             module.gl = self._gl
         self._swapped = []

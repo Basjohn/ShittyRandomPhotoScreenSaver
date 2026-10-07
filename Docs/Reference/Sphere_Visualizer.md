@@ -1,10 +1,10 @@
 # Voxel Sphere — experimental preservation and shared-Scene3D promotion contract
 
-Status: **ACCEPTED EXPERIMENTAL — LOW-LEVEL SUBSTRATE PROMOTION ACTIVE.** Sphere remains independently removable, lazy and mode-owned while S19 moves only its duplicate GPU/resource plumbing onto the shared scene3d substrate. Visual/product acceptance does **not** promote Sphere reaction/state semantics into shared Visualizer architecture or make Sphere a permanent default mode.
+Status: **ACCEPTED EXPERIMENTAL — PROMOTION ACTIVE.** Sphere remains independently removable, lazy and mode-owned while `Current_Plan.md` §7 graduates its consumed authoring controls and shared Scene3D plumbing. Visual/product acceptance does **not** promote Sphere reaction/state semantics into shared Visualizer architecture or make Sphere a permanent default mode.
 
 ## Current golden
 
-Sphere remains a separate, disabled-by-default experimental Visualizer mode; its accepted look and response are preservation inputs, not permission to collapse its behavior into the shared carded-mode implementation. Ordinary-widget semantic Edit/lifetime machinery is not part of Sphere's viewport ownership.
+Sphere remains a separate experimental Visualizer mode whose enablement comes from canonical `mode_activation`; its accepted look and response are preservation inputs, not permission to collapse its behavior into the shared carded-mode implementation. Ordinary-widget semantic Edit/lifetime machinery is not part of Sphere's viewport ownership.
 
 The accepted representation is the stepped voxel shell, not the retired smooth icosphere. The musical *vocabulary* is the preservation target: strong/local detached fragmentation, granular event-owned intake/outtake cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and the vocal-linked intake recoil. Its reaction *numbers* are not (operator 2026-10-04): the S19 ramp retune makes small sounds and near-silence deliberately calmer. Presentation or cleanup work may not make loud passages or big hits quieter or slower to react, nor the mode less spatially articulate or more ambient/free-running.
 
@@ -19,10 +19,53 @@ The golden froze their resolved settings when it was written (`sphere_golden.py`
 
 ## Isolation / ownership contract
 
-- The descriptor remains an independently disabled experimental mode with lazy Settings builder, capture, frame runtime and renderer. Heavy resources stay dormant while disabled and retire through the existing render-context lifecycle.
+### Consumed controls and source seams
+
+`config_applier.py` owns configure-time Sphere parameters; `sphere_capture.py` supplies immutable frame input to
+`SphereFrameRuntime`, and `sphere_voxel.py` consumes its result. The following field suffixes use the `sphere_` prefix.
+This is a consumer inventory, not another settings/default catalog; the canonical model/descriptor and Settings binding
+remain authoritative for persisted fields and ranges.
+
+| Consumer | Controls that reach it | Meaningful boundary |
+| --- | --- | --- |
+| Logical event admission | `fragment_energy_floor`, `particle_energy_floor` | Acoustic gates after typed/event-spectrum qualification; quiet/inactive sources cannot author cohorts |
+| Logical fragment/flow response | `fragment_interpolation_enabled`, `incoming_density_response_enabled`, `incoming_transient_velocity_enabled`, `particle_outtake_enabled`, `vocal_response` | Section easing and immutable cohort density, event velocity, intake/outtake direction and vocal recoil |
+| Logical body/tracer motion | `size_response`, `light_tracer_enabled`, `base_rotation_speed`, `rotation_speed` | Body growth, event-stepped tracer travel, continuous base rotation and musical velocity reaction |
+| Voxel transform | `fragment_strength`, `particle_distance`, `particle_amount`, `perspective_strength`, `voxel_size_variation`, `fade_incoming_blocks` | The same hero/shadow vertex transform; bounded section displacement, travel/population, projection, cube size and replacement fade |
+| Surface material | `fill_color`, `edge_color`, `tracer_color`, `edge_weight`, `gloss`, `specular`, `light_direction`, `cel_shading`, `depth_shading_enabled`, `depth_shading_strength` | Literal independent RGBA, face lighting, edge thresholds, tracer colour, cel quantization and rear-depth luminance; audio does not recolour the material |
+| Rainbow | `taste_the_rainbow_enabled`, `taste_the_rainbow_surfaces`, `taste_the_rainbow_edges` | Independent surface/edge switches for the moving partial-spectrum field; speed `0.05` and extent `0.22` remain renderer constants pending authoring graduation |
+| Projected shadow | `shadow_enabled`, `shadow_opacity`, `shadow_softness`, `shadow_distance`, `shadow_size` | Actual voxel silhouette, optionally one expanded feather layer; disabled/zero-opacity does not issue a shadow draw |
+| Presentation resources | `allow_overflow`, `mirror`, shared `scene3d_detail` and displayed `backdrop` | Stable authored reach, tier multisampling/reflection admission and window-owned wallpaper copy; no music-driven target resize |
+| Settings-only finish bundle | `finish` | UI selection writes Gloss/Specular; the renderer consumes those two axes, not a separate material selector |
+
+Source input is generation/activation-fenced current playback. Support-aware bands supply spatial articulation; live
+pre-AGC energy supplies body presence; the immutable pre-shape/pre-AGC spectrum supplies generic onsets; musical level and
+intensity supply passage-relative qualification; the existing typed event scheduler supplies kick/snare/vocal/onset packets.
+No Sphere FFT, source manager or audio clock exists. `get_technical_profile_mode("sphere")` currently selects Spectrum's
+resolved analysis profile; moving consumed analysis controls to a Sphere-owned profile remains the authoring graduation
+boundary. Spectrum shape/ghost presentation controls are not Sphere controls. Existing audio-contract tests and the frozen
+promotion golden protect event/response vocabulary; visual control usability and standard-mode promotion still require the
+operator acceptance gate.
+
+### Shared frame upload and retirement
+
+Hero and shadow programs declare the same `SphereFrameBlock` through `Scene3DBlockLayout`. Its fixed-size section/cohort
+arrays use standard std140 strides; one shared `UniformBlock` streams the immutable transform and material values through
+the existing context-local `StreamRing`. Shadow layer overrides and outtake pass selection write separate bounded copies,
+so submitted draws retain their own projection/pass values. Sampler-unit assignments occur once per linked program;
+wallpaper names are bound together per frame. Shader arithmetic, mesh/instance identity, draw order and reaction state stay
+Sphere-owned.
+
+The ring allocates only on the admitted renderer's prepared reveal or first draw. Program attachment alone allocates no
+stream. The normal renderer `has_resources` and retirement path include the block/ring alongside `MeshResources`,
+`SceneTarget` and `BackdropEnvironment`; failed cleanup remains a loud error with its existing owner, and a later release
+can retry. Each hero/shadow scope stays within the shared fixed per-frame capacity, including outtake; no larger Sphere pool,
+background preparation or cleanup poller exists.
+
+- The descriptor remains independently enabled/disabled with lazy Settings builder, capture, frame runtime and renderer. Heavy resources stay dormant while disabled and retire through the existing render-context lifecycle.
 - Canonical persisted state remains in the existing `sphere_*` namespace. Do not invent a private Settings manager/default store, and do not promote Sphere into shared setting families merely for tidiness.
 - **Pre-S19 current state:** Sphere declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Capture that current state before migration; do not reinterpret it as the final desired technical-control model.
-- **Pre-S19 current state:** the descriptor resolves its hidden technical profile through canonical **Spectrum** technical settings. Those exact resolved values are behavioural golden input for the migration. S19 explicitly replaces this hidden whole-profile borrowing with a Sphere-owned resolved technical profile and per-control capability metadata, exposing only controls that demonstrably affect Sphere's analysis inputs. Dead controls are forbidden.
+- **Pre-promotion state:** the descriptor resolves its hidden technical profile through canonical **Spectrum** technical settings. Those exact resolved values are behavioural golden input for the migration. `Current_Plan.md` §7 explicitly replaces this hidden whole-profile borrowing with a Sphere-owned resolved technical profile and per-control capability metadata, exposing only controls that demonstrably affect Sphere's analysis inputs. Dead controls are forbidden.
 - Existing BeatEngine spectrum/live-pre-AGC/musical-level (`get_musical_level`) seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
 - Product acceptance does not authorize extracting Sphere behavioural internals into shared infrastructure. The active promotion authorises sharing low-level GPU/resource/material/post/compute infrastructure only; Sphere reaction/state semantics remain private.
 
@@ -75,9 +118,19 @@ Before any architectural promotion into shared/permanent ownership, capture both
 - *Visual:* the production render host offscreen on replayed snapshots: both goldens at rest, mid-kicks and on the
   big hit (480x270 item), and extreme CUSTOM wide (960x120) and tall (200x600) through the production presentation
   resolver: `tests/goldens/visualizer_replay/sphere_visual/` (bit-identical run to run).
-- *Cost* (`tools/visualizer_cost_probe.py sphere --size 2560x1440`): CPU submit median 0.44 ms / p90 0.47, GPU
-  0.03 ms, 17 Python GL calls per frame.
+- *Historical cost* (`tools/visualizer_cost_probe.py sphere --size 2560x1440`): CPU submit median 0.44 ms / p90 0.47,
+  GPU 0.03 ms. Its reported 17 Python GL calls omitted Sphere's renderer module and is not a complete call baseline.
 - *Accepted comparison cohort:* the maintained replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
+
+The 2026-10-07 shared-frame migration adds Sphere, shared uniform blocks and the raw stream multi-bind to the existing
+cost probe's call counter. A same-process-code baseline comparison loaded the pre-migration renderer from Git in a
+separate process, without changing the tree: High detail, shadow/softness `0.18`, `960x540`, 90 frames after 15 warm frames.
+Two interleaved runs measured CPU submit median `0.490–0.504 ms` before and `0.433–0.457 ms` after; a separately counted
+run measured `185` versus `78` GL calls. Whole-host GPU median stayed around `0.025 ms`, but its p90 rose from about
+`0.026 ms` to `0.21–0.33 ms`. Draw-only diagnostic queries measured voxel draw p90 `0.0102 ms` before and `0.0133 ms`
+after: the larger whole-host tail includes submission/stream intervals rather than a corresponding increase in voxel
+draw time. This is scoped offscreen evidence; loaded-desktop cadence/GPU-tail acceptance remains open. No behavioural
+or visual golden was rewritten for this migration.
 
 Presets are authored content and never tested against (operator 2026-10-04): each case is seeded from its curated
 preset only when recorded, and its resolved Sphere settings are frozen into the golden; replays use that frozen copy,
@@ -104,12 +157,12 @@ The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferre
 This gate removes competing low-level 3D architectures. Promotion
 means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
 preserving the complete behavioural golden above. It does **not** authorise retuning/renaming Sphere behavioural state, replacing its logical runtime, or turning Sphere
-into a base class. S19 **does** authorise replacing the hidden Spectrum-profile borrow with deliberate Sphere-owned
-technical-control resolution after the current values are captured as the migration golden. See `Current_Plan.md` S19.
+into a base class. `Current_Plan.md` §7 **does** authorise replacing the hidden Spectrum-profile borrow with deliberate
+Sphere-owned technical-control resolution after the current values are captured as the migration golden.
 
 ## Current shared-boundary rule
 
-Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. Only the low-level GPU/resource/material/post/compute seams named by S19 are in the active promotion; any behavioural extraction beyond them requires separate approval and the golden gate above.
+Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. The low-level GPU/resource/material/post/compute seams and consumed authoring controls named by `Current_Plan.md` §7 are in the active promotion; behavioural extraction requires separate approval and the golden gate above.
 
 ## Open operator gate: energy-floor controls
 

@@ -30,6 +30,77 @@ def test_std140_offsets_follow_the_rules():
     assert "layout(std140) uniform MixedBlock" in _MIXED.glsl()
 
 
+_ARRAYS = Scene3DBlockLayout.of("ArrayBlock", (
+    ("weights", "float[8]"), ("lanes", "int[4]"), ("centres", "vec3[2]"),
+))
+
+
+def test_fixed_arrays_have_std140_stride_and_reject_incomplete_records():
+    import struct
+    assert _ARRAYS.offsets == (0, 128, 192)
+    assert _ARRAYS.size == 224
+    values = {"weights": tuple(range(8)), "lanes": (1, 2, 3, 4), "centres": ((5, 6, 7), (8, 9, 10))}
+    packed = _ARRAYS.pack(values)
+    assert [struct.unpack_from("<f", packed, index * 16)[0] for index in range(8)] == list(range(8))
+    assert struct.unpack_from("<3f", packed, 208) == (8, 9, 10)
+    assert _ARRAYS.pack_fields({"weights": tuple(range(8))}) == ((0, packed[:128]),)
+    with pytest.raises(ValueError, match="exactly 8"):
+        _ARRAYS.pack({**values, "weights": (1,)})
+
+
+@pytest.mark.qt
+def test_fixed_scalar_and_vector_arrays_reach_gpu_and_partial_updates_preserve_other_fields(context):
+    fragment = "#version 460 core\nout vec4 FragColor;\n" + _ARRAYS.glsl() + """
+void main() {
+    int column = int(gl_FragCoord.x);
+    if (column < 8) FragColor = vec4(weights[column]);
+    else if (column < 12) FragColor = vec4(float(lanes[column - 8]));
+    else FragColor = vec4(centres[column - 12], 1.0);
+}
+"""
+    program = compile_program(_VERTEX, fragment, label="fixed-array uniform probe")
+    block = UniformBlock(_ARRAYS, "fixed-array uniform probe")
+    texture, fbo, vao = int(gl.glGenTextures(1)), int(gl.glGenFramebuffers(1)), int(gl.glGenVertexArrays(1))
+    try:
+        block.attach(program)
+        for index in range(int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORMS))):
+            name = gl.glGetActiveUniform(program, index)[0].decode().split("[")[0].split(".")[-1]
+            stride = (ctypes.c_int * 1)()
+            gl.glGetActiveUniformsiv(program, 1, (ctypes.c_uint * 1)(index), gl.GL_UNIFORM_ARRAY_STRIDE, stride)
+            assert stride[0] == 16, name
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA32F, 14, 1, 0, gl.GL_RGBA, gl.GL_FLOAT, None)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
+        gl.glViewport(0, 0, 14, 1)
+        gl.glUseProgram(program)
+        gl.glBindVertexArray(vao)
+        values = {"weights": tuple(range(8)), "lanes": (1, 2, 3, 4), "centres": ((5, 6, 7), (8, 9, 10))}
+        packed = _ARRAYS.pack(values)
+        with pytest.raises(ValueError, match="224 packed bytes"):
+            with block.bound(packed[:-1]):
+                pytest.fail("invalid packed input reached the stream")
+        assert not block.has_resources
+        with pytest.raises(RuntimeError, match="not bound"):
+            block.update_packed(packed)
+        with block.bound(packed):
+            block.update_fields({"lanes": (9, 8, 7, 6)})
+            with pytest.raises(ValueError, match="224 packed bytes"):
+                block.update_packed(packed[:-1])
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        pixels = np.asarray(gl.glReadPixels(0, 0, 14, 1, gl.GL_RGBA, gl.GL_FLOAT)).reshape(-1, 4)
+        assert np.array_equal(pixels[:8, 0], np.arange(8))
+        assert np.array_equal(pixels[8:12, 0], (9, 8, 7, 6))
+        assert np.array_equal(pixels[12:14, :3], values["centres"])
+    finally:
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, context.fbo)
+        gl.glDeleteFramebuffers(1, [fbo])
+        gl.glDeleteTextures([texture])
+        gl.glDeleteVertexArrays(1, [vao])
+        gl.glDeleteProgram(program)
+        block.release()
+
+
 @pytest.fixture
 def context(qt_app):
     from tools.transition_contact_sheet import TransitionCapture

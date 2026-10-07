@@ -498,10 +498,12 @@ an active CUSTOM session may provide a temporary working override. Save promotes
 restores the old committed value, and ending CUSTOM removes only the override. Inactive CUSTOM does not imply canonical
 `(420,280)`.
 
-Sphere is an opt-in descriptor with FRAMELESS + VIEWPORT_RECT policy. Its compact configure-owned parameters and
-activation-relative time share the existing visualizer clock; only current playing source energy/transients drive
-deformation, size pulse and reactive bump. A static body mesh uses aspect-correct perspective and material-local
-bump/lighting; Magma/Water may lazily allocate bounded static effect geometry. Renderer resources belong to
+Sphere is an opt-in Voxel descriptor with FRAMELESS + VIEWPORT_RECT policy. Its configure-owned parameters and
+activation-relative time share the existing Visualizer clock; generation/activation-fenced playing sources own
+section fragmentation, size pulse, tracer articulation and bounded intake/outtake cohorts. One static cube mesh and
+stepped-shell instance buffer supply the hero and projected voxel-shadow transforms. Fill/Edge/Tracer RGBA, lighting,
+depth/cel shading, partial-spectrum Rainbow and tier-gated wallpaper Mirror Cubes remain presentation values rather
+than audio-authored palette changes. Shared SceneTarget, MeshResources and BackdropEnvironment resources belong to
 their Quick window/context and retire through one-shot render events on admission changes, independently of whether
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
 

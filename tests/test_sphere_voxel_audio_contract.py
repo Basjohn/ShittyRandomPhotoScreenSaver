@@ -117,7 +117,8 @@ def test_voxel_renderer_is_sectional_audio_geometry_not_time_motion() -> None:
     ).read_text(encoding="utf-8")
     vertex = source.split("void main() {{", 1)[1].split("mat3 turn = rotation();", 1)[0]
     assert "uTime" not in vertex
-    assert "uSectionDrives[8]" in source.split("_FRAGMENT_SOURCE", 1)[0]
+    from rendering.quick.visualizer.implementations.sphere_voxel import _VERTEX_SOURCE
+    assert "uSectionDrives[8]" in _VERTEX_SOURCE
     assert "sectionField(direction)" in vertex
     assert "smoothstep(0.62, 0.95" in source
     assert "0.68 * uFragmentStrength" in vertex
@@ -144,8 +145,12 @@ def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
     uniform_pattern = r"^\s*uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
     uniforms = lambda text: set(re.findall(uniform_pattern, text, flags=re.MULTILINE))
     # Every declared uniform is set (no dead or missing uniform), for both programs.
-    assert set(module._HERO_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._FRAGMENT_SOURCE)
-    assert set(module._SHADOW_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._SHADOW_FRAGMENT_SOURCE)
+    assert set(module._SAMPLER_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._FRAGMENT_SOURCE)
+    assert not uniforms(module._SHADOW_FRAGMENT_SOURCE)
+    declaration = module._SPHERE_FRAME_BLOCK.glsl()
+    assert declaration in module._VERTEX_SOURCE
+    assert declaration in module._FRAGMENT_SOURCE
+    assert declaration in module._SHADOW_FRAGMENT_SOURCE
     assert "_GHOST_FRAGMENT_SOURCE" not in source
     assert "ghost_names" not in source
 
@@ -154,7 +159,8 @@ def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> Non
     source = (
         ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py"
     ).read_text(encoding="utf-8")
-    fragment = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
+    from rendering.quick.visualizer.implementations.sphere_voxel import _FRAGMENT_SOURCE
+    fragment = _FRAGMENT_SOURCE.split("};", 1)[1]
     assert "vDrive" not in fragment
     assert "materialBase" not in fragment
     assert "uMaterial" not in fragment
@@ -165,7 +171,7 @@ def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> Non
     assert "vDrive" not in fragment
     assert "uSectionDrives" not in fragment
     assert "rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate)" in fragment
-    assert 'gl.glUniform1f(uniforms["uVoxelSizeVariation"], float(parameters["sphere_voxel_size_variation"]))' in source
+    assert 'values["uVoxelSizeVariation"] = float(parameters["sphere_voxel_size_variation"])' in source
     assert "uBlockRelief" not in source
     assert "uMaterialFx" not in fragment
 
@@ -727,7 +733,8 @@ def test_incoming_blocks_are_event_owned_and_decay_instead_of_spawning_ambiently
 
 def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
-    fragment = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
+    from rendering.quick.visualizer.implementations.sphere_voxel import _FRAGMENT_SOURCE
+    fragment = _FRAGMENT_SOURCE.split("};", 1)[1]
     assert "vScreenCenter" in fragment
     assert "directional = dot(vScreenCenter.xy, lightXY)" in fragment
     assert "shellDiffuse = clamp(0.56 + 0.44 * directional" in fragment
@@ -889,9 +896,9 @@ def test_scene_shadow_cel_and_arrival_fade_are_sphere_renderer_only() -> None:
     assert 'gl.glBindVertexArray(self._vao)' in shadow_method
     assert 'parameters["sphere_shadow_enabled"]' in shadow_method
     assert '_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE' in source
-    assert 'self._upload_voxel_transform_uniforms(' in shadow_method
-    assert 'projection_offset=shadow_offset' in shadow_method
-    assert 'projection_scale=shadow_size' in shadow_method
+    assert 'with self._frame_block.bound(layer_values)' in shadow_method
+    assert '"uProjectionOffset": shadow_offset' in shadow_method
+    assert '"uProjectionScale": shadow_size' in shadow_method
     assert 'cohort.outtake for cohort in state.particle_cohorts' in shadow_method
     assert 'parameters["sphere_shadow_opacity"]' in shadow_method
     assert 'parameters["sphere_shadow_softness"]' in shadow_method
@@ -972,7 +979,8 @@ def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> Non
 
     assert "sphere_light_tracer_enabled" in runtime_source
     assert "sphere_light_tracer_enabled" in _SPHERE_SETTING_KEYS
-    fragment = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
+    from rendering.quick.visualizer.implementations.sphere_voxel import _FRAGMENT_SOURCE
+    fragment = _FRAGMENT_SOURCE.split("};", 1)[1]
     spec_chunk = fragment.split("float specExponent", 1)[1].split("vec3 base", 1)[0]
     assert "vScreenCenter" not in spec_chunk
     assert "sourceEdge" in source and "towardLight" in source

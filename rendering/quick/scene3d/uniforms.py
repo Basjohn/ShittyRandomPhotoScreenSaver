@@ -54,8 +54,11 @@ class UniformBlock:
         self._attached.add(program)
 
     @contextmanager
-    def bound(self, values: Mapping[str, object]) -> Iterator[None]:
-        data = self.layout.pack(values)
+    def bound(self, values: Mapping[str, object] | bytes) -> Iterator[None]:
+        """Bind resolved values or a packed immutable frame reused across passes."""
+        data = values if isinstance(values, bytes) else self.layout.pack(values)
+        if len(data) != self.layout.size:
+            raise ValueError(f"{self.label} requires {self.layout.size} packed bytes")
         with self._stream.bound(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, data):
             outer, self._packed = self._packed, data
             try:
@@ -67,10 +70,15 @@ class UniformBlock:
         """Rebind the block with selected fields changed (inside ``bound``)."""
         if self._packed is None:
             raise RuntimeError(f"{self.label} is not bound")
-        data = bytearray(self._packed)
-        for offset, part in self.layout.pack_fields(values):
-            data[offset:offset + len(part)] = part
-        self._packed = bytes(data)
+        self.update_packed(self.layout.patch(self._packed, values))
+
+    def update_packed(self, data: bytes) -> None:
+        """Rebind a resolved immutable frame inside the current scope."""
+        if self._packed is None:
+            raise RuntimeError(f"{self.label} is not bound")
+        if len(data) != self.layout.size:
+            raise ValueError(f"{self.label} requires {self.layout.size} packed bytes")
+        self._packed = data
         self._stream.rebind(gl.GL_UNIFORM_BUFFER, SCENE3D_UNIFORM_BINDING, self._packed)
 
     def release(self) -> None:
