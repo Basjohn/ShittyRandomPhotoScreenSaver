@@ -766,6 +766,14 @@ class SettingsManager(QObject):
                     # the user's existing values even when QSettings returns
                     # a mapping type that is not a plain dict.
                     section_dict = dict(existing_section)
+                    if section_name == 'spotify_visualizer':
+                        # Promote the persisted lender values before canonical
+                        # default fill can mask which owned keys were absent.
+                        from core.settings.visualizer_settings_contract import migrate_profile_lender_owned_settings
+                        promoted = migrate_profile_lender_owned_settings(section_dict)
+                        if promoted != section_dict:
+                            section_dict = promoted
+                            changed = True
                     skip_keys = _WIDGET_DEFAULT_MERGE_SKIP_KEYS.get(section_name, frozenset())
                     for k, v in section_defaults.items():
                         if k in skip_keys and k not in section_dict:

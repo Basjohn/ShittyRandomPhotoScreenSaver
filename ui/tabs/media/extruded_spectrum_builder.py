@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QCheckBox, QLabel
+from PySide6.QtWidgets import QCheckBox, QLabel, QVBoxLayout, QWidget
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from ui.tabs.media.builder_scaffold import bind_setting_signal, build_collapsible_bucket, build_mode_scaffold
@@ -19,20 +19,24 @@ _SHAPE_SLIDERS = (
      "Turns the row of bars a full circle, so it is seen at an angle or from behind (A and D while it shows)."),
 )
 _FINISH_SLIDERS = (
+    ("extruded_spectrum_body_alpha", "Body Alpha:", 0, 100,
+     "Opacity of the extruded bar bodies; edge and reflection treatment remain authored separately."),
     ("extruded_spectrum_hue_drift", "Hue Drift:", 0, 100,
-     "How fast spectral colours drift around the colour wheel; zero holds them still."),
+     "How fast Rainbow colours drift in Spectral Faces or Spectral Edges; zero holds them still. "
+     "Bar Colours uses the authored fill and border colours instead."),
     ("extruded_spectrum_gloss", "Gloss:", 0, 100, "Shine on the bars' faces."),
     ("extruded_spectrum_face_mirror", "Mirror Faces:", 0, 100,
      "Gives the bars' faces (not their edges) a polished, mirror surface reflecting the wallpaper, "
      "sharper with Gloss; zero leaves them plain."),
     ("extruded_spectrum_reflection", "Reflection:", 0, 100,
      "How strongly the bars reflect in the floor beneath them; zero shows no floor."),
+    ("extruded_spectrum_shadow_strength", "Shadow Strength:", 0, 100,
+     "Strength of the optional projected Scene3D shadow."),
 )
 
 
 def build_extruded_spectrum_ui(tab, parent_layout) -> None:
-    """Build Extruded Spectrum's body. Its bars, analysis, shape, bar colours and ghosting come
-    from Spectrum's settings; only its 3D presentation is its own."""
+    """Build Extruded Spectrum's independently-authored 3D and bar profile."""
 
     scaffold = build_mode_scaffold(
         tab,
@@ -48,12 +52,19 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     )
     _, shape = build_collapsible_bucket(
         tab, scaffold.normal_layout, mode_key="extruded_spectrum", bucket_key="shape", title="Shape",
-        helper_text=("Spectrum's bars in 3D. Bar count, response, the shape editor and ghosting follow "
-                     "Spectrum's settings."),
+        helper_text="Bars in 3D with this mode's own count, shape, response and ghost settings.",
     )
     _, finish = build_collapsible_bucket(
         tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="finish", title="Finish",
         helper_text="Colour, shine, reflections, edge smoothing and whether the 3D may leave its rectangle.",
+    )
+    _, response = build_collapsible_bucket(
+        tab, scaffold.normal_layout, mode_key="extruded_spectrum", bucket_key="response", title="Response",
+        helper_text="Shape the bars and tune how this preset responds to music.",
+    )
+    _, ghost = build_collapsible_bucket(
+        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="ghost", title="Ghost",
+        helper_text="Trailing bar ghosts are authored by this Extruded preset.",
     )
 
     def row(layout, label):
@@ -81,13 +92,79 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     for spec in _SHAPE_SLIDERS:
         slider(shape, *spec)
 
+    content = row(shape, "Mirrored Layout:")
+    tab.extruded_spectrum_mirrored = QCheckBox("Center-Out (Mirrored Shape)")
+    tab.extruded_spectrum_mirrored.setProperty("circleIndicator", True)
+    tab.extruded_spectrum_mirrored.setChecked(
+        tab._default_bool("spotify_visualizer", "extruded_spectrum_mirrored"))
+    tab.extruded_spectrum_mirrored.setToolTip(
+        "On: use the center-out profile. Off: use the left-to-right profile.")
+    bind_setting_signal(tab, tab.extruded_spectrum_mirrored.stateChanged, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_mirrored)
+    content.addStretch()
+
+    hint = QLabel("Left-click to add a control node (max 5). Right-click a node to remove it. Drag to reshape.")
+    hint.setWordWrap(True)
+    response.addWidget(hint)
+    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+    tab.extruded_spectrum_shape_editor = SpectrumShapeEditor(
+        parent=None,
+        mirrored=tab._default_bool("spotify_visualizer", "extruded_spectrum_mirrored"),
+        default_nodes=tab._widget_default("spotify_visualizer", "extruded_spectrum_shape_nodes"),
+        default_notches_mirrored=tab._widget_default("spotify_visualizer", "extruded_spectrum_notch_positions_mirrored"),
+        default_notches_linear=tab._widget_default("spotify_visualizer", "extruded_spectrum_notch_positions_linear"),
+        default_lane_strengths_mirrored=tab._widget_default("spotify_visualizer", "extruded_spectrum_lane_strengths_mirrored"),
+        default_lane_strengths_linear=tab._widget_default("spotify_visualizer", "extruded_spectrum_lane_strengths_linear"),
+    )
+    tab.extruded_spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
+    tab.extruded_spectrum_shape_editor.notch_positions_changed.connect(tab._save_settings)
+    tab.extruded_spectrum_shape_editor.lane_strengths_changed.connect(tab._save_settings)
+    response.addWidget(tab.extruded_spectrum_shape_editor)
+    tab.extruded_spectrum_mirrored.stateChanged.connect(
+        lambda state: tab.extruded_spectrum_shape_editor.set_mirrored(bool(state))
+    )
+    for key, label, minimum, maximum, tooltip in (
+        ("extruded_spectrum_wave_amplitude", "Reactivity:", 0, 100,
+         "Overall motion scaling after the authored lane routing."),
+        ("extruded_spectrum_profile_floor", "Shape Floor:", 5, 30,
+         "Minimum body retained by the authored bar profile."),
+        ("extruded_spectrum_drop_speed", "Falloff:", 50, 300,
+         "How quickly the shared bar field falls after an energy drop."),
+    ):
+        slider(response, key, label, minimum, maximum, tooltip)
+    from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
+    build_spectrum_smoothing_controls(tab, response, mode_key="extruded_spectrum")
+
+    content = row(ghost, "Enable Ghosting:")
+    tab.extruded_spectrum_ghosting_enabled = QCheckBox("Draw trailing bar ghosts")
+    tab.extruded_spectrum_ghosting_enabled.setProperty("circleIndicator", True)
+    tab.extruded_spectrum_ghosting_enabled.setChecked(
+        tab._default_bool("spotify_visualizer", "extruded_spectrum_ghosting_enabled"))
+    bind_setting_signal(tab, tab.extruded_spectrum_ghosting_enabled.toggled, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_ghosting_enabled)
+    content.addStretch()
+    ghost_details = QWidget()
+    ghost_details_layout = QVBoxLayout(ghost_details)
+    ghost_details_layout.setContentsMargins(0, 0, 0, 0)
+    ghost_details_layout.setSpacing(12)
+    ghost.addWidget(ghost_details)
+    for key, label, minimum, maximum, tooltip in (
+        ("extruded_spectrum_ghost_alpha", "Ghost Opacity:", 0, 100,
+         "Opacity of the bar-history ghosts."),
+        ("extruded_spectrum_ghost_decay", "Ghost Decay:", 10, 100,
+         "How quickly ghosts descend after a bar falls."),
+    ):
+        slider(ghost_details_layout, key, label, minimum, maximum, tooltip)
+    tab.extruded_spectrum_ghosting_enabled.toggled.connect(ghost_details.setVisible)
+    ghost_details.setVisible(tab.extruded_spectrum_ghosting_enabled.isChecked())
+
     content = row(finish, "Colouring:")
     tab.extruded_spectrum_colouring = StyledComboBox()
     tab.extruded_spectrum_colouring.addItems(list(EXTRUDED_COLOURINGS))
     tab.extruded_spectrum_colouring.setCurrentText(tab._default_str("spotify_visualizer", "extruded_spectrum_colouring"))
     tab.extruded_spectrum_colouring.setToolTip(
-        "Spectral Faces: each bar coloured by its place in the spectrum. Spectral Edges: Spectrum's bar "
-        "colour with glowing spectral edges, like Spectrum's Organs. Bar Colours: Spectrum's bar colours.")
+        "Spectral Faces: Rainbow colours across the bar bodies. Spectral Edges: your authored bar "
+        "colour with glowing spectral edges. Bar Colours: your authored fill and border colours.")
     bind_setting_signal(tab, tab.extruded_spectrum_colouring.currentTextChanged, auto_switch=True)
     content.addWidget(tab.extruded_spectrum_colouring)
     content.addStretch()
@@ -114,4 +191,14 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
         "Off: lines are sized as if seen head-on, which thins and roughens them on faces seen at an angle.")
     bind_setting_signal(tab, tab.extruded_spectrum_smooth_edges.toggled, auto_switch=True)
     content.addWidget(tab.extruded_spectrum_smooth_edges)
+    content.addStretch()
+    content = row(finish, "Cast Shadow:")
+    tab.extruded_spectrum_shadow_enabled = QCheckBox("Project a shared Scene3D shadow")
+    tab.extruded_spectrum_shadow_enabled.setProperty("circleIndicator", True)
+    tab.extruded_spectrum_shadow_enabled.setChecked(
+        tab._default_bool("spotify_visualizer", "extruded_spectrum_shadow_enabled"))
+    tab.extruded_spectrum_shadow_enabled.setToolTip(
+        "Draw the optional Scene3D ground shadow using the display's existing shadow direction.")
+    bind_setting_signal(tab, tab.extruded_spectrum_shadow_enabled.toggled, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_shadow_enabled)
     content.addStretch()

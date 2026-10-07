@@ -31,6 +31,7 @@ from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VE
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.shadows import directional_shadow_pass, directional_shadow_vector
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
@@ -44,7 +45,7 @@ _BAR_BINDING = 3
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
              "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
-             "uBackdropPrevious", "uBackdropBlend")
+             "uBackdropPrevious", "uBackdropBlend", "uBodyAlpha", "uShadowColor", "uShadowVector")
 
 
 def extruded_quality(parameters) -> tuple[int, float]:
@@ -133,8 +134,17 @@ class QuickExtrudedSpectrumRenderer:
         if scene is None or not scene[7]:
             return frame
         layout, field, centre, depth, tilt, turn, reflection, _overflow, fit = scene
+        parameters = frame.snapshot.logical.mode_state.parameters
+        shadow_vector = (0.0, 0.0)
+        if (bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
+                and float(parameter(parameters, "extruded_spectrum_shadow_strength")) > 0.0
+                and rgba(frame.snapshot.presentation.shell_style["shadow_color"])[3] > 0.0):
+            shadow_vector = directional_shadow_vector(
+                frame.snapshot.presentation.shell_style["shadow_offset"], 0.22,
+            )
         return reach_item_frame(frame, extruded_reach(
-            field, centre, 0.5 * layout.bar_span / field[3], depth, tilt, turn, fit, reflection))
+            field, centre, 0.5 * layout.bar_span / field[3], depth, tilt, turn, fit, reflection,
+            shadow_vector=shadow_vector))
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
@@ -185,6 +195,14 @@ class QuickExtrudedSpectrumRenderer:
                      * float(parameter(parameters, "extruded_spectrum_hue_drift"))) % 1.0
         ghost_alpha = (max(0.0, min(1.0, float(parameter(parameters, "spectrum_ghost_alpha"))))
                        if bool(parameter(parameters, "spectrum_ghosting_enabled")) else 0.0)
+        body_alpha = float(parameter(parameters, "extruded_spectrum_body_alpha"))
+        if not 0.0 <= body_alpha <= 1.0:
+            raise ValueError("Extruded Spectrum body alpha must be within [0, 1]")
+        fill = rgba(style["fill_color"])
+        shadow_enabled = bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
+        shadow_strength = float(parameter(parameters, "extruded_spectrum_shadow_strength"))
+        if not 0.0 <= shadow_strength <= 1.0:
+            raise ValueError("Extruded Spectrum shadow strength must be within [0, 1]")
 
         r = self._resources
         program = r.program("bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE)
@@ -222,7 +240,7 @@ class QuickExtrudedSpectrumRenderer:
             gl.glUniform1i(uniforms["uColouring"], colouring)
             field_bottom = field[1] + field[3]
             gl.glUniform2f(uniforms["uFloorSpan"], field_bottom - self._fit[1] * height, field_bottom)
-            gl.glUniform4f(uniforms["uFill"], *rgba(style["fill_color"]))
+            gl.glUniform4f(uniforms["uFill"], *fill)
             gl.glUniform4f(uniforms["uBorder"], *rgba(style["border_color"]))
             gl.glUniform1f(uniforms["uGloss"], float(parameter(parameters, "extruded_spectrum_gloss")))
             gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
@@ -230,6 +248,7 @@ class QuickExtrudedSpectrumRenderer:
             gl.glUniform1f(uniforms["uReflection"], reflection)
             gl.glUniform1f(uniforms["uSmooth"], 1.0 if smooth else 0.0)
             gl.glUniform1f(uniforms["uMirror"], mirror)
+            gl.glUniform1f(uniforms["uBodyAlpha"], body_alpha)
             if backdrop:
                 vx, vy, vw, vh = frame.viewport
                 gl.glUniform4f(uniforms["uBackdropMap"], origin[0] - vx, origin[1] - vy, vw, vh)
@@ -242,11 +261,36 @@ class QuickExtrudedSpectrumRenderer:
                 gl.glUniform1f(uniforms["uBackdropBlend"], blend if previous != backdrop else 1.0)
                 gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindVertexArray(vao)
-            gl.glEnable(gl.GL_DEPTH_TEST)
-            gl.glDepthMask(gl.GL_TRUE)
             with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _BAR_BINDING, records):
-                gl.glUniform1i(uniforms["uPass"], 0)
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+                if shadow_enabled and shadow_strength > 0.0:
+                    shadow_color = rgba(presentation.shell_style["shadow_color"])
+                    shadow_alpha = shadow_color[3] * 0.34 * shadow_strength
+                    shadow_vector = directional_shadow_vector(
+                        presentation.shell_style["shadow_offset"], 0.22,
+                    )
+                    if shadow_alpha > 0.0 and shadow_vector != (0.0, 0.0):
+                        gl.glUniform1i(uniforms["uPass"], 4)
+                        gl.glUniform4f(
+                            uniforms["uShadowColor"],
+                            shadow_color[0], shadow_color[1], shadow_color[2], shadow_alpha,
+                        )
+                        gl.glUniform2f(uniforms["uShadowVector"], *shadow_vector)
+                        with directional_shadow_pass():
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+
+                if body_alpha >= 1.0 and fill[3] >= 1.0:
+                    gl.glEnable(gl.GL_DEPTH_TEST)
+                    gl.glDepthMask(gl.GL_TRUE)
+                    gl.glUniform1i(uniforms["uPass"], 0)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+                elif body_alpha > 0.0:
+                    # Each box keeps only faces toward the eye, then the records' far-to-near
+                    # order resolves bar overlap without a per-mode OIT target.  Depth writes
+                    # would otherwise hide the wallpaper and later transparent bars.
+                    gl.glDisable(gl.GL_DEPTH_TEST)
+                    gl.glDepthMask(gl.GL_FALSE)
+                    gl.glUniform1i(uniforms["uPass"], 3)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
                 gl.glDepthMask(gl.GL_FALSE)              # the translucent passes after the bars
                 if reflection > 0.0:
                     gl.glUniform1i(uniforms["uPass"], 2)

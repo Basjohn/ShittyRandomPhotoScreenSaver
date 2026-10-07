@@ -113,15 +113,27 @@ def extruded_fit(half_span: float, depth: float, tilt: float, reflection: float,
 
 
 def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: float, turn: float,
-                   fit: tuple[float, float], reflection: float) -> tuple[float, float, float, float]:
+                   fit: tuple[float, float], reflection: float,
+                   shadow_vector: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float, float, float]:
     """The item-local (left, top, right, bottom) extent of everything the bars can draw for this
-    view: every bar at the ceiling over its full depth, and its floor reflection. Fixed per view
+    view: every bar at the ceiling over its full depth, its floor reflection and, when admitted,
+    the directional top-face projection swept across the floor. Fixed per view
     and shape, never per frame of music."""
     scale, floor = fit
     top, height = float(field[1]), float(field[3])
     low = -EXTRUDED_CEILING if reflection > 0.0 else 0.0
     points = [extruded_project((x, y, z), tilt, turn) for x in (-half_span, half_span)
               for y in (low, 1.05 * EXTRUDED_CEILING) for z in (-depth, 0.0)]
+    if shadow_vector != (0.0, 0.0):
+        shadow_x, shadow_z = shadow_vector
+        # The shader projects each top face by its authored bar height. The
+        # floor at zero height is already inside the body reach; ceiling-height
+        # shadow corners complete the fixed sweep for every intermediate level.
+        points.extend(
+            extruded_project((x + shadow_x * EXTRUDED_CEILING, 0.0,
+                              z + shadow_z * EXTRUDED_CEILING), tilt, turn)
+            for x in (-half_span, half_span) for z in (-depth, 0.0)
+        )
     xs = [centre + p[0] * scale * height for p in points]
     ys = [top + height - (floor + p[1] * scale) * height for p in points]
     return min(xs), min(ys), max(xs), max(ys)
@@ -170,7 +182,7 @@ vec4 extrudedClip(vec3 world, out float itemY) {{
 EXTRUDED_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location = 0) in vec3 aPosition;\nlayout(location = 1) in vec3 aNormal;\n"
     + _COMMON_UNIFORMS
-    + "uniform int uPass;       // 0 bars, 1 ghost columns, 2 reflection\nuniform int uBarCount;\n"
+    + "uniform int uPass;       // 0 opaque bars, 1 ghost columns, 2 reflection, 3 translucent bars, 4 shadow\nuniform int uBarCount;\nuniform vec2 uShadowVector;\n"
     + "uniform float uHueShift;\n"
     + "flat out vec3 vHue;\nout vec3 vWorld;\nout vec3 vNormal;\nout vec3 vLocal;\nout vec3 vSize;\nout float vItemY;\n"
     + SCENE3D_GLSL + EXTRUDED_BARS.glsl(3) + _PROJECTION_GLSL
@@ -197,6 +209,13 @@ void main() {
         world.y = -world.y;
         normal.y = -normal.y;
     }
+    if (uPass == 4) {                             // directional projection of the top face onto the floor
+        if (aNormal.y < 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+        world.x += uShadowVector.x * world.y;
+        world.z += uShadowVector.y * world.y;
+        world.y = 0.0;
+        normal = vec3(0.0, 1.0, 0.0);
+    }
     vWorld = extrudedViewPoint(world, uView);     // lit in the frame the camera sees
     vNormal = extrudedView(normal, uView);
     vLocal = local;
@@ -205,7 +224,7 @@ void main() {
     float hue = fract(0.8 * float(index) / max(1.0, float(uBarCount - 1)) + uHueShift);
     vHue = mix(vec3(1.0), clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0), 0.85);
     gl_Position = extrudedClip(world, vItemY);
-    if (uPass != 0) {
+    if (uPass == 1 || uPass == 2 || uPass == 3) {
         // Translucent passes keep only the faces turned toward the eye (at the view frame's
         // (0, 0, camera)), so a box never blends over itself; in painter's order that is exact.
         // (A plane faces the eye at all its points or none, so per-vertex agrees across a face.)
@@ -226,10 +245,14 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
     "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
     "uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend\n"
-    "uniform float uBackdropBlend;\n"
+    "uniform float uBackdropBlend;\nuniform float uBodyAlpha;\nuniform vec4 uShadowColor;\nuniform vec2 uShadowVector;\n"
     + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL
     + """
 void main() {
+    if (uPass == 4) {
+        FragColor = uShadowColor;
+        return;
+    }
     vec3 n = normalize(vNormal);
     // Distance to the nearest edge of this face, per face axis. The face is the box axis whose
     // local coordinate sits at 0 or 1 (the normal is in the turned, tilted frame). Off, lines are
@@ -256,7 +279,10 @@ void main() {
     vec3 body = uColouring == 0 ? vHue : uFill.rgb;
     vec3 trim = uColouring == 1 ? vHue : uBorder.rgb;
     float trimAlpha = uColouring == 1 ? 1.0 : uBorder.a;
-    SceneMaterial bar = SceneMaterial(mix(body, trim, rim * trimAlpha), mix(0.75, 0.18, uGloss), 0.0, 0.5,
+    float edgeAlpha = rim * trimAlpha;
+    float surfaceAlpha = uFill.a + (1.0 - uFill.a) * edgeAlpha;
+    float trimMix = surfaceAlpha > 0.0 ? edgeAlpha / surfaceAlpha : 0.0;
+    SceneMaterial bar = SceneMaterial(mix(body, trim, trimMix), mix(0.75, 0.18, uGloss), 0.0, 0.5,
                                       uColouring == 1 ? trim * rim * 0.8 : vec3(0.0));
     vec3 lit = sceneMaterialLit(bar, n, vWorld, vec3(2.3), vec3(0.45));
     if (uMirror > 0.0) {
@@ -278,7 +304,7 @@ void main() {
         float fresnel = 0.8 + 0.2 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         lit = mix(lit, mirror, uMirror * fresnel * (1.0 - rim * trimAlpha));
     }
-    float alpha = 1.0;
+    float alpha = uPass == 3 ? uBodyAlpha * surfaceAlpha : 1.0;
     if (uPass == 1) alpha = uGhostAlpha * mix(0.45, 1.0, rim);
     if (uPass == 2) {
         // The reflection fades with distance below the floor, to nothing at the field's bottom.
@@ -288,7 +314,7 @@ void main() {
     }
     // A translucent box now blends once (its far faces are culled); give that one layer the
     // opacity its front and back faces used to add up to, so Ghost and Reflection keep their look.
-    if (uPass != 0) { alpha = clamp(alpha, 0.0, 1.0); alpha = alpha * (2.0 - alpha); }
+    if (uPass == 1 || uPass == 2) { alpha = clamp(alpha, 0.0, 1.0); alpha = alpha * (2.0 - alpha); }
     FragColor = vec4(lit, alpha);
 }
 """

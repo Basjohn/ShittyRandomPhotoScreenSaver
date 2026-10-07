@@ -38,6 +38,11 @@ SPECTRUM_SOURCE_CONFIG_KEYS = frozenset(
         "spectrum_drop_speed",
     }
 )
+SPECTRUM_SOURCE_SUFFIXES = tuple(
+    key.removeprefix("spectrum_") for key in sorted(SPECTRUM_SOURCE_CONFIG_KEYS)
+)
+SPECTRUM_GHOST_SUFFIXES = ("ghosting_enabled", "ghost_alpha", "ghost_decay")
+SHARED_BAR_SUFFIXES = ("bar_fill_color", "bar_border_color", "bar_border_opacity")
 
 
 def _canonical(key: str) -> Any:
@@ -78,6 +83,52 @@ def _require_engine_method(engine: Any, name: str):
     if not callable(method):
         raise RuntimeError(f"visualizer BeatEngine has no {name} source-config authority")
     return method
+
+
+def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one mode's owned Spectrum-shaper values onto the shared engine seam.
+
+    Spectrum's DSP implementation remains the only source/shaper implementation.
+    A participating 3D mode supplies the same semantic values under its own
+    persisted namespace; this activation-time projection is deliberately not a
+    second persistence or fallback authority.
+    """
+
+    if not isinstance(kwargs, Mapping):
+        raise TypeError("visualizer source config must be a mapping")
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+    descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
+    if not bool(getattr(descriptor, "spectrum_shape_controls", False)):
+        return dict(kwargs)
+    resolved = dict(kwargs)
+    for suffix in SPECTRUM_SOURCE_SUFFIXES:
+        owned_key = f"{descriptor.mode_id}_{suffix}"
+        if owned_key in kwargs:
+            resolved[f"spectrum_{suffix}"] = kwargs[owned_key]
+    for suffix in ("visual_smoothing_enabled", "visual_smoothing"):
+        owned_key = f"{descriptor.mode_id}_{suffix}"
+        if owned_key in kwargs:
+            resolved[f"spectrum_{suffix}"] = kwargs[owned_key]
+    stabilization_key = f"{descriptor.mode_id}_solid_bar_hysteresis_enabled"
+    if stabilization_key in kwargs:
+        resolved["spectrum_render_mode"] = "bars" if kwargs[stabilization_key] else "segment"
+    if bool(getattr(descriptor, "spectrum_ghost_controls", False)):
+        for suffix in SPECTRUM_GHOST_SUFFIXES:
+            owned_key = f"{descriptor.mode_id}_{suffix}"
+            if owned_key in kwargs:
+                resolved[f"spectrum_{suffix}"] = kwargs[owned_key]
+    else:
+        # This family member has no peak-ghost renderer or ghost authoring.
+        # Do not advance invisible ghost history from another mode's controls.
+        resolved["spectrum_ghosting_enabled"] = False
+    from core.settings.visualizer_mode_registry import mode_has_shared_bar_appearance
+    if mode_has_shared_bar_appearance(descriptor.mode_id):
+        for suffix in SHARED_BAR_SUFFIXES:
+            owned_key = f"{descriptor.mode_id}_{suffix}"
+            if owned_key in kwargs:
+                resolved[suffix] = kwargs[owned_key]
+    return resolved
 
 
 def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool:
@@ -170,4 +221,9 @@ def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool
     return True
 
 
-__all__ = ["SPECTRUM_SOURCE_CONFIG_KEYS", "apply_engine_vis_mode_kwargs"]
+__all__ = [
+    "SPECTRUM_SOURCE_CONFIG_KEYS",
+    "SPECTRUM_SOURCE_SUFFIXES",
+    "resolve_mode_source_config",
+    "apply_engine_vis_mode_kwargs",
+]

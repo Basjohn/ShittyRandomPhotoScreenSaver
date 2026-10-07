@@ -97,6 +97,16 @@ class VisualizerModeDescriptor:
     # Modes without their own technical controls may explicitly borrow one
     # canonical technical profile. Empty means the mode owns its own profile.
     technical_profile_mode: str = ""
+    # A mode can reuse Spectrum's source/shaper implementation while owning the
+    # corresponding persisted settings. These flags expose only controls that
+    # the selected runtime actually consumes; they never create a second DSP
+    # implementation or a live dependency on Spectrum's active preset.
+    spectrum_shape_controls: bool = False
+    spectrum_ghost_controls: bool = False
+    # One-time persisted-input bridge for a mode that formerly borrowed its
+    # source profile. The source preset is read only while missing owned keys
+    # are promoted; runtime resolution remains wholly mode-local afterwards.
+    profile_migration_source_mode: str = ""
     # A borrower sees the lender (technical / shared-bar profile mode) as the lender itself
     # shows: resolved through the lender's own active preset. False keeps the raw stored
     # lender keys; only Sphere, whose S19 golden must reproduce today's hidden profile exactly.
@@ -230,8 +240,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         backdrop_setting="sphere_mirror",
     ),
     # The first Visualizer on the shared Scene3D foundation. It reuses Spectrum's frame
-    # runtime (bars, peaks, R-76 temporal treatment, the shape editor), technical profile
-    # and bar colours, and owns only its presentation. Frameless like Sphere (the 3D stands
+    # runtime implementation (bars, peaks, R-76 temporal treatment, the shape editor), while
+    # owning its technical, bar, source-shaper and ghost profile. Frameless like Sphere (the 3D stands
     # over the wallpaper and may overflow its rectangle), reflowing with the viewport;
     # CUSTOM quarter-turn content rotation is not offered (its Turn control orbits instead).
     VisualizerModeDescriptor(
@@ -249,20 +259,21 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.extruded_spectrum",
         settings_builder_module="ui.tabs.media.extruded_spectrum_builder",
         settings_builder_factory="build_extruded_spectrum_ui",
-        technical_controls=False,
+        technical_controls=True,
         rainbow_controls=False,
-        shared_bar_appearance=False,
-        shared_bar_profile_mode="spectrum",
-        technical_profile_mode="spectrum",
+        shared_bar_appearance=True,
+        spectrum_shape_controls=True,
+        spectrum_ghost_controls=True,
+        profile_migration_source_mode="spectrum",
         renderer_overflow_setting="extruded_spectrum_allow_overflow",
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
         prepared_reveal=True,
         backdrop_setting="extruded_spectrum_face_mirror",
     ),
-    # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's bars as a ridge
-    # along its horizon. Spectrum's frame runtime (bars, technical profile, bar colours) plus a
-    # bounded onset-event ring of its own; frameless and orbitable like Extruded Spectrum.
+    # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's shared source
+    # implementation feeding the ridge along its horizon. It owns only the consumed technical and
+    # source-shaper profile plus a bounded onset-event ring; frameless and orbitable like Extruded Spectrum.
     VisualizerModeDescriptor(
         "shockwave_grid",
         "Shockwave Grid",
@@ -278,11 +289,11 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.shockwave_grid",
         settings_builder_module="ui.tabs.media.shockwave_grid_builder",
         settings_builder_factory="build_shockwave_grid_ui",
-        technical_controls=False,
+        technical_controls=True,
         rainbow_controls=False,
         shared_bar_appearance=False,
-        shared_bar_profile_mode="spectrum",
-        technical_profile_mode="spectrum",
+        spectrum_shape_controls=True,
+        profile_migration_source_mode="spectrum",
         renderer_overflow_setting="shockwave_grid_allow_overflow",
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
@@ -457,9 +468,7 @@ def get_resolved_mode_setting_profile(mode_id: str, family: str) -> str | None:
         raise KeyError(f"Unknown visualizer setting family: {family!r}")
     profile = str(descriptor.shared_bar_profile_mode).strip().lower()
     if not profile:
-        raise ValueError(
-            f"visualizer mode {mode_id!r} owns no shared-bar settings and declares no shared-bar profile"
-        )
+        return None
     if not mode_owns_setting_family(profile, "shared_bar"):
         raise ValueError(
             f"visualizer shared-bar profile {profile!r} for mode {mode_id!r} does not own canonical shared-bar settings"

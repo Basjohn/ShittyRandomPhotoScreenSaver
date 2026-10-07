@@ -33,13 +33,14 @@ def install_default_presentation_state(state: VisualizerPresentationState) -> No
     defaults = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
     mode_id = str(state.runtime_controller.mode_id)
     shared_bar_keys = get_resolved_mode_setting_keys(mode_id, "shared_bar")
-    for shared_key, persisted_key in shared_bar_keys.items():
-        if persisted_key not in defaults:
-            raise KeyError(
-                "canonical Visualizer defaults missing resolved shared-bar key "
-                f"{persisted_key!r} for mode {mode_id!r}"
-            )
-        defaults[shared_key] = defaults[persisted_key]
+    if shared_bar_keys:
+        for shared_key, persisted_key in shared_bar_keys.items():
+            if persisted_key not in defaults:
+                raise KeyError(
+                    "canonical Visualizer defaults missing resolved shared-bar key "
+                    f"{persisted_key!r} for mode {mode_id!r}"
+                )
+            defaults[shared_key] = defaults[persisted_key]
     # The 3D Detail tier, as the canonical 3D Settings resolve it for this mode (the runtime's
     # activation passes the stored settings' tier through the same key).
     from core.settings.scene3d_quality import resolve_visualizer_tier

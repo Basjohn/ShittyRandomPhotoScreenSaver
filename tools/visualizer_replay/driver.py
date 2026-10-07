@@ -17,7 +17,7 @@ from unittest.mock import patch
 from PySide6.QtCore import QCoreApplication, QEvent, QThread
 
 from core.settings.models import SpotifyVisualizerSettings
-from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy, iter_all_visualizer_mode_descriptors
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
 from widgets.spotify_visualizer.config_applier import (
     apply_logical_vis_mode_kwargs, apply_presentation_vis_mode_kwargs,
@@ -29,7 +29,7 @@ from widgets.spotify_visualizer.presentation_state import install_default_presen
 from widgets.spotify_visualizer.quick_presentation_sync import QuickVisualizerPresentationSync
 from widgets.spotify_visualizer.quick_technical_config import apply_controller_technical_config
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
-from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mode_kwargs
+from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mode_kwargs, resolve_mode_source_config
 from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
@@ -59,7 +59,7 @@ def mode_output(frame):
         return state.positions
     if frame.mode_id == "devcurve":
         return tuple(value for _name, curve in state.curves for value in curve)
-    if frame.mode_id == "spectrum":
+    if frame.mode_id in {"spectrum", "extruded_spectrum"}:
         return frame.common.bars + state.peaks
     if frame.mode_id == "sphere":
         return sphere_output(state)
@@ -133,7 +133,7 @@ def _configure(controller, mode, preset: int = 0, overrides=None, settings=None)
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=controller.bar_count)
     install_default_presentation_state(controller.presentation_state)
-    values = asdict(model)
+    values = resolve_mode_source_config(mode, asdict(model))
     apply_logical_vis_mode_kwargs(state, values)
     apply_presentation_vis_mode_kwargs(controller.presentation_state, values)
     apply_engine_vis_mode_kwargs(controller.engine, values)
@@ -156,7 +156,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
     """Replay ``clip`` through ``mode`` (curated ``preset``, or ``settings``: frozen complete settings, a mapping
     or ``mode -> mapping``; with optional Settings-model ``overrides``). ``snapshots_at``: frame indices whose published Quick snapshot is returned
     (``result["snapshots"]``, index -> snapshot) for renderer captures."""
-    if mode not in (*MODES, *REAL_SCALE_MODES, "control") or present_every < 1:
+    if mode not in (*(descriptor.mode_id for descriptor in iter_all_visualizer_mode_descriptors()), "control") or present_every < 1:
         raise ValueError("invalid replay mode or presentation interval")
     if mode in REAL_SCALE_MODES and any(frame.real is None for frame in clip.frames):
         raise ValueError("Sphere replays only from schema 2 (real-scale) clips")

@@ -774,6 +774,7 @@ class TestPerModeTechnicalRoundTrip:
 
     def test_from_mapping_drops_legacy_shared_technical_inputs(self):
         from core.settings.models import PER_MODE_TECHNICAL_MODES, SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import apply_preset_to_config
 
         payload = {
             "widgets.spotify_visualizer.mode": "bubble",
@@ -795,36 +796,49 @@ class TestPerModeTechnicalRoundTrip:
         model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
         serialized = model.to_dict()
         defaults = SpotifyVisualizerSettings()
+        spectrum_source = SpotifyVisualizerSettings.from_mapping(
+            apply_preset_to_config(
+                "spectrum", 0, {"spectrum_manual_floor": 0.41}
+            ),
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
         supported_modes = tuple(PER_MODE_TECHNICAL_MODES)
 
         for mode in supported_modes:
-            expected_floor = 0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode)
-            assert model.resolve_bar_count(mode) == defaults.resolve_bar_count(mode)
-            assert model.resolve_manual_floor(mode) == pytest.approx(expected_floor)
-            assert model.resolve_dynamic_floor(mode) is defaults.resolve_dynamic_floor(mode)
-            assert model.resolve_dynamic_range_enabled(mode) is defaults.resolve_dynamic_range_enabled(mode)
-            assert model.resolve_audio_block_size(mode) == defaults.resolve_audio_block_size(mode)
-            assert model.resolve_adaptive_sensitivity(mode) is defaults.resolve_adaptive_sensitivity(mode)
-            assert model.resolve_sensitivity(mode) == pytest.approx(defaults.resolve_sensitivity(mode))
-            assert model.resolve_agc_strength(mode) == pytest.approx(defaults.resolve_agc_strength(mode))
-            assert model.resolve_input_gain(mode) == pytest.approx(defaults.resolve_input_gain(mode))
-            assert model.resolve_kick_lane_gain(mode) == pytest.approx(defaults.resolve_kick_lane_gain(mode))
-            assert model.resolve_transient_pulse_gain(mode) == pytest.approx(
-                defaults.resolve_transient_pulse_gain(mode)
+            source_mode = "spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode
+            expected = spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults
+            expected_floor = (
+                spectrum_source.resolve_manual_floor("spectrum")
+                if mode in {"extruded_spectrum", "shockwave_grid"}
+                else (0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode))
             )
-            assert model.resolve_transient_clamp(mode) == pytest.approx(defaults.resolve_transient_clamp(mode))
+            assert model.resolve_bar_count(mode) == expected.resolve_bar_count(source_mode)
+            assert model.resolve_manual_floor(mode) == pytest.approx(expected_floor)
+            assert model.resolve_dynamic_floor(mode) is expected.resolve_dynamic_floor(source_mode)
+            assert model.resolve_dynamic_range_enabled(mode) is expected.resolve_dynamic_range_enabled(source_mode)
+            assert model.resolve_audio_block_size(mode) == expected.resolve_audio_block_size(source_mode)
+            assert model.resolve_adaptive_sensitivity(mode) is expected.resolve_adaptive_sensitivity(source_mode)
+            assert model.resolve_sensitivity(mode) == pytest.approx(expected.resolve_sensitivity(source_mode))
+            assert model.resolve_agc_strength(mode) == pytest.approx(expected.resolve_agc_strength(source_mode))
+            assert model.resolve_input_gain(mode) == pytest.approx(expected.resolve_input_gain(source_mode))
+            assert model.resolve_kick_lane_gain(mode) == pytest.approx(expected.resolve_kick_lane_gain(source_mode))
+            assert model.resolve_transient_pulse_gain(mode) == pytest.approx(
+                expected.resolve_transient_pulse_gain(source_mode)
+            )
+            assert model.resolve_transient_clamp(mode) == pytest.approx(expected.resolve_transient_clamp(source_mode))
 
         self._assert_dict_matches(
             serialized,
             {
                 mode: {
-                    "bar_count": defaults.resolve_bar_count(mode),
-                    "manual_floor": 0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode),
-                    "dynamic_floor": defaults.resolve_dynamic_floor(mode),
-                    "dynamic_range_enabled": defaults.resolve_dynamic_range_enabled(mode),
-                    "audio_block_size": defaults.resolve_audio_block_size(mode),
-                    "adaptive_sensitivity": defaults.resolve_adaptive_sensitivity(mode),
-                    "sensitivity": defaults.resolve_sensitivity(mode),
+                    "bar_count": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_bar_count("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
+                    "manual_floor": (spectrum_source.resolve_manual_floor("spectrum") if mode in {"extruded_spectrum", "shockwave_grid"} else (0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode))),
+                    "dynamic_floor": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_dynamic_floor("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
+                    "dynamic_range_enabled": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_dynamic_range_enabled("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
+                    "audio_block_size": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_audio_block_size("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
+                    "adaptive_sensitivity": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_adaptive_sensitivity("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
+                    "sensitivity": (spectrum_source if mode in {"extruded_spectrum", "shockwave_grid"} else defaults).resolve_sensitivity("spectrum" if mode in {"extruded_spectrum", "shockwave_grid"} else mode),
                 }
                 for mode in supported_modes
             },

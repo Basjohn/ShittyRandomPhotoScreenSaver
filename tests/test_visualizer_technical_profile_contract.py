@@ -48,6 +48,20 @@ def test_normal_modes_resolve_their_own_technical_profile() -> None:
             assert get_technical_profile_mode(descriptor.mode_id) == descriptor.mode_id
 
 
+def test_absent_bar_capability_is_explicit_but_invalid_declared_profile_still_fails(monkeypatch) -> None:
+    from dataclasses import replace
+    from core.settings import visualizer_mode_registry as registry
+    from core.settings.models._visualizer_helpers import _resolve_active_mode_shared_visual_state
+
+    descriptor = registry.get_visualizer_mode_descriptor("shockwave_grid")
+    assert registry.get_resolved_mode_setting_profile(descriptor.mode_id, "shared_bar") is None
+    assert registry.get_resolved_mode_setting_keys(descriptor.mode_id, "shared_bar") == {}
+    malformed = replace(descriptor, shared_bar_profile_mode=descriptor.mode_id)
+    monkeypatch.setattr(registry, "get_visualizer_mode_descriptor", lambda _mode: malformed)
+    with pytest.raises(ValueError, match="does not own canonical shared-bar settings"):
+        _resolve_active_mode_shared_visual_state(mode_key=descriptor.mode_id, per_mode_kwargs={})
+
+
 def test_technical_cache_resolution_is_descriptor_driven() -> None:
     technical_config = _load_technical_config_module()
     spectrum = {"bar_count": 24, "sentinel": object()}
@@ -224,7 +238,8 @@ def test_legacy_shared_bar_migration_does_not_synthesize_sphere_keys() -> None:
         if not descriptor.shared_bar_appearance:
             continue
         mode = descriptor.mode_id
-        assert migrated[f"{mode}_bar_fill_color"] == [1, 2, 3, 4]
+        expected_fill = [1, 2, 3, 255] if mode == "extruded_spectrum" else [1, 2, 3, 4]
+        assert migrated[f"{mode}_bar_fill_color"] == expected_fill
         assert migrated[f"{mode}_bar_border_color"] == [5, 6, 7, 8]
         assert migrated[f"{mode}_bar_border_opacity"] == 0.4
 
@@ -399,6 +414,8 @@ def test_all_resolved_shared_bar_profiles_point_at_canonical_owned_keys() -> Non
 
     visualizer = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
     for descriptor in iter_all_visualizer_mode_descriptors():
+        if not descriptor.shared_bar_appearance and not descriptor.shared_bar_profile_mode:
+            continue
         resolved = get_resolved_mode_setting_keys(descriptor.mode_id, "shared_bar")
         assert set(resolved) == {
             "bar_fill_color",

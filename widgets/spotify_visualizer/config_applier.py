@@ -658,6 +658,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._extruded_spectrum_allow_overflow = bool(kwargs['extruded_spectrum_allow_overflow'])
     if 'extruded_spectrum_smooth_edges' in kwargs:
         host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
+    if 'extruded_spectrum_shadow_enabled' in kwargs:
+        host._extruded_spectrum_shadow_enabled = bool(kwargs['extruded_spectrum_shadow_enabled'])
     if 'scene3d_detail' in kwargs:
         from rendering.gl_programs.scene3d import scene3d_detail
 
@@ -687,6 +689,7 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
 
 _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
+    "extruded_spectrum_body_alpha": (0.0, 1.0),
     "extruded_spectrum_depth": (0.25, 3.0),
     "extruded_spectrum_tilt": (0.0, 1.0),
     "extruded_spectrum_gloss": (0.0, 1.0),
@@ -694,6 +697,7 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
     "extruded_spectrum_face_mirror": (0.0, 1.0),
     "extruded_spectrum_hue_drift": (0.0, 1.0),
     "extruded_spectrum_turn": (-1.0, 1.0),
+    "extruded_spectrum_shadow_strength": (0.0, 1.0),
 }
 
 
@@ -741,6 +745,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
+    values["extruded_spectrum_shadow_enabled"] = bool(pres._extruded_spectrum_shadow_enabled)
     values["scene3d_detail"] = str(pres._scene3d_detail)
     values["backdrop"] = getattr(pres, "_backdrop", None)    # the reflected wallpaper, when it reflects
     values["backdrop_blend_s"] = getattr(pres, "_backdrop_blend_s", None)

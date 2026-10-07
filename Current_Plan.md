@@ -191,46 +191,22 @@ snapping, viewport math or the global Edit/Arrange transaction model.
 
 ---
 
-## 4. 3D Visualizer authoring parity | Extruded Spectrum first
+## 4. 3D Visualizer authoring parity | Extruded and Shockwave
 
-The 3D renderers are ahead of their Settings surfaces. Fix that as shared architecture rather than growing a second class of
-Visualizer that looks richer but can only be authored through hidden Spectrum borrowing. **Shared controls means shared
-implementation, not shared authored values.** Each participating mode owns its canonical persisted profile and each preset may
-author a different profile.
+Each mode owns its complete technical, source-shaper,
+bar/ghost families where consumed, smoothing and bar-height stabilization; shared UI/evaluation remains one implementation.
+Curated snapshots are explicit and self-contained, and the before-default-fill migration preserves old borrowed values once.
+Direct fill/body alpha and the optional canonical-direction shadow have real-GL proof. Current behavior belongs in
+`Docs/Reference/Visualizer_Reference.md`; these are the remaining actions.
 
-- [ ] **E1. Registry-derived shared authoring substrate.** Replace the old hard-coded 2D-only technical/profile membership
-  assumptions with descriptor/capability-driven ownership for the setting families a mode actually consumes. Extract/reuse the
-  existing Spectrum shaper, shared bar appearance, Rainbow, response/technical and ghost authoring widgets/schema helpers; do
-  not clone their math, validation or persistence logic into 3D builders. A mode that exposes a family owns its own namespace,
-  defaults, Reset behavior and preset values. No Settings widget reads another mode's current preset as hidden mutable state.
-- [ ] **E2. Extruded full Spectrum-facing controls.** Extruded must expose the meaningful Spectrum controls that drive the bars
-  it actually renders: bar count/layout, fill + border colours/alpha, Rainbow controls where applicable, response/technical
-  shaping, mirrored layout, the visual shape editor/notches/lane strengths, smoothing/falloff and ghost controls. Keep the
-  existing 3D-only controls (Depth, Tilt, Turn, Colouring, Hue Drift, Gloss, Mirror Faces, floor Reflection, Smooth Edges and
-  Allow Overflow). Do not expose dead controls merely for checkbox parity.
-- [ ] **E3. Preset-local Extruded shapes are mandatory.** Every shipped or Custom Extruded preset may define a unique shaper
-  profile: nodes, notches, lane strengths, mirrored state and the relevant response/layout values. Switching Spectrum presets
-  must not alter Extruded, and switching Extruded presets must restore the complete Extruded-owned shape/profile. Reuse one
-  `SpectrumShapeEditor`/shape-evaluation authority underneath; separate the stored per-mode/per-preset data. Include migration
-  from today's borrowed Spectrum values so existing users do not get a visually arbitrary first run.
-- [ ] **E4. Direct material axes, no material enum.** Do **not** resurrect an Extruded Finish/material selector. Gloss, colour,
-  alpha/opacity, Mirror Faces and reflection are the authored axes. Make body opacity/alpha genuinely consumable so glassy or
-  matte looks are combinations of direct controls rather than named material modes. If translucent solid bars require a shared
-  depth-aware transparency/OIT facility, build that reusable Scene3D primitive rather than a transition-local or Extruded-only
-  hack.
-- [ ] **E5. Optional shadow.** Add an off-by-default shadow through the canonical shadow-direction system/shared Scene3D
-  primitive. Disabled/inactive owns no target/pass/resource; measure active CPU/GPU cost before acceptance.
-- [ ] **E6. Shockwave Grid parity follow-through.** Audit the other current standard 3D Visualizer with the same rule. Any
-  Spectrum-derived bar/analysis family Shockwave actually consumes should be authorable in Shockwave and preset-local rather
-  than silently changing when Spectrum changes; preserve its own Waves/Look controls. Do not manufacture controls for data the
-  renderer does not consume.
-- [ ] **E7. Preset/default/reset contract.** Shipped presets, user-authored Custom state, canonical defaults, runtime repair and
-  Reset must all use the same per-mode owner. Shared UI components are allowed; shared mutable preset state is not. Add tests
-  proving two Extruded presets can carry visibly different shapes/colours/response, and that Spectrum/Extruded/Shockwave preset
-  switches cannot cross-mutate one another.
-- [ ] **E8. Physical acceptance.** Both displays; overflow on/off; extreme orbit; reflective/non-reflective; opaque/translucent
-  authored looks; unique preset shapes; Rainbow/colour edits; ghosting; shadow directions; CUSTOM resize/reflow; wallpaper
-  transition. Verify the now-polished Mirror Faces remain free of vertical procedural grain on bright and dark photographs.
+- [ ] **E7. Full relevant checkpoint gate.** After the remaining remedial source checkpoints, run the full relevant chunky
+  and durability gates on the stable tree. Descriptor-owned defaults and canonically regenerated shipped presets have focused
+  proof; retain persisted-startup/reopen, activation/capture, private recorder, preset/Custom isolation and dormant-UI coverage.
+  Investigate every relevant failure before admitting the Python migration.
+- [~] **E8. Awaiting Validation: physical acceptance.** Both displays; overflow on/off; extreme orbit; reflective/non-reflective;
+  opaque/translucent authored looks; distinct preset shapes; applicable spectral Colouring/Hue Drift edits; ghosting; shadow
+  directions; CUSTOM resize/reflow; wallpaper transition. Verify Mirror Faces remain free of vertical procedural grain on
+  bright and dark photographs.
 
 ---
 

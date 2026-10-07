@@ -18,6 +18,7 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
+    migrate_profile_lender_owned_settings,
     migrate_legacy_sphere_finish_keys,
     migrate_legacy_sphere_control_keys,
     strip_legacy_global_technical_keys,
@@ -248,6 +249,7 @@ def normalize_visualizer_section_mapping(
     migrated = _forward_migrate_alias_keys(migrated, prefix=prefix)
     migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
+    migrated = migrate_profile_lender_owned_settings(migrated, prefix=prefix)
 
     model = SpotifyVisualizerSettings.from_mapping(
         migrated,

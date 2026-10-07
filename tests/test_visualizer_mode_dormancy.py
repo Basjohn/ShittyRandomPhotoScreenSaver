@@ -75,6 +75,28 @@ def test_registry_import_loads_no_renderer_or_frame_runtime():
     assert out == "[]", f"registry import eagerly loaded heavy modules: {out}"
 
 
+def test_logical_hook_import_waits_for_its_activated_mode():
+    """Constructing an ordinary mode must not import inactive hook code."""
+    out = _run_fresh(
+        """
+        import sys
+        from widgets.spotify_visualizer.runtime_controller import (
+            VisualizerRuntimeController,
+        )
+
+        hook_module = 'widgets.spotify_visualizer.tick_pipeline'
+        print(hook_module in sys.modules)
+        controller = VisualizerRuntimeController(
+            runtime_generation=0, initial_mode='spectrum'
+        )
+        print(hook_module in sys.modules)
+        controller.set_mode('sine_wave')
+        print(hook_module in sys.modules)
+        """
+    )
+    assert out.splitlines() == ["False", "False", "True"], out
+
+
 def test_resolving_one_renderer_imports_only_that_renderer():
     out = _run_fresh(
         """
