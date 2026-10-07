@@ -87,6 +87,140 @@ def test_card_validates_each_row_once_and_never_on_role_reads_or_clicks(qt_app):
     assert urls == [VALID, f"magnet:?xt=urn:btih:{'f' * 40}", "https://example.test/page", ""]
 
 
+def test_ordinary_feed_refresh_reconciles_rows_without_a_model_reset(qt_app):
+    """A normal source refresh keeps retained article delegates alive."""
+    from PySide6.QtCore import QPersistentModelIndex
+    from rendering.quick.widgets.feeds import FeedRowsModel
+
+    def row(identity, title, url, artwork):
+        return FeedDisplayRow(
+            identity, title, f"Summary {identity}", f"Author {identity}", url,
+            1_700_000_000, image_source=artwork,
+        )
+
+    model = FeedRowsModel()
+    initial = (
+        row("a", "A", "https://example.test/a", "file:///a.png"),
+        row("b", "B", "https://example.test/b", "file:///b.png"),
+        row("c", "C", "https://example.test/c", "file:///c.png"),
+    )
+    assert model.replace_rows(initial) is True
+    retained_b = QPersistentModelIndex(model.index(1))
+    retained_c = QPersistentModelIndex(model.index(2))
+
+    resets: list[bool] = []
+    inserted: list[tuple[int, int]] = []
+    removed: list[tuple[int, int]] = []
+    moved: list[tuple[int, int, int]] = []
+    changes: list[tuple[int, int, list[int]]] = []
+    model.modelReset.connect(lambda: resets.append(True))
+    model.rowsInserted.connect(lambda _parent, first, last: inserted.append((first, last)))
+    model.rowsRemoved.connect(lambda _parent, first, last: removed.append((first, last)))
+    model.rowsMoved.connect(
+        lambda _source_parent, first, last, _destination_parent, destination:
+        moved.append((first, last, destination))
+    )
+    model.dataChanged.connect(
+        lambda first, last, roles: changes.append((first.row(), last.row(), list(roles)))
+    )
+
+    refreshed = (
+        row("b", "B revised", "https://example.test/b-revised", "file:///b-revised.png"),
+        row("x", "X", "https://example.test/x", "file:///x.png"),
+        row("c", "C", "https://example.test/c", "file:///c.png"),
+    )
+    assert model.replace_rows(refreshed) is True
+
+    assert resets == []
+    assert removed == [(0, 0)]
+    assert inserted == [(1, 1)]
+    assert [row.item_id for row in model.rows] == ["b", "x", "c"]
+    assert model.data(model.index(0), model.TitleRole) == "B revised"
+    assert model.data(model.index(0), model.UrlRole) == "https://example.test/b-revised"
+    assert model.data(model.index(0), model.ImageRole) == "file:///b-revised.png"
+    assert retained_b.isValid() and retained_b.row() == 0
+    assert model.data(retained_b, model.TitleRole) == "B revised"
+    assert retained_c.isValid() and retained_c.row() == 2
+    assert model.is_admitted_action("https://example.test/b-revised")
+    assert not model.is_admitted_action("https://example.test/b")
+    assert len(changes) == 1
+    changed_index, changed_last, roles = changes[0]
+    assert (changed_index, changed_last) == (0, 0)
+    assert FeedRowsModel.IdentityRole not in roles
+    assert {FeedRowsModel.TitleRole, FeedRowsModel.UrlRole, FeedRowsModel.ImageRole} <= set(roles)
+
+    resets.clear()
+    inserted.clear()
+    removed.clear()
+    moved.clear()
+    changes.clear()
+    assert model.replace_rows(refreshed) is False
+    assert resets == [] and inserted == [] and removed == [] and moved == [] and changes == []
+
+    reordered = (refreshed[2], refreshed[0], refreshed[1])
+    assert model.replace_rows(reordered) is True
+    assert resets == [] and inserted == [] and removed == [] and changes == []
+    assert moved == [(2, 2, 0)]
+    assert [row.item_id for row in model.rows] == ["c", "b", "x"]
+    assert retained_c.isValid() and retained_c.row() == 0
+    assert retained_b.isValid() and retained_b.row() == 1
+
+
+def test_row_model_keeps_qt_structural_contract_for_grouped_replacements(qt_app):
+    from PySide6.QtTest import QAbstractItemModelTester
+    from rendering.quick.widgets.feeds import FeedRowsModel
+
+    def rows(*identities):
+        return tuple(
+            FeedDisplayRow(
+                identity, identity.upper(), "", "", f"https://example.test/{identity}", None,
+            )
+            for identity in identities
+        )
+
+    model = FeedRowsModel()
+    tester = QAbstractItemModelTester(
+        model, QAbstractItemModelTester.FailureReportingMode.Warning,
+    )
+    resets: list[bool] = []
+    inserted: list[tuple[int, int]] = []
+    removed: list[tuple[int, int]] = []
+    model.modelReset.connect(lambda: resets.append(True))
+    model.rowsInserted.connect(lambda _parent, first, last: inserted.append((first, last)))
+    model.rowsRemoved.connect(lambda _parent, first, last: removed.append((first, last)))
+
+    for replacement, expected_insert, expected_remove in (
+        (rows("a", "b"), [(0, 1)], []),
+        (rows("x", "y", "z", "a", "b"), [(0, 2)], []),
+        (rows("x", "y", "z"), [], [(3, 4)]),
+        (rows(), [], [(0, 2)]),
+        (rows("replacement-a", "replacement-b"), [(0, 1)], []),
+    ):
+        assert model.replace_rows(replacement) is True
+        qt_app.processEvents()
+        assert inserted == expected_insert
+        assert removed == expected_remove
+        assert [row.item_id for row in model.rows] == [row.item_id for row in replacement]
+        inserted.clear()
+        removed.clear()
+
+    assert tester.model() is model
+    assert resets == []
+
+
+def test_row_model_rejects_duplicate_article_identity_instead_of_resetting(qt_app):
+    from rendering.quick.widgets.feeds import FeedRowsModel
+
+    model = FeedRowsModel()
+    resets: list[bool] = []
+    model.modelReset.connect(lambda: resets.append(True))
+    duplicate = FeedDisplayRow("same", "Story", "", "", "https://example.test/story", None)
+    with pytest.raises(ValueError, match="unique article identities"):
+        model.replace_rows((duplicate, duplicate))
+    assert model.rowCount() == 0
+    assert resets == []
+
+
 def test_feed_product_action_opens_a_valid_magnet_and_nothing_malformed():
     from core.widget_product_actions import dispatch_feed_url_product_action
 

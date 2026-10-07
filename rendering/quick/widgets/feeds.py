@@ -467,12 +467,104 @@ class FeedRowsModel(QAbstractListModel):
         if resolved == self._rows:
             return False
         action_urls = tuple(_item_action_url(row.action_url) for row in resolved)
-        self.beginResetModel()
-        self._rows = resolved
-        self._action_urls = action_urls
-        self._admitted_actions = frozenset(url for url in action_urls if url)
-        self.endResetModel()
+
+        # Feed refresh normally adds a new leading story, removes an expired
+        # one, or fills in metadata/artwork for a retained story.  A reset on
+        # each of those ordinary cases tears down the whole QML delegate tree.
+        # Reconcile the stable source item IDs instead, keeping retained
+        # delegates and their article identity while Qt receives the narrowest
+        # structural/data notifications it needs.
+        old_ids = tuple(row.item_id for row in self._rows)
+        new_ids = tuple(row.item_id for row in resolved)
+        if len(old_ids) != len(set(old_ids)) or len(new_ids) != len(set(new_ids)):
+            raise ValueError("FeedRowsModel requires unique article identities")
+
+        target = list(zip(resolved, action_urls))
+        current = list(zip(self._rows, self._action_urls))
+        target_ids = set(new_ids)
+        root = QModelIndex()
+
+        # Remove vanished stories from the tail so indexes remain valid. Group
+        # contiguous runs: a normal refresh usually removes at most one row.
+        index = len(current) - 1
+        while index >= 0:
+            if current[index][0].item_id in target_ids:
+                index -= 1
+                continue
+            last = index
+            while index >= 0 and current[index][0].item_id not in target_ids:
+                index -= 1
+            first = index + 1
+            self.beginRemoveRows(root, first, last)
+            del current[first:last + 1]
+            self._set_entries(current)
+            self.endRemoveRows()
+
+        # Insert new stories at their requested position and move retained
+        # stories only when source order changed. With unique item IDs this
+        # preserves existing delegates instead of repainting an equivalent
+        # article as an unrelated row.
+        for position, entry in enumerate(target):
+            item_id = entry[0].item_id
+            if position < len(current) and current[position][0].item_id == item_id:
+                continue
+            source = next(
+                (offset for offset in range(position, len(current))
+                 if current[offset][0].item_id == item_id),
+                None,
+            )
+            if source is None:
+                last = position
+                current_ids = {row.item_id for row, _action_url in current}
+                while last < len(target) and target[last][0].item_id not in current_ids:
+                    last += 1
+                self.beginInsertRows(root, position, last - 1)
+                current[position:position] = target[position:last]
+                self._set_entries(current)
+                self.endInsertRows()
+                continue
+            self.beginMoveRows(root, source, source, root, position)
+            moved = current.pop(source)
+            current.insert(position, moved)
+            self._set_entries(current)
+            self.endMoveRows()
+
+        # Structural notifications already published new rows. Existing rows
+        # retain their identity, so only notify the roles whose visible value
+        # actually changed (including a newly admitted action or local art).
+        changed_roles: list[tuple[int, list[int]]] = []
+        for index, ((old_row, old_action), (new_row, new_action)) in enumerate(
+            zip(current, target)
+        ):
+            roles: list[int] = []
+            if old_row.title != new_row.title:
+                roles.extend((self.TitleRole, int(Qt.ItemDataRole.DisplayRole)))
+            if old_row.summary != new_row.summary:
+                roles.append(self.SummaryRole)
+            if old_row.author != new_row.author:
+                roles.append(self.AuthorRole)
+            if old_row.published_at != new_row.published_at:
+                roles.append(self.AgeRole)
+            if old_action != new_action:
+                roles.append(self.UrlRole)
+            if old_row.image_source != new_row.image_source:
+                roles.append(self.ImageRole)
+            if roles:
+                changed_roles.append((index, roles))
+
+        self._set_entries(target)
+        for index, roles in changed_roles:
+            self.dataChanged.emit(self.index(index, 0), self.index(index, 0), roles)
         return True
+
+    def _set_entries(self, entries: Iterable[tuple[FeedDisplayRow, str]]) -> None:
+        """Publish aligned row/action storage during a Qt model transaction."""
+        resolved = tuple(entries)
+        self._rows = tuple(row for row, _action_url in resolved)
+        self._action_urls = tuple(action_url for _row, action_url in resolved)
+        self._admitted_actions = frozenset(
+            action_url for action_url in self._action_urls if action_url
+        )
 
 
 _CHILD_ROLE_MAP = child_role_map(FEED_CUSTOM_CHILD_ROLES)

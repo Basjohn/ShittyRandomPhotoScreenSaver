@@ -172,6 +172,7 @@ These rules apply to every FEEDS change:
 - No per-widget poller, QML timer, second downloader, second Edit owner or Settings I/O on refresh/resize/hover/render cadence.
 - Same-endpoint active consumers share source/cache/due work where privacy/cache identity permits it. Retiring one lease must recompute cadence rather than leave a permanently faster source.
 - Identical normalized/presentation revisions do not republish retained models.
+- Feed document item identities are unique. The parser deduplicates them, NEWS namespaces then deduplicates them, and cache/source validation rejects a malformed duplicate before presentation. Ordinary publications reconcile those identities through bounded Qt row insert/remove/move and role-scoped changes, rather than resetting the retained model.
 - External actions stay capability-specific. HTTP/S story URLs and validated magnet URIs are admitted foreground actions. Managed `.torrent` file handling is not a FEEDS capability.
 - Feed URLs may contain private query tokens. Diagnostics/logs redact query and fragment data.
 - Cache maintenance deletes cache/artwork only, never CUSTOM names/URLs or credential/configuration state.
