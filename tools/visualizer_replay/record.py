@@ -200,11 +200,28 @@ def main() -> None:
     controller, engine = _configured_engine()
     frames = []
     last_serial = [0]
+    capture_admitted = [False]
+    capture_failure = []
     start = time.perf_counter()
 
     def tick():
-        bars = engine.tick() or []
         elapsed = time.perf_counter() - start
+        if not capture_admitted[0]:
+            worker = engine._audio_worker
+            if worker.is_capture_healthy():
+                capture_admitted[0] = True
+            else:
+                reason = None
+                if not worker.is_capture_starting():
+                    reason = "native capture failed or its first-callback grace expired"
+                elif elapsed >= args.seconds:
+                    reason = "recording deadline reached before the first valid audio callback"
+                if reason is not None:
+                    capture_failure.append(RuntimeError(f"recording rejected: {reason}"))
+                    timer.stop()
+                    app.quit()
+                return
+        bars = engine.tick() or []
         # The persistent analysis lane publishes the latest detached DSP state.
         # Take its current scheduler events once on the recorder's existing tick.
         onsets = engine.get_onset_events(last_serial[0])
@@ -229,6 +246,10 @@ def main() -> None:
     finally:
         timer.stop()
         _close_configured_engine(controller, engine)
+    if capture_failure:
+        raise capture_failure[0]
+    if not capture_admitted[0]:
+        raise RuntimeError("recording rejected: capture never delivered a valid audio callback")
     clip = FeatureClip(name=args.name, frames=tuple(frames))
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with path.open("xb") as out:
