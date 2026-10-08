@@ -481,7 +481,10 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         transition_now = [0.0]
         owner._transition_clock = lambda: transition_now[0]
         owner._transition_half_duration_s = 0.25
-        owner._sync = SimpleNamespace(sync_latest=lambda: True)
+        owner._sync = SimpleNamespace(
+            sync_latest=lambda: True,
+            set_authored_view_publication_callback=lambda _callback: None,
+        )
         assert preset_admission.handles_semantic_middle_click_at(object()) is True
         assert preset_admission.handles_semantic_middle_click_at(object()) is True
         assert owner._mode_transition_phase == "fading_out"

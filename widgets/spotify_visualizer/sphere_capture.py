@@ -6,7 +6,7 @@ from typing import Any
 from widgets.spotify_visualizer.render_state import FrozenFields, SphereFrame, freeze_render_fields
 
 
-def _render_parameters(widget: Any, parameters: FrozenFields) -> FrozenFields:
+def _render_parameters(widget: Any, parameters: FrozenFields, now_ts: float) -> FrozenFields:
     """The runtime's resolved parameters plus the presentation-owned values only the renderer
     reads (the 3D Detail tier, Mirror Cubes and the reflected wallpaper): the logical runtime
     never sees them. Rebuilt only when one of them changes."""
@@ -15,13 +15,16 @@ def _render_parameters(widget: Any, parameters: FrozenFields) -> FrozenFields:
     pres = _presentation_source(widget)
     backdrop = getattr(pres, "_backdrop", None)
     blend_s = getattr(pres, "_backdrop_blend_s", None)
+    from widgets.spotify_visualizer.view_orbit import view_orbit_values
+    pose = view_orbit_values(pres, "sphere", now_ts)
     key = (str(pres._scene3d_detail), float(pres._sphere_mirror), None if backdrop is None else backdrop.identity,
-           blend_s)
+           blend_s, pose["sphere_turn"], pose["sphere_tilt"])
     cached = getattr(widget, "_sphere_render_parameters", None)
     if cached is not None and cached[0] is parameters and cached[1] == key:
         return cached[2]
     merged = freeze_render_fields({**dict(parameters), "scene3d_detail": key[0], "sphere_mirror": key[1],
-                                   "backdrop": backdrop, "backdrop_blend_s": blend_s})
+                                   "backdrop": backdrop, "backdrop_blend_s": blend_s,
+                                   "sphere_turn": pose["sphere_turn"], "sphere_tilt": pose["sphere_tilt"]})
     widget._sphere_render_parameters = (parameters, key, merged)
     return merged
 
@@ -153,7 +156,7 @@ def capture_sphere(widget: Any, engine: Any, context: Any):
         incoming_previous_section=resolved.incoming_previous_section,
         incoming_blend=resolved.incoming_blend,
         particle_cohorts=resolved.particle_cohorts,
-        parameters=_render_parameters(widget, resolved.parameters),
+        parameters=_render_parameters(widget, resolved.parameters, context.now_ts),
     ), extra
 
 

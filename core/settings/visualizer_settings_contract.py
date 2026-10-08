@@ -106,6 +106,20 @@ _SCHEMA10_EXTRUDED_PROFILE: dict[str, Any] = {
     "extruded_spectrum_transient_clamp": 1.5,
     "extruded_spectrum_wave_amplitude": 0.5,
 }
+_SCHEMA10_EXTRUDED_PROMOTED_SUFFIXES = (
+    "visual_smoothing_enabled", "visual_smoothing",
+    "ghosting_enabled", "ghost_alpha", "ghost_decay",
+    "mirrored", "shape_nodes", "notch_positions_mirrored",
+    "notch_positions_linear", "lane_strengths_mirrored",
+    "lane_strengths_linear", "wave_amplitude", "profile_floor",
+    "drop_speed", "bar_fill_color", "bar_border_color",
+    "bar_border_opacity", "dynamic_floor", "manual_floor",
+    "dynamic_range_enabled", "agc_strength", "input_gain",
+    "kick_lane_gain", "transient_pulse_gain", "transient_clamp",
+    "audio_block_size", "adaptive_sensitivity", "sensitivity",
+    "bar_count", "lane_transient_mix", "solid_bar_hysteresis_enabled",
+)
+
 _SCHEMA10_EXTRUDED_SIGNATURE = (
     "extruded_spectrum_audio_block_size",
     "extruded_spectrum_bar_count",
@@ -141,13 +155,18 @@ def repair_schema10_extruded_owned_profile(data: Mapping[str, Any] | None) -> Di
     for key, stale in _SCHEMA10_EXTRUDED_PROFILE.items():
         if repaired.get(key) == stale:
             repaired[key] = deepcopy(require_canonical_default(f"widgets.spotify_visualizer.{key}"))
-    # This consumed value was missing entirely from schema 10 because it still
-    # read Spectrum live.  Once the stale bundle is recognized, seed the owned
-    # key from the new canonical frozen baseline.
-    repaired.setdefault(
-        "extruded_spectrum_lane_transient_mix",
-        require_canonical_default("widgets.spotify_visualizer.extruded_spectrum_lane_transient_mix"),
-    )
+    # Schema 10 still borrowed the rest of this response profile from Spectrum.
+    # Once the generated bundle is recognized, every *missing* newly-owned field
+    # is frozen from Extruded's canonical migration baseline.  Never consult the
+    # current Organs preset here: Organs is user-tunable product state and is not
+    # a historical migration oracle. Existing explicit Extruded keys remain
+    # authoritative, including real user edits.
+    for suffix in _SCHEMA10_EXTRUDED_PROMOTED_SUFFIXES:
+        key = f"extruded_spectrum_{suffix}"
+        repaired.setdefault(
+            key,
+            deepcopy(require_canonical_default(f"widgets.spotify_visualizer.{key}")),
+        )
     return repaired
 
 

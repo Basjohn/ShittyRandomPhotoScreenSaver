@@ -9,7 +9,7 @@ import pytest
 
 from rendering.gl_programs.extruded_spectrum_program import (
     EXTRUDED_CEILING, EXTRUDED_MAX_TILT, EXTRUDED_MAX_TURN,
-    extruded_project, extruded_reach,
+    extruded_project, extruded_reach, extruded_shadow_project,
 )
 from rendering.quick.scene3d.shadows import directional_shadow_vector
 from rendering.quick.visualizer.edit_content_envelope import resolve_edit_content_envelope
@@ -33,7 +33,7 @@ def test_shadow_ceiling_sweep_contains_projected_corners_and_off_bounds_are_exac
         assert extruded_reach(*args, shadow_vector=(0.0, 0.0)) == old
         expanded = extruded_reach(*args, shadow_vector=vector)
         for x, z, height in itertools.product((-half_span, half_span), (-depth, 0.0), (0.0, 0.3, EXTRUDED_CEILING)):
-            sx, sy, _ = extruded_project((x + vector[0] * height, 0.0, z + vector[1] * height), tilt, turn)
+            sx, sy, _ = extruded_shadow_project((x, height, z), tilt, turn, vector)
             px, py = centre + sx * 200.0, 200.0 - sy * 200.0
             assert expanded[0] - 1e-9 <= px <= expanded[2] + 1e-9
             assert expanded[1] - 1e-9 <= py <= expanded[3] + 1e-9

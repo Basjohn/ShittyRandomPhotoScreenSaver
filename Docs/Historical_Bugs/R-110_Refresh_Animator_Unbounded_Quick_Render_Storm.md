@@ -1,6 +1,6 @@
 # R-110 | Refresh animator turned network latency into an unbounded Qt Quick render storm
 
-**Status:** BOUNDED EDGE-TRANSITION REPAIR IN CODE / REGRESSION-PROTECTED / PHYSICAL PERF RECHECK PENDING
+**Status:** SOLVED / REGRESSION-PROTECTED / PERF-PHYSICALLY ACCEPTED 2026-10-08
 
 ## Trigger
 
@@ -65,3 +65,7 @@ The installed runtime PERF_HUD remains the physical oracle: source/unit proof ca
 Run a diagnostic cold start and one Settings close/reinit with Gmail, Reddit, Games You Follow and several NEWS/CUSTOM Feed cards enabled where practical. Trigger several manual refreshes close together so multiple BUSY edges overlap. The one display-scoped 240 ms epoch may briefly add bounded presentation work, but once it rests, PERF_HUD scene/draw cadence must settle to the normal active logical demand even if one or many providers remain BUSY. Additional simultaneous feed instances must not multiply or prolong the transition cadence.
 
 Do **not** repair recurrence by changing global swap interval; R-86 already rejected that path physically.
+
+## Acceptance evidence
+
+The follow-up 2026-10-08 operator run with the shared edge clock showed no negative Visualizer feel and no return of the old provider-lifetime render storm. Scene-rate excursions were short edge/edit bursts rather than hundreds of swaps per second for the duration of Gmail/Feeds BUSY state, while Visualizer logical revisions remained around their normal cadence. The operator specifically reported no observed negative side effect. Q2 is therefore accepted with the bounded/count-invariant architecture above remaining the permanent guardrail.

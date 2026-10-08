@@ -30,6 +30,7 @@ Item {
     property color transferButtonBorderColor: "#c0777d86"
     property color transferButtonGlyphColor: "#f2f4f7"
     property color contentEnvelopeFrameColor: "#d05f656d"
+    property color contentEnvelopeCageColor: "#e6d7dbe0"
     property color contentEnvelopePivotColor: "#e06f757d"
     property color contentEnvelopePivotBorderColor: "#f1d7dbe0"
 
@@ -215,6 +216,26 @@ Item {
                 ? contentEnvelopeItem.mapToItem(
                     editFrame, Number(contentEnvelope.pivot_x), Number(contentEnvelope.pivot_y)
                 ) : Qt.point(0, 0)
+            // The projected stage cage is admitted separately from actual
+            // audio-dependent content reach. An empty scene still has a real
+            // authored 3D stage, without fabricating a visual footprint.
+            readonly property var contentCagePoints: widgetId === "spotify_visualizer"
+                    && contentEnvelope.cage_points
+                ? contentEnvelope.cage_points : []
+            readonly property bool hasContentCage: contentCagePoints.length === 8
+            function contentCagePoint(index) {
+                if (!hasContentCage || index < 0 || index >= contentCagePoints.length)
+                    return Qt.point(0, 0)
+                const point = contentCagePoints[index]
+                return contentEnvelopeItem.mapToItem(
+                    editFrame, Number(point.x), Number(point.y))
+            }
+            readonly property point contentNorthFace: hasContentCage
+                    && isFinite(Number(contentEnvelope.north_x))
+                    && isFinite(Number(contentEnvelope.north_y))
+                ? contentEnvelopeItem.mapToItem(
+                    editFrame, Number(contentEnvelope.north_x), Number(contentEnvelope.north_y))
+                : Qt.point(0, 0)
             readonly property bool altThreeDGestureAdmitted:
                 widgetId === "spotify_visualizer" && Boolean(contentEnvelope.orbit_admitted)
             required property int childStateRevision
@@ -318,6 +339,36 @@ Item {
                 contentEnvelopeTopLeft.x, contentEnvelopeTopLeft.y,
                 Math.max(0, contentEnvelopeBottomRight.x - contentEnvelopeTopLeft.x),
                 Math.max(0, contentEnvelopeBottomRight.y - contentEnvelopeTopLeft.y))
+            readonly property rect contentCageRect: {
+                if (!hasContentCage)
+                    return liveOrbitRect
+                var first = contentCagePoint(0)
+                var left = first.x
+                var right = first.x
+                var top = first.y
+                var bottom = first.y
+                for (var cageIndex = 1; cageIndex < 8; ++cageIndex) {
+                    var point = contentCagePoint(cageIndex)
+                    left = Math.min(left, point.x)
+                    right = Math.max(right, point.x)
+                    top = Math.min(top, point.y)
+                    bottom = Math.max(bottom, point.y)
+                }
+                return Qt.rect(left, top, Math.max(0, right - left), Math.max(0, bottom - top))
+            }
+            readonly property rect contentEnvelopePaintRect: {
+                if (!hasContentCage)
+                    return liveOrbitRect
+                if (!hasContentEnvelope)
+                    return contentCageRect
+                const left = Math.min(liveOrbitRect.x, contentCageRect.x)
+                const top = Math.min(liveOrbitRect.y, contentCageRect.y)
+                const right = Math.max(liveOrbitRect.x + liveOrbitRect.width,
+                                       contentCageRect.x + contentCageRect.width)
+                const bottom = Math.max(liveOrbitRect.y + liveOrbitRect.height,
+                                        contentCageRect.y + contentCageRect.height)
+                return Qt.rect(left, top, Math.max(0, right - left), Math.max(0, bottom - top))
+            }
             readonly property bool orbitHitFrozen: contentOrbitDragging || moveArea.altOrbitDragging
             readonly property rect orbitRect: orbitHitFrozen ? frozenOrbitRect : liveOrbitRect
             Connections {
@@ -338,19 +389,89 @@ Item {
                     customLayoutOverlay.sessionModel.finishVisualizerOrbitInEdit(index)
                 contentOrbitDragging = false
             }
-            Rectangle {
+            Canvas {
                 id: contentEnvelopeFrame
                 objectName: "customLayoutContentEnvelope-" + editFrame.widgetId
-                visible: editFrame.hasContentEnvelope
-                x: editFrame.liveOrbitRect.x
-                y: editFrame.liveOrbitRect.y
-                width: editFrame.liveOrbitRect.width
-                height: editFrame.liveOrbitRect.height
-                color: "transparent"
-                border.width: 2
-                border.color: customLayoutOverlay.contentEnvelopeFrameColor
-                opacity: 0.95
+                visible: editFrame.hasContentEnvelope || editFrame.hasContentCage
+                x: editFrame.contentEnvelopePaintRect.x
+                y: editFrame.contentEnvelopePaintRect.y
+                width: Math.max(1.0, editFrame.contentEnvelopePaintRect.width)
+                height: Math.max(1.0, editFrame.contentEnvelopePaintRect.height)
                 z: 18
+                antialiasing: true
+
+                // A projected 3D cage is read-only Edit paint. Its vertices come
+                // from the renderer's production projection mirror and can never
+                // become snapping, movement, persistence or fit authority. The
+                // fallback rectangle exists only for transient/legacy envelope
+                // records while a new cage publication catches up.
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.lineWidth = 3.5
+                    ctx.strokeStyle = customLayoutOverlay.contentEnvelopeCageColor
+                    ctx.lineJoin = "round"
+                    ctx.lineCap = "round"
+                    if (!editFrame.hasContentCage) {
+                        ctx.strokeRect(0.75, 0.75, Math.max(0, width - 1.5), Math.max(0, height - 1.5))
+                        return
+                    }
+                    const edges = [
+                        [0, 1], [1, 2], [2, 3], [3, 0],
+                        [4, 5], [5, 6], [6, 7], [7, 4],
+                        [0, 4], [1, 5], [2, 6], [3, 7]
+                    ]
+                    for (let i = 0; i < edges.length; ++i) {
+                        const a = editFrame.contentCagePoint(edges[i][0])
+                        const b = editFrame.contentCagePoint(edges[i][1])
+                        ctx.beginPath()
+                        ctx.moveTo(a.x - contentEnvelopeFrame.x, a.y - contentEnvelopeFrame.y)
+                        ctx.lineTo(b.x - contentEnvelopeFrame.x, b.y - contentEnvelopeFrame.y)
+                        ctx.stroke()
+                    }
+                    // True face-attached North glyph: the same 4 projected face
+                    // vertices supply both position and full perspective/tilt.
+                    // A separate screen-aligned Text item could only rotate in
+                    // 2D and would visibly disagree when the cage turns edge-on.
+                    // World -Z corresponds to the 4->5->6->7 cage quad. Derive
+                    // the three strokes of a vector N in that face's coordinates.
+                    const p4 = editFrame.contentCagePoint(4)
+                    const p5 = editFrame.contentCagePoint(5)
+                    const p6 = editFrame.contentCagePoint(6)
+                    const p7 = editFrame.contentCagePoint(7)
+                    function facePoint(u, v) {
+                        return {
+                            x: ((1-u)*(1-v)*p4.x + u*(1-v)*p5.x + u*v*p6.x + (1-u)*v*p7.x) - contentEnvelopeFrame.x,
+                            y: ((1-u)*(1-v)*p4.y + u*(1-v)*p5.y + u*v*p6.y + (1-u)*v*p7.y) - contentEnvelopeFrame.y
+                        }
+                    }
+                    // A compact bold direction mark: quarter the former face-space
+                    // width/height while keeping the complete N face-aligned.
+                    const letter = [facePoint(.465, .445), facePoint(.465, .555),
+                                    facePoint(.535, .445), facePoint(.535, .555)]
+                    function strokeNorth(width, color) {
+                        ctx.lineWidth = width
+                        ctx.strokeStyle = color
+                        ctx.beginPath()
+                        ctx.moveTo(letter[0].x, letter[0].y)
+                        for (let i = 1; i < letter.length; ++i)
+                            ctx.lineTo(letter[i].x, letter[i].y)
+                        ctx.stroke()
+                    }
+                    ctx.globalAlpha = 0.70
+                    strokeNorth(10.6, '#ffffffff')
+                    strokeNorth(4.8, '#ff000000') // black +1px; white stroke thickness -0.5px each side
+                    ctx.globalAlpha = 1.0
+                }
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+                onXChanged: requestPaint()
+                onYChanged: requestPaint()
+                Connections {
+                    target: editFrame.contentEnvelopeItem || null
+                    ignoreUnknownSignals: true
+                    function onEditContentEnvelopeChanged() { contentEnvelopeFrame.requestPaint() }
+                }
             }
 
             Rectangle {
@@ -430,7 +551,7 @@ Item {
                 color: orbitControlMouse.containsMouse
                     ? customLayoutOverlay.transferButtonHoverColor
                     : customLayoutOverlay.transferButtonColor
-                border.color: customLayoutOverlay.transferButtonBorderColor
+                border.color: customLayoutOverlay.closeButtonBorderColor
                 border.width: 1
 
                 Text {

@@ -754,7 +754,9 @@ class TestSettingsManagerDefaults:
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
 
-    def test_visualizer_schema_v11_repairs_only_generated_extruded_profile(self, tmp_path: Path) -> None:
+    def test_visualizer_schema_v11_repairs_only_generated_extruded_profile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Schema 10's generated 33/512 Extruded bundle must not masquerade as user state."""
         storage_root = tmp_path / "extruded_schema10_profile"
         app_name = f"TestApp_{uuid.uuid4().hex}"
@@ -783,6 +785,24 @@ class TestSettingsManagerDefaults:
         manager._settings.sync()
         assert manager.flush(timeout=5.0) is True
         manager._settings.load()
+
+        # The schema-10 repair must not borrow whatever Organs happens to be
+        # authored as *today*. Simulate the operator retuning Organs after the
+        # old generated Extruded bundle already existed. Default merge runs
+        # before the formal schema pass, so this specifically protects that
+        # ordering edge.
+        import core.settings.visualizer_presets as visualizer_presets
+        original_apply = visualizer_presets.apply_preset_to_config
+
+        def retuned_organs(mode, index, config, *args, **kwargs):
+            resolved = original_apply(mode, index, config, *args, **kwargs)
+            if str(mode) == "spectrum" and int(index) == 0:
+                resolved = dict(resolved)
+                resolved["spectrum_lane_transient_mix"] = 0.94
+                resolved["spectrum_visual_smoothing"] = 0.7
+            return resolved
+
+        monkeypatch.setattr(visualizer_presets, "apply_preset_to_config", retuned_organs)
 
         reloaded = SettingsManager(
             organization="TestOrg", application=app_name, storage_base_dir=storage_root,

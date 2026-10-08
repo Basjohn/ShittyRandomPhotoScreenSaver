@@ -57,6 +57,7 @@ def _item(
     authored_reference_size: tuple[float, float] | None = None,
     child_collision_enabled: bool = True,
     geometry_variant: str = "default",
+    geometry_kind: str = "planar",
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity, geometry_variant),
@@ -67,6 +68,7 @@ def _item(
         current_size_payload={},
         baseline_enabled=True,
         current_enabled=True,
+        geometry_kind=geometry_kind,
         is_duplicate=duplicate,
         resize_capable=resizable,
         viewport_resize_capable=viewport_capable,
@@ -115,7 +117,8 @@ def test_visualizer_edit_envelope_and_alt_orbit_are_read_only_session_edges(qt_a
         resizable=True,
         viewport_capable=True,
         baseline_viewport_extent=(420.0, 280.0),
-        geometry_variant="freeform_3d",
+        geometry_variant="3d:extruded_spectrum",
+        geometry_kind="freeform_3d",
     )
     session.add_item(visualizer)
     envelope_root = QQuickItem()
@@ -198,11 +201,14 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
 
 @pytest.mark.parametrize(
     ("variant", "selected", "enabled"),
-    (("planar", True, True), ("freeform_3d", False, True), ("freeform_3d", True, False)),
+    (("planar", True, True), ("3d:extruded_spectrum", False, True), ("3d:extruded_spectrum", True, False)),
 )
 def test_edit_orbit_rejects_unadmitted_python_rows(variant, selected, enabled):
     session = CustomLayoutSession()
-    visualizer = _item("spotify_visualizer", "display:a", QRect(100, 80, 420, 280), geometry_variant=variant)
+    visualizer = _item(
+        "spotify_visualizer", "display:a", QRect(100, 80, 420, 280),
+        geometry_variant=variant, geometry_kind=("freeform_3d" if variant != "planar" else "planar"),
+    )
     session.add_item(visualizer)
     model = CustomLayoutOverlayModel(session=session, display_identity="display:a")
     events = []
@@ -691,7 +697,7 @@ def test_display_scene_layers_peer_edges_above_and_center_guides_below_widgets(q
     vertical_edges = _quick_items_named(overlay_item, "customLayoutVerticalGuide")
     assert len(vertical_edges) == 1
     assert vertical_edges[0].property("guideKind") == "peer"
-    assert vertical_edges[0].property("color") == QColor(94, 168, 255, 170)
+    assert vertical_edges[0].property("color") == QColor(105, 111, 119, 170)
     assert not _quick_items_named(overlay_item, "customLayoutHorizontalGuide")
 
     vertical_centers = _quick_items_named(
@@ -704,8 +710,8 @@ def test_display_scene_layers_peer_edges_above_and_center_guides_below_widgets(q
     assert len(horizontal_centers) == 1
     assert vertical_centers[0].property("guideKind") == "display_center"
     assert horizontal_centers[0].property("guideKind") == "peer_center"
-    assert vertical_centers[0].property("color") == QColor(180, 110, 255, 168)
-    assert horizontal_centers[0].property("color") == QColor(180, 110, 255, 168)
+    assert vertical_centers[0].property("color") == QColor(115, 121, 129, 168)
+    assert horizontal_centers[0].property("color") == QColor(115, 121, 129, 168)
 
     absolute_vertical = _quick_items_named(
         underlay_item, "customLayoutAbsoluteCenterVertical"
@@ -715,8 +721,9 @@ def test_display_scene_layers_peer_edges_above_and_center_guides_below_widgets(q
     )
     assert len(absolute_vertical) == 1
     assert len(absolute_horizontal) == 1
-    assert absolute_vertical[0].property("color") == QColor(255, 255, 255, 112)
-    assert absolute_horizontal[0].property("color") == QColor(255, 255, 255, 112)
+    # Graphite Edit chrome is intentional; the old white centre cross is gone.
+    assert absolute_vertical[0].property("color") == QColor(97, 102, 108, 112)
+    assert absolute_horizontal[0].property("color") == QColor(97, 102, 108, 112)
 
     overlay.model.moveItem(0, 70.0, 90.0, 85.0, 105.0)
     qt_app.processEvents()

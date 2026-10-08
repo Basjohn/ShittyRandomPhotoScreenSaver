@@ -15,6 +15,8 @@ import struct
 
 from OpenGL import GL as gl
 
+from core.logging.logger import get_logger, is_geometry_logging_enabled, is_viz_diagnostics_enabled
+
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.extruded_spectrum_program import (
     EXTRUDED_FRAGMENT_SOURCE,
@@ -31,7 +33,7 @@ from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VE
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
-from rendering.quick.scene3d.shadows import directional_shadow_pass, directional_shadow_vector
+from rendering.quick.scene3d.shadows import directional_shadow_pass, directional_shadow_vector, extruded_shadow_length
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame
@@ -42,10 +44,11 @@ from .spectrum import compute_quick_spectrum_layout, prepare_spectrum_shader_lev
 
 _MAX_BARS = 64
 _BAR_BINDING = 3
+logger = get_logger(__name__)
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
              "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
-             "uBackdropPrevious", "uBackdropBlend", "uBodyAlpha", "uShadowColor", "uShadowVector")
+             "uBackdropPrevious", "uBackdropBlend", "uShadowColor", "uShadowVector")
 
 
 def extruded_quality(parameters) -> tuple[int, float]:
@@ -84,6 +87,7 @@ class QuickExtrudedSpectrumRenderer:
         self._backdrop = BackdropEnvironment("Quick Extruded Spectrum")
         self._fit_key: tuple | None = None
         self._fit = (1.0, 0.0)
+        self._shadow_diag_key = None
 
     @property
     def has_resources(self) -> bool:
@@ -145,7 +149,8 @@ class QuickExtrudedSpectrumRenderer:
                 and float(parameter(parameters, "extruded_spectrum_shadow_strength")) > 0.0
                 and rgba(frame.snapshot.presentation.shell_style["shadow_color"])[3] > 0.0):
             shadow_vector = directional_shadow_vector(
-                frame.snapshot.presentation.shell_style["shadow_offset"], 0.22,
+                frame.snapshot.presentation.shell_style["shadow_offset"],
+                extruded_shadow_length(str(parameter(parameters, 'extruded_spectrum_shadow_reach'))),
             )
         return reach_item_frame(frame, extruded_reach(
             field, centre, 0.5 * layout.bar_span / field[3], depth, tilt, turn, fit, reflection,
@@ -202,10 +207,12 @@ class QuickExtrudedSpectrumRenderer:
         )
         ghost_alpha = (max(0.0, min(1.0, float(parameter(parameters, "spectrum_ghost_alpha"))))
                        if bool(parameter(parameters, "spectrum_ghosting_enabled")) else 0.0)
-        body_alpha = float(parameter(parameters, "extruded_spectrum_body_alpha"))
-        if not 0.0 <= body_alpha <= 1.0:
-            raise ValueError("Extruded Spectrum body alpha must be within [0, 1]")
         fill = rgba(style["fill_color"])
+        border = rgba(style["border_color"])
+        # Bar edges are independently authored. Spectral Edges supplies its own
+        # fully-visible edge colour; the other modes use the border swatch alpha.
+        # A transparent fill must not suppress visible edges at draw admission.
+        edges_visible = colouring == 1 or border[3] > 0.0
         shadow_enabled = bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
         shadow_strength = float(parameter(parameters, "extruded_spectrum_shadow_strength"))
         if not 0.0 <= shadow_strength <= 1.0:
@@ -248,14 +255,13 @@ class QuickExtrudedSpectrumRenderer:
             field_bottom = field[1] + field[3]
             gl.glUniform2f(uniforms["uFloorSpan"], field_bottom - self._fit[1] * height, field_bottom)
             gl.glUniform4f(uniforms["uFill"], *fill)
-            gl.glUniform4f(uniforms["uBorder"], *rgba(style["border_color"]))
+            gl.glUniform4f(uniforms["uBorder"], *border)
             gl.glUniform1f(uniforms["uGloss"], float(parameter(parameters, "extruded_spectrum_gloss")))
             gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
             gl.glUniform1f(uniforms["uGhostAlpha"], ghost_alpha)
             gl.glUniform1f(uniforms["uReflection"], reflection)
             gl.glUniform1f(uniforms["uSmooth"], 1.0 if smooth else 0.0)
             gl.glUniform1f(uniforms["uMirror"], mirror)
-            gl.glUniform1f(uniforms["uBodyAlpha"], body_alpha)
             if backdrop:
                 vx, vy, vw, vh = frame.viewport
                 gl.glUniform4f(uniforms["uBackdropMap"], origin[0] - vx, origin[1] - vy, vw, vh)
@@ -271,10 +277,32 @@ class QuickExtrudedSpectrumRenderer:
             with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _BAR_BINDING, records):
                 if shadow_enabled and shadow_strength > 0.0:
                     shadow_color = rgba(presentation.shell_style["shadow_color"])
-                    shadow_alpha = shadow_color[3] * 0.34 * shadow_strength
+                    # E8: Strength is the authored opacity fraction of the canonical
+                    # shadow colour, not a fraction of an undocumented 0.34
+                    # attenuation. At the former default 0.45 and global 0.77
+                    # opacity the cast silhouette was only ~12% alpha and was
+                    # effectively invisible over busy wallpaper. The dedicated
+                    # Extruded slider now spans the actual available alpha range.
+                    shadow_alpha = shadow_color[3] * shadow_strength
                     shadow_vector = directional_shadow_vector(
-                        presentation.shell_style["shadow_offset"], 0.22,
+                        presentation.shell_style["shadow_offset"],
+                        extruded_shadow_length(str(parameter(parameters, 'extruded_spectrum_shadow_reach'))),
                     )
+                    if is_viz_diagnostics_enabled() or is_geometry_logging_enabled():
+                        # An authored-setting edge, never an audio/frame cadence.
+                        diag = (shadow_enabled, round(shadow_strength, 3),
+                                round(shadow_alpha, 3), shadow_vector,
+                                tuple(int(v) for v in presentation.shell_style["shadow_color"]),
+                                bool(scene[7]))
+                        if diag != self._shadow_diag_key:
+                            self._shadow_diag_key = diag
+                            logger.info(
+                                "[EXTRUDED_SHADOW] pass_admitted=%s strength=%.3f "
+                                "alpha=%.3f world_vector=%s color=%s overflow=%s",
+                                shadow_alpha > 0.0 and shadow_vector != (0.0, 0.0),
+                                shadow_strength, shadow_alpha, shadow_vector,
+                                diag[4], bool(scene[7]),
+                            )
                     if shadow_alpha > 0.0 and shadow_vector != (0.0, 0.0):
                         gl.glUniform1i(uniforms["uPass"], 4)
                         gl.glUniform4f(
@@ -285,12 +313,13 @@ class QuickExtrudedSpectrumRenderer:
                         with directional_shadow_pass():
                             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
 
-                if body_alpha >= 1.0 and fill[3] >= 1.0:
+                if fill[3] >= 1.0:
                     gl.glEnable(gl.GL_DEPTH_TEST)
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glUniform1i(uniforms["uPass"], 0)
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
-                elif body_alpha > 0.0:
+                elif fill[3] > 0.0 or edges_visible:
+                    # A zero-alpha body may still have visible border/spectral edges.
                     # Each box keeps only faces toward the eye, then the records' far-to-near
                     # order resolves bar overlap without a per-mode OIT target.  Depth writes
                     # would otherwise hide the wallpaper and later transparent bars.
@@ -315,6 +344,7 @@ class QuickExtrudedSpectrumRenderer:
             except Exception as exc:
                 errors.append(str(exc))
         self._fit_key = None
+        self._shadow_diag_key = None
         if errors:
             raise RuntimeError(" | ".join(errors))
 

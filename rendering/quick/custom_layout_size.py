@@ -256,10 +256,17 @@ def viewport_extent_resize_payload(
         float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
         float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
     )
-    next_extent = (
-        float(rect.width()) / scale if change_width else float(extent[0]),
-        float(rect.height()) / scale if change_height else float(extent[1]),
-    )
+    # A freeform 3D viewport is an authored *stage*.  Enlarging that stage
+    # must enlarge the projected mesh, not expand its virtual world by the
+    # same amount (which would cancel the visible resize).  Planar Visualizer
+    # side handles retain their existing viewport-world editing semantics.
+    if item.geometry_kind == "freeform_3d":
+        next_extent = (float(extent[0]), float(extent[1]))
+    else:
+        next_extent = (
+            float(rect.width()) / scale if change_width else float(extent[0]),
+            float(rect.height()) / scale if change_height else float(extent[1]),
+        )
     payload = dict(item.current_size_payload)
     payload.update(
         width=rect.width(),
@@ -316,8 +323,14 @@ def uniform_corner_drag_scale(
 def pixels_per_world_from_geometry(
     rect: QRect,
     viewport_extent: tuple[float, float] | None,
+    *,
+    geometry_kind: str = "planar",
 ) -> float:
-    """The one Visualizer pixels-per-world scale an integer outer rect encodes."""
+    """Return a usable viewport scale, strictly enforcing planar geometry only.
+
+    3D stage aspect and logical render-world aspect are independent by design.
+    The ratio is an interaction aid there, never the stage-size authority.
+    """
 
     if viewport_extent is None:
         raise RuntimeError("CUSTOM visualizer geometry has no viewport extent")
@@ -327,6 +340,8 @@ def pixels_per_world_from_geometry(
     height = float(rect.height())
     if min(extent_width, extent_height, width, height) <= 0.0:
         raise RuntimeError("CUSTOM visualizer geometry must be positive")
+    if geometry_kind == "freeform_3d":
+        return max(1.0e-6, min(width / extent_width, height / extent_height))
     horizontal = (
         max(0.0, (width - 0.5) / extent_width),
         (width + 0.5) / extent_width,
@@ -368,7 +383,8 @@ def uniform_scale_geometry(
     display_size = display_geometry.size()
     minimum = quick_custom_minimum_size(item)
     box = item.current_content_extent
-    world = item.current_viewport_extent if item.viewport_resize_capable else None
+    world = (item.current_viewport_extent if item.viewport_resize_capable
+             and item.geometry_kind != "freeform_3d" else None)
     current_scale = max(1.0e-6, float(item.resize_scale))
     if item.content_extent_capable and not item.viewport_resize_capable and box is not None:
         # Scale the user's logical content box as a whole (a side drag may have
@@ -381,6 +397,30 @@ def uniform_scale_geometry(
             float(minimum.height()) / reference_height,
         )
         world = None
+    elif item.geometry_kind == "freeform_3d" and item.viewport_resize_capable:
+        # Uniform Edit/Arrange scaling multiplies the existing authored stage
+        # as one rectangle.  Using viewport_extent here would silently snap its
+        # proportions back to the renderer's unrelated virtual-world aspect.
+        stage_reference = item.uniform_stage_reference
+        # CUSTOM's working QRect is the geometry authority. A direct geometry
+        # replacement can bypass the gesture setter (e.g. host rehydration or
+        # Settings reconciliation); an obsolete rounding reference may not drag
+        # the stage back to an earlier size on the next wheel step.
+        if (stage_reference is None or
+                abs(float(item.current_global_rect.width()) - stage_reference[0] * current_scale) > 0.501 or
+                abs(float(item.current_global_rect.height()) - stage_reference[1] * current_scale) > 0.501):
+            stage_reference = (
+                float(item.current_global_rect.width()) / current_scale,
+                float(item.current_global_rect.height()) / current_scale,
+            )
+            item.uniform_stage_reference = stage_reference
+        reference_width = max(1.0, float(stage_reference[0]))
+        reference_height = max(1.0, float(stage_reference[1]))
+        floor_scale = max(
+            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+            float(minimum.width()) / reference_width,
+            float(minimum.height()) / reference_height,
+        )
     else:
         admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
         reference_width = max(1.0, float(item.baseline_global_rect.width()) / admitted_scale)

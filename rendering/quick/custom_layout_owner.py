@@ -196,6 +196,7 @@ class _EditUndoSnapshot:
     rect: QRect
     size_payload: dict[str, Any]
     resize_scale: float
+    uniform_stage_reference: tuple[float, float] | None
     viewport_extent: tuple[float, float] | None
     content_extent: tuple[float, float] | None
     child_sizes: dict[str, CustomChildSize]
@@ -298,6 +299,7 @@ class QuickCustomLayoutOwner:
             rect=QRect(item.current_global_rect),
             size_payload=deepcopy(item.current_size_payload),
             resize_scale=float(item.resize_scale),
+            uniform_stage_reference=item.uniform_stage_reference,
             viewport_extent=item.current_viewport_extent,
             content_extent=item.current_content_extent,
             child_sizes=dict(item.current_child_sizes),
@@ -366,6 +368,7 @@ class QuickCustomLayoutOwner:
         item.set_geometry(before.rect)
         item.current_size_payload = deepcopy(before.size_payload)
         item.resize_scale = before.resize_scale
+        item.uniform_stage_reference = before.uniform_stage_reference
         item.current_viewport_extent = before.viewport_extent
         item.current_content_extent = before.content_extent
         item.current_child_sizes = dict(before.child_sizes)
@@ -558,6 +561,17 @@ class QuickCustomLayoutOwner:
     def cancel(self) -> bool:
         if not self._active or self._session is None:
             return False
+        # Cancel cannot project the saved baseline through a renderer whose
+        # hidden target activation is not yet coherent either. Keep the Edit
+        # session in place until the existing activation completion edge.
+        owner, _unit = self._visualizer_provider()
+        phase = getattr(owner, "_mode_transition_phase", "idle") if owner is not None else "idle"
+        if phase != "idle":
+            logger.warning(
+                "[CUSTOM_LAYOUT] Refused Cancel during Visualizer activation "
+                "phase=%s; session remains active", phase,
+            )
+            return False
         restore_error: Exception | None = None
         try:
             self._session.restore_baseline()
@@ -654,6 +668,50 @@ class QuickCustomLayoutOwner:
     def save(self, *, defer_topology_reconciliation: bool = False) -> bool:
         if not self._active or self._session is None:
             return False
+        # A mode switch is a hidden, multi-stage activation. Until the target
+        # has finished its first coherent reveal, its selected CUSTOM draft
+        # must not be persisted or promoted against the old retained renderer.
+        # This gate comes BEFORE commit_custom_session/settings.save; the strict
+        # retained-runtime coherence check below remains unchanged.
+        owner, _visualizer_unit = self._visualizer_provider()
+        phase = getattr(owner, "_mode_transition_phase", "idle") if owner is not None else "idle"
+        if phase != "idle":
+            logger.warning(
+                "[CUSTOM_LAYOUT] Refused Save during Visualizer activation "
+                "phase=%s; Edit session and Settings remain intact", phase,
+            )
+            return False
+        live_visualizer = next(
+            (entry for entry in self._session.active_items()
+             if entry.model_identity == "spotify_visualizer" and not entry.removed),
+            None,
+        )
+        if live_visualizer is not None:
+            if live_visualizer.current_viewport_extent is None:
+                logger.error(
+                    "[CUSTOM_LAYOUT] Refused Save of unhydrated Visualizer "
+                    "profile=%s; Edit session and Settings remain intact",
+                    live_visualizer.source_key.geometry_variant,
+                )
+                return False
+            if owner is not None:
+                from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+                controller = getattr(owner, "controller", None)
+                mode = getattr(controller, "mode_id", None)
+                if mode is not None:
+                    expected = get_visualizer_layout_profile(mode)
+                    actual = live_visualizer.source_key.geometry_variant
+                    if actual != expected and not (
+                        actual == "default" and expected == "planar"
+                        and live_visualizer.geometry_kind == "planar"
+                    ):
+                        logger.error(
+                            "[CUSTOM_LAYOUT] Refused Save while target profile="
+                            "%s disagrees with retained mode=%s profile=%s; "
+                            "Edit session and Settings remain intact",
+                            actual, mode, expected,
+                        )
+                        return False
         if self._direct and not self._direct_changed():
             self._finish()
             return True
@@ -2126,6 +2184,7 @@ class QuickCustomLayoutOwner:
         key = CustomLayoutKey(
             "spotify_visualizer", binding.identity, geometry_variant
         )
+        from core.settings.visualizer_mode_registry import get_visualizer_geometry_kind
         item = CustomLayoutSessionItem(
             source_key=key,
             model_identity="spotify_visualizer",
@@ -2135,7 +2194,9 @@ class QuickCustomLayoutOwner:
             current_size_payload=payload,
             baseline_enabled=True,
             current_enabled=True,
-            legacy_geometry_variant=getattr(owner, "_legacy_layout_profile", None),
+            geometry_kind=get_visualizer_geometry_kind(owner.controller.mode_id),
+            legacy_layout_profile=getattr(owner, "_legacy_layout_profile", None),
+            legacy_source_variant=getattr(owner, "_legacy_layout_source_variant", None),
             resize_capable=True,
             source_monitor_route=get_effective_monitor_value_for_widget(
                 "spotify_visualizer", widgets
@@ -2161,8 +2222,149 @@ class QuickCustomLayoutOwner:
         session.add_item(item)
         descriptors[key] = descriptor
         self._visualizer_pixels_per_world[key] = (
-            self._pixels_per_world_from_geometry(global_rect, extent)
+            self._pixels_per_world_from_geometry(global_rect, extent, geometry_kind=item.geometry_kind)
         )
+
+    def activate_edit_visualizer_profile(self, target_mode: str) -> bool:
+        """Switch active CUSTOM view without committing or losing sibling drafts.
+
+        Invoked once while the outgoing Visualizer is fully hidden. Multiple
+        profile poses live in the existing CustomLayoutSession and Save/Cancel
+        still owns the ONE persistence boundary. Parked profiles remain normal
+        session items for canonical commit, but never own a second live item.
+        """
+        if not self.is_editing or self._session is None:
+            return False
+        from core.settings.visualizer_mode_registry import (
+            get_visualizer_layout_profile, get_visualizer_geometry_kind,
+            get_visualizer_presentation_policy,
+        )
+        from rendering.quick.custom_layout_hydration import (
+            resolve_visualizer_custom_entry, resolve_committed_visualizer_rect,
+        )
+        from widgets.spotify_visualizer.render_state import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        session = self._session
+        profile = get_visualizer_layout_profile(target_mode)
+        visible = next((entry for entry in session.items()
+                        if entry.model_identity == "spotify_visualizer"
+                        and not entry.profile_parked and not entry.removed), None)
+        if visible is None:
+            return False
+        if visible.source_key.geometry_variant == profile:
+            return True
+        self._finish_undo_gesture()
+        binding = self._bindings.get(visible.current_display_identity)
+        if binding is None:
+            return False
+        key = CustomLayoutKey("spotify_visualizer", binding.identity, profile)
+        target = next((entry for entry in session.items() if entry.source_key == key), None)
+        created_here = target is None
+        if target is None:
+            widgets = self._settings_manager.get_widgets_map()
+            saved = resolve_visualizer_custom_entry(
+                widgets, binding.screen, target_mode,
+            )
+            if saved is not None:
+                local = resolve_committed_visualizer_rect(saved, binding.geometry.size())
+                rect = local.translated(binding.geometry.topLeft())
+                extent = normalize_viewport_extent(saved.size_payload.get("viewport_extent"))
+                if extent is None:
+                    # Historic saved rectangles may lack a logical 3D world.
+                    # This is a transient hydration fallback, not a second
+                    # persisted size or the outgoing mode's render extent.
+                    extent = tuple(float(value) for value in CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)
+                    logger.info(
+                        "[CUSTOM_LAYOUT] Hydrated missing target viewport "
+                        "mode=%s profile=%s from canonical baseline", target_mode, profile,
+                    )
+                payload = deepcopy(saved.size_payload)
+            else:
+                # A brand-new profile starts at its authored baseline, never
+                # inherits the outgoing 3D mode's potentially absurd pose.
+                world_w, world_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+                width = min(int(world_w), binding.geometry.width())
+                height = min(int(world_h), binding.geometry.height())
+                rect = QRect(
+                    binding.geometry.x() + (binding.geometry.width() - width) // 2,
+                    binding.geometry.y() + (binding.geometry.height() - height) // 2,
+                    width, height,
+                )
+                extent = (float(world_w), float(world_h))
+                payload = {"viewport_extent": list(extent)}
+            payload.update(width=rect.width(), height=rect.height())
+            policy = get_visualizer_presentation_policy(target_mode)
+            target = CustomLayoutSessionItem(
+                source_key=key, model_identity="spotify_visualizer",
+                baseline_global_rect=rect, current_global_rect=rect,
+                baseline_size_payload=payload, current_size_payload=payload,
+                baseline_enabled=True, current_enabled=True,
+                geometry_kind=get_visualizer_geometry_kind(target_mode),
+                resize_capable=True, viewport_resize_capable=True,
+                baseline_viewport_extent=extent, current_viewport_extent=extent,
+                source_monitor_route=visible.source_monitor_route,
+                content_rotation_capable=bool(policy.content_rotation_capable),
+                size_reset_capable=visible.size_reset_capable,
+                authored_reference_size=visible.authored_reference_size,
+                authored_size_payload=deepcopy(visible.authored_size_payload),
+                authored_viewport_extent=visible.authored_viewport_extent,
+            )
+            session.add_item(target)
+            self._descriptors[key] = self._descriptors[visible.source_key]
+            self._visualizer_pixels_per_world[key] = self._pixels_per_world_from_geometry(rect, extent, geometry_kind=target.geometry_kind)
+        if target.current_viewport_extent is None:
+            # A parked draft can originate from pre-N-profile Edit data. Repair
+            # its transient world only, never copy another mode's geometry.
+            extent = tuple(float(value) for value in CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)
+            target.current_viewport_extent = extent
+            target.current_size_payload = {
+                **target.current_size_payload, "viewport_extent": list(extent),
+            }
+            # Cancel restores the same repaired transient baseline; an old
+            # malformed parked record must not reappear at session retirement.
+            if target.baseline_viewport_extent is None:
+                target.baseline_viewport_extent = extent
+                target.baseline_size_payload = {
+                    **target.baseline_size_payload, "viewport_extent": list(extent),
+                }
+            logger.info(
+                "[CUSTOM_LAYOUT] Repaired parked target viewport profile=%s", profile,
+            )
+        previous_selection = session.selected_item()
+        visible.profile_parked = True
+        target.profile_parked = False
+        try:
+            session.select_item(target)
+            for entry in self._bindings.values():
+                entry.unit.runtime.scene_controller.refresh_custom_layout_session()
+        except Exception:
+            # The Edit target is a session draft. Restore a single live source
+            # before propagating to the owner transaction, never leave a
+            # half-parked profile behind on a failed hidden activation.
+            target.profile_parked = True
+            visible.profile_parked = False
+            try:
+                session.select_item(previous_selection)
+            finally:
+                if created_here:
+                    session.discard_provisional_item(target)
+                    self._descriptors.pop(key, None)
+                    self._visualizer_pixels_per_world.pop(key, None)
+                # The first projection may have updated other display overlays.
+                # Restore the old live presentation on every participant before
+                # surfacing the failure. Keep these writes event-bound.
+                for entry in self._bindings.values():
+                    try:
+                        entry.unit.runtime.scene_controller.refresh_custom_layout_session()
+                    except Exception:
+                        logger.exception("[CUSTOM_LAYOUT] Failed restoring peer Edit projection after rollback")
+            logger.exception(
+                "[CUSTOM_LAYOUT] Edit profile projection failed; rolled back "
+                "draft switch %s -> %s", visible.source_key.geometry_variant, profile,
+            )
+            raise
+        logger.info("[CUSTOM_LAYOUT] Edit draft profile %s -> %s; no Settings write",
+                    visible.source_key.geometry_variant, profile)
+        return True
 
     def rotate_visualizer_content(self, item: CustomLayoutSessionItem) -> bool:
         """Advance one eligible Visualizer CUSTOM content orientation by 90°."""
@@ -2401,7 +2603,7 @@ class QuickCustomLayoutOwner:
                 viewport_extent=viewport_extent,
             )
             self._visualizer_pixels_per_world[item.source_key] = (
-                self._pixels_per_world_from_geometry(geometry, viewport_extent)
+                self._pixels_per_world_from_geometry(geometry, viewport_extent, geometry_kind=item.geometry_kind)
             )
         else:
             item.set_geometry(
@@ -2946,6 +3148,11 @@ class QuickCustomLayoutOwner:
             raise RetainedRuntimeIncoherenceError("CUSTOM live geometry promotion requires a session")
         owner, visualizer_unit = self._visualizer_provider()
         for item in session.items():
+            # Parked Visualizer profiles are authored drafts in the SAME Edit
+            # transaction. Commit them through the canonical CUSTOM writer but
+            # never project them onto the single retained Visualizer runtime.
+            if item.model_identity == "spotify_visualizer" and getattr(item, "profile_parked", False):
+                continue
             if item.removed or not item.current_enabled:
                 if item.model_identity == "spotify_visualizer":
                     reconcile = self._visualizer_presence_commit
@@ -3223,6 +3430,7 @@ class QuickCustomLayoutOwner:
                     self._pixels_per_world_from_geometry(
                         visualizer_item.current_global_rect,
                         visualizer_item.current_viewport_extent,
+                        geometry_kind=visualizer_item.geometry_kind,
                     )
                 )
         except Exception as lifecycle_error:

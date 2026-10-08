@@ -62,6 +62,7 @@ DESTINATION_PROFILE = (
     "test_visualizer_edit_content_envelope.py",
     "test_visualizer_edit_orbit_publication.py",
     "test_extruded_shadow_reach.py",
+    "test_extruded_shadow_receiver_contract.py",  # E8: yaw-canonical receiver and shallow-floor projection
     "test_qtquick_edit_pointer_delivery.py",  # real QQuickWindow MouseArea click targeting
     "test_qtquick_child_mapped_geometry.py",  # thin targets + 4-corner QQuickItem mapped bounds
     "test_qtquick_child_mapped_source_contract.py",  # selected-only mapping, no new runtime owner

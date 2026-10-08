@@ -77,37 +77,62 @@ def _canonicalize_alias_bucket(custom_map: dict[str, Any], aliases: tuple[str, .
     return canonicalize_screen_layout_aliases(custom_map, aliases) or aliases[0]
 
 
-def _migrate_visualizer_legacy_entries(custom_map: dict[str, Any], legacy_variant: str | None) -> None:
-    """Promote only the interpreted legacy family; retire default on canonical writes."""
-    displays = custom_map.get("displays", {})
-    if isinstance(displays, dict):
-        for saved_signature in tuple(displays):
-            layouts = displays.get(saved_signature)
-            variants = (
-                layouts.get("spotify_visualizer")
-                if isinstance(layouts, dict)
-                else None
-            )
-            if isinstance(variants, dict):
-                legacy_payload = variants.get("default")
-                if legacy_variant and legacy_variant not in variants and isinstance(legacy_payload, Mapping):
-                    variants[legacy_variant] = deepcopy(legacy_payload)
-            remove_screen_layout_entry(
-                custom_map,
-                str(saved_signature),
-                "spotify_visualizer",
-                "default",
-            )
+def _migrate_visualizer_legacy_entries(
+    custom_map: dict[str, Any],
+    *,
+    target_profile: str | None,
+    source_variant: str | None,
+) -> None:
+    """Promote one interpreted legacy Visualizer pose, then retire ambiguity.
 
-
-def migrate_visualizer_legacy_geometry(widgets: dict[str, Any], legacy_variant: str) -> None:
-    """Preserve a legacy pose before persisting a new active Visualizer mode.
-
-    This uses the same canonical write boundary as CUSTOM Save. The mode save
-    would otherwise reinterpret the legacy pose as its new family at restart.
+    ``target_profile`` is the descriptor-owned canonical compatibility-group ID.
+    ``source_variant`` is the actual old storage key (``default`` or
+    ``freeform_3d``).  Promotion happens independently per display and never
+    clones a legacy 3D pose into sibling 3D mode profiles.  A canonical write
+    also retires the fully ambiguous ``default`` key everywhere.
     """
+
+    target = str(target_profile or "").strip().lower() or None
+    source = str(source_variant or "").strip().lower() or None
+    displays = custom_map.get("displays", {})
+    if not isinstance(displays, dict):
+        return
+    for saved_signature in tuple(displays):
+        layouts = displays.get(saved_signature)
+        variants = (
+            layouts.get("spotify_visualizer")
+            if isinstance(layouts, dict)
+            else None
+        )
+        if isinstance(variants, dict) and target and source:
+            legacy_payload = variants.get(source)
+            if target not in variants and isinstance(legacy_payload, Mapping):
+                variants[target] = deepcopy(legacy_payload)
+        # ``default`` can never regain authority once any canonical profile has
+        # crossed the write boundary.  A claimed old freeform record retires at
+        # the same point; unclaimed freeform input remains dormant for the mode
+        # that originally authored it until a claimant is known.
+        remove_screen_layout_entry(
+            custom_map, str(saved_signature), "spotify_visualizer", "default"
+        )
+        if source == "freeform_3d":
+            remove_screen_layout_entry(
+                custom_map, str(saved_signature), "spotify_visualizer", "freeform_3d"
+            )
+
+
+def migrate_visualizer_legacy_geometry(
+    widgets: dict[str, Any],
+    *,
+    target_profile: str,
+    source_variant: str,
+) -> None:
+    """Promote a claimed legacy pose before persisting another active mode."""
+
     custom_map = load_custom_layout_map(widgets)
-    _migrate_visualizer_legacy_entries(custom_map, legacy_variant)
+    _migrate_visualizer_legacy_entries(
+        custom_map, target_profile=target_profile, source_variant=source_variant
+    )
     write_custom_layout_map(widgets, custom_map)
 
 
@@ -178,7 +203,11 @@ def _write_item(
         item.model_identity == "spotify_visualizer"
         and item.source_key.geometry_variant != "default"
     ):
-        _migrate_visualizer_legacy_entries(custom_map, item.legacy_geometry_variant)
+        _migrate_visualizer_legacy_entries(
+            custom_map,
+            target_profile=item.legacy_layout_profile,
+            source_variant=item.legacy_source_variant,
+        )
     if widget_writes_custom_position_key(item.model_identity):
         section = widgets.setdefault(get_custom_persistence_position_settings_key_for_widget(item.model_identity), {})
         if not isinstance(section, dict):
@@ -221,7 +250,9 @@ def commit_custom_session(
             for alias in aliases:
                 remove_screen_layout_entry(custom_map, alias, widget_id, removed.source_key.geometry_variant)
         survivors = [item for item in items if not item.removed]
-        source_had_duplicates = len(items) > 1
+        # Mutually exclusive Visualizer layout profiles are not physical
+        # duplicate widgets, even though every profile must be saved.
+        source_had_duplicates = sum(not item.profile_parked for item in items) > 1
         for item in survivors:
             display = displays[item.current_display_identity]
             _aliases, _geometry, route, _screen = _display_parts(display)

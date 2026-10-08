@@ -71,7 +71,8 @@ def edit_scene(qt_app, monkeypatch):
         visualizer._apply_resolved_presentation(visualizer._resolve_current_presentation())
         assert layout.start()
         item = layout.session.items()[0]
-        assert item.source_key.geometry_variant == "freeform_3d"
+        assert item.source_key.geometry_variant == "3d:extruded_spectrum"
+        assert item.geometry_kind == "freeform_3d"
         layout.session.select_item(item)
         scene.set_visualizer_edit_content_envelope({
             "mode": "extruded_spectrum", "orbit_admitted": True,
@@ -136,8 +137,13 @@ def test_alt_wheel_is_signed_reversible_uniform_and_zero_is_noop(edit_scene, hor
         assert rect.y() == original.y()  # shared CUSTOM top-centre pivot
         assert edit.item.current_viewport_extent == original_extent
         presentation = edit.scene.visualizer_item.presentation
-        assert presentation.outer_rect[2] / presentation.outer_rect[3] == pytest.approx(
-            original_presentation.outer_rect[2] / original_presentation.outer_rect[3], abs=.005)
+        # A uniform freeform-3D stage is stored as an integral QRect; rounding
+        # both dimensions independently can shift the ratio by ~one pixel.
+        # The actual visible stage must match the editor's rectangle exactly.
+        assert presentation.outer_rect[2] == pytest.approx(rect.width(), abs=.501)
+        assert presentation.outer_rect[3] == pytest.approx(rect.height(), abs=.501)
+        original_aspect = original_presentation.outer_rect[2] / original_presentation.outer_rect[3]
+        assert abs(presentation.outer_rect[2] - original_aspect * presentation.outer_rect[3]) <= (1 + original_aspect) / 2 + 0.01
     assert edit.item.resize_scale == pytest.approx(original_scale)
     assert edit.item.current_global_rect == original
     before_payload = dict(edit.item.current_size_payload)

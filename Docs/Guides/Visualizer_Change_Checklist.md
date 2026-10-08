@@ -147,33 +147,42 @@ Expected adaptation:
 
 Persist and restore uniform scale and viewport extent separately through Save/Cancel, geometry variants and layout slots.
 
-## 7A. Geometry-profile / mode-family changes
+## 7A. Geometry kind / layout-profile changes
 
-When a mode change may select a different CUSTOM geometry profile:
+When a mode change may select a different CUSTOM layout profile:
 
 - [ ] Reuse the existing `(widget_id, display_identity, geometry_variant)` persistence axis and the one
-      `CustomLayoutSession`/commit/hydration owner. Do not add parallel 2D/3D layout maps or per-mode rect Settings.
-- [ ] Profile membership comes from canonical mode capability/descriptor metadata, not a renderer-name conditional scattered
-      through input, hydration and Edit code. Classify by layout behavior, not merely "is 3D".
-- [ ] Same-profile mode changes are geometry no-ops. Cross-profile changes apply the target rect/viewport only while the target
-      is hidden during the existing activation transaction; there is no visible outgoing-pose frame on the new mode.
-- [ ] Edit, Arrange and direct Alt move/resize write only the active variant and preserve dormant sibling variants. A
-      cross-profile activation does not retarget an in-flight `CustomLayoutSessionItem` halfway through a gesture.
-- [ ] 3D turn/tilt/orbit remains mode/preset state. Geometry variants own outer placement/size/viewport only.
+      `CustomLayoutSession`/commit/hydration owner. Do not add parallel 2D/3D maps, per-mode rect Settings or a second geometry service.
+- [ ] Keep descriptor `geometry_kind` and `layout_profile` separate. `geometry_kind` selects mechanics; `layout_profile` is a
+      compatibility-group ID for persisted stage geometry. Never infer one from the other or from renderer class names.
+- [ ] A future mode may share a `layout_profile` only by explicit descriptor choice because its authored stage pose is actually
+      compatible. Merely being `freeform_3d` never grants geometry sharing.
+- [ ] Cross-profile changes apply the target rect/viewport only while the target is hidden during the existing activation
+      transaction. Missing targets start from authored baseline; they never clone the outgoing profile.
+- [ ] Edit, Arrange and direct Alt move/resize write only the active profile and preserve dormant siblings. A cross-profile
+      activation does not retarget an in-flight `CustomLayoutSessionItem` halfway through a gesture.
+- [ ] Turn/tilt/orbit/camera/material/response/preset fields remain mode-presentation state. Layout profiles own only outer
+      placement/size/viewport intent and must neither serialize nor restore those presentation fields.
 - [ ] Layout slots retain the complete variant map and restore active Visualizer mode before geometry hydration chooses a
-      profile. Cross-display moves preserve inactive sibling variants and display-signature canonicalization.
-- [ ] Legacy/default Visualizer geometry is compatibility input, not a permanent competing authority. Missing opposite-family
-      geometry falls back to that family's authored baseline, never a blind copy of the source-family pose.
-- [ ] Repeated planar→freeform→planar switching proves exact pose restoration with no viewport/scale drift, no owner rebuild
-      solely for geometry, and no regression to global CUSTOM stacking/Media-adjacency dormancy.
-- [ ] For `freeform_3d`, Edit distinguishes the persisted stage/viewport from the derived projected scene extent. Reuse
-      the renderer's CPU reach/bounds authority; do not duplicate projection math in QML or persist the derived envelope.
-- [ ] Orbit alone leaves the saved CUSTOM rect unchanged. The content envelope may update only on relevant authored view/shape
-      changes, never as a per-audio-frame geometry feed or automatic layout mutation.
+      profile. Cross-display moves preserve inactive siblings and display-signature canonicalization.
+- [ ] Legacy `default` / `freeform_3d` Visualizer geometry is one-way compatibility input. At most one explicit/current claimant
+      may promote it; sibling 3D modes must not clone the ambiguous record.
+- [ ] Hidden profile switching may discard one unread outgoing snapshot only after logical production is stopped. Edit Save may
+      rebase one unread newest logical snapshot onto the exact committed presentation being promoted. Everywhere else the render
+      bridge must continue rejecting mismatched presentation geometry and counting it.
+- [ ] Repeated planar↔3D and 3D↔3D switching proves exact profile restoration with no viewport/scale drift, no owner rebuild
+      solely for geometry, no visible outgoing-pose frame and no new `viz_geometry_mismatches` at transaction edges.
+- [ ] For `freeform_3d`, Edit distinguishes persisted stage/viewport from derivative projected scene data. Reuse production
+      projection/reach authorities; do not duplicate projection math in QML or persist the derived envelope/cage.
+- [ ] A projected 3D cage, if shown, is eight read-only projected vertices + twelve edges + orientation marker only. It must not
+      participate in snap, collision, movement, resize, Fit Scene or persistence. QML only paints the published projection.
+- [ ] Orbit alone leaves the saved CUSTOM rect unchanged. Envelope/cage publication happens only on relevant authored view/shape
+      edges, never as a per-audio-frame geometry feed or automatic layout mutation.
 - [ ] Alt-left orbit, Alt-right move and Alt-wheel resize work while Edit is active without weakening CUSTOM's product-input
       block. Orbit routes to the existing view resolver; move/scale route to the active `CustomLayoutSession`.
-- [ ] Geometry Save/Cancel/undo continues to own Edit move/scale. Orbit remains mode/preset state rather than being folded into
-      layout geometry merely because the gesture happened while Edit was visible.
+- [ ] Geometry Save/Cancel/undo continues to own Edit move/scale. Orbit remains mode/preset state even when the gesture happens
+      while Edit is visible.
+
 
 ## 8. Bubble
 

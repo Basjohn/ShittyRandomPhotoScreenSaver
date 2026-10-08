@@ -212,7 +212,7 @@ def test_the_view_is_saved_once_when_orbiting_stops_never_per_step():
     assert saved["mode"] == "extruded_spectrum"
 
 
-def test_orbiting_a_curated_preset_moves_the_mode_to_custom_holding_what_was_shown():
+def test_orbiting_a_curated_preset_preserves_preset_and_updates_only_persistent_view():
     from core.settings.visualizer_presets import get_custom_preset_index, get_presets
     from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
 
@@ -222,21 +222,19 @@ def test_orbiting_a_curated_preset_moves_the_mode_to_custom_holding_what_was_sho
     index = get_presets(mode).index(preset)
     section = {**deepcopy(_DEFAULTS), "mode": "bubble", f"preset_{mode}": index}
     original = deepcopy(section)
-    config, cache = resolve_visualizer_view_orbit(section, {}, mode=mode, values={turn: 0.42, tilt: 0.13})
-    assert section == original                                    # inputs untouched
-    assert config["mode"] == "bubble"                             # orbiting never switches the shown mode
+    config, cache = resolve_visualizer_view_orbit(section, {}, mode=mode, values={turn: .42, tilt: .13})
+    assert section == original
+    assert config["mode"] == "bubble"
+    assert config[f"preset_{mode}"] == index  # camera gestures never choose Custom
+    assert (config[turn], config[tilt]) == (.42, .13)
+    assert {key: value for key, value in config.items() if key not in (turn, tilt)} == {
+        key: value for key, value in original.items() if key not in (turn, tilt)}
+    assert cache == {}
+    config, cache = resolve_visualizer_view_orbit(
+        {**original, f"preset_{mode}": get_custom_preset_index(mode)}, {},
+        mode=mode, values={turn: -.3, tilt: .9})
     assert config[f"preset_{mode}"] == get_custom_preset_index(mode)
-    assert (config[turn], config[tilt]) == (0.42, 0.13)
-    shown = {key: value for key, value in preset.settings.items() if key.startswith(mode) and key not in (turn, tilt)}
-    assert shown and all(config[key] == value for key, value in shown.items())
-    assert cache[mode][turn] == 0.42 and cache[mode][tilt] == 0.13
-
-    # Already on Custom: only the view changes, and the Custom cache is left alone.
-    config, cache = resolve_visualizer_view_orbit({**original, f"preset_{mode}": get_custom_preset_index(mode)},
-                                                  {}, mode=mode, values={turn: -0.3, tilt: 0.9})
-    assert config[f"preset_{mode}"] == get_custom_preset_index(mode)
-    assert (config[turn], config[tilt]) == (-0.3, 0.9) and cache == {}
-
+    assert (config[turn], config[tilt]) == (-.3, .9) and cache == {}
 
 def test_saving_an_orbit_normalizes_only_the_snapshot_it_replaces(tmp_path, monkeypatch, qt_app):
     """A finished orbit is saved on the GUI thread between frames, so it must stay cheap: only the

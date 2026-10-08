@@ -17,6 +17,7 @@ from PySide6.QtGui import QGuiApplication
 
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.models import ShadowSettings
+from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
 from rendering.custom_layout_contract import (
     deserialize_custom_layout_entry,
     get_widget_layout_variant_payload,
@@ -261,8 +262,12 @@ def _saver_rect(widget_id: str, committed: dict, display: ArrangeDisplay, meter)
     """Where the saver resolves one committed content-sized entry."""
 
     bucket = load_custom_layout_map(committed)["displays"][display.identity]
+    profile = (
+        get_visualizer_layout_profile(str(committed["spotify_visualizer"]["mode"]))
+        if widget_id == "spotify_visualizer" else "default"
+    )
     entry = deserialize_custom_layout_entry(
-        widget_id, "default", get_widget_layout_variant_payload(bucket, widget_id, "default")
+        widget_id, profile, get_widget_layout_variant_payload(bucket, widget_id, profile)
     )
     assert entry.size_payload["_size_from_content"] is True, widget_id
     size = QSize(display.geometry.width(), display.geometry.height())

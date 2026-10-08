@@ -125,7 +125,7 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     # each mode. Extruded authors its renderer-specific Faces/Edges rainbow
     # participation explicitly in its own Appearance bucket.
     expected_buckets = {
-        "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["Material", "Reflection", "Shadow", "Render", "Ghost"]),
+        "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["3D Effects"]),
         "shockwave_grid": (["Appearance", "Waves", "Bar Response"], ["Render"]),
         "sphere": (["Frequency Zones", "Appearance", "Particle Flow"], ["Reactivity", "Rotation", "Effects"]),
     }

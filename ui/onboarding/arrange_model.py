@@ -404,12 +404,26 @@ class ArrangeModel:
                     )
                     section = self._route_section_for(descriptor)
                     source_route = str(section.get("monitor", display.monitor_route)) if isinstance(section, Mapping) else display.monitor_route
+                    visualizer_mode = None
+                    visualizer_kind = "planar"
+                    legacy_layout_profile = None
+                    legacy_source_variant = None
+                    if descriptor.widget_id == "spotify_visualizer":
+                        from core.settings.visualizer_mode_registry import (
+                            coerce_visualizer_mode_id, get_visualizer_geometry_kind,
+                        )
+                        visualizer_mode = coerce_visualizer_mode_id(str(
+                            self._section_for(descriptor).get("mode") or "spectrum"
+                        ))
+                        visualizer_kind = get_visualizer_geometry_kind(visualizer_mode)
+                        if entry is not None and entry.geometry_variant in {"default", "freeform_3d"}:
+                            legacy_layout_profile = variant
+                            legacy_source_variant = entry.geometry_variant
                     item = CustomLayoutSessionItem(
                         source_key=key, model_identity=descriptor.widget_id,
-                        legacy_geometry_variant=(
-                            variant if descriptor.widget_id == "spotify_visualizer"
-                            and entry is not None and entry.geometry_variant == "default" else None
-                        ),
+                        geometry_kind=visualizer_kind,
+                        legacy_layout_profile=legacy_layout_profile,
+                        legacy_source_variant=legacy_source_variant,
                         baseline_global_rect=rect, current_global_rect=rect,
                         baseline_size_payload=payload, current_size_payload=payload,
                         baseline_enabled=True, current_enabled=True,
@@ -696,7 +710,10 @@ class ArrangeModel:
         extent = item.current_viewport_extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         rect = item.current_global_rect
         try:
-            return pixels_per_world_from_geometry(rect, (float(extent[0]), float(extent[1])))
+            return pixels_per_world_from_geometry(
+                rect, (float(extent[0]), float(extent[1])),
+                geometry_kind=item.geometry_kind,
+            )
         except RuntimeError:
             # A box saved by an older build may not encode one scale exactly.
             return min(rect.width() / float(extent[0]), rect.height() / float(extent[1]))

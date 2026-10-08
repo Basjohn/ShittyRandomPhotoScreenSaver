@@ -136,9 +136,14 @@ class VisualizerModeDescriptor:
     # A setting whose value above zero means the mode reflects the displayed wallpaper; its owner
     # then keeps a small copy of it in the mode's parameters (``widgets/spotify_visualizer/backdrop.py``).
     backdrop_setting: str = ""
-    # CUSTOM geometry ownership.  Planar modes share the ordinary retained-card
-    # profile; freeform 3D modes own a separate camera/stage profile.
-    geometry_profile: str = "planar"
+    # CUSTOM geometry mechanics and persistence are deliberately separate.
+    # ``geometry_kind`` selects the interaction/renderer contract (planar vs
+    # freeform 3D). ``layout_profile`` selects the independently persisted stage
+    # pose. Multiple modes may deliberately share one layout_profile when their
+    # authored stage geometry is compatible; a new 3D mode must never inherit
+    # another mode's pose merely because both use freeform_3d mechanics.
+    geometry_kind: str = "planar"
+    layout_profile: str = "planar"
     # Optional sole-logical-clock work, resolved once when this mode activates.
     # Keep lazy module/name strings here for the same import-dormancy reason as
     # frame runtimes and renderers.  The common logical tick calls only the
@@ -248,7 +253,10 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_overflow_setting="sphere_allow_overflow",
         prepared_reveal=True,
         backdrop_setting="sphere_mirror",
-        geometry_profile="freeform_3d",
+        view_orbit_settings=("sphere_turn", "sphere_tilt"),
+        view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        geometry_kind="freeform_3d",
+        layout_profile="3d:sphere",
     ),
     # The first Visualizer on the shared Scene3D foundation. It reuses Spectrum's frame
     # runtime implementation (bars, peaks, R-76 temporal treatment, the shape editor), while
@@ -281,7 +289,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
         prepared_reveal=True,
         backdrop_setting="extruded_spectrum_face_mirror",
-        geometry_profile="freeform_3d",
+        geometry_kind="freeform_3d",
+        layout_profile="3d:extruded_spectrum",
     ),
     # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's shared source
     # implementation feeding the ridge along its horizon. It owns only the consumed technical and
@@ -310,7 +319,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
         prepared_reveal=True,
-        geometry_profile="freeform_3d",
+        geometry_kind="freeform_3d",
+        layout_profile="3d:shockwave_grid",
     ),
 )
 
@@ -347,17 +357,52 @@ def get_visualizer_mode_descriptor(mode_id: str) -> VisualizerModeDescriptor:
     raise KeyError(f"Unknown visualizer mode: {mode_id}")
 
 
-_VISUALIZER_GEOMETRY_PROFILES = frozenset(("planar", "freeform_3d"))
+_VISUALIZER_GEOMETRY_KINDS = frozenset(("planar", "freeform_3d"))
+_LEGACY_VISUALIZER_LAYOUT_PROFILES = frozenset(("default", "freeform_3d"))
 
 
-def get_visualizer_geometry_profile(mode_id: str) -> str:
-    """Return the descriptor-owned CUSTOM geometry profile for *mode_id*."""
+def get_visualizer_geometry_kind(mode_id: str) -> str:
+    """Return the descriptor-owned CUSTOM geometry mechanics for *mode_id*."""
 
     descriptor = get_visualizer_mode_descriptor(mode_id)
-    profile = str(descriptor.geometry_profile).strip().lower()
-    if profile not in _VISUALIZER_GEOMETRY_PROFILES:
+    kind = str(descriptor.geometry_kind).strip().lower()
+    if kind not in _VISUALIZER_GEOMETRY_KINDS:
         raise ValueError(
-            f"visualizer mode {descriptor.mode_id!r} has invalid geometry profile {profile!r}"
+            f"visualizer mode {descriptor.mode_id!r} has invalid geometry kind {kind!r}"
+        )
+    return kind
+
+
+def get_visualizer_view_pose_keys(mode_id: str) -> tuple[str, ...]:
+    """Mode-owned persistent view pose, deliberately outside all preset ownership.
+
+    View authoring persists in the live mode-scoped visualizer settings, never
+    inside curated or Custom preset snapshots or CUSTOM stage rectangles.
+    """
+    return tuple(get_visualizer_mode_descriptor(mode_id).view_orbit_settings)
+
+
+def get_visualizer_layout_profile(mode_id: str) -> str:
+    """Return the descriptor-owned persisted CUSTOM stage profile for *mode_id*.
+
+    This is intentionally independent from ``geometry_kind``.  A profile is a
+    stable compatibility-group ID, not a renderer family.  Legacy ``default``
+    and ``freeform_3d`` records are interpretation-only inputs and are forbidden
+    as new descriptor-owned profile IDs.
+    """
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    profile = str(descriptor.layout_profile).strip().lower()
+    if not profile or profile in _LEGACY_VISUALIZER_LAYOUT_PROFILES:
+        raise ValueError(
+            f"visualizer mode {descriptor.mode_id!r} has invalid layout profile {profile!r}"
+        )
+    if get_visualizer_geometry_kind(mode_id) == "planar" and profile != "planar":
+        # Today's carded 2D modes deliberately share one planar compatibility
+        # profile. If that product decision changes, relax this assertion with
+        # an explicit migration rather than accidentally fragmenting 2D state.
+        raise ValueError(
+            f"planar visualizer mode {descriptor.mode_id!r} must use layout profile 'planar'"
         )
     return profile
 

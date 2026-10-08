@@ -487,6 +487,15 @@ def build_sphere_ui(tab, parent_layout) -> None:
     # ------------------------------------------------------------------
     # Rotation
     # ------------------------------------------------------------------
+    _widget, spin_content = row(rotation, 'Spin Direction:')
+    tab.sphere_spin_direction = StyledComboBox()
+    tab.sphere_spin_direction.addItems(['Default', 'Reverse', 'Y Clockwise', 'Y Counterclockwise'])
+    tab.sphere_spin_direction.setCurrentText(tab._default_str('spotify_visualizer', 'sphere_spin_direction'))
+    tab.sphere_spin_direction.setToolTip(
+        'Choose the shell rotation axis/direction. Default keeps the original compound rotation; the velocity floor remains continuous.')
+    bind_setting_signal(tab, tab.sphere_spin_direction.currentTextChanged, auto_switch=True)
+    spin_content.addWidget(tab.sphere_spin_direction)
+    spin_content.addStretch()
     slider(rotation, "sphere_base_rotation_speed", "sphere_base_rotation_speed", "Base Rotation:", 50, "x", 100.0)
     tab.sphere_base_rotation_speed.setToolTip(
         "Continuous authored rotation floor/idle velocity."

@@ -779,9 +779,26 @@ class SettingsManager(QObject):
                     # a mapping type that is not a plain dict.
                     section_dict = dict(existing_section)
                     if section_name == 'spotify_visualizer':
-                        # Promote the persisted lender values before canonical
+                        # Schema 10's generated Extruded bundle must be classified
+                        # *before* the generic former-lender bridge runs. Otherwise a
+                        # now-retuned Spectrum/Organs preset can populate still-missing
+                        # Extruded-owned keys during default merge and silently become
+                        # the historical migration oracle. The narrow repair freezes
+                        # recognized generated schema-10 state from Extruded's own
+                        # canonical baseline while preserving explicit user-authored
+                        # Extruded values. Normal old-borrower promotion still handles
+                        # profiles that predate that generated bundle.
+                        from core.settings.visualizer_settings_contract import (
+                            migrate_profile_lender_owned_settings,
+                            repair_schema10_extruded_owned_profile,
+                        )
+                        if self._visualizer_schema_version() < 11:
+                            repaired = repair_schema10_extruded_owned_profile(section_dict)
+                            if repaired != section_dict:
+                                section_dict = repaired
+                                changed = True
+                        # Promote remaining persisted lender values before canonical
                         # default fill can mask which owned keys were absent.
-                        from core.settings.visualizer_settings_contract import migrate_profile_lender_owned_settings
                         promoted = migrate_profile_lender_owned_settings(section_dict)
                         if promoted != section_dict:
                             section_dict = promoted

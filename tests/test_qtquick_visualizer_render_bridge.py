@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import dataclasses
 import inspect
 from dataclasses import FrozenInstanceError, replace
 
@@ -202,6 +203,66 @@ def test_bridge_rejects_stale_generation_and_activation_without_displacing_lates
     ) is False
     assert bridge.rejected_count == 4
     assert bridge.peek() is current
+
+
+def test_explicit_layout_switch_discards_unread_snapshot_without_geometry_mismatch() -> None:
+    bridge = VisualizerSnapshotBridge()
+    bridge.begin_activation(
+        runtime_generation=1, engine_generation=2, activation_id=3, mode_id="spectrum",
+    )
+    assert bridge.publish(_snapshot(
+        revision=1, runtime_generation=1, engine_generation=2, activation_id=3,
+    )) is True
+
+    bridge.discard_pending()
+
+    assert bridge.peek() is None
+    assert bridge.presentation_mismatch_count == 0
+    replacement = dataclasses.replace(
+        _presentation(),
+        outer_rect=(128.0, 96.0, 640.0, 360.0),
+        content_rect=(132.0, 100.0, 632.0, 352.0),
+        viewport_extent=(632.0, 352.0),
+        current_aspect_ratio=632.0 / 352.0,
+    )
+    assert bridge.take_for_render(
+        runtime_generation=1, engine_generation=2, activation_id=3, mode_id="spectrum",
+        required_presentation=replacement,
+    ) is None
+    assert bridge.presentation_mismatch_count == 0
+
+
+def test_custom_save_discards_only_mismatched_unread_snapshot_without_relabeling() -> None:
+    bridge = VisualizerSnapshotBridge()
+    bridge.begin_activation(
+        runtime_generation=1, engine_generation=2, activation_id=3, mode_id="spectrum",
+    )
+    assert bridge.publish(_snapshot(
+        revision=1, runtime_generation=1, engine_generation=2, activation_id=3,
+    )) is True
+    committed = dataclasses.replace(
+        _presentation(),
+        outer_rect=(140.0, 84.0, 600.0, 340.0),
+        content_rect=(144.0, 88.0, 592.0, 332.0),
+        viewport_extent=(592.0, 332.0),
+        current_aspect_ratio=592.0 / 332.0,
+    )
+
+    assert bridge.discard_if_presentation_differs(committed) is True
+    assert bridge.peek() is None
+    assert bridge.presentation_mismatch_count == 0
+    # An already-coherent newer snapshot is never dropped or rewritten.
+    logical = _logical_frame(runtime_generation=1, engine_generation=2, activation_id=3)
+    fresh = compose_visualizer_render_snapshot(logical, committed, logical_revision=2)
+    assert bridge.publish(fresh)
+    assert bridge.discard_if_presentation_differs(committed) is False
+    assert bridge.peek() is fresh
+    consumed = bridge.take_for_render(
+        runtime_generation=1, engine_generation=2, activation_id=3, mode_id="spectrum",
+        required_presentation=committed,
+    )
+    assert consumed is fresh
+    assert bridge.presentation_mismatch_count == 0
 
 
 def test_protected_result_survives_coalescing_once_without_frame_replay() -> None:

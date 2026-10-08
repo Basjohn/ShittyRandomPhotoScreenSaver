@@ -77,8 +77,14 @@ def test_orbit_glyph_delivers_native_drag_from_fixed_restore_adjacent_slot(edit_
     # fails this native bar.
     assert (primary.x(), primary.y(), primary.width(), primary.height()) != before_paint
     live = edit.frame.property("liveOrbitRect")
-    assert (primary.x(), primary.y(), primary.width(), primary.height()) == (
-        live.x(), live.y(), live.width(), live.height())
+    paint = edit.frame.property("contentEnvelopePaintRect")
+    assert primary.x() == pytest.approx(paint.x())
+    assert primary.y() == pytest.approx(paint.y())
+    assert primary.width() == pytest.approx(max(1.0, paint.width()))
+    assert primary.height() == pytest.approx(max(1.0, paint.height()))
+    assert paint.x() <= live.x() and paint.y() <= live.y()
+    assert paint.x() + paint.width() >= live.x() + live.width()
+    assert paint.y() + paint.height() >= live.y() + live.height()
     _mouse(edit, QEvent.MouseMove, point + QPointF(24, 12), Qt.NoButton, Qt.LeftButton, Qt.NoModifier)
     _mouse(edit, QEvent.MouseButtonRelease, point + QPointF(24, 12), Qt.LeftButton, Qt.NoButton, Qt.NoModifier)
     assert view_orbit_values(edit.visualizer.controller.presentation_state, "extruded_spectrum") != before
@@ -155,7 +161,7 @@ def test_retained_input_accessor_is_fenced_and_does_not_copy_or_create_node(qt_a
 
 
 def test_fully_transparent_body_has_no_footprint_but_independent_passes_are_real():
-    snapshot = _snapshot(extruded_spectrum_colouring="Bar Colours", extruded_spectrum_body_alpha=1.0,
+    snapshot = _snapshot(extruded_spectrum_colouring="Bar Colours",
         extruded_spectrum_reflection=0.0, spectrum_ghosting_enabled=False,
         extruded_spectrum_shadow_enabled=False)
     style = snapshot.logical.common.style.as_dict()
@@ -185,10 +191,32 @@ def test_empty_scene_has_semantically_admitted_orbit_without_fabricated_frame(ed
     assert glyph.isVisible()
     before = view_orbit_values(edit.visualizer.controller.presentation_state, "extruded_spectrum")
     stage = edit.item.current_global_rect
-    point = glyph.mapToItem(edit.window.contentItem(), 30.0, 13.0)
+    # The compact Orbit glyph is 22px wide: click its actual hit area.
+    point = glyph.mapToItem(edit.window.contentItem(), glyph.width() / 2.0, glyph.height() / 2.0)
     _mouse(edit, QEvent.MouseButtonPress, point, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     _mouse(edit, QEvent.MouseMove, point + QPointF(24, 12), Qt.NoButton, Qt.LeftButton, Qt.NoModifier)
     _mouse(edit, QEvent.MouseButtonRelease, point + QPointF(24, 12), Qt.LeftButton, Qt.NoButton, Qt.NoModifier)
     assert view_orbit_values(edit.visualizer.controller.presentation_state, "extruded_spectrum") != before
     assert edit.item.current_global_rect == stage
     assert edit.settings.save_calls == 0
+
+
+@pytest.mark.qt
+def test_empty_audio_scene_shows_projected_3d_cage_without_claiming_mesh_reach(edit_scene):
+    edit = edit_scene
+    points = (
+        (35, 40), (265, 40), (265, 185), (35, 185),
+        (90, 20), (320, 20), (320, 165), (90, 165),
+    )
+    assert edit.scene.set_visualizer_edit_content_envelope({
+        "admitted": False, "cage_admitted": True,
+        "orbit_admitted": True, "mode": "extruded_spectrum",
+        "cage_points": tuple({"x": float(x), "y": float(y)} for x, y in points),
+        "north_x": 190.0, "north_y": 90.0, "north_angle": 0.0,
+    })
+    edit.qt_app.processEvents()
+    frame = _one(edit.scene.scene_root, "customLayoutContentEnvelope-spotify_visualizer")
+    assert frame.isVisible(), "3D structural cage must not depend on audio footprint admission"
+    parent = frame.parentItem()
+    assert parent.property("hasContentCage") is True
+    assert parent.property("hasContentEnvelope") is False

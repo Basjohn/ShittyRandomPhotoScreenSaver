@@ -59,6 +59,10 @@ EXTRUDED_CAMERA = 6.0
 EXTRUDED_MAX_DEPTH = 0.6          # a bar's depth never exceeds this many bar-field heights
 EXTRUDED_CEILING = 0.95           # Spectrum's tallest bar, in bar-field heights
 EXTRUDED_REFLECTION_SPACE = 0.22  # floor lift (bar-field heights) a full reflection reserves
+# At shallow camera angles the world-floor area collapses to a line. The visible
+# reflection-side cast instead sweeps the full box silhouette in projected item
+# space, without a second camera, target, persisted layout or animation owner.
+EXTRUDED_SHADOW_CAST_REACH = 1.8
 # The view tilts about the bars' mid-height, so orbiting circles the middle of the scene (level
 # views are unchanged; looking straight down keeps the tops where the bars' middle was).
 EXTRUDED_PIVOT = 0.5 * EXTRUDED_CEILING
@@ -73,6 +77,24 @@ def extruded_project(point: tuple[float, float, float], tilt: float,
     """CPU mirror of ``extrudedProject``: (screen x, screen y up, view depth) of a world point."""
     pivot = (0.0, EXTRUDED_PIVOT, 0.0)
     return scene3d_orbit_project(point, tilt, turn, camera=EXTRUDED_CAMERA, pivot=pivot, anchor=pivot)
+
+
+def extruded_shadow_project(point: tuple[float, float, float], tilt: float, turn: float,
+                            shadow_vector: tuple[float, float]) -> tuple[float, float, float]:
+    """CPU mirror of the *visible* reflection-side receiver, in projected space.
+
+    Direction is canonical screen-right/up (shadow Y is down, projected Y is up).
+    The shadow sweeps each bar's silhouette from its true projected floor
+    footprint toward the authored signed global direction. It cannot collapse
+    edge-on with the horizontal floor, and is not a second persisted camera.
+    """
+    foot = extruded_project((point[0], 0.0, point[2]), tilt, turn)
+    baseline = extruded_project((point[0], 0.0, 0.0), tilt, turn)
+    blend = max(0.0, min(1.0, point[1] / EXTRUDED_CEILING))
+    receiver_y = foot[1] + (baseline[1] - foot[1]) * blend
+    return (foot[0] + shadow_vector[0] * point[1] * EXTRUDED_SHADOW_CAST_REACH,
+            receiver_y - shadow_vector[1] * point[1] * EXTRUDED_SHADOW_CAST_REACH,
+            foot[2])
 
 
 def extruded_draw_order(first: float, step: float, count: int, tilt: float, turn: float) -> list[int]:
@@ -117,7 +139,7 @@ def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: f
                    shadow_vector: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float, float, float]:
     """The item-local (left, top, right, bottom) extent of everything the bars can draw for this
     view: every bar at the ceiling over its full depth, its floor reflection and, when admitted,
-    the directional top-face projection swept across the floor. Fixed per view
+    the view-aligned directional cuboid sweep across the reflection-side floor. Fixed per view
     and shape, never per frame of music."""
     scale, floor = fit
     top, height = float(field[1]), float(field[3])
@@ -127,11 +149,10 @@ def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: f
     if shadow_vector != (0.0, 0.0):
         shadow_x, shadow_z = shadow_vector
         # The shader projects each top face by its authored bar height. The
-        # floor at zero height is already inside the body reach; ceiling-height
+        # base at zero height is already inside the body reach; ceiling-height
         # shadow corners complete the fixed sweep for every intermediate level.
         points.extend(
-            extruded_project((x + shadow_x * EXTRUDED_CEILING, 0.0,
-                              z + shadow_z * EXTRUDED_CEILING), tilt, turn)
+            extruded_shadow_project((x, EXTRUDED_CEILING, z), tilt, turn, shadow_vector)
             for x in (-half_span, half_span) for z in (-depth, 0.0)
         )
     xs = [centre + p[0] * scale * height for p in points]
@@ -159,6 +180,11 @@ def extruded_footprint(field, centre: float, first: float, step: float, half_wid
         projected.append((centre + px * scale * height,
                           field[1] + height - (floor + py * scale) * height))
 
+    def include_shadow(x, y, z):
+        px, py, _ = extruded_shadow_project((x, y, z), tilt, turn, shadow_vector)
+        projected.append((centre + px * scale * height,
+                          field[1] + height - (floor + py * scale) * height))
+
     for index, level in enumerate(levels):
         bar_height = extruded_height(level, height_scale)
         peak_height = extruded_height(peaks[index], height_scale)
@@ -175,8 +201,7 @@ def extruded_footprint(field, centre: float, first: float, step: float, half_wid
                         include(x, -bar_height, z)
                     if shadow_vector != (0.0, 0.0):
                         include(x, 0.0, z)
-                        include(x + shadow_vector[0] * bar_height, 0.0,
-                                z + shadow_vector[1] * bar_height)
+                        include_shadow(x, bar_height, z)
         if ghost_alpha > 0.0 and peak_height * height > bar_height * height + 1.0:
             for x in xs:
                 for z in zs:
@@ -201,6 +226,7 @@ uniform float uHeightScale;
 _PROJECTION_GLSL = SCENE3D_ORBIT_GLSL + f"""
 const float EXTRUDED_CEILING = {EXTRUDED_CEILING:.6f};
 const float EXTRUDED_CAMERA = {EXTRUDED_CAMERA:.6f};
+const float EXTRUDED_SHADOW_CAST_REACH = {EXTRUDED_SHADOW_CAST_REACH:.6f};
 const float EXTRUDED_PIVOT = {EXTRUDED_PIVOT:.6f};
 // The shared orbit (scene3d.py), the tilt pivoting about the bars' mid-height, which stays put.
 vec3 extrudedView(vec3 p, vec2 view) {{ return sceneOrbitView(p, view); }}
@@ -211,6 +237,15 @@ vec3 extrudedViewPoint(vec3 p, vec2 view) {{
 vec3 extrudedProject(vec3 p, vec2 view) {{
     vec3 pivot = vec3(0.0, EXTRUDED_PIVOT, 0.0);
     return sceneOrbitProject(p, view, pivot, pivot, EXTRUDED_CAMERA);
+}}
+vec3 extrudedShadowProject(vec3 p, vec2 shadow, vec2 view) {{
+    vec3 foot = extrudedProject(vec3(p.x, 0.0, p.z), view);
+    // Keep the shadow receiver parallel to the bar row's horizontal base,
+    // not the tilted rear-depth footprint. Only the global shadow direction casts it.
+    foot.y = mix(foot.y, extrudedProject(vec3(p.x, 0.0, 0.0), view).y,
+                 clamp(p.y / EXTRUDED_CEILING, 0.0, 1.0));
+    foot.xy += vec2(shadow.x, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;
+    return foot;
 }}
 // Spectrum's level transfer: the uploaded level (already x0.55) to bar-field heights.
 float extrudedHeight(float level) {{
@@ -264,10 +299,22 @@ void main() {
         // top footprint, which is the actual cast-shadow silhouette.  Drawing
         // only the translated top cap could sit almost entirely under the bar
         // or its reflection and read as no shadow at all.
-        world.x += uShadowVector.x * world.y;
-        world.z += uShadowVector.y * world.y;
-        world.y = 0.0;
-        normal = vec3(0.0, 1.0, 0.0);
+        // The former world-floor receiver collapses at near-front tilt.
+        // Receiver pixels instead lie on the reflection-side screen plane.
+        // "cast" is a reserved GLSL identifier. Keep this explicit screen-space
+        // receiver separate from the bar's world-space point.
+        vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView);
+        float h = uField.w;
+        vec2 item = vec2(uCentre.x + shadowPoint.x * uFit.x * h,
+                         uField.y + h - (uFit.y + shadowPoint.y * uFit.x) * h);
+        vItemY = item.y;
+        gl_Position = uMatrix * vec4(item, 0.0, 1.0);
+        vWorld = shadowPoint;
+        vNormal = vec3(0.0, 1.0, 0.0);
+        vLocal = local;
+        vSize = vec3(1.0);
+        vHue = vec3(0.0);
+        return;
     }
     vWorld = extrudedViewPoint(world, uView);     // lit in the frame the camera sees
     vNormal = extrudedView(normal, uView);
@@ -298,7 +345,7 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
     "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
     "uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend\n"
-    "uniform float uBackdropBlend;\nuniform float uBodyAlpha;\nuniform vec4 uShadowColor;\nuniform vec2 uShadowVector;\n"
+    "uniform float uBackdropBlend;\nuniform vec4 uShadowColor;\nuniform vec2 uShadowVector;\n"
     + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL
     + """
 void main() {
@@ -360,7 +407,7 @@ void main() {
         float fresnel = 0.8 + 0.2 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         lit = mix(lit, mirror, uMirror * fresnel * (1.0 - rim * trimAlpha));
     }
-    float alpha = uPass == 3 ? uBodyAlpha * surfaceAlpha : 1.0;
+    float alpha = uPass == 3 ? surfaceAlpha : 1.0;
     if (uPass == 1) alpha = uGhostAlpha * mix(0.45, 1.0, rim);
     if (uPass == 2) {
         // The reflection fades with distance below the floor, to nothing at the field's bottom.

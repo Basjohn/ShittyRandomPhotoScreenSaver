@@ -55,6 +55,7 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_taste_the_rainbow_extent",
     "sphere_taste_the_rainbow_surfaces",
     "sphere_taste_the_rainbow_edges",
+    "sphere_spin_direction",
     "sphere_base_rotation_speed",
     "sphere_rotation_speed",
     "sphere_gloss",
@@ -167,6 +168,11 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sphere_shadow_distance = _sphere_bounded(kwargs['sphere_shadow_distance'], 0.0, 2.5, 'sphere_shadow_distance')
     if 'sphere_shadow_size' in kwargs:
         host._sphere_shadow_size = _sphere_bounded(kwargs['sphere_shadow_size'], 0.6, 1.6, 'sphere_shadow_size')
+    if 'sphere_spin_direction' in kwargs:
+        direction = str(kwargs['sphere_spin_direction'])
+        if direction not in ('Default', 'Reverse', 'Y Clockwise', 'Y Counterclockwise'):
+            raise ValueError(f'invalid Sphere spin direction {direction!r}')
+        host._sphere_spin_direction = direction
     if 'sphere_base_rotation_speed' in kwargs:
         host._sphere_base_rotation_speed = _sphere_bounded(kwargs['sphere_base_rotation_speed'], 0.0, 0.5, 'sphere_base_rotation_speed')
     if 'sphere_rotation_speed' in kwargs:
@@ -665,12 +671,21 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
     if 'extruded_spectrum_shadow_enabled' in kwargs:
         host._extruded_spectrum_shadow_enabled = bool(kwargs['extruded_spectrum_shadow_enabled'])
+    if 'extruded_spectrum_shadow_reach' in kwargs:
+        reach = str(kwargs['extruded_spectrum_shadow_reach'])
+        if reach not in ('Nearby', 'Distant'):
+            raise ValueError(f'invalid Extruded shadow reach {reach!r}')
+        host._extruded_spectrum_shadow_reach = reach
     if 'scene3d_detail' in kwargs:
         from rendering.gl_programs.scene3d import scene3d_detail
 
         host._scene3d_detail = scene3d_detail(kwargs['scene3d_detail']).name   # resolved upstream
 
     # --- Voxel Sphere presentation (renderer-only; the logical runtime never reads it) ---
+    if 'sphere_turn' in kwargs:
+        host._sphere_turn = _sphere_bounded(kwargs['sphere_turn'], -1.0, 1.0, 'sphere_turn')
+    if 'sphere_tilt' in kwargs:
+        host._sphere_tilt = _sphere_bounded(kwargs['sphere_tilt'], 0.0, 1.0, 'sphere_tilt')
     if 'sphere_mirror' in kwargs:
         host._sphere_mirror = _sphere_bounded(kwargs['sphere_mirror'], 0.0, 1.0, 'sphere_mirror')
 
@@ -694,7 +709,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
 
 _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
-    "extruded_spectrum_body_alpha": (0.0, 1.0),
     "extruded_spectrum_depth": (0.25, 3.0),
     "extruded_spectrum_tilt": (0.0, 1.0),
     "extruded_spectrum_gloss": (0.0, 1.0),
@@ -723,7 +737,8 @@ _SHOCKWAVE_GRID_COLOURS = ("shockwave_grid_line_color", "shockwave_grid_crest_co
 
 def presentation_setting_range(key: str) -> tuple[float, float]:
     """The canonical (low, high) of a ranged presentation-only setting (for live orbiting)."""
-    return {**_EXTRUDED_SPECTRUM_KEYS, **_SHOCKWAVE_GRID_KEYS}[key]
+    return {**_EXTRUDED_SPECTRUM_KEYS, **_SHOCKWAVE_GRID_KEYS,
+            "sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
 
 
 def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
@@ -751,6 +766,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
     values["extruded_spectrum_shadow_enabled"] = bool(pres._extruded_spectrum_shadow_enabled)
+    values['extruded_spectrum_shadow_reach'] = str(pres._extruded_spectrum_shadow_reach)
     values["scene3d_detail"] = str(pres._scene3d_detail)
     values["backdrop"] = getattr(pres, "_backdrop", None)    # the reflected wallpaper, when it reflects
     values["backdrop_blend_s"] = getattr(pres, "_backdrop_blend_s", None)

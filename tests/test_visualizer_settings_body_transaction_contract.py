@@ -70,12 +70,8 @@ def test_c6_3d_bucket_defaults_match_current_builder_contract() -> None:
     assert {key for key in keys if key.startswith("extruded_spectrum:")} == {
         "extruded_spectrum:appearance",
         "extruded_spectrum:bar_appearance",
-        "extruded_spectrum:ghost",
-        "extruded_spectrum:material",
-        "extruded_spectrum:reflection",
-        "extruded_spectrum:render",
+        "extruded_spectrum:effects",
         "extruded_spectrum:response",
-        "extruded_spectrum:shadow",
         "extruded_spectrum:shape",
     }
     assert {key for key in keys if key.startswith("shockwave_grid:")} == {

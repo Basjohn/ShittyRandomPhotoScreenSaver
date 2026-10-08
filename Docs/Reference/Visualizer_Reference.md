@@ -391,20 +391,24 @@ Control UI may remain QWidget if appropriate.
 Live runtime pixels belong to the Quick scene; edit plumbing must not recreate a
 second accelerated presentation surface.
 
-**Current CUSTOM geometry-family limitation (active repair).** The generic CUSTOM schema already supports arbitrary
-`geometry_variant` values under one widget/display key, but the Visualizer currently resolves `default` for every mode. A
-retained 2D↔3D hot-swap therefore inherits the same outer rect/viewport even when that pose is unsuitable for the target
-presentation family. `Current_Plan.md` §3A repairs this by selecting `planar` versus `freeform_3d` through canonical mode
-metadata while keeping the existing CUSTOM session/commit/hydration owner. This is intentionally not per-mode geometry and
-not a second 2D/3D settings store.
+**CUSTOM geometry identity is mode-compatible, not merely 2D versus 3D.** The generic CUSTOM schema already supports
+arbitrary `geometry_variant` values under one widget/display key. Visualizer descriptors therefore expose two separate facts:
+`geometry_kind` selects interaction mechanics (`planar` or `freeform_3d`) while `layout_profile` selects the persisted CUSTOM
+variant. Current planar modes share `planar`; Extruded, Shockwave and Sphere use `3d:extruded_spectrum`,
+`3d:shockwave_grid` and `3d:sphere`. A future pair of modes may deliberately share a profile only when their stage geometry is
+actually compatible. This remains one CUSTOM session/commit/hydration owner, not per-mode X/Y settings and not a second 3D
+store. A hidden hot-swap restores the target profile before reveal and never lends the outgoing profile to a missing target;
+missing profiles begin from authored baseline. Legacy `default` / `freeform_3d` are one-way migration input claimed by at most
+one canonical profile, never permanent competing authorities.
 
-For `freeform_3d`, the saved rectangle is a **stage/viewport**, not a promise that the currently projected scene fills that
-rectangle. Edit should therefore keep that rectangle as the only persisted geometry while also showing a derived projected
-content envelope/hull and orbit pivot from the renderer's existing CPU reach/bounds calculation. Extruded already has
-`extruded_reach(...)`; Shockwave has `shockwave_reach(...)`; Sphere promotion should expose the corresponding shared Scene3D
-bound. Those bounds are view/shape dependent rather than per-audio-frame, which makes them suitable for event-driven Edit
-chrome without another geometry cadence. The derived envelope is never a snap/collision/persistence authority and orbit never
-auto-resizes the saved stage.
+For `freeform_3d`, the saved rectangle is a **stage/viewport**, not a promise that the currently projected scene fills it.
+Edit keeps that rectangle as the only persisted geometry while also showing a derived projected content envelope and a
+perspective-correct read-only wireframe cage. The cage consists of eight renderer-consistent projected vertices, twelve edges
+and an `N` at the canonical north/far face centre. It is paint/orientation chrome only: never a snap/collision/persistence,
+Fit Scene, movement or resize authority. Extruded derives it from its production projection/fit, Shockwave from its production
+camera projection, and Sphere from its stage/perspective convention. These records update only on relevant Edit/view/geometry
+edges, not per-audio-frame. Turn/tilt and any other camera/preset fields remain the mode's own presentation-state authority and
+are never copied into layout profiles.
 
 Required visualizer resize semantics:
 
@@ -650,8 +654,9 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   persistence, when no key is held and no drag is on, when the Visualizer retires mid-orbit, or never if a preset
   replaced the view (held keys then carry on from the preset's view). On a curated preset the edit moves the mode to
   Custom holding what was shown (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. This persistence is
-  deliberately **mode/preset state**, not CUSTOM outer geometry: Extruded and Shockwave can share a future `freeform_3d`
-  placement/size profile while retaining independent turn/tilt values and independent Custom snapshots. Sphere does not
+  deliberately **mode/preset state**, not CUSTOM outer geometry: Extruded and Shockwave retain independent turn/tilt values
+  and independent Custom snapshots even though both use `freeform_3d` mechanics. They may share a future descriptor-owned
+  `layout_profile` only if their authored stage geometry is deliberately judged compatible. Sphere does not
   currently declare the descriptor orbit seam; its promotion work owns that parity decision. With no 3D view shown W/A/S/D
   exit like any other key. The S key no longer opens Settings (the context menu does).
 - **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it too: a step per 4 pixels, the
