@@ -1,6 +1,8 @@
 """Lazy Settings body for the Extruded Spectrum visualizer."""
 from __future__ import annotations
 
+from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QLabel, QVBoxLayout, QWidget
 
@@ -228,12 +230,15 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     content.addStretch()
     for spec in _SHADOW_SLIDERS:
         slider(shadow, *spec)
-    # Shadow Strength must never look effective while Cast Shadow is off.
-    # This is presentation-only UI state; no duplicate settings or preset write.
-    tab.extruded_spectrum_shadow_strength.setEnabled(
-        tab.extruded_spectrum_shadow_enabled.isChecked())
-    tab.extruded_spectrum_shadow_enabled.toggled.connect(
-        tab.extruded_spectrum_shadow_strength.setEnabled)
+    # R128: retain saved values and both reach choices for compatibility, but
+    # grey out the complete rejected feature until an accepted redesign ships.
+    # Loading a curated preset cannot re-enable the controls or render pass.
+    for control in (tab.extruded_spectrum_shadow_enabled,
+                    tab.extruded_spectrum_shadow_reach,
+                    tab.extruded_spectrum_shadow_strength):
+        control.setEnabled(EXTRUDED_CAST_SHADOW_AVAILABLE)
+        if not EXTRUDED_CAST_SHADOW_AVAILABLE:
+            control.setToolTip('Temporarily unavailable: Extruded cast shadows are disabled pending a redesign.')
 
     content = row(render, "Allow Overflow:")
     tab.extruded_spectrum_allow_overflow = QCheckBox("Let the 3D leave the visualizer's rectangle")

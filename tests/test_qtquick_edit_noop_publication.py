@@ -32,6 +32,7 @@ def test_viewport_duplicate_samples_do_not_publish_but_changed_and_reversed_edit
     key = CustomLayoutKey("spotify_visualizer", "display:a")
     publications = []
     item = SimpleNamespace(
+        geometry_kind="planar",
         source_key=key,
         current_global_rect=QRect(rect),
         current_viewport_extent=extent,

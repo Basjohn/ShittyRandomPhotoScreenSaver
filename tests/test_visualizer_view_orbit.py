@@ -407,3 +407,53 @@ def test_alt_drag_through_the_real_display_window_reaches_the_runtime_in_fractio
         factory.deleteLater()
         qt_app.processEvents()
     assert controller._view_orbit_hit_test is None                # retirement dropped the scene's test
+
+
+def test_sphere_drag_inertia_uses_existing_capture_clock_then_matches_saved_endpoint():
+    from widgets.spotify_visualizer.view_orbit import (
+        SPHERE_INERTIA_SECONDS, release_sphere_orbit_inertia, view_orbit_values,
+    )
+    host = _host()
+    original = view_orbit_values(host, 'sphere', 100.0)
+    # Drag right, let go. The endpoint is written once, but presentation glides
+    # toward it on the same clock Sphere already uses for its base spin.
+    orbit_visualizer_view(host, 'sphere', 1.0, 0.0, 100.0)
+    orbit_visualizer_view(host, 'sphere', 1.0, 0.0, 100.016)
+    at_release = view_orbit_values(host, 'sphere', 100.03)
+    endpoint = release_sphere_orbit_inertia(host, 100.03)
+    assert endpoint is not None
+    assert endpoint['sphere_turn'] != pytest.approx(at_release['sphere_turn'])
+    assert view_orbit_values(host, 'sphere', 100.03) == pytest.approx(at_release)
+    mid = view_orbit_values(host, 'sphere', 100.03 + SPHERE_INERTIA_SECONDS / 2)
+    assert mid['sphere_turn'] != pytest.approx(at_release['sphere_turn'])
+    assert mid['sphere_turn'] != pytest.approx(endpoint['sphere_turn'])
+    assert view_orbit_values(host, 'sphere', 100.03 + SPHERE_INERTIA_SECONDS) == pytest.approx(endpoint)
+    assert view_orbit_values(host, 'sphere', 200.0) == pytest.approx(endpoint)
+    assert view_orbit_values(host, 'sphere') == pytest.approx(endpoint)  # persisted pose matches
+    assert release_sphere_orbit_inertia(host, 200.0) is None
+
+
+def test_sphere_inertia_expired_or_new_drag_does_not_snap_to_old_pose():
+    from widgets.spotify_visualizer.view_orbit import release_sphere_orbit_inertia
+    host = _host()
+    orbit_visualizer_view(host, 'sphere', 2.0, 0.0, 50.0)
+    assert release_sphere_orbit_inertia(host, 51.0) is None  # stale drag has no inertia
+    orbit_visualizer_view(host, 'sphere', -2.0, 0.0, 52.0)
+    endpoint = release_sphere_orbit_inertia(host, 52.01)
+    assert endpoint is not None
+    moving = view_orbit_values(host, 'sphere', 52.15)
+    after = orbit_visualizer_view(host, 'sphere', 0.5, 0.0, 52.15)
+    assert after['sphere_turn'] == pytest.approx((moving['sphere_turn'] + get_visualizer_mode_descriptor('sphere').view_orbit_steps[0] * 0.5 + 1) % 2 - 1)
+    assert release_sphere_orbit_inertia(host, 53.1) is None
+
+
+def test_sphere_inertia_cleared_when_preset_rebases_without_held_keys():
+    from widgets.spotify_visualizer.view_orbit import (
+        OrbitDragVelocity, OrbitInertia, rebase_view_orbit_motion,
+    )
+    from types import SimpleNamespace
+    host = SimpleNamespace(_view_orbit_motion=None, _view_orbit_drag_velocity=OrbitDragVelocity('sphere', 4.0, .1, .1),
+                           _view_orbit_inertia=OrbitInertia('sphere', 4.0, .9, 0.0, .0, .1, .1))
+    rebase_view_orbit_motion(host, 4.1)
+    assert host._view_orbit_drag_velocity is None
+    assert host._view_orbit_inertia is None

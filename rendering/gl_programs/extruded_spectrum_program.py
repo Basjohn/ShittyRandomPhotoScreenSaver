@@ -59,10 +59,16 @@ EXTRUDED_CAMERA = 6.0
 EXTRUDED_MAX_DEPTH = 0.6          # a bar's depth never exceeds this many bar-field heights
 EXTRUDED_CEILING = 0.95           # Spectrum's tallest bar, in bar-field heights
 EXTRUDED_REFLECTION_SPACE = 0.22  # floor lift (bar-field heights) a full reflection reserves
-# At shallow camera angles the world-floor area collapses to a line. The visible
-# reflection-side cast instead sweeps the full box silhouette in projected item
-# space, without a second camera, target, persisted layout or animation owner.
-EXTRUDED_SHADOW_CAST_REACH = 1.8
+# R127: Two genuinely different shadows, never another maximum-height footprint
+# sheet. Nearby is an offset of the actual projected box SILHOUETTE, so it
+# follows the visible bar heights. Distant is a ground-contact sweep per bar,
+# cast from the actual uploaded height, NOT the fixed scene ceiling. For
+# diagonal global directions Distant's lateral motion is deliberately modest:
+# preserve the row's horizontal contact baseline instead of the previous giant
+# sideways parallelogram. Cardinal E/W retains its full horizontal direction.
+EXTRUDED_SHADOW_CAST_REACH = 4.5
+EXTRUDED_SHADOW_NEAR_DROP_SCALE = 1.0
+EXTRUDED_SHADOW_DIAGONAL_LATERAL_SCALE = 0.15
 # The view tilts about the bars' mid-height, so orbiting circles the middle of the scene (level
 # views are unchanged; looking straight down keeps the tops where the bars' middle was).
 EXTRUDED_PIVOT = 0.5 * EXTRUDED_CEILING
@@ -80,21 +86,28 @@ def extruded_project(point: tuple[float, float, float], tilt: float,
 
 
 def extruded_shadow_project(point: tuple[float, float, float], tilt: float, turn: float,
-                            shadow_vector: tuple[float, float]) -> tuple[float, float, float]:
-    """CPU mirror of the *visible* reflection-side receiver, in projected space.
+                            shadow_vector: tuple[float, float],
+                            shadow_mode: str = "Distant") -> tuple[float, float, float]:
+    """CPU mirror of one shadow vertex, in the same screen axes as the global direction.
 
-    Direction is canonical screen-right/up (shadow Y is down, projected Y is up).
-    The shadow sweeps each bar's silhouette from its true projected floor
-    footprint toward the authored signed global direction. It cannot collapse
-    edge-on with the horizontal floor, and is not a second persisted camera.
+    Nearby translates the true 3D projected point (a silhouette/drop shadow).
+    Distant starts at the *physical foot* and projects the real audible bar
+    height, with reduced lateral travel for diagonal directions. A flat-height
+    footprint sheet is never drawn. The camera orbit changes the base point,
+    not the global shadow direction.
     """
+    sx, sy = shadow_vector
+    if shadow_mode == "Nearby":
+        screen = extruded_project(point, tilt, turn)
+        return (screen[0] + sx * EXTRUDED_SHADOW_NEAR_DROP_SCALE,
+                screen[1] - sy * EXTRUDED_SHADOW_NEAR_DROP_SCALE, screen[2])
+    if shadow_mode != "Distant":
+        raise ValueError(f"invalid Extruded shadow mode {shadow_mode!r}")
     foot = extruded_project((point[0], 0.0, point[2]), tilt, turn)
-    baseline = extruded_project((point[0], 0.0, 0.0), tilt, turn)
-    blend = max(0.0, min(1.0, point[1] / EXTRUDED_CEILING))
-    receiver_y = foot[1] + (baseline[1] - foot[1]) * blend
-    return (foot[0] + shadow_vector[0] * point[1] * EXTRUDED_SHADOW_CAST_REACH,
-            receiver_y - shadow_vector[1] * point[1] * EXTRUDED_SHADOW_CAST_REACH,
-            foot[2])
+    reach = point[1] * EXTRUDED_SHADOW_CAST_REACH
+    lateral = EXTRUDED_SHADOW_DIAGONAL_LATERAL_SCALE if sx and sy else 1.0
+    return (foot[0] + sx * reach * lateral,
+            foot[1] - sy * reach, foot[2])
 
 
 def extruded_draw_order(first: float, step: float, count: int, tilt: float, turn: float) -> list[int]:
@@ -136,24 +149,24 @@ def extruded_fit(half_span: float, depth: float, tilt: float, reflection: float,
 
 def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: float, turn: float,
                    fit: tuple[float, float], reflection: float,
-                   shadow_vector: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float, float, float]:
+                   shadow_vector: tuple[float, float] = (0.0, 0.0),
+                   shadow_mode: str = "Distant") -> tuple[float, float, float, float]:
     """The item-local (left, top, right, bottom) extent of everything the bars can draw for this
     view: every bar at the ceiling over its full depth, its floor reflection and, when admitted,
-    the view-aligned directional cuboid sweep across the reflection-side floor. Fixed per view
-    and shape, never per frame of music."""
+    genuine bar silhouettes for Nearby or the maximum possible actual-height
+    cast for Distant. Fixed per view and shape, never per frame of music."""
     scale, floor = fit
     top, height = float(field[1]), float(field[3])
     low = -EXTRUDED_CEILING if reflection > 0.0 else 0.0
     points = [extruded_project((x, y, z), tilt, turn) for x in (-half_span, half_span)
               for y in (low, 1.05 * EXTRUDED_CEILING) for z in (-depth, 0.0)]
     if shadow_vector != (0.0, 0.0):
-        shadow_x, shadow_z = shadow_vector
-        # The shader projects each top face by its authored bar height. The
-        # base at zero height is already inside the body reach; ceiling-height
-        # shadow corners complete the fixed sweep for every intermediate level.
+        # Nearby needs its full, vertically projected silhouette. Distant
+        # bounds the actual bar heights (which may approach the ceiling).
         points.extend(
-            extruded_shadow_project((x, EXTRUDED_CEILING, z), tilt, turn, shadow_vector)
-            for x in (-half_span, half_span) for z in (-depth, 0.0)
+            extruded_shadow_project((x, y, z), tilt, turn, shadow_vector, shadow_mode)
+            for x in (-half_span, half_span) for y in (0.0, EXTRUDED_CEILING)
+            for z in (-depth, 0.0)
         )
     xs = [centre + p[0] * scale * height for p in points]
     ys = [top + height - (floor + p[1] * scale) * height for p in points]
@@ -164,7 +177,8 @@ def extruded_footprint(field, centre: float, first: float, step: float, half_wid
                        depth: float, tilt: float, turn: float, fit: tuple[float, float],
                        levels, peaks, height_scale: float, *, body_visible: bool,
                        ghost_alpha: float, reflection: float,
-                       shadow_vector: tuple[float, float] = (0.0, 0.0)):
+                       shadow_vector: tuple[float, float] = (0.0, 0.0),
+                       shadow_mode: str = "Distant"):
     """Item-local bounds of the admitted boxes in one accepted rendered frame.
 
     Inputs are the renderer's *uploaded* levels, not logical Spectrum levels.
@@ -181,7 +195,7 @@ def extruded_footprint(field, centre: float, first: float, step: float, half_wid
                           field[1] + height - (floor + py * scale) * height))
 
     def include_shadow(x, y, z):
-        px, py, _ = extruded_shadow_project((x, y, z), tilt, turn, shadow_vector)
+        px, py, _ = extruded_shadow_project((x, y, z), tilt, turn, shadow_vector, shadow_mode)
         projected.append((centre + px * scale * height,
                           field[1] + height - (floor + py * scale) * height))
 
@@ -200,7 +214,9 @@ def extruded_footprint(field, centre: float, first: float, step: float, half_wid
                         include(x, 0.0, z)
                         include(x, -bar_height, z)
                     if shadow_vector != (0.0, 0.0):
-                        include(x, 0.0, z)
+                        # Follow actual admitted audio heights. Nearby shadows
+                        # copy the 3D silhouette; Distant sweeps from its base.
+                        include_shadow(x, 0.0, z)
                         include_shadow(x, bar_height, z)
         if ghost_alpha > 0.0 and peak_height * height > bar_height * height + 1.0:
             for x in xs:
@@ -227,6 +243,8 @@ _PROJECTION_GLSL = SCENE3D_ORBIT_GLSL + f"""
 const float EXTRUDED_CEILING = {EXTRUDED_CEILING:.6f};
 const float EXTRUDED_CAMERA = {EXTRUDED_CAMERA:.6f};
 const float EXTRUDED_SHADOW_CAST_REACH = {EXTRUDED_SHADOW_CAST_REACH:.6f};
+const float EXTRUDED_SHADOW_NEAR_DROP_SCALE = {EXTRUDED_SHADOW_NEAR_DROP_SCALE:.6f};
+const float EXTRUDED_SHADOW_DIAGONAL_LATERAL_SCALE = {EXTRUDED_SHADOW_DIAGONAL_LATERAL_SCALE:.6f};
 const float EXTRUDED_PIVOT = {EXTRUDED_PIVOT:.6f};
 // The shared orbit (scene3d.py), the tilt pivoting about the bars' mid-height, which stays put.
 vec3 extrudedView(vec3 p, vec2 view) {{ return sceneOrbitView(p, view); }}
@@ -238,13 +256,16 @@ vec3 extrudedProject(vec3 p, vec2 view) {{
     vec3 pivot = vec3(0.0, EXTRUDED_PIVOT, 0.0);
     return sceneOrbitProject(p, view, pivot, pivot, EXTRUDED_CAMERA);
 }}
-vec3 extrudedShadowProject(vec3 p, vec2 shadow, vec2 view) {{
+vec3 extrudedShadowProject(vec3 p, vec2 shadow, vec2 view, int shadowMode) {{
+    if (shadowMode == 0) {{
+        vec3 silhouette = extrudedProject(p, view);
+        silhouette.xy += vec2(shadow.x, -shadow.y) * EXTRUDED_SHADOW_NEAR_DROP_SCALE;
+        return silhouette;
+    }}
     vec3 foot = extrudedProject(vec3(p.x, 0.0, p.z), view);
-    // Keep the shadow receiver parallel to the bar row's horizontal base,
-    // not the tilted rear-depth footprint. Only the global shadow direction casts it.
-    foot.y = mix(foot.y, extrudedProject(vec3(p.x, 0.0, 0.0), view).y,
-                 clamp(p.y / EXTRUDED_CEILING, 0.0, 1.0));
-    foot.xy += vec2(shadow.x, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;
+    float lateral = (shadow.x != 0.0 && shadow.y != 0.0)
+                    ? EXTRUDED_SHADOW_DIAGONAL_LATERAL_SCALE : 1.0;
+    foot.xy += vec2(shadow.x * lateral, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;
     return foot;
 }}
 // Spectrum's level transfer: the uploaded level (already x0.55) to bar-field heights.
@@ -266,7 +287,7 @@ vec4 extrudedClip(vec3 world, out float itemY) {{
 EXTRUDED_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location = 0) in vec3 aPosition;\nlayout(location = 1) in vec3 aNormal;\n"
     + _COMMON_UNIFORMS
-    + "uniform int uPass;       // 0 opaque bars, 1 ghost columns, 2 reflection, 3 translucent bars, 4 shadow\nuniform int uBarCount;\nuniform vec2 uShadowVector;\n"
+    + "uniform int uPass;       // 0 opaque bars, 1 ghost columns, 2 reflection, 3 translucent bars, 4 shadow\nuniform int uBarCount;\nuniform vec2 uShadowVector;\nuniform int uShadowMode;\n"
     + "uniform float uHueShift;\n"
     + "flat out vec3 vHue;\nout vec3 vWorld;\nout vec3 vNormal;\nout vec3 vLocal;\nout vec3 vSize;\nout float vItemY;\n"
     + SCENE3D_GLSL + EXTRUDED_BARS.glsl(3) + _PROJECTION_GLSL
@@ -293,17 +314,11 @@ void main() {
         world.y = -world.y;
         normal.y = -normal.y;
     }
-    if (uPass == 4) {                             // directional silhouette sweep onto the floor
-        // Project every box vertex, not only the top face.  The vertical faces
-        // become the floor polygons between the bar footprint and its shifted
-        // top footprint, which is the actual cast-shadow silhouette.  Drawing
-        // only the translated top cap could sit almost entirely under the bar
-        // or its reflection and read as no shadow at all.
-        // The former world-floor receiver collapses at near-front tilt.
-        // Receiver pixels instead lie on the reflection-side screen plane.
-        // "cast" is a reserved GLSL identifier. Keep this explicit screen-space
-        // receiver separate from the bar's world-space point.
-        vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView);
+    if (uPass == 4) {
+        // Nearby: translated SILHOUETTE (same bars, not a connected wedge).
+        // Distant: grounded sweep from each ACTUAL bar height. The old
+        // constant-ceiling footprint sheet is deliberately impossible here.
+        vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView, uShadowMode);
         float h = uField.w;
         vec2 item = vec2(uCentre.x + shadowPoint.x * uFit.x * h,
                          uField.y + h - (uFit.y + shadowPoint.y * uFit.x) * h);

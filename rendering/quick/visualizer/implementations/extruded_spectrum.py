@@ -16,6 +16,7 @@ import struct
 from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_geometry_logging_enabled, is_viz_diagnostics_enabled
+from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.extruded_spectrum_program import (
@@ -48,7 +49,7 @@ logger = get_logger(__name__)
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
              "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
-             "uBackdropPrevious", "uBackdropBlend", "uShadowColor", "uShadowVector")
+             "uBackdropPrevious", "uBackdropBlend", "uShadowColor", "uShadowVector", "uShadowMode")
 
 
 def extruded_quality(parameters) -> tuple[int, float]:
@@ -145,7 +146,8 @@ class QuickExtrudedSpectrumRenderer:
         layout, field, centre, depth, tilt, turn, reflection, _overflow, fit = scene
         parameters = frame.snapshot.logical.mode_state.parameters
         shadow_vector = (0.0, 0.0)
-        if (bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
+        if (EXTRUDED_CAST_SHADOW_AVAILABLE
+                and bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
                 and float(parameter(parameters, "extruded_spectrum_shadow_strength")) > 0.0
                 and rgba(frame.snapshot.presentation.shell_style["shadow_color"])[3] > 0.0):
             shadow_vector = directional_shadow_vector(
@@ -154,7 +156,8 @@ class QuickExtrudedSpectrumRenderer:
             )
         return reach_item_frame(frame, extruded_reach(
             field, centre, 0.5 * layout.bar_span / field[3], depth, tilt, turn, fit, reflection,
-            shadow_vector=shadow_vector))
+            shadow_vector=shadow_vector,
+            shadow_mode=str(parameter(parameters, 'extruded_spectrum_shadow_reach'))))
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
@@ -213,7 +216,8 @@ class QuickExtrudedSpectrumRenderer:
         # fully-visible edge colour; the other modes use the border swatch alpha.
         # A transparent fill must not suppress visible edges at draw admission.
         edges_visible = colouring == 1 or border[3] > 0.0
-        shadow_enabled = bool(parameter(parameters, "extruded_spectrum_shadow_enabled"))
+        shadow_enabled = (EXTRUDED_CAST_SHADOW_AVAILABLE
+                          and bool(parameter(parameters, "extruded_spectrum_shadow_enabled")))
         shadow_strength = float(parameter(parameters, "extruded_spectrum_shadow_strength"))
         if not 0.0 <= shadow_strength <= 1.0:
             raise ValueError("Extruded Spectrum shadow strength must be within [0, 1]")
@@ -310,6 +314,8 @@ class QuickExtrudedSpectrumRenderer:
                             shadow_color[0], shadow_color[1], shadow_color[2], shadow_alpha,
                         )
                         gl.glUniform2f(uniforms["uShadowVector"], *shadow_vector)
+                        gl.glUniform1i(uniforms["uShadowMode"],
+                                       0 if str(parameter(parameters, 'extruded_spectrum_shadow_reach')) == 'Nearby' else 1)
                         with directional_shadow_pass():
                             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
 

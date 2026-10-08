@@ -51,6 +51,10 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
   `Docs/Future_Work/Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`; it must consume the current shared Scene3D quality,
   resource, lifecycle and Visualizer contracts rather than inventing private infrastructure.
 
+## Rejected Extruded cast shadows (deferred)
+
+R128 hard-disables cast shadows after three successive physically rejected treatments (R125–R127). The existing Settings controls are greyed out, saved values are retained for compatibility, and the renderer never draws the rejected pass or expands Edit bounds for it. Reopen only when there is a new, operator-approved visual target and a renderer design consistent with the canvas and global shadow direction. Do **not** silently re-enable the old GLSL projection. The failed approaches and visual evidence are in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`.
+
 ## 4. Deferred maintenance / product work
 
 Keep these deferred unless new evidence or an explicit request promotes them:

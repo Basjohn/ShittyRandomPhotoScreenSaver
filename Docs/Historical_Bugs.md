@@ -11,6 +11,10 @@ complete record set.
 Historical incident bodies may name old owners. They are evidence for the failure/mechanism at the time,
 not automatic current architecture instructions.
 
+## Current negative controls
+
+- [Rejected Extruded cast-shadow approaches (R125–R128)](Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md) — cast shadows disabled; renderer, Edit and greyed Settings follow a single availability authority.
+
 ## Open / Watchlist Records
 
 - [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **AWAITING VALIDATION**. Thread churn (a new heartbeat `threading.Timer` every 3 s, Qt's image pool recreated each wallpaper) × the NVIDIA GL driver's never-returned per-thread state (~70 KB each) ≈ 130 MB/h; fixed at both owners, measured flat; unattended physical run pending.

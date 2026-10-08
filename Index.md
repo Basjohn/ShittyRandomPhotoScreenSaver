@@ -10,7 +10,7 @@ exact current source
 -> tests + physical evidence for the claim
 ```
 
-`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the maintained historical authority; there is no other history folder (the legacy `Docs/Fossils/` described outdated architecture and is retired; source control keeps it). Ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
+`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the maintained historical authority; dated audits now live there, not in a second active audit folder (the legacy `Docs/Fossils/` described outdated architecture and is retired; source control keeps it). Ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
 
 ## Current product and regression references
 
@@ -50,6 +50,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
+| persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
@@ -67,7 +68,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | transitions and material surfaces (open physical acceptance at the end of the reference); active transition expansion order and local mock references | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §8 |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
-| Usu character authoring source and static review renders | `assets/usu/README.md`; all modelling review notes remain inside the asset directory |
+| Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); plans in `Current_Plan.md` §5 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md` |
 | current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |
@@ -82,7 +83,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Steam source/auth/privacy contract | `Docs/Reference/Steam_Source_Contracts.md` |
 | Friend Pulse current contract | `Docs/Reference/Steam_Friend_Pulse.md` |
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |
-| Sphere current experimental contract | `Docs/Reference/Sphere_Visualizer.md` |
+| Sphere current standard-mode contract and momentum | `Docs/Reference/Sphere_Visualizer.md`; `Current_Plan.md` |
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` then `Docs/Historical_Bugs/README.md` |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |

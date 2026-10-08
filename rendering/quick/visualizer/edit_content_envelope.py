@@ -13,12 +13,15 @@ from collections.abc import Mapping
 from typing import Any
 
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
 
 
 _ENVELOPE_PARAMETER_KEYS = {
     "extruded_spectrum": (
         "extruded_spectrum_depth", "extruded_spectrum_turn", "extruded_spectrum_tilt",
         "extruded_spectrum_reflection", "extruded_spectrum_allow_overflow",
+        # Kept in the frozen shape for compatibility with the existing Edit
+        # projection call; availability prevents all shadow geometry.
         "extruded_spectrum_shadow_enabled", "extruded_spectrum_shadow_strength",
         "extruded_spectrum_shadow_reach",
         "extruded_spectrum_colouring",
@@ -176,7 +179,8 @@ def _extruded_envelope(
     reflection = float(parameters["extruded_spectrum_reflection"])
     overflow = bool(parameters["extruded_spectrum_allow_overflow"])
     shadow_vector = (0.0, 0.0)
-    if (bool(parameters["extruded_spectrum_shadow_enabled"])
+    if (EXTRUDED_CAST_SHADOW_AVAILABLE
+            and bool(parameters["extruded_spectrum_shadow_enabled"])
             and float(parameters["extruded_spectrum_shadow_strength"]) > 0.0):
         shadow_color = presentation.shell_style["shadow_color"]
         if len(shadow_color) < 4 or float(shadow_color[3]) > 0.0:
@@ -240,6 +244,7 @@ def _extruded_envelope(
         ghost_alpha=(float(parameters["spectrum_ghost_alpha"])
                      if bool(parameters["spectrum_ghosting_enabled"]) else 0.0),
         reflection=reflection, shadow_vector=shadow_vector,
+        shadow_mode=str(parameters["extruded_spectrum_shadow_reach"]),
     )
     if reach is None:
         return None

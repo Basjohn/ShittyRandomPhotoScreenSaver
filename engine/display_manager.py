@@ -121,6 +121,8 @@ class DisplayManager(QObject):
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
     save_image_requested = Signal(int)  # context menu - save the image on this display
+    ban_image_requested = Signal(int)  # current image on invoking display
+    clear_image_bans_requested = Signal()  # explicit maintenance action
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # context menu - open settings
     settings_target_requested = Signal(str)  # runtime widget -> semantic Settings target
@@ -1014,9 +1016,16 @@ class DisplayManager(QObject):
         if owner is not None:
             from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion
 
-            settled = stop_view_orbit_motion(owner.controller.presentation_state, time.time())
+            now = time.time()
+            pres = owner.controller.presentation_state
+            settled = stop_view_orbit_motion(pres, now)
             if settled is not None:
                 self._quick_view_orbit_pending = settled
+            if owner.controller.mode_id == 'sphere':
+                from widgets.spotify_visualizer.view_orbit import release_sphere_orbit_inertia
+                endpoint = release_sphere_orbit_inertia(pres, now)
+                if endpoint is not None:
+                    self._quick_view_orbit_pending = ('sphere', endpoint)
         pending = self._quick_view_orbit_pending
         self._quick_view_orbit_pending = None
         self._refresh_quick_visualizer_edit_content_envelope()
@@ -1330,6 +1339,12 @@ class DisplayManager(QObject):
             return True
         if action == "save_image":
             self.save_image_requested.emit(int(unit.screen_index))
+            return True
+        if action == "ban_image":
+            self.ban_image_requested.emit(int(unit.screen_index))
+            return True
+        if action == "clear_image_bans":
+            self.clear_image_bans_requested.emit()
             return True
         if action == "settings":
             if self._quick_custom_layout_owner.is_active:

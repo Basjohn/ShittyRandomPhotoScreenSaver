@@ -136,7 +136,7 @@ def test_visualizer_width_only_keeps_its_height_world_and_scale() -> None:
     assert vis.current_global_rect.height() == origin.height()
     assert vis.current_viewport_extent[1] == 280.0  # the untouched axis keeps its world exactly
     assert vis.current_viewport_extent[0] == pytest.approx(vis.current_global_rect.width() / ppw)
-    saved = model.apply()["custom_layout"]["displays"]["screen:test"]["spotify_visualizer"]["default"]["size_payload"]
+    saved = model.apply()["custom_layout"]["displays"]["screen:test"]["spotify_visualizer"][vis.source_key.geometry_variant]["size_payload"]
     assert saved["viewport_extent"] == [pytest.approx(vis.current_viewport_extent[0]), 280.0]
     assert (saved["width"], saved["height"]) == (vis.current_global_rect.width(), vis.current_global_rect.height())
 

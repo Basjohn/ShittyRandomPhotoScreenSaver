@@ -275,6 +275,8 @@ def build_quick_context_menu_entries(
         QuickContextMenuEntry("next", "▸  Next Image"),
         # Always offered: checking the image's source per open would add work.
         QuickContextMenuEntry("save_image", "⤓  Save Image"),
+        QuickContextMenuEntry("ban_image", "⊘  Ban Image"),
+        QuickContextMenuEntry("clear_image_bans", "↺  Clear Image Bans"),
     )
     entries = [
         QuickContextMenuEntry("", "▣  Images", kind="submenu", children=images),
