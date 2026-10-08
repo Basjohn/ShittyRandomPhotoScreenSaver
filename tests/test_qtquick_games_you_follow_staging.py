@@ -248,7 +248,9 @@ def test_followed_model_consumes_only_its_retained_source_lease_on_gui_thread(qt
 
         def start(self):
             self.started += 1
+            self.consumer.on_games_followed_runtime_refreshing(True)
             self.consumer.on_games_followed_runtime_snapshot(_snapshot(4))
+            self.consumer.on_games_followed_runtime_refreshing(False)
             return True
 
         def request_refresh(self):
@@ -267,6 +269,7 @@ def test_followed_model_consumes_only_its_retained_source_lease_on_gui_thread(qt
     assert model.activate(manager)
     assert model.storyRows.rowCount() == 8
     assert model.selectedStoryCount == 4
+    assert model.refreshing is False
     assert lease.started == 1 and lease.manager is manager
     assert model.activate(manager)  # no duplicate source admission
     assert lease.started == 1

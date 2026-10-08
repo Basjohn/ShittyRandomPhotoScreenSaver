@@ -33,7 +33,7 @@ class VisualizerModePresentationPolicy:
     clip_policy: VisualizerClipPolicy
     viewport_resize_capable: bool
     # CUSTOM quarter-turn orientation is a presentation/layout capability.
-    # Accepted carded modes opt in; experimental Sphere remains isolated.
+    # Carded modes opt in; freeform 3D modes use orbit instead of quarter-turn content rotation.
     content_rotation_capable: bool = False
 
 
@@ -120,8 +120,8 @@ class VisualizerModeDescriptor:
     # metadata only; the boolean value itself remains a canonical persisted
     # product setting carried in the mode's immutable parameter snapshot.
     renderer_overflow_setting: str = ""
-    # Whether Guided Setup offers the mode to someone who has not already admitted it.
-    # Experimental modes are kept out of first-run choices.
+    # Whether Guided Setup offers the mode in the standard first-run mode chooser.
+    # Keep False only for a registered mode whose product admission is not yet ready.
     guided_setup_offered: bool = True
     # 3D freeform modes name their (turn, tilt) presentation settings here, and W/A/S/D then
     # orbit the view live (widgets/spotify_visualizer/view_orbit.py). Turn spans -1..1 as a full
@@ -136,6 +136,9 @@ class VisualizerModeDescriptor:
     # A setting whose value above zero means the mode reflects the displayed wallpaper; its owner
     # then keeps a small copy of it in the mode's parameters (``widgets/spotify_visualizer/backdrop.py``).
     backdrop_setting: str = ""
+    # CUSTOM geometry ownership.  Planar modes share the ordinary retained-card
+    # profile; freeform 3D modes own a separate camera/stage profile.
+    geometry_profile: str = "planar"
     # Optional sole-logical-clock work, resolved once when this mode activates.
     # Keep lazy module/name strings here for the same import-dormancy reason as
     # frame runtimes and renderers.  The common logical tick calls only the
@@ -217,7 +220,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     ),
     VisualizerModeDescriptor(
         "sphere",
-        "Voxel Sphere (Experimental)",
+        "Voxel Sphere",
         "_sphere_preset_slider",
         ("sphere_",),
         VisualizerModePresentationPolicy(
@@ -243,9 +246,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         profile_migration_source_mode="spectrum",
         lender_preset_resolved=False,
         renderer_overflow_setting="sphere_allow_overflow",
-        guided_setup_offered=False,
         prepared_reveal=True,
         backdrop_setting="sphere_mirror",
+        geometry_profile="freeform_3d",
     ),
     # The first Visualizer on the shared Scene3D foundation. It reuses Spectrum's frame
     # runtime implementation (bars, peaks, R-76 temporal treatment, the shape editor), while
@@ -278,6 +281,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
         prepared_reveal=True,
         backdrop_setting="extruded_spectrum_face_mirror",
+        geometry_profile="freeform_3d",
     ),
     # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's shared source
     # implementation feeding the ridge along its horizon. It owns only the consumed technical and
@@ -306,6 +310,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
         prepared_reveal=True,
+        geometry_profile="freeform_3d",
     ),
 )
 
@@ -340,6 +345,21 @@ def get_visualizer_mode_descriptor(mode_id: str) -> VisualizerModeDescriptor:
         if descriptor.mode_id == mode_id:
             return descriptor
     raise KeyError(f"Unknown visualizer mode: {mode_id}")
+
+
+_VISUALIZER_GEOMETRY_PROFILES = frozenset(("planar", "freeform_3d"))
+
+
+def get_visualizer_geometry_profile(mode_id: str) -> str:
+    """Return the descriptor-owned CUSTOM geometry profile for *mode_id*."""
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    profile = str(descriptor.geometry_profile).strip().lower()
+    if profile not in _VISUALIZER_GEOMETRY_PROFILES:
+        raise ValueError(
+            f"visualizer mode {descriptor.mode_id!r} has invalid geometry profile {profile!r}"
+        )
+    return profile
 
 
 def load_mode_settings_builder(mode_id: str):

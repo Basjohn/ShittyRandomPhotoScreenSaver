@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-10-05
+Last updated: 2026-10-08
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -22,6 +22,8 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **BOUNDED EDGE-TRANSITION REPAIR IN CODE / REGRESSION-PROTECTED / PHYSICAL PERF RECHECK PENDING**. Infinite per-widget refresh animators tied network `refreshing` lifetime to full-scene rendering; the repair replaces them with one 240 ms display-scoped transition epoch shared by Reddit, Gmail, every NEWS/CUSTOM Feed instance and Games You Follow, inert while BUSY is steady.
+- [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](Historical_Bugs/R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Stable Bar Appearance/Rainbow accessories now bootstrap without consulting an incompatible active mode, and C6 Extruded/Shockwave bucket identities match canonical defaults.
 - [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **ACTIVE / PHYSICAL ACCEPTANCE OPEN**. The render-release repair is baseline; the tiny-breath helper failed recorded/fixture A/B and was removed. Remaining physical localization and acceptance stay in the live plan.
 - [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **AWAITING VALIDATION**. Windows dual-monitor built check in `Current_Plan.md`.
 - [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
@@ -41,6 +43,9 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **FIXED IN CODE / REGRESSION-PROTECTED / PHYSICAL RECHECK PENDING**. Keep refresh activity stateful without creating an independent continuous Quick animation cadence.
+- [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](Historical_Bugs/R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Opening Settings is guarded across every persisted active Visualizer mode; 3D bucket schema changes must stay atomic with their builders.
+- [R-108 — Card Chrome Parity, Spectrum Raster Flicker And Native-Capture Packet Framing](Historical_Bugs/R-108_Card_Chrome_Parity_And_Spectrum_Regression_Audit.md) — **SPECTRUM PHYSICALLY ACCEPTED / CAPTURE FIX REGRESSION-PROTECTED / C4-C5 PHYSICAL GATE OPEN**. The moving Spectrum cap receives a one-logical-pixel raster-coverage floor; PyAudioWPatch shapes valid float32 PCM from the delivered channel-divisible payload rather than advisory callback `frame_count`.
 - [R-107 — RSS Index Denied-Write Startup Spin](Historical_Bugs/R-107_RSS_Index_Denied_Write_Startup_Spin.md) — **FIXED IN CODE**. One exclusive atomic index write replaces Windows temporary-file permission retries; denied cache writes log immediately and preserve last-good state.
 - [R-106 — Visualizer Dormancy Audit and Frame-Trace Observer Pressure](Historical_Bugs/R-106_Visualizer_Dormancy_And_Shutdown_Ownership_Followup.md) — **CLOSED / 10 OF 10 PHYSICAL GREEN**. Plain frame trace was restored to low-observer behavior; all-thread stall stacks became separately admitted/lifecycle-suppressed; ten bounded startup/reveal/normal-terminal-shutdown cycles completed without memoryview/native faults. Remaining dormancy/Python-owner cleanup is live work, not incident closure debt.
 - [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Pure-Python remote parsing moved to one lazy spawned family process; durable warm artwork bindings and coherent presentation states restore cache-first startup and remove the recurring parser/GIL hitch.

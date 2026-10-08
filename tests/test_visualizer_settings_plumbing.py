@@ -1071,10 +1071,20 @@ class TestPerModeTechnicalControlPresentation:
         assert "not live adaptive analysis" in tc._recommended_sensitivity_tooltip("spectrum")
         assert "groove marker shows the recommended starting position" in tc._agc_tooltip("spectrum")
 
+        extruded = {
+            defn.control_key: defn
+            for defn in tc._control_defs_for_mode("extruded_spectrum")
+        }
+        assert "kick_gain_slider" in extruded
+        assert "mix_slider" in extruded
+        assert extruded["mix_slider"].config_key == "extruded_spectrum_lane_transient_mix"
+        assert "Recommended for Extruded Spectrum: 128 samples." in tc._audio_block_tooltip("extruded_spectrum")
+
     @pytest.mark.parametrize(
         ("mode_key", "expected_percent"),
         [
             ("spectrum", 42),
+            ("extruded_spectrum", 34),
             ("bubble", 50),
             ("sine_wave", 18),
             ("oscilloscope", 15),

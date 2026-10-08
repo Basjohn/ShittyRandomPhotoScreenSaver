@@ -39,9 +39,13 @@ class _Manager:
 class _Consumer:
     def __init__(self):
         self.snapshots = []
+        self.refreshing = []
 
     def on_games_followed_runtime_snapshot(self, snapshot):
         self.snapshots.append(snapshot)
+
+    def on_games_followed_runtime_refreshing(self, refreshing):
+        self.refreshing.append(bool(refreshing))
 
 
 class _Source:
@@ -140,6 +144,28 @@ class FollowedLeaseTests(unittest.TestCase):
         for _, callback in self.deadlines:
             callback()
         self.assertEqual(self.manager.submissions, count)
+
+    def test_busy_state_fans_out_from_one_shared_owner_without_per_display_work(self):
+        a, b = _Consumer(), _Consumer()
+        first, second = self._lease(a), self._lease(b)
+        self.assertTrue(first.start())
+        self.assertTrue(second.start())
+        self.assertEqual(a.refreshing, [True])
+        self.assertEqual(b.refreshing, [True])
+        self.assertEqual(self.manager.submissions, 1)
+
+        # Cache-stage completion closes BUSY then immediately starts the one
+        # shared source refresh. Both leases observe state edges; neither submits
+        # another worker or gains its own deadline/cadence owner.
+        self._complete()
+        self.assertEqual(a.refreshing, [True, False, True])
+        self.assertEqual(b.refreshing, [True, False, True])
+        self.assertEqual(self.manager.submissions, 2)
+        self._complete()
+        self.assertEqual(a.refreshing, [True, False, True, False])
+        self.assertEqual(b.refreshing, [True, False, True, False])
+        first.retire()
+        second.retire()
 
     def test_same_generation_different_display_managers_still_share_source(self):
         first_consumer, second_consumer = _Consumer(), _Consumer()

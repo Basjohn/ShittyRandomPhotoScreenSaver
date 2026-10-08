@@ -54,6 +54,38 @@ def test_collapsible_builder_bucket_keys_are_registered_in_canonical_ui_defaults
     assert not missing, f"Visualizer builder bucket(s) missing canonical UI defaults: {sorted(missing)}"
 
 
+def test_dynamic_accessory_bootstrap_does_not_consult_incompatible_active_mode() -> None:
+    """Parked shared accessories acquire persisted state only after compatible placement."""
+    source = (ROOT / "ui/tabs/media/builder_scaffold.py").read_text(encoding="utf-8")
+    start = source.index("def build_dynamic_collapsible_bucket(")
+    end = source.index("\ndef build_mode_scaffold(", start)
+    dynamic = source[start:end]
+    assert "initial_expanded=False" in dynamic
+
+
+def test_c6_3d_bucket_defaults_match_current_builder_contract() -> None:
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    keys = set(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
+    assert {key for key in keys if key.startswith("extruded_spectrum:")} == {
+        "extruded_spectrum:appearance",
+        "extruded_spectrum:bar_appearance",
+        "extruded_spectrum:ghost",
+        "extruded_spectrum:material",
+        "extruded_spectrum:reflection",
+        "extruded_spectrum:render",
+        "extruded_spectrum:response",
+        "extruded_spectrum:shadow",
+        "extruded_spectrum:shape",
+    }
+    assert {key for key in keys if key.startswith("shockwave_grid:")} == {
+        "shockwave_grid:appearance",
+        "shockwave_grid:render",
+        "shockwave_grid:response",
+        "shockwave_grid:waves",
+    }
+
+
 def test_sphere_bucket_defaults_match_current_isolated_builder_contract() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
 
@@ -63,6 +95,7 @@ def test_sphere_bucket_defaults_match_current_isolated_builder_contract() -> Non
         if key.startswith("sphere:")
     }
     assert sphere_keys == {
+        "sphere:analysis",
         "sphere:appearance",
         "sphere:particle_flow",
         "sphere:reaction",

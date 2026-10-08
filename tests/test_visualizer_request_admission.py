@@ -98,3 +98,58 @@ def test_request_absent_activation_follows_canonical_mode_defaults(monkeypatch):
                 mgr._request_quick_visualizer_mode(mode)
         else:
             assert mgr._request_quick_visualizer_mode(mode) is False
+
+
+def test_cross_profile_request_is_rejected_while_custom_edit_owns_the_source_key():
+    owner = _Owner()
+    owner.controller = SimpleNamespace(mode_id="spectrum")
+    section = {
+        "mode": "spectrum",
+        "mode_activation": build_visualizer_mode_activation(
+            ("spectrum", "extruded_spectrum")
+        ),
+    }
+    mgr = _make_manager(section, owner)
+    mgr._quick_custom_layout_owner = SimpleNamespace(
+        is_editing=True, is_direct=False, is_active=True
+    )
+
+    assert mgr._request_quick_visualizer_mode("extruded_spectrum") is False
+    assert owner.request_calls == []
+
+
+def test_cross_profile_request_finishes_direct_save_before_target_activation(monkeypatch):
+    owner = _Owner()
+    owner.controller = SimpleNamespace(mode_id="extruded_spectrum")
+    mgr = _make_manager({"mode": "extruded_spectrum", "mode_activation": build_visualizer_mode_activation(("spectrum", "extruded_spectrum"))}, owner)
+    layout = SimpleNamespace(is_editing=False, is_direct=True, is_active=True)
+    mgr._quick_custom_layout_owner = layout
+    boundaries = []
+    def finish():
+        boundaries.append("save_original_profile")
+        layout.is_direct = layout.is_active = False
+        return True
+    mgr._finish_quick_visualizer_gesture = finish
+    class _ReachedActivation(RuntimeError):
+        pass
+    def resolve(_section):
+        boundaries.append("target_activation")
+        assert not layout.is_active
+        raise _ReachedActivation
+    monkeypatch.setattr(visualizer_presets, "resolve_visualizer_activation_payload", resolve)
+    with pytest.raises(_ReachedActivation):
+        mgr._request_quick_visualizer_mode("spectrum")
+    assert boundaries == ["save_original_profile", "target_activation"]
+
+
+def test_same_profile_request_can_activate_without_finishing_edit(monkeypatch):
+    owner = _Owner()
+    owner.controller = SimpleNamespace(mode_id="spectrum")
+    mgr = _make_manager({"mode": "spectrum", "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble"))}, owner)
+    mgr._quick_custom_layout_owner = SimpleNamespace(is_editing=True, is_direct=False, is_active=True)
+    mgr._finish_quick_visualizer_gesture = lambda: pytest.fail("same-family change must keep Edit transaction")
+    class _ReachedActivation(RuntimeError):
+        pass
+    monkeypatch.setattr(visualizer_presets, "resolve_visualizer_activation_payload", lambda _section: (_ for _ in ()).throw(_ReachedActivation()))
+    with pytest.raises(_ReachedActivation):
+        mgr._request_quick_visualizer_mode("bubble")

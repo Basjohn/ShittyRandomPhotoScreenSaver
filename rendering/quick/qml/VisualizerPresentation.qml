@@ -8,6 +8,10 @@ Item {
     property bool presentationActive: false
     property bool customLayoutWorkingVisible: true
     property bool volumeWheelEnabled: true
+    // Read-only, item-local projected scene reach for CUSTOM Edit chrome.
+    // The retained renderer/CPU reach authority supplies it; it never changes
+    // this stage's saved rectangle, snapping or input ownership.
+    property var editContentEnvelope: ({ admitted: false })
     signal appVolumeStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0

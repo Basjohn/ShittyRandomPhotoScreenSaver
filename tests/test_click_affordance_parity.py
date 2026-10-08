@@ -136,8 +136,8 @@ def test_media_seek_and_transport_use_pointer_and_gesture_feedback_without_hover
     assert "Timer {" not in media
 
 
-def test_refresh_glyphs_share_one_hover_across_families():
-    """Header refresh accessories: white frame + full-opacity white glyph, no row wash."""
+def test_refresh_glyphs_share_one_hover_and_one_bounded_state_component():
+    """Every retained refresh accessory uses one visual language and no local cadence."""
     blocks = {
         "reddit": _text("RedditPresentation.qml").split('objectName: "redditRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
         "gmail": _text("GmailPresentation.qml").split('objectName: "gmailRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
@@ -145,10 +145,46 @@ def test_refresh_glyphs_share_one_hover_across_families():
         "followed": _text("GamesYouFollowPresentation.qml").split('objectName: "followedRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
     }
     for family, block in blocks.items():
-        assert "scaleAwareChildStrokeWidth(1.5" in block, family  # the same white frame stroke
-        assert block.count('? "white"') >= 2, family  # frame border and glyph
-        assert "Qt.rgba(1.0, 1.0, 1.0" not in block, family  # no dense-row wash on an accessory
+        assert "scaleAwareChildStrokeWidth(1.5" in block, family
+        assert '? "white"' in block, family
+        assert "Qt.rgba(1.0, 1.0, 1.0" not in block, family
         assert "cursorShape: Qt.PointingHandCursor" in block, family
-        assert "Timer {" not in block, family
-    for family in ("reddit", "gmail", "feeds"):
-        assert "? 1.0 : 0.7" in blocks[family], family  # dim at rest, full white when hovered
+        assert "RefreshStateGlyph {" in block, family
+        assert "refreshTransitionClock" in block, family
+        assert ".refreshing" in block, family
+        for forbidden in ("Timer {", "RotationAnimator", "Animation.Infinite", "NumberAnimation"):
+            assert forbidden not in block, (family, forbidden)
+
+    shared = _text("RefreshStateGlyph.qml")
+    assert 'return value ? "◌" : "↻"' in shared
+    assert "transitionClock.begin()" in shared
+    assert "* 0.72" in shared
+    assert "restOpacity: 0.7" in shared
+    for forbidden in ("Timer {", "RotationAnimator", "Animation.Infinite", "NumberAnimation"):
+        assert forbidden not in shared
+
+    # All families now use the Feeds-sized target/glyph contract. Any number of
+    # NEWS/CUSTOM Feed instances inherit this same component from one QML type.
+    assert "implicitWidth: 30.0" in blocks["reddit"]
+    assert "implicitHeight: 30.0" in blocks["reddit"]
+    assert "implicitWidth: 30.0" in blocks["gmail"]
+    assert "implicitHeight: 30.0" in blocks["gmail"]
+    assert 'width: 30.0 * feedRoot.childWidthScale("refresh")' in blocks["feeds"]
+    assert 'height: 30.0 * feedRoot.childHeightScale("refresh")' in blocks["feeds"]
+    assert 'width: 30.0 * childWidthScale("refresh")' in blocks["followed"]
+    assert 'height: 30.0 * childHeightScale("refresh")' in blocks["followed"]
+
+
+def test_refresh_feed_multiplicity_reuses_one_family_component_and_display_clock():
+    """NEWS plus every CUSTOM slot share FeedPresentation; no slot-local clock exists."""
+    registry = (ROOT / "rendering" / "quick" / "widgets" / "registry.py").read_text("utf-8")
+    binder = (ROOT / "rendering" / "quick" / "widgets" / "family_binder.py").read_text("utf-8")
+    overlay = _text("OverlayWidget.qml")
+    feed = _text("FeedPresentation.qml")
+
+    assert 'family_id="feeds"' in registry
+    assert 'qml_filename="FeedPresentation.qml"' in registry
+    assert "for widget_id in FEED_WIDGET_IDS" in binder
+    assert "property var refreshTransitionClock: null" in overlay
+    assert "transitionClock: feedRoot.refreshTransitionClock" in feed
+    assert "RefreshTransitionClock" not in feed

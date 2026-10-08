@@ -139,6 +139,55 @@ def extruded_reach(field, centre: float, half_span: float, depth: float, tilt: f
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def extruded_footprint(field, centre: float, first: float, step: float, half_width: float,
+                       depth: float, tilt: float, turn: float, fit: tuple[float, float],
+                       levels, peaks, height_scale: float, *, body_visible: bool,
+                       ghost_alpha: float, reflection: float,
+                       shadow_vector: tuple[float, float] = (0.0, 0.0)):
+    """Item-local bounds of the admitted boxes in one accepted rendered frame.
+
+    Inputs are the renderer's *uploaded* levels, not logical Spectrum levels.
+    Unlike target-allocation ``extruded_reach``, this projects actual bar/peak
+    heights and exactly the enabled pass geometry. It runs only on Edit edges.
+    """
+    scale, floor = fit
+    height = float(field[3])
+    projected = []
+
+    def include(x, y, z):
+        px, py, _ = extruded_project((x, y, z), tilt, turn)
+        projected.append((centre + px * scale * height,
+                          field[1] + height - (floor + py * scale) * height))
+
+    for index, level in enumerate(levels):
+        bar_height = extruded_height(level, height_scale)
+        peak_height = extruded_height(peaks[index], height_scale)
+        xs = (first + index * step - half_width, first + index * step + half_width)
+        zs = (-depth, 0.0)
+        if bar_height * height >= 0.5:
+            for x in xs:
+                for z in zs:
+                    if body_visible:
+                        include(x, 0.0, z)
+                        include(x, bar_height, z)
+                    if reflection > 0.0:
+                        include(x, 0.0, z)
+                        include(x, -bar_height, z)
+                    if shadow_vector != (0.0, 0.0):
+                        include(x, 0.0, z)
+                        include(x + shadow_vector[0] * bar_height, 0.0,
+                                z + shadow_vector[1] * bar_height)
+        if ghost_alpha > 0.0 and peak_height * height > bar_height * height + 1.0:
+            for x in xs:
+                for z in zs:
+                    include(x, bar_height, z)
+                    include(x, peak_height, z)
+    if not projected:
+        return None
+    return (min(p[0] for p in projected), min(p[1] for p in projected),
+            max(p[0] for p in projected), max(p[1] for p in projected))
+
+
 _COMMON_UNIFORMS = """
 uniform mat4 uMatrix;
 uniform vec4 uField;        // bar field in item coordinates: left, top, width, height
@@ -209,8 +258,12 @@ void main() {
         world.y = -world.y;
         normal.y = -normal.y;
     }
-    if (uPass == 4) {                             // directional projection of the top face onto the floor
-        if (aNormal.y < 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    if (uPass == 4) {                             // directional silhouette sweep onto the floor
+        // Project every box vertex, not only the top face.  The vertical faces
+        // become the floor polygons between the bar footprint and its shifted
+        // top footprint, which is the actual cast-shadow silhouette.  Drawing
+        // only the translated top cap could sit almost entirely under the bar
+        // or its reflection and read as no shadow at all.
         world.x += uShadowVector.x * world.y;
         world.z += uShadowVector.y * world.y;
         world.y = 0.0;
@@ -250,7 +303,10 @@ EXTRUDED_FRAGMENT_SOURCE = (
     + """
 void main() {
     if (uPass == 4) {
-        FragColor = uShadowColor;
+        // Shadow union uses GL_MAX inside a transparent overlay target. Store
+        // premultiplied RGB so SceneTarget's straight-alpha composite can divide
+        // by alpha exactly once; overlapping box faces then never darken twice.
+        FragColor = vec4(uShadowColor.rgb * uShadowColor.a, uShadowColor.a);
         return;
     }
     vec3 n = normalize(vNormal);

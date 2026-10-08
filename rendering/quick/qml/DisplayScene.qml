@@ -230,10 +230,9 @@ Item {
     CustomLayoutOverlay {
         id: customLayoutOverlay
         anchors.fill: parent
-        transferButtonColor: displayScene.contextMenuSurfaceColor
-        transferButtonHoverColor: displayScene.contextMenuSelectedSurfaceColor
-        transferButtonBorderColor: displayScene.contextMenuBorderColor
-        transferButtonGlyphColor: displayScene.contextMenuArrowColor
+        // Edit chrome owns a neutral graphite palette. Do not inherit the
+        // context-menu accent palette here: that made Edit controls turn cyan/
+        // blue whenever the active Widget Theme used those accents.
         z: 100
     }
 

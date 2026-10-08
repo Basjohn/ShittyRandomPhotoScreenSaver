@@ -296,7 +296,7 @@ controls. Authored size is a Restore target, not child-growth permission.
 
 **Rounded artwork frames:** Qt Quick `clip` is rectangular and ignores `radius`, so a rounded artwork/avatar frame never relies on it. The image is inset by the frame's outline stroke on a concentric `MultiEffect` mask (frame radius minus the inset) and the outline paints on top, so neither the image nor a thicker hover stroke can escape the frame or cover its outline (Achievement Pulse, Abandonment Issues, Media, Friend Pulse avatars, Games You Follow story/inline art, FEEDS art). `tests/test_qtquick_artwork_frame_containment.py` renders each and measures image pixels against the ideal rounded frame.
 
-**Widget line weight (not Visualizer):** every inner border, rule and separator goes through `OverlayWidget`'s scale-aware stroke helpers. An authored line under 2 px gains +0.5 px (0.5 px and finer) rising linearly to +1.5 px just under 2 px; 2 px and heavier keep their weight. Enlarging the card adds up to +2.5 px more (headers 1.25x that); shrinking never goes below the boosted baseline or 1 px. A child CUSTOM enlarges by geometry uses `scaleAwareChildStrokeWidth` with min(width scale, height scale). The outer card border (Card Border Width) and user-set Clock separator thickness scale directly, and icon glyph strokes scale with their icon.
+**Widget line weight (not Visualizer):** every inner border, rule and separator goes through `OverlayWidget`'s scale-aware stroke helpers. An authored line under 2 px gains +0.5 px (0.5 px and finer) rising linearly to +1.5 px just under 2 px; 2 px and heavier keep their weight. Enlarging the card adds up to +2.5 px more (headers 1.25x that); shrinking never goes below the boosted baseline or 1 px. A child CUSTOM enlarges by geometry uses `scaleAwareChildStrokeWidth` with min(width scale, height scale). **Card Border Width is different:** `widgets.global.card_border_width_px` is one finished logical-pixel authority for every ordinary card and every framed Visualizer. Whole-card CUSTOM transforms inverse-compensate only that outer stroke, so a 4 px card border remains visibly 4 px rather than becoming family/scale dependent. Visualizer card radius is likewise visible chrome: framed modes keep the authored 8 px radius independent of visual-world scale and the canonical resolver derives the matching inner stencil radius. User-set Clock separator thickness and icon glyph strokes remain authored content and scale with their presentation.
 
 **Family-local live rails:** Friend Pulse's unedited separator follows its existing live `authoredWidth`/content extent, while an explicitly edited `width_scale` multiplies that live span. The separator's own geometry cannot demand parent growth. Flipped Reddit reads `post title | age value (e.g. 01HR) | AGO`, with a compact title/time gap and no mirrored text or independently persisted post-row geometry. These are projections of existing family and normalized child values, not new ownership systems.
 
@@ -532,17 +532,28 @@ before the fenced rebuild; an empty saved override map clears later overrides ra
 never recorded overrides replay their saved shared baseline. Cross-display transfer has one live retained pixel owner and
 preserves logical runtime/model identity.
 
-Visualizer geometry-family separation must reuse this same variant-key architecture. The active repair in
-`Current_Plan.md` §3A introduces profile selection through canonical Visualizer mode metadata while retaining one Visualizer
-widget, one `custom_layout` root and one CUSTOM transaction owner. Family profile is geometry state; 3D orbit/view settings
-remain mode/preset state. A cross-family hot-swap may select another saved variant only at an event-bound hidden activation
-seam; it may not add a second geometry clock, duplicate retained item or parallel persistence map.
-Freeform-3D Edit framing may show **two views of that one owner**: the persisted CUSTOM rectangle is the stage/viewport, while
-an orbit-aware projected content envelope/hull plus pivot is derived from the same CPU reach/bounds authority the renderer uses.
-The derived envelope is presentation-only: it never persists, snaps, collides or auto-resizes/repositions the stage as orbit
-changes. CUSTOM's native pointer block remains binding; Alt-left orbit, Alt-right move and Alt-wheel scale in Edit must route
-semantically through the existing orbit resolver and current `CustomLayoutSession`, never a second direct session or duplicated
-pointer/geometry math.
+Visualizer geometry-family separation reuses this same variant-key architecture. Canonical Visualizer mode metadata selects
+either `planar` or `freeform_3d` while retaining one Visualizer widget, one `custom_layout` root and one CUSTOM transaction
+owner. The legacy Visualizer `default` variant is interpretation-only input for the startup-authored family and is retired at
+the next canonical geometry or active-mode Save. That write preserves its original family before changing persisted mode,
+so restarting after a cross-family switch cannot reinterpret the old pose. A missing sibling starts from that family's fitted
+baseline rather than cloning the outgoing pose. Family profile is geometry state; 3D orbit/view settings remain mode/preset
+state. A cross-family hot-swap selects the target saved variant only at the event-bound hidden activation seam; it may not
+add a second geometry clock, duplicate retained item or
+parallel persistence map. A full Edit transaction keeps its source profile identity until it finishes; a direct gesture commits
+through its existing Save boundary before the cross-family activation begins.
+Freeform-3D Edit framing shows **two views of that one owner**: the persisted CUSTOM rectangle is the stage/viewport;
+Extruded's primary frame projects accepted immutable bar/peak data through the production height transfer and camera.
+Conservative `extruded_reach` remains render-target allocation only. Body, ghost, reflection and shadow visibility follow
+their independent shader admission/alpha rules. Other modes retain their renderer-bound projection. Descriptor-owned orbit
+admission is separate from footprint visibility, so empty scenes expose Orbit without fabricated geometry. The derived
+framing never persists, snaps, collides or auto-resizes/repositions the stage. CUSTOM's native pointer block remains binding;
+Orbit/Alt-left, Alt-right move and Alt-wheel scale route through the existing orbit resolver and current `CustomLayoutSession`.
+Wheel input preserves signed movement on either Qt axis; zero movement is a no-op. Geometry/settings/orbit edges refresh
+framing; selected held orbit and a pending first visible source use the existing GUI publication wake. The first-source
+request disarms after valid visible input, including empty geometry. Ordinary audio and closed/deselected Edit add no
+continuing projection work; unchanged/clamped held views skip projection. Gesture hit regions remain frozen while the
+primary frame follows the projection; stage handle paint stays secondary until hovered or dragged.
 Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
 reconstruction, reinjection or provider restart. Clock variant/action context follows the receiving display owner.
 A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption

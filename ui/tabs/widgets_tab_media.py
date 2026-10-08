@@ -939,8 +939,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
 def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> None:
     """Create the lazy-body host + production factory on the tab.
 
-    All five modes (Spectrum included, V6a) are lazy — none is pre-built or
-    adopted. The factory builds a mode's controls into ``controls_layout`` and
+    All registered modes are lazy — none is pre-built or adopted. The factory builds a mode's controls into ``controls_layout`` and
     hydrates it once from ``tab._vis_loaded_config``; it returns the mode's real
     settings container. The container is a hard contract: if the builder fails to
     create it the factory raises rather than returning a placeholder, so the host
@@ -1016,7 +1015,7 @@ def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> 
 def ensure_visualizer_mode_body(tab, mode_id: str) -> None:
     """Construct + hydrate a lazy mode body on first selection (idempotent).
 
-    All five modes are lazy (V6a). No-op before the section has loaded
+    All registered modes are lazy. No-op before the section has loaded
     (``_vis_loaded_config`` unset — the hydration source is not yet available),
     so build-time visibility passes never construct an un-hydratable body.
     """
@@ -1237,7 +1236,7 @@ def load_shared_visualizer_appearance_settings(
     per participating mode. V7 keeps the widgets under SETUP permanently and
     swaps only their values when mode selection changes, so retiring a mode body
     can never delete these controls. Modes that do not own the canonical shared
-    bar-appearance contract (for example experimental Voxel Sphere) are a true
+    bar-appearance contract (for example Voxel Sphere) are a true
     no-op here: never request or invent absent defaults.
     """
     shared_bar_keys = get_owned_mode_setting_keys(active_vis_mode, "shared_bar")

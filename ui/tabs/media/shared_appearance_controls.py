@@ -5,7 +5,8 @@ visualizer save/load path even though the authored Settings presentation has
 historically exposed them with Spectrum. Their stored keys remain mode-qualified.
 Historically their *widgets* were created inside the Spectrum builder, which
 forced Spectrum to stay eagerly constructed. V6a extracted their logical owner.
-V7 keeps one tab-owned widget set, presents it physically inside Spectrum Custom,
+V7 keeps one tab-owned widget set, presents it physically inside the active mode
+that owns the shared-bar appearance contract (currently Spectrum and Extruded Spectrum),
 and explicitly evacuates the stable group back to the top-level mode page before
 mode switch/SETUP/retirement so Qt body destruction cannot take it.
 
@@ -58,7 +59,7 @@ def build_shared_visualizer_appearance_controls(
     fill_row, fill_content, _ = add_builder_swatch_row(
         target_layout, "Bar Fill Color:", label_width=_LABEL_WIDTH
     )
-    tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Spectrum Bar Fill Color")
+    tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Bar Fill Color")
     bind_color_button(
         tab,
         tab.vis_fill_color_btn,
@@ -72,7 +73,7 @@ def build_shared_visualizer_appearance_controls(
     border_row, border_content, _ = add_builder_swatch_row(
         target_layout, "Bar Border Color:", label_width=_LABEL_WIDTH
     )
-    tab.vis_border_color_btn = ColorSwatchButton(title="Choose Spectrum Bar Border Color")
+    tab.vis_border_color_btn = ColorSwatchButton(title="Choose Bar Border Color")
     bind_color_button(
         tab,
         tab.vis_border_color_btn,

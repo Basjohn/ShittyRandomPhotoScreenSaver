@@ -1,4 +1,4 @@
-"""Lazy Settings body for the isolated experimental voxel Sphere visualizer."""
+"""Lazy Settings body for the standard Voxel Sphere visualizer."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -51,10 +51,10 @@ _RECOMMENDED_SLIDER_VALUES: dict[str, float] = {
 
 
 def build_sphere_ui(tab, parent_layout) -> None:
-    """Build Sphere's Settings UI without changing its experimental ownership.
+    """Build Sphere's standard Settings UI from canonical ``sphere_*`` state.
 
-    Controls persist canonical ``sphere_*`` state. Experimental product admission
-    stays separate from its own consumed analysis and presentation authoring.
+    Sphere remains mode-owned and lazy; standard product admission does not collapse
+    its analysis, material, reaction or preset semantics into another mode.
     """
 
     scaffold = build_mode_scaffold(
@@ -104,8 +104,8 @@ def build_sphere_ui(tab, parent_layout) -> None:
         bucket_key="reaction",
         title="Reactivity",
         helper_text=(
-            "Music-driven geometry response. These controls affect the isolated Sphere "
-            "experiment only; they do not retune shared visualizer analysis."
+            "Music-driven geometry response. These controls affect Sphere only; "
+            "they do not retune shared visualizer analysis."
         ),
     )
     _, rotation = build_collapsible_bucket(
@@ -127,7 +127,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
         title="Effects",
         helper_text=(
             "Optional Sphere-only render effects. None may become a shared visualizer "
-            "setting family while Sphere remains experimental."
+            "setting family; Sphere keeps these controls mode-owned."
         ),
     )
     def row(layout, label):

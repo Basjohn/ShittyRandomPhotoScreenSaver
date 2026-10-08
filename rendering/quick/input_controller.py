@@ -19,6 +19,7 @@ class QuickInputController(RuntimeInputOwner):
     input_state_changed = Signal(object)
     widget_glow_pressed = Signal(object, object)
     admitted_pointer_pressed = Signal(object, object)
+    custom_layout_edit_requested = Signal()
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
     custom_layout_undo_requested = Signal()
@@ -235,6 +236,22 @@ class QuickInputController(RuntimeInputOwner):
 
     def handle_mouse_double_click(self, event: QMouseEvent) -> bool:
         if not self._state.admission_open:
+            return True
+        # Replacement admission owns the event before any presentation-specific
+        # inspection. Apart from preserving the neutral RuntimeInputOwner contract,
+        # this is important because stale/replacement events are intentionally
+        # opaque to callers and must be consumable without dereferencing them.
+        if self._should_suppress_runtime_pointer_input("mouseDoubleClickEvent"):
+            return True
+        if (
+            event.button() == Qt.MouseButton.RightButton
+            and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+        ):
+            # The first right press may have opened the retained context menu.
+            # Double-right is an explicit editor shortcut, so bypass the neutral
+            # next-image double-click fallback and let the product owner dismiss
+            # that menu before entering the one existing CUSTOM session.
+            self.custom_layout_edit_requested.emit()
             return True
         return super().handle_mouse_double_click(event)
 

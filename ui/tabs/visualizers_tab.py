@@ -305,7 +305,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._mode_body_layout.setSpacing(4)
         controls_layout.addWidget(self._mode_body_host_widget)
 
-        # These controls historically belong to Spectrum Custom. They are created
+        # These controls originated in Spectrum Custom but now serve every mode
+        # that explicitly owns the shared-bar appearance contract. They are created
         # once by the tab, then physically placed inside the selected mode's Custom
         # normal-layout. Before body retirement they are evacuated back to the
         # stable mode page so Qt destruction cannot take them with a retired body.
@@ -316,11 +317,11 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         ) = build_dynamic_collapsible_bucket(
             self,
             controls_layout,
-            mode_provider=lambda: "spectrum",
-            host_mode_key="spectrum_stable",
+            mode_provider=self._get_active_visualizer_mode,
+            host_mode_key="shared_bar_stable",
             bucket_key="bar_appearance",
             title="Bar Appearance",
-            helper_text="Spectrum fill, border colour, and border opacity still apply when hidden.",
+            helper_text="Fill colour/alpha, border colour/alpha, and border opacity are stored per supported mode.",
         )
         build_shared_visualizer_appearance_controls(self, base_appearance_layout)
         self._base_appearance_group.setVisible(False)
@@ -430,12 +431,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._rainbow_controls_container.setVisible(False)
 
     def _update_rainbow_visibility(self) -> None:
-        """Apply shared Rainbow visibility plus Spectrum's Custom accessory gate."""
+        """Apply shared Rainbow visibility plus shared-bar Custom accessory gates."""
         super()._update_rainbow_visibility()
         appearance = getattr(self, "_base_appearance_group", None)
         if appearance is not None:
             appearance.setVisible(
-                self._get_active_visualizer_mode() == "spectrum"
+                self._get_active_visualizer_mode() in {"spectrum", "extruded_spectrum"}
                 and self._active_visualizer_preset_is_custom()
             )
 
@@ -468,15 +469,18 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 f"Visualizer mode {mode_id!r} has no Custom normal-layout for accessories"
             )
 
-        if mode_id == "spectrum":
-            normal_layout.addWidget(self._base_appearance_group)
+        if mode_id in {"spectrum", "extruded_spectrum"}:
+            if mode_id == "extruded_spectrum":
+                normal_layout.insertWidget(0, self._base_appearance_group)
+            else:
+                normal_layout.addWidget(self._base_appearance_group)
             shared_styles.set_bucket_toggle_checked(
                 self._base_appearance_toggle,
-                self.get_visualizer_bucket_state("spectrum", "bar_appearance"),
+                self.get_visualizer_bucket_state(mode_id, "bar_appearance"),
             )
 
-        normal_layout.addWidget(self._rainbow_controls_container)
         if mode_has_rainbow_controls(mode_id):
+            normal_layout.addWidget(self._rainbow_controls_container)
             shared_styles.set_bucket_toggle_checked(
                 self._rainbow_bucket_toggle,
                 self.get_visualizer_bucket_state(mode_id, "rainbow"),

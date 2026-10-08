@@ -17,6 +17,9 @@ from typing import Any, Callable, Mapping
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
+from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+)
 
 logger = get_logger(__name__)
 
@@ -71,6 +74,9 @@ class QuickDisplayVisualizerOwner:
         initial_mode: str,
         engine_factory: Callable[[int], Any] | None = None,
         presentation_resolver: Callable[[], Any] | None = None,
+        committed_layout_profile_resolver: Callable[[str], tuple[
+            tuple[float, float, float, float], tuple[float, float] | None, object
+        ] | None] | None = None,
         card_shadow_kwargs: Mapping[str, object],
         transition_clock: Callable[[], float] | None = None,
         transition_half_duration_s: float = _MODE_TRANSITION_HALF_DURATION_S,
@@ -91,6 +97,10 @@ class QuickDisplayVisualizerOwner:
             int(runtime.screen_index)
         )
         self._presentation_resolver = presentation_resolver
+        # The DisplayManager resolves this through the one canonical
+        # ``custom_layout`` map.  It is consulted only at the hidden mode
+        # activation boundary, never from the logical/render cadence.
+        self._committed_layout_profile_resolver = committed_layout_profile_resolver
         required_card_fields = {
             "background_color",
             "border_color",
@@ -117,6 +127,7 @@ class QuickDisplayVisualizerOwner:
         )
         self._committed_layout_rect: tuple[float, float, float, float] | None = None
         self._committed_layout_extent: tuple[float, float] | None = None
+        self._legacy_layout_profile: str | None = None
         self._authored_outer_origin: tuple[float, float] = (0.0, 0.0)
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
@@ -571,6 +582,7 @@ class QuickDisplayVisualizerOwner:
         local_rect: tuple[float, float, float, float] | None,
         viewport_extent: tuple[float, float] | None = None,
         content_rotation_by_mode: object = None,
+        legacy_geometry_profile: str | None = None,
     ) -> None:
         """Hydrate one saved CUSTOM outer rect before logical runtime start.
 
@@ -585,6 +597,7 @@ class QuickDisplayVisualizerOwner:
         if local_rect is None:
             self._committed_layout_rect = None
             self._committed_layout_extent = None
+            self._legacy_layout_profile = None
             return
         x, y, width, height = (float(value) for value in local_rect)
         if width <= 0.0 or height <= 0.0:
@@ -597,6 +610,11 @@ class QuickDisplayVisualizerOwner:
                 raise ValueError("visualizer committed viewport extent must be positive")
         self._committed_layout_rect = (x, y, width, height)
         self._committed_layout_extent = extent
+        self._legacy_layout_profile = (
+            str(legacy_geometry_profile).strip().lower()
+            if legacy_geometry_profile is not None
+            else None
+        )
         # Rehydrate physical CUSTOM truth before the authored logical runtime can
         # consume it. Orientation is layout state, not a Visualizer preset.
         hydration_extent = extent or self._controller.committed_viewport_extent
@@ -615,6 +633,41 @@ class QuickDisplayVisualizerOwner:
         # metrics between construction and first presentation, which leaves
         # viewport-sensitive Bubble presentation scaling wrong until a cold
         # restart.  This is state-only and adds no cadence/polling owner.
+
+    def _activate_committed_layout_profile(self, target_mode: str) -> None:
+        """Select a cross-family CUSTOM pose while the target remains hidden."""
+
+        resolver = self._committed_layout_profile_resolver
+        resolved = None if resolver is None else resolver(str(target_mode))
+        if resolved is None:
+            logger.info(
+                "[CUSTOM_LAYOUT] Visualizer target has no saved profile pose "
+                "mode=%s; selecting authored baseline", target_mode,
+            )
+            # A profile that has never been authored deliberately starts from
+            # its normal fitted baseline.  Do not copy the outgoing family
+            # rectangle: it is exactly the malformed 2D/3D coupling this seam
+            # removes.  The next normal CUSTOM Save writes the named profile.
+            self._committed_layout_rect = None
+            self._committed_layout_extent = None
+            self._controller.hydrate_committed_layout_metrics(
+                CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+                {},
+            )
+            return
+        local_rect, viewport_extent, rotations = resolved
+        x, y, width, height = (float(value) for value in local_rect)
+        if width <= 0.0 or height <= 0.0:
+            raise ValueError("visualizer profile rect must be positive")
+        if viewport_extent is None:
+            extent = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        else:
+            extent = (float(viewport_extent[0]), float(viewport_extent[1]))
+            if extent[0] <= 0.0 or extent[1] <= 0.0:
+                raise ValueError("visualizer profile viewport extent must be positive")
+        self._committed_layout_rect = (x, y, width, height)
+        self._committed_layout_extent = extent
+        self._controller.hydrate_committed_layout_metrics(extent, rotations)
 
     def commit_live_custom_layout(
         self,
@@ -676,6 +729,7 @@ class QuickDisplayVisualizerOwner:
         self._controller.commit_content_rotation_map(content_rotation_by_mode)
         self._committed_layout_rect = tuple(float(value) for value in presentation.outer_rect)
         self._committed_layout_extent = (extent_width, extent_height)
+        self._legacy_layout_profile = None
 
     def _activation_scene_fade(self) -> float:
         """Return the authored 0 -> 1 first-appearance scene fade progress.
@@ -845,6 +899,13 @@ class QuickDisplayVisualizerOwner:
 
         raise RuntimeError(f"unknown visualizer mode transition phase: {phase}")
 
+    def set_edit_orbit_publication_callback(
+        self, callback: Callable[[Any, Any], None] | None,
+    ) -> None:
+        """Bind held-orbit/one-shot first-source Edit framing to the GUI owner."""
+        if self._sync is not None and not self._retired:
+            self._sync.set_authored_view_publication_callback(callback)
+
     def _target_renderer_preparing(self, now: float) -> bool:
         """True while a ``prepared_reveal`` target's renderer is still preparing (bounded)."""
         activation = self._preparing_activation
@@ -1010,6 +1071,15 @@ class QuickDisplayVisualizerOwner:
             raise
         try:
             if kind == "mode":
+                from core.settings.visualizer_mode_registry import (
+                    get_visualizer_geometry_profile,
+                )
+
+                if (
+                    get_visualizer_geometry_profile(target)
+                    != get_visualizer_geometry_profile(controller.mode_id)
+                ):
+                    self._activate_committed_layout_profile(target)
                 controller.set_mode(target)
             elif target != controller.mode_id:
                 raise RuntimeError("preset activation attempted to change visualizer mode")
@@ -1139,6 +1209,7 @@ class QuickDisplayVisualizerOwner:
     def retire(self) -> bool:
         if self._retired:
             return False
+        self.set_edit_orbit_publication_callback(None)
         # The mailbox wake is installed during bind(), before start(). A failed
         # start must not leave a logical-thread callback targeting a retired Qt
         # object, so detach this edge regardless of whether logical cadence ran.

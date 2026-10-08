@@ -22,6 +22,9 @@ Item {
     // chrome. The presentation host toggles this once at Edit enter/exit; the
     // blocker itself is loader-gated so normal runtime has no live input item.
     property bool customLayoutInputBlocked: false
+    // One display-scoped bounded clock shared by every refresh accessory.
+    // Families publish only BUSY/IDLE state; no widget owns a refresh animator.
+    property var refreshTransitionClock: null
     // Every ordinary card and accessory has an always-on paint boundary.
     // The independently selectable child EDIT lock is only edit chrome; it
     // cannot affect visibility, authored reflow, paint or saved geometry.
@@ -126,8 +129,10 @@ Item {
     // they do earn a further boost as the card enlarges: visible thickness rises
     // by at most +2.5 px above that baseline at large sizes. Shrinking never
     // thins a stroke below its baseline (the downward delta is floored at 0);
-    // nothing ever renders below 1 px. The outer card/shell border bypasses this
-    // entirely and scales with the transform directly. Families with their own
+    // nothing ever renders below 1 px. The outer card/shell border is different:
+    // Card Border Width is a visible global stroke, so the authored root divides
+    // it by the whole-card transform and the finished card stays at the requested
+    // width. Families with their own
     // authored-canvas transform (Steam cards) pass that explicit scale; ordinary
     // uniform-transform families use presentationScale; children that CUSTOM
     // enlarges by geometry (not a transform) use scaleAwareChildStrokeWidth.
@@ -195,7 +200,15 @@ Item {
     }
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardBorderColor: card.borderColor
-    property alias cardBorderWidth: card.borderWidth
+    // Global Card Border Width is specified in finished logical pixels. Uniform
+    // CUSTOM families scale their authored root, so feed the card the inverse
+    // authored width rather than magnifying the global stroke with the content.
+    // Keep the factory/smoke fallback aligned with the canonical global default.
+    // Production families still project the live global value explicitly.
+    property real cardBorderWidth: 4.0
+    readonly property real authoredCardBorderWidth: uniformScaleTransform
+        ? cardBorderWidth / Math.max(0.05, presentationScale)
+        : cardBorderWidth
     property alias cardCornerRadius: card.cornerRadius
     property alias cardPadding: card.padding
     // Production ordinary cards project their shadow into the display-level
@@ -336,6 +349,7 @@ Item {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: overlayWidget.authoredCardWidth
+            borderWidth: overlayWidget.authoredCardBorderWidth
             shadowEnabled: overlayWidget.cardShadowEnabled && !overlayWidget.externalCardShadow
             shadowColor: overlayWidget.cardShadowColor
             shadowBlur: overlayWidget.cardShadowBlur

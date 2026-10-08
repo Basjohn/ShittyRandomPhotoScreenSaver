@@ -107,13 +107,13 @@ def test_media_volume_is_bounded_by_accessory_not_by_card_or_canonical_height() 
 
 def test_wheel_from_child_body_and_resize_handles_uses_parent_owner_once() -> None:
     editor = _text(QML / 'CustomLayoutOverlay.qml')
-    assert editor.count('function resizeParentByWheel(deltaY)') == 1
-    helper = editor.split('function resizeParentByWheel(deltaY)', 1)[1].split('\n            MouseArea {', 1)[0]
+    assert editor.count('function resizeParentByWheel(deltaX, deltaY)') == 1
+    helper = editor.split('function resizeParentByWheel(deltaX, deltaY)', 1)[1].split('\n            MouseArea {', 1)[0]
     assert 'editFrame.syncChildRequirementNow()' not in helper
-    assert 'sessionModel.resizeWheel(' in helper
-    assert editor.count('wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)') == 5
+    assert 'sessionModel.resizeWheelDelta(' in helper
+    assert editor.count('wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)') == 5
     # The same owner services parent, child body/edge/corner, and lock glyph wheel.
-    assert editor.count('sessionModel.resizeWheel(') == 1
+    assert editor.count('sessionModel.resizeWheelDelta(') == 1
 
 
 def test_clock_keeps_special_variant_font_payload_not_an_unreviewed_mode_migration() -> None:

@@ -147,9 +147,9 @@ def test_fresh_profile_widget_sections_are_well_formed_and_architecture_safe() -
             assert str(section["monitor"]).strip() != "", widget_id
 
     # Schema: per-mode dormancy is the explicit mode_activation boolean map (the
-    # retired enabled_modes list is gone). Every registered mode -- including the
-    # accepted-experimental sphere, whose isolation lives in the technical
-    # profile rather than in mode exclusion -- carries an explicit bool.
+    # retired enabled_modes list is gone). Every registered mode, including
+    # standard Voxel Sphere, carries an explicit bool; mode-owned technical
+    # isolation is not represented by product exclusion.
     visualizer = widgets["spotify_visualizer"]
     mode_activation = visualizer["mode_activation"]
     assert isinstance(mode_activation, dict)

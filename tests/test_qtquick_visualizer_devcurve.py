@@ -408,18 +408,18 @@ def test_devcurve_layout_reflows_domain_and_keeps_authored_stroke_scale() -> Non
     wide = _layout(_presentation(extent=(560.0, 280.0)))
     tall = _layout(_presentation(extent=(420.0, 420.0)))
 
-    # Visible border obeys the bounded/non-linear stroke rule (authored 4px clamped
-    # to 3.3px at 0.65x, not a naive 2.6px), so the content extent it insets is not
-    # a perfect uniform scaling of the canonical content extent.
+    # Visible card chrome is invariant: authored 4px remains 4px at 0.65x,
+    # so the content extent it insets is not a perfect uniform scaling of the
+    # canonical content extent.
     assert canonical_pres.border_width == pytest.approx(4.0)
-    assert scaled_pres.border_width == pytest.approx(3.3)
+    assert scaled_pres.border_width == pytest.approx(4.0)
     border_delta = scaled_pres.border_width - canonical_pres.border_width * 0.65
-    assert border_delta == pytest.approx(0.7)
+    assert border_delta == pytest.approx(1.4)
 
     # content extent = outer - 2*border; the outer rect scales uniformly, so each
-    # content axis differs from a naive 0.65x by EXACTLY twice the bounded border
+    # content axis differs from a naive 0.65x by EXACTLY twice the constant border
     # delta. The domain normalization below still recovers a 1.0 scale because the
-    # baseline content extent de-scales the same bounded stroke.
+    # baseline content extent de-scales the same constant visible stroke.
     assert scaled.content_rect[2] == pytest.approx(
         canonical.content_rect[2] * 0.65 - 2.0 * border_delta
     )

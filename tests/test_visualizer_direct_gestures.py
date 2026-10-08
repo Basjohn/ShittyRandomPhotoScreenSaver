@@ -140,7 +140,10 @@ def test_a_direct_gesture_moves_and_resizes_live_and_commits_once_through_edits_
         engine_factory=lambda _count: _LiveCommitEngine(),
     )
     unit.attach_visualizer_owner(visualizer)
-    settings = _Settings({"spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"}})
+    settings = _Settings({"spotify_visualizer": {
+        "enabled": True, "position": "Custom", "monitor": "1",
+        "mode": "extruded_spectrum",
+    }})
     reloads, config_commits = [], []
     layout = QuickCustomLayoutOwner(
         settings_manager=settings, participants_provider=lambda: (unit,),

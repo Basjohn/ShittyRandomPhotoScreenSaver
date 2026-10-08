@@ -60,11 +60,95 @@ PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
 
 SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Callable[[Any], Any]], ...] = (
     ("spectrum", "lane_transient_mix", "spectrum_lane_transient_mix", float),
+    ("extruded_spectrum", "lane_transient_mix", "extruded_spectrum_lane_transient_mix", float),
     ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", float),
     ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", float),
     ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", float),
     ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", float),
 )
+
+
+# Schema 10 introduced independent Extruded ownership, but its fresh/default
+# profile was accidentally seeded from generic technical defaults instead of the
+# Spectrum preset it had actually consumed before the ownership split.  This
+# signature is intentionally narrow: only the generated schema-10 bundle is
+# repaired.  Any user-authored deviation prevents wholesale classification, and
+# individual changed values are never overwritten.
+_SCHEMA10_EXTRUDED_PROFILE: dict[str, Any] = {
+    "extruded_spectrum_adaptive_sensitivity": True,
+    "extruded_spectrum_agc_strength": 0.5,
+    "extruded_spectrum_audio_block_size": 512,
+    "extruded_spectrum_bar_count": 33,
+    "extruded_spectrum_drop_speed": 1.0,
+    "extruded_spectrum_dynamic_range_enabled": False,
+    "extruded_spectrum_ghost_alpha": 0.4,
+    "extruded_spectrum_ghost_decay": 0.35,
+    "extruded_spectrum_input_gain": 1.0,
+    "extruded_spectrum_kick_lane_gain": 1.0,
+    "extruded_spectrum_lane_strengths_linear": {
+        "Bass": 0.8, "Hi-Mid": 0.8, "Low-Mid": 0.7, "Treble": 1.0, "Vocal": 0.64,
+    },
+    "extruded_spectrum_lane_strengths_mirrored": {
+        "Bass": 0.8, "Low-Mid": 0.7, "Mid": 0.6, "Vocal": 0.64,
+    },
+    "extruded_spectrum_manual_floor": 0.12,
+    "extruded_spectrum_notch_positions_linear": [
+        [0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"],
+    ],
+    "extruded_spectrum_notch_positions_mirrored": [
+        [0.0, "Mid"], [0.3, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"],
+    ],
+    "extruded_spectrum_profile_floor": 0.12,
+    "extruded_spectrum_sensitivity": 0.4,
+    "extruded_spectrum_shape_nodes": [
+        [0.0, 0.4], [0.35, 0.75], [0.65, 0.55], [1.0, 0.8],
+    ],
+    "extruded_spectrum_transient_clamp": 1.5,
+    "extruded_spectrum_wave_amplitude": 0.5,
+}
+_SCHEMA10_EXTRUDED_SIGNATURE = (
+    "extruded_spectrum_audio_block_size",
+    "extruded_spectrum_bar_count",
+    "extruded_spectrum_agc_strength",
+    "extruded_spectrum_input_gain",
+    "extruded_spectrum_sensitivity",
+    "extruded_spectrum_wave_amplitude",
+    "extruded_spectrum_profile_floor",
+    "extruded_spectrum_drop_speed",
+)
+
+
+def repair_schema10_extruded_owned_profile(data: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Repair only the accidentally generated schema-10 Extruded profile.
+
+    The ownership migration must preserve user-authored Custom snapshots.  We
+    therefore classify the stale bundle only when every high-signal technical
+    anchor still equals the old generated value.  Once classified, each field
+    is replaced only if *that field* still equals its old generated value.
+    User edits survive, while untouched generated values move to the canonical
+    frozen pre-migration baseline.
+    """
+
+    if not isinstance(data, Mapping):
+        return {}
+    repaired = deepcopy(dict(data))
+    if not all(
+        key in repaired and repaired[key] == _SCHEMA10_EXTRUDED_PROFILE[key]
+        for key in _SCHEMA10_EXTRUDED_SIGNATURE
+    ):
+        return repaired
+
+    for key, stale in _SCHEMA10_EXTRUDED_PROFILE.items():
+        if repaired.get(key) == stale:
+            repaired[key] = deepcopy(require_canonical_default(f"widgets.spotify_visualizer.{key}"))
+    # This consumed value was missing entirely from schema 10 because it still
+    # read Spectrum live.  Once the stale bundle is recognized, seed the owned
+    # key from the new canonical frozen baseline.
+    repaired.setdefault(
+        "extruded_spectrum_lane_transient_mix",
+        require_canonical_default("widgets.spotify_visualizer.extruded_spectrum_lane_transient_mix"),
+    )
+    return repaired
 
 
 def migrate_profile_lender_owned_settings(
@@ -124,6 +208,8 @@ def migrate_profile_lender_owned_settings(
         suffixes: set[str] = set()
         if bool(descriptor.technical_controls):
             suffixes.update(get_owned_mode_setting_keys(descriptor.mode_id, "technical"))
+        if descriptor.mode_id == "extruded_spectrum" and source_mode == "spectrum":
+            suffixes.add("lane_transient_mix")
         if bool(getattr(descriptor, "spectrum_shape_controls", False)):
             suffixes.update(
                 {

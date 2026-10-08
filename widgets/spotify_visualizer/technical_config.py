@@ -47,9 +47,13 @@ def build_technical_cache(
             # Every mode therefore carries this resolved source value instead
             # of letting the worker own a second 0.65 baseline.
             "spectrum_lane_transient_mix": (
-                spectrum_lane_transient_mix
-                if get_visualizer_mode_descriptor(mode_key).technical_setting_suffixes is None
-                else require_canonical_default("widgets.spotify_visualizer.spectrum_lane_transient_mix")
+                model.resolve_spectrum_lane_transient_mix_for_mode(mode_key)
+                if mode_key == "extruded_spectrum"
+                else (
+                    spectrum_lane_transient_mix
+                    if get_visualizer_mode_descriptor(mode_key).technical_setting_suffixes is None
+                    else require_canonical_default("widgets.spotify_visualizer.spectrum_lane_transient_mix")
+                )
             ),
         }
         if mode_key == "bubble":

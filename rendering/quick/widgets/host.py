@@ -18,7 +18,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 
-from PySide6.QtCore import QObject, QPointF
+from PySide6.QtCore import (
+    QAbstractAnimation, QEasingCurve, QObject, QPointF, Property, Signal, Slot,
+    QVariantAnimation,
+)
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
@@ -40,6 +43,84 @@ def _qobject_is_alive(value: object) -> bool:
 # families unless a family owns a real visual distinction.
 ORDINARY_CARD_SHADOW_BASE = (4.0, 4.0)
 ORDINARY_TEXT_SHADOW_BASE = (2.0, 2.0)
+
+
+class RefreshTransitionClock(QObject):
+    """One bounded refresh-edge presentation clock per retained display.
+
+    Refresh providers remain completely independent.  Their existing BUSY facts
+    merely join this one short presentation epoch; no network lifetime, widget
+    count, or feed-instance count can lengthen the animation.  Multiple edges
+    that arrive while the clock is already running coalesce into that same epoch.
+    Idle state owns no timer, poller, animation, or scene invalidation.
+    """
+
+    phaseChanged = Signal()
+    epochChanged = Signal()
+    activeChanged = Signal()
+    DURATION_MS = 240
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._phase = 1.0
+        self._epoch = 0
+        self._animation = QVariantAnimation(self)
+        self._animation.setDuration(self.DURATION_MS)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(1.0)
+        self._animation.setEasingCurve(QEasingCurve(QEasingCurve.Type.InOutSine))
+        self._animation.valueChanged.connect(self._on_value_changed)
+        self._animation.stateChanged.connect(self._on_state_changed)
+        self._animation.finished.connect(self._on_finished)
+
+    @Property(float, notify=phaseChanged)
+    def phase(self) -> float:
+        return self._phase
+
+    @Property(int, notify=epochChanged)
+    def epoch(self) -> int:
+        return self._epoch
+
+    @Property(bool, notify=activeChanged)
+    def active(self) -> bool:
+        return self._animation.state() == QAbstractAnimation.State.Running
+
+    def _set_phase(self, value: float) -> None:
+        normalized = max(0.0, min(1.0, float(value)))
+        if abs(normalized - self._phase) <= 1e-9:
+            return
+        self._phase = normalized
+        self.phaseChanged.emit()
+
+    def _on_value_changed(self, value: object) -> None:
+        try:
+            self._set_phase(float(value))
+        except (TypeError, ValueError):
+            self._set_phase(1.0)
+
+    def _on_state_changed(self, current: object, previous: object) -> None:
+        if current != previous:
+            self.activeChanged.emit()
+
+    def _on_finished(self) -> None:
+        self._set_phase(1.0)
+
+    @Slot(result="QVariantMap")
+    def begin(self) -> dict[str, object]:
+        """Begin one edge epoch, or join the currently active epoch."""
+
+        if self.active:
+            return {"epoch": self._epoch, "phase": self._phase}
+        self._epoch += 1
+        self.epochChanged.emit()
+        self._set_phase(0.0)
+        self._animation.start()
+        return {"epoch": self._epoch, "phase": self._phase}
+
+    def stop(self) -> None:
+        if self._animation.state() != QAbstractAnimation.State.Stopped:
+            self._animation.stop()
+        self._set_phase(1.0)
 
 
 @dataclass(frozen=True)
@@ -69,7 +150,9 @@ class OverlayCardStyle:
     border_color: QColor = field(
         default_factory=lambda: QColor(255, 255, 255, 230)
     )
-    border_width: float = 2.0
+    # Presentation-only fallback mirrors the canonical global card width.
+    # Runtime family adapters still project the live Settings-owned value.
+    border_width: float = 4.0
     corner_radius: float = 8.0
     padding: float = 8.0
     shadow_enabled: bool = True
@@ -403,6 +486,10 @@ class OrdinaryWidgetPresentationHost:
         # the scene already closed/current, rather than flashing at QML's 1.0
         # default until the coordinator's next animation value arrives.
         self._startup_reveal_opacity = 1.0
+        # Exactly one bounded refresh-edge clock belongs to this display host.
+        # Any number of Gmail/Reddit/NEWS/CUSTOM Feed/Games You Follow
+        # accessories join it; providers never gain a presentation cadence.
+        self._refresh_transition_clock = RefreshTransitionClock(host_item)
         self._retired = False
 
     @property
@@ -412,6 +499,13 @@ class OrdinaryWidgetPresentationHost:
     @property
     def live_count(self) -> int:
         return len(self._live)
+
+    @property
+    def refresh_transition_clock(self) -> RefreshTransitionClock:
+        clock = self._refresh_transition_clock
+        if self._retired or clock is None:
+            raise RuntimeError("ordinary-widget refresh transition clock has retired")
+        return clock
 
     def create_widget(
         self,
@@ -552,6 +646,13 @@ class OrdinaryWidgetPresentationHost:
             item.deleteLater()
             raise RuntimeError(
                 "OverlayWidget.qml rejected customLayoutInputBlocked projection"
+            )
+        if not item.setProperty(
+            "refreshTransitionClock", self.refresh_transition_clock
+        ):
+            item.deleteLater()
+            raise RuntimeError(
+                "OverlayWidget.qml rejected refreshTransitionClock projection"
             )
         item.setParentItem(host_item)
         item.setParent(host_item)
@@ -963,17 +1064,26 @@ class OrdinaryWidgetPresentationHost:
             raise RuntimeError(
                 "OverlayWidget.qml rejected customLayoutInputBlocked transfer projection"
             )
-        if target._input_state is not None:
-            widget._apply_input_state(
-                target._effective_input_state(target._input_state)
-            )
+        source_refresh_clock = self.refresh_transition_clock
+        target_refresh_clock = target.refresh_transition_clock
         try:
             item.setParentItem(target_item)
             item.setParent(target_item)
             if shadow_item is not None and target_shadow_host is not None:
                 shadow_item.setParentItem(target_shadow_host)
                 shadow_item.setParent(target_shadow_host)
+            if not item.setProperty(
+                "refreshTransitionClock", target_refresh_clock
+            ):
+                raise RuntimeError(
+                    "OverlayWidget.qml rejected refreshTransitionClock transfer projection"
+                )
+            if target._input_state is not None:
+                widget._apply_input_state(
+                    target._effective_input_state(target._input_state)
+                )
         except Exception:
+            item.setProperty("refreshTransitionClock", source_refresh_clock)
             item.setParentItem(source_item)
             item.setParent(source_item)
             if shadow_item is not None and source_shadow_host is not None:
@@ -999,6 +1109,9 @@ class OrdinaryWidgetPresentationHost:
         self._custom_layout_input_blocked = False
         self._unexpected_qt_deaths = []
         self._retired = True
+        clock, self._refresh_transition_clock = self._refresh_transition_clock, None
+        if clock is not None:
+            clock.stop()
         for widget in live:
             widget._retire()
         self._host_item = None

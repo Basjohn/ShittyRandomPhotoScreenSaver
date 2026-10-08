@@ -82,7 +82,10 @@ from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
 )
-from rendering.quick.custom_layout_hydration import clock_geometry_variant, resolve_committed_visualizer_rect
+from rendering.quick.custom_layout_hydration import (
+    clock_geometry_variant, geometry_variant_for_presentation,
+    resolve_committed_visualizer_rect, resolve_visualizer_custom_entry_for_aliases,
+)
 from rendering.quick.widgets.geometry_resolver import resolve_overlay_geometry_policy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 from widgets.spotify_visualizer.render_state import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
@@ -239,6 +242,8 @@ class ArrangeModel:
         return section if isinstance(section, Mapping) else {}
 
     def _variants_for(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[str, ...]:
+        if descriptor.widget_id == "spotify_visualizer":
+            return (geometry_variant_for_presentation(descriptor.widget_id, None, self.widgets),)
         if descriptor.widget_id not in _CLOCK_IDS:
             return ("default",)
         # The saver's own face resolution (base-Clock inheritance, per-display override).
@@ -342,6 +347,11 @@ class ArrangeModel:
         return rect, float(placement.scale)
 
     def _existing_entry(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, variant: str):
+        if descriptor.widget_id == "spotify_visualizer":
+            return resolve_visualizer_custom_entry_for_aliases(
+                self.widgets, display.signature_aliases,
+                self._section_for(descriptor).get("mode"),
+            )
         custom = load_custom_layout_map(self.widgets)
         layouts = custom.get("displays", {})
         if not isinstance(layouts, Mapping):
@@ -396,6 +406,10 @@ class ArrangeModel:
                     source_route = str(section.get("monitor", display.monitor_route)) if isinstance(section, Mapping) else display.monitor_route
                     item = CustomLayoutSessionItem(
                         source_key=key, model_identity=descriptor.widget_id,
+                        legacy_geometry_variant=(
+                            variant if descriptor.widget_id == "spotify_visualizer"
+                            and entry is not None and entry.geometry_variant == "default" else None
+                        ),
                         baseline_global_rect=rect, current_global_rect=rect,
                         baseline_size_payload=payload, current_size_payload=payload,
                         baseline_enabled=True, current_enabled=True,

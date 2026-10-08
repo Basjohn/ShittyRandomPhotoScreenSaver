@@ -49,7 +49,10 @@ def test_settings_startup_seeds_raw_sphere_before_default_fill_and_reopen_is_sta
     store.setValue("visualizer_custom_presets", {"sphere": {
         "mode": "sphere", "sphere_fill_color": [23, 34, 45, 79], "sphere_manual_floor": .29,
     }})
-    store.sync()
+    # This test represents a pre-existing on-disk profile. ``sync()`` is only
+    # asynchronous admission; force the durability boundary before constructing
+    # the new manager so startup cannot race the fixture writer on Windows.
+    assert store.flush(timeout=5.0)
     manager = SettingsManager(application=profile, storage_base_dir=tmp_path)
     first = manager.get("widgets.spotify_visualizer")
     assert first["sphere_bar_count"] == 47

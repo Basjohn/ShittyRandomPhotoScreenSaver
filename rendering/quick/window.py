@@ -316,6 +316,7 @@ class QuickDisplayWindow(QQuickWindow):
             controller = self._input_controller
             if (
                 event.button() == Qt.MouseButton.RightButton
+                and not event.modifiers() & Qt.KeyboardModifier.AltModifier
                 and controller is not None
                 and controller.handle_custom_layout_context_press(event)
             ):
@@ -361,10 +362,13 @@ class QuickDisplayWindow(QQuickWindow):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._custom_layout_input_blocked:
-            # Right-click press already opened the retained context menu. Consume
-            # its release here so it cannot fall through to family QML; there is
-            # no separate press-timestamp/position lifecycle to retire in Edit.
-            if event.button() == Qt.MouseButton.RightButton:
+            # Ordinary right-click opened the retained context menu. Alt-right
+            # may instead be grabbed by Edit's move area; finish that same QML
+            # grab even when Alt was released before the mouse button.
+            if (
+                event.button() == Qt.MouseButton.RightButton
+                and self.mouseGrabberItem() is None
+            ):
                 event.accept()
                 return
             super().mouseReleaseEvent(event)
@@ -393,6 +397,15 @@ class QuickDisplayWindow(QQuickWindow):
             super().mouseDoubleClickEvent(event)
             return
         if self._runtime_discrete_pointer_event_is_suppressed("mouseDoubleClickEvent"):
+            event.accept()
+            return
+        controller = self._input_controller
+        if (
+            event.button() == Qt.MouseButton.RightButton
+            and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+            and controller is not None
+            and controller.handle_mouse_double_click(event)
+        ):
             event.accept()
             return
         # Retained Quick hit regions own family-specific double-click semantics

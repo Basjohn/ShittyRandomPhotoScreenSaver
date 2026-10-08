@@ -39,6 +39,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Need | Read |
 | --- | --- |
 | current work / next sequence | `Current_Plan.md` |
+| queued canonical CPython 3.14 migration and prerequisite/acceptance gates | `Current_Plan.md` §10 |
 | durable product / architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | project overview | `Docs/00_PROJECT_OVERVIEW.md` |

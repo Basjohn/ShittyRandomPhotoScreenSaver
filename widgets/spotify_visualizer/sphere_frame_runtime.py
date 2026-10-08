@@ -1,4 +1,4 @@
-"""Activation-fenced authored state for the experimental Voxel Sphere mode.
+"""Activation-fenced authored state for the Voxel Sphere mode.
 
 Sphere is deliberately isolated from the accepted visualizers.  This runtime owns
 only Sphere's logical envelopes and consumes immutable/public audio seams; it does

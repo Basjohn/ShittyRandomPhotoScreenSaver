@@ -94,6 +94,7 @@ def _build_collapsible_bucket_core(
     bucket_key: str,
     title: str,
     helper_text: str,
+    initial_expanded: bool | None = None,
 ) -> tuple[QWidget, QVBoxLayout, QToolButton]:
     """Create one Visualizer Custom bucket using the shared accordion contract."""
 
@@ -105,8 +106,17 @@ def _build_collapsible_bucket_core(
     host_layout.setContentsMargins(0, 0, 0, 0)
     host_layout.setSpacing(8)
 
+    # Stable accessory buckets are constructed before any lazy mode body exists.
+    # Their active mode may not own this bucket at all (for example Bubble does
+    # not own Bar Appearance, and Sphere does not own Rainbow).  In that case
+    # the caller supplies an inert bootstrap state; the real per-mode state is
+    # applied synchronously when the accessory is placed into a compatible body.
     mode = str(mode_provider()).strip().lower()
-    expanded = bool(tab.get_visualizer_bucket_state(mode, bucket_key))
+    expanded = (
+        bool(tab.get_visualizer_bucket_state(mode, bucket_key))
+        if initial_expanded is None
+        else bool(initial_expanded)
+    )
 
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
@@ -205,6 +215,11 @@ def build_dynamic_collapsible_bucket(
         bucket_key=bucket_key,
         title=title,
         helper_text=helper_text,
+        # Dynamic accessories begin parked and hidden.  Do not consult the
+        # currently persisted mode here: it may not own this accessory.
+        # _place_custom_accessories() applies the canonical state once the
+        # accessory is attached to a compatible lazy body.
+        initial_expanded=False,
     )
 
 

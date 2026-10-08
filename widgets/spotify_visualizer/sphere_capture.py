@@ -1,4 +1,4 @@
-"""Lazy logical-frame capture for experimental Voxel Sphere."""
+"""Lazy logical-frame capture for Voxel Sphere."""
 from __future__ import annotations
 
 from typing import Any

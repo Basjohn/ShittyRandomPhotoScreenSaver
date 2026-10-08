@@ -13,7 +13,9 @@ from rendering.custom_layout_contract import (
     denormalize_local_rect,
     deserialize_custom_layout_entry,
     get_screen_layout_entries_for_screen,
+    get_screen_layout_entries_for_aliases,
     get_screen_signature,
+    get_screen_signature_aliases,
     get_widget_layout_variant_payload,
     load_custom_layout_map,
 )
@@ -65,6 +67,20 @@ def geometry_variant_for_presentation(
 ) -> str:
     """Resolve the independently persisted variant for one live presentation."""
 
+    if widget_id == "spotify_visualizer":
+        controller = getattr(presentation, "controller", None)
+        mode_id = getattr(controller, "mode_id", None)
+        if mode_id is None and isinstance(widgets, Mapping):
+            section = widgets.get("spotify_visualizer", {})
+            mode_id = section.get("mode") if isinstance(section, Mapping) else None
+        from core.settings.visualizer_mode_registry import (
+            coerce_visualizer_mode_id,
+            get_visualizer_geometry_profile,
+        )
+
+        return get_visualizer_geometry_profile(
+            coerce_visualizer_mode_id(str(mode_id or "spectrum"))
+        )
     if widget_id not in {"clock", "clock2", "clock3"}:
         return "default"
     model = getattr(presentation, "model", None)
@@ -133,12 +149,90 @@ def resolve_quick_committed_entry(
     nothing, which dropped content-sized Clock placements at generation start.
     """
 
+    if widget_id == "spotify_visualizer":
+        section = widgets.get(widget_id, {})
+        mode_id = section.get("mode") if isinstance(section, Mapping) else "spectrum"
+        return resolve_visualizer_custom_entry(widgets, screen, mode_id)
     variant = (
         _clock_variant_from_widgets(widgets, widget_id, screen=screen)
         if widget_id in {"clock", "clock2", "clock3"}
         else "default"
     )
     return resolve_quick_custom_entry(widgets, screen, widget_id, geometry_variant=variant)
+
+
+def resolve_visualizer_custom_entry(
+    widgets: Mapping[str, Any],
+    screen: Any,
+    mode_id: object,
+    *,
+    legacy_geometry_profile: str | None = None,
+) -> CustomLayoutEntry | None:
+    return resolve_visualizer_custom_entry_for_aliases(
+        widgets, get_screen_signature_aliases(screen), mode_id,
+        legacy_geometry_profile=legacy_geometry_profile,
+    )
+
+
+def resolve_visualizer_custom_entry_for_aliases(
+    widgets: Mapping[str, Any],
+    signature_aliases: tuple[str, ...],
+    mode_id: object,
+    *,
+    legacy_geometry_profile: str | None = None,
+) -> CustomLayoutEntry | None:
+    """Resolve one Visualizer profile with legacy input interpretation.
+
+    A legacy ``default`` entry has no family identity.  It is therefore read
+    only for the authored active mode's family when that profile has no record, which
+    preserves the pose an existing installation actually authored without
+    cloning it into the other family.  Once a named profile exists it is the
+    sole authority, including when its payload is invalid (that profile then
+    falls back through the normal authored baseline rather than reviving a
+    stale legacy pose).
+    """
+
+    from core.settings.visualizer_mode_registry import (
+        coerce_visualizer_mode_id,
+        get_visualizer_geometry_profile,
+    )
+
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets):
+        return None
+    profile = get_visualizer_geometry_profile(
+        coerce_visualizer_mode_id(str(mode_id or "spectrum"))
+    )
+    custom_map = load_custom_layout_map(widgets)
+    _matched, entries = get_screen_layout_entries_for_aliases(custom_map, signature_aliases)
+    profile_payload = get_widget_layout_variant_payload(
+        entries,
+        "spotify_visualizer",
+        profile,
+    )
+    # Normalization drops non-mapping payloads. Their named key still marks a
+    # corrupt authored profile, so it must not resurrect legacy geometry.
+    raw_map = widgets.get("custom_layout", {})
+    _, raw_entries = get_screen_layout_entries_for_aliases(
+        raw_map if isinstance(raw_map, Mapping) else {}, signature_aliases
+    )
+    variants = raw_entries.get("spotify_visualizer", {})
+    if isinstance(variants, Mapping) and profile in variants:
+        return deserialize_custom_layout_entry(
+            "spotify_visualizer", profile, profile_payload
+        )
+    section = widgets.get("spotify_visualizer", {})
+    authored_mode = section.get("mode") if isinstance(section, Mapping) else None
+    authored_profile = get_visualizer_geometry_profile(
+        coerce_visualizer_mode_id(str(authored_mode or "spectrum"))
+    )
+    if profile != (legacy_geometry_profile or authored_profile):
+        return None
+    legacy_payload = get_widget_layout_variant_payload(
+        entries, "spotify_visualizer", "default"
+    )
+    return deserialize_custom_layout_entry(
+        "spotify_visualizer", "default", legacy_payload
+    )
 
 
 def resolve_quick_committed_variant_state(
@@ -249,6 +343,14 @@ def resolve_quick_committed_geometry(
 ) -> OverlayWidgetGeometry | None:
     """Return a display-local committed rect for pre-bind family admission."""
 
+    if widget_id == "spotify_visualizer":
+        entry = resolve_quick_committed_entry(widgets, screen, widget_id)
+        if entry is None:
+            return None
+        local = resolve_committed_visualizer_rect(entry, screen.geometry().size())
+        return OverlayWidgetGeometry(
+            float(local.x()), float(local.y()), float(local.width()), float(local.height())
+        )
     variant = (
         _clock_variant_from_widgets(widgets, widget_id, screen=screen)
         if widget_id in {"clock", "clock2", "clock3"}
@@ -300,4 +402,6 @@ __all__ = [
     "resolve_quick_committed_geometry",
     "resolve_quick_committed_variant_state",
     "resolve_quick_custom_entry",
+    "resolve_visualizer_custom_entry",
+    "resolve_visualizer_custom_entry_for_aliases",
 ]

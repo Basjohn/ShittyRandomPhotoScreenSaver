@@ -11,6 +11,8 @@ from core.settings.models._spotify_visualizer import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     build_visualizer_mode_activation,
+    get_visualizer_mode_descriptor,
+    is_mode_active,
     resolve_effective_enabled_modes,
 )
 from core.settings.visualizer_settings_snapshot import (
@@ -52,6 +54,17 @@ def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> 
         _canonical_activation()
     )
 
+
+
+def test_sphere_is_a_standard_selectable_registry_mode() -> None:
+    descriptor = get_visualizer_mode_descriptor("sphere")
+    assert descriptor.display_name == "Voxel Sphere"
+    assert descriptor.guided_setup_offered is True
+    assert is_mode_active("sphere") is True
+
+    activation = build_visualizer_mode_activation(("sphere",))
+    assert activation["sphere"] is True
+    assert resolve_effective_enabled_modes(activation) == ("sphere",)
 
 def test_model_serializes_only_current_mode_activation_schema() -> None:
     selected = ("spectrum", "bubble", "sphere")

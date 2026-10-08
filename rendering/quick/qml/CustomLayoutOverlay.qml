@@ -22,13 +22,16 @@ Item {
     property color closeButtonColor: "#000000"
     property color closeButtonBorderColor: "#ffffff"
     property color closeButtonGlyphColor: "#ffffff"
-    // Discrete Visualizer display-hop controls reuse the resolved menu/theme
-    // palette. They are intentionally separate from drag transfer so native
-    // QQuickWindow pointer grabs are not the only way to change ownership.
-    property color transferButtonColor: "#f21b1d24"
-    property color transferButtonHoverColor: "#4f77b9e8"
-    property color transferButtonBorderColor: "#d8f3ff"
-    property color transferButtonGlyphColor: "#d8f3ff"
+    // Edit chrome deliberately uses a neutral graphite family rather than the
+    // Widget Theme accent palette. Different affordances keep slightly different
+    // values so their hierarchy remains readable without reverting to cyan/blue.
+    property color transferButtonColor: "#e01b1e23"
+    property color transferButtonHoverColor: "#ee353a41"
+    property color transferButtonBorderColor: "#c0777d86"
+    property color transferButtonGlyphColor: "#f2f4f7"
+    property color contentEnvelopeFrameColor: "#d05f656d"
+    property color contentEnvelopePivotColor: "#e06f757d"
+    property color contentEnvelopePivotBorderColor: "#f1d7dbe0"
 
     visible: editActive
     enabled: editActive
@@ -145,7 +148,7 @@ Item {
             x: Number(modelData.position)
             width: 3
             height: customLayoutOverlay.height
-            color: "#aa5ea8ff"
+            color: "#aa696f77"
         }
     }
 
@@ -158,7 +161,7 @@ Item {
             y: Number(modelData.position)
             width: customLayoutOverlay.width
             height: 3
-            color: "#aa5ea8ff"
+            color: "#aa696f77"
         }
     }
 
@@ -180,12 +183,40 @@ Item {
             required property bool contentRotationCapable
             required property bool selectedForChildEdit
             required property var presentationItem
+            required property var contentEnvelopeItem
             // Qt may project a Python None role as QML `undefined` rather than
             // `null` (Visualizer intentionally has no editable-child presentation).
             // Keep one lifecycle-safe gate so parent edit gestures never dereference
             // an absent child presentation before their own gesture can begin.
             readonly property bool hasPresentationItem:
                 presentationItem !== null && presentationItem !== undefined
+            readonly property var contentEnvelope: {
+                const item = contentEnvelopeItem
+                return item && item.editContentEnvelope
+                    ? item.editContentEnvelope : ({ admitted: false })
+            }
+            readonly property bool hasContentEnvelope:
+                widgetId === "spotify_visualizer"
+                && Boolean(contentEnvelope.admitted)
+                && Number(contentEnvelope.right) > Number(contentEnvelope.left)
+                && Number(contentEnvelope.bottom) > Number(contentEnvelope.top)
+            // The renderer's item-local projected bounds are mapped into the
+            // existing session frame only for paint. They are never supplied to
+            // movement, snapping, collision or the session payload.
+            readonly property point contentEnvelopeTopLeft: hasContentEnvelope
+                ? contentEnvelopeItem.mapToItem(
+                    editFrame, Number(contentEnvelope.left), Number(contentEnvelope.top)
+                ) : Qt.point(0, 0)
+            readonly property point contentEnvelopeBottomRight: hasContentEnvelope
+                ? contentEnvelopeItem.mapToItem(
+                    editFrame, Number(contentEnvelope.right), Number(contentEnvelope.bottom)
+                ) : Qt.point(0, 0)
+            readonly property point contentEnvelopePivot: hasContentEnvelope
+                ? contentEnvelopeItem.mapToItem(
+                    editFrame, Number(contentEnvelope.pivot_x), Number(contentEnvelope.pivot_y)
+                ) : Qt.point(0, 0)
+            readonly property bool altThreeDGestureAdmitted:
+                widgetId === "spotify_visualizer" && Boolean(contentEnvelope.orbit_admitted)
             required property int childStateRevision
             required property bool childCollisionEnabled
             required property real resizeScale
@@ -274,6 +305,173 @@ Item {
                 color: "transparent"
                 border.width: 2
                 border.color: "#fff4f4f4"
+                opacity: editFrame.hasContentEnvelope ? 0.35 : 1.0
+            }
+
+            // The persisted rectangle is deliberately still visible as the
+            // secondary stage. Extruded's primary cue projects the accepted
+            // bars, not the full-height render-target allocation. Sampled only
+            // at Edit edges, it never chases audio or changes saved geometry.
+            property bool contentOrbitDragging: false
+            property rect frozenOrbitRect: Qt.rect(0, 0, 0, 0)
+            readonly property rect liveOrbitRect: Qt.rect(
+                contentEnvelopeTopLeft.x, contentEnvelopeTopLeft.y,
+                Math.max(0, contentEnvelopeBottomRight.x - contentEnvelopeTopLeft.x),
+                Math.max(0, contentEnvelopeBottomRight.y - contentEnvelopeTopLeft.y))
+            readonly property bool orbitHitFrozen: contentOrbitDragging || moveArea.altOrbitDragging
+            readonly property rect orbitRect: orbitHitFrozen ? frozenOrbitRect : liveOrbitRect
+            Connections {
+                target: moveArea
+                function onAltOrbitDraggingChanged() {
+                    if (moveArea.altOrbitDragging) {
+                        editFrame.frozenOrbitRect = editFrame.liveOrbitRect
+                    }
+                }
+            }
+            function beginContentOrbit() {
+                frozenOrbitRect = liveOrbitRect
+                contentOrbitDragging = true
+                customLayoutOverlay.sessionModel.selectItem(index)
+            }
+            function finishContentOrbit() {
+                if (customLayoutOverlay.sessionModel)
+                    customLayoutOverlay.sessionModel.finishVisualizerOrbitInEdit(index)
+                contentOrbitDragging = false
+            }
+            Rectangle {
+                id: contentEnvelopeFrame
+                objectName: "customLayoutContentEnvelope-" + editFrame.widgetId
+                visible: editFrame.hasContentEnvelope
+                x: editFrame.liveOrbitRect.x
+                y: editFrame.liveOrbitRect.y
+                width: editFrame.liveOrbitRect.width
+                height: editFrame.liveOrbitRect.height
+                color: "transparent"
+                border.width: 2
+                border.color: customLayoutOverlay.contentEnvelopeFrameColor
+                opacity: 0.95
+                z: 18
+            }
+
+            Rectangle {
+                id: contentEnvelopePivot
+                objectName: "customLayoutContentPivot-" + editFrame.widgetId
+                visible: editFrame.hasContentEnvelope && editFrame.contentEnvelope.mode !== "extruded_spectrum"
+                width: 10
+                height: 10
+                radius: width / 2
+                x: editFrame.contentEnvelopePivot.x - width / 2
+                y: editFrame.contentEnvelopePivot.y - height / 2
+                color: customLayoutOverlay.contentEnvelopePivotColor
+                border.width: 1
+                border.color: customLayoutOverlay.contentEnvelopePivotBorderColor
+                z: 19
+            }
+
+            MouseArea {
+                id: contentOverflowOrbit
+                objectName: "customLayoutOverflowOrbit-" + editFrame.widgetId
+                visible: editFrame.hasContentEnvelope
+                x: editFrame.orbitRect.x
+                y: editFrame.orbitRect.y
+                width: editFrame.orbitRect.width
+                height: editFrame.orbitRect.height
+                z: -1
+                acceptedButtons: Qt.LeftButton
+                property point lastPoint: Qt.point(0, 0)
+                onPressed: function(mouse) {
+                    const point = mapToItem(editFrame, mouse.x, mouse.y)
+                    if (!(mouse.modifiers & Qt.AltModifier)
+                            || (point.x >= 0 && point.y >= 0
+                                && point.x <= editFrame.width && point.y <= editFrame.height)) {
+                        mouse.accepted = false
+                        return
+                    }
+                    lastPoint = mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                    editFrame.beginContentOrbit()
+                    mouse.accepted = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed || !editFrame.contentOrbitDragging) return
+                    const point = mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                    customLayoutOverlay.sessionModel.orbitVisualizerInEdit(
+                        editFrame.index, point.x - lastPoint.x, point.y - lastPoint.y)
+                    lastPoint = point
+                }
+                onReleased: function(mouse) {
+                    if (editFrame.contentOrbitDragging) editFrame.finishContentOrbit()
+                    mouse.accepted = true
+                }
+                onCanceled: if (editFrame.contentOrbitDragging) editFrame.finishContentOrbit()
+                onWheel: function(wheel) {
+                    wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
+                }
+            }
+
+            Rectangle {
+                id: contentOrbitControl
+                objectName: "customLayoutOrbit-" + editFrame.widgetId
+                visible: editFrame.altThreeDGestureAdmitted && editFrame.selectedForChildEdit
+                width: 22
+                height: 22
+                radius: width / 2
+                // Freeform-3D has no quarter-turn content action. Put Orbit in
+                // the same stable parent-glyph row beside Restore instead of
+                // chasing the moving projected content envelope.
+                x: restoreSizeControl.visible
+                    ? restoreSizeControl.x + restoreSizeControl.width + 6 : 10
+                y: restoreSizeControl.visible
+                    ? restoreSizeControl.y
+                    : Math.max(1.0, editFrame.height - height - 10.0)
+                z: 120
+                antialiasing: true
+                opacity: editFrame.parentGlyphControlsOpacity
+                enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
+                color: orbitControlMouse.containsMouse
+                    ? customLayoutOverlay.transferButtonHoverColor
+                    : customLayoutOverlay.transferButtonColor
+                border.color: customLayoutOverlay.transferButtonBorderColor
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "↔↕"
+                    color: customLayoutOverlay.transferButtonGlyphColor
+                    font.pixelSize: 10
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    id: orbitControlMouse
+                    objectName: "customLayoutOrbitDrag-" + editFrame.widgetId
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.SizeAllCursor
+                    acceptedButtons: Qt.LeftButton
+                    property point lastPoint: Qt.point(0, 0)
+                    onPressed: function(mouse) {
+                        lastPoint = mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                        editFrame.beginContentOrbit()
+                        mouse.accepted = true
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const point = mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                        customLayoutOverlay.sessionModel.orbitVisualizerInEdit(
+                            editFrame.index, point.x - lastPoint.x, point.y - lastPoint.y)
+                        lastPoint = point
+                    }
+                    onReleased: function(mouse) {
+                        editFrame.finishContentOrbit()
+                        mouse.accepted = true
+                    }
+                    onCanceled: if (editFrame.contentOrbitDragging) editFrame.finishContentOrbit()
+                    onWheel: function(wheel) {
+                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
+                    }
+                }
             }
 
             Rectangle {
@@ -512,7 +710,7 @@ Item {
                         editFrame.toggleChildEditLock()
                     }
                     onWheel: function(wheel) {
-                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
                     }
                 }
             }
@@ -521,8 +719,8 @@ Item {
                 id: parentGlyphControlWedge
                 objectName: "customLayoutParentGlyphToggle-" + editFrame.widgetId
                 visible: editFrame.selectedForChildEdit
-                width: editFrame.controlsWedgeVertical ? 22 : 104
-                height: editFrame.controlsWedgeVertical ? 104 : 22
+                width: editFrame.controlsWedgeVertical ? 22 : 56
+                height: editFrame.controlsWedgeVertical ? 56 : 22
                 radius: 6
                 x: editFrame.controlsWedgeSide === "right"
                     ? editFrame.width - 3.0
@@ -565,7 +763,7 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     text: editFrame.parentGlyphControlsHidden
-                        ? "SHOW CONTROLS" : "HIDE CONTROLS"
+                        ? "SHOW" : "HIDE"
                     color: customLayoutOverlay.transferButtonGlyphColor
                     font.pixelSize: 9
                     font.bold: true
@@ -595,12 +793,12 @@ Item {
             // path must still resize the selected PARENT through the same owner,
             // including when the pointer is above a child or one of its handles.
             // This function holds no independent scale/geometry state.
-            function resizeParentByWheel(deltaY) {
+            function resizeParentByWheel(deltaX, deltaY) {
                 if (!editFrame.resizable || !customLayoutOverlay.sessionModel)
                     return false
                 customLayoutOverlay.sessionModel.selectItem(editFrame.index)
-                return customLayoutOverlay.sessionModel.resizeWheel(
-                    editFrame.index, deltaY
+                return customLayoutOverlay.sessionModel.resizeWheelDelta(
+                    editFrame.index, deltaX, deltaY
                 )
             }
 
@@ -613,13 +811,41 @@ Item {
                 // Chrome owns its own higher z; do not remove an entire row of
                 // parent hit area to protect one top-right close button.
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 property real pressOffsetX: 0
                 property real pressOffsetY: 0
+                property bool altOrbitDragging: false
+                property bool altMoveDragging: false
+                property point lastOrbitPoint: Qt.point(0, 0)
 
                 onPressed: function(mouse) {
+                    const altThreeD = editFrame.altThreeDGestureAdmitted
+                        && Boolean(mouse.modifiers & Qt.AltModifier)
+                    const point = moveArea.mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                    if (altThreeD && mouse.button === Qt.LeftButton) {
+                        customLayoutOverlay.sessionModel.selectItem(editFrame.index)
+                        altOrbitDragging = true
+                        lastOrbitPoint = point
+                        mouse.accepted = true
+                        return
+                    }
+                    if (altThreeD && mouse.button === Qt.RightButton) {
+                        // This is the normal parent move operation inside the
+                        // existing session, not a direct-gesture transaction.
+                        customLayoutOverlay.sessionModel.selectItem(editFrame.index)
+                        customLayoutOverlay.sessionModel.finishMove()
+                        altMoveDragging = true
+                        pressOffsetX = point.x - editFrame.x
+                        pressOffsetY = point.y - editFrame.y
+                        mouse.accepted = true
+                        return
+                    }
+                    if (mouse.button !== Qt.LeftButton) {
+                        mouse.accepted = false
+                        return
+                    }
                     customLayoutOverlay.sessionModel.selectItem(editFrame.index)
                     customLayoutOverlay.sessionModel.finishMove()
-                    const point = moveArea.mapToItem(customLayoutOverlay, mouse.x, mouse.y)
                     pressOffsetX = point.x - editFrame.x
                     pressOffsetY = point.y - editFrame.y
                 }
@@ -627,6 +853,25 @@ Item {
                     if (!pressed)
                         return
                     const point = moveArea.mapToItem(customLayoutOverlay, mouse.x, mouse.y)
+                    if (altOrbitDragging) {
+                        customLayoutOverlay.sessionModel.orbitVisualizerInEdit(
+                            editFrame.index,
+                            point.x - lastOrbitPoint.x,
+                            point.y - lastOrbitPoint.y
+                        )
+                        lastOrbitPoint = point
+                        return
+                    }
+                    if (altMoveDragging) {
+                        customLayoutOverlay.sessionModel.moveItem(
+                            editFrame.index,
+                            point.x - pressOffsetX,
+                            point.y - pressOffsetY,
+                            point.x,
+                            point.y
+                        )
+                        return
+                    }
                     customLayoutOverlay.sessionModel.moveItem(
                         editFrame.index,
                         point.x - pressOffsetX,
@@ -635,10 +880,32 @@ Item {
                         point.y
                     )
                 }
-                onReleased: customLayoutOverlay.sessionModel.finishMove()
-                onCanceled: customLayoutOverlay.sessionModel.finishMove()
+                onReleased: function(mouse) {
+                    if (altOrbitDragging) {
+                        altOrbitDragging = false
+                        customLayoutOverlay.sessionModel.finishVisualizerOrbitInEdit(editFrame.index)
+                    } else if (altMoveDragging) {
+                        altMoveDragging = false
+                        customLayoutOverlay.sessionModel.finishMove()
+                    } else {
+                        customLayoutOverlay.sessionModel.finishMove()
+                    }
+                    mouse.accepted = true
+                }
+                onCanceled: function() {
+                    if (altOrbitDragging) {
+                        altOrbitDragging = false
+                        customLayoutOverlay.sessionModel.finishVisualizerOrbitInEdit(editFrame.index)
+                    }
+                    if (altMoveDragging)
+                        altMoveDragging = false
+                    customLayoutOverlay.sessionModel.finishMove()
+                }
                 onWheel: function(wheel) {
-                    wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                    // Alt-wheel has the same uniform session resize operation
+                    // as the ordinary Edit wheel. It only becomes a 3D gesture
+                    // when the existing renderer-derived framing admits it.
+                    wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
                 }
             }
 
@@ -772,14 +1039,18 @@ Item {
                     x: leftSide ? -width / 2 : editFrame.width - width / 2
                     y: topSide ? -height / 2 : editFrame.height - height / 2
                     // Visualizer corners are a distinct two-axis viewport-extent
-                    // gesture; use a deeper blue than the one-axis side strips so
+                    // gesture; use a darker graphite than the one-axis side strips so
                     // the edit affordance communicates the semantic difference.
-                    color: editFrame.viewportResizeCapable ? "#e73b7fbe" : "#fff4f4f4"
+                    color: editFrame.viewportResizeCapable ? "#e74b5057" : "#fff4f4f4"
                     border.width: 1
-                    border.color: editFrame.viewportResizeCapable ? "#ff0b2a46" : "#ff222222"
+                    border.color: editFrame.viewportResizeCapable ? "#ff20242a" : "#ff222222"
+                    opacity: editFrame.hasContentEnvelope
+                        && !stageCornerMouse.containsMouse && !stageCornerMouse.pressed ? 0.22 : 1.0
 
                     MouseArea {
+                        id: stageCornerMouse
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: parent.leftSide === parent.topSide
                                      ? Qt.SizeFDiagCursor
                                      : Qt.SizeBDiagCursor
@@ -852,13 +1123,15 @@ Item {
                     // The thin parent boundary also outranks child resize zones
                     // precisely at the outer edge, without covering interior roles.
                     z: 65
-                    // Visualizer viewport edges keep the bright blue; ordinary
-                    // content-extent side edges use a modestly darker blue so the
-                    // two semantics read differently in edit mode.
-                    color: editFrame.viewportResizeCapable ? "#c85ec8ff" : "#c83a78c8"
+                    // Visualizer viewport edges use a lighter graphite; ordinary
+                    // content-extent side edges use a darker graphite so the two
+                    // semantics read differently in edit mode.
+                    color: editFrame.viewportResizeCapable ? "#c85f656d" : "#c84b5058"
                     border.width: 1
-                    border.color: editFrame.viewportResizeCapable ? "#ff10324b" : "#ff0a2038"
+                    border.color: editFrame.viewportResizeCapable ? "#ff252a30" : "#ff1a1e23"
                     radius: 2
+                    opacity: editFrame.hasContentEnvelope
+                        && !stageEdgeMouse.containsMouse && !stageEdgeMouse.pressed ? 0.22 : 1.0
 
                     width: horizontalEdge
                            ? edgeThickness
@@ -878,7 +1151,9 @@ Item {
                           : edgeInset)
 
                     MouseArea {
+                        id: stageEdgeMouse
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: parent.horizontalEdge
                                      ? Qt.SizeHorCursor
                                      : Qt.SizeVerCursor
@@ -984,7 +1259,7 @@ Item {
                                     anchors.bottom: parent.bottom
                                     width: 2
                                     radius: 1
-                                    color: "#a94d9ee5"
+                                    color: "#a9656b73"
                                     transform: Translate { x: columnGrip.previewOffsetX }
                                 }
                                 Rectangle {
@@ -995,9 +1270,9 @@ Item {
                                     radius: 4
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.top: parent.top
-                                    color: "#d8265eaa"
+                                    color: "#d83e434a"
                                     border.width: 1
-                                    border.color: "#e8d6edff"
+                                    border.color: "#e89ba1a9"
                                     transform: Translate { x: columnGrip.previewOffsetX }
                                     Text {
                                         anchors.centerIn: parent
@@ -1115,7 +1390,7 @@ Item {
                             x: childRoleLayer.childVerticalGuidePosition
                             width: semantic ? 3 : 2
                             height: childRoleLayer.height
-                            color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
+                            color: semantic ? "#dc7a8088" : "#b4666c74"
                         }
 
                         Rectangle {
@@ -1126,7 +1401,7 @@ Item {
                             y: childRoleLayer.childHorizontalGuidePosition
                             width: childRoleLayer.width
                             height: semantic ? 3 : 2
-                            color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
+                            color: semantic ? "#dc7a8088" : "#b4666c74"
                         }
 
                         NumberAnimation on opacity {
@@ -2687,7 +2962,7 @@ Item {
                                     color: "transparent"
                                     border.width: childRoleFrame.semanticAnchor.length > 0 ? 2 : 1
                                     border.color: childRoleFrame.semanticAnchor.length > 0
-                                        ? "#dc8bc8ff" : "#a85f9fd7"
+                                        ? "#dc7a8088" : "#a85f656d"
                                     radius: 2
                                 }
 
@@ -2716,15 +2991,15 @@ Item {
                                     // visible move grip must win the central
                                     // 20px without stealing the outer corners.
                                     z: 5
-                                    color: "#eb142a40"
+                                    color: "#eb252a30"
                                     border.width: 1
-                                    border.color: "#d0a6d8ff"
+                                    border.color: "#d08c929a"
                                     Rectangle {
                                         width: 8
                                         height: 2
                                         radius: 1
                                         anchors.centerIn: parent
-                                        color: "#e3eaf7ff"
+                                        color: "#e3e6e9ed"
                                     }
                                 }
 
@@ -2755,7 +3030,7 @@ Item {
                                     }
 
                                     onWheel: function(wheel) {
-                                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
                                     }
 
                                     onPressed: function(mouse) {
@@ -2880,13 +3155,13 @@ Item {
                                         width: 16
                                         height: 16
                                         radius: width / 2.0
-                                        color: "#e01d2f42"
+                                        color: "#e02b3036"
                                         border.width: 1
-                                        border.color: "#d078b7e8"
+                                        border.color: "#d0767c84"
                                         Text {
                                             anchors.centerIn: parent
                                             text: "↔"
-                                            color: "#f0d8f3ff"
+                                            color: "#f0e7eaed"
                                             font.pixelSize: 10
                                             font.bold: true
                                         }
@@ -2957,9 +3232,9 @@ Item {
                                             width: 8
                                             height: 8
                                             radius: 2
-                                            color: "#e078b7e8"
+                                            color: "#e0767c84"
                                             border.width: 1
-                                            border.color: "#ff14344d"
+                                            border.color: "#ff252a31"
                                         }
 
                                         MouseArea {
@@ -2970,7 +3245,7 @@ Item {
                                                 : Qt.SizeBDiagCursor
                                             propagateComposedEvents: false
                                             onWheel: function(wheel) {
-                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
                                             }
 
                                             function overlayPoint(mouse) {
@@ -3065,7 +3340,7 @@ Item {
                                                 ? Qt.SizeHorCursor : Qt.SizeVerCursor
                                             propagateComposedEvents: false
                                             onWheel: function(wheel) {
-                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)
                                             }
 
                                             function overlayPoint(mouse) {
@@ -3201,7 +3476,7 @@ Item {
                                     height: 3
                                     radius: 1.5
                                     antialiasing: true
-                                    color: "#dc6aa8e8"
+                                    color: "#dc737981"
                                     // Corner orientation is the mirror of the ordinary
                                     // square-resize cursor mapping: e.g. bottom-right must
                                     // run from the bottom-strip endpoint up to the

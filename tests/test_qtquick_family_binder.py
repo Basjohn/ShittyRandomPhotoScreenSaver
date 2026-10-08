@@ -310,6 +310,31 @@ def test_new_service_backed_adapters_retire_owner_if_qml_construction_fails(
     assert manager.retired == [widget_id]
 
 
+@pytest.mark.qt
+def test_global_card_border_width_reaches_representative_family_styles(qt_app) -> None:
+    widgets = {"global": {"card_border_width_px": 7.0}}
+    shadow = require_canonical_default("widgets.shadows")
+    cases = (
+        (ClockFamilyAdapter(), "clock"),
+        (WeatherFamilyAdapter(), "weather"),
+        (RedditFamilyAdapter(), "reddit"),
+        (GmailFamilyAdapter(), "gmail"),
+        (AchievementPulseFamilyAdapter(), "achievement_pulse"),
+        (FriendPulseFamilyAdapter(), "friend_pulse"),
+        (SystemStatsFamilyAdapter(), "system_stats"),
+        (MediaFamilyAdapter(), "media"),
+    )
+    for adapter, widget_id in cases:
+        model = adapter.presentation_model(
+            widget_id=widget_id, widgets_config=widgets, shadow_values=shadow,
+            display_identity="screen:a", runtime_generation=991,
+        )
+        assert adapter.presentation_card_style(model).border_width == pytest.approx(7.0), widget_id
+        if hasattr(model, "retire"):
+            model.retire()
+    qt_app.processEvents()
+
+
 def test_reddit_adapter_enumerates_both_members_without_qt() -> None:
     adapter = RedditFamilyAdapter()
     assert adapter.family_id == "reddit"

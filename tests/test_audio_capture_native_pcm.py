@@ -122,13 +122,34 @@ def test_callback_during_native_open_keeps_first_valid_health_observation(monkey
     backend.stop()
 
 
-@pytest.mark.parametrize("backend_type", [PyAudioWPatchBackend, SounddeviceBackend])
-def test_native_shape_mismatch_never_flattens_or_changes_channel_meaning(monkeypatch, backend_type):
-    backend, _opens, callbacks, _released = _selected_backend(monkeypatch, backend_type)
+@pytest.mark.parametrize("advisory_frame_count", [1, 2, 4, 4096])
+def test_pyaudio_valid_float32_payload_uses_actual_channel_framing_not_advisory_frame_count(
+    monkeypatch, advisory_frame_count
+):
+    """R-108: callback metadata must never become a second PCM-shape authority.
+
+    The native packet contains three stereo frames.  Deliberately lie in both
+    directions through PortAudio's advisory frame_count and prove the exact
+    delivered float32 payload still crosses the native boundary unchanged.
+    """
+    backend, _opens, callbacks, _released = _selected_backend(monkeypatch, PyAudioWPatchBackend)
+    received = []
+    assert backend.start(received.append) is True
+    pcm = np.arange(6, dtype="float32").reshape(3, 2)
+    callbacks[0](pcm.tobytes(), advisory_frame_count, None, None)
+    assert len(received) == 1
+    np.testing.assert_array_equal(received[0], pcm)
+    assert backend.is_healthy() is True
+    assert backend._native_callback_failures == 0
+    backend.stop()
+
+
+def test_sounddevice_native_shape_mismatch_never_flattens_or_changes_channel_meaning(monkeypatch):
+    backend, _opens, callbacks, _released = _selected_backend(monkeypatch, SounddeviceBackend)
     received = []
     assert backend.start(received.append) is True
     pcm = np.ones((2, 3), dtype="float32")
-    callbacks[0](pcm.tobytes() if backend_type is PyAudioWPatchBackend else pcm, 2, None, None)
+    callbacks[0](pcm, 2, None, None)
     assert received == []
     assert backend._last_callback_ts == 0.0
     assert backend._native_callback_failures == 1

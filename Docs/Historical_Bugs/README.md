@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-10-02
+Last updated: 2026-10-08
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -28,6 +28,9 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
+- [R-110 — Refresh animator turned network latency into an unbounded Qt Quick render storm](R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **FIXED IN CODE / REGRESSION-PROTECTED / PHYSICAL RECHECK PENDING**. Infinite QML refresh animators were the only new continuous animation owners; they drove the retained 4K scene into the hundreds of swaps/s for the lifetime of network refreshes.
+- [R-109 — Visualizer Settings bucket schema drift crashed Settings open](R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Parked shared accessories no longer query an incompatible persisted active mode, and C6 Extruded/Shockwave bucket identities are canonical again.
+- [R-108 — Card chrome parity, Spectrum raster flicker and native-capture packet framing](R-108_Card_Chrome_Parity_And_Spectrum_Regression_Audit.md) — **SPECTRUM PHYSICALLY ACCEPTED / CAPTURE FIX REGRESSION-PROTECTED / C4-C5 WIDER PHYSICAL GATE OPEN**. Moving-cap raster coverage and PyAudioWPatch actual-payload framing now have permanent regression oracles.
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed interval-1 validation was materially worse; production remains on the release-era interval-0 policy.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. 58-minute Windows soak preserved scaled-prefetch liveness under sustained eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. 58-minute Windows soak showed no zero-delay recursive re-arm storm or request multiplication.
@@ -42,6 +45,8 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-110 — Refresh Animator Unbounded Quick Render Storm](R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **FIXED IN CODE / REGRESSION-PROTECTED / PHYSICAL RECHECK PENDING**. Never bind an infinite retained-QML animation to asynchronous network lifetime under the accepted interval-0 surface policy.
+- [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Stable accessory bootstrap and C6 bucket-schema ownership are now explicit.
 - [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Parser-process isolation, durable warm artwork identity and coherent presentation-state ownership.
 - [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. Retained Media affinity context; no per-query Proactor/manager churn.
 - [R-102 — Frozen Qt Quick Runtime Pruned PySide6.QtOpenGL](R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) — **SOLVED**. Frozen QtQuick binding dependency restored without reviving OpenGLWidgets.

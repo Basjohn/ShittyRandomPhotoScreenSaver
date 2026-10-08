@@ -8,8 +8,10 @@ Media bands recentre independently, and Gmail fixed rows/header escaped the
 shell. Save/replay faithfully reproduced the broken geometry.
 
 The fix is a single retained-presentation scale (``OverlayWidget``
-``uniformScaleTransform``): the whole authored card is laid out once at its
-baseline content size and scaled as one coordinate relationship, with the factor
+``uniformScaleTransform``): the authored content/card geometry is laid out once at
+its baseline content size and scaled as one coordinate relationship, with the outer
+Card Border Width inverse-compensated so that one global visible stroke does not
+change thickness between differently-scaled widgets. The factor
 derived from the Python-assigned outer rect / baseline-preferred ratio (no
 QML->Python feedback, no second geometry owner). CUSTOM resize for these families
 is therefore purely geometric; font/artwork stay Settings-owned.
@@ -234,6 +236,12 @@ def test_reddit_uniform_scale_is_min_ratio_and_preserves_aspect(qt_app) -> None:
             # The authored coordinate box never changes; only the whole scales.
             assert float(authored.property("width")) == pytest.approx(base_w)
             assert float(authored.property("height")) == pytest.approx(base_h)
+            # Card Border Width is global visible chrome, not content geometry.
+            # The authored root therefore carries the inverse width so its
+            # finished stroke remains exact at every CUSTOM scale.
+            card = _child(item, "overlayWidgetCard")
+            assert float(item.property("cardBorderWidth")) == pytest.approx(4.0)
+            assert float(card.property("borderWidth")) * factor == pytest.approx(4.0, abs=0.01)
             # Scaled box fills the outer rect (uniform, no single-axis distortion).
             scale = float(authored.property("scale"))
             assert float(authored.property("width")) * scale == pytest.approx(
