@@ -88,6 +88,10 @@ class CustomLayoutSessionItem:
     current_size_payload: dict[str, Any]
     baseline_enabled: bool
     current_enabled: bool
+    # Visualizer-only migration provenance.  A legacy ``default`` CUSTOM entry
+    # is interpreted for the profile active at hydration, then promoted into
+    # that named profile at the next normal Save before ``default`` retires.
+    legacy_geometry_variant: str | None = None
     is_duplicate: bool = False
     resize_capable: bool = False
     # Absolute CUSTOM resize scale at admission.  Unlike the mutable working

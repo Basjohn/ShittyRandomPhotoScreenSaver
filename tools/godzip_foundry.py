@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -78,6 +79,87 @@ def set_windows_app_id() -> None:
         )
     except (AttributeError, OSError, ValueError):
         pass
+
+
+def _shell_open_associated_document(path: Path) -> int:
+    """Open one document through the Windows shell and return a waitable handle.
+
+    ``cmd /c start`` is deliberately not used here. Besides being sensitive to
+    command-line quoting, it can report success even when no associated editor is
+    actually launched. ShellExecuteEx is the association authority and, when the
+    editor starts a distinct process, SEE_MASK_NOCLOSEPROCESS gives us a real
+    process handle without polling. Single-instance/DDE editors may legitimately
+    return no handle; the caller then keeps the snapshot armed for manual CHECK.
+    """
+
+    if sys.platform != "win32":
+        raise OSError("Windows document association launch requested off Windows")
+
+    class SHELLEXECUTEINFOW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_ulong),
+            ("fMask", ctypes.c_ulong),
+            ("hwnd", ctypes.c_void_p),
+            ("lpVerb", ctypes.c_wchar_p),
+            ("lpFile", ctypes.c_wchar_p),
+            ("lpParameters", ctypes.c_wchar_p),
+            ("lpDirectory", ctypes.c_wchar_p),
+            ("nShow", ctypes.c_int),
+            ("hInstApp", ctypes.c_void_p),
+            ("lpIDList", ctypes.c_void_p),
+            ("lpClass", ctypes.c_wchar_p),
+            ("hkeyClass", ctypes.c_void_p),
+            ("dwHotKey", ctypes.c_ulong),
+            ("hIcon", ctypes.c_void_p),
+            ("hProcess", ctypes.c_void_p),
+        ]
+
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    launch = shell32.ShellExecuteExW
+    launch.argtypes = [ctypes.POINTER(SHELLEXECUTEINFOW)]
+    launch.restype = ctypes.c_int
+
+    info = SHELLEXECUTEINFOW()
+    info.cbSize = ctypes.sizeof(SHELLEXECUTEINFOW)
+    info.fMask = 0x00000040  # SEE_MASK_NOCLOSEPROCESS
+    info.lpVerb = "open"
+    info.lpFile = str(Path(path).resolve())
+    info.lpDirectory = str(Path(path).resolve().parent)
+    info.nShow = 1  # SW_SHOWNORMAL
+
+    if not launch(ctypes.byref(info)):
+        native_error = int(ctypes.get_last_error() or 0)
+        # ``os.startfile`` is still a real ShellExecute-backed open and is a safer
+        # fallback than claiming success. It cannot provide an editor lifetime.
+        try:
+            os.startfile(str(path))
+        except OSError as exc:
+            if native_error:
+                raise OSError(native_error, os.strerror(native_error), str(path)) from exc
+            raise
+        return 0
+    return int(info.hProcess or 0)
+
+
+def _wait_and_close_windows_process_handle(handle: int) -> None:
+    """Wait for a ShellExecuteEx process handle and always release it."""
+
+    if not handle:
+        return
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    wait = kernel32.WaitForSingleObject
+    wait.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    wait.restype = ctypes.c_ulong
+    close = kernel32.CloseHandle
+    close.argtypes = [ctypes.c_void_p]
+    close.restype = ctypes.c_int
+    try:
+        result = int(wait(ctypes.c_void_p(handle), 0xFFFFFFFF))
+        if result == 0xFFFFFFFF:  # WAIT_FAILED
+            error = int(ctypes.get_last_error() or 1)
+            raise OSError(error, os.strerror(error))
+    finally:
+        close(ctypes.c_void_p(handle))
 
 
 _DPI_MODE = enable_windows_dpi_awareness()
@@ -148,6 +230,7 @@ from godzip_foundry_core import (  # noqa: E402
     discover_run_flags,
     discover_zip_candidates,
     generate_godzip_diff,
+    generate_text_edit_diff,
     git_branch,
     git_changes,
     git_commit_all,
@@ -722,6 +805,14 @@ class _TaskBridge(QObject):
     """Qt signal bridge for one background Foundry operation."""
 
     succeeded = Signal(object)
+    failed = Signal(object)
+
+
+class _PlanEditBridge(QObject):
+    """Cross-thread lifecycle bridge for one external Current Plan edit."""
+
+    opened = Signal(object)
+    finished = Signal(object)
     failed = Signal(object)
 
 
@@ -4340,6 +4431,10 @@ class GodzipFoundryWindow(QMainWindow):
         self._backdrop_applied = False
         self._zip_discovery_cache: dict[tuple[bool, tuple[str, ...]], tuple[Path, ...]] = {}
         self._zip_discovery_generation = 0
+        self._plan_edit_snapshot: str | None = None
+        self._plan_edit_bridge: _PlanEditBridge | None = None
+        self._plan_edit_thread: threading.Thread | None = None
+        self._plan_edit_waiting = False
 
         self.setWindowTitle(APP_TITLE)
         self.setWindowFlags(
@@ -4375,6 +4470,174 @@ class GodzipFoundryWindow(QMainWindow):
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))):
             self.show_error(f"Cannot open {label}", GodzipError(f"Desktop shell refused directory: {target}"))
+
+    def open_current_plan_and_diff(self) -> None:
+        """Open Current_Plan.md and diff only edits made during that session.
+
+        Windows can wait on the file association through ``start /wait`` without
+        polling the editor or filesystem. Other platforms still get the useful
+        open-plan half of the action because desktop shells do not expose a
+        portable document-editor lifetime handle.
+        """
+
+        plan_path = self.repo_root / "Current_Plan.md"
+        if not plan_path.is_file():
+            self.show_error(
+                "Cannot open Current Plan",
+                GodzipError(f"Current_Plan.md does not exist: {plan_path}"),
+            )
+            return
+
+        # A fast-returning/single-instance file association may leave the exact
+        # pre-open snapshot armed for a manual second click. Never overwrite it
+        # with a newer snapshot, or the operator's edits would disappear from the
+        # comparison they are trying to paste back into chat.
+        if self._plan_edit_snapshot is not None and not self._plan_edit_waiting:
+            self._finish_current_plan_diff(manual=True)
+            return
+        if self._plan_edit_waiting:
+            self.set_status("Current_Plan.md editor is still open; close/save it to generate the diff.")
+            return
+
+        try:
+            self._plan_edit_snapshot = plan_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self._plan_edit_snapshot = None
+            self.show_error("Cannot read Current Plan", exc)
+            return
+
+        if sys.platform != "win32":
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(plan_path))):
+                self._plan_edit_snapshot = None
+                self.show_error(
+                    "Cannot open Current Plan",
+                    GodzipError(f"Desktop shell refused file: {plan_path}"),
+                )
+                return
+            self.current_plan_button.setText("CHECK CP DIFF")
+            self.set_status(
+                "Opened Current_Plan.md. Automatic editor-close detection is unavailable here; "
+                "click CHECK CP DIFF after saving."
+            )
+            return
+
+        bridge = _PlanEditBridge(self)
+        self._plan_edit_bridge = bridge
+        self._plan_edit_waiting = True
+        self.current_plan_button.setText("CP OPEN…")
+        bridge.opened.connect(self._on_current_plan_editor_opened)
+        bridge.finished.connect(self._on_current_plan_editor_finished)
+        bridge.failed.connect(self._on_current_plan_editor_failed)
+
+        def wait_for_editor() -> None:
+            started_at = time.monotonic()
+            try:
+                process_handle = _shell_open_associated_document(plan_path)
+                bridge.opened.emit({"waitable": bool(process_handle)})
+                if process_handle:
+                    _wait_and_close_windows_process_handle(process_handle)
+                bridge.finished.emit({
+                    "returncode": 0,
+                    "stderr": "",
+                    "elapsed": max(0.0, time.monotonic() - started_at),
+                    "waitable": bool(process_handle),
+                })
+            except Exception as exc:
+                bridge.failed.emit(exc)
+
+        thread = threading.Thread(
+            target=wait_for_editor,
+            name="godzip-current-plan-editor",
+            daemon=True,
+        )
+        self._plan_edit_thread = thread
+        thread.start()
+        self.set_status("Opening Current_Plan.md through the Windows file association…")
+
+    def _on_current_plan_editor_opened(self, result: object) -> None:
+        payload = result if isinstance(result, dict) else {}
+        if bool(payload.get("waitable", False)):
+            self.set_status(
+                "Opened Current_Plan.md; close/save the editor to generate a diff if it changed."
+            )
+        else:
+            self.current_plan_button.setText("CHECK CP DIFF")
+            self.set_status(
+                "Opened Current_Plan.md in an existing/single-instance editor; "
+                "save it, then click CHECK CP DIFF."
+            )
+
+    def _on_current_plan_editor_finished(self, result: object) -> None:
+        self._plan_edit_waiting = False
+        payload = result if isinstance(result, dict) else {}
+        if int(payload.get("returncode", 0) or 0) != 0:
+            detail = str(payload.get("stderr", "") or "").strip()
+            self._on_current_plan_editor_failed(
+                GodzipError(detail or "The Current Plan editor launcher returned an error.")
+            )
+            return
+        self._finish_current_plan_diff(
+            manual=False,
+            keep_armed_if_unchanged=(
+                not bool(payload.get("waitable", False))
+                or float(payload.get("elapsed", 99.0) or 0.0) < 1.5
+            ),
+        )
+
+    def _on_current_plan_editor_failed(self, error: object) -> None:
+        self._plan_edit_waiting = False
+        self._plan_edit_thread = None
+        self._plan_edit_bridge = None
+        # Keep the snapshot armed: the associated application may still have
+        # opened even when the waitable launcher failed. The button becomes an
+        # explicit CHECK action rather than silently discarding the comparison.
+        self.current_plan_button.setText("CHECK CP DIFF")
+        self.set_status("Could not track editor lifetime; Current Plan snapshot remains armed for manual diff.")
+        if isinstance(error, Exception):
+            self.show_error("Current Plan editor tracking failed", error)
+
+    def _finish_current_plan_diff(
+        self,
+        *,
+        manual: bool,
+        keep_armed_if_unchanged: bool = False,
+    ) -> None:
+        before = self._plan_edit_snapshot
+        if before is None:
+            self.current_plan_button.setText("OPEN CP & DIFF")
+            return
+        plan_path = self.repo_root / "Current_Plan.md"
+        try:
+            after = plan_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self.show_error("Cannot read edited Current Plan", exc)
+            return
+
+        diff_text = generate_text_edit_diff("Current_Plan.md", before, after)
+        self._plan_edit_thread = None
+        self._plan_edit_bridge = None
+        if not diff_text:
+            if manual or keep_armed_if_unchanged:
+                # A manual check may happen before the operator has saved; keep
+                # the original snapshot alive so a later click still sees the
+                # complete session delta.
+                self.current_plan_button.setText("CHECK CP DIFF")
+                self.set_status(
+                    "No saved Current_Plan.md changes yet; diff snapshot remains armed. "
+                    "This also covers editors that hand the file to an existing process."
+                )
+                return
+            self._plan_edit_snapshot = None
+            self.current_plan_button.setText("OPEN CP & DIFF")
+            self.set_status("Current_Plan.md closed with no changes; no diff generated.")
+            return
+
+        self._plan_edit_snapshot = None
+        self.current_plan_button.setText("OPEN CP & DIFF")
+        summary = "Current_Plan.md changed · exact pre-open snapshot → saved file"
+        dialog = DiffResultDialog(self, "CURRENT PLAN DIFF", diff_text, summary)
+        self._track_dialog(dialog)
+        self.set_status("Current Plan diff ready to copy back into chat.")
 
     def _fit_to_screen(self) -> None:
         screen = QApplication.primaryScreen()
@@ -4563,6 +4826,14 @@ class GodzipFoundryWindow(QMainWindow):
         subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         titles.addWidget(subtitle)
         hl.addLayout(titles, 1)
+        self.current_plan_button = QPushButton("OPEN CP & DIFF")
+        self.current_plan_button.setObjectName("toolTitlePlanButton")
+        self.current_plan_button.setFixedHeight(34)
+        self.current_plan_button.setToolTip(
+            "Open Current_Plan.md; if it changes, show a copy-ready diff after the editor closes."
+        )
+        self.current_plan_button.clicked.connect(self.open_current_plan_and_diff)
+        hl.addWidget(self.current_plan_button)
         self.branch_badge = QLabel()
         self.branch_badge.setObjectName("chip")
         self.branch_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)

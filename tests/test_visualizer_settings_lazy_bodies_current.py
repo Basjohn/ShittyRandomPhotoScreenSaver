@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
+
 from core.settings.visualizer_mode_registry import (
     build_visualizer_mode_activation,
     iter_visualizer_mode_descriptors,
+    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_presets import get_custom_preset_index
 from rendering.widget_descriptors import get_widgets_tab_settings_section_descriptors
@@ -64,6 +67,30 @@ def test_widgets_tab_registry_no_longer_hosts_visualizers():
     }
 
 
+@pytest.mark.parametrize(
+    "mode",
+    tuple(descriptor.mode_id for descriptor in iter_visualizer_mode_descriptors()),
+)
+def test_settings_shell_constructs_for_every_persisted_active_visualizer_mode(
+    qt_app, settings_manager, mode
+):
+    """R-109: opening Settings must not assume stable accessories belong to active mode.
+
+    The C6 Settings-authoring pass built the parked Bar Appearance accessory while
+    Bubble was the persisted active mode.  Construction queried
+    ``bubble:bar_appearance`` even though that bucket exists only for modes that
+    physically host the accessory, so Settings died before its dialog appeared.
+    Keep the shell lazy and constructible for every persisted mode identity.
+    """
+    tab = _make_tab(settings_manager, mode)
+    try:
+        assert tab._page_stack.currentWidget() is tab._setup_page
+        assert tab._vis_body_host.constructed_modes() == frozenset()
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+
+
 def test_opening_visualizers_lands_on_setup_and_builds_zero_modes(
     qt_app, settings_manager, monkeypatch
 ):
@@ -78,6 +105,240 @@ def test_opening_visualizers_lands_on_setup_and_builds_zero_modes(
         assert hasattr(tab, "vis_border_opacity")
     finally:
         tab.deleteLater()
+
+
+
+def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
+    qt_app, settings_manager
+):
+    """The migrated 3D Settings bodies must be real usable pages, not source-only schema.
+
+    Exercise the exact lazy path that exposed the quota-stop KeyErrors, then edit one
+    mode-owned presentation value and one Technical value per mode, persist them, and
+    prove a fresh Settings host restores each mode independently.
+    """
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    modes = ("extruded_spectrum", "shockwave_grid", "sphere")
+    # These 3D modes do not participate in the shared 2D Rainbow accessory.
+    # It stays parked/hidden instead of being inserted as a phantom bucket in
+    # each mode. Extruded authors its renderer-specific Faces/Edges rainbow
+    # participation explicitly in its own Appearance bucket.
+    expected_buckets = {
+        "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["Material", "Reflection", "Shadow", "Render", "Ghost"]),
+        "shockwave_grid": (["Appearance", "Waves", "Bar Response"], ["Render"]),
+        "sphere": (["Frequency Zones", "Appearance", "Particle Flow"], ["Reactivity", "Rotation", "Effects"]),
+    }
+    presentation_controls = {
+        "extruded_spectrum": "extruded_spectrum_depth",
+        "shockwave_grid": "shockwave_grid_wave_height",
+        "sphere": "sphere_gloss",
+    }
+
+    tab = _make_tab(settings_manager, "extruded_spectrum", enabled_modes=modes)
+    authored: dict[str, tuple[int, int]] = {}
+    try:
+        for mode in modes:
+            tab._select_mode_page(mode)
+            assert tab._vis_body_host.is_constructed(mode)
+            assert tab._vis_body_host.selected_mode == mode
+
+            normal = getattr(tab, f"_{mode}_normal")
+            advanced = getattr(tab, f"_{mode}_advanced")
+            assert _bucket_titles(normal) == expected_buckets[mode][0]
+            assert _bucket_titles(advanced) == expected_buckets[mode][1]
+            assert not mode_has_rainbow_controls(mode)
+            assert tab._rainbow_controls_container.isHidden()
+
+            if mode == "extruded_spectrum":
+                shape_host = normal.findChild(type(normal), "extruded_spectrum_bucket_shape")
+                response_host = normal.findChild(type(normal), "extruded_spectrum_bucket_response")
+                assert shape_host is not None and response_host is not None
+                assert shape_host.isAncestorOf(tab.extruded_spectrum_shape_editor)
+                assert not response_host.isAncestorOf(tab.extruded_spectrum_shape_editor)
+                assert shape_host.isAncestorOf(tab.extruded_spectrum_mirrored)
+                assert tab._base_appearance_group.parentWidget() is normal
+                assert not hasattr(tab, "extruded_spectrum_colouring")
+                assert hasattr(tab, "extruded_spectrum_rainbow_enabled")
+                assert hasattr(tab, "extruded_spectrum_rainbow_faces")
+                assert hasattr(tab, "extruded_spectrum_rainbow_edges")
+
+            technical = get_per_mode_controls_for_mode(tab, mode)
+            assert technical is not None
+            assert technical["mode_key"] == mode
+            bar_count = technical.get("bar_count")
+            assert bar_count is not None
+
+            presentation = getattr(tab, presentation_controls[mode])
+            new_presentation = (
+                presentation.minimum()
+                if presentation.value() != presentation.minimum()
+                else presentation.maximum()
+            )
+            new_bar_count = (
+                bar_count.minimum()
+                if bar_count.value() != bar_count.minimum()
+                else bar_count.maximum()
+            )
+            presentation.setValue(new_presentation)
+            bar_count.setValue(new_bar_count)
+            tab._save_settings_now()
+            authored[mode] = (new_presentation, new_bar_count)
+
+            persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
+            assert persisted[presentation_controls[mode]] == pytest.approx(
+                new_presentation / 100.0
+            )
+            assert persisted[f"{mode}_bar_count"] == new_bar_count
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+
+    reopened = VisualizersTab(settings_manager)
+    try:
+        for mode in modes:
+            reopened._select_mode_page(mode)
+            technical = get_per_mode_controls_for_mode(reopened, mode)
+            assert technical is not None
+            expected_presentation, expected_bar_count = authored[mode]
+            assert getattr(reopened, presentation_controls[mode]).value() == expected_presentation
+            assert technical["bar_count"].value() == expected_bar_count
+    finally:
+        reopened.deleteLater()
+
+
+
+
+def test_extruded_settings_explicit_rainbow_controls_encode_runtime_colouring_without_combo(
+    qt_app, settings_manager
+):
+    """C6: product authoring is explicit while the renderer keeps its stable enum input."""
+    widgets = _vis_settings("extruded_spectrum", enabled_modes=("extruded_spectrum",))
+    section = widgets["spotify_visualizer"]
+    section["preset_extruded_spectrum"] = get_custom_preset_index("extruded_spectrum")
+    section["extruded_spectrum_colouring"] = "Bar Colours"
+    settings_manager.set("widgets", widgets)
+
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("extruded_spectrum")
+        assert not hasattr(tab, "extruded_spectrum_colouring")
+        assert tab.extruded_spectrum_rainbow_enabled.isChecked() is False
+        assert tab.extruded_spectrum_rainbow_faces.isChecked() is True
+        assert tab.extruded_spectrum_rainbow_faces.isEnabled() is False
+        assert tab.extruded_spectrum_rainbow_edges.isEnabled() is False
+
+        tab.extruded_spectrum_rainbow_enabled.setChecked(True)
+        tab.extruded_spectrum_rainbow_edges.setChecked(True)
+        tab._save_settings_now()
+        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
+        assert persisted["extruded_spectrum_colouring"] == "Spectral Edges"
+
+        tab.extruded_spectrum_rainbow_enabled.setChecked(False)
+        tab._save_settings_now()
+        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
+        assert persisted["extruded_spectrum_colouring"] == "Bar Colours"
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+
+
+def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cross_mode_leakage(
+    qt_app, settings_manager
+):
+    """Exercise the real top-level preset transaction for every current 3D mode.
+
+    A 3D mode leaving Custom must snapshot its own authored Settings state before
+    a curated preset replaces the visible controls. Returning to Custom restores
+    that exact mode-owned snapshot without borrowing from or mutating either of
+    the other 3D modes.
+    """
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    modes = ("extruded_spectrum", "shockwave_grid", "sphere")
+    presentation_controls = {
+        "extruded_spectrum": ("extruded_spectrum_depth", 123),
+        "shockwave_grid": ("shockwave_grid_wave_height", 61),
+        "sphere": ("sphere_gloss", 73),
+    }
+    bar_counts = {
+        "extruded_spectrum": 31,
+        "shockwave_grid": 37,
+        "sphere": 43,
+    }
+
+    widgets = _vis_settings("extruded_spectrum", enabled_modes=modes)
+    section = widgets["spotify_visualizer"]
+    for mode in modes:
+        section[f"preset_{mode}"] = get_custom_preset_index(mode)
+    section.update(
+        {
+            "extruded_spectrum_depth": 1.23,
+            "extruded_spectrum_bar_count": bar_counts["extruded_spectrum"],
+            "shockwave_grid_wave_height": 0.61,
+            "shockwave_grid_bar_count": bar_counts["shockwave_grid"],
+            "sphere_gloss": 0.73,
+            "sphere_bar_count": bar_counts["sphere"],
+        }
+    )
+    settings_manager.set("widgets", widgets)
+
+    tab = VisualizersTab(settings_manager)
+    try:
+        # First prove the persisted Custom values hydrate into the real lazy UI.
+        for mode in modes:
+            tab._select_mode_page(mode)
+            slider = getattr(tab, f"_{mode}_preset_slider")
+            assert slider.preset_index() == slider.custom_index()
+            presentation_attr, expected_slider_value = presentation_controls[mode]
+            assert getattr(tab, presentation_attr).value() == expected_slider_value
+            technical = get_per_mode_controls_for_mode(tab, mode)
+            assert technical is not None
+            assert technical["bar_count"].value() == bar_counts[mode]
+
+        # Cycle each mode through a real curated-preset UI change and back to
+        # Custom. The slider's own signal path invokes the canonical preset
+        # snapshot/apply/restore transaction; flush only the existing bounded
+        # Settings save coalescer so the persistence assertion is deterministic.
+        for mode in modes:
+            tab._select_mode_page(mode)
+            slider = getattr(tab, f"_{mode}_preset_slider")
+            custom_index = slider.custom_index()
+            assert custom_index > 0
+
+            before = settings_manager.get("widgets", {})["spotify_visualizer"]
+            peer_snapshot = {
+                other: (
+                    before[presentation_controls[other][0]],
+                    before[f"{other}_bar_count"],
+                )
+                for other in modes
+                if other != mode
+            }
+
+            slider._slider.setValue(0)
+            tab._flush_pending_visualizer_save()
+            assert slider.preset_index() == 0
+
+            slider._slider.setValue(custom_index)
+            tab._flush_pending_visualizer_save()
+            assert slider.preset_index() == custom_index
+
+            presentation_attr, expected_slider_value = presentation_controls[mode]
+            assert getattr(tab, presentation_attr).value() == expected_slider_value
+            technical = get_per_mode_controls_for_mode(tab, mode)
+            assert technical is not None
+            assert technical["bar_count"].value() == bar_counts[mode]
+
+            persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
+            assert persisted[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
+            assert persisted[f"{mode}_bar_count"] == bar_counts[mode]
+            for other, expected in peer_snapshot.items():
+                assert persisted[presentation_controls[other][0]] == pytest.approx(expected[0])
+                assert persisted[f"{other}_bar_count"] == expected[1]
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
 
 
 def test_selecting_mode_pill_constructs_only_that_mode_once(

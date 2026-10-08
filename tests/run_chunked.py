@@ -55,6 +55,13 @@ DESTINATION_PROFILE = (
     "test_qtquick_custom_layout_owner.py",
     "test_qtquick_visualizer_roundtrip_lifetime.py",
     "test_qtquick_custom_layout_overlay.py",
+    "test_visualizer_geometry_profiles.py",
+    "test_visualizer_custom_geometry_profiles.py",
+    "test_visualizer_edit_native_input.py",
+    "test_visualizer_edit_footprint.py",
+    "test_visualizer_edit_content_envelope.py",
+    "test_visualizer_edit_orbit_publication.py",
+    "test_extruded_shadow_reach.py",
     "test_qtquick_edit_pointer_delivery.py",  # real QQuickWindow MouseArea click targeting
     "test_qtquick_child_mapped_geometry.py",  # thin targets + 4-corner QQuickItem mapped bounds
     "test_qtquick_child_mapped_source_contract.py",  # selected-only mapping, no new runtime owner

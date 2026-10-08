@@ -558,10 +558,23 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 
 - **Authored state:** Extruded Spectrum reuses Spectrum's frame-runtime and one source/shaper implementation, while it
   owns its technical response, bar fill/border/opacity, mirrored layout, nodes, notches, lane strengths, profile floor,
-  falloff, ghosts, smoothing and solid-bar stabilization. Old inputs missing those fields receive a one-time promoted copy of the selected Spectrum preset;
-  no runtime setting follows Spectrum's later selection. `ExtrudedSpectrumFrame` is a `SpectrumFrame` with the mode's
-  presentation parameters; the height transfer equals
-  Spectrum's (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
+  falloff, ghosts, smoothing and solid-bar stabilization. Before the ownership migration it was a live Spectrum-profile
+  borrower: activation resolved Spectrum's currently selected preset. Thus there was no single hidden hard-coded Extruded
+  response. On the canonical fresh/default path, Spectrum preset 0 is **Organs**, so the effective pre-migration Extruded
+  profile was Organs in full: 35 bars, 128-sample blocks, Dynamic Floor ON / 0.42 baseline, Output Lift ON, AGC 0.34,
+  Input Gain 0.98, Recommended Sensitivity OFF / 0.97, Kick Lane Gain 1.70, Transient Pulse 1.0, Clamp 1.85, Kick Lane Mix
+  0.90, mirrored layout, the Organs nodes/notches/lane strengths, wave amplitude 0.15, profile floor 0.20, falloff 0.72,
+  smoothing 0.50 and ghost 0.59 / decay 0.18. Old inputs missing owned fields still receive a one-time promoted copy of
+  their selected Spectrum preset; no runtime setting follows Spectrum afterwards.
+
+  Canonical Extruded defaults and every shipped Extruded curated preset now freeze that complete default-Organs effective
+  response into `extruded_spectrum_*` keys while their **3D finish/material/orbit settings remain independently authored**.
+  The one historical presentation exception is fill alpha: old Extruded rendered the borrowed Organs fill opaquely, so the
+  owned colour preserves Organs RGB `[12,12,12]` with alpha 255 rather than importing Organs' planar alpha 230. A schema-11
+  repair recognizes only the accidentally generated schema-10 Extruded bundle (33 bars / 512 samples plus its matching
+  generic response anchors) and replaces only fields still equal to those generated values, including the newly owned kick
+  lane mix. User deviations survive. `ExtrudedSpectrumFrame` remains a `SpectrumFrame`; its height transfer equals Spectrum's
+  (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
 - **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral
   Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, body alpha, smooth edges, optional shared Scene3D
   shadow and allow overflow. Hue drift advances with logical time only.
@@ -584,9 +597,12 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   multiplies that combined surface alpha. Spectral Edges supplies its own opaque spectral edge colour; Bar Colours uses
   the authored edge RGBA. Fully opaque bodies use depth writes; translucent bodies use the same ordered visible-face path
   without depth writes. Ghost and floor-reflection opacity remain independent authored axes.
-- **Shadow:** the optional Scene3D directional pass projects bar top faces onto the floor using the canonical shadow
-  direction/style and mode-owned strength. It uses the shared pass/state fence; disabled or transparent shadows draw no pass.
-  Its fixed ceiling-height sweep participates in render-target reach, so it cannot be clipped by the body-only bounds.
+- **Shadow:** the optional Scene3D directional pass projects the **full cuboid silhouette** onto the floor using the
+  canonical shadow direction/style and mode-owned strength. Every box vertex is projected by height, so vertical faces fill
+  the sweep between the base footprint and shifted top footprint; the previous top-cap-only translation could sit under the
+  bar/reflection and read as no cast shadow. Overlapping projected faces use a single-alpha union rather than stacking darkness.
+  It uses the shared pass/state fence; disabled or transparent shadows draw no pass. The ceiling-height sweep participates in
+  render-target reach, so it cannot be clipped by the body-only bounds.
 - **Mirror Faces** (0 by default) gives the faces, never the edge lines, a polished mirror surface reflecting
   the wallpaper; procedural brushed/hash grain is intentionally absent because it produced visible vertical ribbing across
   bright reflected faces. An invented studio environment reads as washout/sheen and is not the product contract. The displayed photograph is

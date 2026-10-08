@@ -114,6 +114,7 @@ class _FollowedOwner:
         if self._running:
             if self._snapshot is not None:
                 lease._accept(self._snapshot)
+            lease._accept_refreshing(self._in_flight)
             return True
         self._running = True
         self._generation_token += 1
@@ -171,6 +172,10 @@ class _FollowedOwner:
             if callable(retire):
                 retire()  # Existing G1 source has its own narrow retirement lock.
 
+    def _deliver_refreshing(self, refreshing: bool) -> None:
+        for lease in tuple(self._active):
+            lease._accept_refreshing(refreshing)
+
     def request_refresh(self) -> bool:
         if not self._running or self._retired or self._in_flight:
             return False
@@ -183,6 +188,7 @@ class _FollowedOwner:
         if self._in_flight or self._retired or not self._running:
             return
         self._in_flight = True
+        self._deliver_refreshing(True)
         self._work_token += 1
         token, generation = self._work_token, self._generation_token
         source = self._source
@@ -227,6 +233,7 @@ class _FollowedOwner:
         self._deadline_token += 1
         self._cancel_deadline()
         self._in_flight = False
+        self._deliver_refreshing(False)
         self._retire_source()
         for lease in tuple(self._active):
             lease._running = False
@@ -239,6 +246,7 @@ class _FollowedOwner:
         ):
             return
         self._in_flight = False
+        self._deliver_refreshing(False)
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], FollowedNewsSnapshot):
             source, snapshot = result
             if source is not self._source:
@@ -372,6 +380,16 @@ class FollowedRuntimeLease:
             accept = getattr(consumer, "on_games_followed_runtime_snapshot", None)
             if callable(accept):
                 accept(snapshot)
+
+    def _accept_refreshing(self, refreshing: bool) -> None:
+        consumer = self._consumer_ref() if self._consumer_ref else None
+        if not self._retired and self._running and consumer is not None:
+            alive = getattr(consumer, "is_games_followed_consumer_alive", None)
+            if callable(alive) and not alive():
+                return
+            accept = getattr(consumer, "on_games_followed_runtime_refreshing", None)
+            if callable(accept):
+                accept(bool(refreshing))
 
     def request_refresh(self) -> bool:
         return bool(self._running and self._owner and self._owner.request_refresh())

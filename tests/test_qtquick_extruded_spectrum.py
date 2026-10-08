@@ -24,6 +24,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
     _PROJECTION_GLSL,
     EXTRUDED_CEILING,
     EXTRUDED_FRAGMENT_SOURCE,
+    EXTRUDED_VERTEX_SOURCE,
     EXTRUDED_MAX_TILT,
     EXTRUDED_MAX_TURN,
     EXTRUDED_REFLECTION_SPACE,
@@ -80,6 +81,16 @@ def test_mirror_faces_are_polished_without_procedural_brushed_grain():
     assert "float grain" not in EXTRUDED_FRAGMENT_SOURCE
     assert "0.94 + 0.12" not in EXTRUDED_FRAGMENT_SOURCE
     assert "vec3 mirror = seen * tint + lit * 0.15;" in EXTRUDED_FRAGMENT_SOURCE
+
+
+def test_directional_shadow_shader_projects_the_full_box_sweep_without_overlap_stacking():
+    """A cast shadow is the sweep from base footprint to shifted top, not a translated cap."""
+    shadow_branch = EXTRUDED_VERTEX_SOURCE.split("if (uPass == 4)", 1)[1].split("vWorld =", 1)[0]
+    assert "aNormal.y < 0.5" not in shadow_branch
+    assert "world.x += uShadowVector.x * world.y" in shadow_branch
+    assert "world.y = 0.0" in shadow_branch
+    fragment_shadow = EXTRUDED_FRAGMENT_SOURCE.split("if (uPass == 4)", 1)[1].split("vec3 n", 1)[0]
+    assert "uShadowColor.rgb * uShadowColor.a" in fragment_shadow
 
 
 def test_the_projection_and_heights_match_their_mirrors_on_the_gpu(qt_app):
@@ -585,6 +596,46 @@ def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_t
     assert renderer._target.allocation == allocation
     assert np.abs(enabled_se - disabled).max() > 8
     assert np.abs(enabled_se - enabled_nw).max() > 8
+
+
+def test_directional_shadow_area_grows_with_bar_height_instead_of_translating_one_cap(target):
+    """The real GL shadow contains the side-face sweep, so taller bars cast a larger floor area."""
+    capture, host = target
+    base = _with_shadow_style(
+        _snapshot(
+            extruded_spectrum_body_alpha=0.0,
+            extruded_spectrum_face_mirror=0.0,
+            extruded_spectrum_reflection=0.0,
+            spectrum_ghosting_enabled=False,
+            extruded_spectrum_shadow_enabled=True,
+            extruded_spectrum_shadow_strength=1.0,
+            extruded_spectrum_tilt=0.22,
+            extruded_spectrum_turn=0.18,
+        ),
+        offset=(6.0, 6.0),
+    )
+    count = base.logical.common.bar_count
+
+    def levels(value: float):
+        common = dataclasses.replace(base.logical.common, bars=(value,) * count)
+        state = dataclasses.replace(base.logical.mode_state, peaks=(value,) * count)
+        return dataclasses.replace(base, logical=dataclasses.replace(base.logical, common=common, mode_state=state))
+
+    backdrop = (0.84, 0.76, 0.66, 1.0)
+    disabled_state = dataclasses.replace(
+        base.logical.mode_state,
+        parameters={**dict(base.logical.mode_state.parameters), "extruded_spectrum_shadow_enabled": False},
+    )
+    disabled = capture.render(
+        host, dataclasses.replace(base, logical=dataclasses.replace(base.logical, mode_state=disabled_state)),
+        backdrop=backdrop,
+    )
+    low = capture.render(host, levels(0.18), backdrop=backdrop)
+    high = capture.render(host, levels(0.95), backdrop=backdrop)
+    low_mask = np.abs(low[..., :3] - disabled[..., :3]).max(axis=2) > 3
+    high_mask = np.abs(high[..., :3] - disabled[..., :3]).max(axis=2) > 3
+    assert low_mask.sum() > 100
+    assert high_mask.sum() > low_mask.sum() * 1.35
 
 
 

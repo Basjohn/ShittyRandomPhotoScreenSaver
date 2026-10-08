@@ -280,7 +280,9 @@ class UniformScaleGeometry:
 def uniform_wheel_scale(current_scale: float, angle_delta_y: int) -> float:
     """The absolute scale one wheel event asks for: 5% per notch of the current scale."""
 
-    steps = int(angle_delta_y / 120) if angle_delta_y else 0
+    if not angle_delta_y:
+        return float(current_scale)
+    steps = int(angle_delta_y / 120)
     if steps == 0:
         steps = 1 if angle_delta_y > 0 else -1
     return max(CUSTOM_LAYOUT_MIN_RESIZE_SCALE, float(current_scale) + 0.05 * steps)

@@ -27,7 +27,7 @@ Item {
             x: index * guideUnderlay.gridStep
             width: 1
             height: guideUnderlay.height
-            color: index % 4 === 0 ? "#3affffff" : "#1cffffff"
+            color: index % 4 === 0 ? "#3a555a60" : "#1c45494e"
         }
     }
 
@@ -40,7 +40,7 @@ Item {
             y: index * guideUnderlay.gridStep
             width: guideUnderlay.width
             height: 1
-            color: index % 4 === 0 ? "#3affffff" : "#1cffffff"
+            color: index % 4 === 0 ? "#3a555a60" : "#1c45494e"
         }
     }
 
@@ -52,7 +52,7 @@ Item {
         x: Math.round(guideUnderlay.width / 2.0)
         width: 3
         height: guideUnderlay.height
-        color: "#70ffffff"
+        color: "#7061666c"
     }
 
     Rectangle {
@@ -61,7 +61,7 @@ Item {
         y: Math.round(guideUnderlay.height / 2.0)
         width: guideUnderlay.width
         height: 3
-        color: "#70ffffff"
+        color: "#7061666c"
     }
 
     Rectangle {
@@ -70,10 +70,10 @@ Item {
         anchors.margins: guideUnderlay.gridGutter
         color: "transparent"
         border.width: 2
-        border.color: "#74b46eff"
+        border.color: "#746a6f76"
     }
 
-    // Active centering snaps are gentle purple and intentionally under widgets.
+    // Active centering snaps are neutral graphite and intentionally under widgets.
     Repeater {
         model: guideUnderlay.verticalCenterGuides
         delegate: Rectangle {
@@ -83,7 +83,7 @@ Item {
             x: Number(modelData.position)
             width: 3
             height: guideUnderlay.height
-            color: "#a8b46eff"
+            color: "#a8737981"
         }
     }
 
@@ -96,7 +96,7 @@ Item {
             y: Number(modelData.position)
             width: guideUnderlay.width
             height: 3
-            color: "#a8b46eff"
+            color: "#a8737981"
         }
     }
 }

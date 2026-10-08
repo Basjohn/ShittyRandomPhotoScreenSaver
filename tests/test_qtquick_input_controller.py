@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
+from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.input_controller import QuickInputController
@@ -76,6 +76,28 @@ def test_edit_only_undo_and_lock_hotkeys_preserve_plain_z_and_ignore_repeats() -
         controller.deleteLater()
 
 
+
+
+def test_double_right_click_requests_existing_custom_edit_owner_not_next_image() -> None:
+    controller = QuickInputController(screen_index=0, runtime_generation=2)
+    routed: list[str] = []
+    controller.custom_layout_edit_requested.connect(lambda: routed.append("edit"))
+    controller.next_image_requested.connect(lambda: routed.append("next"))
+    controller.set_context_menu_active(True)
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonDblClick,
+        QPointF(40.0, 50.0),
+        QPointF(40.0, 50.0),
+        Qt.MouseButton.RightButton,
+        Qt.MouseButton.RightButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    try:
+        assert controller.handle_mouse_double_click(event) is True
+        assert routed == ["edit"]
+    finally:
+        controller.deleteLater()
+
 def test_quick_input_uses_the_single_neutral_policy_owner():
     assert issubclass(QuickInputController, RuntimeInputOwner)
 
@@ -110,6 +132,18 @@ def test_quick_input_uses_the_single_neutral_policy_owner():
         "mouseDoubleClickEvent",
     ):
         assert f"super().{event_method}(event)" in window_source
+
+    # Double-right Edit is a display-level shortcut. It must be admitted before
+    # retained QML family double-click semantics so the first right-click menu
+    # cannot steal the second click or turn it into an unrelated widget action.
+    double_click_body = window_source.split("def mouseDoubleClickEvent", 1)[1].split(
+        "def _runtime_discrete_pointer_event_is_suppressed", 1
+    )[0]
+    assert double_click_body.index("Qt.MouseButton.RightButton") < double_click_body.index(
+        "_semantic_double_click_hit_test"
+    )
+    assert "custom_layout_edit_requested = Signal()" in runtime_source
+    assert "self._input.custom_layout_edit_requested.connect(" in runtime_source
     for signal_name in (
         "exit_requested",
         "previous_requested",
@@ -305,9 +339,13 @@ def test_replacement_pointer_guard_suppresses_quick_double_click_route():
     )
     routed: list[str] = []
     controller.next_image_requested.connect(lambda: routed.append("next"))
+    controller.custom_layout_edit_requested.connect(lambda: routed.append("edit"))
 
     try:
         suppress_runtime_pointer_input(500, reason="test_replacement")
+        # Replacement-guarded events are consumed before the Quick layer is even
+        # allowed to inspect presentation-specific mouse fields. This opaque object
+        # deliberately proves neither Next nor the double-right Edit shortcut leaks.
         assert controller.handle_mouse_double_click(object()) is True
         assert routed == []
     finally:

@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtCore import QObject, QPointF
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
 
 from core.settings.shadow_direction import ShadowDirection, resolve_signed_offset
 from rendering.quick.bootstrap import quick_qml_root
@@ -22,6 +23,7 @@ from rendering.quick.scene_controller import QuickSceneController, QuickSceneFac
 from rendering.quick.state import QuickInputState, QuickWindowPolicy
 from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
+    RefreshTransitionClock,
     OverlayCardStyle,
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
@@ -37,6 +39,7 @@ PRIMITIVE_FILES = (
     "OverlayCardShadow.qml",
     "ShadowedText.qml",
     "Separator.qml",
+    "RefreshStateGlyph.qml",
 )
 
 
@@ -72,6 +75,35 @@ def test_all_shell_primitives_load_through_package_import_path(qt_app) -> None:
             instance.deleteLater()
     finally:
         engine.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_refresh_transition_clock_coalesces_arbitrary_simultaneous_consumers(qt_app) -> None:
+    """One display epoch absorbs Gmail/Reddit/GYF and any number of Feed edges."""
+    clock = RefreshTransitionClock()
+    try:
+        first = clock.begin()
+        assert clock.active is True
+        epoch = first["epoch"]
+        # Model a refresh wave larger than today's family count: every edge joins
+        # the same bounded clock rather than creating per-widget animation work.
+        for _ in range(32):
+            joined = clock.begin()
+            assert joined["epoch"] == epoch
+        assert clock.epoch == epoch
+        assert 0.0 <= clock.phase < 1.0
+
+        QTest.qWait(RefreshTransitionClock.DURATION_MS + 80)
+        qt_app.processEvents()
+        assert clock.active is False
+        assert clock.phase == pytest.approx(1.0, abs=1e-6)
+
+        next_edge = clock.begin()
+        assert next_edge["epoch"] == epoch + 1
+    finally:
+        clock.stop()
+        clock.deleteLater()
         qt_app.processEvents()
 
 
@@ -113,6 +145,8 @@ def test_host_creates_updates_and_retires_synthetic_item_without_new_engine_or_w
     assert shadow_underlay is not None
     assert shadow_underlay.parentItem() is shadow_host_item
     assert item.property("externalCardShadow") is True
+    assert float(item.property("cardBorderWidth")) == pytest.approx(4.0)
+    assert item.property("refreshTransitionClock") == host.refresh_transition_clock
 
     # Creating a retained item must reuse the display's engine/context, never a
     # second QQmlEngine or top-level runtime window.

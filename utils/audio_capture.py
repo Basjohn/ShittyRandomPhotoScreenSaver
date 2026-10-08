@@ -336,10 +336,14 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         def stream_callback(in_data, frame_count, time_info, status):
             try:
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
-                frames = int(frame_count)
-                if frames <= 0 or samples.size != frames * self._channels:
-                    raise ValueError("native float32 PCM packet does not match resolved frame/channel shape")
-                samples = samples.reshape(frames, self._channels)
+                # PortAudio frame_count is advisory metadata at this boundary.
+                # The known-good path shaped the actual float32 payload. Reject
+                # malformed channel framing, but never discard a valid packet
+                # solely because metadata disagrees with its byte payload.
+                channels = int(self._channels)
+                if channels <= 0 or samples.size <= 0 or samples.size % channels:
+                    raise ValueError("native float32 PCM packet is not divisible by resolved channels")
+                samples = samples.reshape(samples.size // channels, channels)
                 callback(samples)
                 self._note_capture_callback()
                 self._note_native_callback_recovered()

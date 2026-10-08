@@ -10,17 +10,27 @@
         "extruded_spectrum_visual_smoothing_enabled": true,
         "extruded_spectrum_visual_smoothing": 0.5,
         "extruded_spectrum_solid_bar_hysteresis_enabled": true,
-        "extruded_spectrum_agc_strength": 0.5,
-        "extruded_spectrum_audio_block_size": 512,
-        "extruded_spectrum_bar_border_color": [255, 255, 255, 255],
+        "extruded_spectrum_agc_strength": 0.34,
+        "extruded_spectrum_audio_block_size": 128,
+        "extruded_spectrum_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
         "extruded_spectrum_bar_border_opacity": 1.0,
-        "extruded_spectrum_bar_fill_color": [12, 12, 12, 255],
+        "extruded_spectrum_bar_fill_color": [
+          12,
+          12,
+          12,
+          255
+        ],
         "extruded_spectrum_body_alpha": 1.0,
-        "extruded_spectrum_dynamic_range_enabled": false,
-        "extruded_spectrum_kick_lane_gain": 1.0,
+        "extruded_spectrum_dynamic_range_enabled": true,
+        "extruded_spectrum_kick_lane_gain": 1.7,
         "extruded_spectrum_shadow_enabled": false,
         "extruded_spectrum_shadow_strength": 0.45,
-        "extruded_spectrum_transient_clamp": 1.5,
+        "extruded_spectrum_transient_clamp": 1.85,
         "extruded_spectrum_transient_pulse_gain": 1.0,
         "extruded_spectrum_depth": 0.8,
         "extruded_spectrum_tilt": 0.01,
@@ -32,27 +42,98 @@
         "extruded_spectrum_colouring": "Bar Colours",
         "extruded_spectrum_allow_overflow": true,
         "extruded_spectrum_smooth_edges": true,
-        "extruded_spectrum_bar_count": 28,
+        "extruded_spectrum_bar_count": 35,
         "extruded_spectrum_dynamic_floor": true,
-        "extruded_spectrum_manual_floor": 0.14,
+        "extruded_spectrum_manual_floor": 0.42,
         "extruded_spectrum_adaptive_sensitivity": false,
-        "extruded_spectrum_sensitivity": 0.48,
-        "extruded_spectrum_input_gain": 0.9,
+        "extruded_spectrum_sensitivity": 0.97,
+        "extruded_spectrum_input_gain": 0.98,
         "extruded_spectrum_mirrored": true,
-        "extruded_spectrum_shape_nodes": [[0.0, 0.32], [0.38, 0.68], [0.72, 0.5], [1.0, 0.72]],
-        "extruded_spectrum_notch_positions_mirrored": [[0.0, "Mid"], [0.28, "Vocal"], [0.62, "Low-Mid"], [1.0, "Bass"]],
-        "extruded_spectrum_notch_positions_linear": [[0.0, "Bass"], [0.22, "Low-Mid"], [0.48, "Vocal"], [0.76, "Hi-Mid"], [1.0, "Treble"]],
-        "extruded_spectrum_lane_strengths_mirrored": {"Bass": 0.68, "Low-Mid": 0.62, "Mid": 0.55, "Vocal": 0.72},
-        "extruded_spectrum_lane_strengths_linear": {"Bass": 0.68, "Low-Mid": 0.62, "Vocal": 0.72, "Hi-Mid": 0.78, "Treble": 0.86},
-        "extruded_spectrum_wave_amplitude": 0.42,
-        "extruded_spectrum_profile_floor": 0.14,
-        "extruded_spectrum_drop_speed": 0.85,
+        "extruded_spectrum_shape_nodes": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.1299578059071731,
+            1.0
+          ],
+          [
+            0.5704641350210972,
+            0.7438271604938275
+          ],
+          [
+            0.830379746835443,
+            0.9104938271604942
+          ],
+          [
+            0.9930025445292622,
+            0.1882716049382717
+          ]
+        ],
+        "extruded_spectrum_notch_positions_mirrored": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.2859915611814348,
+            "Mid"
+          ],
+          [
+            0.6861603375527427,
+            "Low-Mid"
+          ],
+          [
+            0.8144303797468355,
+            "Vocal"
+          ]
+        ],
+        "extruded_spectrum_notch_positions_linear": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.25,
+            "Low-Mid"
+          ],
+          [
+            0.5022879267863428,
+            "Vocal"
+          ],
+          [
+            0.6261879619852164,
+            "Hi-Mid"
+          ],
+          [
+            1.0,
+            "Treble"
+          ]
+        ],
+        "extruded_spectrum_lane_strengths_mirrored": {
+          "Bass": 0.1794871794871802,
+          "Low-Mid": 0.2868,
+          "Mid": 0.344,
+          "Vocal": 0.4096
+        },
+        "extruded_spectrum_lane_strengths_linear": {
+          "Bass": 0.24,
+          "Hi-Mid": 0.672,
+          "Low-Mid": 0.2868,
+          "Treble": 1.0,
+          "Vocal": 0.4096
+        },
+        "extruded_spectrum_wave_amplitude": 0.15,
+        "extruded_spectrum_profile_floor": 0.2,
+        "extruded_spectrum_drop_speed": 0.72,
         "extruded_spectrum_ghosting_enabled": true,
-        "extruded_spectrum_ghost_alpha": 0.24,
-        "extruded_spectrum_ghost_decay": 0.46,
-        "mode": "extruded_spectrum"
+        "extruded_spectrum_ghost_alpha": 0.59,
+        "extruded_spectrum_ghost_decay": 0.18,
+        "mode": "extruded_spectrum",
+        "extruded_spectrum_lane_transient_mix": 0.9
       }
     }
   },
-  "description": "Saved from current Settings state."
+  "description": "3D finish over the frozen pre-migration Spectrum Organs response profile; the copied extruded_spectrum_* values are mode-owned, not a live Spectrum dependency."
 }

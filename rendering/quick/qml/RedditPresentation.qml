@@ -238,7 +238,8 @@ OverlayWidget {
             Item {
                 id: refreshTarget
                 objectName: "redditRefreshTarget"
-                implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                implicitWidth: 30.0
+                implicitHeight: 30.0
                 readonly property bool canActivate: visible
                     && redditRoot.redditModel.interactionEnabled
                     && !redditRoot.customLayoutInputBlocked
@@ -251,8 +252,10 @@ OverlayWidget {
                     || y + height <= headerFrame.y
                     || y >= headerFrame.y + headerFrame.height * headerFrame.scale
                 visible: redditRoot.redditModel.showRefreshSpiral && clearOfHeader
-                width: implicitWidth * redditRoot.childWidthScale("refresh")
-                height: headerArea.height * redditRoot.childHeightScale("refresh")
+                width: Math.min(headerArea.width,
+                    implicitWidth * redditRoot.childWidthScale("refresh"))
+                height: Math.min(headerArea.height,
+                    implicitHeight * redditRoot.childHeightScale("refresh"))
                 x: (redditRoot.headerFlipped ? 0.0 : headerArea.width - width)
                     + redditRoot.childOffsetX("refresh")
                 y: (headerArea.height - height) / 2.0 + redditRoot.childOffsetY("refresh")
@@ -277,19 +280,17 @@ OverlayWidget {
                     blocking: false
                     cursorShape: Qt.PointingHandCursor
                 }
-                ShadowedText {
+                RefreshStateGlyph {
                     id: refreshGlyph
                     objectName: "redditRefreshGlyph"
                     anchors.fill: parent
-                    horizontalAlignment: Text.AlignHCenter
-                    text: redditRoot.redditModel.refreshing ? "◌" : "↻"
-                    opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
-                    color: refreshHover.hovered && refreshTarget.canActivate
-                        ? "white" : redditRoot.redditModel.textColor
-                    font.family: redditRoot.redditModel.fontFamily
-                    font.pointSize: redditRoot.redditModel.fontSize
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
+                    busy: redditRoot.redditModel.refreshing
+                    transitionClock: redditRoot.refreshTransitionClock
+                    hovered: refreshHover.hovered
+                    canActivate: refreshTarget.canActivate
+                    glyphColor: redditRoot.redditModel.textColor
+                    fontFamily: redditRoot.redditModel.fontFamily
+                    bold: true
                     shadowEnabled: redditRoot.redditModel.textShadowEnabled
                     shadowColor: redditRoot.redditModel.textShadowColor
                     shadowOffsetX: redditRoot.redditModel.textShadowOffsetX

@@ -155,6 +155,7 @@ def _manager(section, mode="extruded_spectrum"):
         settings_manager=_Settings(section),
         _widgets_config_snapshot={},
         _refresh_all_quick_context_menus=lambda: None,
+        _refresh_quick_visualizer_edit_content_envelope=lambda: None,
     )
 
 

@@ -353,7 +353,13 @@ void main() {
                 on_border = true;
             } else {
                 bool on_side = (bx <= authored_scale || bx >= bw_px - authored_scale);
-                bool on_top = (y_rel >= active_height - authored_scale);
+                // The moving horizontal cap is finished pixel chrome, not world
+                // thickness. A sub-pixel interval can contain no fragment centre
+                // at some fractional bar heights, which is the observed top-edge
+                // disappearance. Keep authored growth above one pixel, but never
+                // let the cap's coverage interval fall below one logical pixel.
+                float top_stroke = max(authored_scale, 1.0);
+                bool on_top = (y_rel >= active_height - top_stroke);
                 bool on_bottom = (y_rel < authored_scale);
                 on_border = on_side || on_top || on_bottom;
             }

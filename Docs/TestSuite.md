@@ -306,6 +306,12 @@ Protect:
 - read-oriented defaults/manifest validation and runtime preset catalogue loading must not rewrite shipped Visualizer preset artifacts; explicit regeneration is the source-tree write authority and no-op manifest writes must remain byte-stable across host newline conventions;
 - Theme Foundry and Defaults tooling consume canonical schema rather than inventing parallel fields;
 - collapsible-bucket identities stay canonical while persisted state remains sparse/local-scope;
+- every descriptor with Technical controls has canonical outer/leaf UI-state identities, and every statically authored Visualizer builder bucket is represented in the canonical bucket map; lazy page construction must never discover schema identity by crashing at first selection;
+- solid Spectrum bar tops retain at least one logical pixel of horizontal-cap coverage throughout fractional height motion; tests must inspect rendered endpoint pixels, not infer correctness from source strings or bar geometry alone;
+- Windows PyAudio capture accepts a valid float32 payload according to the payload's actual channel-divisible length rather than treating callback `frame_count` as byte-shape authority; malformed channel framing still fails loud and bounded;
+- the former Spectrum-borrowing Extruded profile is frozen under mode-owned keys with the historical Organs-effective 35-bar/128-sample response, schema-10 generated 33/512 bundles receive a narrow field-preserving schema-11 repair, and the owned Kick Lane Mix reaches the technical cache;
+- the current 3D modes cross the full Settings-to-runtime ownership seam: resolved Custom/preset state configures the retained Quick owner, source/BeatEngine projection and Technical destination from each mode's own namespace, and Visualizer Reset returns those namespaces to canonical defaults without erasing the separate user-authored Custom preset cache;
+- current 3D lazy Settings pages round-trip mode-owned/Technical values across reopen and through the real curated-preset ↔ Custom transaction without cross-mode leakage;
 - `themes/dark.qss` stays physically absent; narrow structural renderers plus `SettingsThemeSpec` own Settings styling and no fallback monolithic QSS may return;
 - Widget Theme semantics stay separate from Settings HWND material/backdrop ownership; while old material-bearing Widget Theme profile/SST/QSettings state remains supported, only `core.settings.widget_theme_input_compat` may name that retired runtime-card material schema, and current Widget Theme selection/runtime/file I/O remain colour-only v3.
 - Settings Theme authoring/runtime remains schema v6; supported schema-v5 `.srtheme` files may be named only by the explicit file-input compatibility owner, and tests must keep Foundry/current export assertions separate from historical v5 migration assertions. A v5 fixture must remain distinguishing and incomplete old themes must still fail whole rather than default-merge.
@@ -335,7 +341,7 @@ snapshot targets. `test_bubble_fidelity_report.py` protects identity-preserving 
 delay/pixel-bound/representation/simulation-change detection and unchanged production logical/Quick output while observing.
 The replay report uses supplied projection pixels; first radius movement in a moving musical window is not causal latency.
 
-Voxel Sphere remains experimental while using the current low-level scene3d substrate promotion. Its behavioural/state contract remains private and golden-protected while that migration is incomplete. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
+Voxel Sphere is a standard selectable Visualizer while retaining lazy mode-owned behavior on the shared low-level Scene3D substrate. Its behavioural/state contract remains private and golden-protected; standard product admission does not make its reaction/material schema a shared family. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
 
@@ -349,6 +355,13 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 - `tests/test_visualizer_prepared_reveal.py` — first use prepares on hidden frames, the reveal waits (with a deadline);
 - `tests/test_visualizer_view_orbit.py`, `tests/test_visualizer_direct_gestures.py` — W/A/S/D and Alt + left orbit;
   Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
+- `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — descriptor-owned
+  CUSTOM families, one-time legacy-pose preservation, hidden hot-swap, profile-local Save/Cancel and Arrange/slot/transfer;
+- `tests/test_visualizer_edit_native_input.py`, `tests/test_visualizer_edit_footprint.py`,
+  `tests/test_visualizer_edit_content_envelope.py`, `tests/test_visualizer_edit_orbit_publication.py` — native QQuickWindow/QML
+  wheel/move/orbit delivery, actual GPU footprint, empty-scene controls, stable gesture targets and bounded existing-wake
+  framing with closed/deselected dormancy. Test stages lie inside their bound native window; hidden window pixels or supplied
+  event coordinates alone cannot certify physical feel;
 - `tests/test_scene3d_quality_settings.py` — the 3D Settings tab, the tier resolver (General / family / entry, Auto by
   GPU), the `transitions.detail_3d` bridge, each tier's levers in the renderers;
 - `tests/test_visualizer_profile_lender_presets.py`, `tests/test_3d_curated_preset_ownership.py` — descriptor-declared

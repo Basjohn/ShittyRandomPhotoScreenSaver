@@ -1,6 +1,8 @@
 """Persistence binding for the lazy Extruded Spectrum Settings body."""
 from __future__ import annotations
 
+from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+
 _SLIDER_KEYS = (
     "extruded_spectrum_depth",
     "extruded_spectrum_tilt",
@@ -29,6 +31,16 @@ _CHECK_KEYS = (
 )
 
 
+def _resolved_colouring(tab, value) -> str:
+    colouring = str(value)
+    if colouring in EXTRUDED_COLOURINGS:
+        return colouring
+    fallback = str(tab._widget_default("spotify_visualizer", "extruded_spectrum_colouring"))
+    if fallback not in EXTRUDED_COLOURINGS:
+        raise ValueError(f"Canonical Extruded Spectrum colouring is invalid: {fallback!r}")
+    return fallback
+
+
 def load_extruded_spectrum_mode_settings(tab, config) -> None:
     def value(key):
         return config.get(key, tab._widget_default("spotify_visualizer", key))
@@ -37,9 +49,24 @@ def load_extruded_spectrum_mode_settings(tab, config) -> None:
         control = getattr(tab, key, None)
         if control is not None:
             control.setValue(round(float(value(key)) * 100.0))
-    control = getattr(tab, "extruded_spectrum_colouring", None)
+
+    # The persisted enum is a compatibility/runtime encoding only. Settings
+    # presents explicit Rainbow enable + surface participation controls.
+    colouring = _resolved_colouring(tab, value("extruded_spectrum_colouring"))
+    control = getattr(tab, "extruded_spectrum_rainbow_enabled", None)
     if control is not None:
-        control.setCurrentText(str(value("extruded_spectrum_colouring")))
+        control.setChecked(colouring != "Bar Colours")
+    faces = getattr(tab, "extruded_spectrum_rainbow_faces", None)
+    edges = getattr(tab, "extruded_spectrum_rainbow_edges", None)
+    if faces is not None and edges is not None:
+        if colouring == "Spectral Edges":
+            edges.setChecked(True)
+        else:
+            faces.setChecked(True)
+        enabled = colouring != "Bar Colours"
+        faces.setEnabled(enabled)
+        edges.setEnabled(enabled)
+
     for key in _CHECK_KEYS:
         control = getattr(tab, key, None)
         if control is not None:
@@ -65,7 +92,12 @@ def load_extruded_spectrum_mode_settings(tab, config) -> None:
 
 def collect_extruded_spectrum_mode_settings(tab) -> dict:
     values: dict = {key: getattr(tab, key).value() / 100.0 for key in _SLIDER_KEYS}
-    values["extruded_spectrum_colouring"] = tab.extruded_spectrum_colouring.currentText()
+    if not tab.extruded_spectrum_rainbow_enabled.isChecked():
+        values["extruded_spectrum_colouring"] = "Bar Colours"
+    elif tab.extruded_spectrum_rainbow_edges.isChecked():
+        values["extruded_spectrum_colouring"] = "Spectral Edges"
+    else:
+        values["extruded_spectrum_colouring"] = "Spectral Faces"
     values.update({key: getattr(tab, key).isChecked() for key in _CHECK_KEYS})
     shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
     if shape_editor is not None:

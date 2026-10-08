@@ -2113,14 +2113,19 @@ class QuickCustomLayoutOwner:
         if extent is not None:
             payload["viewport_extent"] = [extent[0], extent[1]]
         # Preserve all carded-mode orientations even when the currently selected
-        # experimental mode (Sphere) does not consume or expose them. Sphere
+        # freeform 3D mode (for example Sphere) does not consume or expose them. Sphere
         # therefore renders at 0° without erasing dormant per-mode layout state.
         rotations = normalize_content_rotation_by_mode(
             owner.controller.committed_content_rotations
         )
         if rotations:
             payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = rotations
-        key = CustomLayoutKey("spotify_visualizer", binding.identity)
+        geometry_variant = geometry_variant_for_presentation(
+            "spotify_visualizer", owner, widgets
+        )
+        key = CustomLayoutKey(
+            "spotify_visualizer", binding.identity, geometry_variant
+        )
         item = CustomLayoutSessionItem(
             source_key=key,
             model_identity="spotify_visualizer",
@@ -2130,6 +2135,7 @@ class QuickCustomLayoutOwner:
             current_size_payload=payload,
             baseline_enabled=True,
             current_enabled=True,
+            legacy_geometry_variant=getattr(owner, "_legacy_layout_profile", None),
             resize_capable=True,
             source_monitor_route=get_effective_monitor_value_for_widget(
                 "spotify_visualizer", widgets

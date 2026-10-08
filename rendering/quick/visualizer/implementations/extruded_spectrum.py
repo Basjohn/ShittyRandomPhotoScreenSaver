@@ -69,6 +69,11 @@ def extruded_bar_records(levels, peaks, count: int, order=None) -> bytes:
     return struct.pack(f"<{3 * count}f", *values)
 
 
+def extruded_hue_shift(animation_time: float, hue_drift: float) -> float:
+    """Resolve the authored spectral hue phase without render-state side effects."""
+    return (float(animation_time) * EXTRUDED_HUE_DRIFT_RATE * float(hue_drift)) % 1.0
+
+
 class QuickExtrudedSpectrumRenderer:
     mode_id = "extruded_spectrum"
 
@@ -191,8 +196,10 @@ class QuickExtrudedSpectrumRenderer:
         scale = presentation.uniform_visual_scale
         height = field[3]
         colouring = EXTRUDED_COLOURINGS.index(str(parameter(parameters, "extruded_spectrum_colouring")))
-        hue_shift = (mode_state.animation_time * EXTRUDED_HUE_DRIFT_RATE
-                     * float(parameter(parameters, "extruded_spectrum_hue_drift"))) % 1.0
+        hue_shift = extruded_hue_shift(
+            mode_state.animation_time,
+            float(parameter(parameters, "extruded_spectrum_hue_drift")),
+        )
         ghost_alpha = (max(0.0, min(1.0, float(parameter(parameters, "spectrum_ghost_alpha"))))
                        if bool(parameter(parameters, "spectrum_ghosting_enabled")) else 0.0)
         body_alpha = float(parameter(parameters, "extruded_spectrum_body_alpha"))

@@ -5,43 +5,37 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QLabel
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.builder_scaffold import (
-    bind_color_button,
-    bind_setting_signal,
-    build_collapsible_bucket,
-    build_mode_scaffold,
-)
+from ui.tabs.media.builder_scaffold import bind_color_button, bind_setting_signal, build_collapsible_bucket, build_mode_scaffold
 from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
 
-# (setting key, label, slider minimum, slider maximum, tooltip); sliders store hundredths.
 _WAVE_SLIDERS = (
     ("shockwave_grid_wave_height", "Wave Height:", 0, 100,
      "How high each beat's shockwave lifts the grid."),
     ("shockwave_grid_wave_speed", "Wave Speed:", 0, 100,
      "How fast the shockwaves spread across the grid."),
     ("shockwave_grid_horizon", "Horizon:", 0, 100,
-     "How high Spectrum's bars raise the far edge of the grid; zero keeps it flat."),
+     "How strongly Spectrum's bar field raises the grid horizon."),
     ("shockwave_grid_idle", "Idle Swell:", 0, 100,
-     "A soft swell that drifts from side to side, so the grid moves between beats; zero holds it still."),
+     "How much the grid breathes when the music is quiet."),
     ("shockwave_grid_tilt", "Tilt:", 0, 100,
-     "How far the view looks down onto the grid, from level to straight down (W and S while it shows)."),
+     "How far the view looks down onto the grid (W and S while it shows)."),
     ("shockwave_grid_turn", "Turn:", -100, 100,
-     "Turns the grid a full circle (A and D while it shows)."),
+     "Turns the grid around its vertical axis (A and D while it shows)."),
 )
-_LOOK_SLIDERS = (
+_RENDER_SLIDERS = (
     ("shockwave_grid_density", "Grid Density:", 0, 100, "How many grid lines there are."),
     ("shockwave_grid_glow", "Glow:", 0, 100,
      "How much the lines and the shockwave crests glow; zero turns the glow off."),
     ("shockwave_grid_floor", "Floor:", 0, 100,
-     "How dark the floor between the lines is; zero leaves only the lines over the wallpaper."),
+     "How much of the receding grid floor remains visible."),
     ("shockwave_grid_scroll", "Scroll:", 0, 100,
-     "How fast the grid travels toward you; zero holds it still."),
+     "How quickly the grid texture travels under the camera."),
 )
 _COLOURS = (
     ("shockwave_grid_line_color", "Line Colour:", "Choose Grid Line Colour",
-     "The grid lines' colour."),
+     "The base grid line colour, including alpha."),
     ("shockwave_grid_crest_color", "Crest Colour:", "Choose Shockwave Crest Colour",
-     "The colour the lines turn as a shockwave's crest and the horizon pass through them."),
+     "The colour the lines turn as a shockwave's crest and the horizon pass through them, including alpha."),
 )
 
 
@@ -60,18 +54,22 @@ def build_shockwave_grid_ui(tab, parent_layout) -> None:
         advanced_helper_attr="_shockwave_grid_adv_helper",
         advanced_attr="_shockwave_grid_advanced",
     )
+    _, appearance = build_collapsible_bucket(
+        tab, scaffold.normal_layout, mode_key="shockwave_grid", bucket_key="appearance", title="Appearance",
+        helper_text="Author the grid-line and shockwave-crest colours directly, including alpha.",
+    )
     _, waves = build_collapsible_bucket(
         tab, scaffold.normal_layout, mode_key="shockwave_grid", bucket_key="waves", title="Waves",
         helper_text=("Beats send shockwaves across a neon grid; Spectrum's bars raise its horizon. "
                      "This grid owns the horizon's bar count and response."),
     )
-    _, look = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="shockwave_grid", bucket_key="look", title="Look",
-        helper_text="Colours, density, glow, the floor, scrolling and whether the grid may leave its rectangle.",
-    )
     _, response = build_collapsible_bucket(
         tab, scaffold.normal_layout, mode_key="shockwave_grid", bucket_key="response", title="Bar Response",
         helper_text="The shared Spectrum shaper is reused, while this grid owns its layout, nodes, lanes and response.",
+    )
+    _, render = build_collapsible_bucket(
+        tab, scaffold.advanced_layout, mode_key="shockwave_grid", bucket_key="render", title="Render",
+        helper_text="Density, glow, floor, scrolling and overflow are rendering axes, not colour authoring.",
     )
 
     def row(layout, label):
@@ -95,6 +93,17 @@ def build_shockwave_grid_ui(tab, parent_layout) -> None:
         setattr(tab, key, control)
         content.addWidget(control)
         content.addWidget(value)
+
+    for key, label, title, tooltip in _COLOURS:
+        content = row(appearance, label)
+        colour = tab._color_from_default("spotify_visualizer", key)
+        setattr(tab, f"_{key}", colour)
+        button = ColorSwatchButton(title=title)
+        button.setToolTip(tooltip)
+        bind_color_button(tab, button, f"_{key}", auto_switch=True, initial_color=colour)
+        setattr(tab, f"{key}_btn", button)
+        content.addWidget(button)
+        content.addStretch()
 
     for spec in _WAVE_SLIDERS:
         slider(waves, *spec)
@@ -141,19 +150,10 @@ def build_shockwave_grid_ui(tab, parent_layout) -> None:
         slider(response, *spec)
     from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
     build_spectrum_smoothing_controls(tab, response, mode_key="shockwave_grid")
-    for key, label, title, tooltip in _COLOURS:
-        content = row(look, label)
-        colour = tab._color_from_default("spotify_visualizer", key)
-        setattr(tab, f"_{key}", colour)
-        button = ColorSwatchButton(title=title)
-        button.setToolTip(tooltip)
-        bind_color_button(tab, button, f"_{key}", auto_switch=True, initial_color=colour)
-        setattr(tab, f"{key}_btn", button)
-        content.addWidget(button)
-        content.addStretch()
-    for spec in _LOOK_SLIDERS:
-        slider(look, *spec)
-    content = row(look, "Allow Overflow:")
+
+    for spec in _RENDER_SLIDERS:
+        slider(render, *spec)
+    content = row(render, "Allow Overflow:")
     tab.shockwave_grid_allow_overflow = QCheckBox("Let the grid leave the visualizer's rectangle")
     tab.shockwave_grid_allow_overflow.setProperty("circleIndicator", True)
     tab.shockwave_grid_allow_overflow.setChecked(

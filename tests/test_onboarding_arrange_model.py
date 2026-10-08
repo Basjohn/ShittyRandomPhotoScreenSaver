@@ -39,7 +39,11 @@ def _widgets() -> dict:
     }
 
 
-def _custom_payload(widgets: dict, widget_id: str, variant: str = "default") -> dict:
+def _custom_payload(widgets: dict, widget_id: str, variant: str | None = None) -> dict:
+    if variant is None:
+        from rendering.quick.custom_layout_hydration import geometry_variant_for_presentation
+
+        variant = geometry_variant_for_presentation(widget_id, None, widgets)
     return widgets["custom_layout"]["displays"]["screen:test"][widget_id][variant]["size_payload"]
 
 

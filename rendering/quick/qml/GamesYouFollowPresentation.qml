@@ -140,9 +140,9 @@ OverlayWidget {
         x: (followsRoot.headerFlipped ? 14.0 : parent.width - width - 14.0)
             + childOffsetX("refresh")
         y: 15.0 + childOffsetY("refresh")
-        width: 28.0 * childWidthScale("refresh")
-        height: 28.0 * childHeightScale("refresh")
-        radius: 7.0
+        width: 30.0 * childWidthScale("refresh")
+        height: 30.0 * childHeightScale("refresh")
+        radius: 6.0
         color: followedModel.showRefreshFrame ? followedModel.headerFillColor : "transparent"
         border.color: refreshHover.hovered && canActivate
             ? "white"
@@ -159,17 +159,16 @@ OverlayWidget {
             blocking: false
             cursorShape: Qt.PointingHandCursor
         }
-        ShadowedText {
-            anchors.centerIn: parent
-            width: parent.width
-            height: parent.height
-            text: "↻"
-            textFormat: Text.PlainText
-            font.pixelSize: Math.min(parent.width, parent.height) * 0.8
-            color: refreshHover.hovered && refreshGlyph.canActivate
-                ? "white" : followedModel.primaryColor
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+        RefreshStateGlyph {
+            id: refreshStateGlyph
+            objectName: "followedRefreshGlyph"
+            anchors.fill: parent
+            busy: followedModel.refreshing
+            transitionClock: followsRoot.refreshTransitionClock
+            hovered: refreshHover.hovered
+            canActivate: refreshGlyph.canActivate
+            glyphColor: followedModel.primaryColor
+            fontFamily: followedModel.fontFamily
             shadowEnabled: followedModel.textShadowEnabled
             shadowColor: followedModel.textShadowColor
             shadowOffsetX: followedModel.textShadowOffsetX

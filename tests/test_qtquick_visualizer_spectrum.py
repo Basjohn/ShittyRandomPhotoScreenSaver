@@ -552,14 +552,13 @@ def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> N
     wide = _layout(_presentation(extent=(560.0, 280.0)), count)
     tall = _layout(_presentation(extent=(420.0, 420.0)), count)
 
-    # Visible border obeys the bounded/non-linear stroke rule: authored 4px clamps
-    # to 3.3px at 0.65x, not a naive 2.6px. Pure scale-derived bar metrics still
+    # Visible border obeys the visible-card chrome rule: authored 4px remains 4px at 0.65x rather than shrinking to 2.6px. Pure scale-derived bar metrics still
     # scale uniformly; anything derived from the border-inset content geometry
-    # differs from a naive 0.65x by exactly the bounded border delta.
+    # differs from a naive 0.65x by exactly the constant-border delta.
     assert canonical_pres.border_width == pytest.approx(4.0)
-    assert scaled_pres.border_width == pytest.approx(3.3)
+    assert scaled_pres.border_width == pytest.approx(4.0)
     border_delta = scaled_pres.border_width - canonical_pres.border_width * 0.65
-    assert border_delta == pytest.approx(0.7)
+    assert border_delta == pytest.approx(1.4)
 
     # bar_gap is a pure function of visual scale, so it scales uniformly, as do the
     # scale-only segment/height metrics.
@@ -572,7 +571,7 @@ def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> N
     assert scaled.bars_left == pytest.approx(canonical.bars_left * 0.65 + border_delta)
 
     # The bar field lives inside content_width (= outer - 2*border), whose only
-    # non-uniform term is the bounded border. bar_span carries the whole -2*delta;
+    # non-uniform term is the constant border. bar_span carries the whole -2*delta;
     # bar_width carries that same content-width delta shared across the bars.
     assert scaled.bar_span == pytest.approx(canonical.bar_span * 0.65 - 2.0 * border_delta)
     assert scaled.bar_width == pytest.approx(
@@ -868,3 +867,80 @@ def test_real_gl_organs_preset_keeps_dark_fill_when_screen_fit_shrinks_glow(
         max(sample[:3]) - min(sample[:3]) > 60
         for sample in visible_rainbow_samples
     ), visible_rainbow_samples
+
+
+@pytest.mark.qt
+def test_real_gl_solid_bar_top_border_never_loses_pixel_coverage_during_motion(
+    _real_spectrum_gl,
+) -> None:
+    """R-108: moving solid-bar tops retain raster coverage at every fractional height."""
+    import numpy as np
+    from core.settings.models import SpotifyVisualizerSettings
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from widgets.spotify_visualizer.config_applier import (
+        _populate_shared_visualizer_extras, apply_presentation_vis_mode_kwargs,
+    )
+
+    settings = SpotifyVisualizerSettings.from_mapping(
+        frozen_visualizer_settings("spectrum"), apply_preset_overlay=False,
+    )
+    resolved = asdict(settings)
+    controller = VisualizerRuntimeController(runtime_generation=2, initial_mode="spectrum")
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, resolved)
+    capture_host = SimpleNamespace(
+        presentation_config_host=controller.presentation_state,
+        _spectrum_ghosting_enabled=False, _spectrum_ghost_decay=0.18,
+        _osc_ghosting_enabled=False, _osc_ghost_intensity=0.4, _osc_ghost_decay=0.4,
+        _sine_ghosting_enabled=False, _sine_ghost_alpha=0.0, _sine_ghost_decay=0.4,
+        _sine_heartbeat=0.0, _heartbeat_intensity=0.0,
+    )
+    parameters: dict[str, object] = {}
+    _populate_shared_visualizer_extras(parameters, capture_host)
+    parameters.update(
+        spectrum_ghosting_enabled=False, spectrum_glow_enabled=False,
+        rainbow_enabled=False, rainbow_per_bar=False,
+        spectrum_rainbow_fill=False, spectrum_rainbow_border=False,
+    )
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1380.0, 280.0), viewport_extent=(8240.0, 1579.0),
+        border_width=4.0, corner_radius=8.0,
+    )
+    assert presentation.uniform_visual_scale < 0.2
+    count = resolved["spectrum_bar_count"]
+    layout = _layout(presentation, count)
+    index = count // 2
+    x = int(layout.bars_left + (index + 0.5) * (layout.bar_width + layout.bar_gap))
+
+    # Sweep through fractional active heights. Before the coverage-floor repair,
+    # one endpoint repeatedly became the black fill because the moving authored
+    # top stroke was only ~0.17 framebuffer pixels wide.
+    for level in np.linspace(0.08, 0.92, 37):
+        logical = VisualizerLogicalFrame(
+            runtime_generation=2, engine_generation=5, activation_id=7,
+            source_generation=5, source_activation_id=7, mode_id="spectrum",
+            playing=True, logical_timestamp=1.0, source_timestamp=1.0, changed=True,
+            present_frame=True, mode_reveal_ready=True,
+            common=VisualizerCommonState(
+                bars=(float(level),) * count, bar_count=count,
+                style=freeze_render_fields({
+                    "fill_color": (8, 8, 8, 255),
+                    "border_color": (255, 255, 255, 255),
+                    "single_piece": True, "border_radius": 0.0,
+                }),
+            ),
+            mode_state=SpectrumFrame(
+                peaks=(float(level),) * count, parameters=freeze_render_fields(parameters),
+            ),
+        )
+        snapshot = compose_visualizer_render_snapshot(logical, presentation, logical_revision=1)
+        pixels = np.frombuffer(_real_spectrum_gl(snapshot), dtype=np.uint8).reshape(280, 1380, 4)
+        covered = np.nonzero(pixels[:, x, 3] >= 220)[0]
+        assert covered.size > 2
+        # glReadPixels is bottom-origin.  In this production Quick path the
+        # active bar occupies [moving_top .. anchored_baseline], so covered[0]
+        # is the fractional edge whose cap used to vanish.  The stationary
+        # baseline deliberately keeps authored-scale border thickness and is
+        # not part of this regression contract.
+        moving_top = pixels[covered[0], x, :3]
+        assert int(moving_top.max()) >= 220, (level, moving_top)

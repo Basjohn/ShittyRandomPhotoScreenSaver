@@ -33,6 +33,57 @@ def _function_source(path: Path, function_name: str) -> str:
     raise AssertionError(f"{function_name} not found in {path}")
 
 
+
+def test_visualizer_ui_state_defaults_cover_all_registered_settings_surfaces() -> None:
+    """Every lazily constructible Visualizer Settings surface has canonical UI state.
+
+    The Settings body host is intentionally fail-loud when a bucket/state identity
+    is absent. Keep the canonical maps in lock-step with descriptor capabilities
+    and static builder bucket declarations so adding a technical-capable mode or
+    bucket cannot turn a lazy page selection into a runtime KeyError.
+    """
+    ui = DEFAULT_SETTINGS["ui"]
+    descriptors = iter_all_visualizer_mode_descriptors()
+
+    mode_ids = {descriptor.mode_id for descriptor in descriptors}
+    assert mode_ids <= set(ui["visualizer_adv_states"])
+
+    technical_modes = {
+        descriptor.mode_id
+        for descriptor in descriptors
+        if descriptor.technical_controls
+    }
+    assert technical_modes <= set(ui["visualizer_tech_states"])
+    assert {
+        f"{mode}:{bucket}"
+        for mode in technical_modes
+        for bucket in ("agc", "transient")
+    } <= set(ui["visualizer_tech_bucket_states"])
+
+    # Builder bucket identities are static authored schema. Extract them from
+    # the lazy builder source without importing QWidget/PySide code.
+    builder_buckets: set[str] = set()
+    for path in (ROOT / "ui" / "tabs" / "media").glob("*_builder.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Name) or node.func.id != "build_collapsible_bucket":
+                continue
+            kwargs = {kw.arg: kw.value for kw in node.keywords if kw.arg}
+            mode_node = kwargs.get("mode_key")
+            bucket_node = kwargs.get("bucket_key")
+            if (
+                isinstance(mode_node, ast.Constant)
+                and isinstance(mode_node.value, str)
+                and isinstance(bucket_node, ast.Constant)
+                and isinstance(bucket_node.value, str)
+            ):
+                builder_buckets.add(f"{mode_node.value}:{bucket_node.value}")
+
+    assert builder_buckets <= set(ui["visualizer_bucket_states"])
+
+
 def test_fresh_settings_collapsible_state_is_all_closed() -> None:
     ui = DEFAULT_SETTINGS["ui"]
     for state_map_name in (
@@ -210,7 +261,7 @@ def test_flat_and_visualizer_scopes_replace_previous_open_bucket() -> None:
     }
 
 
-def test_shared_rainbow_and_spectrum_bar_appearance_are_real_bucket_schema() -> None:
+def test_shared_rainbow_and_bar_appearance_are_real_bucket_schema() -> None:
     keys = set(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
     descriptors = iter_all_visualizer_mode_descriptors()
     for descriptor in descriptors:
@@ -221,6 +272,8 @@ def test_shared_rainbow_and_spectrum_bar_appearance_are_real_bucket_schema() -> 
             assert rainbow_key not in keys
 
     assert "spectrum:bar_appearance" in keys
+    assert "extruded_spectrum:bar_appearance" in keys
+    assert "bubble:bar_appearance" not in keys
     assert "sphere:bar_appearance" not in keys
 
     source = (ROOT / "ui" / "tabs" / "visualizers_tab.py").read_text(encoding="utf-8")

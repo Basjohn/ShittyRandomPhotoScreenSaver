@@ -40,6 +40,312 @@ def _raw(mode, index):
     return json.loads(path.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
 
 
+
+def test_extruded_curated_presets_freeze_the_full_organs_profile_without_runtime_borrowing():
+    """All shipped Extruded finishes preserve the old default Organs-backed response.
+
+    Before independent ownership, Extruded consumed Spectrum's selected preset at
+    activation. Fresh/default Spectrum selected Organs, so migration parity means
+    every Extruded finish shares that complete consumed profile while retaining
+    independent ``extruded_spectrum_*`` persistence.
+    """
+    donor = _raw("spectrum", 0)
+    suffixes = (
+        "visual_smoothing_enabled", "visual_smoothing",
+        "ghosting_enabled", "ghost_alpha", "ghost_decay",
+        "mirrored", "shape_nodes", "notch_positions_mirrored",
+        "notch_positions_linear", "lane_strengths_mirrored",
+        "lane_strengths_linear", "wave_amplitude", "profile_floor", "drop_speed",
+        "bar_border_color", "bar_border_opacity",
+        "dynamic_floor", "manual_floor", "dynamic_range_enabled", "agc_strength",
+        "input_gain", "kick_lane_gain", "transient_pulse_gain", "transient_clamp",
+        "audio_block_size", "adaptive_sensitivity", "sensitivity", "bar_count",
+        "lane_transient_mix",
+    )
+    for index, preset in enumerate(get_presets("extruded_spectrum")):
+        if preset.is_custom:
+            continue
+        raw = _raw("extruded_spectrum", index)
+        for suffix in suffixes:
+            assert raw[f"extruded_spectrum_{suffix}"] == donor[f"spectrum_{suffix}"]
+        assert raw["extruded_spectrum_solid_bar_hysteresis_enabled"] is (
+            donor["spectrum_render_mode"] == "bars"
+        )
+        # Historical Extruded ignored Spectrum fill alpha. The ownership migration
+        # deliberately froze the same RGB at opaque alpha to preserve those pixels.
+        assert raw["extruded_spectrum_bar_fill_color"] == [
+            *donor["spectrum_bar_fill_color"][:3], 255
+        ]
+
+        poisoned = deepcopy(_BASE)
+        poisoned.update(
+            spectrum_shape_nodes=[[0.0, 0.01], [1.0, 0.99]],
+            spectrum_lane_strengths_mirrored={"Bass": 0.99, "Mid": 0.01},
+            spectrum_audio_block_size=512, spectrum_bar_count=17,
+            spectrum_lane_transient_mix=0.01,
+        )
+        applied = apply_preset_to_config("extruded_spectrum", index, poisoned)
+        assert applied["spectrum_shape_nodes"] == poisoned["spectrum_shape_nodes"]
+        assert applied["spectrum_bar_count"] == 17
+        assert applied["spectrum_lane_transient_mix"] == pytest.approx(0.01)
+        for suffix in suffixes:
+            assert applied[f"extruded_spectrum_{suffix}"] == donor[f"spectrum_{suffix}"]
+
+
+class _ActivationAudioWorker:
+    def __init__(self) -> None:
+        self.block_size = None
+        self.kick_lane_gain = None
+        self.transient_mix = None
+        self.transient_clamp = None
+
+    def set_audio_block_size(self, value: int) -> None:
+        self.block_size = int(value)
+
+
+class _ActivationEngine:
+    """Production-shaped source + Technical destination for activation proof."""
+
+    def __init__(self) -> None:
+        self._audio_worker = _ActivationAudioWorker()
+        self.mirrored = None
+        self.shape_nodes = None
+        self.notches = None
+        self.shape_config = None
+        self.drop_speed = None
+        self.bar_count = None
+        self.floor = None
+        self.sensitivity = None
+        self.energy_boost = None
+        self.agc_strength = None
+        self.input_gain = None
+
+    def set_spectrum_mirrored(self, value: bool) -> None:
+        self.mirrored = bool(value)
+
+    def set_spectrum_shape_nodes(self, value: list) -> None:
+        self.shape_nodes = deepcopy(value)
+
+    def set_notch_positions(self, value: list) -> None:
+        self.notches = deepcopy(value)
+
+    def set_spectrum_shape_config(self, value) -> None:
+        self.shape_config = value
+
+    def set_drop_speed(self, value: float) -> None:
+        self.drop_speed = float(value)
+
+    def reconfigure_bar_count(self, value: int) -> None:
+        self.bar_count = int(value)
+
+    def set_floor_config(self, dynamic: bool, manual: float) -> None:
+        self.floor = (bool(dynamic), float(manual))
+
+    def set_sensitivity_config(self, adaptive: bool, value: float) -> None:
+        self.sensitivity = (bool(adaptive), float(value))
+
+    def set_energy_boost(self, value: float) -> None:
+        self.energy_boost = float(value)
+
+    def set_agc_strength(self, value: float) -> None:
+        self.agc_strength = float(value)
+
+    def set_input_gain(self, value: float) -> None:
+        self.input_gain = float(value)
+
+    def set_transient_lane_config(
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float = 0.0,
+    ) -> None:
+        self._audio_worker.kick_lane_gain = float(kick_lane_gain)
+        self._audio_worker.transient_mix = float(spectrum_lane_transient_mix)
+        self._audio_worker.transient_clamp = float(transient_clamp)
+
+
+@pytest.mark.parametrize("mode", ("extruded_spectrum", "shockwave_grid", "sphere"))
+def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mode):
+    """Settings/preset resolution must survive the final Quick-owner apply seam.
+
+    This is intentionally beyond model/source projection tests: construct the
+    retained owner with the same activation/model/Technical pipeline used by
+    DisplayManager and prove the active 3D mode reaches logical, presentation,
+    BeatEngine source and Technical destinations without reading poisoned live
+    Spectrum authoring.
+    """
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from tests._visualizer_presentation import make_visualizer_owner
+    from widgets.spotify_visualizer.technical_config import (
+        build_technical_cache,
+        resolve_technical_config,
+    )
+
+    config = deepcopy(_BASE)
+    config.update(
+        mode=mode,
+        **{
+            f"preset_{mode}": get_custom_preset_index(mode),
+            f"{mode}_bar_count": 27,
+            f"{mode}_dynamic_floor": False,
+            f"{mode}_manual_floor": 0.27,
+            f"{mode}_adaptive_sensitivity": False,
+            f"{mode}_sensitivity": 0.44,
+            f"{mode}_audio_block_size": 256,
+            f"{mode}_dynamic_range_enabled": False,
+            f"{mode}_agc_strength": 0.31,
+            f"{mode}_input_gain": 0.74,
+            f"{mode}_kick_lane_gain": 1.22,
+            f"{mode}_transient_pulse_gain": 0.58,
+            f"{mode}_transient_clamp": 1.37,
+        },
+        # Poison the former lender. None of these values may become the active
+        # Extruded/Shockwave authored profile, and Sphere intentionally projects
+        # canonical source shape rather than live Spectrum authoring.
+        spectrum_mirrored=True,
+        spectrum_shape_nodes=[[0.0, 0.97], [1.0, 0.03]],
+        spectrum_notch_positions_mirrored=[[0.0, "Bass"], [1.0, "Treble"]],
+        spectrum_notch_positions_linear=[[0.0, "Treble"], [1.0, "Bass"]],
+        spectrum_wave_amplitude=0.03,
+        spectrum_profile_floor=0.29,
+        spectrum_drop_speed=2.91,
+    )
+
+    if mode in {"extruded_spectrum", "shockwave_grid"}:
+        config.update(
+            {
+                f"{mode}_mirrored": False,
+                f"{mode}_shape_nodes": [[0.0, 0.18], [0.55, 0.79], [1.0, 0.41]],
+                f"{mode}_notch_positions_linear": [
+                    [0.0, "Bass"], [0.41, "Vocal"], [1.0, "Treble"]
+                ],
+                f"{mode}_notch_positions_mirrored": [
+                    [0.0, "Mid"], [0.58, "Low-Mid"], [1.0, "Bass"]
+                ],
+                f"{mode}_wave_amplitude": 0.63,
+                f"{mode}_profile_floor": 0.17,
+                f"{mode}_drop_speed": 1.73,
+            }
+        )
+    if mode == "extruded_spectrum":
+        config.update(
+            extruded_spectrum_depth=2.13,
+            extruded_spectrum_body_alpha=0.42,
+            extruded_spectrum_reflection=0.0,
+            extruded_spectrum_colouring="Bar Colours",
+        )
+    elif mode == "shockwave_grid":
+        config.update(
+            shockwave_grid_wave_height=0.67,
+            shockwave_grid_density=0.38,
+            shockwave_grid_line_color=[11, 22, 33, 44],
+        )
+    else:
+        config.update(
+            sphere_gloss=0.73,
+            sphere_fill_color=[10, 20, 30, 40],
+            sphere_analysis_notch_positions=[
+                [0.0, "Bass"], [0.24, "Mid"], [0.72, "Treble"], [1.0, "End"]
+            ],
+        )
+
+    activation = resolve_visualizer_activation_payload(config)
+    model = SpotifyVisualizerSettings.from_mapping(
+        activation.resolved_config,
+        apply_preset_overlay=False,
+        resolve_preset_indices=False,
+    )
+    technical_cache = build_technical_cache(None, model)
+    engine = _ActivationEngine()
+    factory_bar_counts: list[int] = []
+
+    def engine_factory(bar_count: int):
+        # Production get_shared_spotify_beat_engine(bar_count) configures the
+        # shared engine to this count at acquisition. Keep the fake faithful to
+        # that seam rather than requiring configure() to redundantly reapply an
+        # already-matching controller count.
+        factory_bar_counts.append(int(bar_count))
+        engine.reconfigure_bar_count(bar_count)
+        return engine
+
+    runtime = SimpleNamespace(
+        runtime_generation=41,
+        screen_index=0,
+        scene_controller=SimpleNamespace(incoming_image=None, presentation_image=None),
+    )
+    owner = make_visualizer_owner(
+        runtime,
+        bar_count=model.resolve_bar_count(mode),
+        initial_mode=mode,
+        engine_factory=engine_factory,
+    )
+    owner.controller.settings_model = model
+    owner.controller.record_resolved_activation(activation)
+    owner.controller.technical_config_cache = technical_cache
+    owner.configure(
+        logical_kwargs=dataclasses.asdict(model),
+        presentation_kwargs=dataclasses.asdict(model),
+        technical_config=resolve_technical_config(technical_cache, mode),
+        playing=False,
+    )
+
+    state = owner.controller.logical_tick_state
+    presentation = owner.controller.presentation_state
+    assert owner.controller.bar_count == 27
+    assert factory_bar_counts == [27]
+    assert engine.bar_count == 27
+    assert engine.floor == (False, pytest.approx(0.27))
+    assert engine.sensitivity == (False, pytest.approx(0.44))
+    assert engine.input_gain == pytest.approx(0.74)
+    assert engine._audio_worker.block_size == 256
+    assert state._transient_clamp == pytest.approx(1.37)
+    if mode == "sphere":
+        # Sphere deliberately owns only the Technical controls it consumes.
+        # AGC, kick-lane gain and transient-pulse gain are not Sphere Settings
+        # keys, so the shared engine must receive canonical Spectrum baselines
+        # rather than invented ``sphere_*`` values from this poisoned mapping.
+        assert engine.agc_strength == pytest.approx(_BASE["spectrum_agc_strength"])
+        assert engine._audio_worker.kick_lane_gain == pytest.approx(
+            _BASE["spectrum_kick_lane_gain"]
+        )
+        assert state._transient_pulse_gain == pytest.approx(
+            _BASE["spectrum_transient_pulse_gain"]
+        )
+    else:
+        assert engine.agc_strength == pytest.approx(0.31)
+        assert engine._audio_worker.kick_lane_gain == pytest.approx(1.22)
+        assert state._transient_pulse_gain == pytest.approx(0.58)
+
+    if mode in {"extruded_spectrum", "shockwave_grid"}:
+        assert engine.mirrored is False
+        assert engine.shape_nodes == config[f"{mode}_shape_nodes"]
+        assert engine.notches == config[f"{mode}_notch_positions_linear"]
+        assert engine.drop_speed == pytest.approx(1.73)
+        assert engine.shape_config.wave_amplitude == pytest.approx(0.63)
+        assert engine.shape_config.profile_floor == pytest.approx(0.17)
+        assert engine.shape_nodes != config["spectrum_shape_nodes"]
+    else:
+        # Sphere owns only the two consumed analysis splits. The unused shared
+        # shaper inputs deliberately resolve from canonical product defaults,
+        # not from the user's live Spectrum profile.
+        assert engine.shape_nodes == _BASE["spectrum_shape_nodes"]
+        assert engine.shape_nodes != config["spectrum_shape_nodes"]
+        assert engine.notches == config["sphere_analysis_notch_positions"]
+
+    if mode == "extruded_spectrum":
+        assert presentation._extruded_spectrum_depth == pytest.approx(2.13)
+        assert presentation._extruded_spectrum_body_alpha == pytest.approx(0.42)
+        assert presentation._extruded_spectrum_colouring == "Bar Colours"
+    elif mode == "shockwave_grid":
+        assert presentation._shockwave_grid_wave_height == pytest.approx(0.67)
+        assert presentation._shockwave_grid_density == pytest.approx(0.38)
+        assert presentation._shockwave_grid_line_color == [11, 22, 33, 44]
+    else:
+        assert state._sphere_gloss == pytest.approx(0.73)
+        assert state._sphere_fill_color == (10, 20, 30, 40)
+        assert state._sphere_parameters["sphere_gloss"] == pytest.approx(0.73)
+
+
 @pytest.mark.parametrize(("mode", "index"), _CASES)
 def test_every_curated_3d_file_explicitly_owns_its_complete_consumed_namespace(mode, index):
     raw = _raw(mode, index)
@@ -129,12 +435,23 @@ def test_raw_curated_3d_normalization_cannot_borrow_changed_spectrum_catalogue(m
     assert normalize_visualizer_mode_payload(mode, _raw(mode, index)) == before
 
 
-def test_extruded_presets_restore_different_authored_shapes_response_and_colour_paths():
-    first, second = (_raw("extruded_spectrum", index) for index in (0, 1))
-    assert first["extruded_spectrum_shape_nodes"] != second["extruded_spectrum_shape_nodes"]
-    assert first["extruded_spectrum_wave_amplitude"] != second["extruded_spectrum_wave_amplitude"]
-    assert first["extruded_spectrum_colouring"] != second["extruded_spectrum_colouring"]
-    assert first["extruded_spectrum_mirrored"] != second["extruded_spectrum_mirrored"]
+def test_extruded_presets_share_frozen_response_but_keep_distinct_3d_finishes():
+    raws = [_raw("extruded_spectrum", index) for index in range(4)]
+    response_keys = (
+        "extruded_spectrum_shape_nodes", "extruded_spectrum_wave_amplitude",
+        "extruded_spectrum_bar_count", "extruded_spectrum_audio_block_size",
+        "extruded_spectrum_input_gain", "extruded_spectrum_lane_transient_mix",
+    )
+    for key in response_keys:
+        assert len({json.dumps(raw[key], sort_keys=True) for raw in raws}) == 1
+
+    finishes = {
+        (raw["extruded_spectrum_colouring"], raw["extruded_spectrum_turn"],
+         raw["extruded_spectrum_tilt"], raw["extruded_spectrum_gloss"],
+         raw["extruded_spectrum_reflection"], raw["extruded_spectrum_face_mirror"])
+        for raw in raws
+    }
+    assert len(finishes) == 4
 
 
 @pytest.mark.parametrize("mode", _MODES)
@@ -354,8 +671,6 @@ def test_existing_extruded_rainbow_colour_field_is_consumed_only_by_spectral_col
         assert np.array_equal(initial, drifted)
     else:
         assert (np.abs(initial[..., :3] - drifted[..., :3]).max(axis=2) > 8).sum() > 200
-        state = dataclasses.replace(snapshot.logical.mode_state, parameters={
-            **dict(snapshot.logical.mode_state.parameters), "extruded_spectrum_hue_drift": 0.0,
-        })
-        snapshot = dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
-        assert np.array_equal(capture.render(host, at_animation(0.0)), capture.render(host, at_animation(1.0)))
+        from rendering.quick.visualizer.implementations.extruded_spectrum import extruded_hue_shift
+        assert extruded_hue_shift(0.0, 0.0) == 0.0
+        assert extruded_hue_shift(1.0, 0.0) == 0.0

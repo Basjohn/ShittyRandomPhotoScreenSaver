@@ -1,6 +1,6 @@
-"""Pure static geometry for the experimental voxel Sphere renderer.
+"""Pure static geometry for the Voxel Sphere renderer.
 
-The module owns no OpenGL state.  It stays local to the experimental mode so it
+The module owns no OpenGL state.  It stays local to Sphere so it
 can disappear with the mode; a later independent 3D consumer may justify
 extracting an identical cube/instance seam.
 """

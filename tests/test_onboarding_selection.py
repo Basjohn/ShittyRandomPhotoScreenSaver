@@ -112,7 +112,7 @@ def test_current_summary_counts_effective_families_and_media_aliases(settings, m
     assert state.current_setup_summary(settings)["visualizer_modes"] == ()
 
 
-def test_visualizer_selection_never_promotes_hidden_sphere(qapp, settings) -> None:
+def test_visualizer_selection_offers_standard_sphere_and_can_enable_it(qapp, settings) -> None:
     widgets = settings.values["widgets"]
     widgets["family_activation"]["media"] = True
     widgets["family_activation"]["visualizers"] = True
@@ -122,18 +122,19 @@ def test_visualizer_selection_never_promotes_hidden_sphere(qapp, settings) -> No
     try:
         page.refresh()
         offered = {
-            page.rows.item(index).data(Qt.ItemDataRole.UserRole)
+            page.rows.item(index).data(Qt.ItemDataRole.UserRole): page.rows.item(index)
             for index in range(page.rows.count())
         }
-        assert "sphere" not in offered
+        assert "sphere" in offered
+        assert offered["sphere"].text() == "Voxel Sphere"
+        assert offered["sphere"].checkState() == Qt.CheckState.Unchecked
         assert settings.writes == []
 
         page._enable(True)
-        first = page.rows.item(0)
-        page._toggle(first)
+        offered["sphere"].setCheckState(Qt.CheckState.Checked)
         modes = settings.get("widgets.spotify_visualizer.mode_activation")
         assert settings.get("widgets.spotify_visualizer.enabled") is True
-        assert modes["sphere"] is False
+        assert modes["sphere"] is True
     finally:
         page.deleteLater()
 

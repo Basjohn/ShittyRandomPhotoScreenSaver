@@ -56,9 +56,10 @@ def _item(
     size_reset_capable: bool = False,
     authored_reference_size: tuple[float, float] | None = None,
     child_collision_enabled: bool = True,
+    geometry_variant: str = "default",
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
-        source_key=CustomLayoutKey(widget_id, display_identity),
+        source_key=CustomLayoutKey(widget_id, display_identity, geometry_variant),
         model_identity=widget_id,
         baseline_global_rect=rect,
         current_global_rect=rect,
@@ -104,6 +105,54 @@ def test_overlay_model_exposes_widget_scoped_child_collision_preference() -> Non
     assert model.data(index, roles["childCollisionEnabled"]) is True
 
 
+@pytest.mark.qt
+def test_visualizer_edit_envelope_and_alt_orbit_are_read_only_session_edges(qt_app) -> None:
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(100, 80, 420, 280),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+        geometry_variant="freeform_3d",
+    )
+    session.add_item(visualizer)
+    envelope_root = QQuickItem()
+    envelope_root.setProperty("editContentEnvelope", {
+        "admitted": True, "mode": "extruded_spectrum",
+        "left": 4.0, "top": 8.0, "right": 408.0, "bottom": 264.0,
+        "pivot_x": 210.0, "pivot_y": 126.0,
+    })
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        content_envelope_item_resolver=lambda item: envelope_root if item is visualizer else None,
+    )
+    roles = {bytes(name).decode(): role for role, name in model.roleNames().items()}
+    index = model.index(0, 0)
+    before_rect = QRect(visualizer.current_global_rect)
+    before_payload = dict(visualizer.current_size_payload)
+    orbit_events: list[tuple[float, float]] = []
+    finished: list[bool] = []
+    model.visualizer_edit_orbit_requested.connect(
+        lambda turn, tilt: orbit_events.append((turn, tilt))
+    )
+    model.visualizer_edit_orbit_finished.connect(lambda: finished.append(True))
+
+    assert "contentEnvelopeItem" in roles
+    assert model.data(index, roles["contentEnvelopeItem"]) is envelope_root
+    assert model.orbitVisualizerInEdit(0, 12.0, -4.0) is False
+    model.selectItem(0)
+    assert model.orbitVisualizerInEdit(0, 12.0, -4.0)
+    model.finishVisualizerOrbitInEdit(0)
+    assert orbit_events == [(12.0, -4.0)] and finished == [True]
+    # The read-only envelope and semantic orbit request do not become a
+    # session geometry/persistence/snap authority.
+    assert visualizer.current_global_rect == before_rect
+    assert visualizer.current_size_payload == before_payload
+
+
 def test_overlay_model_mutates_shared_session_items_without_copying_authority() -> None:
     session = CustomLayoutSession()
     singleton = _item("clock", "display:a", QRect(110, 220, 180, 80))
@@ -145,6 +194,27 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
     assert model.rowCount() == 0
     assert foreign.current_enabled is True
     assert foreign.removed is False
+
+
+@pytest.mark.parametrize(
+    ("variant", "selected", "enabled"),
+    (("planar", True, True), ("freeform_3d", False, True), ("freeform_3d", True, False)),
+)
+def test_edit_orbit_rejects_unadmitted_python_rows(variant, selected, enabled):
+    session = CustomLayoutSession()
+    visualizer = _item("spotify_visualizer", "display:a", QRect(100, 80, 420, 280), geometry_variant=variant)
+    session.add_item(visualizer)
+    model = CustomLayoutOverlayModel(session=session, display_identity="display:a")
+    events = []
+    model.visualizer_edit_orbit_requested.connect(lambda *args: events.append(args))
+    try:
+        if selected:
+            model.selectItem(0)
+        visualizer.current_enabled = enabled
+        assert model.orbitVisualizerInEdit(0, 12.0, -4.0) is False
+        assert events == []
+    finally:
+        model.retire()
 
 
 def test_overlay_restore_size_role_and_action_route_through_owner_handler() -> None:

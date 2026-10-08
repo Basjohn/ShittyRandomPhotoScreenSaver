@@ -89,7 +89,7 @@ The reviewed standard/Screensaver baseline is intentionally conservative about s
 - MC is a deliberate profile exception and preserves its established monitor routes through `default_profile_overrides.py` (including existing Display-2 and `ALL` routes);
 - Weather remains enabled with blank location (`""`), leaving location discovery/onboarding user-specific rather than baking a city into product defaults;
 - Gmail remains enabled and starts on Display 1;
-- Spotify Visualizer remains enabled and starts in **Bubble**; its existing Media/now-playing admission keeps it dormant when there is nothing to visualize, while its enabled-mode pool excludes experimental Sphere so Sphere stays dormant until explicitly enabled;
+- Spotify Visualizer remains enabled and starts in **Bubble**; its existing Media/now-playing admission keeps it dormant when there is nothing to visualize. **Voxel Sphere** is a standard registered mode and is present in the canonical enabled-mode pool; Extruded Spectrum and Shockwave Grid remain default-disabled choices rather than hidden product exceptions;
 - Transitions start in Random mode through canonical `transitions.random_always=True`; `transitions.type` remains the remembered manual selection and must not be rewritten to the retired `"Random"` sentinel.
 
 Do not infer ordinary widget enablement from monitor routing. The standard profile may place disabled families on Display 1 so future activation has a sane single-monitor destination without consuming fresh-install screen space.

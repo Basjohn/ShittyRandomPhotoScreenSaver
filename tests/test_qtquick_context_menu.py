@@ -438,3 +438,26 @@ def test_images_submenu_actions_use_the_same_admission_and_click_through_guard(q
         assert not model.menuVisible  # dismissed like any row
     assert emitted == [("save_image", 1), "previous", "next"]
     assert [reason for _ms, reason in guards] == ["context_menu_action"] * 3
+
+
+def test_double_right_edit_shortcut_dismisses_menu_before_starting_editor(monkeypatch) -> None:
+    from types import SimpleNamespace
+    import rendering.runtime_input as runtime_input
+    from engine.display_manager import DisplayManager
+
+    order: list[object] = []
+    model = SimpleNamespace(dismiss=lambda: order.append("dismiss") or True)
+    unit = SimpleNamespace(runtime=SimpleNamespace(context_menu_model=model))
+    manager = SimpleNamespace(
+        _start_quick_custom_layout_session=lambda: order.append("start") or True
+    )
+    guards: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        runtime_input,
+        "suppress_runtime_pointer_input",
+        lambda ms, reason: guards.append((ms, reason)),
+    )
+
+    assert DisplayManager._start_quick_custom_layout_from_shortcut(manager, unit) is True
+    assert order == ["dismiss", "start"]
+    assert guards == [(700, "double_right_edit")]

@@ -21,6 +21,7 @@ from widgets.spotify_visualizer.render_bridge import (
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     ResolvedVisualizerPresentation,
+    VisualizerRenderSnapshot,
 )
 
 from .node import VisualizerRenderNode
@@ -129,6 +130,20 @@ class _RenderNodeRetirement:
             node = self._node
         return node is not None and node.render_host.prepared_activation == (mode_id, int(activation_id))
 
+    def retained_snapshot(self, identity: VisualizerRenderIdentity) -> VisualizerRenderSnapshot | None:
+        """Read only immutable pixels' input, never expose a render resource."""
+        with self._lock:
+            node = self._node
+            snapshot = None if node is None else node.snapshot
+        if snapshot is None:
+            return None
+        logical = snapshot.logical
+        if (logical.runtime_generation, logical.engine_generation, logical.activation_id, logical.mode_id) != (
+            identity.runtime_generation, identity.engine_generation, identity.activation_id, identity.mode_id
+        ):
+            return None
+        return snapshot
+
     def update_latest_mode(self, mode_id: str | None) -> None:
         with self._lock:
             self._latest_mode_id = mode_id
@@ -217,6 +232,16 @@ class VisualizerRenderItem(QQuickItem):
     @property
     def render_identity(self) -> VisualizerRenderIdentity | None:
         return self._identity
+
+    def retained_snapshot(self, identity: VisualizerRenderIdentity | None) -> VisualizerRenderSnapshot | None:
+        """GUI Edit edge: inspect the existing node's current immutable input.
+
+        No snapshot is copied or retained here. Cleared/transferred sources and
+        stale activations cannot expose an earlier generation's content.
+        """
+        if identity is None or self._identity != identity or self._presentation is None:
+            return None
+        return self._retirement.retained_snapshot(identity)
 
     @property
     def presentation(self) -> ResolvedVisualizerPresentation | None:

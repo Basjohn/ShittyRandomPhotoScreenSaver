@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import threading
 import time
 import uuid
@@ -612,6 +613,61 @@ class TestSettingsManagerDefaults:
         assert vis == expected
         assert "obsolete_custom_key" not in vis
 
+    def test_reset_visualizers_restores_all_current_3d_defaults_without_erasing_custom_cache(self, tmp_path: Path) -> None:
+        from core.settings.defaults import get_default_settings
+
+        manager = _make_manager(tmp_path)
+        defaults = get_default_settings()["widgets"]["spotify_visualizer"]
+        widgets = manager.get("widgets")
+        visualizer = dict(widgets["spotify_visualizer"])
+        visualizer.update(
+            mode="sphere",
+            extruded_spectrum_depth=2.73,
+            extruded_spectrum_bar_count=61,
+            shockwave_grid_wave_height=0.91,
+            shockwave_grid_bar_count=59,
+            sphere_gloss=0.11,
+            sphere_bar_count=57,
+            sphere_analysis_notch_positions=[
+                [0.0, "Bass"], [0.18, "Mid"], [0.81, "Treble"], [1.0, "End"]
+            ],
+        )
+        widgets = dict(widgets)
+        widgets["spotify_visualizer"] = visualizer
+        manager.set("widgets", widgets)
+
+        custom_cache = {
+            "extruded_spectrum": {"mode": "extruded_spectrum", "extruded_spectrum_depth": 1.73},
+            "shockwave_grid": {"mode": "shockwave_grid", "shockwave_grid_wave_height": 0.63},
+            "sphere": {"mode": "sphere", "sphere_gloss": 0.47},
+        }
+        manager.set("visualizer_custom_presets", custom_cache)
+        # This generic Settings root stores the caller's nested mapping as-is.
+        # Runtime preset transactions canonicalize snapshots through their own
+        # dedicated owner; Reset's contract here is simply not to mutate this
+        # separate user-authored root at all.
+        preserved_cache = deepcopy(manager.get("visualizer_custom_presets"))
+        assert preserved_cache == custom_cache
+
+        manager.reset_visualizers_to_defaults()
+
+        reset = manager.get("widgets.spotify_visualizer")
+        for key in (
+            "extruded_spectrum_depth",
+            "extruded_spectrum_bar_count",
+            "shockwave_grid_wave_height",
+            "shockwave_grid_bar_count",
+            "sphere_gloss",
+            "sphere_bar_count",
+            "sphere_analysis_notch_positions",
+        ):
+            assert reset[key] == defaults[key], key
+        assert reset["mode"] == defaults["mode"]
+        # Custom snapshots are a separate preset authority and intentionally
+        # survive a Visualizer-default reset; reset must not destroy user-authored
+        # Custom state merely because the visible live section returns to defaults.
+        assert manager.get("visualizer_custom_presets") == preserved_cache
+
     def test_fresh_defaults_keep_visualizer_enabled_without_repair(self, tmp_path: Path) -> None:
         from core.settings.defaults import get_default_settings
 
@@ -697,6 +753,51 @@ class TestSettingsManagerDefaults:
             reloaded._settings.metadata().get("visualizer_schema_version")
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
+
+    def test_visualizer_schema_v11_repairs_only_generated_extruded_profile(self, tmp_path: Path) -> None:
+        """Schema 10's generated 33/512 Extruded bundle must not masquerade as user state."""
+        storage_root = tmp_path / "extruded_schema10_profile"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg", application=app_name, storage_base_dir=storage_root,
+        )
+        stale = {
+            "mode": "extruded_spectrum",
+            "preset_extruded_spectrum": 4,
+            "extruded_spectrum_audio_block_size": 512,
+            "extruded_spectrum_bar_count": 33,
+            "extruded_spectrum_agc_strength": 0.5,
+            "extruded_spectrum_input_gain": 1.0,
+            "extruded_spectrum_sensitivity": 0.4,
+            "extruded_spectrum_wave_amplitude": 0.5,
+            "extruded_spectrum_profile_floor": 0.12,
+            "extruded_spectrum_drop_speed": 1.0,
+            # A real user edit outside the signature survives the repair.
+            "extruded_spectrum_ghost_alpha": 0.17,
+        }
+        manager._settings.setValue("widgets", {"spotify_visualizer": deepcopy(stale)})
+        manager._settings.setValue("visualizer_custom_presets", {
+            "extruded_spectrum": deepcopy(stale),
+        })
+        manager._settings.update_metadata(visualizer_schema_version=10)
+        manager._settings.sync()
+        assert manager.flush(timeout=5.0) is True
+        manager._settings.load()
+
+        reloaded = SettingsManager(
+            organization="TestOrg", application=app_name, storage_base_dir=storage_root,
+        )
+        live = reloaded.get("widgets.spotify_visualizer")
+        custom = reloaded.get("visualizer_custom_presets")["extruded_spectrum"]
+        for payload in (live, custom):
+            assert payload["extruded_spectrum_bar_count"] == 35
+            assert payload["extruded_spectrum_audio_block_size"] == 128
+            assert payload["extruded_spectrum_agc_strength"] == pytest.approx(0.34)
+            assert payload["extruded_spectrum_input_gain"] == pytest.approx(0.98)
+            assert payload["extruded_spectrum_sensitivity"] == pytest.approx(0.97)
+            assert payload["extruded_spectrum_lane_transient_mix"] == pytest.approx(0.9)
+            assert payload["extruded_spectrum_ghost_alpha"] == pytest.approx(0.17)
+        assert reloaded._settings.metadata().get("visualizer_schema_version") == 11
 
     def test_visualizer_schema_migration_nests_flat_custom_cache(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "flat_visualizer_custom_cache"

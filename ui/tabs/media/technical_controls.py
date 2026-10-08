@@ -27,7 +27,7 @@ _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
 MANUAL_FLOOR_MIN = 0.05
 MANUAL_FLOOR_MAX = 1.0
 
-_KICK_GAIN_MODES = frozenset({"spectrum"})
+_KICK_GAIN_MODES = frozenset({"spectrum", "extruded_spectrum"})
 _PULSE_GAIN_MODES = frozenset({"bubble"})
 
 _TRANSIENT_MIX_META: Dict[str, tuple] = {
@@ -36,6 +36,13 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
         "Kick Lane Mix:",
         "How much transient energy feeds the kick express lane (0%–100%).\n"
         "Higher = snappier kick response.",
+        0.0, 1.0,
+    ),
+    "extruded_spectrum": (
+        "extruded_spectrum_lane_transient_mix",
+        "Kick Lane Mix:",
+        "How much transient energy feeds Extruded Spectrum's kick express lane (0%–100%).\n"
+        "This is the mode-owned value frozen from its former Spectrum profile.",
         0.0, 1.0,
     ),
     "bubble": (
@@ -64,7 +71,7 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
 _KICK_GAIN_TIP = (
     "Kick event gain (0%–200%). Controls how strongly discrete kick help\n"
     "pushes the mode's fast-react path. 0% = disabled, 100% = unity.\n"
-    "Spectrum spends this in the kick lane.\n"
+    "Spectrum-family bar modes spend this in the kick lane.\n"
     "0% = disabled, 100% = unity, 200% = double."
 )
 _PULSE_GAIN_TIP = (
@@ -75,6 +82,7 @@ _PULSE_GAIN_TIP = (
 
 _MODE_LABELS: Dict[str, str] = {
     "spectrum": "Spectrum",
+    "extruded_spectrum": "Extruded Spectrum",
     "oscilloscope": "Oscilloscope",
     "sine_wave": "Sine Wave",
     "bubble": "Bubble",
@@ -82,6 +90,7 @@ _MODE_LABELS: Dict[str, str] = {
 
 _MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
     "spectrum": 128,
+    "extruded_spectrum": 128,
     "oscilloscope": 128,
     "sine_wave": 128,
     "bubble": 256,
@@ -89,6 +98,7 @@ _MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
 
 _MODE_RECOMMENDED_AGC: Dict[str, float] = {
     "spectrum": 0.42,
+    "extruded_spectrum": 0.34,
     "oscilloscope": 0.15,
     "sine_wave": 0.18,
     "bubble": 0.50,

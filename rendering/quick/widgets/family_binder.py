@@ -76,6 +76,23 @@ def _enabled_from_candidates(
     return tuple(enabled)
 
 
+
+
+def _global_card_border_width_px(widgets_config: Mapping[str, object]) -> float:
+    """Resolve the one Widgets -> General visible card-border width authority."""
+
+    canonical = float(require_canonical_default("widgets.global.card_border_width_px"))
+    values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping):
+        values = {}
+    try:
+        width = float(values.get("card_border_width_px", canonical))
+    except (TypeError, ValueError):
+        width = canonical
+    if width != width or width in (float("inf"), float("-inf")):
+        width = canonical
+    return max(0.0, min(12.0, width))
+
 def _attach_runtime_service(
     runtime_manager: Any,
     widget_id: str,
@@ -440,7 +457,7 @@ class ClockFamilyAdapter:
             widgets_config,
             display_signature=display_identity,
         )
-        style = ClockPresentationStyle.project(config, shadow_values)
+        style = ClockPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return ClockPresentationModel(config, style)
 
     def apply_committed_size_payload(self, model: Any, payload: Mapping[str, object]) -> None:
@@ -540,7 +557,7 @@ class WeatherFamilyAdapter:
         )
 
         config = WeatherPresentationConfig.from_widgets_mapping(widgets_config)
-        style = WeatherPresentationStyle.project(config, shadow_values)
+        style = WeatherPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return WeatherPresentationModel(config, style)
 
     def prepare_measurement(self, model: Any) -> None:
@@ -625,7 +642,7 @@ class RedditFamilyAdapter:
         config = RedditPresentationConfig.from_widgets_mapping(
             widgets_config, widget_id=widget_id
         )
-        style = RedditPresentationStyle.project(config, shadow_values)
+        style = RedditPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return RedditPresentationModel(config, style)
 
     def build(
@@ -712,7 +729,7 @@ class FeedFamilyAdapter:
         config = FeedPresentationConfig.from_widgets_mapping(
             widgets_config, widget_id=widget_id
         )
-        style = FeedPresentationStyle.project(config, shadow_values)
+        style = FeedPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return FeedPresentationModel(
             config, style, runtime_generation=runtime_generation
         )
@@ -821,7 +838,7 @@ class GmailFamilyAdapter:
         )
 
         config = GmailPresentationConfig.from_widgets_mapping(widgets_config)
-        style = GmailPresentationStyle.project(config, shadow_values)
+        style = GmailPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return GmailPresentationModel(
             config, style, runtime_generation=runtime_generation
         )
@@ -906,7 +923,7 @@ class AchievementPulseFamilyAdapter:
         config = AchievementPulsePresentationConfig.from_widgets_mapping(
             widgets_config
         )
-        style = AchievementPulsePresentationStyle.project(config, shadow_values)
+        style = AchievementPulsePresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return AchievementPulsePresentationModel(config, style)
 
     def build(
@@ -1068,7 +1085,7 @@ class AbandonmentIssuesFamilyAdapter:
         config = AbandonmentIssuesPresentationConfig.from_widgets_mapping(
             widgets_config
         )
-        style = AbandonmentIssuesPresentationStyle.project(config, shadow_values)
+        style = AbandonmentIssuesPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return AbandonmentIssuesPresentationModel(config, style)
 
     def build(
@@ -1157,7 +1174,7 @@ class FriendPulseFamilyAdapter:
         )
 
         config = FriendPulsePresentationConfig.from_widgets_mapping(widgets_config)
-        style = FriendPulsePresentationStyle.project(config, shadow_values)
+        style = FriendPulsePresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return FriendPulsePresentationModel(
             config,
             style,
@@ -1242,7 +1259,7 @@ class SystemStatsFamilyAdapter:
         )
 
         config = SystemStatsPresentationConfig.from_widgets_mapping(widgets_config)
-        style = SystemStatsPresentationStyle.project(config, shadow_values)
+        style = SystemStatsPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return SystemStatsPresentationModel(
             config,
             style,
@@ -1386,7 +1403,7 @@ class MediaFamilyAdapter:
         )
 
         config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
-        style = MediaPresentationStyle.project(config, shadow_values)
+        style = MediaPresentationStyle.project(config, shadow_values, border_width=_global_card_border_width_px(widgets_config))
         return MediaPresentationModel(
             config,
             style,

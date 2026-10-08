@@ -138,6 +138,7 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 
 _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_lane_transient_mix": float,
+    "extruded_spectrum_lane_transient_mix": float,
     "bubble_transient_mix_bass": float,
     "bubble_transient_mix_vocal": float,
     "sine_wave_transient_width_mix": float,
@@ -1157,6 +1158,7 @@ class SpotifyVisualizerSettings:
     transient_pulse_gain: float = field(default_factory=lambda: _active_visualizer_default('transient_pulse_gain'))
     transient_clamp: float = field(default_factory=lambda: _active_visualizer_default('transient_clamp'))
     spectrum_lane_transient_mix: float = field(default_factory=lambda: _visualizer_default('spectrum_lane_transient_mix'))
+    extruded_spectrum_lane_transient_mix: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_lane_transient_mix'))
     spectrum_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('spectrum_dynamic_floor'))
     spectrum_manual_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_manual_floor'))
     spectrum_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_dynamic_range_enabled'))
@@ -2020,6 +2022,12 @@ class SpotifyVisualizerSettings:
         return self._resolve_mode_value_with(mode, "bar_border_opacity")
 
     def resolve_spectrum_lane_transient_mix(self) -> float:
+        return float(self.spectrum_lane_transient_mix)
+
+    def resolve_spectrum_lane_transient_mix_for_mode(self, mode: str) -> float:
+        """Return the kick-lane transient mix consumed by one Spectrum-family mode."""
+        if str(mode).strip().lower() == "extruded_spectrum":
+            return float(self.extruded_spectrum_lane_transient_mix)
         return float(self.spectrum_lane_transient_mix)
 
     def resolve_bubble_transient_mix_bass(self) -> float:

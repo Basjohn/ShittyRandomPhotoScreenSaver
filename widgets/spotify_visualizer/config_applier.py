@@ -120,11 +120,11 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     in ``apply_presentation_vis_mode_kwargs``.
     """
 
-    # The experimental Sphere keeps one configure-owned immutable parameter
+    # Sphere keeps one configure-owned immutable parameter bundle. The voxel
     for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_depth_shading_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
         if key in kwargs:
             setattr(host, f"_{key}", bool(kwargs[key]))
-    # bundle. The voxel renderer consumes that snapshot without a second
+    # renderer consumes that snapshot without a second
     # settings/runtime authority or per-frame Python geometry rebuild.
     for key in ('sphere_taste_the_rainbow_speed', 'sphere_taste_the_rainbow_extent'):
         if key in kwargs:

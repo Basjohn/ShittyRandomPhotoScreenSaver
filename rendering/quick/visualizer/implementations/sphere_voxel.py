@@ -1,4 +1,4 @@
-"""Instanced block-shell renderer for the experimental Sphere visualizer.
+"""Instanced block-shell renderer for the Voxel Sphere visualizer.
 
 The rejected smooth icosphere representation deliberately does not survive in
 this module.  One cube mesh and one static stepped-shell instance buffer are

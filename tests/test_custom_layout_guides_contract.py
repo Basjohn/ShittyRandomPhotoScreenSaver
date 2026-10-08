@@ -26,26 +26,26 @@ def test_custom_alignment_guides_have_explicit_above_below_layering() -> None:
     assert "id: customLayoutOverlay" in scene
     assert "z: 100" in scene
 
-    # Peer-edge alignment is a gentle blue high-layer guide, one pixel thicker
+    # Peer-edge alignment is a neutral graphite high-layer guide, one pixel thicker
     # than the former baseline.
-    assert 'color: "#aa5ea8ff"' in overlay
+    assert 'color: "#aa696f77"' in overlay
     assert 'width: 3' in overlay
     assert 'height: 3' in overlay
     assert 'objectName: "customLayoutVerticalGuide"' in overlay
     assert 'objectName: "customLayoutHorizontalGuide"' in overlay
 
     # Centering guides and the stronger absolute centre cross stay under widgets.
-    assert 'color: "#a8b46eff"' in underlay
+    assert 'color: "#a8737981"' in underlay
     assert 'objectName: "customLayoutVerticalCenterGuide"' in underlay
     assert 'objectName: "customLayoutHorizontalCenterGuide"' in underlay
-    assert 'color: "#70ffffff"' in underlay
+    assert 'color: "#7061666c"' in underlay
     assert 'border.width: 2' in underlay
     assert underlay.count('width: 3') >= 2
     assert underlay.count('height: 3') >= 2
     # Generic grid lines deliberately remain at the original 1 px.
     assert 'width: 1' in underlay
     assert 'height: 1' in underlay
-    assert 'color: index % 4 === 0 ? "#3affffff" : "#1cffffff"' in underlay
+    assert 'color: index % 4 === 0 ? "#3a555a60" : "#1c45494e"' in underlay
 
 
 def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> None:
@@ -88,7 +88,7 @@ def test_selected_parent_two_axis_reflow_affordance_is_event_driven_and_collisio
     assert "active: editFrame.selectedForChildEdit" in qml
     assert "editFrame.twoAxisContentExtentCapable" in qml
     assert 'objectName: "customLayoutContentCorner-"' in qml
-    assert 'color: "#dc6aa8e8"' in qml
+    assert 'color: "#dc737981"' in qml
     assert '"content_" + parent.corner' in qml
     assert "contentCornerAvailable" in qml
     assert "contentCornerLocalRect" in qml
@@ -458,9 +458,14 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     # gesture return remains: the attached wedge toggles glyph buttons only.
     assert "property bool parentGlyphControlsHidden: false" in qml
     assert 'objectName: "customLayoutParentGlyphToggle-"' in qml
-    assert '"SHOW CONTROLS" : "HIDE CONTROLS"' in qml
+    assert '"SHOW" : "HIDE"' in qml
     assert "parentGlyphControlsOpacity" in qml
     assert "duration: 180" in qml
+    assert 'objectName: "customLayoutOrbit-"' in qml
+    assert 'text: "↔↕"' in qml
+    assert 'text: "↔↕ ORBIT"' not in qml
+    assert 'restoreSizeControl.x + restoreSizeControl.width + 6' in qml
+    assert 'liveOrbitGlyphPoint' not in qml
     assert "childGestureActive" not in qml
     assert "? 1000 : 3000" not in qml
     assert "function overlapsEditRect(candidate)" in qml

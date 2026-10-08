@@ -56,7 +56,7 @@ def normalize_content_rotation_by_mode(value: object) -> dict[str, int]:
     """Return persisted non-zero quarter-turns keyed by capable canonical mode.
 
     The map lives inside the existing CUSTOM ``size_payload`` carrier. Unknown,
-    malformed, zero and non-capable (for example experimental Sphere) entries are
+    malformed, zero and non-capable (for example freeform-3D Sphere) entries are
     omitted so persistence stays sparse and stable.
     """
 

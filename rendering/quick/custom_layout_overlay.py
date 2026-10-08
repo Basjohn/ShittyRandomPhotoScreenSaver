@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -37,6 +38,10 @@ DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
 SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
 ContentRotationHandler = Callable[[CustomLayoutSessionItem], bool]
 PresentationItemResolver = Callable[[CustomLayoutSessionItem], QQuickItem | None]
+# The Visualizer has no editable child target.  Its retained root is exposed
+# separately only so Edit chrome can map the renderer-derived read-only content
+# envelope into the one existing session frame.
+ContentEnvelopeItemResolver = Callable[[CustomLayoutSessionItem], QQuickItem | None]
 ChildResizeBeginHandler = Callable[
     [CustomLayoutSessionItem, str, str, QPoint, float, float, float, float], bool
 ]
@@ -103,6 +108,9 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     item_closed = Signal(str, bool, bool)
     save_requested = Signal()
     toggleSelectedChildEditLockRequested = Signal()
+    visualizer_edit_orbit_requested = Signal(float, float)
+    visualizer_edit_orbit_finished = Signal()
+    selection_changed = Signal()
 
     @Slot()
     def requestToggleSelectedChildEditLock(self) -> None:
@@ -128,6 +136,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _PRESENTATION_ITEM_ROLE = _WIDGET_ID_ROLE + 15
     _CHILD_STATE_REVISION_ROLE = _WIDGET_ID_ROLE + 16
     _CHILD_COLLISION_ENABLED_ROLE = _WIDGET_ID_ROLE + 17
+    _CONTENT_ENVELOPE_ITEM_ROLE = _WIDGET_ID_ROLE + 18
 
     def __init__(
         self,
@@ -146,6 +155,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
+        content_envelope_item_resolver: ContentEnvelopeItemResolver | None = None,
         child_resize_begin_handler: ChildResizeBeginHandler | None = None,
         child_resize_preview_handler: ChildResizePreviewHandler | None = None,
         child_resize_update_handler: ChildResizeUpdateHandler | None = None,
@@ -177,6 +187,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._size_reset_handler = size_reset_handler
         self._content_rotation_handler = content_rotation_handler
         self._presentation_item_resolver = presentation_item_resolver
+        self._content_envelope_item_resolver = content_envelope_item_resolver
         self._child_resize_begin_handler = child_resize_begin_handler
         self._child_resize_preview_handler = child_resize_preview_handler
         self._child_resize_update_handler = child_resize_update_handler
@@ -223,6 +234,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._PRESENTATION_ITEM_ROLE: QByteArray(b"presentationItem"),
             self._CHILD_STATE_REVISION_ROLE: QByteArray(b"childStateRevision"),
             self._CHILD_COLLISION_ENABLED_ROLE: QByteArray(b"childCollisionEnabled"),
+            self._CONTENT_ENVELOPE_ITEM_ROLE: QByteArray(b"contentEnvelopeItem"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -266,6 +278,15 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return bool(session is not None and session.selected_item() is item)
         if role == self._PRESENTATION_ITEM_ROLE:
             resolver = self._presentation_item_resolver
+            if resolver is None:
+                return None
+            try:
+                target = resolver(item)
+                return target if target is not None and _is_valid_qobject(target) else None
+            except (RuntimeError, TypeError):
+                return None
+        if role == self._CONTENT_ENVELOPE_ITEM_ROLE:
+            resolver = self._content_envelope_item_resolver
             if resolver is None:
                 return None
             try:
@@ -424,6 +445,44 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         if not item.content_rotation_capable or handler is None:
             return False
         return bool(handler(item))
+
+    @Slot(int, float, float, result=bool)
+    def orbitVisualizerInEdit(self, row: int, delta_x: float, delta_y: float) -> bool:
+        """Forward an admitted Alt-left delta to the canonical view-orbit owner.
+
+        QML supplies only physical pointer deltas.  The shared input/orbit seam
+        converts them to authored steps, so Edit never grows a second camera
+        resolver or persistence path.
+        """
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        session = self._session
+        if (
+            session is None
+            or session.selected_item() is not item
+            or item.model_identity != "spotify_visualizer"
+            or item.source_key.geometry_variant != "freeform_3d"
+            or not item.current_enabled
+            or item.removed
+        ):
+            return False
+        if not (math.isfinite(float(delta_x)) and math.isfinite(float(delta_y))):
+            return False
+        if not float(delta_x) and not float(delta_y):
+            return False
+        self.visualizer_edit_orbit_requested.emit(float(delta_x), float(delta_y))
+        return True
+
+    @Slot(int)
+    def finishVisualizerOrbitInEdit(self, row: int) -> None:
+        """Settle the existing mode/preset orbit transaction after Alt-left."""
+
+        if not 0 <= int(row) < len(self._items):
+            return
+        if self._items[int(row)].model_identity == "spotify_visualizer":
+            self.visualizer_edit_orbit_finished.emit()
 
     @Slot(int)
     def closeItem(self, row: int) -> None:
@@ -785,6 +844,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     def resizeWheel(self, row: int, angle_delta_y: int) -> bool:
         """Apply one uniform wheel-resize request through the canonical owner."""
 
+        if not angle_delta_y:
+            return False
         item = self._resizable_item(row)
         handler = self._resize_wheel_handler
         if item is None or handler is None:
@@ -793,6 +854,13 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return False
         self._notify_resize(item)
         return True
+
+    @Slot(int, int, int, result=bool)
+    def resizeWheelDelta(self, row: int, delta_x: int, delta_y: int) -> bool:
+        """Use the same signed native wheel interpretation in retained Edit."""
+        from rendering.runtime_input import RuntimeInputOwner
+
+        return self.resizeWheel(row, RuntimeInputOwner.wheel_angle_step(delta_x, delta_y))
 
     def retire(self) -> None:
         session = self._session
@@ -813,6 +881,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._size_reset_handler = None
         self._content_rotation_handler = None
         self._presentation_item_resolver = None
+        self._content_envelope_item_resolver = None
         self._child_resize_begin_handler = None
         self._child_resize_preview_handler = None
         self._child_resize_update_handler = None
@@ -934,6 +1003,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self,
         _selected: CustomLayoutSessionItem | None,
     ) -> None:
+        self.selection_changed.emit()
         if not self._items:
             return
         first = self.index(0, 0)
@@ -988,6 +1058,7 @@ class RetainedCustomLayoutOverlay:
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
+        content_envelope_item_resolver: ContentEnvelopeItemResolver | None = None,
         child_resize_begin_handler: ChildResizeBeginHandler | None = None,
         child_resize_preview_handler: ChildResizePreviewHandler | None = None,
         child_resize_update_handler: ChildResizeUpdateHandler | None = None,
@@ -1017,6 +1088,7 @@ class RetainedCustomLayoutOverlay:
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=presentation_item_resolver,
+            content_envelope_item_resolver=content_envelope_item_resolver,
             child_resize_begin_handler=child_resize_begin_handler,
             child_resize_preview_handler=child_resize_preview_handler,
             child_resize_update_handler=child_resize_update_handler,

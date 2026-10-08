@@ -658,3 +658,37 @@ def test_foundry_folder_open_does_not_spawn_explorer_process() -> None:
     # does not launch a second explorer.exe process directly.
     # SOURCE-ORACLE INVARIANT: no direct Explorer child-process launch.
     assert "explorer.exe" not in source
+
+
+def test_current_plan_edit_diff_is_exact_and_silent_when_unchanged() -> None:
+    before = "# Plan\n\n- [ ] Old\n"
+    after = "# Plan\n\n- [x] Old\n- [ ] New\n"
+
+    assert core.generate_text_edit_diff("Current_Plan.md", before, before) == ""
+    rendered = core.generate_text_edit_diff("Current_Plan.md", before, after)
+    assert rendered.startswith("# SRPSS CURRENT PLAN EDIT DIFF\n")
+    assert "--- BEFORE/Current_Plan.md" in rendered
+    assert "+++ AFTER/Current_Plan.md" in rendered
+    assert "-- [ ] Old" in rendered
+    assert "+- [x] Old" in rendered
+    assert "+- [ ] New" in rendered
+
+
+def test_foundry_header_exposes_waitable_current_plan_diff_workflow() -> None:
+    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
+    for marker in (
+        'QPushButton("OPEN CP & DIFF")',
+        'self.current_plan_button.clicked.connect(self.open_current_plan_and_diff)',
+        'generate_text_edit_diff("Current_Plan.md", before, after)',
+        '_shell_open_associated_document(plan_path)',
+        'ShellExecuteExW',
+        'SEE_MASK_NOCLOSEPROCESS',
+        'os.startfile(str(path))',
+        'bridge.opened.emit({"waitable": bool(process_handle)})',
+        'DiffResultDialog(self, "CURRENT PLAN DIFF"',
+        'self.current_plan_button.setText("CHECK CP DIFF")',
+    ):
+        assert marker in source
+    # The original cmd.exe/start launcher could report success while opening
+    # nothing. File association launch now belongs to ShellExecuteEx directly.
+    assert 'start "" /wait' not in source

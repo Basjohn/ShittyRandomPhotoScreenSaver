@@ -1,10 +1,9 @@
 """Shared Scene3D shadow primitives.
 
-An effect's shadow program draws one instance per piece over the item quad's four
-corners: its vertex shader builds the piece (``ScenePiece``) and places the quad with
-``scenePieceShadow``; its fragment shader draws its own lit photograph darkened by
-``sceneSoftRect(local, feather)`` times its strength. Drawn with MIN blending, so
-overlapping shadows never darken twice and the photograph is never brightened.
+Planar transition shadows use the photograph-darkening MIN-blend path below.
+Extruded's retained overlay shadow is a different admitted primitive: all cuboid
+faces project onto a transparent floor target and union their premultiplied
+silhouette with MAX blending so overlap never compounds opacity.
 """
 from __future__ import annotations
 
@@ -41,23 +40,20 @@ def directional_shadow_vector(resolved_offset: Sequence[object], length: float) 
 
 @contextmanager
 def directional_shadow_pass() -> Iterator[None]:
-    """Draw one direct Scene3D shadow with ordinary straight-alpha blending.
+    """Draw one projected silhouette as a single-alpha union in the scene target.
 
-    This is intentionally target-free: consumers draw their projected silhouette directly into
-    their already-owned scene target, so a disabled shadow owns no extra pass resource.  The
-    exit state is the Visualizer/SceneTarget transparent-pass baseline; a following opaque draw
-    still explicitly enables depth writes.
+    Extruded projects all six box faces onto the floor so side faces fill the
+    sweep between each base and shifted top footprint. Those triangles overlap.
+    MAX blending over the transparent target keeps the premultiplied shadow
+    colour/alpha exactly once at every covered sample rather than stacking a
+    darker shadow for every overlapping triangle. The consumer's fragment pass
+    emits premultiplied shadow colour specifically for this scope.
     """
     gl.glDisable(gl.GL_DEPTH_TEST)
     gl.glDepthMask(gl.GL_FALSE)
     gl.glEnable(gl.GL_BLEND)
-    gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
-    gl.glBlendFuncSeparate(
-        gl.GL_SRC_ALPHA,
-        gl.GL_ONE_MINUS_SRC_ALPHA,
-        gl.GL_ONE,
-        gl.GL_ONE_MINUS_SRC_ALPHA,
-    )
+    gl.glBlendEquationSeparate(gl.GL_MAX, gl.GL_MAX)
+    gl.glBlendFuncSeparate(gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
     try:
         yield
     finally:

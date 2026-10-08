@@ -8,6 +8,7 @@ objects, settings manager, or cadence.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 from PySide6.QtCore import QRect
@@ -76,6 +77,40 @@ def _canonicalize_alias_bucket(custom_map: dict[str, Any], aliases: tuple[str, .
     return canonicalize_screen_layout_aliases(custom_map, aliases) or aliases[0]
 
 
+def _migrate_visualizer_legacy_entries(custom_map: dict[str, Any], legacy_variant: str | None) -> None:
+    """Promote only the interpreted legacy family; retire default on canonical writes."""
+    displays = custom_map.get("displays", {})
+    if isinstance(displays, dict):
+        for saved_signature in tuple(displays):
+            layouts = displays.get(saved_signature)
+            variants = (
+                layouts.get("spotify_visualizer")
+                if isinstance(layouts, dict)
+                else None
+            )
+            if isinstance(variants, dict):
+                legacy_payload = variants.get("default")
+                if legacy_variant and legacy_variant not in variants and isinstance(legacy_payload, Mapping):
+                    variants[legacy_variant] = deepcopy(legacy_payload)
+            remove_screen_layout_entry(
+                custom_map,
+                str(saved_signature),
+                "spotify_visualizer",
+                "default",
+            )
+
+
+def migrate_visualizer_legacy_geometry(widgets: dict[str, Any], legacy_variant: str) -> None:
+    """Preserve a legacy pose before persisting a new active Visualizer mode.
+
+    This uses the same canonical write boundary as CUSTOM Save. The mode save
+    would otherwise reinterpret the legacy pose as its new family at restart.
+    """
+    custom_map = load_custom_layout_map(widgets)
+    _migrate_visualizer_legacy_entries(custom_map, legacy_variant)
+    write_custom_layout_map(widgets, custom_map)
+
+
 def _write_item(
     widgets: dict[str, Any],
     custom_map: dict[str, Any],
@@ -139,6 +174,11 @@ def _write_item(
         size_payload=payload,
         resize_mode=descriptor.custom_layout_resize_mode,
     ))
+    if (
+        item.model_identity == "spotify_visualizer"
+        and item.source_key.geometry_variant != "default"
+    ):
+        _migrate_visualizer_legacy_entries(custom_map, item.legacy_geometry_variant)
     if widget_writes_custom_position_key(item.model_identity):
         section = widgets.setdefault(get_custom_persistence_position_settings_key_for_widget(item.model_identity), {})
         if not isinstance(section, dict):
@@ -194,4 +234,4 @@ def commit_custom_session(
     return widgets
 
 
-__all__ = ["commit_custom_session"]
+__all__ = ["commit_custom_session", "migrate_visualizer_legacy_geometry"]

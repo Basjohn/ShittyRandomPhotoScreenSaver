@@ -213,6 +213,13 @@ class RuntimeInputOwner(QObject):
     def _view_orbiting(self) -> bool:
         return bool(self._view_orbit_held) or self._view_orbit_drag is not None
 
+    @classmethod
+    def view_orbit_drag_steps(cls, delta_x: float, delta_y: float) -> tuple[float, float]:
+        """Convert a physical drag delta through the one shared orbit gesture scale."""
+
+        step = cls.VIEW_ORBIT_DRAG_PIXELS_PER_STEP
+        return float(delta_x) / step, float(delta_y) / step
+
     def _finish_view_orbit_if_idle(self) -> None:
         if not self._view_orbiting():
             self.view_orbit_finished.emit()
@@ -252,11 +259,16 @@ class RuntimeInputOwner(QObject):
             return False
         # With Alt held Qt may report the vertical wheel as horizontal.
         delta = event.angleDelta()
-        step = int(delta.y() or delta.x())
+        step = self.wheel_angle_step(delta.x(), delta.y())
         if step:
             self._visualizer_wheeling = True
             self.visualizer_scale_requested.emit(step)
         return True
+
+    @staticmethod
+    def wheel_angle_step(delta_x: int, delta_y: int) -> int:
+        """Preserve Qt's signed wheel delta, including its Alt axis remapping."""
+        return int(delta_y or delta_x)
 
     def is_view_orbit_enabled(self) -> bool:
         return self._view_orbit_enabled
@@ -432,9 +444,8 @@ class RuntimeInputOwner(QObject):
             position = QPointF(event.position())
             delta = position - self._view_orbit_drag
             self._view_orbit_drag = position
-            step = self.VIEW_ORBIT_DRAG_PIXELS_PER_STEP
             if delta.x() or delta.y():
-                self.view_orbit_requested.emit(delta.x() / step, delta.y() / step)
+                self.view_orbit_requested.emit(*self.view_orbit_drag_steps(delta.x(), delta.y()))
             return True
         if self._context_menu_active:
             return False

@@ -381,6 +381,13 @@ class QuickSceneController(QObject):
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
     custom_layout_save_requested = Signal()
+    # Semantic Edit-only routes.  The native input block remains intact while
+    # the retained overlay forwards these to DisplayManager's existing orbit
+    # resolver and persistence boundary.
+    custom_layout_visualizer_orbit_requested = Signal(float, float)
+    custom_layout_visualizer_orbit_finished = Signal()
+    custom_layout_selection_changed = Signal()
+    custom_layout_visualizer_geometry_changed = Signal()
 
     def __init__(
         self,
@@ -403,6 +410,7 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline: ResolvedVisualizerPresentation | None = None
+        self._custom_layout_edit_geometry_key: tuple[object, ...] | None = None
         # Set only when the C++ DisplayScene root dies while this generation is
         # still admitting work. Normal terminal retirement closes admission first.
         self._unexpected_scene_root_loss = False
@@ -1023,6 +1031,7 @@ class QuickSceneController(QObject):
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=self._custom_layout_presentation_item,
+            content_envelope_item_resolver=self._custom_layout_content_envelope_item,
             child_resize_begin_handler=child_resize_begin_handler,
             child_resize_preview_handler=child_resize_preview_handler,
             child_resize_update_handler=child_resize_update_handler,
@@ -1037,6 +1046,13 @@ class QuickSceneController(QObject):
             close_item_handler=close_item_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
+        model.visualizer_edit_orbit_requested.connect(
+            self.custom_layout_visualizer_orbit_requested.emit
+        )
+        model.visualizer_edit_orbit_finished.connect(
+            self.custom_layout_visualizer_orbit_finished.emit
+        )
+        model.selection_changed.connect(self.custom_layout_selection_changed.emit)
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
             underlay.setProperty("verticalCenterGuides", [])
@@ -1064,6 +1080,21 @@ class QuickSceneController(QObject):
         if presentation is None or not presentation.is_qt_alive:
             return None
         return presentation.item
+
+    def _custom_layout_content_envelope_item(
+        self, item: CustomLayoutSessionItem
+    ) -> QQuickItem | None:
+        """Return the retained Visualizer root for derived Edit-only framing.
+
+        It is deliberately separate from editable child presentation: the root
+        supplies a read-only renderer-derived envelope only and never joins the
+        child editor, snapping or session persistence contracts.
+        """
+
+        if item.model_identity != "spotify_visualizer":
+            return None
+        root = self._visualizer_root
+        return root if _qobject_is_alive(root) else None
 
     def refresh_custom_layout_session(self) -> None:
         """Reproject current session state onto the same retained items."""
@@ -1218,6 +1249,8 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = ""
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline = None
+        self._custom_layout_edit_geometry_key = None
+        self.set_visualizer_edit_content_envelope(None)
         # Ending CUSTOM restores the baseline logical world for the next step.
         try:
             self._publish_visualizer_viewport_config()
@@ -1417,6 +1450,40 @@ class QuickSceneController(QObject):
             resized,
             active=bool(root.property("presentationActive")),
         )
+        # The record stays presentation-only: this is an edge notification for
+        # derived Edit framing after the one geometry authority changed.  Fades
+        # and ordinary logical/audio publications are deliberately excluded.
+        geometry_key = (
+            mode_id,
+            tuple(float(value) for value in resized.outer_rect),
+            tuple(float(value) for value in resized.content_rect),
+            tuple(float(value) for value in resized.viewport_extent),
+            int(resized.content_rotation_quarters),
+        )
+        if geometry_key != self._custom_layout_edit_geometry_key:
+            self._custom_layout_edit_geometry_key = geometry_key
+            self.custom_layout_visualizer_geometry_changed.emit()
+
+    def set_visualizer_edit_content_envelope(
+        self,
+        envelope: Mapping[str, object] | None,
+    ) -> bool:
+        """Project one read-only active-3D envelope into retained Edit chrome.
+
+        The value is intentionally a QML-only diagnostic/presentation record;
+        it has no route back into ``CustomLayoutSession`` geometry, snapping,
+        collision or persistence.
+        """
+
+        root = self._visualizer_root
+        if not _qobject_is_alive(root):
+            return False
+        projected = dict(envelope) if isinstance(envelope, Mapping) else {"admitted": False}
+        if root.property("editContentEnvelope") == projected:
+            return False
+        if not root.setProperty("editContentEnvelope", projected):
+            raise RuntimeError("VisualizerPresentation.qml rejected edit content envelope")
+        return True
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:

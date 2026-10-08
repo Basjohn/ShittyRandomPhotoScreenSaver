@@ -52,7 +52,7 @@ def test_missing_3d_profile_keys_copy_the_selected_spectrum_preset_once(mode: st
     for suffix in ("bar_count", "sensitivity", *_SOURCE_SUFFIXES):
         assert migrated[f"{mode}_{suffix}"] == source[f"spectrum_{suffix}"]
     if mode == "extruded_spectrum":
-        for suffix in ("bar_border_color", "bar_border_opacity", "ghosting_enabled"):
+        for suffix in ("bar_border_color", "bar_border_opacity", "ghosting_enabled", "lane_transient_mix"):
             assert migrated[f"{mode}_{suffix}"] == source[f"spectrum_{suffix}"]
         assert migrated[f"{mode}_bar_fill_color"] == [
             *source["spectrum_bar_fill_color"][:3],
@@ -69,6 +69,10 @@ def test_missing_3d_profile_keys_copy_the_selected_spectrum_preset_once(mode: st
     technical = resolve_technical_config(build_technical_cache(None, model), mode)
     assert technical["bar_count"] == migrated[f"{mode}_bar_count"]
     assert technical["sensitivity"] == pytest.approx(migrated[f"{mode}_sensitivity"])
+    if mode == "extruded_spectrum":
+        assert technical["spectrum_lane_transient_mix"] == pytest.approx(
+            migrated["extruded_spectrum_lane_transient_mix"]
+        )
 
 
 @pytest.mark.parametrize("mode", ("extruded_spectrum", "shockwave_grid"))

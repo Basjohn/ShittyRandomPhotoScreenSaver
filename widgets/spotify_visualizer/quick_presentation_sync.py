@@ -144,6 +144,21 @@ class QuickVisualizerPresentationSync:
         self._resolve_screen_index = resolve_screen_index
         self._frame_trace = current_frame_trace()
         self._stall_sampler = current_gui_stall_sampler()     # --frame-trace only (N1e)
+        self._authored_view_publication_callback: Callable[[Any, ResolvedVisualizerPresentation], None] | None = None
+
+    def set_authored_view_publication_callback(
+        self, callback: Callable[[Any, ResolvedVisualizerPresentation], None] | None,
+    ) -> None:
+        """Admit selected Edit orbit framing on the existing GUI publication edge.
+
+        The caller binds this during authored held-key motion or one pending
+        first visible Edit source, then disarms the latter. Ordinary audio-only
+        publications therefore invoke no continuing framing observer. The
+        accepted frame carries the same frozen authored view used by rendering.
+        """
+        if callback is not None and not callable(callback):
+            raise TypeError("authored view publication callback must be callable or None")
+        self._authored_view_publication_callback = callback
 
     def _screen_index(self) -> int:
         resolver = self._resolve_screen_index
@@ -224,6 +239,9 @@ class QuickVisualizerPresentationSync:
             # Commit the SAME record embedded in the just-published snapshot.
             # Do not independently resolve presentation again.
             self._commit_presentation(presentation)
+        view_callback = self._authored_view_publication_callback
+        if view_callback is not None:
+            view_callback(logical, presentation)
         if trace is not None:
             trace.record(
                 FrameTraceEvent.GUI_PRESENTATION_COMMIT_READY,

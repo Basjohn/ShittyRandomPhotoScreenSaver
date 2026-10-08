@@ -225,6 +225,7 @@ class GamesYouFollowPresentationModel(QObject):
     displayChanged = Signal()
     layoutChanged = Signal()
     artworkAvailabilityChanged = Signal()
+    refreshingChanged = Signal()
 
     def __init__(self, config: FollowedPresentationConfig | None = None,
                  *, runtime_generation: int | None = None,
@@ -250,6 +251,7 @@ class GamesYouFollowPresentationModel(QObject):
         self._runtime_generation = runtime_generation
         self._runtime_service: object | None = None
         self._active = False
+        self._refreshing = False
         self._rows = FollowedStoryRows(self)
         # Inherit existing Steam semantic theme roles rather than create new
         # per-card colour authority; the eventual family adapter projects
@@ -286,6 +288,10 @@ class GamesYouFollowPresentationModel(QObject):
     @Property(bool, notify=displayChanged)
     def stale(self) -> bool:
         return self._display.stale
+
+    @Property(bool, notify=refreshingChanged)
+    def refreshing(self) -> bool:
+        return self._refreshing
 
     @Property(int, constant=True)
     def headlineChars(self) -> int:
@@ -483,6 +489,15 @@ class GamesYouFollowPresentationModel(QObject):
             return False
         return self.accept_snapshot(snapshot)
 
+    def on_games_followed_runtime_refreshing(self, refreshing: bool) -> None:
+        if not self.is_games_followed_consumer_alive():
+            return
+        normalized = bool(refreshing)
+        if normalized == self._refreshing:
+            return
+        self._refreshing = normalized
+        self.refreshingChanged.emit()
+
     def request_manual_refresh(self) -> bool:
         if not self.is_games_followed_consumer_alive() or self._runtime_service is None:
             return False
@@ -598,6 +613,9 @@ class GamesYouFollowPresentationModel(QObject):
             return
         self._retired = True
         self._active = False
+        if self._refreshing:
+            self._refreshing = False
+            self.refreshingChanged.emit()
         self._article_action = None
         if self._runtime_service is not None:
             self._runtime_service.stop()

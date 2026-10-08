@@ -2029,6 +2029,43 @@ def _changed_paths_since(repo_root: Path, source_head: str) -> set[str]:
     return paths
 
 
+def generate_text_edit_diff(
+    relative_path: str,
+    before_text: str,
+    after_text: str,
+) -> str:
+    """Return a copy-ready unified diff for one operator-edited text file.
+
+    This helper deliberately has no Git/archive authority. It compares the exact
+    text snapshot captured immediately before an editor session with the bytes
+    saved when that session ends. An unchanged file returns an empty string so
+    the UI can remain silent instead of opening a pointless diff window.
+    """
+
+    rel = validate_repo_relpath(relative_path)
+    before = str(before_text)
+    after = str(after_text)
+    if before == after:
+        return ""
+    rendered = "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=f"BEFORE/{rel}",
+            tofile=f"AFTER/{rel}",
+            lineterm="\n",
+        )
+    )
+    if rendered and not rendered.endswith("\n"):
+        rendered += "\n"
+    header = (
+        "# SRPSS CURRENT PLAN EDIT DIFF\n"
+        f"# File: {rel}\n"
+        "# Scope: exact pre-open snapshot -> saved editor result\n\n"
+    )
+    return header + rendered
+
+
 def generate_local_diff(repo_root: Path) -> GodzipDiffResult:
     """Compare the complete current local worktree against Git HEAD.
 
@@ -2325,6 +2362,7 @@ __all__ = [
     "discover_zip_candidates",
     "generate_godzip_diff",
     "generate_local_diff",
+    "generate_text_edit_diff",
     "git_branch",
     "git_changes",
     "git_commit_all",

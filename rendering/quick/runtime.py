@@ -68,6 +68,7 @@ class QuickDisplayRuntime(QObject):
     visualizer_move_requested = Signal(QPoint, QPoint)
     visualizer_scale_requested = Signal(int)
     visualizer_gesture_finished = Signal()
+    custom_layout_edit_requested = Signal()
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
     custom_layout_undo_requested = Signal()
@@ -250,6 +251,9 @@ class QuickDisplayRuntime(QObject):
         self._input.visualizer_move_requested.connect(self.visualizer_move_requested.emit)
         self._input.visualizer_scale_requested.connect(self.visualizer_scale_requested.emit)
         self._input.visualizer_gesture_finished.connect(self.visualizer_gesture_finished.emit)
+        self._input.custom_layout_edit_requested.connect(
+            self.custom_layout_edit_requested.emit
+        )
         self._input.custom_layout_save_requested.connect(
             self.custom_layout_save_requested.emit
         )

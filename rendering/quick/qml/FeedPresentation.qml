@@ -345,18 +345,18 @@ OverlayWidget {
                 cursorShape: Qt.PointingHandCursor
             }
 
-            // The same retained refresh glyph as Games You Follow / Gmail.
-            ShadowedText {
+            // Every NEWS/CUSTOM Feed instance joins the display's one bounded
+            // refresh-edge clock; instance count never creates more cadence owners.
+            RefreshStateGlyph {
+                id: refreshGlyph
                 objectName: "feedRefreshGlyph"
                 anchors.fill: parent
-                text: "↻"
-                textFormat: Text.PlainText
-                font.pixelSize: Math.min(parent.width, parent.height) * 0.72
-                color: refreshHover.hovered && refreshTarget.canActivate
-                    ? "white" : feedRoot.feedModel.headerTextColor
-                opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+                busy: feedRoot.feedModel.refreshing
+                transitionClock: feedRoot.refreshTransitionClock
+                hovered: refreshHover.hovered
+                canActivate: refreshTarget.canActivate
+                glyphColor: feedRoot.feedModel.headerTextColor
+                fontFamily: feedRoot.feedModel.fontFamily
                 shadowEnabled: feedRoot.feedModel.textShadowEnabled
                 shadowColor: feedRoot.feedModel.textShadowColor
                 shadowOffsetX: feedRoot.feedModel.textShadowOffsetX

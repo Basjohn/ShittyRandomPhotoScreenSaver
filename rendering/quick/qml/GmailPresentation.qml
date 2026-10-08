@@ -314,7 +314,8 @@ OverlayWidget {
                 objectName: "gmailRefreshTarget"
                 // Preserve the authored bounded edit target and paint slot.
                 clip: true
-                implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                implicitWidth: 30.0
+                implicitHeight: 30.0
                 readonly property bool canActivate: visible
                     && gmailRoot.gmailModel.interactionEnabled
                     && !gmailRoot.customLayoutInputBlocked
@@ -322,7 +323,7 @@ OverlayWidget {
                 width: Math.min(Math.max(1.0, headerArea.width),
                     implicitWidth * gmailRoot.childWidthScale("refresh"))
                 height: Math.min(Math.max(1.0, headerArea.height),
-                    headerArea.height * gmailRoot.childHeightScale("refresh"))
+                    implicitHeight * gmailRoot.childHeightScale("refresh"))
                 x: Math.max(0.0, Math.min(headerArea.width - width,
                     (gmailRoot.headerFlipped ? 0.0 : headerArea.width - width)
                         + gmailRoot.childOffsetX("refresh")))
@@ -347,20 +348,17 @@ OverlayWidget {
                     blocking: false
                     cursorShape: Qt.PointingHandCursor
                 }
-                ShadowedText {
+                RefreshStateGlyph {
                     id: refreshGlyph
                     objectName: "gmailRefreshGlyph"
                     anchors.fill: parent
-                    text: gmailRoot.gmailModel.refreshing ? "◌" : "↻"
-                    opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
-                    color: refreshHover.hovered && refreshTarget.canActivate
-                        ? "white" : gmailRoot.gmailModel.textColor
-                    font.family: gmailRoot.gmailModel.fontFamily
-                    font.pointSize: gmailRoot.gmailModel.fontSize
-                        * gmailRoot.childHeightScale("refresh")
-                    font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    busy: gmailRoot.gmailModel.refreshing
+                    transitionClock: gmailRoot.refreshTransitionClock
+                    hovered: refreshHover.hovered
+                    canActivate: refreshTarget.canActivate
+                    glyphColor: gmailRoot.gmailModel.textColor
+                    fontFamily: gmailRoot.gmailModel.fontFamily
+                    bold: true
                     shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
                     shadowColor: gmailRoot.gmailModel.textShadowColor
                     shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX

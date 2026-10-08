@@ -149,9 +149,9 @@ class VisualizerRenderNode(QSGRenderNode):
     def flags(self) -> QSGRenderNode.RenderingFlag:
         snapshot = self._snapshot
         if snapshot is not None and mode_capabilities.requests_unclipped_renderer_overflow(snapshot):
-            # Sphere-only experimental overflow must not advertise bounded
-            # rendering to Qt's scene-graph damage tracker. Accepted modes
-            # retain the exact previous BoundedRectRendering contract.
+            # Any descriptor-admitted overflow renderer must not advertise bounded
+            # rendering to Qt's scene-graph damage tracker. Clipped modes retain
+            # the exact previous BoundedRectRendering contract.
             return QSGRenderNode.RenderingFlag(0)
         return QSGRenderNode.RenderingFlag.BoundedRectRendering
 

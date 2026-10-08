@@ -44,7 +44,7 @@ from rendering.quick.custom_layout_hydration import (
     resolve_quick_committed_geometry,
     resolve_quick_committed_variant_state,
     resolve_quick_committed_entry,
-    resolve_quick_custom_entry,
+    resolve_visualizer_custom_entry,
 )
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
@@ -199,6 +199,7 @@ class DisplayManager(QObject):
         self._quick_visualizer_owner: Any | None = None
         # A live W/A/S/D view orbit not yet saved: (mode id, {setting: value}).
         self._quick_view_orbit_pending: tuple[str, dict[str, float]] | None = None
+        self._quick_visualizer_edit_orbit_sample: tuple[object, ...] | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
         self._quick_visualizer_media_model: Any | None = None
         # Secondary fence for the CUSTOM failover grace deadline (bumped on a
@@ -826,6 +827,7 @@ class DisplayManager(QObject):
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
+            self._refresh_quick_visualizer_edit_content_envelope()
 
     def _orbit_quick_visualizer_view(self, turn_steps: float, tilt_steps: float) -> None:
         """Step the shown 3D Visualizer's view live (a drag); nothing is saved until orbiting stops."""
@@ -841,6 +843,157 @@ class DisplayManager(QObject):
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
+            self._refresh_quick_visualizer_edit_content_envelope()
+
+    def _orbit_quick_visualizer_view_from_edit_drag(
+        self, delta_x: float, delta_y: float
+    ) -> None:
+        """Route Edit's Alt-left pixels through the established orbit gesture scale."""
+
+        from rendering.runtime_input import RuntimeInputOwner
+
+        turn_steps, tilt_steps = RuntimeInputOwner.view_orbit_drag_steps(delta_x, delta_y)
+        self._orbit_quick_visualizer_view(turn_steps, tilt_steps)
+
+    def _refresh_quick_visualizer_edit_content_envelope(
+        self, logical: Any = None, presentation: Any = None,
+    ) -> None:
+        """Publish one renderer-derived 3D framing record at an authored Edit edge.
+
+        Geometry, selection, mode/preset and orbit edges call it. The existing
+        GUI wake delivers frozen input during selected held orbit, or once for
+        a pending first visible source. Ordinary audio has no framing observer.
+        """
+
+        owner = self._quick_visualizer_owner
+        unit = self._quick_visualizer_unit
+        if (
+            owner is None
+            or owner.is_retired
+            or unit is None
+            or unit.is_retired
+        ):
+            return
+        scene = unit.runtime.scene_controller
+        publish = getattr(scene, "set_visualizer_edit_content_envelope", None)
+        if not callable(publish):
+            return
+        from core.settings.visualizer_mode_registry import get_visualizer_geometry_profile
+
+        custom_owner = self._quick_custom_layout_owner
+        session = custom_owner.session if custom_owner.is_editing else None
+        selected = None if session is None else session.selected_item()
+        from_publication = logical is not None
+        motion = getattr(owner.controller.presentation_state, "_view_orbit_motion", None)
+        selected_visualizer = bool(
+            selected is not None
+            and selected.current_enabled
+            and not selected.removed
+            and selected.source_key.widget_id == "spotify_visualizer"
+            and selected.source_key.geometry_variant == "freeform_3d"
+        )
+        track_orbit = bool(
+            selected_visualizer
+            and motion is not None
+            and motion.mode_id == owner.controller.mode_id
+            and (motion.turn_rate != 0.0 or motion.tilt_rate != 0.0)
+        )
+        if (
+            not self._quick_custom_layout_owner.is_editing
+            or get_visualizer_geometry_profile(owner.controller.mode_id) != "freeform_3d"
+        ):
+            owner.set_edit_orbit_publication_callback(None)
+            self._quick_visualizer_edit_orbit_sample = None
+            publish(None)
+            return
+        if presentation is None:
+            try:
+                presentation = scene.visualizer_item.presentation
+            except RuntimeError:
+                return
+        if presentation is None:
+            owner.set_edit_orbit_publication_callback(None)
+            return
+        if from_publication and owner.controller.mode_id == "extruded_spectrum":
+            from rendering.quick.visualizer.render_contract import snapshot_is_render_admissible
+
+            accepted_snapshot = owner.controller.render_bridge.peek()
+            if (accepted_snapshot is None or accepted_snapshot.logical is not logical
+                    or not snapshot_is_render_admissible(accepted_snapshot)):
+                logical = None
+                from_publication = False
+        if logical is None and owner.controller.mode_id == "extruded_spectrum":
+            # Edit edges inspect the existing immutable render input. The node
+            # keeps the consumed snapshot; the bridge may hold a newer accepted
+            # publication before its first render. Neither is copied/cached here.
+            item = scene.visualizer_item
+            identity = owner.controller.render_identity
+            snapshot = item.retained_snapshot(identity)
+            if snapshot is None:
+                snapshot = owner.controller.render_bridge.peek()
+            if snapshot is not None and identity is not None:
+                candidate = snapshot.logical
+                from rendering.quick.visualizer.render_contract import snapshot_is_render_admissible
+
+                if ((candidate.runtime_generation, candidate.engine_generation,
+                     candidate.activation_id, candidate.mode_id) ==
+                    (identity.runtime_generation, identity.engine_generation,
+                     identity.activation_id, identity.mode_id)
+                    and snapshot_is_render_admissible(snapshot)):
+                    logical = candidate
+        pending_first_frame = bool(
+            selected_visualizer and owner.controller.mode_id == "extruded_spectrum"
+            and (logical is None or presentation.content_fade <= 0.0)
+        )
+        # The same GUI wake admits one first visible source after Enter/preset
+        # switch, then disarms even when that valid scene is legitimately empty.
+        # Ordinary audio therefore has no ongoing framing observer.
+        owner.set_edit_orbit_publication_callback(
+            self._refresh_quick_visualizer_edit_content_envelope if track_orbit or pending_first_frame else None
+        )
+        from rendering.quick.visualizer.edit_content_envelope import (
+            edit_content_envelope_parameters,
+            resolve_edit_content_envelope,
+            resolve_owner_edit_content_envelope,
+        )
+        accepted_parameters = None
+        if from_publication:
+            accepted_parameters = edit_content_envelope_parameters(
+                logical.mode_id, logical.mode_state.parameters, bar_count=logical.common.bar_count,
+            )
+        if track_orbit and accepted_parameters is not None:
+            shadow_style = None
+            alpha_style = None
+            if logical.mode_id == "extruded_spectrum":
+                alpha_style = (logical.common.style["fill_color"][3], logical.common.style["border_color"][3])
+                if (accepted_parameters["extruded_spectrum_shadow_enabled"]
+                        and float(accepted_parameters["extruded_spectrum_shadow_strength"]) > 0.0):
+                    shadow_style = (presentation.shell_style["shadow_offset"], presentation.shell_style["shadow_color"])
+            sample = (logical.mode_id, tuple(accepted_parameters.items()), presentation.outer_rect,
+                      presentation.content_rect, presentation.logical_viewport_extent,
+                      presentation.uniform_visual_scale, shadow_style, alpha_style)
+            if sample == getattr(self, "_quick_visualizer_edit_orbit_sample", None):
+                return
+            self._quick_visualizer_edit_orbit_sample = sample
+        else:
+            self._quick_visualizer_edit_orbit_sample = None
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+        descriptor = get_visualizer_mode_descriptor(owner.controller.mode_id)
+        def publish_footprint(record):
+            # Semantic orbit admission survives an empty scene; it is never a
+            # manufactured rectangle or an allocation-reach fallback.
+            publish({**({"admitted": False} if record is None else record),
+                     "mode": descriptor.mode_id, "orbit_admitted": bool(descriptor.view_orbit_settings)})
+
+        if logical is not None and accepted_parameters is not None:
+            publish_footprint(resolve_edit_content_envelope(
+                logical.mode_id, presentation,
+                accepted_parameters,
+                logical=logical,
+            ))
+        else:
+            publish_footprint(resolve_owner_edit_content_envelope(owner, presentation, logical=logical))
 
     def _persist_quick_visualizer_view(self) -> None:
         """Settle and save a finished orbit once (no key held and no drag on any more)."""
@@ -854,6 +1007,7 @@ class DisplayManager(QObject):
                 self._quick_view_orbit_pending = settled
         pending = self._quick_view_orbit_pending
         self._quick_view_orbit_pending = None
+        self._refresh_quick_visualizer_edit_content_envelope()
         settings = self.settings_manager
         if pending is None or settings is None:
             return
@@ -1307,6 +1461,34 @@ class DisplayManager(QObject):
                 ",".join(enabled_modes),
             )
             return False
+        controller = getattr(owner, "controller", None)
+        current_mode = getattr(controller, "mode_id", None)
+        if current_mode is not None:
+            from core.settings.visualizer_mode_registry import get_visualizer_geometry_profile
+
+            if (
+                get_visualizer_geometry_profile(target)
+                != get_visualizer_geometry_profile(current_mode)
+            ):
+                layout = self._quick_custom_layout_owner
+                if layout.is_editing:
+                    # A session item owns an immutable source key. Replacing its
+                    # profile mid-Edit would silently commit a planar gesture into
+                    # the freeform pose (or the reverse), so the user must finish
+                    # this one transaction before the hidden activation begins.
+                    logger.info(
+                        "[CUSTOM_LAYOUT] Rejected cross-profile Visualizer mode "
+                        "change while Edit is active target=%s",
+                        target,
+                    )
+                    return False
+                if layout.is_direct:
+                    # Direct Alt placement has the same session identity but no
+                    # chrome. Finish it through its one existing Save boundary
+                    # before selecting the target profile.
+                    self._finish_quick_visualizer_gesture()
+                    if layout.is_active:
+                        return False
         candidate = dict(section)
         candidate["mode"] = target
         activation = resolve_visualizer_activation_payload(candidate)
@@ -1441,13 +1623,41 @@ class DisplayManager(QObject):
         settings = self.settings_manager
         if settings is None:
             raise RuntimeError("visualizer mode completion has no Settings authority")
+        owner = self._quick_visualizer_owner
+        legacy_profile = getattr(owner, "_legacy_layout_profile", None)
+        custom_map = self._widgets_config_snapshot.get("custom_layout", {})
+        displays = custom_map.get("displays", {}) if isinstance(custom_map, Mapping) else {}
+        has_legacy = isinstance(displays, Mapping) and any(
+            isinstance(layouts, Mapping)
+            and isinstance(layouts.get("spotify_visualizer"), Mapping)
+            and "default" in layouts["spotify_visualizer"]
+            for layouts in displays.values()
+        )
+        if legacy_profile is not None or has_legacy:
+            from rendering.custom_layout_commit import migrate_visualizer_legacy_geometry
+            from core.settings.visualizer_mode_registry import (
+                coerce_visualizer_mode_id, get_visualizer_geometry_profile,
+            )
+
+            widgets = settings.get_widgets_map()
+            section = widgets.get("spotify_visualizer", {})
+            authored_mode = section.get("mode", "spectrum") if isinstance(section, Mapping) else "spectrum"
+            original_profile = legacy_profile or get_visualizer_geometry_profile(
+                coerce_visualizer_mode_id(str(authored_mode))
+            )
+            migrate_visualizer_legacy_geometry(widgets, original_profile)
+            settings.set_widgets_map(widgets, emit_change=False)
+            self._widgets_config_snapshot["custom_layout"] = deepcopy(widgets["custom_layout"])
         settings.set("widgets.spotify_visualizer.mode", str(mode_id))
         settings.save()
+        if legacy_profile is not None:
+            owner._legacy_layout_profile = None
         section = self._widgets_config_snapshot.get("spotify_visualizer")
         if isinstance(section, dict):
             section["mode"] = str(mode_id)
         self._refresh_all_quick_context_menus()
         self._publish_quick_view_orbit_admission()
+        self._refresh_quick_visualizer_edit_content_envelope()
         logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
 
     def _complete_quick_visualizer_preset_change(
@@ -1495,6 +1705,7 @@ class DisplayManager(QObject):
             target.visualizer_config
         )
         self._refresh_all_quick_context_menus()
+        self._refresh_quick_visualizer_edit_content_envelope()
         logger.info(
             "[VIS_PRESETS] Persisted Quick preset mode=%s source=%s target=%s custom_cache_changed=%s",
             target.mode,
@@ -1569,6 +1780,9 @@ class DisplayManager(QObject):
         )
         runtime.layout_slot_load_requested.connect(self._load_layout_slot)
         runtime.layout_slot_save_requested.connect(self._save_layout_slot)
+        runtime.custom_layout_edit_requested.connect(
+            lambda display=unit: self._start_quick_custom_layout_from_shortcut(display)
+        )
         runtime.custom_layout_save_requested.connect(
             self._save_quick_custom_layout
         )
@@ -1580,6 +1794,18 @@ class DisplayManager(QObject):
         )
         runtime.scene_controller.jedi_mode_requested.connect(
             self.jedi_mode_requested.emit
+        )
+        runtime.scene_controller.custom_layout_visualizer_orbit_requested.connect(
+            self._orbit_quick_visualizer_view_from_edit_drag
+        )
+        runtime.scene_controller.custom_layout_visualizer_orbit_finished.connect(
+            self._persist_quick_visualizer_view
+        )
+        runtime.scene_controller.custom_layout_visualizer_geometry_changed.connect(
+            self._refresh_quick_visualizer_edit_content_envelope
+        )
+        runtime.scene_controller.custom_layout_selection_changed.connect(
+            self._refresh_quick_visualizer_edit_content_envelope
         )
         runtime.transition_finalized.connect(
             lambda completion, display=unit: self._on_quick_transition_finalized(
@@ -1736,6 +1962,22 @@ class DisplayManager(QObject):
 
         return not is_global_custom_layout_mode_selected(widgets)
 
+    def _start_quick_custom_layout_from_shortcut(
+        self, unit: QuickDisplayUnit
+    ) -> bool:
+        """Dismiss the first right-click menu, then enter the existing Edit owner."""
+
+        try:
+            unit.runtime.context_menu_model.dismiss()
+        except RuntimeError:
+            pass
+        from rendering.runtime_input import suppress_runtime_pointer_input
+
+        # The second right-click release belongs to the shortcut, not to the
+        # freshly exposed widget scene underneath the dismissed menu.
+        suppress_runtime_pointer_input(700, reason="double_right_edit")
+        return self._start_quick_custom_layout_session()
+
     def _start_quick_custom_layout_session(self) -> bool:
         """Enter global CUSTOM edit mode with authored layout fully dormant."""
 
@@ -1756,6 +1998,7 @@ class DisplayManager(QObject):
             if self._authored_layout_allowed_by_settings():
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
             return False
+        self._refresh_quick_visualizer_edit_content_envelope()
         self._refresh_all_quick_context_menus()
         return True
 
@@ -1765,6 +2008,7 @@ class DisplayManager(QObject):
             # A geometry-only Save stays in this generation. Keep authored
             # placement dormant now that persisted CUSTOM owns the geometry.
             self._refresh_all_quick_context_menus()
+            self._refresh_quick_visualizer_edit_content_envelope()
         return saved
 
     def cancel_custom_layout_session(self) -> bool:
@@ -1775,6 +2019,7 @@ class DisplayManager(QObject):
             if self._authored_layout_allowed_by_settings():
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
             self._refresh_all_quick_context_menus()
+            self._refresh_quick_visualizer_edit_content_envelope()
         return cancelled
 
     def _save_layout_slot(self, slot_id: str) -> bool:
@@ -2688,10 +2933,12 @@ class DisplayManager(QObject):
                 shadow.direction, shadow.frame_extra_offset
             ),
         }
+
         owner = QuickDisplayVisualizerOwner(
             chosen.runtime,
             bar_count=model.resolve_bar_count(mode),
             initial_mode=mode,
+            committed_layout_profile_resolver=self._resolve_quick_visualizer_layout_profile,
             card_shadow_kwargs=card_shadow_kwargs,
         )
         try:
@@ -2709,10 +2956,8 @@ class DisplayManager(QObject):
                 process_supervisor=self._process_supervisor,
                 playing=False,
             )
-            custom_entry = resolve_quick_custom_entry(
-                widgets,
-                chosen.runtime.window.screen(),
-                "spotify_visualizer",
+            custom_entry = resolve_visualizer_custom_entry(
+                widgets, chosen.runtime.window.screen(), mode
             )
             if custom_entry is not None:
                 from rendering.custom_layout_session import normalize_viewport_extent
@@ -2727,6 +2972,9 @@ class DisplayManager(QObject):
                 from widgets.spotify_visualizer.presentation_orientation import (
                     CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
                     CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+                )
+                from core.settings.visualizer_mode_registry import (
+                    get_visualizer_geometry_profile,
                 )
 
                 owner.configure_committed_layout(
@@ -2744,6 +2992,10 @@ class DisplayManager(QObject):
                         custom_entry.size_payload.get(
                             CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
                         ),
+                    ),
+                    legacy_geometry_profile=(
+                        get_visualizer_geometry_profile(mode)
+                        if custom_entry.geometry_variant == "default" else None
                     ),
                 )
             # Ordinary placement is resolved before start so the first retained
@@ -2948,6 +3200,58 @@ class DisplayManager(QObject):
                         "[SPOTIFY_VIS] Media route already detached during retirement"
                     )
         self._quick_visualizer_media_model = None
+
+    def _resolve_quick_visualizer_layout_profile(
+        self, target_mode: str,
+    ) -> tuple[
+        tuple[float, float, float, float], tuple[float, float] | None, object
+    ] | None:
+        """Resolve one target family pose from the sole CUSTOM authority."""
+
+        from rendering.custom_layout_session import normalize_viewport_extent
+        from rendering.quick.custom_layout_hydration import (
+            resolve_committed_visualizer_rect,
+            resolve_visualizer_custom_entry,
+        )
+        from widgets.spotify_visualizer.presentation_orientation import (
+            CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+            CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+        )
+
+        unit = self._quick_visualizer_unit
+        owner = self._quick_visualizer_owner
+        if unit is None or owner is None:
+            raise RuntimeError("visualizer profile activation has no admitted display owner")
+        if owner.presentation_runtime is not unit.runtime:
+            raise RuntimeError("visualizer profile display disagrees with presentation runtime")
+        screen = unit.runtime.window.screen()
+        # Keep transient legacy interpretation tied to the startup family until
+        # the normal mode/CUSTOM Save boundary canonicalizes it. A missing
+        # sibling uses its fitted baseline rather than cloning the old pose.
+        entry = resolve_visualizer_custom_entry(
+            self._widgets_config_snapshot,
+            screen,
+            target_mode,
+            legacy_geometry_profile=getattr(owner, "_legacy_layout_profile", None),
+        )
+        if entry is None:
+            return None
+        local_rect = resolve_committed_visualizer_rect(
+            entry, screen.geometry().size()
+        )
+        return (
+            (
+                float(local_rect.x()),
+                float(local_rect.y()),
+                float(local_rect.width()),
+                float(local_rect.height()),
+            ),
+            normalize_viewport_extent(entry.size_payload.get("viewport_extent")),
+            entry.size_payload.get(
+                CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+                entry.size_payload.get(CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0),
+            ),
+        )
 
     def _transfer_quick_visualizer_unit(self, target: QuickDisplayUnit) -> bool:
         """Move the single visualizer's display-retirement authority transactionally.

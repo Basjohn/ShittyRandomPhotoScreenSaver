@@ -77,7 +77,7 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 10
+    _VISUALIZER_SCHEMA_VERSION = 11
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -671,8 +671,12 @@ class SettingsManager(QObject):
                 widgets_dict = dict(widgets)
                 vis_section = widgets_dict.get('spotify_visualizer')
                 if isinstance(vis_section, Mapping):
+                    source_vis = dict(vis_section)
+                    if schema_version < 11:
+                        from core.settings.visualizer_settings_contract import repair_schema10_extruded_owned_profile
+                        source_vis = repair_schema10_extruded_owned_profile(source_vis)
                     normalized_vis = normalize_visualizer_section_mapping(
-                        vis_section,
+                        source_vis,
                         apply_preset_overlay=False,
                     )
                     if dict(vis_section) != normalized_vis:
@@ -686,9 +690,16 @@ class SettingsManager(QObject):
 
                 raw_cache = self._settings.value('visualizer_custom_presets', None)
                 if raw_cache is not None:
+                    cache_source = raw_cache
+                    if schema_version < 11 and isinstance(raw_cache, Mapping):
+                        from core.settings.visualizer_settings_contract import repair_schema10_extruded_owned_profile
+                        cache_source = deepcopy(dict(raw_cache))
+                        extruded_cache = cache_source.get("extruded_spectrum")
+                        if isinstance(extruded_cache, Mapping):
+                            cache_source["extruded_spectrum"] = repair_schema10_extruded_owned_profile(extruded_cache)
                     try:
                         normalized_cache = normalize_visualizer_custom_snapshot_cache(
-                            raw_cache,
+                            cache_source,
                             raw_profile_source=vis_section if isinstance(widgets, Mapping) and isinstance(vis_section, Mapping) else None,
                         )
                     except (TypeError, ValueError):
