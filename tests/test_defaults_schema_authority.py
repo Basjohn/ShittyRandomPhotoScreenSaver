@@ -297,7 +297,7 @@ def test_curated_visualizer_preset_assets_remain_separate_authored_inputs() -> N
 
     presets_source = _text("core/settings/visualizer_presets.py")
     assert "For Custom (last index), *config* is returned unchanged" in presets_source
-    assert "First: CLEAR all mode-specific keys not in preset" in presets_source
+    assert "# First: CLEAR mode-owned preset keys, never persistent view pose." in presets_source
 
 
 def test_settings_visualizer_builders_do_not_reintroduce_shadow_defaults() -> None:

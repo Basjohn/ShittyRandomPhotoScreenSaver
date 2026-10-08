@@ -21,6 +21,7 @@ toward it (rendering/runtime_input.py).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Dict, Mapping
 
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -29,6 +30,40 @@ from core.settings.visualizer_mode_registry import get_visualizer_mode_descripto
 VIEW_ORBIT_STEPS_PER_SECOND = 30.0
 # The presentation-state attribute holding the live motion (absent or None when keys are idle).
 _MOTION = "_view_orbit_motion"
+_DRAG = "_view_orbit_drag_velocity"
+_INERTIA = "_view_orbit_inertia"
+# Presentation-only release tail, sampled by the existing logical frame clock.
+# The normal Sphere shader's continuous base rotation is independent of this view pose.
+SPHERE_INERTIA_SECONDS = 0.9
+SPHERE_INERTIA_MAX_AGE = 0.18
+
+
+@dataclass(frozen=True, slots=True)
+class OrbitDragVelocity:
+    mode_id: str
+    time: float
+    turn_rate: float
+    tilt_rate: float
+
+
+@dataclass(frozen=True, slots=True)
+class OrbitInertia:
+    mode_id: str
+    since: float
+    duration: float
+    turn_start: float
+    tilt_start: float
+    turn_delta: float
+    tilt_delta: float
+
+
+def inertia_pose(inertia: OrbitInertia, now: float) -> Dict[str, float]:
+    """Finite smooth deceleration, ending at exactly the once-persisted final view."""
+    progress = max(0.0, min(1.0, (float(now) - inertia.since) / inertia.duration))
+    portion = 1.0 - (1.0 - progress) ** 3
+    return {"sphere_turn": _wrap(inertia.turn_start + inertia.turn_delta * portion),
+            "sphere_tilt": _clamped("sphere_tilt", inertia.tilt_start + inertia.tilt_delta * portion)}
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +117,9 @@ def view_orbit_values(host: Any, mode_id: str, now: float | None = None) -> Dict
     motion = _motion(host, mode_id)
     if motion is not None and now is not None:
         return orbit_motion_values(motion, now)
+    inertia = getattr(host, _INERTIA, None)
+    if mode_id == 'sphere' and isinstance(inertia, OrbitInertia) and now is not None and inertia.mode_id == mode_id:
+        return inertia_pose(inertia, now)
     return {key: float(getattr(host, f"_{key}")) for key in view_orbit_settings(mode_id)}
 
 
@@ -102,6 +140,11 @@ def set_view_orbit_rates(host: Any, mode_id: str, turn_steps: float, tilt_steps:
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode_id).view_orbit_steps
     turn_key, tilt_key = keys
     values = view_orbit_values(host, mode_id, now)
+    setattr(host, _INERTIA, None)  # held keys take over from the exact live view
+    setattr(host, _DRAG, None)  # a later key release is not a mouse flick
+    if mode_id == 'sphere':
+        from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+        apply_presentation_vis_mode_kwargs(host, values)
     setattr(host, _MOTION, ViewOrbitMotion(
         mode_id, values[turn_key], values[tilt_key],
         turn_step * VIEW_ORBIT_STEPS_PER_SECOND * float(turn_steps),
@@ -130,6 +173,10 @@ def stop_view_orbit_motion(host: Any, now: float) -> tuple[str, Dict[str, float]
 
 def rebase_view_orbit_motion(host: Any, now: float) -> None:
     """A preset has replaced the view (GUI thread): keys still held carry on turning from it."""
+    # A preset changes the authored pose even when no orbit keys are held.
+    # Never let a pending drag tail overwrite the newly activated pose.
+    setattr(host, _INERTIA, None)
+    setattr(host, _DRAG, None)
     motion = getattr(host, _MOTION, None)
     if motion is None:
         return
@@ -158,9 +205,49 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
         return view_orbit_values(host, mode_id, now)
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
 
-    values = view_orbit_values(host, mode_id)
+    values = view_orbit_values(host, mode_id, now)
+    setattr(host, _INERTIA, None)
+    turn_delta = turn_step * float(turn_steps)
+    tilt_delta = tilt_step * float(tilt_steps)
+    if mode_id == 'sphere' and now is not None and (turn_delta or tilt_delta):
+        previous = getattr(host, _DRAG, None)
+        # A new gesture must not borrow velocity from an earlier gesture.
+        dt = (float(now) - previous.time if isinstance(previous, OrbitDragVelocity)
+              and previous.mode_id == mode_id and 0 < float(now) - previous.time < 0.18 else 1 / 60)
+        dt = max(dt, 1 / 120)
+        turn_rate = max(-0.85, min(0.85, turn_delta / dt))
+        tilt_rate = max(-0.7, min(0.7, tilt_delta / dt))
+        if isinstance(previous, OrbitDragVelocity) and 0 < float(now) - previous.time < 0.18:
+            turn_rate = 0.65 * turn_rate + 0.35 * previous.turn_rate
+            tilt_rate = 0.65 * tilt_rate + 0.35 * previous.tilt_rate
+        setattr(host, _DRAG, OrbitDragVelocity(mode_id, float(now), turn_rate, tilt_rate))
     apply_presentation_vis_mode_kwargs(host, {
-        turn_key: _wrap(values[turn_key] + turn_step * float(turn_steps)),
-        tilt_key: values[tilt_key] + tilt_step * float(tilt_steps),
+        turn_key: _wrap(values[turn_key] + turn_delta),
+        tilt_key: values[tilt_key] + tilt_delta,
     })
-    return view_orbit_values(host, mode_id)
+    return view_orbit_values(host, mode_id, now)
+
+
+def release_sphere_orbit_inertia(host: Any, now: float) -> Dict[str, float] | None:
+    """Settle a Sphere drag onto the existing presentation clock, no additional timer.
+
+    Persist the analytic endpoint once at release. Until the tail finishes, captures
+    read its intermediate view, then naturally read the identical saved endpoint.
+    """
+    sample = getattr(host, _DRAG, None)
+    setattr(host, _DRAG, None)
+    if (not isinstance(sample, OrbitDragVelocity) or sample.mode_id != 'sphere'
+            or not 0 <= float(now) - sample.time <= SPHERE_INERTIA_MAX_AGE):
+        return None
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    start = view_orbit_values(host, 'sphere', now)
+    turn_delta = max(-0.16, min(0.16, sample.turn_rate * SPHERE_INERTIA_SECONDS / 3))
+    tilt_delta = max(-0.12, min(0.12, sample.tilt_rate * SPHERE_INERTIA_SECONDS / 3))
+    if abs(turn_delta) + abs(tilt_delta) < 0.0005:
+        return None
+    inertia = OrbitInertia('sphere', float(now), SPHERE_INERTIA_SECONDS,
+                           start['sphere_turn'], start['sphere_tilt'], turn_delta, tilt_delta)
+    final = inertia_pose(inertia, float(now) + SPHERE_INERTIA_SECONDS)
+    apply_presentation_vis_mode_kwargs(host, final)
+    setattr(host, _INERTIA, inertia)
+    return final

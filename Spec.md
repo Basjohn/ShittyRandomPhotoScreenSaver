@@ -213,10 +213,10 @@ solve deleted-object failures with timers, event-loop pumping, leaked hidden sec
 
 ## Shared 3D rendering foundation / dormancy
 
-Usu character authoring material lives under `assets/usu/` (see its `README.md`).
+Usu character authoring material lives in the local working checkout under `assets/usu/` (see its Windows-local `README.md`, not bundled in normal GODZIP handoffs).
 The Blender source and review renders are authoring assets; they do not admit a
 runtime Visualizer, rig, animation or engine export. Asset modelling and approval
-notes stay in `assets/usu/README.md`; they do not belong in `Current_Plan.md`.
+notes stay in the Windows-local `assets/usu/README.md`; they do not belong in `Current_Plan.md`.
 
 SRPSS already has a bounded **real-3D foundation inside the accepted Qt Quick scene**; future 3D work must inspect and
 reuse/extend this foundation where appropriate rather than creating a second renderer stack.
@@ -654,6 +654,12 @@ Current source must be reasoned about from present owners/contracts rather than 
 - `Docs/Historical_Bugs/`: durable regression/failed-method history; ordinary chronology remains in source control.
 
 
-### Sphere Scene3D camera and Extruded opacity SSOT (R-121 candidate, awaiting physical acceptance)
+### Sphere orbit, authored alpha and quarantined Extruded cast shadows
 
-Sphere's instanced 3D voxel shells route final vertex projection and clip-depth through the shared Scene3D camera, with a pure CPU mirror for Edit bounds. Camera orbit is persistent mode view pose, independent from preset appearance and from audio-reactive shell rotation. Extruded's bodies consume *fill-swatch alpha* only and their edge lines consume border-swatch alpha; the retired Body Alpha multiplier must not regain renderer or Settings authority. These changes are candidate work until the grouped real-GL and operator checks pass.
+Sphere's instanced voxel shells project through the shared Scene3D camera with one CPU mirror for Edit bounds. The operator accepted normal Sphere orbit/spin in runtime; an Alt+left-drag release adds a **finite** momentum tail evaluated against the existing logical capture clock. The transient velocity is not preset state or a second camera/animation owner. Persist only the analytically resolved endpoint; re-grab, held-key orbit and preset activation cancel the old tail. Sphere's authored perpetual base spin continues independently. Momentum's new Windows physical acceptance remains open in `Current_Plan.md`.
+
+Extruded bodies consume fill-swatch alpha and their independent edge lines consume border-swatch alpha; the retired Body Alpha multiplier has no authority. **Extruded cast shadows are disabled** across the renderer, Edit bounds and greyed-out Settings. Historical shadow settings survive for compatibility but cannot reactivate the GL pass. The disabled feature's failed implementations belong in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`; no shadow physics acceptance is claimed.
+
+### Persistent Ban Image admission
+
+The image menu's Ban Image acts on the original local path or stable remote URL, never the decoded/cache derivative. `core/sources/image_bans.py` persists SHA-256-named empty sentinels in the Settings profile. When `.active` is absent, nothing is hashed or enumerated; when bans exist, digest filenames are read **once per runtime generation** into an in-memory membership set. The `ImageQueue` keeps all original source metadata for Clear while active local/RSS/combined queues contain *only eligible images*. Initial hydration and explicit Ban/Clear reindex these queues; normal Next/Peek/Preview/Wrap never call a ban predicate, hash an image, probe the filesystem or loop over banned candidates. All-banned returns immediately; incoming source updates are filtered once, and Clear restores eligibility without source-provider rescan. Multi-display/worker retries and history also use the in-memory membership gate. Only explicit actions write/delete persistent bans. Memory and one-time index work scale with bans/source count; the active rendering and rotation paths do not. No Settings list, polling, new scheduler or GPU work. Windows functional acceptance pending; see `Current_Plan.md`.

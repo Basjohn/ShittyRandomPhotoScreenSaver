@@ -111,6 +111,8 @@ class ImageQueue:
         # FIX: Add thread safety with RLock (reentrant for same thread)
         self._lock = threading.RLock()
         self._rng = random.Random()
+        self._image_ban_predicate = None  # no ban lookup for default installations
+        self._eligible_images = None  # None means unfiltered; _images always owns the full catalogue
         
         if _log_init:
             logger.info(
@@ -136,11 +138,16 @@ class ImageQueue:
         
         # FIX: Thread-safe queue modification
         with self._lock:
-            # Categorize images by source type
+            # Preserve the entire source catalogue for Clear Image Bans.
+            # Admission is checked once, when sources arrive, not per rotation.
+            reject = self._image_ban_predicate
+            eligible_new = images if reject is None else [img for img in images if not reject(img)]
+            if self._eligible_images is not None:
+                self._eligible_images.extend(eligible_new)
             local_new: List[ImageMetadata] = []
             rss_new: List[ImageMetadata] = []
-            
-            for img in images:
+
+            for img in eligible_new:
                 if img.source_type == ImageSourceType.FOLDER:
                     local_new.append(img)
                 else:
@@ -163,13 +170,13 @@ class ImageQueue:
                     self._rng.shuffle(shuffled_rss)
                     self._rss_queue.extend(shuffled_rss)
                 # Combined queue for backwards compatibility
-                shuffled = images.copy()
+                shuffled = eligible_new.copy()
                 self._rng.shuffle(shuffled)
                 self._queue.extend(shuffled)
             else:
                 self._local_queue.extend(local_new)
                 self._rss_queue.extend(rss_new)
-                self._queue.extend(images)
+                self._queue.extend(eligible_new)
             
             logger.info(
                 f"Added {len(images)} images (local={len(local_new)}, rss={len(rss_new)}). "
@@ -303,7 +310,51 @@ class ImageQueue:
                 return True
         return False
     
+    def set_image_ban_predicate(self, predicate) -> None:
+        """Index eligible images on explicit ban/clear, never on a transition.
+
+        The full _images catalogue is unchanged. Refilter the *remaining*
+        queues in place, preserving accepted order and prior selections. Any
+        newly unbanned sources rejoin on wraparound, or immediately when no
+        eligible candidate is queued. This runs only on explicit user actions
+        or when an existing ban store is attached to a new queue.
+        """
+        with self._lock:
+            # Explicit Ban Image only removes eligibility. The already-filtered
+            # pool is sufficient for another ban; avoid rehashing past bans.
+            # Clearing or swapping stores returns to the complete catalogue.
+            if predicate is None:
+                eligible = list(self._images)
+            elif self._eligible_images is not None and predicate == self._image_ban_predicate:
+                eligible = [meta for meta in self._eligible_images if not predicate(meta)]
+            else:
+                eligible = [meta for meta in self._images if not predicate(meta)]
+            eligible_ids = {id(meta) for meta in eligible}
+            old_eligible_ids = ({id(meta) for meta in self._eligible_images}
+                                if self._eligible_images is not None else
+                                {id(meta) for meta in self._images})
+            self._image_ban_predicate = predicate
+            self._eligible_images = eligible if predicate is not None else None
+            self._local_images = [meta for meta in eligible if meta.source_type == ImageSourceType.FOLDER]
+            self._rss_images = [meta for meta in eligible if meta.source_type != ImageSourceType.FOLDER]
+            self._queue = deque(meta for meta in self._queue if id(meta) in eligible_ids)
+            self._local_queue = deque(meta for meta in self._local_queue if id(meta) in eligible_ids)
+            self._rss_queue = deque(meta for meta in self._rss_queue if id(meta) in eligible_ids)
+            # Unbanned members omitted from the pending queues must eventually
+            # return without refreshing source folders or losing their metadata.
+            reenabled = [meta for meta in eligible if id(meta) not in old_eligible_ids]
+            if reenabled:
+                if self.shuffle_enabled:
+                    self._rng.shuffle(reenabled)
+                self._queue.extend(reenabled)
+                self._local_queue.extend(meta for meta in reenabled if meta.source_type == ImageSourceType.FOLDER)
+                self._rss_queue.extend(meta for meta in reenabled if meta.source_type != ImageSourceType.FOLDER)
+
     def next(self) -> Optional[ImageMetadata]:
+        """O(1) ban-admission overhead: only eligible queues enter selection."""
+        return self._next_unfiltered()
+
+    def _next_unfiltered(self) -> Optional[ImageMetadata]:
         """
         Get next image from queue using ratio-based source selection (thread-safe).
         
@@ -510,6 +561,12 @@ class ImageQueue:
             
             # FIX: Get previous ImageMetadata directly (O(1) instead of O(n) search)
             prev_image = self._history[-1]
+            while (self._image_ban_predicate is not None
+                   and self._image_ban_predicate(prev_image) and len(self._history) > 1):
+                self._history.pop()
+                prev_image = self._history[-1]
+            if self._image_ban_predicate is not None and self._image_ban_predicate(prev_image):
+                return None
             self._current_image = prev_image
             self._current_index = max(0, self._current_index - 1)
             
@@ -536,15 +593,10 @@ class ImageQueue:
         with self._lock:
             if self._queue:
                 return self._queue[0]
-            
-            if self._images:
-                # Would rebuild, return first from rebuild
-                if self.shuffle_enabled:
-                    # Can't predict shuffle, return None
-                    return None
-                else:
-                    return self._images[0]
-        
+            available = self._images if self._eligible_images is None else self._eligible_images
+            if available and not self.shuffle_enabled:
+                return available[0]
+            # A shuffle rebuild's first candidate is intentionally unknowable.
         return None
     
     def peek_many(self, count: int = 1) -> List[ImageMetadata]:
@@ -562,8 +614,7 @@ class ImageQueue:
         with self._lock:
             if not self._queue:
                 return []
-            ql = list(self._queue)
-            return ql[:min(count, len(ql))]
+            return list(self._queue)[:count]
 
     def preview_upcoming(self, count: int = 1) -> List[ImageMetadata]:
         """Preview the next N images using the same mixed-source contract as next()."""
@@ -582,8 +633,11 @@ class ImageQueue:
             preview_queue._local_queue = deque(self._local_queue)
             preview_queue._rss_queue = deque(self._rss_queue)
             preview_queue._images = list(self._images)
+            preview_queue._eligible_images = (None if self._eligible_images is None
+                                              else list(self._eligible_images))
             preview_queue._queue = deque(self._queue)
             preview_queue._history = deque(self._history, maxlen=self.history_size)
+            preview_queue._image_ban_predicate = self._image_ban_predicate
             preview_queue._current_image = self._current_image
             preview_queue._current_index = self._current_index
             preview_queue._wrap_count = self._wrap_count
@@ -602,18 +656,18 @@ class ImageQueue:
     
     def _rebuild_queue(self) -> None:
         """Rebuild queue from original image list."""
-        if not self._images:
+        available = self._images if self._eligible_images is None else self._eligible_images
+        if not available:
             return
-        
-        # Start with all images
+
+        # Rebuild exclusively from eligible images, without running ban checks.
         if self.shuffle_enabled:
-            # Shuffle
-            shuffled = self._images.copy()
+            shuffled = available.copy()
             self._rng.shuffle(shuffled)
             self._queue.extend(shuffled)
         else:
             # Keep original order
-            self._queue.extend(self._images)
+            self._queue.extend(available)
         
         logger.debug(f"Queue rebuilt with {len(self._queue)} images")
     
@@ -672,6 +726,7 @@ class ImageQueue:
             
             # Clear combined (backwards compatibility)
             self._images.clear()
+            self._eligible_images = None if self._image_ban_predicate is None else []
             self._queue.clear()
             self._history.clear()
             self._current_image = None
@@ -719,7 +774,8 @@ class ImageQueue:
         Returns:
             True if no images available
         """
-        return len(self._images) == 0
+        available = self._images if self._eligible_images is None else self._eligible_images
+        return len(available) == 0
     
     def get_history(self, count: int = 10) -> List[str]:
         """
@@ -826,6 +882,14 @@ class ImageQueue:
                     removed_from_list = True
                     break
             
+            # Maintain active-source pools so a removed image cannot re-enter
+            # on wraparound (especially after explicit ban-filter reindexing).
+            self._local_images = [img for img in self._local_images if str(img.local_path) != image_path]
+            self._rss_images = [img for img in self._rss_images if str(img.local_path) != image_path]
+            if self._eligible_images is not None:
+                self._eligible_images = [img for img in self._eligible_images if str(img.local_path) != image_path]
+            self._local_queue = deque(img for img in self._local_queue if str(img.local_path) != image_path)
+            self._rss_queue = deque(img for img in self._rss_queue if str(img.local_path) != image_path)
             # Remove from queue
             removed_from_queue = False
             queue_list = list(self._queue)

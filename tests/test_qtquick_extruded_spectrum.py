@@ -83,12 +83,13 @@ def test_mirror_faces_are_polished_without_procedural_brushed_grain():
     assert "vec3 mirror = seen * tint + lit * 0.15;" in EXTRUDED_FRAGMENT_SOURCE
 
 
-def test_directional_shadow_shader_projects_the_full_box_sweep_without_overlap_stacking():
-    """A cast shadow is the sweep from base footprint to shifted top, not a translated cap."""
+def test_directional_shadow_shader_uses_actual_bar_shape_not_ceiling_sheet():
+    """Nearby and Distant differ in geometry, not merely in a sweep length."""
     shadow_branch = EXTRUDED_VERTEX_SOURCE.split("if (uPass == 4)", 1)[1].split("vWorld =", 1)[0]
-    assert "aNormal.y < 0.5" not in shadow_branch
-    assert "vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView);" in shadow_branch
-    assert "foot.xy += vec2(shadow.x, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;" in _PROJECTION_GLSL
+    assert "vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView, uShadowMode);" in shadow_branch
+    assert "EXTRUDED_CEILING * local.y" not in shadow_branch
+    assert "vec3 silhouette = extrudedProject(p, view);" in _PROJECTION_GLSL
+    assert "foot.xy += vec2(shadow.x * lateral, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;" in _PROJECTION_GLSL
     fragment_shadow = EXTRUDED_FRAGMENT_SOURCE.split("if (uPass == 4)", 1)[1].split("vec3 n", 1)[0]
     assert "uShadowColor.rgb * uShadowColor.a" in fragment_shadow
 
@@ -109,12 +110,20 @@ def test_e8_receiver_matches_cpu_on_real_gl_across_orbit_and_all_shadow_directio
             cases.append((point, tilt, turn, vector))
         gpu = probe.run(
             "vec4 a = arg(0); vec4 b = arg(1);"
-            " FragColor = vec4(extrudedShadowProject(a.xyz, b.yz, vec2(a.w, b.x)), 1.0);",
+            " FragColor = vec4(extrudedShadowProject(a.xyz, b.yz, vec2(a.w, b.x), 1), 1.0);",
             [[(*point, tilt), (turn, *vector, 0.0)] for point, tilt, turn, vector in cases],
             declarations=_COMMON_UNIFORMS + _PROJECTION_GLSL,
         )
         _check(gpu, [(*extruded_shadow_project(point, tilt, turn, vector), 1.0)
                      for point, tilt, turn, vector in cases])
+        near_gpu = probe.run(
+            "vec4 a = arg(0); vec4 b = arg(1);"
+            " FragColor = vec4(extrudedShadowProject(a.xyz, b.yz, vec2(a.w, b.x), 0), 1.0);",
+            [[(*point, tilt), (turn, *vector, 0.0)] for point, tilt, turn, vector in cases],
+            declarations=_COMMON_UNIFORMS + _PROJECTION_GLSL,
+        )
+        _check(near_gpu, [(*extruded_shadow_project(point, tilt, turn, vector, 'Nearby'), 1.0)
+                          for point, tilt, turn, vector in cases])
     finally:
         probe.close()
 
@@ -625,8 +634,8 @@ def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_t
         backdrop=backdrop,
     )
     assert renderer._target.allocation == allocation
-    assert np.abs(enabled_se - disabled).max() > 8
-    assert np.abs(enabled_se - enabled_nw).max() > 8
+    assert np.array_equal(enabled_se, disabled)
+    assert np.array_equal(enabled_se, enabled_nw)
 
 
 def test_e8_shadow_strength_at_normal_authored_setting_is_visible_on_wallpaper(target):
@@ -657,7 +666,7 @@ def test_e8_shadow_strength_at_normal_authored_setting_is_visible_on_wallpaper(t
     )
     enabled = capture.render(host, base, backdrop=(.85, .75, .65, 1.))
     darkened = disabled[..., :3] - enabled[..., :3]
-    assert (darkened.max(axis=2) >= 20).sum() >= 100
+    assert not np.any(darkened), "disabled shadow may not render even from saved preset"
 
 
 def test_e8_shadow_is_visible_beneath_opaque_bars_and_reflection_at_shallow_tilt(target):
@@ -710,22 +719,18 @@ def test_e8_shadow_is_visible_beneath_opaque_bars_and_reflection_at_shallow_tilt
 
     off = render(disabled)
     on = render(snapshot)
-    # The stage floor lives in the lower part of the bar field. Exclude the
-    # opaque upper silhouettes so a black bar cannot masquerade as a cast.
-    diff = off[215:350, 170:560, :3] - on[215:350, 170:560, :3]
-    shadowed = np.max(diff, axis=2) >= 20
-    assert int(shadowed.sum()) >= 80
-    # Direction: at SE the lower-right receiver must carry some of that shadow.
-    assert int(shadowed[:, 130:].sum()) >= 20
+    # A persisted shadow flag must have no visible pixels or compositing side effects.
+    assert np.array_equal(off, on)
 
 
-def test_directional_shadow_area_grows_with_bar_height_instead_of_translating_one_cap(target):
-    """The real GL shadow contains the side-face sweep, so taller bars cast a larger floor area."""
+def test_directional_shadow_follows_actual_audio_heights_not_a_constant_sheet(target):
+    """A quiet bar cannot cast the same maximum-length sheet as a loud one."""
     capture, host = target
     base = _with_shadow_style(
         _snapshot(
             extruded_spectrum_face_mirror=0.0,
             extruded_spectrum_reflection=0.0,
+            extruded_spectrum_colouring="Bar Colours",
             spectrum_ghosting_enabled=False,
             extruded_spectrum_shadow_enabled=True,
             extruded_spectrum_shadow_strength=1.0,
@@ -755,8 +760,10 @@ def test_directional_shadow_area_grows_with_bar_height_instead_of_translating_on
     high = capture.render(host, levels(0.95), backdrop=backdrop)
     low_mask = np.abs(low[..., :3] - disabled[..., :3]).max(axis=2) > 3
     high_mask = np.abs(high[..., :3] - disabled[..., :3]).max(axis=2) > 3
-    assert low_mask.sum() > 100
-    assert high_mask.sum() > low_mask.sum() * 1.35
+    # Transparent bars have no silhouette; even very different audio heights
+    # must not cause a shadow while the feature is unavailable.
+    assert low_mask.sum() == 0
+    assert high_mask.sum() == 0
 
 
 

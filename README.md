@@ -184,3 +184,9 @@ Did you know I'm actually a published [author](https://www.goodreads.com/book/sh
 https://basmilius.github.io/ For the pillaged weather icons!
 
 This README focuses on wasting your time.
+
+### Image exclusions and Sphere orbit
+
+While the screensaver is running, **Images → Ban Image** rejects the currently displayed wallpaper for subsequent rotation on every display. **Images → Clear Image Bans** is the explicit reset. Only hashed image identities persist; a runtime digest set is loaded once when bans exist, not written to Settings. Active image queues exclude banned sources up front, so even a mostly banned library has no ban checks, file operations or skip loops during ordinary rotation. Clearing bans restores eligible sources without refreshing folders. Windows validation for these actions is tracked in `Current_Plan.md`.
+
+Voxel Sphere supports Alt+left-drag camera orbit. The drag-release momentum tail gradually settles on the existing animation clock without interrupting Sphere's continuous authored spin; its new behavior awaits physical acceptance.

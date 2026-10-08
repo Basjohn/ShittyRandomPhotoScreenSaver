@@ -23,6 +23,20 @@ preset catalogue. Canonical appearance is captured for every identity; Blinds' a
 options are additionally enumerated from their canonical option owners. This does not claim exhaustive surface-control
 combinations or physical appearance approval.
 
+**Operator transition showcase directive (future M1, not the deterministic test fixture):** use combinations
+of these four local source images, not the superseded `UsuScenePaper1/2` artwork:
+
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene1.png`
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene2.png`
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`
+- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png` Every published transition
+animated WebP must be a high-quality approximately 480p loop with a **strict per-file size below 10,000,000
+bytes (decimal 10 MB)**. Keep the original artwork's aspect ratio when compositing. These four source PNGs are
+Windows-local and intentionally absent from handoff archives and Linux CI; the production transition-media
+capture should combine the genuine images when the operator runs M1, never substitute fixtures for publication.
+The current tool defaults documented below (960x540 and 10 MiB) are NOT acceptance for future transition
+media; M1 must adapt/override them before publication. This paragraph does not change visualizer WebP rules.
+
 Visualizer identities come from the active canonical mode registry and each mode's actual curated preset catalogue;
 Custom is excluded. The filename-derived variant survives sparse authored slots. The tool accepts only non-archived,
 schema-2 operator recordings under `logs/visualizer_recordings`; synthetic fixtures and archived takes are rejected.

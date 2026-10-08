@@ -310,6 +310,8 @@ class ScreensaverEngine(QObject):
         # Each entry is a list of ImageMetadata, one per display, representing
         # what was shown during that rotation.  Newest entry is at the end.
         self._display_image_history: List[List[ImageMetadata]] = []
+        self._image_ban_store = None  # lazy persistent owner, not a Settings list
+        self._ban_advance_pending = False  # consumed by an existing completion edge
         # Canonical list of transition types used for C-key cycling. Legacy
         # "Claw Marks" entries have been fully removed from the engine and are
         # mapped to "Crossfade" at selection time for back-compat only. The
@@ -569,6 +571,8 @@ class ScreensaverEngine(QObject):
             if self.settings_manager is None:
                 self.settings_manager = SettingsManager()
             logger.debug("SettingsManager initialized")
+            from core.sources.image_bans import ImageBanStore
+            self._image_ban_store = ImageBanStore(self.settings_manager._storage_path)
 
             # Retained Quick families resolve Widget Theme colours only at
             # generation/configuration boundaries. Activate the persisted theme
@@ -738,6 +742,8 @@ class ScreensaverEngine(QObject):
                 history_size=history_size,
                 local_ratio=local_ratio
             )
+            if self._image_ban_store is not None and self._image_ban_store.has_banned_images:
+                self.image_queue.set_image_ban_predicate(self._image_ban_store.is_banned)
             
             # Collect LOCAL images first (synchronous - fast)
             local_images: List[ImageMetadata] = []
@@ -907,6 +913,12 @@ class ScreensaverEngine(QObject):
 
         notify_transition_complete(self, screen_index)
         self._prepare_next_transition()
+        if self._ban_advance_pending and not self._has_active_image_change_work():
+            self._ban_advance_pending = False
+            if self._show_next_image(origin='manual_ban_deferred'):
+                self._rebase_rotation_timer(reason='manual_ban')
+            else:
+                logger.warning('[IMAGE_BAN] Deferred ban could not advance: no admitted image available')
 
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
@@ -968,6 +980,8 @@ class ScreensaverEngine(QObject):
             _connect_runtime_signal("previous_requested", self._on_previous_requested)
             _connect_runtime_signal("next_requested", self._on_next_requested)
             _connect_runtime_signal("save_image_requested", self._on_save_image_requested)
+            _connect_runtime_signal("ban_image_requested", self._on_ban_image_requested)
+            _connect_runtime_signal("clear_image_bans_requested", self._on_clear_image_bans_requested)
             _connect_runtime_signal("cycle_transition_requested", self._on_cycle_transition)
             _connect_runtime_signal("settings_requested", self._on_settings_requested)
             _connect_runtime_signal(
@@ -1861,6 +1875,11 @@ class ScreensaverEngine(QObject):
             if len(self._display_image_history) >= 2:
                 self._display_image_history.pop()  # discard current
                 prev_entry = self._display_image_history[-1]  # peek at previous
+                while (self._image_ban_store is not None
+                       and any(self._image_ban_store.is_banned(meta) for meta in prev_entry if meta is not None)
+                       and len(self._display_image_history) > 1):
+                    self._display_image_history.pop()
+                    prev_entry = self._display_image_history[-1]
                 # Also step the queue history back so single-display code stays in sync
                 self.image_queue.previous()
                 self._current_image = prev_entry[0] if prev_entry else self.image_queue.current()
@@ -1893,6 +1912,45 @@ class ScreensaverEngine(QObject):
         if history and 0 <= int(screen_index) < len(history[-1]) and history[-1][int(screen_index)] is not None:
             return history[-1][int(screen_index)]
         return self._current_image
+
+    def _on_ban_image_requested(self, screen_index: int) -> None:
+        """Persistent context action. Advance through the existing image transaction."""
+        image = self._image_on_display(screen_index)
+        store = self._image_ban_store
+        if image is None or store is None or self.image_queue is None:
+            return
+        try:
+            store.ban(image)
+        except OSError:
+            logger.exception('[IMAGE_BAN] Failed to persist banned image; keeping current image')
+            return
+        self.image_queue.set_image_ban_predicate(store.is_banned)
+        self._ban_advance_pending = True
+        if not self._has_active_image_change_work():
+            self._ban_advance_pending = False
+            if self._show_next_image(origin='manual_ban'):
+                self._rebase_rotation_timer(reason='manual_ban')
+            else:
+                # A failed immediate admission with no active transaction has
+                # no completion edge to wake a deferred request. Avoid leaving
+                # a perpetual, silently reattempted pending flag behind.
+                if self._has_active_image_change_work():
+                    self._ban_advance_pending = True
+                else:
+                    logger.warning('[IMAGE_BAN] No replacement image admitted; no deferred transaction pending')
+
+    def _on_clear_image_bans_requested(self) -> None:
+        store = self._image_ban_store
+        if store is None:
+            return
+        try:
+            store.clear_all()
+        except OSError:
+            logger.exception('[IMAGE_BAN] Failed to clear ban sentinels')
+            return
+        if self.image_queue is not None:
+            self.image_queue.set_image_ban_predicate(None)
+        self._ban_advance_pending = False
 
     def _on_save_image_requested(self, screen_index: int) -> None:
         """Context menu "Save Image": one copy of the file on disk, off the UI thread."""
@@ -1988,6 +2046,8 @@ class ScreensaverEngine(QObject):
         current = self.image_queue.current()
         if not current:
             return False
+        if self._image_ban_store is not None and self._image_ban_store.is_banned(current):
+            return False
 
         if not self.thread_manager:
             logger.error("[IMAGE] Current-image replay requires ThreadManager")
@@ -2004,6 +2064,9 @@ class ScreensaverEngine(QObject):
             return False
         if not image_metas:
             return self._show_current_image()
+        if self._image_ban_store is not None and self._image_ban_store.has_banned_images:
+            if any(self._image_ban_store.is_banned(meta) for meta in image_metas if meta is not None):
+                return False
 
         if not self.thread_manager:
             logger.error("[IMAGE] Previous-image replay requires ThreadManager")

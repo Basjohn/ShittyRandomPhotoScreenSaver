@@ -12,6 +12,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
+# R128: hard-disabled pending a physically accepted shadow implementation.
+# Preserve saved keys/presets for compatibility, but never admit the render pass.
+EXTRUDED_CAST_SHADOW_AVAILABLE = False
+
 
 class VisualizerShellPolicy(str, Enum):
     """Retained chrome owned by the visualizer presentation root."""

@@ -63,8 +63,9 @@ def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> N
     assert "never feed the resolver's suggested scale back into geometry" in owner
     assert "def set_custom_layout_guides(" in scene
     assert 'center_kinds = {"display_center", "peer_center"}' in scene
-    assert "onReleased: customLayoutOverlay.sessionModel.finishMove()" in overlay_qml
-    assert "onCanceled: customLayoutOverlay.sessionModel.finishMove()" in overlay_qml
+    # The gesture now clears guides through the existing finishMove action;
+    # QML deliberately uses a multiline callback, not the old inline handler.
+    assert overlay_qml.count('customLayoutOverlay.sessionModel.finishMove()') >= 2
 
     # The restoration is event-driven: do not introduce a guide-owned cadence.
     combined = owner + scene + overlay_qml
@@ -354,8 +355,8 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'objectName: "customLayoutChildRole-"' in qml
     assert 'readonly property string controlsWedgeSide:' in qml
     assert 'readonly property bool controlsWedgeVertical:' in qml
-    assert 'width: editFrame.controlsWedgeVertical ? 22 : 104' in qml
-    assert 'height: editFrame.controlsWedgeVertical ? 104 : 22' in qml
+    assert 'width: editFrame.controlsWedgeVertical ? 22 : 56' in qml
+    assert 'height: editFrame.controlsWedgeVertical ? 56 : 22' in qml
     assert 'editFrame.controlsWedgeSide === "right"\n                        ? 90' in qml
     assert "function admitChildMove(" in qml
     # Editable peers are hard at first contact but can be crossed with a small,

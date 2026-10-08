@@ -111,7 +111,7 @@ def test_wheel_from_child_body_and_resize_handles_uses_parent_owner_once() -> No
     helper = editor.split('function resizeParentByWheel(deltaX, deltaY)', 1)[1].split('\n            MouseArea {', 1)[0]
     assert 'editFrame.syncChildRequirementNow()' not in helper
     assert 'sessionModel.resizeWheelDelta(' in helper
-    assert editor.count('wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)') == 5
+    assert editor.count('wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.x, wheel.angleDelta.y)') == 7
     # The same owner services parent, child body/edge/corner, and lock glyph wheel.
     assert editor.count('sessionModel.resizeWheelDelta(') == 1
 

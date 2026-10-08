@@ -1,9 +1,11 @@
 """Shared Scene3D shadow primitives.
 
 Planar transition shadows use the photograph-darkening MIN-blend path below.
-Extruded's retained overlay shadow is a different admitted primitive: all cuboid
-faces project onto a transparent floor target and union their premultiplied
-silhouette with MAX blending so overlap never compounds opacity.
+Extruded's retained overlay shadow is a different admitted primitive. Nearby
+is a small displacement of the actually visible cuboid silhouette. Distant is
+a base-anchored ground cast proportional to actual bar height. Neither is the
+old constant-ceiling rectangle swept into a huge parallelogram. MAX blending
+keeps overlapping faces at one authored opacity.
 """
 from __future__ import annotations
 
@@ -51,9 +53,9 @@ def directional_shadow_vector(resolved_offset: Sequence[object], length: float) 
 def directional_shadow_pass() -> Iterator[None]:
     """Draw one projected silhouette as a single-alpha union in the scene target.
 
-    Extruded projects all six box faces onto the floor so side faces fill the
-    sweep between each base and shifted top footprint. Those triangles overlap.
-    MAX blending over the transparent target keeps the premultiplied shadow
+    Extruded reuses the six box faces either as a translated silhouette or
+    a height-driven receiver cast. The faces overlap. MAX blending over the
+    transparent target keeps the premultiplied shadow
     colour/alpha exactly once at every covered sample rather than stacking a
     darker shadow for every overlapping triangle. The consumer's fragment pass
     emits premultiplied shadow colour specifically for this scope.

@@ -125,13 +125,13 @@ Before any architectural promotion into shared/permanent ownership, capture both
   Outtake on (the curated snapshots currently all choose intake). Every authored `SphereFrame` field per frame
   (drives, phases, incoming section/blend, every cohort's progress/strength/density/section/lane/velocity/recoil/
   direction), the resolved hidden technical profile (Spectrum-backed: bar count 33, sensitivity 0.4, block 512,
-  dynamic floor 0.12, AGC 0.5, ...) and each preset's resolved parameters: `tests/goldens/visualizer_replay/sphere_promotion.json`.
+  dynamic floor 0.12, AGC 0.5, ...) and each preset's resolved parameters: `historical sphere promotion replay reference (not bundled in this GODZIP)`.
 - *Visual:* the production render host offscreen on replayed snapshots: both goldens at rest, mid-kicks and on the
   big hit (480x270 item), and extreme CUSTOM wide (960x120) and tall (200x600) through the production presentation
   resolver: `tests/goldens/visualizer_replay/sphere_visual/` (bit-identical run to run).
 - *Historical cost* (`tools/visualizer_cost_probe.py sphere --size 2560x1440`): CPU submit median 0.44 ms / p90 0.47,
   GPU 0.03 ms. Its reported 17 Python GL calls omitted Sphere's renderer module and is not a complete call baseline.
-- *Accepted comparison cohort:* the maintained replay floors (`tests/goldens/visualizer_replay/reactivity_floor.json`).
+- *Accepted comparison cohort:* the maintained replay floors (`historical visualizer replay-floor reference (not bundled in this GODZIP)`).
 
 The 2026-10-07 shared-frame migration adds Sphere, shared uniform blocks and the raw stream multi-bind to the existing
 cost probe's call counter. A same-process-code baseline comparison loaded the pre-migration renderer from Git in a
@@ -187,3 +187,9 @@ The independent fragment and particle minimum-energy settings are implemented wi
 - [ ] Custom Save/reopen preserves user-authored values.
 
 Do not retune authored values on the operator's behalf.
+
+## Shared camera and drag-release inertia (current)
+
+The mode's shared Scene3D view (turn and tilt) comes from presentation pose, not the voxel shell's continuous audio/base spin. Alt+left dragging steps that view directly. Release samples the last admitted drag velocity, adds one finite cubic ease-out tail on the **existing** logical capture clock, and writes the final camera pose once to the canonical mode-owned view-settings authority. A new drag, held-key motion or preset rebase cancels the stale tail without a snapback or extra resource owner. The basic Sphere orbit was physically accepted; the new inertia tail still needs Windows/dual-display assessment. See `Current_Plan.md` and `tests/test_visualizer_view_orbit.py`.
+
+Extruded shadow geometry is unrelated: that rejected optional cast pass is centrally disabled; do not reenable it as part of Sphere/parity work.

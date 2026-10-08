@@ -83,6 +83,7 @@ def test_double_right_click_requests_existing_custom_edit_owner_not_next_image()
     routed: list[str] = []
     controller.custom_layout_edit_requested.connect(lambda: routed.append("edit"))
     controller.next_image_requested.connect(lambda: routed.append("next"))
+    clear_runtime_pointer_input_suppression()  # isolate this shortcut from a previous test's replacement guard
     controller.set_context_menu_active(True)
     event = QMouseEvent(
         QEvent.Type.MouseButtonDblClick,

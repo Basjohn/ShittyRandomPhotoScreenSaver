@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
 
 _SLIDER_KEYS = (
     "extruded_spectrum_depth",
@@ -71,6 +72,13 @@ def load_extruded_spectrum_mode_settings(tab, config) -> None:
         control = getattr(tab, key, None)
         if control is not None:
             control.setChecked(bool(value(key)))
+    # Preset/reset hydration may change checked values but never availability.
+    for name in ('extruded_spectrum_shadow_enabled',
+                 'extruded_spectrum_shadow_reach',
+                 'extruded_spectrum_shadow_strength'):
+        control = getattr(tab, name, None)
+        if control is not None:
+            control.setEnabled(EXTRUDED_CAST_SHADOW_AVAILABLE)
     shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
     if shape_editor is not None:
         mirrored = bool(value("extruded_spectrum_mirrored"))
@@ -100,6 +108,13 @@ def collect_extruded_spectrum_mode_settings(tab) -> dict:
         values["extruded_spectrum_colouring"] = "Spectral Faces"
     values.update({key: getattr(tab, key).isChecked() for key in _CHECK_KEYS})
     values['extruded_spectrum_shadow_reach'] = tab.extruded_spectrum_shadow_reach.currentText()
+    # Preset/reset hydration may change checked values but never availability.
+    for name in ('extruded_spectrum_shadow_enabled',
+                 'extruded_spectrum_shadow_reach',
+                 'extruded_spectrum_shadow_strength'):
+        control = getattr(tab, name, None)
+        if control is not None:
+            control.setEnabled(EXTRUDED_CAST_SHADOW_AVAILABLE)
     shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
     if shape_editor is not None:
         values.update(

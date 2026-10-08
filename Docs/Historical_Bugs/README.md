@@ -6,6 +6,10 @@ Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
 narratives.
 
+## New negative controls
+
+- [R125–R128 | Rejected Extruded cast-shadow projections](R-125_to_R-128_Extruded_Cast_Shadow_Failure.md) — R125 taper, R126 full-sheet stretch, R127 attached slab, R128 centralized disable; no physical acceptance from pure geometry tests.
+
 ## Reading rule
 
 Incident bodies preserve the owner names, architecture and evidence that existed when the failure was
