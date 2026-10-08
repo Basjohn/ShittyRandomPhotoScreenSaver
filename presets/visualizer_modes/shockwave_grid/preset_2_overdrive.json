@@ -19,15 +19,81 @@
         "shockwave_grid_dynamic_range_enabled": false,
         "shockwave_grid_input_gain": 1.0,
         "shockwave_grid_kick_lane_gain": 1.0,
-        "shockwave_grid_lane_strengths_linear": {"Bass": 0.8, "Hi-Mid": 0.8, "Low-Mid": 0.7, "Treble": 1.0, "Vocal": 0.64},
-        "shockwave_grid_lane_strengths_mirrored": {"Bass": 0.8, "Low-Mid": 0.7, "Mid": 0.6, "Vocal": 0.64},
+        "shockwave_grid_lane_strengths_linear": {
+          "Bass": 0.8,
+          "Hi-Mid": 0.8,
+          "Low-Mid": 0.7,
+          "Treble": 1.0,
+          "Vocal": 0.64
+        },
+        "shockwave_grid_lane_strengths_mirrored": {
+          "Bass": 0.8,
+          "Low-Mid": 0.7,
+          "Mid": 0.6,
+          "Vocal": 0.64
+        },
         "shockwave_grid_manual_floor": 0.12,
         "shockwave_grid_mirrored": true,
-        "shockwave_grid_notch_positions_linear": [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]],
-        "shockwave_grid_notch_positions_mirrored": [[0.0, "Mid"], [0.3, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]],
+        "shockwave_grid_notch_positions_linear": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.24,
+            "Low-Mid"
+          ],
+          [
+            0.46,
+            "Vocal"
+          ],
+          [
+            0.72,
+            "Hi-Mid"
+          ],
+          [
+            1.0,
+            "Treble"
+          ]
+        ],
+        "shockwave_grid_notch_positions_mirrored": [
+          [
+            0.0,
+            "Mid"
+          ],
+          [
+            0.3,
+            "Vocal"
+          ],
+          [
+            0.65,
+            "Low-Mid"
+          ],
+          [
+            1.0,
+            "Bass"
+          ]
+        ],
         "shockwave_grid_profile_floor": 0.12,
         "shockwave_grid_sensitivity": 0.4,
-        "shockwave_grid_shape_nodes": [[0.0, 0.4], [0.35, 0.75], [0.65, 0.55], [1.0, 0.8]],
+        "shockwave_grid_shape_nodes": [
+          [
+            0.0,
+            0.4
+          ],
+          [
+            0.35,
+            0.75
+          ],
+          [
+            0.65,
+            0.55
+          ],
+          [
+            1.0,
+            0.8
+          ]
+        ],
         "shockwave_grid_transient_clamp": 1.5,
         "shockwave_grid_transient_pulse_gain": 1.0,
         "shockwave_grid_wave_amplitude": 0.5,
@@ -51,8 +117,6 @@
           255
         ],
         "shockwave_grid_scroll": 0.6,
-        "shockwave_grid_tilt": 0.4,
-        "shockwave_grid_turn": 0.06,
         "shockwave_grid_wave_height": 0.85,
         "shockwave_grid_wave_speed": 0.7
       }

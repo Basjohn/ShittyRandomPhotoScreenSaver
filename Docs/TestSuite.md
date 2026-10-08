@@ -355,13 +355,15 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 - `tests/test_visualizer_prepared_reveal.py` — first use prepares on hidden frames, the reveal waits (with a deadline);
 - `tests/test_visualizer_view_orbit.py`, `tests/test_visualizer_direct_gestures.py` — W/A/S/D and Alt + left orbit;
   Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
-- `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — descriptor-owned
-  CUSTOM families, one-time legacy-pose preservation, hidden hot-swap, profile-local Save/Cancel and Arrange/slot/transfer;
+- `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — independent descriptor
+  geometry-kind/layout-profile metadata, N-profile CUSTOM persistence, one-way legacy claim, hidden 2D↔3D and 3D↔3D hot-swap,
+  profile-local Save/Cancel plus Arrange/slot/transfer, and proof that turn/tilt/camera state is not layout geometry;
 - `tests/test_visualizer_edit_native_input.py`, `tests/test_visualizer_edit_footprint.py`,
-  `tests/test_visualizer_edit_content_envelope.py`, `tests/test_visualizer_edit_orbit_publication.py` — native QQuickWindow/QML
-  wheel/move/orbit delivery, actual GPU footprint, empty-scene controls, stable gesture targets and bounded existing-wake
-  framing with closed/deselected dormancy. Test stages lie inside their bound native window; hidden window pixels or supplied
-  event coordinates alone cannot certify physical feel;
+  `tests/test_visualizer_edit_content_envelope.py`, `tests/test_visualizer_edit_orbit_publication.py`,
+  `tests/test_qtquick_visualizer_render_bridge.py` — native QQuickWindow/QML wheel/move/orbit delivery, actual GPU footprint,
+  projected eight-vertex 3D cage + north marker, stable gesture targets, bounded existing-wake framing with closed/deselected
+  dormancy, and explicit profile-switch/Edit-Save snapshot discard/rebase without false geometry mismatch counts. Test stages lie
+  inside their bound native window; hidden window pixels or supplied event coordinates alone cannot certify physical feel;
 - `tests/test_scene3d_quality_settings.py` — the 3D Settings tab, the tier resolver (General / family / entry, Auto by
   GPU), the `transitions.detail_3d` bridge, each tier's levers in the renderers;
 - `tests/test_visualizer_profile_lender_presets.py`, `tests/test_3d_curated_preset_ownership.py` — descriptor-declared

@@ -29,7 +29,32 @@ def _item(widget: str, variant: str) -> CustomLayoutSessionItem:
         source_key=CustomLayoutKey(widget, "display:a", variant), model_identity=widget,
         baseline_global_rect=QRect(100, 80, 420, 280), current_global_rect=QRect(100, 80, 420, 280),
         baseline_size_payload={}, current_size_payload={}, baseline_enabled=True, current_enabled=True,
+        geometry_kind=("freeform_3d" if widget == "spotify_visualizer" else "planar"),
     )
+
+
+def test_non_present_frame_never_invokes_pending_authored_view_callback():
+    """A native/audio-only publication cannot sample Edit's projected cage."""
+    mailbox = LatestStateMailbox()
+    identity = SimpleNamespace(runtime_generation=1, engine_generation=2,
+                               activation_id=3, mode_id="extruded_spectrum")
+    snapshots = []
+    controller = SimpleNamespace(
+        logical_mailbox=mailbox, render_identity=identity,
+        publish_render_snapshot=lambda logical, _presentation, **kw: snapshots.append(logical) or True,
+    )
+    sync = QuickVisualizerPresentationSync(controller, resolve_presentation=lambda: object())
+    sampled = []
+    sync.set_authored_view_publication_callback(lambda logical, _presentation: sampled.append(logical))
+    non_present = SimpleNamespace(**vars(identity), logical_timestamp=1.0, present_frame=False)
+    mailbox.publish(non_present, generation=1, activation_id=3)
+    assert sync.sync_latest()
+    assert snapshots == [non_present]
+    assert sampled == []
+    present = SimpleNamespace(**vars(identity), logical_timestamp=2.0, present_frame=True)
+    mailbox.publish(present, generation=1, activation_id=3)
+    assert sync.sync_latest()
+    assert sampled == [present]
 
 
 @pytest.mark.qt
@@ -72,7 +97,7 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
     owner._mode_transition_phase = "idle"
     owner._sync = QuickVisualizerPresentationSync(controller, resolve_presentation=lambda: presentation)
     session = CustomLayoutSession()
-    visualizer, clock = _item("spotify_visualizer", "freeform_3d"), _item("clock", "default")
+    visualizer, clock = _item("spotify_visualizer", "3d:extruded_spectrum"), _item("clock", "default")
     session.add_item(visualizer)
     session.add_item(clock)
     custom_owner = SimpleNamespace(is_editing=True, session=session)
@@ -94,15 +119,20 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
     wake = QuickVisualizerPublicationWake(owner.sync_present)
     mailbox.set_wake_callback(wake.request)
 
-    def publish(timestamp=100.0, *, deliver=True, parameter_changes=None, **changes):
+    def publish(timestamp=100.0, *, deliver=True, parameter_changes=None,
+                empty_bars=False, **changes):
         parameters = extruded_spectrum_parameters(host, timestamp)
         parameters.update(spectrum_ghosting_enabled=False, spectrum_ghost_alpha=0.0)
         parameters.update(parameter_changes or {})
+        # A missing reflection/shadow does not make otherwise-visible bars an
+        # empty scene. Exercise *actual* empty audio geometry at the next edge.
+        level = 0.0 if empty_bars else 0.35
+        peak = 0.0 if empty_bars else 0.4
         frame = SimpleNamespace(
             **vars(identity), logical_timestamp=timestamp,
             present_frame=True, playing=False,
-            mode_state=SimpleNamespace(parameters=freeze_render_fields(parameters), peaks=(0.4,) * controller.bar_count),
-            common=SimpleNamespace(bar_count=controller.bar_count, bars=(0.35,) * controller.bar_count,
+            mode_state=SimpleNamespace(parameters=freeze_render_fields(parameters), peaks=(peak,) * controller.bar_count),
+            common=SimpleNamespace(bar_count=controller.bar_count, bars=(level,) * controller.bar_count,
                 style={"fill_color": (255, 255, 255, 255), "border_color": (255, 255, 255, 255)}),
         )
         for key, value in changes.items():
@@ -132,7 +162,15 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
         identity.activation_id += 1
         retained[0] = accepted_slot[0] = None
         manager._refresh_quick_visualizer_edit_content_envelope()
-        assert published[-1][1] == {"admitted": False, "mode": "extruded_spectrum", "orbit_admitted": True}
+        structural = published[-1][1]
+        assert structural["admitted"] is False
+        assert structural["mode"] == "extruded_spectrum"
+        assert structural["orbit_admitted"] is True
+        assert structural["cage_admitted"] is True
+        assert len(structural["cage_points"]) == 8
+        # The explicit activation edge above may resolve one structural cage;
+        # a non-present audio publication must add NO further resolution.
+        resolutions.clear()
         publish(100.3, present_frame=False)
         assert resolutions == []
         assert owner._sync._authored_view_publication_callback is not None
@@ -146,14 +184,17 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
         identity.activation_id += 1
         retained[0] = accepted_slot[0] = None
         manager._refresh_quick_visualizer_edit_content_envelope()
-        publish(100.46, parameter_changes={
-            "extruded_spectrum_body_alpha": 0.0, "extruded_spectrum_reflection": 0.0,
+        publish(100.46, empty_bars=True, parameter_changes={
+            "extruded_spectrum_reflection": 0.0,
             "extruded_spectrum_shadow_enabled": False,
         })
         assert published[-1][1] == {"admitted": False, "mode": "extruded_spectrum", "orbit_admitted": True}
         assert owner._sync._authored_view_publication_callback is None
         resolutions.clear()
-        publish(100.47)
+        publish(100.47, empty_bars=True, parameter_changes={
+            "extruded_spectrum_reflection": 0.0,
+            "extruded_spectrum_shadow_enabled": False,
+        })
         assert resolutions == []                 # empty is valid, never an endless audio observer
 
         manager._set_quick_view_orbit_rates(1.0, 0.0)

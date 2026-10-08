@@ -16,7 +16,9 @@ from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
-from rendering.gl_programs.scene3d import Scene3DBlockLayout, scene3d_detail
+from rendering.gl_programs.scene3d import (
+    SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
+)
 from rendering.quick import gl_query
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
@@ -115,12 +117,15 @@ def sphere_samples(parameters) -> int:
 _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (
     ('uMatrix', 'mat4'),
     ('uGeometry', 'vec3'),
+    ('uItemSize', 'vec2'),
+    ('uViewPose', 'vec2'),
     ('uSectionDrives', 'float[8]'),
     ('uFragmentStrength', 'float'),
     ('uParticleDistance', 'float'),
     ('uParticleAmount', 'float'),
     ('uPerspectiveStrength', 'float'),
     ('uRotationPhase', 'float'),
+    ('uSpinMode', 'int'),
     ('uSizePulse', 'float'),
     ('uVoxelSizeVariation', 'float'),
     ('uProjectionOffset', 'vec2'),
@@ -168,6 +173,8 @@ _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (
 
 _VERTEX_SOURCE = f"""#version 460 core
 {_SPHERE_FRAME_BLOCK.glsl()}
+{SCENE3D_GLSL}
+{SCENE3D_SPHERE_CAMERA_GLSL}
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec3 aInstanceCenter;
@@ -186,7 +193,11 @@ flat out float vRainbowCoordinate;
 flat out float vDepthCoordinate;
 
 mat3 rotation() {{
-    vec3 angle = uRotationPhase * vec3(0.21, 0.57, 0.29);
+    vec3 axes = uSpinMode == 1 ? vec3(-0.21, -0.57, -0.29)
+              : uSpinMode == 2 ? vec3(0.0, 0.57, 0.0)
+              : uSpinMode == 3 ? vec3(0.0, -0.57, 0.0)
+              : vec3(0.21, 0.57, 0.29);
+    vec3 angle = uRotationPhase * axes;
     vec3 c = cos(angle), s = sin(angle);
     mat3 rx = mat3(1,0,0, 0,c.x,s.x, 0,-s.x,c.x);
     mat3 ry = mat3(c.y,0,-s.y, 0,1,0, s.y,0,c.y);
@@ -483,12 +494,11 @@ void main() {{
     // 1.0 is the accepted projection exactly; lower values only flatten it
     // toward orthographic so this optional control can never exceed the golden
     // perspective/overflow envelope.
-    float cameraW = (4.8 - turnedPosition.z * uPerspectiveStrength) / 4.8;
-    vec2 local = uGeometry.xy * cameraW
-               + vec2(turnedPosition.x, -turnedPosition.y) * uGeometry.z * uProjectionScale
-               + uProjectionOffset * cameraW;
-    gl_Position = uMatrix * vec4(local, 0.0, cameraW);
-    gl_Position.z = (-turnedPosition.z / 3.2) * gl_Position.w;
+    // Common Scene3D camera/near-plane projection, including proper clip depth.
+    // Camera pose is independent of the animated shell's authored rotation.
+    gl_Position = sceneProjectSphere(uMatrix, uItemSize, turnedPosition,
+                                    uGeometry, uPerspectiveStrength,
+                                    uProjectionOffset, uProjectionScale, uViewPose);
 }}
 """
 
@@ -636,10 +646,12 @@ void main() {
     if (uMirror > 0.0) {
         vec3 eyeToward = normalize(vec3(0.0, 0.0, 2.4) - vScreenCenter);
         vec3 reflected = reflect(-eyeToward, worldNormal);
-        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.5;
+        // Soften only the reflected-wallpaper lookup. Fast-changing face normals
+        // previously walked many texels per degree and shimmered on each frame.
+        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.16;
         uv = 1.0 - abs(1.0 - mod(uv, 2.0));
         float polish = max(gloss, clamp(uMirror, 0.0, 1.0));
-        float lod = mix(3.0, 0.3, polish);
+        float lod = mix(3.6, 1.8, polish);
         vec3 seen = mix(textureLod(uBackdropPrevious, uv, lod).rgb, textureLod(uBackdrop, uv, lod).rgb,
                         uBackdropBlend);
         vec3 tint = mix(vec3(1.0), base * 1.35, 0.25);
@@ -800,12 +812,18 @@ class QuickSphereVoxelRenderer:
         presentation = frame.snapshot.presentation
         values = {"uMatrix": tuple(frame.matrix_values)}
         values["uGeometry"] = sphere_pixel_geometry(presentation)
+        values["uItemSize"] = tuple(float(v) for v in frame.logical_size)
+        values["uViewPose"] = (float(parameters.get("sphere_turn", 0.0)) * math.pi,
+                               float(parameters.get("sphere_tilt", 0.0)) * (math.pi / 2.0))
         values["uSectionDrives"] = tuple(section_drives)
         values["uFragmentStrength"] = float(parameters["sphere_fragment_strength"])
         values["uParticleDistance"] = float(parameters["sphere_particle_distance"])
         values["uParticleAmount"] = float(parameters["sphere_particle_amount"])
         values["uPerspectiveStrength"] = float(parameters["sphere_perspective_strength"])
         values["uRotationPhase"] = state.rotation_phase
+        values['uSpinMode'] = {
+            'Default': 0, 'Reverse': 1, 'Y Clockwise': 2, 'Y Counterclockwise': 3
+        }[str(parameters['sphere_spin_direction'])]
         values["uSizePulse"] = state.size_pulse
         values["uTracerDrive"] = state.tracer_drive
         values["uTracerPhase"] = state.tracer_phase

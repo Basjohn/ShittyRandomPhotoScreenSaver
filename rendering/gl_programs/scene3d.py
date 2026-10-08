@@ -1182,6 +1182,48 @@ class Scene3DStorageLayout:
 
 # ---- Camera (CPU side: mirrors, overscan and shake) ----
 
+# Sphere's retained cube shell uses the same Scene3D resting camera as transitions.
+# Its *authored* size is in item pixels, rather than in the photograph-normalized
+# world used by transitions. This adapter is pure projection, not a second camera.
+# At zero view pose it preserves the historical Sphere perspective pixel-for-pixel.
+SCENE3D_SPHERE_CAMERA_GLSL = """
+vec4 sceneProjectSphere(mat4 matrix, vec2 itemSize, vec3 shellPoint,
+                        vec3 itemGeometry, float perspective, vec2 itemOffset,
+                        float projectionScale, vec2 view) {
+    const float distance = 4.8;
+    // Pose is a persistent per-mode camera view, independent of Sphere's
+    // audio-driven rigid shell rotation and every curated appearance preset.
+    vec3 p = sceneCameraSpace(shellPoint, vec4(distance, 1.0, 0.0, 0.0),
+                              vec4(view.y, view.x, 0.0, 0.0));
+    float cameraZ = p.z * perspective;
+    float cameraW = (distance - cameraZ) / distance;
+    vec3 world = vec3(
+        ((itemGeometry.x + itemOffset.x - 0.5 * itemSize.x) * cameraW
+         + p.x * itemGeometry.z * projectionScale) / itemSize.y,
+        ((0.5 * itemSize.y - itemGeometry.y - itemOffset.y) * cameraW
+         + p.y * itemGeometry.z * projectionScale) / itemSize.y,
+        cameraZ
+    );
+    return sceneProjectAt(matrix, itemSize, world, distance);
+}
+"""
+
+
+def scene3d_sphere_item_position(point: Vec3, geometry: tuple[float, float, float],
+                                  perspective: float, view: tuple[float, float] = (0.0, 0.0),
+                                  offset: tuple[float, float] = (0.0, 0.0),
+                                  scale: float = 1.0) -> tuple[float, float]:
+    """CPU mirror of ``sceneProjectSphere`` in local item pixels (no Qt/GL)."""
+    # The shader's canonical view is yaw then pitch, exactly sceneCameraSpace.
+    x, y, z = scene3d_camera_space(point, (4.8, 1.0, 0.0, 0.0),
+                                   (view[1], view[0], 0.0, 0.0))
+    w = (4.8 - z * perspective) / 4.8
+    if w <= 0.0:
+        raise ValueError("Sphere point passes the Scene3D camera")
+    return (geometry[0] + offset[0] + x * geometry[2] * scale / w,
+            geometry[1] + offset[1] - y * geometry[2] * scale / w)
+
+
 def scene3d_screen_uv_at(world: Vec3, aspect: float, distance: float) -> tuple[float, float]:
     """CPU mirror of ``sceneProjectAt`` after the divide, as item UV."""
     scale = distance / (distance - world[2])

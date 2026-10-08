@@ -37,6 +37,10 @@ _ACTIVATION_SCENE_FADE_DURATION_S = 1.3
 # finishes on its first visible frame, as before (a window that renders nothing cannot strand
 # the activation or its completion).
 _PREPARED_REVEAL_DEADLINE_S = 1.5
+# One Qt GUI-thread single-shot guard per REQUEST, not a polling/display ticker.
+# It protects all transition phases, including no logical publication at all.
+# Actual prepared-reveal deadline above is shorter and remains unchanged.
+_ACTIVATION_TRANSACTION_DEADLINE_MS = 6000
 
 
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
@@ -77,7 +81,9 @@ class QuickDisplayVisualizerOwner:
         committed_layout_profile_resolver: Callable[[str], tuple[
             tuple[float, float, float, float], tuple[float, float] | None, object
         ] | None] | None = None,
+        edit_layout_profile_activator: Callable[[str], bool] | None = None,
         card_shadow_kwargs: Mapping[str, object],
+        transition_failure_callback: Callable[[str], None] | None = None,
         transition_clock: Callable[[], float] | None = None,
         transition_half_duration_s: float = _MODE_TRANSITION_HALF_DURATION_S,
     ) -> None:
@@ -101,6 +107,7 @@ class QuickDisplayVisualizerOwner:
         # ``custom_layout`` map.  It is consulted only at the hidden mode
         # activation boundary, never from the logical/render cadence.
         self._committed_layout_profile_resolver = committed_layout_profile_resolver
+        self._edit_layout_profile_activator = edit_layout_profile_activator
         required_card_fields = {
             "background_color",
             "border_color",
@@ -128,6 +135,7 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_rect: tuple[float, float, float, float] | None = None
         self._committed_layout_extent: tuple[float, float] | None = None
         self._legacy_layout_profile: str | None = None
+        self._legacy_layout_source_variant: str | None = None
         self._authored_outer_origin: tuple[float, float] = (0.0, 0.0)
         self._mode_transition_phase = "idle"
         self._mode_transition_started_at = 0.0
@@ -141,6 +149,9 @@ class QuickDisplayVisualizerOwner:
         # against the same clock the mode-transition fade already uses.
         self._activation_fade_started_at: float | None = None
         self._pending_mode_activation: dict[str, Any] | None = None
+        self._transition_failure_callback = transition_failure_callback
+        self._transition_request_serial = 0
+        self._transition_recovery_issued = False
         self._sync: Any = None
         self._publication_wake: Any = None
         self._configured = False
@@ -582,7 +593,8 @@ class QuickDisplayVisualizerOwner:
         local_rect: tuple[float, float, float, float] | None,
         viewport_extent: tuple[float, float] | None = None,
         content_rotation_by_mode: object = None,
-        legacy_geometry_profile: str | None = None,
+        legacy_layout_profile: str | None = None,
+        legacy_source_variant: str | None = None,
     ) -> None:
         """Hydrate one saved CUSTOM outer rect before logical runtime start.
 
@@ -598,6 +610,7 @@ class QuickDisplayVisualizerOwner:
             self._committed_layout_rect = None
             self._committed_layout_extent = None
             self._legacy_layout_profile = None
+            self._legacy_layout_source_variant = None
             return
         x, y, width, height = (float(value) for value in local_rect)
         if width <= 0.0 or height <= 0.0:
@@ -611,10 +624,17 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_rect = (x, y, width, height)
         self._committed_layout_extent = extent
         self._legacy_layout_profile = (
-            str(legacy_geometry_profile).strip().lower()
-            if legacy_geometry_profile is not None
+            str(legacy_layout_profile).strip().lower()
+            if legacy_layout_profile is not None
             else None
         )
+        self._legacy_layout_source_variant = (
+            str(legacy_source_variant).strip().lower()
+            if legacy_source_variant is not None
+            else None
+        )
+        if (self._legacy_layout_profile is None) != (self._legacy_layout_source_variant is None):
+            raise ValueError("legacy visualizer layout claim requires both profile and source variant")
         # Rehydrate physical CUSTOM truth before the authored logical runtime can
         # consume it. Orientation is layout state, not a Visualizer preset.
         hydration_extent = extent or self._controller.committed_viewport_extent
@@ -723,6 +743,12 @@ class QuickDisplayVisualizerOwner:
         # This preserves the prior committed pair if a malformed presentation
         # is ever routed here.
         self._controller.commit_presentation_metrics(presentation)
+        # The editor displayed this presentation, but an unread logical snapshot
+        # may have been composed against the *previous* CUSTOM authority. It is
+        # never legal to relabel its immutable geometry as current. Discard only
+        # that unconsumed snapshot; the next ordinary logical publication carries
+        # the freshly committed, coherent stage/viewport pair.
+        self._controller.render_bridge.discard_if_presentation_differs(presentation)
         # Save promotes the complete sparse map, not only the currently visible
         # mode, so modes rotated earlier in the same edit session survive an
         # in-process mode switch without requiring recreation.
@@ -730,6 +756,7 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_rect = tuple(float(value) for value in presentation.outer_rect)
         self._committed_layout_extent = (extent_width, extent_height)
         self._legacy_layout_profile = None
+        self._legacy_layout_source_variant = None
 
     def _activation_scene_fade(self) -> float:
         """Return the authored 0 -> 1 first-appearance scene fade progress.
@@ -784,6 +811,22 @@ class QuickDisplayVisualizerOwner:
             self._controller.presentation_layout_metrics
         )
         if has_custom_override:
+            working = self._presentation_runtime.scene_controller.visualizer_item.presentation
+            if (working is not None and
+                    tuple(working.viewport_extent) == tuple(controller_extent) and
+                    working.content_rotation_quarters == content_rotation_quarters):
+                # GUI-side sync: retained CUSTOM's live stage is already the
+                # presentation authority. Reuse that exact stage for logical
+                # composition, never republish the previous committed size into
+                # the edit scene. No shadow rectangle or queue is introduced.
+                return replace(
+                    working, scene_fade=scene_fade,
+                    # Fade is derived from this owner's current transition,
+                    # never multiplied by the *previous* retained record.
+                    # Reusing old fade recursively could trap a mode at zero
+                    # opacity after an Edit/profile hot-swap.
+                    content_fade=self._mode_transition_fade,
+                )
             viewport_extent = controller_extent
         elif self._committed_layout_extent is not None:
             viewport_extent = self._committed_layout_extent
@@ -795,10 +838,15 @@ class QuickDisplayVisualizerOwner:
         else:
             outer_origin = (committed_rect[0], committed_rect[1])
             uniform_scale = committed_rect[2] / max(1e-6, viewport_extent[0])
+        from core.settings.visualizer_mode_registry import get_visualizer_geometry_kind
+        is_freeform = get_visualizer_geometry_kind(self._controller.mode_id) == "freeform_3d"
         return resolve_visualizer_presentation(
             policy=self._controller.presentation_policy,
             display_size=(float(width), float(height)),
             outer_origin=outer_origin,
+            committed_outer_size=(committed_rect[2], committed_rect[3]) if (
+                is_freeform and committed_rect is not None and not has_custom_override
+            ) else None,
             dpr=dpr,
             uniform_visual_scale=uniform_scale,
             viewport_extent=viewport_extent,
@@ -832,14 +880,101 @@ class QuickDisplayVisualizerOwner:
         # edits / transfers continue to follow the controller normally.
         self._committed_layout_extent = None
 
+    def _signal_transition_failure(self, reason: str) -> None:
+        """Escalate an unrecoverable activation once through generation-fenced reload.
+
+        No alternate renderer, Settings write or retry scheduler is created.
+        The existing display-recreation authority reconstructs the last
+        committed layout rather than promoting an incomplete Edit transaction.
+        """
+        if self._retired or self._transition_recovery_issued:
+            return
+        self._transition_recovery_issued = True
+        previous_phase = self._mode_transition_phase
+        self._mode_transition_phase = "failed"
+        pending = getattr(self, "_pending_mode_activation", None)
+        target = pending.get("mode") if isinstance(pending, dict) else None
+        logger.error(
+            "[SPOTIFY_VIS] [MODE_ACTIVATION_FAIL] reason=%s phase=%s "
+            "controller_mode=%s target=%s render_identity=%s; "
+            "requesting committed-runtime reconstruction",
+            reason, previous_phase,
+            getattr(getattr(self, "_controller", None), "mode_id", None),
+            target, getattr(self, "_render_identity", None),
+        )
+        callback = getattr(self, "_transition_failure_callback", None)
+        if callback is not None:
+            try:
+                callback(str(reason))
+            except Exception:
+                logger.exception("[SPOTIFY_VIS] Activation reconstruction request failed")
+
+    def _arm_transition_deadline(self) -> None:
+        """One bounded Qt single-shot per activation; successful ones expire inert.
+
+        Without this, a target which never publishes a fresh logical frame
+        leaves waiting_target permanently hidden, and Edit Save/Cancel permanently
+        refused. No frame-driven or periodic timeout service can solve silence.
+        """
+        if self._transition_failure_callback is None:
+            return
+        import weakref
+        scheduler = getattr(self, "_transition_deadline_scheduler", None)
+        if scheduler is None:
+            from PySide6.QtCore import QTimer
+            scheduler = QTimer.singleShot
+
+        owner_ref = weakref.ref(self)
+        serial = self._transition_request_serial
+
+        def deadline() -> None:
+            owner = owner_ref()
+            if (owner is None or owner._retired or
+                    owner._transition_request_serial != serial):
+                return
+            phase = owner._mode_transition_phase
+            if phase == "idle":
+                return
+            if phase == "fading_out":
+                # The outgoing logical owner was never stopped. Abandon the
+                # uncommitted request and restore its opacity, without a reload.
+                owner._pending_mode_activation = None
+                owner._mode_transition_phase = "idle"
+                owner._mode_transition_started_at = 0.0
+                owner._mode_transition_fade = 1.0
+                try:
+                    owner._apply_resolved_presentation(owner._resolve_current_presentation())
+                    owner._request_retained_present()
+                except Exception:
+                    logger.exception("[SPOTIFY_VIS] Could not restore stalled outgoing scene")
+                    owner._signal_transition_failure("fade_out_restore_failed")
+                else:
+                    logger.error("[SPOTIFY_VIS] Cancelled stalled fade-out while outgoing mode remained live")
+                return
+            owner._signal_transition_failure("deadline:" + phase)
+
+        scheduler(_ACTIVATION_TRANSACTION_DEADLINE_MS, deadline)
+
     def sync_present(self) -> bool:
+        try:
+            return self._sync_present_transaction()
+        except Exception:
+            if getattr(self, "_mode_transition_phase", "idle") == "idle":
+                raise
+            logger.exception("[SPOTIFY_VIS] Retained visualizer mode activation failed")
+            self._signal_transition_failure("activation_exception")
+            return False
+
+    def _sync_present_transaction(self) -> bool:
         if self._retired or self._sync is None:
             return False
         phase = self._mode_transition_phase
         if phase == "idle":
             return self._sync.sync_latest()
         if phase == "failed":
-            raise RuntimeError("visualizer mode transition owner is failed")
+            # One fenced reconstruction request already owns recovery. Never
+            # turn subsequent logical mailbox wakes into an exception storm.
+            return False
 
         now = float(self._transition_clock())
         elapsed = max(0.0, now - self._mode_transition_started_at)
@@ -894,7 +1029,14 @@ class QuickDisplayVisualizerOwner:
                 self._mode_transition_fade = 1.0
                 callback = None if pending is None else pending.get("on_complete")
                 if callable(callback):
-                    callback(self._controller.mode_id)
+                    try:
+                        callback(self._controller.mode_id)
+                    except Exception:
+                        # Completion persists mode/preset ownership. A partial
+                        # persistence failure must not masquerade as a healthy
+                        # newly-visible target. Reconstruct from Settings once.
+                        logger.exception("[SPOTIFY_VIS] Activation completion persistence failed")
+                        self._signal_transition_failure("completion_failed")
             return published
 
         raise RuntimeError(f"unknown visualizer mode transition phase: {phase}")
@@ -1036,6 +1178,18 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_phase = "fading_out"
         self._mode_transition_started_at = float(self._transition_clock())
         self._mode_transition_fade = 1.0
+        self._transition_request_serial += 1
+        self._transition_recovery_issued = False
+        try:
+            self._arm_transition_deadline()
+        except Exception:
+            # A GUI with no effective deadline cannot safely admit a potentially
+            # infinite hidden transition. Leave the previous source untouched.
+            self._pending_mode_activation = None
+            self._mode_transition_phase = "idle"
+            self._mode_transition_fade = 1.0
+            logger.exception("[SPOTIFY_VIS] Rejected transition without a bounded recovery guard")
+            return False
         logger.info(
             "[SPOTIFY_VIS] Quick %s activation requested %s -> %s",
             kind,
@@ -1051,8 +1205,37 @@ class QuickDisplayVisualizerOwner:
         if pending is None:
             raise RuntimeError("visualizer mode transition has no target activation")
         controller = self._controller
+        target_mode = str(pending["mode"])
+        previous_mode = str(controller.mode_id)
+        kind = str(pending.get("kind") or "mode")
+        edit_profile_switched = False
+        # The Edit profile projection is fallible (QML, persisted payload, and
+        # display bindings). Validate/project it while the outgoing logical
+        # runtime is still alive and hidden. A failure here must NOT strand a
+        # stopped old runtime with an undelivered new mesh. The retained render
+        # identity remains the outgoing one until the target is configured.
+        if kind == "mode":
+            from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+            if get_visualizer_layout_profile(target_mode) != get_visualizer_layout_profile(previous_mode):
+                activator = self._edit_layout_profile_activator
+                if activator is not None:
+                    try:
+                        if not activator(target_mode):
+                            raise RuntimeError("active CUSTOM edit profile switch was refused")
+                        edit_profile_switched = True
+                    except Exception:
+                        logger.exception(
+                            "[SPOTIFY_VIS] Edit profile preflight FAILED source=%s target=%s; "
+                            "outgoing logical runtime still active", previous_mode, target_mode,
+                        )
+                        self._pending_mode_activation = None
+                        self._mode_transition_phase = "idle"
+                        self._mode_transition_fade = 1.0
+                        return
         engine = controller.ensure_engine()
         if not controller.stop_logical_runtime():
+            if edit_profile_switched and self._edit_layout_profile_activator is not None:
+                self._edit_layout_profile_activator(previous_mode)
             self._mode_transition_phase = "failed"
             raise RuntimeError("visualizer logical runtime did not join for activation")
 
@@ -1064,6 +1247,8 @@ class QuickDisplayVisualizerOwner:
 
         target = str(pending["mode"])
         kind = str(pending.get("kind") or "mode")
+        outgoing_mode = str(controller.mode_id)
+        activation_step = "begin_engine_transaction"
         try:
             begin()
         except Exception:
@@ -1072,17 +1257,27 @@ class QuickDisplayVisualizerOwner:
         try:
             if kind == "mode":
                 from core.settings.visualizer_mode_registry import (
-                    get_visualizer_geometry_profile,
+                    get_visualizer_layout_profile,
                 )
 
                 if (
-                    get_visualizer_geometry_profile(target)
-                    != get_visualizer_geometry_profile(controller.mode_id)
+                    get_visualizer_layout_profile(target)
+                    != get_visualizer_layout_profile(controller.mode_id)
                 ):
+                    # The logical runtime is stopped and the target is still hidden.
+                    # Drop any unread old-mode snapshot before switching geometry so
+                    # it cannot be rejected later as a one-frame stale presentation.
+                    controller.render_bridge.discard_pending()
+                    # Edit's target profile was already projected/validated
+                    # BEFORE stopping the outgoing logical runtime. Never
+                    # repeat a fallible QML projection inside this transaction.
+                    activation_step = "activate_committed_profile"
                     self._activate_committed_layout_profile(target)
+                activation_step = "set_controller_mode"
                 controller.set_mode(target)
             elif target != controller.mode_id:
                 raise RuntimeError("preset activation attempted to change visualizer mode")
+            activation_step = "configure_target"
             controller.settings_model = pending["settings_model"]
             controller.record_resolved_activation(pending["resolved_activation"])
             controller.technical_config_cache = dict(pending["technical_cache"])
@@ -1109,11 +1304,43 @@ class QuickDisplayVisualizerOwner:
             reset_smoothing()
             reset_floor()
         except Exception:
+            # Qt's GUI callback boundary may otherwise discard the Python
+            # traceback, leaving only an invisible Visualizer and a stopped
+            # logical runtime. Record the exact failed transaction stage.
+            logger.exception(
+                "[SPOTIFY_VIS] Hidden %s activation FAILED step=%s "
+                "source=%s target=%s; retained Edit Save must refuse",
+                kind, activation_step, outgoing_mode, target,
+            )
+            if kind == "mode" and str(controller.mode_id) == outgoing_mode:
+                try:
+                    if edit_profile_switched and self._edit_layout_profile_activator is not None:
+                        self._edit_layout_profile_activator(outgoing_mode)
+                    if edit_profile_switched:
+                        self._activate_committed_layout_profile(outgoing_mode)
+                    self._start_logical_runtime()
+                except Exception:
+                    logger.exception(
+                        "[SPOTIFY_VIS] Could not restore outgoing logical mode=%s", outgoing_mode,
+                    )
+                else:
+                    # Recovery is event-owned: no new fade timer, no polling,
+                    # no Settings write, and no half-switched Edit transaction.
+                    self._pending_mode_activation = None
+                    self._mode_transition_started_at = 0.0
+                    self._mode_transition_fade = 1.0
+                    self._mode_transition_phase = "idle"
+                    logger.warning(
+                        "[SPOTIFY_VIS] Restored outgoing mode after failed hidden "
+                        "activation source=%s target=%s", outgoing_mode, target,
+                    )
+                    return
             self._mode_transition_phase = "failed"
             raise
         finally:
             end(reason=f"quick_{kind}_change:{target}")
 
+        activation_step = "bind_fresh_target"
         try:
             generation = int(engine.get_generation_id())
             activation_id = int(engine.get_activation_id())
@@ -1129,6 +1356,11 @@ class QuickDisplayVisualizerOwner:
             )
             self._start_logical_runtime()
         except Exception:
+            logger.exception(
+                "[SPOTIFY_VIS] Hidden %s activation FAILED step=%s "
+                "source=%s target=%s; retained Edit Save must refuse",
+                kind, activation_step, outgoing_mode, target,
+            )
             self._mode_transition_phase = "failed"
             raise
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -1209,6 +1441,10 @@ class QuickDisplayVisualizerOwner:
     def retire(self) -> bool:
         if self._retired:
             return False
+        # Disarm the queued one-shot before touching Qt/engine retirement roots;
+        # even a failed logical join must not make a stale transition callback
+        # re-enter this partially detached generation.
+        self._transition_request_serial = getattr(self, "_transition_request_serial", 0) + 1
         self.set_edit_orbit_publication_callback(None)
         # The mailbox wake is installed during bind(), before start(). A failed
         # start must not leave a logical-thread callback targeting a retired Qt
@@ -1252,8 +1488,11 @@ class QuickDisplayVisualizerOwner:
         self._publication_wake = None
         self._pending_mode_activation = None
         self._preparing_activation = None
+        self._transition_request_serial += 1  # disarm any queued one-shot
+        self._transition_failure_callback = None
         self._presentation_resolver = None
         self._committed_layout_profile_resolver = None
+        self._edit_layout_profile_activator = None
         self._render_identity = None
         self._started = False
         self._bound = False

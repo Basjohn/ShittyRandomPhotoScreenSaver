@@ -178,6 +178,32 @@ class VisualizerSnapshotBridge:
         with self._lock:
             return self._snapshot
 
+    def discard_pending(self) -> None:
+        """Drop one unread snapshot without changing activation admission.
+
+        Used only at an explicit presentation-authority transaction (for example
+        a hidden mode/layout-profile switch) after the logical producer has been
+        stopped. Last consumed pixels remain retained until the next coherent
+        publication; no queue/cadence owner is introduced.
+        """
+
+        with self._lock:
+            self._snapshot = None
+            self._protected_edges.clear()
+
+    def discard_if_presentation_differs(self, presentation: object) -> bool:
+        """Atomically retire only stale unread geometry at a CUSTOM commit boundary.
+
+        A same-presentation snapshot (and its protected events) stays intact.
+        Never change a frozen snapshot's presentation after composition.
+        """
+        with self._lock:
+            if self._snapshot is None or self._snapshot.presentation == presentation:
+                return False
+            self._snapshot = None
+            self._protected_edges.clear()
+            return True
+
     def take_for_render(
         self,
         *,

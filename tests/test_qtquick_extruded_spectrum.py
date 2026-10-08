@@ -87,10 +87,36 @@ def test_directional_shadow_shader_projects_the_full_box_sweep_without_overlap_s
     """A cast shadow is the sweep from base footprint to shifted top, not a translated cap."""
     shadow_branch = EXTRUDED_VERTEX_SOURCE.split("if (uPass == 4)", 1)[1].split("vWorld =", 1)[0]
     assert "aNormal.y < 0.5" not in shadow_branch
-    assert "world.x += uShadowVector.x * world.y" in shadow_branch
-    assert "world.y = 0.0" in shadow_branch
+    assert "vec3 shadowPoint = extrudedShadowProject(world, uShadowVector, uView);" in shadow_branch
+    assert "foot.xy += vec2(shadow.x, -shadow.y) * p.y * EXTRUDED_SHADOW_CAST_REACH;" in _PROJECTION_GLSL
     fragment_shadow = EXTRUDED_FRAGMENT_SOURCE.split("if (uPass == 4)", 1)[1].split("vec3 n", 1)[0]
     assert "uShadowColor.rgb * uShadowColor.a" in fragment_shadow
+
+
+def test_e8_receiver_matches_cpu_on_real_gl_across_orbit_and_all_shadow_directions(qt_app):
+    """Shared production GLSL receiver must match the pure edit/reach CPU mirror."""
+    from rendering.gl_programs.extruded_spectrum_program import extruded_shadow_project
+    from tests.test_scene3d_glsl_mirrors import _GlslProbe, _check
+
+    probe = _GlslProbe()
+    try:
+        rng = random.Random(120)
+        cases = []
+        for _ in range(160):
+            point = (rng.uniform(-2, 2), rng.uniform(0, EXTRUDED_CEILING), rng.uniform(-0.6, 0))
+            tilt, turn = rng.uniform(0, EXTRUDED_MAX_TILT), rng.uniform(-EXTRUDED_MAX_TURN, EXTRUDED_MAX_TURN)
+            vector = (rng.choice((-0.22, 0.0, 0.22)), rng.choice((-0.22, 0.0, 0.22)))
+            cases.append((point, tilt, turn, vector))
+        gpu = probe.run(
+            "vec4 a = arg(0); vec4 b = arg(1);"
+            " FragColor = vec4(extrudedShadowProject(a.xyz, b.yz, vec2(a.w, b.x)), 1.0);",
+            [[(*point, tilt), (turn, *vector, 0.0)] for point, tilt, turn, vector in cases],
+            declarations=_COMMON_UNIFORMS + _PROJECTION_GLSL,
+        )
+        _check(gpu, [(*extruded_shadow_project(point, tilt, turn, vector), 1.0)
+                     for point, tilt, turn, vector in cases])
+    finally:
+        probe.close()
 
 
 def test_the_projection_and_heights_match_their_mirrors_on_the_gpu(qt_app):
@@ -461,7 +487,6 @@ def _with_bar_alpha(snapshot, *, fill_alpha, border_alpha):
 def test_authored_fill_alpha_blends_body_and_preserves_independent_border_alpha(target):
     capture, host = target
     base = _snapshot(
-        extruded_spectrum_body_alpha=1.0,
         extruded_spectrum_face_mirror=0.0,
         extruded_spectrum_reflection=0.0,
         extruded_spectrum_colouring="Bar Colours",
@@ -482,14 +507,23 @@ def test_authored_fill_alpha_blends_body_and_preserves_independent_border_alpha(
     changed = np.abs(edges[..., :3] - empty[..., :3]).max(axis=2) > 8
     assert changed.sum() > 100
     assert changed.sum() < body.sum() / 2
+    # Spectral Edges has its own bright rim, independent of the bar-border swatch;
+    # it must likewise remain visible when the face and authored border are clear.
+    spectral = dataclasses.replace(base.logical.mode_state, parameters={
+        **dict(base.logical.mode_state.parameters), "extruded_spectrum_colouring": "Spectral Edges",
+    })
+    spectral_base = dataclasses.replace(base, logical=dataclasses.replace(base.logical, mode_state=spectral))
+    spectral_edges = capture.render(host, _with_bar_alpha(spectral_base, fill_alpha=0, border_alpha=0), backdrop)
+    spectral_changed = np.abs(spectral_edges[..., :3] - empty[..., :3]).max(axis=2) > 8
+    assert spectral_changed.sum() > 100
+    assert spectral_changed.sum() < body.sum() / 2
 
 
-def test_body_alpha_is_a_real_transparent_surface_and_uses_the_bar_painter_order(target, monkeypatch):
+def test_swatch_alpha_is_the_only_body_opacity_and_uses_the_bar_painter_order(target, monkeypatch):
     """A transparent body blends over the already-drawn wallpaper; reversing its documented
     far-to-near bar order changes pixels on the real driver at an overlapping orbit."""
     capture, host = target
     common = dict(
-        extruded_spectrum_body_alpha=1.0,
         extruded_spectrum_face_mirror=0.0,
         extruded_spectrum_reflection=0.0,
         spectrum_ghosting_enabled=False,
@@ -497,11 +531,9 @@ def test_body_alpha_is_a_real_transparent_surface_and_uses_the_bar_painter_order
         extruded_spectrum_turn=0.0,
     )
     backdrop = (19 / 255, 43 / 255, 97 / 255, 1.0)
-    opaque = capture.render(host, _snapshot(**common), backdrop=backdrop)
-    empty = capture.render(host, _snapshot(**{**common, "extruded_spectrum_body_alpha": 0.0}), backdrop=backdrop)
-    translucent = capture.render(
-        host, _snapshot(**{**common, "extruded_spectrum_body_alpha": 0.5}), backdrop=backdrop,
-    )
+    opaque = capture.render(host, _with_bar_alpha(_snapshot(**common), fill_alpha=255, border_alpha=0), backdrop=backdrop)
+    empty = capture.render(host, _with_bar_alpha(_snapshot(**common), fill_alpha=0, border_alpha=0), backdrop=backdrop)
+    translucent = capture.render(host, _with_bar_alpha(_snapshot(**common), fill_alpha=128, border_alpha=0), backdrop=backdrop)
     body = np.abs(opaque[..., :3] - empty[..., :3]).max(axis=2) > 18
     assert body.sum() > 800
     expected = np.rint((opaque.astype(float) + empty.astype(float)) / 2.0)
@@ -514,10 +546,10 @@ def test_body_alpha_is_a_real_transparent_surface_and_uses_the_bar_painter_order
 
     overlap = _snapshot(**{
         **common,
-        "extruded_spectrum_body_alpha": 0.5,
         "extruded_spectrum_tilt": 0.42,
         "extruded_spectrum_turn": 0.72,
     })
+    overlap = _with_bar_alpha(overlap, fill_alpha=128, border_alpha=0)
     ordered = capture.render(host, overlap, backdrop=backdrop)
     original_order = implementation.extruded_draw_order
     monkeypatch.setattr(
@@ -538,7 +570,6 @@ def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_t
     assert directional_shadow_vector((0.0, -4.0), 0.22) == pytest.approx((0.0, -0.22))
     capture, host = target
     base = _snapshot(
-        extruded_spectrum_body_alpha=1.0,
         extruded_spectrum_face_mirror=0.0,
         extruded_spectrum_reflection=0.0,
         spectrum_ghosting_enabled=False,
@@ -598,12 +629,101 @@ def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_t
     assert np.abs(enabled_se - enabled_nw).max() > 8
 
 
+def test_e8_shadow_strength_at_normal_authored_setting_is_visible_on_wallpaper(target):
+    """E8 regression: the old 0.34 hidden attenuation made a real cast almost
+    imperceptible at the authored 0.45 strength, despite the shadow pass drawing.
+    Verify actual composited GL pixels, not just that the shader contains code.
+    """
+    capture, host = target
+    base = _with_shadow_style(
+        _snapshot(
+            extruded_spectrum_reflection=0.0,
+            spectrum_ghosting_enabled=False,
+            extruded_spectrum_shadow_enabled=True,
+            extruded_spectrum_shadow_strength=0.45,
+            extruded_spectrum_tilt=0.35,
+            extruded_spectrum_turn=0.28,
+        ), offset=(5.0, 5.0), color=(0, 0, 0, 197),
+    )
+    base = _with_bar_alpha(base, fill_alpha=0, border_alpha=0)
+    disabled_mode = dataclasses.replace(
+        base.logical.mode_state,
+        parameters={**dict(base.logical.mode_state.parameters),
+                    "extruded_spectrum_shadow_enabled": False},
+    )
+    disabled = capture.render(
+        host, dataclasses.replace(base, logical=dataclasses.replace(
+            base.logical, mode_state=disabled_mode)), backdrop=(.85, .75, .65, 1.),
+    )
+    enabled = capture.render(host, base, backdrop=(.85, .75, .65, 1.))
+    darkened = disabled[..., :3] - enabled[..., :3]
+    assert (darkened.max(axis=2) >= 20).sum() >= 100
+
+
+def test_e8_shadow_is_visible_beneath_opaque_bars_and_reflection_at_shallow_tilt(target):
+    """Real host regression for the operator's conditions, not a transparent-bar proxy.
+
+    Bars and their floor reflection are BOTH on. A cast must darken pixels in
+    the floor region at a near-front camera, not merely somewhere behind the
+    bars when those other passes are disabled. The stage is inset to admit the
+    overhanging cast on the display (the normal frameless overflow contract).
+    """
+    capture, host = target
+    stage = (170.0, 60.0, 340.0, 215.0)
+    snapshot = _with_shadow_style(_snapshot(
+        extruded_spectrum_allow_overflow=True,
+        extruded_spectrum_shadow_enabled=True,
+        extruded_spectrum_shadow_strength=1.0,
+        extruded_spectrum_reflection=0.35,
+        extruded_spectrum_turn=0.0,
+        extruded_spectrum_tilt=0.12,
+        spectrum_ghosting_enabled=False,
+    ), offset=(5.0, 5.0), color=(0, 0, 0, 197))
+    presentation = dataclasses.replace(
+        snapshot.presentation, outer_rect=stage, content_rect=stage,
+        viewport_extent=stage[2:], current_aspect_ratio=stage[2] / stage[3],
+    )
+    snapshot = dataclasses.replace(snapshot, presentation=presentation)
+    disabled = dataclasses.replace(
+        snapshot, logical=dataclasses.replace(
+            snapshot.logical,
+            mode_state=dataclasses.replace(snapshot.logical.mode_state,
+                parameters={**dict(snapshot.logical.mode_state.parameters),
+                            "extruded_spectrum_shadow_enabled": False}),
+        ),
+    )
+
+    def render(candidate):
+        from tests.test_qtquick_extruded_spectrum import W, H
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.capture.fbo)
+        gl.glViewport(0, 0, W, H)
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        gl.glClearColor(0.79, 0.76, 0.72, 1.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        left, top, width, height = stage
+        matrix = (2 / W, 0, 0, 0, 0, -2 / H, 0, 0, 0, 0, 1, 0,
+                  2 * left / W - 1, 1 - 2 * top / H, 0, 1)
+        assert host.render(snapshot=candidate, viewport=(0, 0, W, H),
+                           logical_size=(width, height), matrix_values=matrix) == "extruded_spectrum"
+        pixels = gl.glReadPixels(0, 0, W, H, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+        return np.flipud(np.frombuffer(bytes(pixels), dtype=np.uint8).reshape(H, W, 4)).astype(np.int16)
+
+    off = render(disabled)
+    on = render(snapshot)
+    # The stage floor lives in the lower part of the bar field. Exclude the
+    # opaque upper silhouettes so a black bar cannot masquerade as a cast.
+    diff = off[215:350, 170:560, :3] - on[215:350, 170:560, :3]
+    shadowed = np.max(diff, axis=2) >= 20
+    assert int(shadowed.sum()) >= 80
+    # Direction: at SE the lower-right receiver must carry some of that shadow.
+    assert int(shadowed[:, 130:].sum()) >= 20
+
+
 def test_directional_shadow_area_grows_with_bar_height_instead_of_translating_one_cap(target):
     """The real GL shadow contains the side-face sweep, so taller bars cast a larger floor area."""
     capture, host = target
     base = _with_shadow_style(
         _snapshot(
-            extruded_spectrum_body_alpha=0.0,
             extruded_spectrum_face_mirror=0.0,
             extruded_spectrum_reflection=0.0,
             spectrum_ghosting_enabled=False,
@@ -614,6 +734,7 @@ def test_directional_shadow_area_grows_with_bar_height_instead_of_translating_on
         ),
         offset=(6.0, 6.0),
     )
+    base = _with_bar_alpha(base, fill_alpha=0, border_alpha=0)
     count = base.logical.common.bar_count
 
     def levels(value: float):

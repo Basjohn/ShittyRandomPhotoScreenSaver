@@ -20,7 +20,8 @@ _ENVELOPE_PARAMETER_KEYS = {
         "extruded_spectrum_depth", "extruded_spectrum_turn", "extruded_spectrum_tilt",
         "extruded_spectrum_reflection", "extruded_spectrum_allow_overflow",
         "extruded_spectrum_shadow_enabled", "extruded_spectrum_shadow_strength",
-        "extruded_spectrum_body_alpha", "extruded_spectrum_colouring",
+        "extruded_spectrum_shadow_reach",
+        "extruded_spectrum_colouring",
         "spectrum_ghosting_enabled", "spectrum_ghost_alpha",
     ),
     "shockwave_grid": (
@@ -28,7 +29,8 @@ _ENVELOPE_PARAMETER_KEYS = {
         "shockwave_grid_wave_height", "shockwave_grid_idle",
     ),
     "sphere": (
-        "sphere_fragment_strength", "sphere_particle_distance", "sphere_shadow_enabled",
+        "sphere_fragment_strength", "sphere_particle_distance", "sphere_perspective_strength",
+        "sphere_turn", "sphere_tilt", "sphere_shadow_enabled",
         "sphere_shadow_softness", "sphere_shadow_size", "sphere_shadow_distance",
     ),
 }
@@ -67,17 +69,23 @@ def _record(
     mode_id: str,
     reach: tuple[float, float, float, float],
     pivot: tuple[float, float],
+    *,
+    cage_points: tuple[tuple[float, float], ...] = (),
+    north_face: tuple[float, float, float] | None = None,
 ) -> dict[str, object] | None:
     left, top, right, bottom = (float(value) for value in reach)
     pivot_x, pivot_y = (float(value) for value in pivot)
-    values = (left, top, right, bottom, pivot_x, pivot_y)
+    values = [left, top, right, bottom, pivot_x, pivot_y]
+    values.extend(component for point in cage_points for component in point)
+    if north_face is not None:
+        values.extend((float(north_face[0]), float(north_face[1]), float(north_face[2])))
     if not all(math.isfinite(value) for value in values):
         return None
     if right <= left or bottom <= top:
         return None
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 
-    return {
+    record: dict[str, object] = {
         "admitted": True,
         "orbit_admitted": bool(get_visualizer_mode_descriptor(mode_id).view_orbit_settings),
         "mode": str(mode_id),
@@ -88,6 +96,32 @@ def _record(
         "pivot_x": pivot_x,
         "pivot_y": pivot_y,
     }
+    if len(cage_points) == 8:
+        record["cage_points"] = tuple(
+            {"x": float(x), "y": float(y)} for x, y in cage_points
+        )
+        if north_face is not None:
+            record["north_x"] = float(north_face[0])
+            record["north_y"] = float(north_face[1])
+            record["north_angle"] = float(north_face[2])
+    return record
+
+
+def _north_face_pose(points: tuple[tuple[float, float], ...]) -> tuple[float, float, float]:
+    """Project a direction marker onto the world -Z face, aligned to its 4→5 edge.
+
+    Position and angle derive exclusively from the *same eight cage vertices*;
+    there is no separately authored compass, camera or renderer. The cage uses
+    world -Z as North consistently for every 3D mode, even when viewed edge-on.
+    """
+    x = sum(points[index][0] for index in (4, 5, 6, 7)) / 4.0
+    y = sum(points[index][1] for index in (4, 5, 6, 7)) / 4.0
+    dx = points[5][0] - points[4][0]
+    dy = points[5][1] - points[4][1]
+    # Degenerate screen-space edges provide no reliable tangent: do not invent
+    # an unrelated angle merely because a user has turned the stage edge-on.
+    degrees = math.degrees(math.atan2(dy, dx)) if math.hypot(dx, dy) > 1e-6 else 0.0
+    return (x, y, degrees)
 
 
 def _extruded_envelope(
@@ -98,6 +132,7 @@ def _extruded_envelope(
     # Import only after the active mode has admitted Edit chrome.  Merely
     # registering an inactive 3D mode must not pull in its renderer stack.
     from rendering.gl_programs.extruded_spectrum_program import (
+        EXTRUDED_CEILING,
         EXTRUDED_MAX_DEPTH,
         EXTRUDED_MAX_TILT,
         EXTRUDED_MAX_TURN,
@@ -111,12 +146,13 @@ def _extruded_envelope(
         prepare_spectrum_shader_levels,
     )
 
-    if logical is None or logical.mode_id != "extruded_spectrum" or presentation.content_fade <= 0.0:
+    if logical is not None and logical.mode_id != "extruded_spectrum":
         return None
 
     local_content = _local_content_rect(presentation)
     # Match QuickExtrudedSpectrumRenderer's bounded draw admission exactly.
-    count = min(64, int(logical.common.bar_count))
+    count = min(64, int(logical.common.bar_count if logical is not None
+                        else parameters.get("bar_count", 32)))
     if count <= 0:
         return None
     layout = compute_quick_spectrum_layout(
@@ -144,9 +180,11 @@ def _extruded_envelope(
             and float(parameters["extruded_spectrum_shadow_strength"]) > 0.0):
         shadow_color = presentation.shell_style["shadow_color"]
         if len(shadow_color) < 4 or float(shadow_color[3]) > 0.0:
-            from rendering.quick.scene3d.shadows import directional_shadow_vector
+            from rendering.quick.scene3d.shadows import directional_shadow_vector, extruded_shadow_length
 
-            shadow_vector = directional_shadow_vector(presentation.shell_style["shadow_offset"], 0.22)
+            shadow_vector = directional_shadow_vector(
+                presentation.shell_style['shadow_offset'],
+                extruded_shadow_length(str(parameters['extruded_spectrum_shadow_reach'])))
     fit = extruded_fit(
         0.5 * layout.bar_span / field[3], depth, tilt, reflection,
         content_width / field[3], turn, overflow,
@@ -157,6 +195,34 @@ def _extruded_envelope(
         centre + projected_pivot[0] * scale * field[3],
         field[1] + field[3] - (floor + projected_pivot[1] * scale) * field[3],
     )
+    half_span = 0.5 * layout.bar_span / field[3]
+    world = (
+        (-half_span, 0.0, 0.0), (half_span, 0.0, 0.0),
+        (half_span, EXTRUDED_CEILING, 0.0), (-half_span, EXTRUDED_CEILING, 0.0),
+        (-half_span, 0.0, -depth), (half_span, 0.0, -depth),
+        (half_span, EXTRUDED_CEILING, -depth), (-half_span, EXTRUDED_CEILING, -depth),
+    )
+    cage = tuple(
+        (centre + projected[0] * scale * field[3],
+         field[1] + field[3] - (floor + projected[1] * scale) * field[3])
+        for projected in (extruded_project(point, tilt, turn) for point in world)
+    )
+    if logical is None or presentation.content_fade <= 0.0:
+        # The authored stage cage is independent of the audio-dependent visual
+        # footprint. Show the true projected guide in an empty/revealing scene,
+        # but DO NOT claim a render footprint has been admitted.
+        bounds = (
+            min(point[0] for point in cage), min(point[1] for point in cage),
+            max(point[0] for point in cage), max(point[1] for point in cage),
+        )
+        guide = _record(
+            "extruded_spectrum", bounds, pivot, cage_points=cage,
+            north_face=_north_face_pose(cage),
+        )
+        if guide is not None:
+            guide["admitted"] = False
+            guide["cage_admitted"] = True
+        return guide
     levels, peaks = prepare_spectrum_shader_levels(
         logical.common.bars, logical.mode_state.peaks, bar_count=count,
     )
@@ -170,7 +236,7 @@ def _extruded_envelope(
         field, centre, (layout.bars_left + 0.5 * layout.bar_width - centre) / field[3],
         (layout.bar_width + layout.bar_gap) / field[3], 0.5 * layout.bar_width / field[3],
         depth, tilt, turn, fit, levels[:count], peaks[:count], layout.height_scale,
-        body_visible=float(parameters["extruded_spectrum_body_alpha"]) > 0.0 and surface_visible,
+        body_visible=surface_visible,
         ghost_alpha=(float(parameters["spectrum_ghost_alpha"])
                      if bool(parameters["spectrum_ghosting_enabled"]) else 0.0),
         reflection=reflection, shadow_vector=shadow_vector,
@@ -180,7 +246,11 @@ def _extruded_envelope(
     if not overflow:
         reach = (max(0.0, reach[0]), max(0.0, reach[1]),
                  min(presentation.outer_rect[2], reach[2]), min(presentation.outer_rect[3], reach[3]))
-    return _record("extruded_spectrum", reach, pivot)
+
+    return _record(
+        "extruded_spectrum", reach, pivot, cage_points=cage,
+        north_face=_north_face_pose(cage),
+    )
 
 
 def _shockwave_envelope(
@@ -192,9 +262,13 @@ def _shockwave_envelope(
         SHOCKWAVE_MAX_RIDGE,
         SHOCKWAVE_MAX_TILT,
         SHOCKWAVE_MAX_TURN,
+        SHOCKWAVE_MAX_STRENGTH,
+        SHOCKWAVE_IDLE_HEIGHT,
+        SHOCKWAVE_VISIBLE,
         shockwave_camera,
         shockwave_fit,
         shockwave_half_width,
+        shockwave_amplitude,
         shockwave_project,
         shockwave_reach,
     )
@@ -216,14 +290,35 @@ def _shockwave_envelope(
         field[0] + 0.5 * field[2] + projected_pivot[0] * scale * field[3],
         field[1] + field[3] * (base - projected_pivot[1] * scale),
     )
+    wave_height = float(parameters["shockwave_grid_wave_height"])
+    idle = float(parameters["shockwave_grid_idle"])
+    reach = shockwave_reach(
+        field, fit, tilt, turn, half_width, ridge, wave_height, idle,
+    )
+    amplitude = shockwave_amplitude(wave_height)
+    crest = (
+        1.25 * amplitude * SHOCKWAVE_MAX_STRENGTH
+        + amplitude * SHOCKWAVE_IDLE_HEIGHT * max(0.0, idle)
+    )
+    reach_x = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * half_width
+    reach_z = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * SHOCKWAVE_DEPTH
+    low_y = -0.5 * crest
+    high_y = max(crest, 1.05 * ridge)
+    camera = shockwave_camera(half_width)
+    world = (
+        (-reach_x, low_y, 0.0), (reach_x, low_y, 0.0),
+        (reach_x, high_y, 0.0), (-reach_x, high_y, 0.0),
+        (-reach_x, low_y, -reach_z), (reach_x, low_y, -reach_z),
+        (reach_x, high_y, -reach_z), (-reach_x, high_y, -reach_z),
+    )
+    cage = tuple(
+        (field[0] + 0.5 * field[2] + projected[0] * scale * field[3],
+         field[1] + field[3] * (base - projected[1] * scale))
+        for projected in (shockwave_project(point, tilt, turn, camera) for point in world)
+    )
     return _record(
-        "shockwave_grid",
-        shockwave_reach(
-            field, fit, tilt, turn, half_width, ridge,
-            float(parameters["shockwave_grid_wave_height"]),
-            float(parameters["shockwave_grid_idle"]),
-        ),
-        pivot,
+        "shockwave_grid", reach, pivot, cage_points=cage,
+        north_face=_north_face_pose(cage),
     )
 
 
@@ -236,8 +331,28 @@ def _sphere_envelope(
         sphere_reach,
     )
 
-    centre_x, centre_y, _radius = sphere_pixel_geometry(presentation)
-    return _record("sphere", sphere_reach(presentation, parameters), (centre_x, centre_y))
+    centre_x, centre_y, radius = sphere_pixel_geometry(presentation)
+    from rendering.gl_programs.scene3d import scene3d_sphere_item_position
+    perspective = max(0.0, min(1.0, float(parameters.get("sphere_perspective_strength", 1.0))))
+    view = (float(parameters.get("sphere_turn", 0.0)) * math.pi,
+            float(parameters.get("sphere_tilt", 0.0)) * math.pi / 2.0)
+    extent = 1.22
+
+    def project(point: tuple[float, float, float]) -> tuple[float, float]:
+        return scene3d_sphere_item_position(point, (centre_x, centre_y, radius),
+                                             perspective, view=view)
+
+    world = (
+        (-extent, -extent, extent), (extent, -extent, extent),
+        (extent, extent, extent), (-extent, extent, extent),
+        (-extent, -extent, -extent), (extent, -extent, -extent),
+        (extent, extent, -extent), (-extent, extent, -extent),
+    )
+    cage = tuple(project(point) for point in world)
+    return _record(
+        "sphere", sphere_reach(presentation, parameters), (centre_x, centre_y),
+        cage_points=cage, north_face=_north_face_pose(cage),
+    )
 
 
 def resolve_edit_content_envelope(
@@ -282,11 +397,10 @@ def resolve_owner_edit_content_envelope(
         from widgets.spotify_visualizer.config_applier import extruded_spectrum_parameters
         from widgets.spotify_visualizer.view_orbit import view_orbit_values
 
-        if logical is None:
-            return None
-        # Shared Spectrum pass admission comes from the accepted logical frame;
-        # current authored camera/depth can change at this explicit Edit edge.
-        values = dict(logical.mode_state.parameters)
+        # With no admitted audio frame, project only the static stage cage.
+        # The live footprint remains unadmitted until an actual render snapshot.
+        values = (dict(logical.mode_state.parameters) if logical is not None
+                  else {})
         values.update(extruded_spectrum_parameters(controller.presentation_state))
         values.update(view_orbit_values(controller.presentation_state, mode_id, when))
         values["bar_count"] = controller.bar_count
@@ -298,13 +412,15 @@ def resolve_owner_edit_content_envelope(
         values = shockwave_grid_parameters(controller.presentation_state)
         values.update(view_orbit_values(controller.presentation_state, mode_id, when))
         return resolve_edit_content_envelope(mode_id, presentation, values)
-    if mode_id == "sphere":
-        parameters = getattr(controller.logical_tick_state, "_sphere_parameters", None)
-        return (
-            resolve_edit_content_envelope(mode_id, presentation, parameters)
-            if isinstance(parameters, Mapping)
-            else None
-        )
+    if mode_id == 'sphere':
+        parameters = getattr(controller.logical_tick_state, '_sphere_parameters', None)
+        if not isinstance(parameters, Mapping):
+            return None
+        from widgets.spotify_visualizer.view_orbit import view_orbit_values
+        # Live view is presentation-owned, exactly as in the render capture.
+        # The logical parameter cache does not change during pointer orbiting.
+        view = view_orbit_values(controller.presentation_state, mode_id, when)
+        return resolve_edit_content_envelope(mode_id, presentation, {**dict(parameters), **view})
     return None
 
 

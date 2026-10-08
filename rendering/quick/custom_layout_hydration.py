@@ -75,10 +75,10 @@ def geometry_variant_for_presentation(
             mode_id = section.get("mode") if isinstance(section, Mapping) else None
         from core.settings.visualizer_mode_registry import (
             coerce_visualizer_mode_id,
-            get_visualizer_geometry_profile,
+            get_visualizer_layout_profile,
         )
 
-        return get_visualizer_geometry_profile(
+        return get_visualizer_layout_profile(
             coerce_visualizer_mode_id(str(mode_id or "spectrum"))
         )
     if widget_id not in {"clock", "clock2", "clock3"}:
@@ -166,11 +166,11 @@ def resolve_visualizer_custom_entry(
     screen: Any,
     mode_id: object,
     *,
-    legacy_geometry_profile: str | None = None,
+    legacy_layout_profile: str | None = None,
 ) -> CustomLayoutEntry | None:
     return resolve_visualizer_custom_entry_for_aliases(
         widgets, get_screen_signature_aliases(screen), mode_id,
-        legacy_geometry_profile=legacy_geometry_profile,
+        legacy_layout_profile=legacy_layout_profile,
     )
 
 
@@ -179,36 +179,35 @@ def resolve_visualizer_custom_entry_for_aliases(
     signature_aliases: tuple[str, ...],
     mode_id: object,
     *,
-    legacy_geometry_profile: str | None = None,
+    legacy_layout_profile: str | None = None,
 ) -> CustomLayoutEntry | None:
-    """Resolve one Visualizer profile with legacy input interpretation.
+    """Resolve one Visualizer layout profile with one-way legacy interpretation.
 
-    A legacy ``default`` entry has no family identity.  It is therefore read
-    only for the authored active mode's family when that profile has no record, which
-    preserves the pose an existing installation actually authored without
-    cloning it into the other family.  Once a named profile exists it is the
-    sole authority, including when its payload is invalid (that profile then
-    falls back through the normal authored baseline rather than reviving a
-    stale legacy pose).
+    Canonical profiles are descriptor-owned compatibility-group IDs.  Legacy
+    ``default`` has no mode identity; legacy ``freeform_3d`` has only a broad
+    mechanics identity.  Neither may be borrowed by a sibling mode.  When the
+    canonical profile is absent, only the authored/explicit claimant profile may
+    interpret a legacy record, and a freeform mode prefers the old
+    ``freeform_3d`` record over the older fully-ambiguous ``default`` record.
+    A named canonical key, even when malformed, always wins over legacy input.
     """
 
     from core.settings.visualizer_mode_registry import (
         coerce_visualizer_mode_id,
-        get_visualizer_geometry_profile,
+        get_visualizer_geometry_kind,
+        get_visualizer_layout_profile,
     )
 
     if not is_custom_position_selected_for_widget("spotify_visualizer", widgets):
         return None
-    profile = get_visualizer_geometry_profile(
-        coerce_visualizer_mode_id(str(mode_id or "spectrum"))
-    )
+    canonical_mode = coerce_visualizer_mode_id(str(mode_id or "spectrum"))
+    profile = get_visualizer_layout_profile(canonical_mode)
     custom_map = load_custom_layout_map(widgets)
     _matched, entries = get_screen_layout_entries_for_aliases(custom_map, signature_aliases)
     profile_payload = get_widget_layout_variant_payload(
-        entries,
-        "spotify_visualizer",
-        profile,
+        entries, "spotify_visualizer", profile,
     )
+
     # Normalization drops non-mapping payloads. Their named key still marks a
     # corrupt authored profile, so it must not resurrect legacy geometry.
     raw_map = widgets.get("custom_layout", {})
@@ -220,19 +219,30 @@ def resolve_visualizer_custom_entry_for_aliases(
         return deserialize_custom_layout_entry(
             "spotify_visualizer", profile, profile_payload
         )
+
     section = widgets.get("spotify_visualizer", {})
     authored_mode = section.get("mode") if isinstance(section, Mapping) else None
-    authored_profile = get_visualizer_geometry_profile(
+    authored_profile = get_visualizer_layout_profile(
         coerce_visualizer_mode_id(str(authored_mode or "spectrum"))
     )
-    if profile != (legacy_geometry_profile or authored_profile):
+    claim_profile = str(legacy_layout_profile or authored_profile).strip().lower()
+    if profile != claim_profile:
         return None
-    legacy_payload = get_widget_layout_variant_payload(
-        entries, "spotify_visualizer", "default"
+
+    candidates = (
+        ("freeform_3d", "default")
+        if get_visualizer_geometry_kind(canonical_mode) == "freeform_3d"
+        else ("default",)
     )
-    return deserialize_custom_layout_entry(
-        "spotify_visualizer", "default", legacy_payload
-    )
+    for legacy_variant in candidates:
+        if isinstance(variants, Mapping) and legacy_variant in variants:
+            legacy_payload = get_widget_layout_variant_payload(
+                entries, "spotify_visualizer", legacy_variant
+            )
+            return deserialize_custom_layout_entry(
+                "spotify_visualizer", legacy_variant, legacy_payload
+            )
+    return None
 
 
 def resolve_quick_committed_variant_state(

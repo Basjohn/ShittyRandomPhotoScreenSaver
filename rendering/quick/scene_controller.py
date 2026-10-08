@@ -110,6 +110,7 @@ def _custom_visualizer_relative_scale(
     viewport_extent: tuple[float, float],
     working_width: float,
     working_height: float,
+    freeform_3d: bool = False,
 ) -> float:
     """Resolve one CUSTOM working rectangle against its logical extent.
 
@@ -125,6 +126,12 @@ def _custom_visualizer_relative_scale(
     width, height = float(working_width), float(working_height)
     if min(extent_width, extent_height, width, height) <= 0.0:
         raise ValueError("CUSTOM visualizer geometry must be positive")
+    if freeform_3d:
+        # Frameless 3D intentionally permits an outer stage aspect independent
+        # of the authored render world (e.g. a shallow Shockwave viewport). One
+        # uniform mesh scale survives, while the stage's two extents are direct
+        # session authority. Never reject a legitimate independent aspect.
+        return (width / extent_width) / float(baseline.uniform_visual_scale)
     horizontal_interval = (
         max(0.0, (width - 0.5) / extent_width),
         (width + 0.5) / extent_width,
@@ -1311,6 +1318,7 @@ class QuickSceneController(QObject):
                 == self._custom_layout_display_identity
                 and item.current_enabled
                 and not item.removed
+                and not item.profile_parked
             ),
             None,
         )
@@ -1386,6 +1394,29 @@ class QuickSceneController(QObject):
             loader.setX(local_origin[0])
             loader.setY(local_origin[1])
             return
+        # A hidden mode activation parks the outgoing profile before its new
+        # render identity/presentation has been committed. The outgoing shell
+        # is not a valid projection authority for the incoming stage (CARD vs
+        # FRAMELESS especially). Wait for the target's coherent publication;
+        # neither coerce a 3D stage through a card nor invent a parallel shell.
+        from core.settings.visualizer_mode_registry import (
+            get_visualizer_layout_profile, get_visualizer_presentation_policy,
+        )
+        retained = self._visualizer_item
+        retained_identity = None if retained is None else retained.render_identity
+        if retained_identity is not None:
+            active_profile = active_item.source_key.geometry_variant
+            retained_mode = retained_identity.mode_id
+            target_profile = get_visualizer_layout_profile(retained_mode)
+            if (target_profile != active_profile and not (
+                    target_profile == "planar" and active_profile == "default"
+                    and active_item.geometry_kind == "planar")):
+                return
+            # A new identity can arrive before its first target presentation.
+            # Do not let the outgoing shell's policy project the incoming mode.
+            if (get_visualizer_presentation_policy(retained_mode).shell_policy
+                    is not baseline.shell_policy):
+                return
         screen = self._window.screen()
         screen_geometry = None if screen is None else screen.geometry()
         if screen_geometry is not None and screen_geometry.width() > 0 and screen_geometry.height() > 0:
@@ -1404,11 +1435,16 @@ class QuickSceneController(QObject):
         # effective logical domain. The QRect is the retained edit authority, including
         # after a normal publication refreshed baseline from committed state.
         effective_extent = active_item.current_viewport_extent or baseline.viewport_extent
+        # During a hidden Edit hot-swap the new session profile is installed
+        # before the retained renderer changes modes.  Geometry mechanics come
+        # from the selected session item, never the outgoing render identity.
+        freeform_3d = active_item.geometry_kind == "freeform_3d"
         relative_scale = _custom_visualizer_relative_scale(
             baseline=baseline,
             viewport_extent=effective_extent,
             working_width=float(rect.width()),
             working_height=float(rect.height()),
+            freeform_3d=freeform_3d,
         )
         target_width = effective_extent[0] * baseline.uniform_visual_scale * relative_scale
         target_height = effective_extent[1] * baseline.uniform_visual_scale * relative_scale
@@ -1444,6 +1480,7 @@ class QuickSceneController(QObject):
             outer_origin=local_origin,
             relative_scale=relative_scale,
             viewport_extent=effective_extent,
+            committed_outer_size=(float(rect.width()), float(rect.height())) if freeform_3d else None,
             content_rotation_quarters=rotation_quarters,
         )
         self._apply_visualizer_presentation_items(
@@ -1479,6 +1516,17 @@ class QuickSceneController(QObject):
         if not _qobject_is_alive(root):
             return False
         projected = dict(envelope) if isinstance(envelope, Mapping) else {"admitted": False}
+        # PySide's dynamic QML property conversion does not consistently expose
+        # Python tuples as JavaScript arrays (and an opaque tuple has no .length).
+        # Publish plain QVariantList/QVariantMap-compatible values for this
+        # read-only projected cage, without adding a second framing authority.
+        cage = projected.get("cage_points")
+        if isinstance(cage, (tuple, list)):
+            projected["cage_points"] = [
+                {"x": float(point["x"]), "y": float(point["y"])}
+                for point in cage if isinstance(point, Mapping)
+                and "x" in point and "y" in point
+            ]
         if root.property("editContentEnvelope") == projected:
             return False
         if not root.setProperty("editContentEnvelope", projected):

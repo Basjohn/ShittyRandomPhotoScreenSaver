@@ -765,7 +765,11 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
     assert "uRainbowExtent * vRainbowCoordinate" in fragment
     assert "uRainbowSurfaces" in fragment and "uRainbowEdges" in fragment
     assert "uPerspectiveStrength" in source
-    assert "turnedPosition.z * uPerspectiveStrength" in source
+    # Sphere's private clip-depth path is retired. The shared Scene3D camera
+    # applies perspective and authored orbit without touching shell dynamics.
+    assert "sceneProjectSphere(uMatrix, uItemSize, turnedPosition," in source
+    assert "uProjectionOffset, uProjectionScale, uViewPose" in source
+    assert "turnedPosition.z * uPerspectiveStrength" not in source
     # Optional presentation-only additions preserve the accepted path at their
     # baseline values and consume only existing transformed geometry.
     assert "uVoxelSizeVariation" in source

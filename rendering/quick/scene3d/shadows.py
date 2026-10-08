@@ -16,6 +16,15 @@ from OpenGL import GL as gl
 from .passes import blend_scope
 
 
+def extruded_shadow_length(reach: str) -> float:
+    """Two authored distances, never a new shadow-direction authority."""
+    if reach == 'Nearby':
+        return 0.045
+    if reach == 'Distant':
+        return 0.22
+    raise ValueError(f'unsupported Extruded shadow reach {reach!r}')
+
+
 def directional_shadow_vector(resolved_offset: Sequence[object], length: float) -> tuple[float, float]:
     """Return a world-space shadow vector using the canonical resolved direction only.
 

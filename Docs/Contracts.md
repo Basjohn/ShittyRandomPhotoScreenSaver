@@ -532,28 +532,41 @@ before the fenced rebuild; an empty saved override map clears later overrides ra
 never recorded overrides replay their saved shared baseline. Cross-display transfer has one live retained pixel owner and
 preserves logical runtime/model identity.
 
-Visualizer geometry-family separation reuses this same variant-key architecture. Canonical Visualizer mode metadata selects
-either `planar` or `freeform_3d` while retaining one Visualizer widget, one `custom_layout` root and one CUSTOM transaction
-owner. The legacy Visualizer `default` variant is interpretation-only input for the startup-authored family and is retired at
-the next canonical geometry or active-mode Save. That write preserves its original family before changing persisted mode,
-so restarting after a cross-family switch cannot reinterpret the old pose. A missing sibling starts from that family's fitted
-baseline rather than cloning the outgoing pose. Family profile is geometry state; 3D orbit/view settings remain mode/preset
-state. A cross-family hot-swap selects the target saved variant only at the event-bound hidden activation seam; it may not
-add a second geometry clock, duplicate retained item or
-parallel persistence map. A full Edit transaction keeps its source profile identity until it finishes; a direct gesture commits
-through its existing Save boundary before the cross-family activation begins.
-Freeform-3D Edit framing shows **two views of that one owner**: the persisted CUSTOM rectangle is the stage/viewport;
-Extruded's primary frame projects accepted immutable bar/peak data through the production height transfer and camera.
-Conservative `extruded_reach` remains render-target allocation only. Body, ghost, reflection and shadow visibility follow
-their independent shader admission/alpha rules. Other modes retain their renderer-bound projection. Descriptor-owned orbit
-admission is separate from footprint visibility, so empty scenes expose Orbit without fabricated geometry. The derived
-framing never persists, snaps, collides or auto-resizes/repositions the stage. CUSTOM's native pointer block remains binding;
-Orbit/Alt-left, Alt-right move and Alt-wheel scale route through the existing orbit resolver and current `CustomLayoutSession`.
-Wheel input preserves signed movement on either Qt axis; zero movement is a no-op. Geometry/settings/orbit edges refresh
-framing; selected held orbit and a pending first visible source use the existing GUI publication wake. The first-source
-request disarms after valid visible input, including empty geometry. Ordinary audio and closed/deselected Edit add no
-continuing projection work; unchanged/clamped held views skip projection. Gesture hit regions remain frozen while the
-primary frame follows the projection; stage handle paint stays secondary until hovered or dragged.
+Visualizer geometry separation reuses this same variant-key architecture, but **mechanics and persisted pose identity are
+separate descriptor facts**. `geometry_kind` selects interaction/renderer mechanics (`planar` or `freeform_3d`);
+`layout_profile` selects the canonical CUSTOM variant slot. Current planar modes deliberately share `planar`, while Extruded,
+Shockwave and Sphere use `3d:extruded_spectrum`, `3d:shockwave_grid` and `3d:sphere`. Those strings are compatibility-group
+IDs, not camera state and not a requirement that every mode have a unique slot: future modes may deliberately share a profile
+only when their authored stage geometry is genuinely compatible. The system still has one Visualizer widget, one
+`custom_layout` root and one CUSTOM transaction owner. No per-mode X/Y settings, parallel 3D map or second geometry service
+is admitted.
+
+Legacy Visualizer `default` and `freeform_3d` variants are interpretation-only input. Only the explicitly authored/current
+claimant may promote one ambiguous legacy record into its canonical profile; sibling 3D modes never clone it. A missing target
+profile starts from its authored baseline rather than borrowing the outgoing pose. Cross-profile hot-swap resolves the target
+profile only at the event-bound hidden activation seam after logical production is stopped. One unread outgoing render snapshot
+is discarded there; CUSTOM Save may rebase only the one unread newest logical snapshot onto the exact presentation being
+promoted. These two explicit transaction operations prevent false one-publication `viz_geometry_mismatches` without weakening
+the bridge's normal stale-presentation rejection. A full Edit transaction keeps its source profile identity until it finishes; a
+direct gesture commits through its existing Save boundary before target-profile activation begins.
+
+**Camera/preset state is not layout geometry.** Descriptor `view_orbit_settings`, curated/Custom preset fields, turn, tilt,
+material, response and any future camera parameters remain in the mode's existing presentation/settings authority. A visible
+3D pose is the composition of the active `layout_profile` (stage position/size/viewport) plus the mode's own presentation state.
+Neither side may serialize, infer or overwrite the other.
+
+Freeform-3D Edit framing shows multiple derivative views of that same one geometry owner. The persisted CUSTOM rectangle is the
+stage/viewport; the renderer-derived content envelope remains the honest projected footprint/hit cue; and a projected **3D cage**
+may expose eight read-only renderer-consistent vertices, twelve wireframe edges and a north/far-face marker. The cage and `N` are
+paint only. They never persist, snap, collide, fit, move, resize or become a projection/geometry authority. Extruded derives its
+cage from the same production projection/fit used by its renderer; Shockwave mirrors its production camera projection; Sphere
+uses its renderer's stage/perspective convention. Conservative renderer reach remains allocation/visibility evidence only.
+Descriptor-owned orbit admission is separate from footprint visibility, so empty scenes may expose Orbit without fabricated
+content geometry. CUSTOM's native pointer block remains binding; Orbit/Alt-left, Alt-right move and Alt-wheel scale route through
+the existing orbit resolver and current `CustomLayoutSession`. Wheel input preserves signed movement on either Qt axis; zero
+movement is a no-op. Geometry/settings/orbit edges refresh framing; ordinary audio and closed/deselected Edit add no continuing
+projection work. Gesture hit regions remain frozen while derivative paint follows the projection; persisted stage handle paint
+stays secondary until hovered or dragged.
 Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
 reconstruction, reinjection or provider restart. Clock variant/action context follows the receiving display owner.
 A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption
@@ -592,3 +605,12 @@ selected/unlocked Edit commits a whole-list swap as one Undo action. The model e
 geometry sample never rebinds every repeated-row column. Retained
 per-row items use the same order, preserve their identity, and never become
 independent position owners. Normal render has no edit-rail descriptor scan.
+
+
+### 3D Visualizer geometry vs pose vs preset ownership
+
+A new Visualizer mode declares `geometry_kind` (only shared Edit/Arrange mechanics), `layout_profile` (compatible authored CUSTOM stage slot), and optionally `view_orbit_settings` (canonical persistent *mode* view keys) in the existing lazy mode descriptor. The canonical live mode section persists view keys. No Custom layout entry or preset owns view keys. Adding another freeform-3D mode is descriptor metadata plus its mode's renderer/projection contract, not a second geometry store or duplicate Settings UI.
+
+On mode hot-swap, resolve the target stage while hidden. Never borrow an outgoing mode's rectangle or per-mode camera. Save/Cancel and display transfer persist only the current active layout-profile stage and preserve every dormant sibling. Arrange must use the same descriptor lookup. In active Edit, cross-profile mode changes are refused until the transaction closes.
+
+The world-space, read-only 3D cage is derived from each renderer's projected stage/geometry and must never become snapping, collision, persistence or fit authority. North is the projected world -Z face, with the white/black-outlined vector N formed inside the same projected face quad (including its tilt and perspective). No continuous sampling/audio observer or per-cage renderer is admitted.

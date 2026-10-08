@@ -6,23 +6,18 @@ from PySide6.QtWidgets import QButtonGroup, QCheckBox, QLabel, QVBoxLayout, QWid
 
 from ui.tabs.media.builder_scaffold import bind_setting_signal, build_collapsible_bucket, build_mode_scaffold
 from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
+from ui.widgets import StyledComboBox
 
 # (setting key, label, slider minimum, slider maximum, tooltip); sliders store hundredths.
 _SHAPE_SLIDERS = (
     ("extruded_spectrum_depth", "Bar Depth:", 25, 300,
      "How deep each bar is, as a multiple of its width."),
-    ("extruded_spectrum_tilt", "Tilt:", 0, 100,
-     "How far the view looks down onto the bars, from level to straight down (W and S while it shows)."),
-    ("extruded_spectrum_turn", "Turn:", -100, 100,
-     "Turns the row of bars a full circle, so it is seen at an angle or from behind (A and D while it shows)."),
 )
 _APPEARANCE_SLIDERS = (
     ("extruded_spectrum_hue_drift", "Hue Drift:", 0, 100,
      "How fast Rainbow hues drift across the bars; zero holds the spectral colours still."),
 )
 _MATERIAL_SLIDERS = (
-    ("extruded_spectrum_body_alpha", "Body Alpha:", 0, 100,
-     "Overall opacity multiplier for the extruded bar bodies. Fill colour alpha remains authored separately."),
     ("extruded_spectrum_gloss", "Gloss:", 0, 100, "Shine on the bars' faces."),
     ("extruded_spectrum_face_mirror", "Mirror Faces:", 0, 100,
      "Gives the bars' faces (not their edges) a polished, mirror surface reflecting the wallpaper, "
@@ -34,7 +29,7 @@ _REFLECTION_SLIDERS = (
 )
 _SHADOW_SLIDERS = (
     ("extruded_spectrum_shadow_strength", "Shadow Strength:", 0, 100,
-     "Strength of the optional projected Scene3D shadow."),
+     "Opacity of the cast shadow (requires Cast Shadow enabled)."),
 )
 
 
@@ -66,27 +61,15 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
         tab, scaffold.normal_layout, mode_key="extruded_spectrum", bucket_key="response", title="Response",
         helper_text="Tune global reactivity, shape-floor support, falloff and smoothing after the authored lane mapping.",
     )
-    _, material = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="material", title="Material",
-        helper_text="Surface opacity, gloss, wallpaper mirroring and edge smoothing.",
+    # One Effects bucket replaces six tiny Material/Reflection/Shadow/Render/Ghost
+    # buckets. The Shape editor remains independent; Appearance and Response retain
+    # their existing product ownership. No controls/settings are silently dropped.
+    _, effects = build_collapsible_bucket(
+        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="effects",
+        title="3D Effects",
+        helper_text="Material finish, floor reflection, directional shadow, overflow and trailing ghosts.",
     )
-    _, reflection = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="reflection", title="Reflection",
-        helper_text="Floor reflection is a scene treatment, independent of bar colour authoring.",
-    )
-    _, shadow = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="shadow", title="Shadow",
-        helper_text="Optional shared Scene3D directional shadow and its strength.",
-    )
-    _, render = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="render", title="Render",
-        helper_text="Rendering/containment controls that do not author the bars' colour or material.",
-    )
-    _, ghost = build_collapsible_bucket(
-        tab, scaffold.advanced_layout, mode_key="extruded_spectrum", bucket_key="ghost", title="Ghost",
-        helper_text=("Trailing bar ghosts are authored by this Extruded preset. Ghosts inherit the rendered bar "
-                     "material; this renderer does not own a separate ghost-rainbow participation path."),
-    )
+    material = reflection = shadow = render = ghost = effects
 
     def row(layout, label):
         _widget, content, _ = add_aligned_row_widget(layout, label, label_width=150)
@@ -233,8 +216,24 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     bind_setting_signal(tab, tab.extruded_spectrum_shadow_enabled.toggled, auto_switch=True)
     content.addWidget(tab.extruded_spectrum_shadow_enabled)
     content.addStretch()
+    content = row(shadow, 'Shadow Reach:')
+    tab.extruded_spectrum_shadow_reach = StyledComboBox()
+    tab.extruded_spectrum_shadow_reach.addItems(['Nearby', 'Distant'])
+    tab.extruded_spectrum_shadow_reach.setCurrentText(
+        tab._default_str('spotify_visualizer', 'extruded_spectrum_shadow_reach'))
+    tab.extruded_spectrum_shadow_reach.setToolTip(
+        'Nearby hugs the base line; Distant casts a longer silhouette. Both inherit the global Widgets shadow direction.')
+    bind_setting_signal(tab, tab.extruded_spectrum_shadow_reach.currentTextChanged, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_shadow_reach)
+    content.addStretch()
     for spec in _SHADOW_SLIDERS:
         slider(shadow, *spec)
+    # Shadow Strength must never look effective while Cast Shadow is off.
+    # This is presentation-only UI state; no duplicate settings or preset write.
+    tab.extruded_spectrum_shadow_strength.setEnabled(
+        tab.extruded_spectrum_shadow_enabled.isChecked())
+    tab.extruded_spectrum_shadow_enabled.toggled.connect(
+        tab.extruded_spectrum_shadow_strength.setEnabled)
 
     content = row(render, "Allow Overflow:")
     tab.extruded_spectrum_allow_overflow = QCheckBox("Let the 3D leave the visualizer's rectangle")

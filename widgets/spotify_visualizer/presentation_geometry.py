@@ -78,6 +78,7 @@ def resolve_visualizer_presentation(
     dpr: float = 1.0,
     uniform_visual_scale: float = 1.0,
     viewport_extent: Sequence[object] | None = None,
+    committed_outer_size: Sequence[object] | None = None,
     content_rotation_quarters: object = 0,
     scene_fade: float = 1.0,
     content_fade: float = 1.0,
@@ -125,13 +126,29 @@ def resolve_visualizer_presentation(
 
     # Screen-bound reduction remains uniform.  The resolved scale is the
     # committed scale that every downstream geometry consumer receives.
-    resolved_scale = min(
-        requested_scale,
-        display_width / extent_width,
-        display_height / extent_height,
+    resolved_scale = (
+        requested_scale
+        if committed_outer_size is not None and policy.shell_policy is VisualizerShellPolicy.FRAMELESS
+        else min(requested_scale, display_width / extent_width, display_height / extent_height)
     )
     outer_width = extent_width * resolved_scale
     outer_height = extent_height * resolved_scale
+    if committed_outer_size is not None:
+        # Frameless-3D CUSTOM has two independent authored extents: the outer
+        # stage rect and the renderer's logical viewport. A width-derived
+        # height silently discards the saved stage's aspect, particularly after
+        # switching between Shockwave and Sphere. The stage is one persisted
+        # authority; do not reverse-infer its height from the render world.
+        if policy.shell_policy is not VisualizerShellPolicy.FRAMELESS:
+            raise ValueError("explicit CUSTOM outer size is for frameless presentations")
+        outer_width, outer_height = _positive_size(
+            committed_outer_size, name="committed outer size"
+        )
+        if outer_width > display_width or outer_height > display_height:
+            factor = min(1.0, display_width / outer_width, display_height / outer_height)
+            outer_width *= factor
+            outer_height *= factor
+            resolved_scale *= factor
     origin_x = min(max(0.0, origin_x), max(0.0, display_width - outer_width))
     origin_y = min(max(0.0, origin_y), max(0.0, display_height - outer_height))
 
@@ -239,6 +256,7 @@ def resize_visualizer_presentation(
     outer_origin: Sequence[object],
     relative_scale: float,
     viewport_extent: Sequence[object] | None = None,
+    committed_outer_size: Sequence[object] | None = None,
     content_rotation_quarters: object | None = None,
 ) -> ResolvedVisualizerPresentation:
     """Reproject one resolved presentation at a new uniform scale and/or extent.
@@ -287,6 +305,7 @@ def resize_visualizer_presentation(
         dpr=baseline.dpr,
         uniform_visual_scale=baseline_scale * factor,
         viewport_extent=target_extent,
+        committed_outer_size=committed_outer_size,
         content_rotation_quarters=target_rotation,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,

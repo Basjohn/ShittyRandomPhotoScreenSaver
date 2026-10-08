@@ -878,19 +878,24 @@ class DisplayManager(QObject):
         publish = getattr(scene, "set_visualizer_edit_content_envelope", None)
         if not callable(publish):
             return
-        from core.settings.visualizer_mode_registry import get_visualizer_geometry_profile
+        from core.settings.visualizer_mode_registry import get_visualizer_geometry_kind
 
         custom_owner = self._quick_custom_layout_owner
         session = custom_owner.session if custom_owner.is_editing else None
         selected = None if session is None else session.selected_item()
         from_publication = logical is not None
+        # A non-present audio packet is never a new visible scene. Keep the
+        # one-shot first-visible-source wake armed, but don't re-project cage
+        # geometry on audio-only updates during an activation gap.
+        if from_publication and not bool(getattr(logical, "present_frame", False)):
+            return
         motion = getattr(owner.controller.presentation_state, "_view_orbit_motion", None)
         selected_visualizer = bool(
             selected is not None
             and selected.current_enabled
             and not selected.removed
             and selected.source_key.widget_id == "spotify_visualizer"
-            and selected.source_key.geometry_variant == "freeform_3d"
+            and selected.geometry_kind == "freeform_3d"
         )
         track_orbit = bool(
             selected_visualizer
@@ -900,7 +905,7 @@ class DisplayManager(QObject):
         )
         if (
             not self._quick_custom_layout_owner.is_editing
-            or get_visualizer_geometry_profile(owner.controller.mode_id) != "freeform_3d"
+            or get_visualizer_geometry_kind(owner.controller.mode_id) != "freeform_3d"
         ):
             owner.set_edit_orbit_publication_callback(None)
             self._quick_visualizer_edit_orbit_sample = None
@@ -961,6 +966,13 @@ class DisplayManager(QObject):
             accepted_parameters = edit_content_envelope_parameters(
                 logical.mode_id, logical.mode_state.parameters, bar_count=logical.common.bar_count,
             )
+        if accepted_parameters is not None and logical.mode_id == 'sphere':
+            # A pointer drag changes the saved presentation view directly with
+            # no held-key rate.  Use that same live camera for every accepted
+            # Edit refresh, including after a new audio packet lands.
+            from widgets.spotify_visualizer.view_orbit import view_orbit_values
+            accepted_parameters.update(view_orbit_values(
+                owner.controller.presentation_state, 'sphere', time.time()))
         if track_orbit and accepted_parameters is not None:
             shadow_style = None
             alpha_style = None
@@ -1321,7 +1333,8 @@ class DisplayManager(QObject):
             return True
         if action == "settings":
             if self._quick_custom_layout_owner.is_active:
-                self.cancel_custom_layout_session()
+                if not self.cancel_custom_layout_session():
+                    return False
             self.settings_requested.emit()
             return True
         if action == "exit":
@@ -1464,24 +1477,15 @@ class DisplayManager(QObject):
         controller = getattr(owner, "controller", None)
         current_mode = getattr(controller, "mode_id", None)
         if current_mode is not None:
-            from core.settings.visualizer_mode_registry import get_visualizer_geometry_profile
+            from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
 
             if (
-                get_visualizer_geometry_profile(target)
-                != get_visualizer_geometry_profile(current_mode)
+                get_visualizer_layout_profile(target)
+                != get_visualizer_layout_profile(current_mode)
             ):
                 layout = self._quick_custom_layout_owner
-                if layout.is_editing:
-                    # A session item owns an immutable source key. Replacing its
-                    # profile mid-Edit would silently commit a planar gesture into
-                    # the freeform pose (or the reverse), so the user must finish
-                    # this one transaction before the hidden activation begins.
-                    logger.info(
-                        "[CUSTOM_LAYOUT] Rejected cross-profile Visualizer mode "
-                        "change while Edit is active target=%s",
-                        target,
-                    )
-                    return False
+                # Edit drafts are exchanged at the HIDDEN activation edge by
+                # the one session owner; Save/Cancel continue to span all modes.
                 if layout.is_direct:
                     # Direct Alt placement has the same session identity but no
                     # chrome. Finish it through its one existing Save boundary
@@ -1506,7 +1510,12 @@ class DisplayManager(QObject):
                 # Persist first (existing behaviour), then notify the experiment
                 # observer on the same genuine completion edge.
                 persist_completion(completed_mode_id)
-                completion_observer(completed_mode_id)
+                try:
+                    completion_observer(completed_mode_id)
+                except Exception:
+                    # An optional experiment/diagnostic observer never owns
+                    # product Settings or a completed retained activation.
+                    logger.exception("[SPOTIFY_VIS] Optional mode-completion observer failed")
 
         return bool(
             owner.request_mode_change(
@@ -1625,33 +1634,54 @@ class DisplayManager(QObject):
             raise RuntimeError("visualizer mode completion has no Settings authority")
         owner = self._quick_visualizer_owner
         legacy_profile = getattr(owner, "_legacy_layout_profile", None)
+        legacy_source = getattr(owner, "_legacy_layout_source_variant", None)
         custom_map = self._widgets_config_snapshot.get("custom_layout", {})
         displays = custom_map.get("displays", {}) if isinstance(custom_map, Mapping) else {}
-        has_legacy = isinstance(displays, Mapping) and any(
+        has_default = isinstance(displays, Mapping) and any(
             isinstance(layouts, Mapping)
             and isinstance(layouts.get("spotify_visualizer"), Mapping)
             and "default" in layouts["spotify_visualizer"]
             for layouts in displays.values()
         )
-        if legacy_profile is not None or has_legacy:
+        has_freeform_legacy = isinstance(displays, Mapping) and any(
+            isinstance(layouts, Mapping)
+            and isinstance(layouts.get("spotify_visualizer"), Mapping)
+            and "freeform_3d" in layouts["spotify_visualizer"]
+            for layouts in displays.values()
+        )
+        if legacy_profile is not None or legacy_source is not None or has_default or has_freeform_legacy:
             from rendering.custom_layout_commit import migrate_visualizer_legacy_geometry
             from core.settings.visualizer_mode_registry import (
-                coerce_visualizer_mode_id, get_visualizer_geometry_profile,
+                coerce_visualizer_mode_id,
+                get_visualizer_geometry_kind,
+                get_visualizer_layout_profile,
             )
 
             widgets = settings.get_widgets_map()
             section = widgets.get("spotify_visualizer", {})
-            authored_mode = section.get("mode", "spectrum") if isinstance(section, Mapping) else "spectrum"
-            original_profile = legacy_profile or get_visualizer_geometry_profile(
-                coerce_visualizer_mode_id(str(authored_mode))
-            )
-            migrate_visualizer_legacy_geometry(widgets, original_profile)
-            settings.set_widgets_map(widgets, emit_change=False)
-            self._widgets_config_snapshot["custom_layout"] = deepcopy(widgets["custom_layout"])
+            authored_mode = coerce_visualizer_mode_id(str(
+                section.get("mode", "spectrum") if isinstance(section, Mapping) else "spectrum"
+            ))
+            claim_profile = legacy_profile or get_visualizer_layout_profile(authored_mode)
+            source_variant = legacy_source
+            if source_variant is None:
+                if get_visualizer_geometry_kind(authored_mode) == "freeform_3d" and has_freeform_legacy:
+                    source_variant = "freeform_3d"
+                elif has_default:
+                    source_variant = "default"
+            if source_variant is not None:
+                migrate_visualizer_legacy_geometry(
+                    widgets,
+                    target_profile=claim_profile,
+                    source_variant=source_variant,
+                )
+                settings.set_widgets_map(widgets, emit_change=False)
+                self._widgets_config_snapshot["custom_layout"] = deepcopy(widgets["custom_layout"])
         settings.set("widgets.spotify_visualizer.mode", str(mode_id))
         settings.save()
-        if legacy_profile is not None:
+        if legacy_profile is not None or legacy_source is not None:
             owner._legacy_layout_profile = None
+            owner._legacy_layout_source_variant = None
         section = self._widgets_config_snapshot.get("spotify_visualizer")
         if isinstance(section, dict):
             section["mode"] = str(mode_id)
@@ -2939,6 +2969,15 @@ class DisplayManager(QObject):
             bar_count=model.resolve_bar_count(mode),
             initial_mode=mode,
             committed_layout_profile_resolver=self._resolve_quick_visualizer_layout_profile,
+            edit_layout_profile_activator=(
+                lambda target: not self._quick_custom_layout_owner.is_editing
+                or self._quick_custom_layout_owner.activate_edit_visualizer_profile(target)
+            ),
+            transition_failure_callback=(
+                lambda reason: self._request_custom_layout_runtime_reload(
+                    "visualizer_activation_failed"
+                )
+            ),
             card_shadow_kwargs=card_shadow_kwargs,
         )
         try:
@@ -2974,7 +3013,12 @@ class DisplayManager(QObject):
                     CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
                 )
                 from core.settings.visualizer_mode_registry import (
-                    get_visualizer_geometry_profile,
+                    get_visualizer_layout_profile,
+                )
+                legacy_source_variant = (
+                    custom_entry.geometry_variant
+                    if custom_entry.geometry_variant in {"default", "freeform_3d"}
+                    else None
                 )
 
                 owner.configure_committed_layout(
@@ -2993,10 +3037,11 @@ class DisplayManager(QObject):
                             CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
                         ),
                     ),
-                    legacy_geometry_profile=(
-                        get_visualizer_geometry_profile(mode)
-                        if custom_entry.geometry_variant == "default" else None
+                    legacy_layout_profile=(
+                        get_visualizer_layout_profile(mode)
+                        if legacy_source_variant is not None else None
                     ),
+                    legacy_source_variant=legacy_source_variant,
                 )
             # Ordinary placement is resolved before start so the first retained
             # Visualizer presentation never appears at the old (0, 0) default.
@@ -3225,6 +3270,23 @@ class DisplayManager(QObject):
         if owner.presentation_runtime is not unit.runtime:
             raise RuntimeError("visualizer profile display disagrees with presentation runtime")
         screen = unit.runtime.window.screen()
+        layout = getattr(self, "_quick_custom_layout_owner", None)
+        if layout is not None and layout.is_editing and layout.session is not None:
+            from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+            profile = get_visualizer_layout_profile(target_mode)
+            staged = next((entry for entry in layout.session.items()
+                           if entry.model_identity == "spotify_visualizer"
+                           and entry.source_key.geometry_variant == profile
+                           and not entry.profile_parked and not entry.removed), None)
+            if staged is not None:
+                rect = staged.current_global_rect
+                screen_geom = screen.geometry()
+                return (
+                    (float(rect.x() - screen_geom.x()), float(rect.y() - screen_geom.y()),
+                     float(rect.width()), float(rect.height())),
+                    staged.current_viewport_extent,
+                    staged.current_size_payload.get("content_rotation_by_mode", {}),
+                )
         # Keep transient legacy interpretation tied to the startup family until
         # the normal mode/CUSTOM Save boundary canonicalizes it. A missing
         # sibling uses its fitted baseline rather than cloning the old pose.
@@ -3232,7 +3294,7 @@ class DisplayManager(QObject):
             self._widgets_config_snapshot,
             screen,
             target_mode,
-            legacy_geometry_profile=getattr(owner, "_legacy_layout_profile", None),
+            legacy_layout_profile=getattr(owner, "_legacy_layout_profile", None),
         )
         if entry is None:
             return None

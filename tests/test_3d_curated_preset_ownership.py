@@ -30,7 +30,9 @@ _CASES = tuple((mode, index) for mode in _MODES for index, preset in enumerate(g
 
 
 def _owned(mode):
-    return {key for key in _BASE if key.startswith(mode + "_")}
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    view_keys = set(get_visualizer_view_pose_keys(mode))
+    return {key for key in _BASE if key.startswith(mode + "_") and key not in view_keys}
 
 
 def _raw(mode, index):
@@ -41,41 +43,37 @@ def _raw(mode, index):
 
 
 
-def test_extruded_curated_presets_freeze_the_full_organs_profile_without_runtime_borrowing():
-    """All shipped Extruded finishes preserve the old default Organs-backed response.
+def test_extruded_curated_presets_freeze_the_historical_response_without_live_organs_borrowing():
+    """All shipped Extruded finishes preserve the frozen ownership-migration response.
 
-    Before independent ownership, Extruded consumed Spectrum's selected preset at
-    activation. Fresh/default Spectrum selected Organs, so migration parity means
-    every Extruded finish shares that complete consumed profile while retaining
-    independent ``extruded_spectrum_*`` persistence.
+    Extruded historically consumed Spectrum/Organs at runtime, but the ownership
+    migration deliberately froze that accepted response into Extruded's own
+    canonical namespace.  The mutable Organs preset is therefore *not* a test or
+    migration oracle: retuning Organs must never rewrite Extruded's independent
+    authored response.
     """
-    donor = _raw("spectrum", 0)
     suffixes = (
         "visual_smoothing_enabled", "visual_smoothing",
         "ghosting_enabled", "ghost_alpha", "ghost_decay",
         "mirrored", "shape_nodes", "notch_positions_mirrored",
         "notch_positions_linear", "lane_strengths_mirrored",
         "lane_strengths_linear", "wave_amplitude", "profile_floor", "drop_speed",
-        "bar_border_color", "bar_border_opacity",
+        "bar_fill_color", "bar_border_color", "bar_border_opacity",
         "dynamic_floor", "manual_floor", "dynamic_range_enabled", "agc_strength",
         "input_gain", "kick_lane_gain", "transient_pulse_gain", "transient_clamp",
         "audio_block_size", "adaptive_sensitivity", "sensitivity", "bar_count",
-        "lane_transient_mix",
+        "lane_transient_mix", "solid_bar_hysteresis_enabled",
     )
+    expected = {
+        suffix: deepcopy(_BASE[f"extruded_spectrum_{suffix}"])
+        for suffix in suffixes
+    }
     for index, preset in enumerate(get_presets("extruded_spectrum")):
         if preset.is_custom:
             continue
         raw = _raw("extruded_spectrum", index)
-        for suffix in suffixes:
-            assert raw[f"extruded_spectrum_{suffix}"] == donor[f"spectrum_{suffix}"]
-        assert raw["extruded_spectrum_solid_bar_hysteresis_enabled"] is (
-            donor["spectrum_render_mode"] == "bars"
-        )
-        # Historical Extruded ignored Spectrum fill alpha. The ownership migration
-        # deliberately froze the same RGB at opaque alpha to preserve those pixels.
-        assert raw["extruded_spectrum_bar_fill_color"] == [
-            *donor["spectrum_bar_fill_color"][:3], 255
-        ]
+        for suffix, value in expected.items():
+            assert raw[f"extruded_spectrum_{suffix}"] == value
 
         poisoned = deepcopy(_BASE)
         poisoned.update(
@@ -88,8 +86,8 @@ def test_extruded_curated_presets_freeze_the_full_organs_profile_without_runtime
         assert applied["spectrum_shape_nodes"] == poisoned["spectrum_shape_nodes"]
         assert applied["spectrum_bar_count"] == 17
         assert applied["spectrum_lane_transient_mix"] == pytest.approx(0.01)
-        for suffix in suffixes:
-            assert applied[f"extruded_spectrum_{suffix}"] == donor[f"spectrum_{suffix}"]
+        for suffix, value in expected.items():
+            assert applied[f"extruded_spectrum_{suffix}"] == value
 
 
 class _ActivationAudioWorker:
@@ -230,7 +228,7 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
     if mode == "extruded_spectrum":
         config.update(
             extruded_spectrum_depth=2.13,
-            extruded_spectrum_body_alpha=0.42,
+            extruded_spectrum_bar_fill_color=[31, 61, 99, 107],
             extruded_spectrum_reflection=0.0,
             extruded_spectrum_colouring="Bar Colours",
         )
@@ -334,7 +332,6 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
 
     if mode == "extruded_spectrum":
         assert presentation._extruded_spectrum_depth == pytest.approx(2.13)
-        assert presentation._extruded_spectrum_body_alpha == pytest.approx(0.42)
         assert presentation._extruded_spectrum_colouring == "Bar Colours"
     elif mode == "shockwave_grid":
         assert presentation._shockwave_grid_wave_height == pytest.approx(0.67)
@@ -380,7 +377,6 @@ def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned
             "extruded_spectrum_bar_fill_color": [241, 37, 91, 23],
             "extruded_spectrum_bar_border_color": [11, 72, 31, 19],
             "extruded_spectrum_ghost_decay": 0.94,
-            "extruded_spectrum_body_alpha": 0.12,
             "extruded_spectrum_shadow_enabled": True,
         })
     untouched = deepcopy(original)
@@ -445,9 +441,10 @@ def test_extruded_presets_share_frozen_response_but_keep_distinct_3d_finishes():
     for key in response_keys:
         assert len({json.dumps(raw[key], sort_keys=True) for raw in raws}) == 1
 
+    # Persistent turn/tilt are authoring state, never curated-preset finishes.
+    assert all("extruded_spectrum_turn" not in raw and "extruded_spectrum_tilt" not in raw for raw in raws)
     finishes = {
-        (raw["extruded_spectrum_colouring"], raw["extruded_spectrum_turn"],
-         raw["extruded_spectrum_tilt"], raw["extruded_spectrum_gloss"],
+        (raw["extruded_spectrum_colouring"], raw["extruded_spectrum_gloss"],
          raw["extruded_spectrum_reflection"], raw["extruded_spectrum_face_mirror"])
         for raw in raws
     }
@@ -465,7 +462,7 @@ def test_custom_source_colour_and_material_state_survives_all_curated_round_trip
     if mode == "extruded_spectrum":
         current.update(
             extruded_spectrum_bar_fill_color=[21, 97, 172, 101],
-            extruded_spectrum_body_alpha=0.38, extruded_spectrum_ghost_alpha=0.16,
+            extruded_spectrum_ghost_alpha=0.16,
         )
     custom = build_normalized_custom_snapshot(mode, current)
     preserved = deepcopy(custom)
@@ -659,7 +656,7 @@ def test_existing_extruded_rainbow_colour_field_is_consumed_only_by_spectral_col
     common = {
         "extruded_spectrum_colouring": colouring, "extruded_spectrum_hue_drift": 1.0,
         "extruded_spectrum_face_mirror": 0.0, "extruded_spectrum_reflection": 0.0,
-        "extruded_spectrum_shadow_enabled": False, "extruded_spectrum_body_alpha": 1.0,
+        "extruded_spectrum_shadow_enabled": False,
     }
     snapshot = _snapshot(**common)
     def at_animation(seconds):

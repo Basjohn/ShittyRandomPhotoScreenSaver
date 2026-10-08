@@ -240,7 +240,10 @@ class QuickVisualizerPresentationSync:
             # Do not independently resolve presentation again.
             self._commit_presentation(presentation)
         view_callback = self._authored_view_publication_callback
-        if view_callback is not None:
+        if view_callback is not None and bool(getattr(logical, "present_frame", False)):
+            # A pending first visible Edit scene waits for an actual presentable
+            # frame; audio-only publications cannot demand cage re-projection or
+            # disarm the one-shot edge. Held orbit likewise follows visible state.
             view_callback(logical, presentation)
         if trace is not None:
             trace.record(

@@ -15,7 +15,10 @@ def test_dormant_sphere_renderer_does_not_allocate_mesh_target_backdrop_or_strea
     renderer = QuickSphereVoxelRenderer()
     assert not renderer.has_resources
     assert not renderer._stream.has_resources
-    assert renderer._frame_block.layout.size == 1008
+    # Shared Scene3D authored view adds a std140 vec2 slot (16-byte aligned)
+    # to the historical 1008-byte block, without allocating GPU resources.
+    assert ('uViewPose', 'vec2') in renderer._frame_block.layout.fields
+    assert renderer._frame_block.layout.size == 1024
     # A shadow/outtake pair writes two copies per scoped pass, inside the
     # canonical bounded ring; no consumer-specific enlarged capacity exists.
     assert 2 * renderer._frame_block.layout.size <= renderer._stream.hold_bytes

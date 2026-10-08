@@ -604,9 +604,14 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_particle_energy_floor': float,
     'sphere_particle_amount': float,
     'sphere_perspective_strength': float,
+    # View-pose range limits are applied in normalize_inplace(), not here.
+    # Build specs and serializers must contain callables exclusively.
+    'sphere_turn': float,
+    'sphere_tilt': float,
     'sphere_taste_the_rainbow_enabled': bool,
     'sphere_taste_the_rainbow_surfaces': bool,
     'sphere_taste_the_rainbow_edges': bool,
+    'sphere_spin_direction': str,
     'sphere_base_rotation_speed': float,
     'sphere_rotation_speed': float,
     'sphere_gloss': float,
@@ -621,7 +626,6 @@ _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 # Extruded Spectrum (experimental): presentation-only keys. Its bars, analysis and colours
 # come from Spectrum's runtime, technical profile and shared-bar profile (descriptor).
 _EXTRUDED_SPECTRUM_LIMITS: Dict[str, Tuple[float, float]] = {
-    'extruded_spectrum_body_alpha': (0.0, 1.0),
     'extruded_spectrum_depth': (0.25, 3.0),
     'extruded_spectrum_tilt': (0.0, 1.0),
     'extruded_spectrum_gloss': (0.0, 1.0),
@@ -636,6 +640,7 @@ _EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'extruded_spectrum_colouring': str,
     'extruded_spectrum_allow_overflow': bool,
     'extruded_spectrum_smooth_edges': bool,
+    'extruded_spectrum_shadow_reach': str,
     'extruded_spectrum_shadow_enabled': bool,
 }
 _EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED_SPECTRUM_BUILD_SPECS)
@@ -1319,9 +1324,9 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing_enabled'))
     extruded_spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing'))
     extruded_spectrum_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_solid_bar_hysteresis_enabled'))
-    extruded_spectrum_body_alpha: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_body_alpha'))
     extruded_spectrum_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_enabled'))
     extruded_spectrum_shadow_strength: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_strength'))
+    extruded_spectrum_shadow_reach: str = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_reach'))
     shockwave_grid_mirrored: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_mirrored'))
     shockwave_grid_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('shockwave_grid_shape_nodes'))
     shockwave_grid_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('shockwave_grid_notch_positions_mirrored'))
@@ -1517,6 +1522,8 @@ class SpotifyVisualizerSettings:
     sphere_particle_energy_floor: float = field(default_factory=lambda: _visualizer_default('sphere_particle_energy_floor'))
     sphere_particle_amount: float = field(default_factory=lambda: _visualizer_default('sphere_particle_amount'))
     sphere_perspective_strength: float = field(default_factory=lambda: _visualizer_default('sphere_perspective_strength'))
+    sphere_turn: float = field(default_factory=lambda: _visualizer_default('sphere_turn'))
+    sphere_tilt: float = field(default_factory=lambda: _visualizer_default('sphere_tilt'))
     sphere_bar_count: int = field(default_factory=lambda: _visualizer_default('sphere_bar_count'))
     sphere_audio_block_size: int = field(default_factory=lambda: _visualizer_default('sphere_audio_block_size'))
     sphere_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('sphere_adaptive_sensitivity'))
@@ -1531,6 +1538,7 @@ class SpotifyVisualizerSettings:
     sphere_taste_the_rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_enabled'))
     sphere_taste_the_rainbow_surfaces: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_surfaces'))
     sphere_taste_the_rainbow_edges: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_edges'))
+    sphere_spin_direction: str = field(default_factory=lambda: _visualizer_default('sphere_spin_direction'))
     sphere_base_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_base_rotation_speed'))
     sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
     sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
@@ -1589,6 +1597,8 @@ class SpotifyVisualizerSettings:
         self.extruded_spectrum_allow_overflow = bool(self.extruded_spectrum_allow_overflow)
         self.extruded_spectrum_smooth_edges = bool(self.extruded_spectrum_smooth_edges)
         self.extruded_spectrum_shadow_enabled = bool(self.extruded_spectrum_shadow_enabled)
+        if self.extruded_spectrum_shadow_reach not in ('Nearby', 'Distant'):
+            self.extruded_spectrum_shadow_reach = _visualizer_default('extruded_spectrum_shadow_reach')
         from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
         if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
             self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')
@@ -1696,10 +1706,12 @@ class SpotifyVisualizerSettings:
                 attr,
                 [max(0, min(255, int(round(float(channel))))) for channel in value[:4]],
             )
+        if self.sphere_spin_direction not in ('Default', 'Reverse', 'Y Clockwise', 'Y Counterclockwise'):
+            self.sphere_spin_direction = _visualizer_default('sphere_spin_direction')
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_fragment_energy_floor", 0.0, 1.0), ("sphere_particle_energy_floor", 0.0, 1.0), ("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_mirror", 0.0, 1.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
+        for attr, low, high in (("sphere_turn", -1.0, 1.0), ("sphere_tilt", 0.0, 1.0), ("sphere_fragment_energy_floor", 0.0, 1.0), ("sphere_particle_energy_floor", 0.0, 1.0), ("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_mirror", 0.0, 1.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
             _clamp_attr_range(self, attr, low, high)
 
     def _apply_spectrum_source_profile_defaults(self, mode: str) -> None:

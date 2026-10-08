@@ -5,13 +5,10 @@ from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 
 _SLIDER_KEYS = (
     "extruded_spectrum_depth",
-    "extruded_spectrum_tilt",
-    "extruded_spectrum_turn",
     "extruded_spectrum_hue_drift",
     "extruded_spectrum_gloss",
     "extruded_spectrum_reflection",
     "extruded_spectrum_face_mirror",
-    "extruded_spectrum_body_alpha",
     "extruded_spectrum_shadow_strength",
     "extruded_spectrum_wave_amplitude",
     "extruded_spectrum_profile_floor",
@@ -67,6 +64,9 @@ def load_extruded_spectrum_mode_settings(tab, config) -> None:
         faces.setEnabled(enabled)
         edges.setEnabled(enabled)
 
+    reach = getattr(tab, 'extruded_spectrum_shadow_reach', None)
+    if reach is not None:
+        reach.setCurrentText(str(value('extruded_spectrum_shadow_reach')))
     for key in _CHECK_KEYS:
         control = getattr(tab, key, None)
         if control is not None:
@@ -99,6 +99,7 @@ def collect_extruded_spectrum_mode_settings(tab) -> dict:
     else:
         values["extruded_spectrum_colouring"] = "Spectral Faces"
     values.update({key: getattr(tab, key).isChecked() for key in _CHECK_KEYS})
+    values['extruded_spectrum_shadow_reach'] = tab.extruded_spectrum_shadow_reach.currentText()
     shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
     if shape_editor is not None:
         values.update(

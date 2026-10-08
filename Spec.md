@@ -450,10 +450,14 @@ separate viewport and visual-scale intents. New-widget implementation starts wit
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example. **That existing variant axis is also the only admitted persistence seam
-for any Visualizer presentation-family split.** A Visualizer family split must remain inside the same `custom_layout` map,
-`CustomLayoutSession` and commit/hydration owner; it may not introduce parallel 2D/3D layout roots, per-mode X/Y settings or a
-second geometry service. Visualizer descriptors select `planar` or `freeform_3d`; the hidden activation boundary restores
-that family's saved pose. Read-only 3D Edit framing and migration semantics are defined in `Docs/Contracts.md`'s CUSTOM
+for Visualizer pose compatibility.** Visualizer descriptor `geometry_kind` selects mechanics (`planar` / `freeform_3d`) while
+`layout_profile` selects the existing CUSTOM variant slot. Current profiles are `planar`, `3d:extruded_spectrum`,
+`3d:shockwave_grid` and `3d:sphere`; future modes may share a profile only by explicit descriptor choice when their stage geometry
+is compatible. The split remains inside the same `custom_layout` map, `CustomLayoutSession` and commit/hydration owner; it may
+not introduce parallel 2D/3D roots, per-mode X/Y settings or a second geometry service. Hidden activation restores the target
+layout profile without borrowing outgoing geometry. Turn/tilt/camera/material/preset values remain mode-presentation state and
+are never serialized into layout profiles. Legacy `default` / `freeform_3d` variants are one-way interpretation input only.
+Read-only projected 3D Edit envelope/cage paint and migration/transaction semantics are defined in `Docs/Contracts.md`'s CUSTOM
 contract; `Current_Plan.md` §3A owns outstanding physical acceptance.
 
 Edit-mode X changes working session only: duplicate removal or singleton ordinary-enabled OFF. Never family capability
@@ -648,3 +652,8 @@ Current source must be reasoned about from present owners/contracts rather than 
 - `Docs/Architecture/Persisted_Input_Compatibility.md`: persisted-input compatibility-bridge guard (user-data protection, horizon-gated);
 - `Future_Work.md`: deferred features, their admission rules and dormant order;
 - `Docs/Historical_Bugs/`: durable regression/failed-method history; ordinary chronology remains in source control.
+
+
+### Sphere Scene3D camera and Extruded opacity SSOT (R-121 candidate, awaiting physical acceptance)
+
+Sphere's instanced 3D voxel shells route final vertex projection and clip-depth through the shared Scene3D camera, with a pure CPU mirror for Edit bounds. Camera orbit is persistent mode view pose, independent from preset appearance and from audio-reactive shell rotation. Extruded's bodies consume *fill-swatch alpha* only and their edge lines consume border-swatch alpha; the retired Body Alpha multiplier must not regain renderer or Settings authority. These changes are candidate work until the grouped real-GL and operator checks pass.

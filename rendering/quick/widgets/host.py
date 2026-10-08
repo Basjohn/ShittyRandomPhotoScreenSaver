@@ -489,7 +489,9 @@ class OrdinaryWidgetPresentationHost:
         # Exactly one bounded refresh-edge clock belongs to this display host.
         # Any number of Gmail/Reddit/NEWS/CUSTOM Feed/Games You Follow
         # accessories join it; providers never gain a presentation cadence.
-        self._refresh_transition_clock = RefreshTransitionClock(host_item)
+        self._refresh_transition_clock = RefreshTransitionClock(
+            host_item if isinstance(host_item, QObject) else None
+        )
         self._retired = False
 
     @property

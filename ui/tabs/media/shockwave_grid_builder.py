@@ -17,10 +17,6 @@ _WAVE_SLIDERS = (
      "How strongly Spectrum's bar field raises the grid horizon."),
     ("shockwave_grid_idle", "Idle Swell:", 0, 100,
      "How much the grid breathes when the music is quiet."),
-    ("shockwave_grid_tilt", "Tilt:", 0, 100,
-     "How far the view looks down onto the grid (W and S while it shows)."),
-    ("shockwave_grid_turn", "Turn:", -100, 100,
-     "Turns the grid around its vertical axis (A and D while it shows)."),
 )
 _RENDER_SLIDERS = (
     ("shockwave_grid_density", "Grid Density:", 0, 100, "How many grid lines there are."),

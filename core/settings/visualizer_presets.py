@@ -44,6 +44,7 @@ from core.settings.visualizer_mode_registry import (
     get_preset_key,
     get_setting_prefixes,
     get_owned_mode_setting_keys,
+    get_visualizer_view_pose_keys,
 )
 from core.settings.visualizer_settings_contract import (
     LEGACY_GLOBAL_SHARED_VISUAL_KEYS,
@@ -114,8 +115,12 @@ def _filter_snapshot_payload_ownership(
     """
 
     prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+    excluded_view_keys = frozenset(get_visualizer_view_pose_keys(mode_key))
     filtered: Dict[str, Any] = {}
     for key, value in payload.items():
+        bare_key = key.removeprefix("widgets.spotify_visualizer.")
+        if bare_key in excluded_view_keys:
+            continue
         if key == "mode":
             filtered[key] = mode_key
         elif _is_key_for_mode(key, prefixes):
@@ -130,6 +135,8 @@ def extract_visualizer_snapshot(mode_key: str, spotify_vis_config: Mapping[str, 
         if key == VISUALIZER_CUSTOM_STORAGE_KEY:
             continue
         if key.startswith("preset_") and key != f"preset_{mode_key}":
+            continue
+        if key in get_visualizer_view_pose_keys(mode_key):
             continue
         if _is_key_for_mode(key, prefixes) or _is_global_visualizer_key(key):
             snapshot[key] = deepcopy(value)
@@ -303,13 +310,16 @@ def restore_visualizer_snapshot(
         spotify_vis_config.update(sanitized)
     changed = False
     prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+    view_keys = frozenset(get_visualizer_view_pose_keys(mode_key))
     for key in list(spotify_vis_config.keys()):
-        if key in payload:
+        if key in payload or key in view_keys:
             continue
         if _is_key_for_mode(key, prefixes):
             spotify_vis_config.pop(key, None)
             changed = True
     for key, value in payload.items():
+        if key in view_keys:
+            continue
         stored = spotify_vis_config.get(key)
         if stored != value:
             spotify_vis_config[key] = deepcopy(value)
@@ -667,6 +677,8 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
     for key, value in sv_settings.items():
         if key == "mode":
             # Force the active mode later, regardless of the payload value.
+            continue
+        if key in get_visualizer_view_pose_keys(mode):
             continue
         if any(key.startswith(prefix) for prefix in prefixes):
             filtered[key] = value
@@ -1050,7 +1062,11 @@ def get_preset_settings(mode: str, index: int) -> Dict[str, Any]:
     presets = get_presets(mode)
     if not 0 <= index < len(presets):
         raise IndexError(f"visualizer preset index out of range for {mode}: {index}")
-    return dict(presets[index].settings)
+    # Old curated JSON may carry tilt/turn: treat it as inert legacy metadata.
+    # No preset, including externally authored/imported ones, may author view pose.
+    view_keys = frozenset(get_visualizer_view_pose_keys(mode))
+    return {key: deepcopy(value) for key, value in presets[index].settings.items()
+            if key not in view_keys}
 
 
 def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -1079,9 +1095,10 @@ def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dic
     prefixes = MODE_KEY_PREFIXES.get(mode, [])
     cleaned = dict(config)
 
-    # First: CLEAR all mode-specific keys not in preset
+    # First: CLEAR mode-owned preset keys, never persistent view pose.
+    view_keys = frozenset(get_visualizer_view_pose_keys(mode))
     for key in list(cleaned.keys()):
-        if key in preset_settings:
+        if key in view_keys or key in preset_settings:
             continue
         if _is_key_for_mode(key, prefixes):
             cleaned.pop(key, None)

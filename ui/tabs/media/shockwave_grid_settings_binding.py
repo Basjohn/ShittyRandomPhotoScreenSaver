@@ -9,8 +9,6 @@ _SLIDER_KEYS = (
     "shockwave_grid_wave_height",
     "shockwave_grid_wave_speed",
     "shockwave_grid_horizon",
-    "shockwave_grid_tilt",
-    "shockwave_grid_turn",
     "shockwave_grid_density",
     "shockwave_grid_glow",
     "shockwave_grid_floor",

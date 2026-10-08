@@ -88,10 +88,15 @@ class CustomLayoutSessionItem:
     current_size_payload: dict[str, Any]
     baseline_enabled: bool
     current_enabled: bool
-    # Visualizer-only migration provenance.  A legacy ``default`` CUSTOM entry
-    # is interpreted for the profile active at hydration, then promoted into
-    # that named profile at the next normal Save before ``default`` retires.
-    legacy_geometry_variant: str | None = None
+    # Visualizer-only mechanics + migration provenance. ``geometry_kind`` is
+    # interaction behavior, never persistence identity.  Legacy layout input is
+    # one-way: ``legacy_layout_profile`` is the canonical claimant and
+    # ``legacy_source_variant`` is the old storage key (``default`` or
+    # ``freeform_3d``) that may be promoted at the next normal Save.
+    geometry_kind: str = "planar"
+    profile_parked: bool = False
+    legacy_layout_profile: str | None = None
+    legacy_source_variant: str | None = None
     is_duplicate: bool = False
     resize_capable: bool = False
     # Absolute CUSTOM resize scale at admission.  Unlike the mutable working
@@ -100,6 +105,11 @@ class CustomLayoutSessionItem:
     # shrunken rectangle.
     baseline_resize_scale: float = 1.0
     resize_scale: float = 1.0
+    # Transient, derived unscaled stage reference for repeated uniform Edit /
+    # Arrange gestures. Unlike the current QRect this does not compound integer
+    # rounding. It is never persisted and never becomes geometry authority;
+    # explicit X/Y shape edits refresh it from the current session rectangle.
+    uniform_stage_reference: ViewportExtent | None = None
     removed: bool = False
     current_display_identity: str = ""
     source_monitor_route: str = "ALL"
@@ -173,6 +183,25 @@ class CustomLayoutSessionItem:
         self.current_size_payload = dict(self.current_size_payload)
         self.baseline_enabled = bool(self.baseline_enabled)
         self.current_enabled = bool(self.current_enabled)
+        geometry_kind = str(self.geometry_kind or "planar").strip().lower()
+        if geometry_kind not in {"planar", "freeform_3d"}:
+            raise ValueError(f"invalid CUSTOM geometry kind: {geometry_kind!r}")
+        self.geometry_kind = geometry_kind
+        self.profile_parked = bool(self.profile_parked)
+        self.legacy_layout_profile = (
+            str(self.legacy_layout_profile).strip().lower()
+            if self.legacy_layout_profile is not None else None
+        )
+        self.legacy_source_variant = (
+            normalize_geometry_variant(self.legacy_source_variant)
+            if self.legacy_source_variant is not None else None
+        )
+        if (self.legacy_layout_profile is None) != (self.legacy_source_variant is None):
+            raise ValueError("legacy Visualizer layout claim requires profile and source variant")
+        if self.legacy_source_variant not in {None, "default", "freeform_3d"}:
+            raise ValueError(
+                f"invalid legacy Visualizer geometry variant: {self.legacy_source_variant!r}"
+            )
         self.is_duplicate = bool(self.is_duplicate)
         self.child_collision_enabled = bool(self.child_collision_enabled)
         self.resize_capable = bool(self.resize_capable)
@@ -182,6 +211,13 @@ class CustomLayoutSessionItem:
         self.resize_scale = float(self.resize_scale)
         if not self.resize_scale > 0.0:
             self.resize_scale = self.baseline_resize_scale
+        if self.geometry_kind == "freeform_3d":
+            self.uniform_stage_reference = (
+                float(self.current_global_rect.width()) / self.resize_scale,
+                float(self.current_global_rect.height()) / self.resize_scale,
+            )
+        else:
+            self.uniform_stage_reference = None
         self.removed = bool(self.removed)
         self.viewport_resize_capable = bool(self.viewport_resize_capable)
         self.content_rotation_capable = bool(self.content_rotation_capable)
@@ -317,6 +353,21 @@ class CustomLayoutSessionItem:
         content_extent: ViewportExtent | None = None,
     ) -> None:
         self.current_global_rect = QRect(global_rect)
+        if self.geometry_kind == "freeform_3d":
+            # Preserve the unrounded reference only for a real uniform-gesture
+            # projection. Explicit stage replacement, including callers which
+            # supply an unchanged scale, establishes the new shape authority.
+            next_scale = max(1.0e-6, float(
+                self.resize_scale if resize_scale is None else resize_scale
+            ))
+            reference = self.uniform_stage_reference
+            if (resize_scale is None or reference is None or
+                    abs(self.current_global_rect.width() - reference[0] * next_scale) > 0.501 or
+                    abs(self.current_global_rect.height() - reference[1] * next_scale) > 0.501):
+                self.uniform_stage_reference = (
+                    float(self.current_global_rect.width()) / next_scale,
+                    float(self.current_global_rect.height()) / next_scale,
+                )
         if (
             size_payload is not None
             or resize_scale is not None
@@ -341,6 +392,11 @@ class CustomLayoutSessionItem:
     def transfer_to_display(self, display_identity: str, global_rect: QRect) -> None:
         self.set_current_display(display_identity)
         self.current_global_rect = QRect(global_rect)
+        if self.geometry_kind == "freeform_3d":
+            self.uniform_stage_reference = (
+                float(self.current_global_rect.width()) / max(1.0e-6, self.resize_scale),
+                float(self.current_global_rect.height()) / max(1.0e-6, self.resize_scale),
+            )
 
     def set_current_display(
         self,
@@ -367,6 +423,11 @@ class CustomLayoutSessionItem:
         self.current_display_identity = self.source_key.display_identity
         self.current_monitor_route = self.source_monitor_route
         self.current_global_rect = QRect(self.baseline_global_rect)
+        if self.geometry_kind == "freeform_3d":
+            self.uniform_stage_reference = (
+                float(self.baseline_global_rect.width()) / self.baseline_resize_scale,
+                float(self.baseline_global_rect.height()) / self.baseline_resize_scale,
+            )
         self.current_size_payload = dict(self.baseline_size_payload)
         self.current_enabled = self.baseline_enabled
         self.resize_scale = self.baseline_resize_scale
@@ -400,6 +461,11 @@ class CustomLayoutSessionItem:
         self.content_sized = False
         self.current_size_payload = dict(size_payload)
         self.resize_scale = max(1.0e-6, float(resize_scale))
+        if self.geometry_kind == "freeform_3d":
+            self.uniform_stage_reference = (
+                float(self.current_global_rect.width()) / self.resize_scale,
+                float(self.current_global_rect.height()) / self.resize_scale,
+            )
         self.current_content_extent = None
         self.current_viewport_extent = normalize_viewport_extent(viewport_extent)
 
@@ -422,6 +488,20 @@ class CustomLayoutSession:
             raise ValueError(f"duplicate CUSTOM session key: {item.source_key!r}")
         self._items[item.source_key] = item
 
+    def discard_provisional_item(self, item: CustomLayoutSessionItem) -> None:
+        """Undo a failed admission, never remove an authored/active session item.
+
+        Only an unselected, parked profile created during this Edit session may
+        leave the session. A failed QML projection must not commit a phantom
+        3D sibling during a later otherwise-healthy Save.
+        """
+        key = item.source_key
+        if self._items.get(key) is not item:
+            raise ValueError("provisional CUSTOM item is not session-owned")
+        if self._selected_key == key or not item.profile_parked:
+            raise RuntimeError("cannot discard a selected or live CUSTOM profile")
+        del self._items[key]
+
     def item(self, key: CustomLayoutKey) -> CustomLayoutSessionItem:
         return self._items[key]
 
@@ -429,7 +509,7 @@ class CustomLayoutSession:
         return tuple(self._items.values())
 
     def active_items(self) -> tuple[CustomLayoutSessionItem, ...]:
-        return tuple(item for item in self._items.values() if not item.removed)
+        return tuple(item for item in self._items.values() if not item.removed and not item.profile_parked)
 
     def selected_item(self) -> CustomLayoutSessionItem | None:
         """Return the transient parent selected for child/edit-chrome focus."""
@@ -506,12 +586,13 @@ class CustomLayoutSession:
 
         grouped: dict[str, list[CustomLayoutSessionItem]] = {}
         for item in self._items.values():
-            if item.current_enabled and not item.removed:
+            if item.current_enabled and not item.removed and not item.profile_parked:
                 grouped.setdefault(item.model_identity, []).append(item)
         for item in self._items.values():
             item.is_duplicate = (
                 item.current_enabled
                 and not item.removed
+                and not item.profile_parked
                 and len(grouped.get(item.model_identity, ())) > 1
             )
 

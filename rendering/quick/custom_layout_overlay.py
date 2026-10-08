@@ -314,6 +314,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             if item.current_display_identity == self._display_identity
             and item.current_enabled
             and not item.removed
+            and not item.profile_parked
         ]
         self.beginResetModel()
         self._items = next_items
@@ -463,7 +464,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             session is None
             or session.selected_item() is not item
             or item.model_identity != "spotify_visualizer"
-            or item.source_key.geometry_variant != "freeform_3d"
+            or item.geometry_kind != "freeform_3d"
             or not item.current_enabled
             or item.removed
         ):
