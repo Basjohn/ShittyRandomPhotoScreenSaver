@@ -115,3 +115,24 @@ def test_ripple_quick_renderer_has_no_legacy_presenter_fallback():
     assert "GLCompositorWidget" not in source
     assert "DisplayWidget" not in source
     assert "QWidget" not in source
+
+
+@pytest.mark.qt
+def test_ripple_starts_on_the_old_picture_exactly_and_ends_on_the_new(qt_app):
+    """The first ripple's front starts at the centre; its reveal and ring ramp in, so the first
+    frame shows no spot of the new picture (it used to: ~8% at the centre and a ring)."""
+    import numpy as np
+    from tools.transition_contact_sheet import TransitionCapture
+
+    capture = TransitionCapture(320, 180)
+    try:
+        run = capture.run("ripple", duration_ms=7200)
+        source, destination = (np.asarray(image.convert("RGB"), dtype=np.int16) for image in capture.images)
+        first = np.asarray(capture.render(run, 0.0)[0].convert("RGB"), dtype=np.int16)
+        last = np.asarray(capture.render(run, 1.0)[0].convert("RGB"), dtype=np.int16)
+        assert np.array_equal(first, source) and np.array_equal(last, destination)
+        early = np.asarray(capture.render(run, 0.004)[0].convert("RGB"), dtype=np.int16)
+        assert np.abs(early - source).mean() < 0.5
+    finally:
+        capture.close()
+
