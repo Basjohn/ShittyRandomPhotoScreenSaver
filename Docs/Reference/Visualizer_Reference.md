@@ -42,6 +42,10 @@ default-off/not-yet-product-accepted and permits private reaction semantics and 
 private scheduling/presentation authority or a disposable GPU engine. Promotion to stable should normally change
 admission/status/defaults and close acceptance gates, not require reimplementing the mode on a second substrate.
 
+### Direct 3D interaction geometry
+
+Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. Neither input path may create a timer, change the mode's camera, or borrow geometry from a sibling layout profile.
+
 ## 2. Capability model
 
 Capability is mode-owned and registry/test-discovered, not inferred from catalog position or a fixed number of modes. Shared

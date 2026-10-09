@@ -327,6 +327,11 @@ def _run_tracked_ui_callable(
             _ui_diagnostics["last_callback"] = label
             _ui_diagnostics["last_duration_ms"] = duration_ms
             _ui_diagnostics["last_completed_ts"] = time.time()
+        if duration_ms >= 16.0 and is_perf_metrics_enabled():
+            logger.warning(
+                "[PERF][UI_CALLBACK] duration_ms=%.2f callback=%s generation=%s queued=%s failed=%s",
+                duration_ms, label, generation_key, was_queued, failed,
+            )
 
 
 def _callable_debug_name(func: Callable | None) -> str:

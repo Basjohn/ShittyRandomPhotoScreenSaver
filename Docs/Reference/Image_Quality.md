@@ -25,6 +25,10 @@ The one-way bridge is `core/settings/resample_filter_input_compat.py`.
 - The existing lower-priority speculative worker decodes once per source batch for all requested display sizes.
   All filters and sharpening participate. A batch has one resolved quality choice; mixed-quality batches reject
   before decode. Cache keys and response manifests include filter and sharpen identity.
+- Separate source batches are serialized and spaced by the canonical 100 ms `PREFETCH_STAGGER_MS` through one
+  bounded continuation in the existing ThreadManager. New registrations cannot jump ahead of that gap; stale
+  generations cannot submit another source and scheduling failure cannot strand lookahead. No per-frame checks,
+  new threads or recurring polling timers are introduced; R-65/R-82 retirement and memory budgets remain binding.
 - Existing count/byte bounds, foreground queue isolation, generation cancellation, native-copy ownership and
   shutdown retirement remain authoritative in `Docs/Contracts.md`. No new cache, worker role, timer or fallback
   is introduced. A failed selected filter is an error, never an implicit switch to Smooth.

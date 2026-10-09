@@ -107,6 +107,16 @@ class FrameTraceEvent(IntEnum):
     # the ImageWorker and is proven separately by its worker identity/timing.
     PREFETCH_HANDOFF_BEGIN = 64
     PREFETCH_HANDOFF_END = 65
+    # R142: Optional first-use boundary attribution. No per-frame polling or
+    # logging, no on-disk format change, and no additional normal-runtime work.
+    BACKGROUND_GL_SETUP_BEGIN = 66
+    BACKGROUND_GL_SETUP_READY = 67
+    NATIVE_TEXTURE_CHANGE_BEGIN = 68
+    NATIVE_TEXTURE_CHANGE_READY = 69
+    TRANSITION_FIRST_RENDER_BEGIN = 70
+    TRANSITION_FIRST_RENDER_READY = 71
+    RETAINED_NODE_CREATE_BEGIN = 72
+    RETAINED_NODE_CREATE_READY = 73
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

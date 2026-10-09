@@ -76,6 +76,13 @@ Use one of these instead:
 
 Preset infrastructure tests may deliberately exercise filenames, sparse slot numbers, manifest mirroring and user-authored entries using test-owned files. Those names and payloads are fixture data, not product authority duplication.
 
+A golden visualizer replay must keep its *input* separate from operator-authored presets. A
+reference can contain a frozen, test-owned configuration, but a regeneration command must
+not re-resolve today's shipped presets. Use behavioral/metamorphic GL assertions for
+expected visual effects; pixel-for-pixel images are optional review artifacts unless
+bitwise identity is itself a genuine protocol contract. Never bless updated artistic
+choices merely to make a visual golden pass.
+
 The same principle applies to themes, layout slots and other operator-authored content.
 
 ### Documentation prose is not a behavior oracle

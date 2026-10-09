@@ -35,17 +35,18 @@ class TestVisualizerModeEnum:
         from widgets.spotify_visualizer.audio_worker import VisualizerMode
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         modes = list(VisualizerMode)
-        # Worker-owned modes are derived from the registry. Modes that borrow another
-        # mode's technical profile intentionally have no worker enum of their own.
-        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-
-        expected_worker_ids = tuple(
-            mode_id
-            for mode_id in VISUALIZER_MODE_IDS
-            if not get_visualizer_mode_descriptor(mode_id).technical_profile_mode
+        # This enum is the original audio-worker protocol, *not* the extensible
+        # product catalogue: newer Scene3D modes are registered with separate
+        # frame runtimes without adding legacy worker enum members.
+        worker_ids = tuple(mode.name.lower() for mode in modes)
+        # EXACT-VALUE INVARIANT: frozen five-member audio-worker protocol, not
+        # the extensible Visualizer catalogue (Scene3D modes do not join it).
+        assert worker_ids == (
+            "spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"
         )
-        assert tuple(mode.name.lower() for mode in modes) == expected_worker_ids
+        assert all(mode_id in VISUALIZER_MODE_IDS for mode_id in worker_ids)
         assert modes[0] == VisualizerMode.SPECTRUM
+        assert tuple(mode.value for mode in modes) == tuple(range(1, len(modes) + 1))
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""

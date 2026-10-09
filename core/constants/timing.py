@@ -52,13 +52,16 @@ CACHE_MAX_AGE_MS = 60000
 """Maximum age for stale cache entries (1 minute)."""
 
 PREFETCH_STAGGER_MS = 100
-"""Delay between prefetch operations to avoid overwhelming I/O."""
+"""Minimum separation between consecutive speculative source batches (existing UI one-shot owner)."""
 
 DISPLAY_INIT_STAGGER_MS = 100
 """Delay between display widget creations to spread GL init load (increased from 50ms)."""
 
-TRANSITION_STAGGER_MS = 200
-"""Delay between transition starts on multiple displays (increased from 100ms to 200ms for better desync)."""
+FIRST_IMAGE_STAGGER_MS = 200
+"""Retain the accepted short startup/first-image stagger without delaying gentle start."""
+
+TRANSITION_STAGGER_MS = 400
+"""Ordinary multi-display transition start separation; secondary run duration compensates."""
 
 SETTINGS_CACHE_TTL_MS = 5000
 """Time-to-live for in-memory settings cache entries."""

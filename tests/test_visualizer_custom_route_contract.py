@@ -72,6 +72,7 @@ def _live_unit(
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
             screen_index=screen_index,
+            runtime_generation=805,  # same active generation as the manager fixture
             binding_loss=binding_loss,
             scene_controller=scene_controller,
             input_controller=SimpleNamespace(set_view_orbit_enabled=lambda _enabled: None),

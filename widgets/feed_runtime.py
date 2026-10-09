@@ -18,6 +18,9 @@ from core.feeds.models import FeedRefreshResult, FeedSourceSpec
 from core.feeds.source import FeedRefreshCancelled
 from core.task_control import ExpectedTaskCancellation
 from core.feeds.news import NewsFeedConfig, NewsProvider, merge_news_results
+from core.logging.logger import get_logger, is_perf_metrics_enabled
+
+_logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -623,8 +626,20 @@ class _FeedFamilyOwner:
                 if owner is None or owner._retired:
                     _FeedFamilyOwner._release_source(state)
                 else:
-                    owner._complete(cache_key, state, token, cancel, result,
-                                    cache_only=cache_only, artwork_only=artwork_only)
+                    measured = is_perf_metrics_enabled()
+                    start = time.perf_counter() if measured else 0.0
+                    try:
+                        owner._complete(cache_key, state, token, cancel, result,
+                                        cache_only=cache_only, artwork_only=artwork_only)
+                    finally:
+                        if measured:
+                            elapsed_ms = (time.perf_counter() - start) * 1000.0
+                            if elapsed_ms >= 16.0:
+                                _logger.warning(
+                                    "[PERF][FEED_GUI_DELIVERY] source=%s phase=%s duration_ms=%.2f",
+                                    cache_key, ("cache" if cache_only else "artwork" if artwork_only else "refresh"),
+                                    elapsed_ms,
+                                )
 
             _deliver._srpss_runtime_generation = self._generation
             try:
@@ -1180,17 +1195,21 @@ class NewsRuntimeService:
         consumer = self._consumer()
         if consumer is None or not self._consumer_alive():
             return
-        merged = merge_news_results(
-            self.config.providers,
-            {pid: accepted for pid, (accepted, _cached) in self._results.items()},
-        )
-
+        # Do not compose an expensive NEWS aggregate from a partial startup
+        # catalogue that cannot be published. On a many-provider card this
+        # formerly merged 1, 2, ... N-1 partial snapshots on the GUI thread
+        # and discarded every result. Settlement/artwork admission still run
+        # only after the full initial set has been received.
         # Do not paint a publisher-by-publisher cache parade at startup. Wait
         # until every provider has answered its cache admission before showing
         # the first aggregate. A brand-new card with no cached stories remains
         # loading until the first remote provider produces usable content.
         if len(self._results) < len(self._leases):
             return
+        merged = merge_news_results(
+            self.config.providers,
+            {pid: accepted for pid, (accepted, _cached) in self._results.items()},
+        )
 
         # Determine visible publisher shares before publishing settlement. This
         # may immediately admit artwork for one or more providers and therefore

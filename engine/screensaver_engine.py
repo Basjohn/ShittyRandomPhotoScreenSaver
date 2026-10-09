@@ -520,11 +520,12 @@ class ScreensaverEngine(QObject):
                 logger.error("Failed to initialize display")
                 return False
 
-            # Start image workers before the first prefetch plan is admitted.
-            # Scaled speculative warmup has no in-process compute fallback; its
-            # dedicated process must therefore be ready before registration.
+            # Start workers, but do not launch speculative prescale against the
+            # foreground first-image batch. The first-frame/transition-complete
+            # edges already own the generation-fenced idle prefetch admission.
+            # In particular, a second display must not double startup decode,
+            # RGBA transfer and memory pressure while initial frames are pending.
             self._start_workers()
-            self._schedule_prefetch()
             
             # Setup rotation timer
             self._setup_rotation_timer()
@@ -1149,16 +1150,16 @@ class ScreensaverEngine(QObject):
             event=self._runtime_lifecycle_event,
             stage="authoritative_first_frame_ready",
         )
-        if self._runtime_lifecycle_event != "cold_start":
-            # Replacement generations can publish their first images across
-            # staggered displays.  The normal image-completion prefetch attempt
-            # may happen before the final destination closes its batch, and a
-            # direct first-frame publish has no transition-complete event to
-            # rescue that lost attempt.  Reseed through the existing prefetch
-            # owner's generation-fenced idle retry once all first frames exist.
-            from engine.image_pipeline import schedule_prefetch_after_runtime_ready
+        # Both cold start and replacement runtimes publish first images across
+        # potentially staggered displays. Cold start no longer speculatively
+        # decodes wallpaper-sized derivatives during that foreground admission.
+        # A direct first-frame publish may have no transition-complete signal,
+        # so seed once through the existing generation-fenced idle retry after
+        # all authoritative first frames are visible. This also preserves the
+        # historical replacement-generation liveness guardrail.
+        from engine.image_pipeline import schedule_prefetch_after_runtime_ready
 
-            schedule_prefetch_after_runtime_ready(self)
+        schedule_prefetch_after_runtime_ready(self)
 
     def _on_startup_reveal_completed(
         self,

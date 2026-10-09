@@ -77,6 +77,14 @@ EVENT_NAMES = {
     63: "lifecycle_end",
     64: "prefetch_handoff_begin",
     65: "prefetch_handoff_end",
+    66: "background_gl_setup_begin",
+    67: "background_gl_setup_ready",
+    68: "native_texture_change_begin",
+    69: "native_texture_change_ready",
+    70: "transition_first_render_begin",
+    71: "transition_first_render_ready",
+    72: "retained_node_create_begin",
+    73: "retained_node_create_ready",
 }
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
@@ -849,6 +857,11 @@ def main() -> int:
         lambda: defaultdict(list)
     )
     background_transition_by_key: dict[tuple[int, int], int] = {}
+    # R142/R143: first-use events have node-local revision identities and are
+    # entirely separate from the logical visualizer publication namespace.
+    first_use_events: dict[tuple[int, int], dict[int, list[tuple[int, int]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     # QQuickWindow phase events use a render-cycle sequence, not a visualizer
     # logical revision. Keep them in a distinct identity namespace.
     render_cycle_events: dict[tuple[int, int, int], dict[int, list[int]]] = defaultdict(
@@ -881,6 +894,8 @@ def main() -> int:
             worker_events[(int(aux), int(revision))][event].append(ts_ns)
         if event in (64, 65) and revision >= 0:
             prefetch_handoff_events[int(revision)][event].append((ts_ns, int(aux)))
+        if 66 <= event <= 73 and screen >= 0:
+            first_use_events[(int(screen), int(revision))][event].append((ts_ns, int(aux)))
         if event in RENDER_CYCLE_EVENT_IDS and screen >= 0 and revision >= 0:
             render_cycle_events[(int(screen), int(aux), int(revision))][event].append(ts_ns)
         elif event in (19, 20, 21, 22, 23) and screen >= 0 and revision >= 0:
@@ -917,6 +932,36 @@ def main() -> int:
         print(f"trace_segments={trace_segments} retention=rolling_oldest_to_newest")
     for event in sorted(counts):
         print(f"{EVENT_NAMES.get(event, str(event))}: {counts[event]}")
+    for begin_id, end_id, label in (
+        (72, 73, "retained_node_create"),
+        (66, 67, "background_gl_setup"),
+        (68, 69, "native_texture_change"),
+        (70, 71, "transition_first_render"),
+    ):
+        by_screen: dict[int, list[tuple[float, int]]] = defaultdict(list)
+        for (screen, _revision), pair in first_use_events.items():
+            for (begin, _start_aux), (end, end_aux) in zip(
+                pair.get(begin_id, ()), pair.get(end_id, ())
+            ):
+                if end >= begin:
+                    by_screen[screen].append(((end - begin) / 1_000_000.0, end_aux))
+        for screen, spans in sorted(by_screen.items()):
+            durations = [duration for duration, _aux in spans]
+            print(
+                f"screen={screen} first_use={label} n={len(spans)} "
+                f"median_ms={statistics.median(durations):.3f} "
+                f"p95_ms={_pct(durations, .95):.3f} max_ms={max(durations):.3f}"
+            )
+            if begin_id == 68:
+                adopted = sum(aux == 1 for _duration, aux in spans)
+                uploaded = sum(aux == 2 for _duration, aux in spans)
+                print(f"screen={screen} native_texture adopted={adopted} uploaded={uploaded}")
+    if counts[48] > 0 and counts[19] == 0:
+        print(
+            "WARNING: Qt Quick frame cycles exist but zero background render "
+            "events were recorded. Check retained-node creation and image "
+            "admission before interpreting missing spans as low cost."
+        )
     if unscoped_logical_publishes:
         print(
             "warning: unscoped_logical_publishes="

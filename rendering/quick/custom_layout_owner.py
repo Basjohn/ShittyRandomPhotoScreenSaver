@@ -864,6 +864,19 @@ class QuickCustomLayoutOwner:
             or item.current_viewport_extent != item.baseline_viewport_extent
         )
 
+    def rebase_direct_visualizer_drag(self) -> None:
+        """Rebase at each native pointer press, never at a sampled move.
+
+        Alt+wheel keeps its existing direct Edit transaction open. Another
+        Alt+right drag has a new offset origin: applying it to the old rectangle
+        teleported the stage, even when the new offset was only one pixel.
+        """
+        item = self._direct_item()
+        if item is None:
+            return
+        self._direct_origin = QRect(item.current_global_rect)
+        self._direct_offset = QPoint()
+
     def move_direct_visualizer(self, offset: QPoint, cursor: QPoint) -> bool:
         """Move the Visualizer by the pointer's global ``offset`` since the gesture began."""
         item, origin = self._direct_item(), self._direct_origin
@@ -2542,7 +2555,7 @@ class QuickCustomLayoutOwner:
         admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
         viewport_extent = item.current_viewport_extent
         visualizer_world = item.viewport_resize_capable and viewport_extent is not None
-        # Size, limits, top-centre pivot and clamp are the one rule Settings
+        # Size, limits and clamp are the one rule Settings
         # Arrange uses too (``uniform_scale_geometry``); the payload stays here.
         resolved = uniform_scale_geometry(
             item,

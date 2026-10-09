@@ -1,31 +1,28 @@
 # SRPSS | Current Plan
 
-Live work and outstanding acceptance only. Source and product contracts live in `Spec.md`, `Docs/Contracts.md`, maintained subsystem references and guardrails. Closed checkpoint narratives and rejected methods live in `Docs/Historical_Bugs/`; the VCS and GODZIP provenance keep chronology.
+**LIVE CHECKLIST ONLY — next accepted work.** Historical performance investigations and trace statistics belong in `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md`; durable rules belong in `Spec.md`, `Docs/Contracts.md` and subsystem references. Do not re-open investigation chores just because old logs contain alarming numbers.
 
-## 0. Active sequence | R130 (Windows validation pending)
+## 0. Next execution order | R146 handoff
 
-**Baseline:** R128 superseding handoff, source HEAD `8448717216`. The operator's latest **focused Windows gate passed: 140/140, 23.14 s**. R127's four-chunk run failed and is not a R129 result. Sphere shared camera/orbit was physically accepted. Extruded cast shadows are **rejected and hard-disabled** (Settings greyed, renderer and Edit bounds gated); never reactivate through a preset or a fixture. The historically rejected casting mechanisms are documented in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`.
+**Runtime status:** The operator reports dual-display performance back to near-perfect following a **Windows system restart**, *not* an R144/R145 code correction. The catastrophic R134–R145 physical-performance P0 is **closed as recovered, cause unproven**. R145 logs show bounded image-cache/prefetch and stable post-startup handle counts over a short window; this is not an overnight leak proof. R145 had no native crash or Qt/QML errors. Historical evidence and restart-state theories have been removed from this live plan.
 
-- [x] **M1. Sphere momentum implementation:** release after Alt+drag adds a finite ease-out to the same presentation/logical clock. The shader's permanent base rotation remains independent and never stops because a drag stops. Mouse re-grab, held-key takeover and preset rebase retire a pending tail. One final logical pose persists when release occurs; intermediate pose does not generate Settings writes. No timer, poll, second camera or animation owner.
-- [x] **B1. Ban Image plus R130 hot-path repair:** Images menu Ban Image / Clear Image Bans use the existing per-display owner. Hashed sentinels remain the only persistent exclusion authority; the in-memory SHA-256 digest set is hydrated once when `.active` exists (zero-ban installations do not enumerate). `ImageQueue` retains the full source metadata catalogue but holds **only eligible images** in its active local/RSS/combined queues. Index once on ban-store attachment and incrementally on explicit bans or added sources; selection/peek/preview and queue wraparound never compute ban identities, touch the filesystem, iterate a banned list or retry over banned candidates. All-banned exhausts immediately. Clearing bans re-enables original metadata without source-provider refresh. Source loading and deliberate ban/clear actions may still cost O(source count); memory grows with ban count; no new cadence/Settings list/GPU work. Existing transactional advance, multi-display rejection and history safety remain in place. R130 local isolated non-Qt tests: 33 passed, 1 Qt-only deselected; Windows acceptance pending.
-- [x] **D1. Documentation authority sweep (source complete, references audited):** move dated audit records to Historical Bugs, replace the R119–R128 live changelog with current status and focused historical mechanism, consolidate rejected shadow and current Sphere + Ban Image owners, correct stale links and version conflict. This box is not runtime acceptance evidence.
-- [ ] **M2/B2/D2. Windows focused tests and hands-on behaviors:** run command below. Verify momentum smoothly decays without stopping base rotation, works under Alt+left mouse drag on both displays, never snaps on rapid re-grab/Settings preset change; Ban Image advances the invoking display and cannot recur on either display after restart, including remote URL cache changes and all-banned source exhaustion. Check context-menu admission, persistent reload, zero-ban fast path, large mostly-banned catalogue, and clear; verify active queue index refresh after banning in flight. Verify docs/source/test authority against actual outputs.
-- [ ] **C5. Shared visual parity:** compare framed Visualizer stencil radius/chrome, global border width on Media/News/Reddit/Gmail/Steam/Weather, and physically accepted Spectrum/Organs top edges and reaction on D0/D1. Do not destabilize the accepted Bubble temporal response or the Organs preset to make an unrelated test pass.
-- [ ] **GATE. 100% full Windows chunk gate:** after M2/B2/D2, run the unchanged destination four-chunk suite, classify/fix every genuine failure (not blanket golden regeneration or weakened assertions), repeat until *every chunk* passes. R127 log findings included Oscilloscope native smoke timeout and a Sphere golden mismatch; neither is accepted as expected failure. Preserve test durability and physical evidence.
-- [ ] **PY1–PY6. Migrate canonical CPython 3.14 only after the green gate**, then repeat the exact same full chunk/real-GL/durability gate at 100%, verify complete dependency wheel/ABI and all frozen products, and compare startup/exit/memory. Never run competing 3.11/3.13/3.14 runtime authorities. See §10.
-- [ ] **System/Scene3D audit and remaining product/transition roadmap:** §1–§9 remain queued; user-directed priorities and acceptance gates take precedence over newly proposed effects. Extruded shadow redesign is deferred to `Future_Work.md` until a new visual target is approved.
+- [x] **R146 timing directive, SOURCE IMPLEMENTED:** ordinary multi-display transition start separation **800 → 400 ms**; compensate later display's immutable request duration by that same 400 ms. Keep the **200 ms first-image gentle-start** separation. `TRANSITION_STAGGER_MS` remains the one source authority. Focused timing test must pass, then operator visually accepts timing.
+- [x] **R144–R145 diagnostic audit:** parent-side speculative admission/priority protections and image-cache mutex shortening retained. R145 cache 14 hits / 2 misses, 19/19 prefetch completions, 8/8 deferred resume runs, no shared-memory survivors at shutdown. No further speculative performance rewriting without a reproducible deficit.
+- [ ] **A1. Run the R146 focused Windows gate:** timing, cache lock, prefetch pause/resume, worker lifetime, dual Qt/GL admission, lifetime and durability tests. Keep any failures as active actionable gates, not passive report prose.
+- [ ] **A2. Run the full four-chunk Windows gate to 100% green.** The prior R130 full run was **1749 pass** (chunk 1); **1748 pass +1 fail** (chunk 2); **1747 pass +1 fail** (chunk 3); **1731 pass +17 fail** (chunk 4). Source repairs R131/R132 are awaiting a clean repeat. Never reseed visual regression oracles from mutable artist presets.
+- [ ] **A3. Close remaining product/physical acceptance:** Extruded Alt-right rebasing and centre-anchored resizing; one 2D/3D CUSTOM owner with distinct per-mode layout profiles; projected Edit cage and correct saved camera/pose; physical Sphere GPU tail, AA/mirror/opaque/translucent/parity; shared stencil/borders and Spectrum/Organs parity; two-display replacement-generation terminal owner release. Preserve the accepted Bubble feel and disabled Extruded cast shadows.
+- [ ] **A4. Checkpoint/commit accepted baseline, then start canonical CPython 3.14/NumPy 2 migration (§10) before new transition feature implementation.** Keep one interpreter/build authority and full frozen-product verification.
+- [ ] **A5. Resume first-wave transition effects (§8) and release WebP capture (§5)** after the migration/test gates; then later concepts and shared Scene3D primitives (§9). Existing local mock artwork is operator-owned, never fabricated from excluded Godzip assets.
 
-**Immediate focused Windows gate (from repository root):**
-
-```powershell
-python -m pytest tests/test_visualizer_view_orbit.py tests/test_image_bans.py tests/test_qtquick_context_menu.py tests/test_sphere_shared_scene3d_projection.py tests/test_qtquick_input_controller.py -q
-```
-
-**100% grouped gate (AFTER focused acceptance):**
+**Copy-paste Windows test gates (repo root):**
 
 ```powershell
+python -m pytest tests/test_multi_display_transition_desync.py tests/test_idle_transition_preparation_contract.py tests/test_transition_warmup.py tests/test_image_prefetcher.py tests/test_image_cache_accounting.py tests/test_image_cache_lock_containment.py tests/test_image_pipeline.py tests/test_image_worker.py tests/test_runtime_perf_policy_contracts.py -q
+python -m pytest tests/test_image_queue_hotpath.py tests/test_image_bans.py tests/test_visualizer_direct_gestures.py tests/test_visualizer_custom_geometry_profiles.py tests/test_visualizer_view_orbit.py tests/test_sphere_frozen_fixture_independence.py tests/test_sphere_promotion_golden.py tests/test_test_suite_durability.py -q
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
+
+**Physical R146 bar:** with existing two-display settings, confirm first images remain only **200 ms** apart; ordinary second transitions start **400 ms** after first (not 800), no snap to the final wallpaper, and the later display finishes its intact duration. Check Settings replacement and normal shutdown without timer warnings/native faults. Performance is operator-accepted now; no new instrumentation requirement absent a recurrence.
 
 ---
 
@@ -74,15 +71,9 @@ Durable mechanism/negative controls: `Docs/Historical_Bugs/R-105_Bubble_Remainin
 
 ---
 
-## 2. Shared presentation stalls
+## 2. Shared presentation issues | conditional, not an open regression
 
-Treat Bubble/DevCurve as canaries for shared delivery. Do not retune a Visualizer to hide GUI/runtime stalls.
-
-- [ ] **P4. Re-trace after P1-P3.** Investigate native/swap/sync ownership only if unattributed presentation holes survive.
-  Do not add a compositor timer or `frameSwapped -> requestUpdate()` loop.
-- [ ] **P5. Physical bar.** Unattended two-display Bubble + DevCurve run with no Settings/mouse interaction; compare
-  >25 / >33 / >50 ms gaps and owner classes before/after.
-
+- [ ] **Only if Bubble/Dev Curve independently reproduces delivery judder:** isolate the presentation owner with matched logical/physical-frame traces. Do not retune Bubble to conceal shared stalls; never add a compositor timer or `frameSwapped → requestUpdate()` loop. Otherwise **skip** this work. Historical physical collapse is closed in the reboot-recovery incident.
 
 ---
 
@@ -138,7 +129,6 @@ CUSTOM variant slot. Camera/material/preset state remains outside layout geometr
   stale-presentation rejection remains binding everywhere else. Regression coverage must prove these explicit transaction helpers
   do not increment mismatch count; the atomic comparison may drop a *stale* unread frame but never relabel a snapshot or discard a coherent one.
 
-**R-113 follow-up grouped gate (2026-10-08):** previous R-113 operator test run 738 pass / 16 fail. Repair tracks: remove pose keys from seven shipped Extruded/Shockwave preset JSON snapshots; keep strict planar scaling while allowing independent 3D stage/world ratios in both Edit and Arrange; preserve logical viewport during freeform-3D stage growth so mesh scales; normalize cage projection into QML-compatible lists; repair missing-Edit-owner display transfer; correct obsolete empty-source / graphite test oracles. **Windows test and physical recheck still required; no G17–G21 closure yet.**
 
 Existing accepted Edit ergonomics remain binding: neutral graphite chrome, HIDE / SHOW wedge, the compact Orbit glyph beside
 Restore, Alt-left orbit, Alt-right move, signed Alt-wheel scale, Fit Scene as an explicit undoable action, and renderer-derived
@@ -210,7 +200,7 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   post-freeze cases passed actual process/current-session checks; evidence is under `logs/run_matrix/mc_rss_fixed_20261007/`
   and `logs/run_matrix/mc_after_freeze_20261007/`. Repeat the relevant cases after the final authoring/geometry checkpoints
   and operator-selected display/mode/effect configurations, including L4 replacement generations. The harness exercises saved
-  settings; it cannot substitute interactive single-display evidence for P5's unattended two-display canary run.
+  settings; it cannot substitute physical operator acceptance on both displays.
 
 The declarative input, evidence scoping and source attribution contract lives in
 `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions. Raw logs remain the evidence authority.
@@ -314,7 +304,7 @@ Bloom.**
 
 ## 9. Shared 3D primitives and next consumers
 
-Resume only after the immediate Bubble/shared-runtime/lifecycle work above is under control.
+Begin after the interpreter gate and the higher-priority physical authoring acceptance, without disturbing accepted Bubble response.
 
 - [ ] **S17 remaining active-only scene facilities:** demand-created normal/material/depth/history attachments, reusable real
   3D shadows, GTAO only if justified, weighted blended OIT/depth-aware transparency, thickness/depth refraction, Fresnel,

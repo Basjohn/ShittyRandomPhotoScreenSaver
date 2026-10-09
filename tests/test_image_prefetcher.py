@@ -162,6 +162,158 @@ def test_strict_single_flight_preserves_other_source_queue_order(qt_app) -> None
     assert [submission["path"] for submission in derive.submissions] == [first, second, third]
 
 
+def test_foreground_admission_fences_only_new_source_batches_and_resumes_event_driven(qt_app) -> None:
+    """An in-flight response may finish; subsequent speculative work waits."""
+    cache, derive = _Cache(), _AsyncDerive()
+    foreground_active = [False]
+    prefetcher = _prefetcher(
+        cache, derive,
+        may_start_source_batch=lambda: not foreground_active[0],
+    )
+    first, second, third = [
+        _request(path, path) for path in ("first", "second", "third")
+    ]
+    assert prefetcher.register_scaled_requests([first, second, third]) == 3
+    assert [entry["path"] for entry in derive.submissions] == ["first"]
+
+    foreground_active[0] = True
+    derive.deliver(0)
+    assert cache.contains("first")
+    assert [entry["path"] for entry in derive.submissions] == ["first"]
+    assert prefetcher.snapshot_state() == {"scaled_inflight": 0, "scaled_pending": 2}
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] > 0
+
+    # The existing final-transition-complete owner re-registers the preview
+    # (possibly empty when all intents were already admitted) and pumps them.
+    foreground_active[0] = False
+    prefetcher.register_scaled_requests([])
+    assert [entry["path"] for entry in derive.submissions] == ["first", "second"]
+    derive.deliver(1)
+    derive.deliver(2)
+    assert [entry["path"] for entry in derive.submissions] == ["first", "second", "third"]
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 0
+    assert all(cache.contains(name) for name in ("first", "second", "third"))
+
+
+def test_normal_transition_resume_drains_retained_intents_without_new_derivatives(qt_app, monkeypatch) -> None:
+    """A cache-ready lookahead must still wake the existing blocked prefetch queue."""
+    from types import SimpleNamespace
+    import engine.image_pipeline as pipeline
+
+    cache, derive = _Cache(), _AsyncDerive()
+    foreground_active = [True]
+    prefetcher = _prefetcher(
+        cache, derive,
+        may_start_source_batch=lambda: not foreground_active[0],
+    )
+    assert prefetcher.register_scaled_requests([_request("queued", "queued")]) == 1
+    assert not derive.submissions
+    assert prefetcher.snapshot_state()["scaled_pending"] == 1
+
+    engine = SimpleNamespace(
+        image_queue=SimpleNamespace(
+            preview_upcoming=lambda count: [SimpleNamespace(local_path="cached", url=None)]
+        ),
+        _prefetcher=prefetcher,
+        _prefetch_ahead=2,
+        _image_cache=SimpleNamespace(set_protected_keys=lambda keys: None),
+    )
+    monkeypatch.setattr(pipeline, "_has_transition_work_pending", lambda _engine: False)
+    monkeypatch.setattr(pipeline, "_build_immediate_prefetch_protected_keys", lambda *args: [])
+    monkeypatch.setattr(pipeline, "_build_prefetch_scaled_requests", lambda *args: [])
+    monkeypatch.setattr(pipeline, "_bump_cache_runtime_stat", lambda *args: None)
+
+    foreground_active[0] = False
+    pipeline.schedule_prefetch(engine)
+    assert [entry["path"] for entry in derive.submissions] == ["queued"]
+    derive.deliver(0)
+    assert cache.contains("queued")
+    assert prefetcher.snapshot_state() == {"scaled_inflight": 0, "scaled_pending": 0}
+
+
+def test_foreground_admission_during_stagger_preserves_liveness_and_order(qt_app) -> None:
+    cache, derive = _Cache(), _AsyncDerive()
+    continuation = []
+    busy = [False]
+    prefetcher = _prefetcher(
+        cache, derive,
+        may_start_source_batch=lambda: not busy[0],
+        schedule_next_batch=lambda delay, fn: continuation.append((delay, fn)),
+        batch_stagger_ms=100,
+    )
+    prefetcher.register_scaled_requests([_request("a", "a"), _request("b", "b")])
+    derive.deliver(0)
+    assert len(continuation) == 1
+    busy[0] = True
+    delay, resume = continuation.pop(0)
+    assert delay == 100
+    resume()
+    assert [entry["path"] for entry in derive.submissions] == ["a"]
+    assert prefetcher.snapshot_state() == {"scaled_inflight": 0, "scaled_pending": 1}
+    busy[0] = False
+    prefetcher.register_scaled_requests([])
+    assert [entry["path"] for entry in derive.submissions] == ["a", "b"]
+    derive.deliver(1)
+    assert not continuation
+
+
+def test_owned_source_batch_stagger_and_new_registration_do_not_bypass_gap(qt_app) -> None:
+    """One owned one-shot between source batches; never a per-frame poll."""
+    cache, derive = _Cache(), _AsyncDerive()
+    callbacks = []
+    prefetcher = _prefetcher(
+        cache, derive,
+        schedule_next_batch=lambda ms, fn: callbacks.append((ms, fn)),
+        batch_stagger_ms=100,
+    )
+    assert prefetcher.register_scaled_requests([_request("first", "a"), _request("second", "b")]) == 2
+    derive.deliver(0)
+    assert len(derive.submissions) == 1
+    assert len(callbacks) == 1 and callbacks[0][0] == 100
+    assert prefetcher.register_scaled_requests([_request("third", "c")]) == 1
+    assert len(derive.submissions) == 1
+    callbacks.pop(0)[1]()
+    assert [entry["path"] for entry in derive.submissions] == ["first", "second"]
+    derive.deliver(1)
+    assert len(derive.submissions) == 2 and len(callbacks) == 1
+    callbacks.pop(0)[1]()
+    assert len(derive.submissions) == 3
+    derive.deliver(2)
+    assert callbacks == []
+
+
+def test_stale_prefetch_batch_stagger_never_restarts_retired_generation(qt_app) -> None:
+    cache, derive = _Cache(), _AsyncDerive()
+    callbacks = []
+    prefetcher = _prefetcher(
+        cache, derive,
+        schedule_next_batch=lambda ms, fn: callbacks.append(fn),
+        batch_stagger_ms=100,
+    )
+    prefetcher.register_scaled_requests([_request("old", "old"), _request("stale", "stale")])
+    derive.deliver(0)
+    assert len(callbacks) == 1
+    prefetcher.clear_inflight()
+    prefetcher.register_scaled_requests([_request("new", "new")])
+    assert len(derive.submissions) == 2
+    callbacks.pop(0)()
+    assert [entry["path"] for entry in derive.submissions] == ["old", "new"]
+    derive.deliver(1)
+    assert cache.contains("new") and not cache.contains("stale")
+
+
+def test_prefetch_stagger_scheduler_failure_does_not_strand_source(qt_app) -> None:
+    cache, derive = _Cache(), _AsyncDerive()
+    def unavailable(_ms, _fn):
+        raise RuntimeError("scheduler stopped")
+    prefetcher = _prefetcher(cache, derive, schedule_next_batch=unavailable, batch_stagger_ms=100)
+    prefetcher.register_scaled_requests([_request("a", "a"), _request("b", "b")])
+    derive.deliver(0)
+    assert [entry["path"] for entry in derive.submissions] == ["a", "b"]
+    derive.deliver(1)
+    assert cache.contains("b")
+
+
 def test_duplicate_requests_are_not_admitted_while_source_is_active(qt_app) -> None:
     path = r"C:\wall\active.jpg"
     cache, derive = _Cache(), _AsyncDerive()

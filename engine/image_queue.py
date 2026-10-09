@@ -8,6 +8,7 @@ import random
 import threading
 from typing import List, Optional
 from collections import deque
+from itertools import islice
 from urllib.parse import urlparse
 from sources.base_provider import ImageMetadata, ImageSourceType
 from core.logging.logger import get_logger
@@ -532,7 +533,8 @@ class ImageQueue:
     def _get_from_combined_queue(self) -> Optional[ImageMetadata]:
         """Get next image from combined queue (backwards compatibility)."""
         if not self._queue:
-            if self._images:
+            available = self._images if self._eligible_images is None else self._eligible_images
+            if available:
                 self._rebuild_queue()
                 self._wrap_count += 1
             else:
@@ -614,7 +616,9 @@ class ImageQueue:
         with self._lock:
             if not self._queue:
                 return []
-            return list(self._queue)[:count]
+            # Deque slicing by materialising the whole catalogue turns a tiny
+            # prefetch peek into O(library size) work. Consume only requested items.
+            return list(islice(self._queue, count))
 
     def preview_upcoming(self, count: int = 1) -> List[ImageMetadata]:
         """Preview the next N images using the same mixed-source contract as next()."""
@@ -632,7 +636,11 @@ class ImageQueue:
             preview_queue._rss_images = list(self._rss_images)
             preview_queue._local_queue = deque(self._local_queue)
             preview_queue._rss_queue = deque(self._rss_queue)
-            preview_queue._images = list(self._images)
+            # With active bans the full catalogue is not selectable. Copying it
+            # into every prefetch simulation only burns memory/GIL time. The
+            # isolated preview queue needs the eligible snapshot, not its rejected
+            # siblings. With no bans retain the original full-catalogue semantics.
+            preview_queue._images = (list(self._images) if self._eligible_images is None else [])
             preview_queue._eligible_images = (None if self._eligible_images is None
                                               else list(self._eligible_images))
             preview_queue._queue = deque(self._queue)

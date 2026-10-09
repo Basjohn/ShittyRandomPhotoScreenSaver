@@ -48,8 +48,10 @@ def test_context_menu_builder_preserves_admitted_product_structure() -> None:
     images = entries[0]  # one Images submenu holds every image action
     assert images.kind == "submenu"
     assert [(child.action_id, child.kind) for child in images.children] == [
-        ("previous", "action"), ("next", "action"), ("save_image", "action")]
-    assert not {"previous", "next", "save_image"} & {entry.action_id for entry in entries}
+        ("previous", "action"), ("next", "action"), ("save_image", "action"),
+        ("ban_image", "action"), ("clear_image_bans", "action"),
+    ]
+    assert not {child.action_id for child in images.children} & {entry.action_id for entry in entries}
     assert "⚙  Settings" in labels
     assert "✥  Edit Widget Layout" in labels
     assert "✓  Save Widget Layout" not in labels
