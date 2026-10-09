@@ -1,7 +1,7 @@
-"""Per-run CPU geometry for the fracture transitions (pure Python; no GL).
+"""Per-run CPU geometry for the piece transitions (pure Python; no GL).
 
-Glass Shatter and Crumble build seeded fracture geometry for every run: tens of
-milliseconds of pure Python. It used to run on the Qt render thread at the
+Glass Shatter and Crumble build seeded fracture geometry for every run, and Jigsaw Piece
+Flip its seeded jigsaw layout: tens to hundreds of milliseconds of pure Python. It used to run on the Qt render thread at the
 first transition frame, stalling that display's whole scene. The batch owner
 now prepares it on COMPUTE as soon as the batch transition resolves (image
 processing runs meanwhile), and the renderer uploads the prepared bytes. When
@@ -272,6 +272,41 @@ def build_crumble_geometry(key: tuple) -> CrumbleGeometry:
     return CrumbleGeometry(chunks, chips, table_bytes, len(shards))
 
 
+# --- Jigsaw Piece Flip ------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class JigsawGeometry:
+    vertices: bytes        # piece_layout.PIECE_VERTEX_ATTRIBUTES records
+    flat_vertices: int     # the leading front faces and rings
+    pieces: bytes          # float32 per piece: centre uv, rank, axis angle
+    count: int
+    cols: int
+    rows: int
+
+
+def jigsaw_geometry_key(parameters: Mapping[str, object], aspect: float, _direction: object = None) -> tuple:
+    # The order is a resolved parameter (the run has no direction), so warm-up can key it too.
+    # The layout follows the aspect only through its knob proportions and grid; vertices carry
+    # item UV, so a key rounded to 0.01 keeps the logical and device aspects of one display on
+    # one entry while the pieces still cover the picture exactly.
+    return ("jigsaw", int(parameters["seed"]), int(parameters["pieces"]), str(parameters["order"]),
+            round(float(aspect), 2))
+
+
+def build_jigsaw_geometry(key: tuple) -> JigsawGeometry:
+    from .piece_layout import jigsaw_layout, piece_order, piece_vertices
+
+    _name, seed, pieces, order, aspect = key
+    layout = jigsaw_layout(seed, pieces, aspect)
+    vertices, flat = piece_vertices(layout)
+    ranks, axes = piece_order(order, layout.centres, layout.cell, layout.aspect, seed)
+    centres = layout.centres
+    table = np.column_stack((centres[:, 0] / layout.aspect + 0.5, 0.5 - centres[:, 1], ranks, axes))
+    return JigsawGeometry(vertices.tobytes(), flat, table.astype(np.float32).tobytes(), len(centres),
+                          layout.cols, layout.rows)
+
+
 # --- Shared prepared-geometry store -----------------------------------------
 
 
@@ -359,6 +394,7 @@ _BUILDERS: dict[str, tuple[Callable[[Mapping[str, object], float, object], tuple
     "glass_shatter": (glass_geometry_key, build_glass_geometry),
     "crumble": (lambda parameters, aspect, _direction: crumble_geometry_key(parameters, aspect),
                 build_crumble_geometry),
+    "jigsaw": (jigsaw_geometry_key, build_jigsaw_geometry),
 }
 
 
@@ -412,15 +448,18 @@ __all__ = [
     "CrumbleGeometry",
     "GLASS_ATTRIBUTES",
     "GlassGeometry",
+    "JigsawGeometry",
     "PREPARED_GEOMETRY",
     "PreparedGeometryCache",
     "build_crumble_geometry",
     "build_glass_geometry",
+    "build_jigsaw_geometry",
     "crumble_geometry_key",
     "crumble_parameters",
     "crumble_vertices",
     "debris_instances",
     "glass_geometry_key",
     "has_run_geometry",
+    "jigsaw_geometry_key",
     "prepare_run_geometry",
 ]

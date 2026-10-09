@@ -268,6 +268,7 @@ def resolve_quick_transition_spec(
         "relief_rise",
         "cube_turn",
         "beam",
+        "jigsaw",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

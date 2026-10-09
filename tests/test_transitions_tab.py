@@ -559,6 +559,24 @@ def test_cube_turn_page_offers_directions_and_round_trips(qapp, settings_manager
     assert persisted == {"direction": "Up", "gloss": 0.7, "antialiasing": "8x"}
 
 
+def test_jigsaw_page_offers_orders_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "jigsaw_group")
+    tab._activation_checkboxes["Jigsaw Piece Flip"].setChecked(True)
+    tab._on_nav_selected("Jigsaw Piece Flip")
+    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(JIGSAW_ORDER_CHOICES)
+    order = JIGSAW_ORDER_CHOICES[1]
+    pieces = JIGSAW_PIECES_RANGE[0] + 1
+    tab.direction_combo.setCurrentText(order)
+    tab.jigsaw_pieces_spin.setValue(pieces)
+    tab.jigsaw_antialiasing_combo.setCurrentText("Off")
+    persisted = settings_manager.get("transitions", {})["jigsaw"]
+    assert persisted == {"direction": order, "pieces": pieces, "antialiasing": "Off"}
+
+
 def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot):
     """Beam's direction, colour, sparks and surface values save and load back."""
     from PySide6.QtGui import QColor

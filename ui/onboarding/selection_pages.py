@@ -260,6 +260,7 @@ TRANSITION_COPY = {
     "relief_rise": "A wave of relief carries one picture into the next.",
     "cube_turn": "The picture turns like a cube to show the next one.",
     "beam": "A beam of light sweeps across, leaving the next picture behind.",
+    "jigsaw": "The picture becomes a jigsaw whose pieces flip over one by one to the next.",
 }
 
 

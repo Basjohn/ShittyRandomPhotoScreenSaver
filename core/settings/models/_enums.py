@@ -37,6 +37,7 @@ class TransitionType(Enum):
     RELIEF_RISE = "Relief Rise"
     CUBE_TURN = "Cube Turn"
     BEAM = "Beam"
+    JIGSAW = "Jigsaw Piece Flip"
 
 
 class WidgetPosition(Enum):

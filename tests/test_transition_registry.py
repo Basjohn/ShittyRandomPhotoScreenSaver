@@ -97,4 +97,5 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "relief_rise": EasingCurve.LINEAR,
         "cube_turn": EasingCurve.LINEAR,
         "beam": EasingCurve.LINEAR,
+        "jigsaw": EasingCurve.LINEAR,
     }
