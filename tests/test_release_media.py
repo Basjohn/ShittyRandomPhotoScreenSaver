@@ -232,6 +232,10 @@ def test_the_showcase_never_runs_back_in_the_same_direction() -> None:
         back = _look(transition_spec(case.identity, 500, case.settings, return_seed(case, 500, 713)))
         if len(looks) > 1:                       # the transition has a direction/order choice
             assert back != there, case.key
+            from rendering.quick.transitions.directions import _DIRECTIONS
+            a, b = _DIRECTIONS.get(str(there[0])), _DIRECTIONS.get(str(back[0]))
+            if a is not None and b is not None:  # sweeps run back broadly the other way
+                assert a[0] * b[0] + a[1] * b[1] <= 0.25 * (a[0] ** 2 + a[1] ** 2) ** .5 * (b[0] ** 2 + b[1] ** 2) ** .5
 
 
 def test_transition_showcases_play_faster_before_shrinking_or_dropping_frames(tmp_path: Path) -> None:
