@@ -103,6 +103,7 @@ class RuntimeInputOwner(QObject):
     # outside Edit (in interaction or Ctrl mode, like the orbit): the move as the pointer's
     # global offset since the press (and its global position), the resize one wheel step at a
     # time. The gesture finishes at the drag's release, or when Alt is released after wheeling.
+    visualizer_move_started = Signal()
     visualizer_move_requested = Signal(QPoint, QPoint)
     visualizer_scale_requested = Signal(int)
     visualizer_gesture_finished = Signal()
@@ -411,6 +412,7 @@ class RuntimeInputOwner(QObject):
                 and self._alt_gesture_on_visualizer(event.modifiers(), event.position(), ctrl_mode_active)):
             # Alt + right on the Visualizer moves it; no context menu while Alt is held there.
             self._visualizer_drag_origin = self._global_mouse_point(event)
+            self.visualizer_move_started.emit()
             return True
         self._mouse_press_pos = self._local_mouse_point(event)
         self._mouse_press_time = time.time()

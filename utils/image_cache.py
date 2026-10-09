@@ -110,12 +110,14 @@ class ImageCache:
                 # Move to end (most recently used)
                 self._cache.move_to_end(key)
                 self._hit_count += 1
-                _cache_trace("Cache hit: %s", key)
-                return self._cache[key]
-            
-            self._miss_count += 1
-            _cache_trace("Cache miss: %s", key)
-            return None
+                image = self._cache[key]
+            else:
+                self._miss_count += 1
+                image = None
+        # The foreground reader and speculative listener share this lock.
+        # Never hold it across formatter/handler/file I/O, even in --cache.
+        _cache_trace("Cache hit: %s" if image is not None else "Cache miss: %s", key)
+        return image
     
     def put(self, key: str, image: QImage) -> None:
         """
@@ -132,47 +134,60 @@ class ImageCache:
         if image.isNull():
             raise ValueError("ImageCache cannot retain a null QImage")
 
-        # Remove if already exists (to update order)
+        # Preserve removed QImages until after unlocking. Dropping the final
+        # reference to a 4K derivative can release a substantial allocation;
+        # it must not block foreground cache admission behind this RLock.
+        retired_images: list[QImage] = []
+        evictions: list[tuple[str, bool]] = []
+        identical = False
         with self._lock:
             if key in self._cache:
                 if self._cache[key] is image:
                     self._cache.move_to_end(key)
                     self._idempotent_put_count += 1
-                    _cache_trace("Retained identical cached object without replacement: %s", key)
-                    return
-                old_img = self._cache.pop(key)
-                self._current_memory -= self._tracked_size(old_img)
-                self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
-                self._resource_metadata_by_key.pop(key, None)
-                self._replacement_count += 1
-            
-            # Add new entry
-            self._cache[key] = image
-            tracked_bytes = self._tracked_size(image)
-            self._current_memory += tracked_bytes
-            self._tracked_bytes_by_key[key] = tracked_bytes
-            self._resource_metadata_by_key[key] = MappingProxyType({
-                "key": key,
-                "owner": self._owner,
-                "generation": _freeze_snapshot_value(self._generation),
-                "dimensions": (int(image.width()), int(image.height())),
-                "format": self._image_format(image),
-                "tracked_bytes": tracked_bytes,
-                "lease_count": None,
-            })
-            self._current_tracked_bytes += tracked_bytes
-            
-            # Evict if necessary
-            while self._should_evict_locked():
-                self._evict_oldest_locked()
-            
-            _cache_trace(
-                "Cached: %s (size=%d/%d, memory=%.1fMB)",
-                key,
-                len(self._cache),
-                self.max_items,
-                self._current_memory / (1024 * 1024),
-            )
+                    identical = True
+                else:
+                    old_img = self._cache.pop(key)
+                    retired_images.append(old_img)
+                    self._current_memory -= self._tracked_size(old_img)
+                    self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
+                    self._resource_metadata_by_key.pop(key, None)
+                    self._replacement_count += 1
+
+            if not identical:
+                self._cache[key] = image
+                tracked_bytes = self._tracked_size(image)
+                self._current_memory += tracked_bytes
+                self._tracked_bytes_by_key[key] = tracked_bytes
+                self._resource_metadata_by_key[key] = MappingProxyType({
+                    "key": key,
+                    "owner": self._owner,
+                    "generation": _freeze_snapshot_value(self._generation),
+                    "dimensions": (int(image.width()), int(image.height())),
+                    "format": self._image_format(image),
+                    "tracked_bytes": tracked_bytes,
+                    "lease_count": None,
+                })
+                self._current_tracked_bytes += tracked_bytes
+                while self._should_evict_locked():
+                    evicted = self._evict_oldest_locked()
+                    if evicted is not None:
+                        evicted_key, evicted_image, forced_protected = evicted
+                        retired_images.append(evicted_image)
+                        evictions.append((evicted_key, forced_protected))
+            item_count, memory_mb = len(self._cache), self._current_memory / (1024 * 1024)
+
+        for evicted_key, forced in evictions:
+            _cache_trace("Hard-cap eviction overrode protection: %s" if forced
+                         else "Evicted from cache: %s", evicted_key)
+        if identical:
+            _cache_trace("Retained identical cached object without replacement: %s", key)
+        else:
+            _cache_trace("Cached: %s (size=%d/%d, memory=%.1fMB)",
+                         key, item_count, self.max_items, memory_mb)
+        # All retired buffers lose their last cache-owned references outside
+        # the lock (possibly on this thread, never during cache mutex hold).
+        retired_images.clear()
     
     def contains(self, key: str) -> bool:
         """
@@ -195,16 +210,26 @@ class ImageCache:
         exceeded, the oldest protected key is evicted as a last resort.
         """
         normalized = {str(key) for key in keys if str(key)}
+        evictions: list[tuple[str, bool]] = []
+        retired_images: list[QImage] = []
         with self._lock:
             self._protected_keys = normalized
             while self._should_evict_locked():
-                self._evict_oldest_locked()
+                evicted = self._evict_oldest_locked()
+                if evicted is not None:
+                    evicted_key, evicted_image, forced = evicted
+                    retired_images.append(evicted_image)
+                    evictions.append((evicted_key, forced))
             retained = sum(1 for key in normalized if key in self._cache)
+        for evicted_key, forced in evictions:
+            _cache_trace("Hard-cap eviction overrode protection: %s" if forced
+                         else "Evicted from cache: %s", evicted_key)
         _cache_trace(
             "Protected near-future cache keys requested=%d retained=%d",
             len(normalized),
             retained,
         )
+        retired_images.clear()
 
     def protected_keys_snapshot(self) -> tuple[str, ...]:
         """Return a detached diagnostic snapshot of protected keys."""
@@ -221,28 +246,33 @@ class ImageCache:
         Returns:
             True if entry was removed, False if not found
         """
+        retired_image = None
         with self._lock:
             if key in self._cache:
-                pixmap = self._cache.pop(key)
-                self._current_memory -= self._tracked_size(pixmap)
+                retired_image = self._cache.pop(key)
+                self._current_memory -= self._tracked_size(retired_image)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
                 self._protected_keys.discard(key)
-                _cache_trace("Removed from cache: %s", key)
-                return True
-            return False
+        if retired_image is not None:
+            _cache_trace("Removed from cache: %s", key)
+            return True
+        return False
     
     def clear(self) -> None:
         """Clear all cached images."""
+        retired_images: list[QImage] = []
         with self._lock:
             count = len(self._cache)
+            retired_images.extend(self._cache.values())
             self._cache.clear()
             self._current_memory = 0
             self._tracked_bytes_by_key.clear()
             self._resource_metadata_by_key.clear()
             self._protected_keys.clear()
             self._current_tracked_bytes = 0
-            logger.info(f"Cache cleared: {count} images removed")
+        logger.info("Cache cleared: %d images removed", count)
+        retired_images.clear()
     
     def size(self) -> int:
         """Get number of cached images."""
@@ -331,8 +361,8 @@ class ImageCache:
         return (len(self._cache) > self.max_items or
                 self._current_tracked_bytes > self.max_memory_bytes)
     
-    def _evict_oldest_locked(self) -> None:
-        """Evict the oldest unprotected entry, preserving hard caps."""
+    def _evict_oldest_locked(self) -> tuple[str, QImage, bool] | None:
+        """Evict the oldest unprotected entry; caller retires its image outside the lock."""
         if not self._cache:
             return
 
@@ -355,10 +385,7 @@ class ImageCache:
         kind = self._key_kind(key)
         self._evict_count_by_kind[kind] += 1
         self._evicted_bytes_by_kind[kind] += tracked_bytes
-        if forced_protected:
-            _cache_trace("Hard-cap eviction overrode protection: %s", key)
-        else:
-            _cache_trace("Evicted from cache: %s", key)
+        return key, img, forced_protected
 
     @staticmethod
     def _key_kind(key: str) -> str:
@@ -378,15 +405,15 @@ class ImageCache:
         return getattr(image_format, "name", str(image_format))
     
     def __len__(self) -> int:
-        """Get number of cached images."""
-        return len(self._cache)
+        """Get number of cached images through the same lock as admission."""
+        return self.size()
     
     def __contains__(self, key: str) -> bool:
-        """Check if key is in cache."""
-        return key in self._cache
+        """Check membership through the same lock as admission/retirement."""
+        return self.contains(key)
     
     def __str__(self) -> str:
         """String representation."""
-        return (f"ImageCache(items={len(self._cache)}/{self.max_items}, "
+        return (f"ImageCache(items={self.size()}/{self.max_items}, "
                 f"memory={self.memory_usage_mb():.1f}MB/"
                 f"{self.max_memory_bytes / (1024*1024):.0f}MB)")

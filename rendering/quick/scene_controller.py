@@ -1671,11 +1671,14 @@ class QuickSceneController(QObject):
             "ridden_ticks": int(root.property("transitionFrameRiddenTicks") or 0),
         }
 
-    def request_transition_warm_up(self, transition_id: str, parameters) -> None:
-        """Warm the next run gradually on this display's render thread (S11)."""
+    def schedule_transition_warm_step(self, transition_id: str, parameters, reporter, ticket: int) -> bool:
+        """Submit a single idle, GL-context-owned preparation job; never repaint."""
         if not self._readiness.admission_open:
-            return
-        self.background_item.request_warm_up(transition_id, parameters)
+            return False
+        return self.background_item.schedule_warm_step(transition_id, parameters, reporter, ticket)
+
+    def cancel_transition_warm_up(self) -> None:
+        self.background_item.cancel_warm_up()
 
     def set_transition_run(self, run: TransitionRun | None) -> bool:
         """Publish the current generation-fenced run into the Quick sync path."""

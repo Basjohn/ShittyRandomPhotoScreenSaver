@@ -22,6 +22,7 @@ from engine.image_pipeline import (
     load_and_display_image_async_with_metas,
     notify_transition_complete,
     schedule_prefetch,
+    schedule_prefetch_after_runtime_ready,
 )
 from rendering.display_modes import DisplayMode
 from rendering.quick.display_processing import DisplayProcessingDescriptor
@@ -33,6 +34,31 @@ class _FakeScheduler:
 
     def single_shot(self, delay, fn):
         self.callbacks.append((delay, fn))
+
+
+def test_runtime_ready_invalidates_old_prefetch_batch_gap_before_reseed():
+    """An old deferred source batch must not strand a replacement generation (R-65)."""
+    scheduler = _FakeScheduler()
+    events = []
+    class _Prefetch:
+        def clear_inflight(self):
+            events.append("old_source_batch_invalidated")
+
+        def is_in_post_transition_delay(self):
+            return False
+
+    engine = SimpleNamespace(
+        _prefetcher=_Prefetch(), _cache_runtime_stats={},
+        thread_manager=scheduler, _runtime_generation=4,
+        image_queue=None,
+    )
+    schedule_prefetch_after_runtime_ready(engine)
+    assert events == ["old_source_batch_invalidated"]
+    assert len(scheduler.callbacks) == 1
+    assert scheduler.callbacks[0][0] == 0
+    scheduler.callbacks.pop(0)[1]()
+    assert engine._prefetch_resume_claim is None
+    assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
 
 
 def _solid_qimage(width: int, height: int, color: QColor) -> QImage:

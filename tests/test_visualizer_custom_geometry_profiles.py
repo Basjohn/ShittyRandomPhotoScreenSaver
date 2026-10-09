@@ -17,18 +17,23 @@ from rendering.quick.custom_layout_hydration import (
 )
 from rendering.widget_descriptors import get_widget_runtime_descriptor
 
+from core.settings.visualizer_mode_registry import (
+    get_visualizer_geometry_kind,
+    get_visualizer_layout_profile,
+    iter_all_visualizer_mode_descriptors,
+)
+
+# The registry owns the extensible mode catalogue.  These explicit profile
+# names are fixture identities, not a second catalogue of active modes.
 PLANAR = "planar"
-EXTRUDED = "3d:extruded_spectrum"
-SHOCKWAVE = "3d:shockwave_grid"
-SPHERE = "3d:sphere"
+EXTRUDED = get_visualizer_layout_profile("extruded_spectrum")
+SHOCKWAVE = get_visualizer_layout_profile("shockwave_grid")
+SPHERE = get_visualizer_layout_profile("sphere")
 THREE_D_PROFILES = (EXTRUDED, SHOCKWAVE, SPHERE)
 ALL_PROFILES = (PLANAR, *THREE_D_PROFILES)
 MODE_PROFILE = {
-    "spectrum": PLANAR,
-    "bubble": PLANAR,
-    "extruded_spectrum": EXTRUDED,
-    "shockwave_grid": SHOCKWAVE,
-    "sphere": SPHERE,
+    descriptor.mode_id: get_visualizer_layout_profile(descriptor.mode_id)
+    for descriptor in iter_all_visualizer_mode_descriptors()
 }
 
 
@@ -122,8 +127,11 @@ def test_profile_identity_is_descriptor_owned_and_independent_from_geometry_kind
         owner = SimpleNamespace(controller=SimpleNamespace(mode_id=mode))
         assert geometry_variant_for_presentation("spotify_visualizer", owner) == profile
         assert get_visualizer_layout_profile(mode) == profile
+    assert get_visualizer_layout_profile("spectrum") == PLANAR
+    assert get_visualizer_layout_profile("bubble") == PLANAR
     assert {get_visualizer_geometry_kind(mode) for mode in ("extruded_spectrum", "shockwave_grid", "sphere")} == {"freeform_3d"}
     assert len({MODE_PROFILE[mode] for mode in ("extruded_spectrum", "shockwave_grid", "sphere")}) == 3
+    assert all(profile.startswith("3d:") for profile in THREE_D_PROFILES)
 
 
 def test_freeform_3d_uniform_wheel_uses_stable_unscaled_stage_and_side_shape_resets_it():
@@ -211,6 +219,13 @@ def test_freeform_3d_stage_resize_keeps_authored_aspect_and_renderer_world_indep
     assert scaled is not None
     assert scaled.rect.width() / 610.0 == pytest.approx(1.1, abs=0.01)
     assert scaled.rect.height() / 180.0 == pytest.approx(1.1, abs=0.01)
+    # The projected 3D stage scales around its actual centre, not its top edge.
+    # A stale top-edge anchor was visibly pulling Extruded toward one handle.
+    original = item.current_global_rect
+    assert abs((scaled.rect.x() + scaled.rect.width() / 2.0)
+               - (original.x() + original.width() / 2.0)) <= 0.5
+    assert abs((scaled.rect.y() + scaled.rect.height() / 2.0)
+               - (original.y() + original.height() / 2.0)) <= 0.5
 
 
 def test_active_mode_claims_legacy_input_but_sibling_3d_modes_never_borrow_it():

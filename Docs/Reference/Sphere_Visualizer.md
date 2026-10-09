@@ -15,7 +15,7 @@ Two original Sphere goldens remain (two additional Rainbow variants are separate
 | 5 | **Glass Current** | Former Preset 5 / Transparent React snapshot (Preset 1 until 2026-10-04, when Mirror Ball took slot 1). Intake (`Particle Outtake` off), translucent fill and bright independent edges preserved. |
 | 2 | **Voxel Bloom** | Former Preset 6 / Reactive Voxel snapshot. Opaque neutral presentation and Sphere shadow enabled. |
 
-The golden froze their resolved settings when it was written (`sphere_golden.py` seeds from the slot only at `--write`); the curated files are authored content the operator edits and no test reads them. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
+The historical reference contains test-owned frozen settings. `sphere_golden.py` always replays those same settings, including for `--write`, and never seeds from curated slots. The curated files are operator-authored content, not a test oracle. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
 
 ## Isolation / ownership contract
 
@@ -143,11 +143,13 @@ after: the larger whole-host tail includes submission/stream intervals rather th
 draw time. This is scoped offscreen evidence; loaded-desktop cadence/GPU-tail acceptance remains open. No behavioural
 or visual golden was rewritten for this migration.
 
-Presets are authored content and never tested against (operator 2026-10-04): each case is seeded from its curated
-preset only when recorded, and its resolved Sphere settings are frozen into the golden; replays use that frozen copy,
-so editing or adding presets never moves it. Only the frames fail; settings and the technical profile are reported
-as information. The visual cases render at a pinned tier (High) and the mirror case reflects a synthetic wallpaper
-(no personal photo in the repository).
+Presets are authored content and never tested against (operator 2026-10-04). Every case is wholly test-owned:
+its resolved Sphere settings are frozen in the historical reference and replayed unchanged even when using `--write`.
+Missing cases fail rather than silently reading a current curated preset. Only behavioural frames can fail the
+replay comparison; settings and the technical profile are informational. GL visual cases test visibility, musical
+state changes and Mirror Cubes' observable effect rather than equality to obsolete PNGs. Optional `--visual`
+before/after sheets remain for human assessment. Captures render at pinned High detail against a synthetic
+wallpaper (no personal photos in the repository).
 
 **Mirror Cubes** (`sphere_mirror`, 0..1, default 0, presentation-owned like Extruded's Mirror Faces; operator
 2026-10-04): the cube faces (never the edge lines or the tracer) become polished mirrors reflecting the displayed
@@ -158,8 +160,9 @@ fill, a mirrored face more opaque. Mixed in display space after Sphere's tone ma
 A new wallpaper crossfades in the reflections alongside the image transition that brings it (from its start, over its duration; 2 s without one) and the first fades in (`BackdropEnvironment`), never a one-frame switch. Curated **Preset 1 (Mirror Ball)** shows it off: silver cubes, thin graphite edges, full Gloss and Mirror.
 
 `python -m tools.visualizer_replay.sphere_golden` prints the per-segment summary and what differs; `--visual` writes
-before/after sheets to `logs/sphere_visual_review/` for review by eye. An intended change re-records with `--write` /
-`--write-visual` and states the measured difference in its commit.
+before/after sheets to `logs/sphere_visual_review/` for review by eye. `--write` refreshes **behavioural output**
+using the same frozen test-owned inputs. `--write-visual` is optional, manual review evidence, not a required
+step to repair CI after a legitimate renderer change. Neither operation reads curated preset values.
 
 After the candidate promotion, replay identical evidence. Sphere's behavioural golden is a **reference, not a lock** (operator 2026-10-04): its current reaction numbers are known to be poor and the migration is expected to retune them (the ramp, `Current_Plan.md` S19). Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the formerly hidden RAW resolved values are preserved behavioural input at migration.
 

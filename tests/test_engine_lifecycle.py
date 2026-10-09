@@ -667,8 +667,8 @@ class TestEngineState:
             engine._state = EngineState.RUNNING
             assert engine._initialized == True
 
-    def test_initialize_schedules_prefetch_after_display_targets_exist(self, monkeypatch):
-        """First scaled prefetch must run after displays expose target sizes."""
+    def test_initialize_defers_scaled_prefetch_until_authoritative_first_frames(self, monkeypatch):
+        """Do not compete with first-image decode/presentation at startup."""
         engine = ScreensaverEngine()
         calls = []
 
@@ -685,7 +685,7 @@ class TestEngineState:
         monkeypatch.setattr(engine, "_start_workers", lambda: None)
 
         assert engine.initialize() is True
-        assert calls == ["cache", "display", "prefetch"]
+        assert calls == ["cache", "display"]
 
 
 class TestShuttingDownProperty:

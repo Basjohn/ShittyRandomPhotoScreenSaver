@@ -39,6 +39,9 @@ class ImagePrefetcher:
         post_transition_delay_ms: float = 100.0,
         max_pending_requests: int | None = None,
         max_pending_scaled_bytes: int | None = None,
+        schedule_next_batch: Callable[[int, Callable[[], None]], None] | None = None,
+        batch_stagger_ms: int = 0,
+        may_start_source_batch: Callable[[], bool] | None = None,
     ) -> None:
         self._cache = cache
         self._derive = derive
@@ -63,6 +66,12 @@ class ImagePrefetcher:
         self._prefetch_generation = 0
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
         self._transition_end_time = 0.0
+        self._schedule_next_batch = schedule_next_batch
+        self._batch_stagger_ms = max(0, int(batch_stagger_ms))
+        self._next_batch_pending = False
+        # Advisory admission gate from the single foreground/transition owner.
+        # It does not cancel an already-admitted batch or own another clock.
+        self._may_start_source_batch = may_start_source_batch
 
     def notify_transition_complete(self) -> None:
         self._transition_end_time = time.monotonic()
@@ -105,6 +114,7 @@ class ImagePrefetcher:
             self._active_path = None
             self._active_generation = None
             self._active_cancel = None
+            self._next_batch_pending = False
         if cancel is not None:
             cancel()
         _cache_trace("Invalidated prefetch generation and cleared derivative intents")
@@ -185,7 +195,16 @@ class ImagePrefetcher:
     def _pump_scaled_prefetch(self) -> None:
         with self._lock:
             self._prune_pending_locked()
-            if self._active_batch is not None or self.is_in_post_transition_delay() or not self._pending_scaled_requests:
+            if (self._active_batch is not None or self._next_batch_pending
+                    or self.is_in_post_transition_delay() or not self._pending_scaled_requests):
+                return
+            # A subsequent foreground transaction may have started while the
+            # previous speculative source was in flight. Never let its
+            # completion spawn *another* batch into a live transition. The
+            # existing final-display transition-complete reseed pumps this
+            # retained queue without polling or cancelling valid work (R-65).
+            gate = self._may_start_source_batch
+            if gate is not None and not gate():
                 return
             path = self._pending_scaled_requests[0]["path"]
             requests = [request for request in self._pending_scaled_requests if request["path"] == path]
@@ -219,6 +238,7 @@ class ImagePrefetcher:
                             if isinstance(stats, dict):
                                 stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
             finally:
+                defer = False
                 with self._lock:
                     if self._active_batch is token:
                         self._active_batch = None
@@ -226,7 +246,30 @@ class ImagePrefetcher:
                         self._active_generation = None
                         self._active_cancel = None
                         self._scaled_inflight.clear()
-                self._pump_scaled_prefetch()
+                        defer = bool(
+                            self._pending_scaled_requests
+                            and self._schedule_next_batch is not None
+                            and self._batch_stagger_ms > 0
+                        )
+                        if defer:
+                            self._next_batch_pending = True
+                if defer:
+                    def _continue() -> None:
+                        with self._lock:
+                            if generation != self._prefetch_generation or not self._next_batch_pending:
+                                return
+                            self._next_batch_pending = False
+                        self._pump_scaled_prefetch()
+
+                    try:
+                        self._schedule_next_batch(self._batch_stagger_ms, _continue)
+                    except Exception:
+                        # A scheduler failure must not strand the remaining
+                        # source work. The old immediate path is a safe fallback.
+                        logger.exception("[PREFETCH] Source stagger scheduling failed")
+                        _continue()
+                else:
+                    self._pump_scaled_prefetch()
 
         try:
             cancel = self._derive(path, requests, generation, _on_done)

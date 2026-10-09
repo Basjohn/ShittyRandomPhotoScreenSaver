@@ -9,10 +9,10 @@ import random
 import time
 import weakref
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, List, Dict, Optional, Set, Mapping
-from PySide6.QtCore import QObject, QPoint, Signal, QUrl, Qt
+from PySide6.QtCore import QObject, QPoint, Signal, Slot, QUrl, Qt
 from PySide6.QtGui import QGuiApplication, QScreen, QDesktopServices
 
 from core.logging.logger import (
@@ -29,6 +29,7 @@ from core.settings.capability_activation import (
 )
 from core.settings.defaults import get_default_setting
 from core.settings.default_contract import require_canonical_default
+from core.constants.timing import TRANSITION_STAGGER_MS
 from rendering.display_modes import DisplayMode
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -76,6 +77,10 @@ from rendering.quick.transitions.run_geometry import (
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
 MONITOR_RECONCILE_DELAY_MS = 250
+# Bound each off-frame GL preparation to one program/target operation, then
+# space the next job through the already-owned one-shot scheduler. No redraw.
+IDLE_TRANSITION_WARM_STEP_SPACING_MS = 200
+IDLE_TRANSITION_WARM_MAX_STEPS_PER_DISPLAY = 96
 # Once one display of a generation is reveal-ready, a sibling that has not
 # reached its first frame within this bound no longer holds every other
 # display's widgets behind the closed startup gate. Healthy staggered displays
@@ -94,6 +99,12 @@ try:  # Windows-only bridge for ProgramData queue
     from core.windows import reddit_helper_bridge
 except Exception:  # pragma: no cover - non-Windows or optional import failure
     reddit_helper_bridge = None
+
+
+class _IdleTransitionWarmReporter(QObject):
+    """Qt-queued result ferry from a NoStage render job to its GUI owner."""
+
+    finished = Signal(int, bool)
 
 
 class DisplayManager(QObject):
@@ -266,6 +277,22 @@ class DisplayManager(QObject):
         self._quick_transition_paths: dict[int, str] = {}
         self._quick_batch_expected_screens: set[int] = set()
         self._quick_batch_published_screens: set[int] = set()
+        # One owner across *all* displays: idle GL jobs never overlap and never
+        # begin before the last selected display completes its transition.
+        self._idle_warm_reporter = _IdleTransitionWarmReporter()
+        self._idle_warm_shot = None
+        self._idle_warm_reporter.finished.connect(
+            self._on_idle_warm_step_finished, Qt.ConnectionType.QueuedConnection,
+        )
+        self._idle_warm_serial = 0
+        self._idle_warm_ticket = -1
+        self._idle_warm_seed: int | None = None
+        self._idle_warm_generation = self._runtime_generation
+        self._idle_warm_order: tuple[object, ...] = ()
+        self._idle_warm_index = 0
+        self._idle_warm_steps = 0
+        self._idle_warm_transition_id = ""
+        self._idle_warm_parameters: dict[str, object] = {}
         self._monitor_detection_app = None
         self._monitor_detection_connected = False
         self._monitor_reconcile_pending = False
@@ -1072,6 +1099,11 @@ class DisplayManager(QObject):
             self._set_quick_authored_layout_enabled(True, restore_base=False)
         return began
 
+    def _start_quick_visualizer_move(self) -> None:
+        """A new Alt+right press starts a new pointer origin, even after Alt+wheel."""
+        if self._begin_quick_visualizer_gesture():
+            self._quick_custom_layout_owner.rebase_direct_visualizer_drag()
+
     def _move_quick_visualizer(self, offset: QPoint, cursor: QPoint) -> None:
         if self._begin_quick_visualizer_gesture():
             self._quick_custom_layout_owner.move_direct_visualizer(offset, cursor)
@@ -1778,6 +1810,7 @@ class DisplayManager(QObject):
         runtime.view_orbit_rates_changed.connect(self._set_quick_view_orbit_rates)
         runtime.view_orbit_requested.connect(self._orbit_quick_visualizer_view)
         runtime.view_orbit_finished.connect(self._persist_quick_visualizer_view)
+        runtime.visualizer_move_started.connect(self._start_quick_visualizer_move)
         runtime.visualizer_move_requested.connect(self._move_quick_visualizer)
         runtime.visualizer_scale_requested.connect(self._scale_quick_visualizer)
         runtime.visualizer_gesture_finished.connect(self._finish_quick_visualizer_gesture)
@@ -4240,6 +4273,7 @@ class DisplayManager(QObject):
     ) -> None:
         """Open one accepted destination-image batch exactly once."""
 
+        self._cancel_idle_transition_warmup()
         if self._transition_work_pending:
             if expected_screens:
                 self._quick_batch_expected_screens.update(
@@ -4306,18 +4340,13 @@ class DisplayManager(QObject):
         return self._quick_transition_batch_spec
 
     def prepare_next_transition(self, random_selection: RandomTransitionSelection | None) -> None:
-        """Warm the next batch's transition while the displays hold the current image (S11).
+        """Reserve and prepare the next run only once the whole batch is idle.
 
-        An image change resolves its transition only milliseconds before the first frame,
-        too late for anything to be prepared. Here the whole display interval is available:
-        the spec is resolved from the next batch's seed, so the batch meets this same spec;
-        its run geometry is built on COMPUTE, its renderer module is imported here on the
-        GUI thread, and each display compiles its programs gradually on frames it renders
-        anyway. Nothing runs in bursts, and a transition already used this session has no
-        programs left to compile.
+        CPU geometry uses the existing COMPUTE owner. GPU preparation uses
+        serial Qt NoStage render jobs, which do NOT request scene repaints.
         """
 
-        if self.has_transition_work_pending():
+        if self.has_transition_work_pending() or not self._authoritative_first_frame_emitted:
             return
         if self._next_batch_seed is None:
             self._next_batch_seed = random.getrandbits(64)
@@ -4332,21 +4361,129 @@ class DisplayManager(QObject):
             return
         if spec is None:
             return
+        parameters = dict(spec.parameters)
+        generation = self._runtime_generation
+        reserved_seed = self._next_batch_seed
+        if (self._idle_warm_seed == reserved_seed
+                and self._idle_warm_generation == generation
+                and self._idle_warm_transition_id == spec.transition_id
+                and self._idle_warm_parameters == parameters
+                and self._idle_warm_order == tuple(self.displays)):
+            return  # no duplicate geometry submission, module import or GL job
         self._prepare_transition_run_geometry(spec)
         try:
             preload_quick_transition_implementation(spec.transition_id)
         except Exception:
             logger.debug("[TRANSITION] Warm-up import failed for %s", spec.transition_id, exc_info=True)
             return
-        parameters = dict(spec.parameters)
-        for display in self.displays:
-            request = getattr(display, "request_transition_warm_up", None)
-            if not callable(request):
-                continue
-            try:
-                request(spec.transition_id, parameters)
-            except Exception:
-                logger.debug("[TRANSITION] Warm-up request failed", exc_info=True)
+        self._cancel_idle_transition_warmup()
+        self._idle_warm_seed = reserved_seed
+        self._idle_warm_generation = generation
+        self._idle_warm_order = tuple(self.displays)
+        self._idle_warm_transition_id = spec.transition_id
+        self._idle_warm_parameters = parameters
+        self._arm_next_idle_warm_step()
+
+    def _cancel_idle_transition_warmup(self) -> None:
+        """Cancel the owned delay and invalidate results without touching active GL work."""
+        shot, self._idle_warm_shot = self._idle_warm_shot, None
+        if shot is not None:
+            cancel = getattr(shot, "cancel", None)
+            if callable(cancel):
+                cancel()
+        for display in self._idle_warm_order:
+            cancel = getattr(display, "cancel_transition_warm_up", None)
+            if callable(cancel):
+                try:
+                    cancel()
+                except (RuntimeError, AttributeError):
+                    pass  # a retired Quick unit already invalidated the node
+        self._idle_warm_serial += 1
+        self._idle_warm_ticket = -1
+        self._idle_warm_seed = None
+        self._idle_warm_order = ()
+        self._idle_warm_index = 0
+        self._idle_warm_steps = 0
+        # Each display's node cancels its own queued job when a run starts or
+        # its scene graph is invalidated. An in-flight job completes normally.
+
+    def _idle_warm_valid(self, serial: int) -> bool:
+        return bool(
+            serial == self._idle_warm_serial
+            and not self._retired
+            and self._idle_warm_seed is not None
+            and self._idle_warm_generation == self._runtime_generation
+            and self._next_batch_seed == self._idle_warm_seed
+            and self._idle_warm_order
+            and all(display in self.displays for display in self._idle_warm_order)
+            and not self.has_transition_work_pending()
+        )
+
+    def _arm_next_idle_warm_step(self) -> None:
+        """Arm one generation-owned GUI continuation via ThreadManager.
+
+        Bind the actual QObject owner and runtime generation instead of
+        handing the timer service an anonymous closure with no ownership.
+        """
+        scheduler = self._thread_manager
+        shot = getattr(scheduler, "single_shot", None)
+        if not callable(shot):
+            self._cancel_idle_transition_warmup()
+            return
+        try:
+            handle = shot(
+                IDLE_TRANSITION_WARM_STEP_SPACING_MS,
+                self._admit_idle_warm_step,
+                self._idle_warm_serial,
+            )
+            if handle is None or not getattr(handle, "active", True):
+                self._cancel_idle_transition_warmup()
+            else:
+                self._idle_warm_shot = handle
+        except Exception:
+            logger.exception("[TRANSITION] Idle GL preparation scheduling failed")
+            self._cancel_idle_transition_warmup()
+
+    @Slot(int)
+    def _admit_idle_warm_step(self, serial: int) -> None:
+        """GUI owner: admit one GL operation only for the current reservation."""
+        self._idle_warm_shot = None
+        if not self._idle_warm_valid(serial):
+            return
+        if self._idle_warm_index >= len(self._idle_warm_order):
+            self._cancel_idle_transition_warmup()
+            return
+        display = self._idle_warm_order[self._idle_warm_index]
+        self._idle_warm_serial += 1
+        ticket = self._idle_warm_serial
+        self._idle_warm_ticket = ticket
+        request = getattr(display, "schedule_transition_warm_step", None)
+        admitted = False
+        try:
+            if callable(request):
+                admitted = bool(request(
+                    self._idle_warm_transition_id, self._idle_warm_parameters,
+                    self._idle_warm_reporter, ticket,
+                ))
+        except Exception:
+            logger.debug("[TRANSITION] Idle GL warm-up step not admitted", exc_info=True)
+        if not admitted:
+            self._on_idle_warm_step_finished(ticket, True)
+
+    @Slot(int, bool)
+    def _on_idle_warm_step_finished(self, ticket: int, done: bool) -> None:
+        """GUI-thread completion; only now may another display touch GL."""
+        if ticket != self._idle_warm_ticket or not self._idle_warm_valid(ticket):
+            return
+        self._idle_warm_steps += 1
+        if done or self._idle_warm_steps >= IDLE_TRANSITION_WARM_MAX_STEPS_PER_DISPLAY:
+            self._idle_warm_index += 1
+            self._idle_warm_steps = 0
+        if self._idle_warm_index >= len(self._idle_warm_order):
+            logger.debug("[TRANSITION] Idle NoStage preparation completed for all displays")
+            self._cancel_idle_transition_warmup()
+        else:
+            self._arm_next_idle_warm_step()
 
     def _prepare_transition_run_geometry(
         self,
@@ -4496,6 +4633,15 @@ class DisplayManager(QObject):
             source_image=source,
             destination_image=destination,
         )
+        if not startup_desktop_transition and len(self._quick_batch_expected_screens) > 1:
+            # The producer starts later displays after the authored long
+            # stagger. Extend only that display's request by the identical
+            # offset; do not mutate the shared Random/spec/settings authority.
+            ordered = sorted(self._quick_batch_expected_screens)
+            if screen_index in ordered:
+                extra_ms = ordered.index(screen_index) * TRANSITION_STAGGER_MS
+                if extra_ms:
+                    request = replace(request, duration_ms=request.duration_ms + extra_ms)
         start_transition(request)
         if startup_desktop_transition:
             logger.info(
@@ -4965,6 +5111,7 @@ class DisplayManager(QObject):
     
     def clear_all(self) -> None:
         """Clear all displays (removes image but keeps windows visible)."""
+        self._cancel_idle_transition_warmup()
         for display in self.displays:
             display.clear()
         self.current_images.clear()
@@ -5287,6 +5434,7 @@ class DisplayManager(QObject):
     
     def cleanup(self) -> None:
         """Retire every display generation through its authoritative owner."""
+        self._cancel_idle_transition_warmup()
         self._cancel_quick_startup_reveal()
         self._display_startup_generation += 1
         self._display_startup_ready_expected = set()
@@ -5370,6 +5518,7 @@ class DisplayManager(QObject):
 
         if self._retired:
             return
+        self._cancel_idle_transition_warmup()
         self._retired = True
         self._cancel_quick_startup_reveal()
         # Retire the process-scoped CUSTOM failover record with this generation so

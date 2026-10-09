@@ -142,9 +142,14 @@ class QuickDisplayUnit:
         _x, _y, width, height = self._runtime.display_identity.geometry
         return OverlayWidgetGeometry(0.0, 0.0, float(width), float(height))
 
-    def request_transition_warm_up(self, transition_id: str, parameters) -> None:
-        """Let this display prepare the next run's programs gradually (S11)."""
-        self._runtime.scene_controller.request_transition_warm_up(transition_id, parameters)
+    def schedule_transition_warm_step(self, transition_id: str, parameters, reporter, ticket: int) -> bool:
+        """One context-owned idle render job; the display manager owns spacing."""
+        return self._runtime.scene_controller.schedule_transition_warm_step(
+            transition_id, parameters, reporter, ticket,
+        )
+
+    def cancel_transition_warm_up(self) -> None:
+        self._runtime.scene_controller.cancel_transition_warm_up()
 
     def transition_logical_size(self) -> tuple[float, float]:
         """Logical size transition renderers draw at: the background item's size.

@@ -177,137 +177,161 @@ def test_the_background_nodes_own_program_is_a_warm_up_step_too(qt_app, monkeypa
         capture.close()
 
 
-def test_the_warm_up_steps_on_spaced_rendered_frames_and_stops_when_done_or_cancelled(qt_app, monkeypatch):
-    from PySide6.QtCore import QObject, Signal
+def test_idle_no_stage_job_does_one_step_without_repainting(qt_app, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from rendering.quick.render import background_item
+    from rendering.quick.render.background_item import _TransitionWarmStepJob
 
-    import rendering.quick.render.background_item as background_item
-    from rendering.quick.render.background_item import _TransitionWarmUp
+    monkeypatch.setattr(background_item, "QOpenGLContext", SimpleNamespace(currentContext=lambda: object()))
+    operations = []
 
-    clock = [100.0]
-    monkeypatch.setattr(background_item.time, "monotonic", lambda: clock[0])
-    spacing = _TransitionWarmUp.SPACING_S
+    class _Window:
+        def beginExternalCommands(self): operations.append("begin")
+        def endExternalCommands(self): operations.append("end")
+        def update(self): raise AssertionError("idle preparation must never repaint")
 
-    def frames(window, count, frame_s):
-        for _ in range(count):              # frames the window renders anyway
-            clock[0] += frame_s
-            window.beforeRendering.emit()
+    class _Node:
+        def warm_step(self, name, parameters):
+            operations.append((name, parameters))
+            return False
 
-    class _Window(QObject):
-        beforeRendering = Signal()
+    class _Reporter:
+        class _Signal:
+            def emit(self, *args): operations.append(("done", args))
+        finished = _Signal()
 
-        def __init__(self):
-            super().__init__()
-            self.external = []
+    # Retain the GUI-affine owners for the full synthetic render-job lifetime.
+    # They are retained by the real display manager and BackgroundRenderItem;
+    # an anonymous temporary is gone before a weak-ref-only job can run.
+    window, reporter, retirement = _Window(), _Reporter(), _Node()
+    job = _TransitionWarmStepJob(window, retirement, ("crumble", {"x": 1}),
+                                 threading.Event(), reporter, 17)
+    assert job._window_ref() is window and job._reporter_ref() is reporter
+    job.run()
+    assert operations == ["begin", ("crumble", {"x": 1}), "end", ("done", (17, False))]
+    operations.clear()
+    cancelled = threading.Event()
+    cancelled.set()
+    _TransitionWarmStepJob(window, _Node(), ("crumble", {}), cancelled, reporter, 19).run()
+    assert not operations
 
-        def beginExternalCommands(self):
-            self.external.append("begin")
 
-        def endExternalCommands(self):
-            self.external.append("end")
+def test_idle_render_job_with_retired_gui_owners_fails_closed_without_repainting(qt_app, monkeypatch):
+    """The real manager owns these wrappers, but a retired window must be a no-op.
+
+    This is deliberately the inverse of the preceding live-owner fixture:
+    the job must never keep a GUI QObject alive merely to make its test pass.
+    """
+    import gc
+    import threading
+    import weakref
+    from types import SimpleNamespace
+    from rendering.quick.render import background_item
+    from rendering.quick.render.background_item import _TransitionWarmStepJob
+
+    operations = []
+    monkeypatch.setattr(
+        background_item, "QOpenGLContext",
+        SimpleNamespace(currentContext=lambda: operations.append("context")),
+    )
+
+    class _Window:
+        def beginExternalCommands(self): operations.append("begin")
+        def endExternalCommands(self): operations.append("end")
+        def update(self): raise AssertionError("retired job must never repaint")
 
     class _Retirement:
-        def __init__(self, steps_needed):
-            self.steps, self.needed = [], steps_needed
+        def warm_step(self, *_args):
+            operations.append("compile")
+            return True
 
-        def warm_step(self, transition_id, parameters):
-            self.steps.append((transition_id, dict(parameters)))
-            return len(self.steps) >= self.needed
+    class _Reporter:
+        finished = SimpleNamespace(emit=lambda *_args: operations.append("done"))
 
-    window, retirement = _Window(), _Retirement(3)
-    warm_up = _TransitionWarmUp(window, retirement, "glass_shatter", {"sheen": 0.5})
-    frame_s = 1.0 / 144.0
-    per_step = int(spacing / frame_s) + 1
-    frames(window, per_step - 1, frame_s)
-    assert retirement.steps == []                                       # not on the frames right away
-    frames(window, per_step * 6, frame_s)
-    assert retirement.steps == [("glass_shatter", {"sheen": 0.5})] * 3   # spaced steps, then done
-    assert not warm_up.active
-    assert window.external == ["begin", "end"] * 3                     # GL work bracketed for Quick
-    retirement = _Retirement(100)
-    warm_up = _TransitionWarmUp(window, retirement, "crumble", {})
-    frames(window, 1, spacing)
-    warm_up.cancel()
-    frames(window, 3, spacing)
-    assert len(retirement.steps) == 1 and not warm_up.active
-    retirement = _Retirement(100)
-    _TransitionWarmUp(window, retirement, "crumble", {})
-    clock[0] += 60.0                                                   # a window that renders nothing
-    assert retirement.steps == []                                      # does no warm-up at all
+    window, reporter = _Window(), _Reporter()
+    job = _TransitionWarmStepJob(
+        window, _Retirement(), ("crumble", {}), threading.Event(), reporter, 18,
+    )
+    window_ref, reporter_ref = weakref.ref(window), weakref.ref(reporter)
+    del window, reporter
+    gc.collect()
+    assert window_ref() is None and reporter_ref() is None
+    job.run()
+    assert operations == []
 
 
-def test_a_starting_run_cancels_the_warm_up(qt_app):
+def test_a_starting_run_cancels_the_idle_job(qt_app):
+    import threading
     from rendering.quick.render.background_item import BackgroundRenderItem
 
     item = BackgroundRenderItem()
-    item.request_warm_up("glass_shatter", {})
-    assert item._warm_up is None                     # no window: nothing renders, nothing to warm
-
-    class _Pending:
-        cancelled = False
-
-        def cancel(self):
-            self.cancelled = True
-
-    pending = _Pending()
-    item._warm_up = pending
+    token = threading.Event()
+    item._warm_up_cancel = token
     capture = TransitionCapture(64, 64)
     try:
         item.set_transition_run(capture.run("glass_shatter", direction="left"))
     finally:
         capture.close()
-    assert pending.cancelled and item._warm_up is None
+    assert token.is_set() and item._warm_up_cancel is None
 
 
-def test_the_display_manager_warms_the_next_transition_on_every_display_while_idle(qt_app, monkeypatch):
+def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app, monkeypatch):
     import sys
     from types import SimpleNamespace
-
-    from engine.display_manager import DisplayManager
+    from engine.display_manager import DisplayManager, IDLE_TRANSITION_WARM_STEP_SPACING_MS
     from rendering.quick.transitions.request_resolution import RandomTransitionSelection
 
     module = "rendering.quick.transitions.implementations.crumble"
     monkeypatch.delitem(sys.modules, module, raising=False)
-    requests = []
+    requests, deferred = [], []
 
     class _Settings:
         def get(self, key, default=None):
             if key == "transitions":
-                return {"type": "Crossfade", "random_always": True, "pool": {"Crumble": True, "Slide": True}}
-            if key == "display.hw_accel":
-                return True
-            return default
+                return {"type": "Crossfade", "random_always": True,
+                        "pool": {"Crumble": True, "Slide": True}}
+            return True if key == "display.hw_accel" else default
+        def get_bool(self, key, default=False): return bool(self.get(key, default))
 
-        def get_bool(self, key, default=False):
-            return bool(self.get(key, default))
+    class _Threads:
+        def single_shot(self, delay, callback, *args):
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
 
     def _unit(name):
         return SimpleNamespace(
-            display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=1920.0, height=1080.0),
+            display_bounds=lambda: SimpleNamespace(x=0, y=0, width=1920, height=1080),
             transition_logical_size=lambda: (1920.0, 1081.0),
-            request_transition_warm_up=lambda transition_id, parameters: requests.append((name, transition_id,
-                                                                                           parameters)),
+            schedule_transition_warm_step=lambda transition, params, reporter, ticket:
+                (requests.append((name, transition, params, ticket)) or True),
+            cancel_transition_warm_up=lambda: None,
         )
 
-    manager = DisplayManager(settings_manager=_Settings(), thread_manager=None, runtime_generation=706)
+    manager = DisplayManager(settings_manager=_Settings(), thread_manager=_Threads(), runtime_generation=706)
     try:
-        manager.displays = [_unit("left"), _unit("right")]
-        manager.set_random_transition_selection(RandomTransitionSelection("Crumble"))
-        spec = manager._resolve_quick_transition_batch_spec()
-        # The batch about to run starts within milliseconds: nothing to warm there.
-        assert requests == [] and module not in sys.modules
-        manager._reset_quick_transition_batch()
+        manager.displays = [_unit("D0"), _unit("D1")]
+        manager._authoritative_first_frame_emitted = True
         manager._transition_work_pending = True
         manager.prepare_next_transition(RandomTransitionSelection("Crumble"))
-        assert requests == []                                # not while image work is pending
+        assert not deferred and not requests
         manager._transition_work_pending = False
         manager.prepare_next_transition(RandomTransitionSelection("Crumble"))
-        assert module in sys.modules                         # imported here, not on a render thread
-        assert [(name, transition_id) for name, transition_id, _ in requests] == [("left", "crumble"),
-                                                                                  ("right", "crumble")]
-        assert requests[0][2] is requests[1][2]              # one shared parameter set, as a batch has
-        unseeded = {key: value for key, value in spec.parameters if key != "seed"}
-        assert {key: value for key, value in requests[0][2].items() if key != "seed"} == unseeded
+        assert module in sys.modules and len(deferred) == 1 and not requests
+        assert deferred[0][0] == IDLE_TRANSITION_WARM_STEP_SPACING_MS
+        deferred.pop(0)[1]()
+        assert [item[0] for item in requests] == ["D0"]
+        ticket = requests[-1][3]
+        manager._on_idle_warm_step_finished(ticket, False)
+        deferred.pop(0)[1]()
+        assert [item[0] for item in requests] == ["D0", "D0"]
+        manager._on_idle_warm_step_finished(requests[-1][3], True)
+        deferred.pop(0)[1]()
+        assert [item[0] for item in requests] == ["D0", "D0", "D1"]
+        manager._on_idle_warm_step_finished(requests[-1][3], True)
+        assert not deferred and manager._idle_warm_seed is None
     finally:
+        manager._cancel_idle_transition_warmup()
         manager.displays = []
 
 
@@ -318,12 +342,15 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
     from rendering.quick.transitions.request_resolution import RandomTransitionSelection
     from rendering.quick.transitions.run_geometry import prepare_run_geometry
 
-    submitted, warmed = [], []
+    submitted, warmed, deferred = [], [], []
 
     class _Threads:
         def submit_compute_task(self, func, *args, **kwargs):
             submitted.append((func, args))
             return "task"
+        def single_shot(self, delay, callback, *args):
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
 
     class _Settings:
         def __init__(self):
@@ -341,24 +368,28 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
     unit = SimpleNamespace(
         display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=1920.0, height=1080.0),
         transition_logical_size=lambda: (1920.0, 1081.0),
-        request_transition_warm_up=lambda transition_id, parameters: warmed.append(parameters),
+        schedule_transition_warm_step=lambda transition_id, parameters, reporter, ticket: (warmed.append(parameters) or True),
+        cancel_transition_warm_up=lambda: None,
     )
     settings = _Settings()
     manager = DisplayManager(settings_manager=settings, thread_manager=_Threads(), runtime_generation=707)
     try:
         manager.displays = [unit]
+        manager._authoritative_first_frame_emitted = True
         selection = RandomTransitionSelection("Glass Shatter")
         for _ in range(3):
             submitted.clear(), warmed.clear()
             manager.prepare_next_transition(selection)
             manager.prepare_next_transition(selection)          # a second idle edge: same spec
-            assert warmed[0] == warmed[1]
-            assert [func for func, _ in submitted] == [prepare_run_geometry] * 2
+            assert len(deferred) == 1 and len(warmed) == 0
+            deferred.pop(0)[1]()
+            assert len(warmed) == 1
+            assert [func for func, _ in submitted] == [prepare_run_geometry]
             prepared = submitted[0][1]
             manager.set_random_transition_selection(selection)
             spec = manager._resolve_quick_transition_batch_spec()
             assert dict(spec.parameters) == warmed[0]          # seed and all: nothing re-drawn
-            assert submitted[-1][1] == prepared                 # the geometry COMPUTE already built
+            assert submitted[-1][1] == prepared                 # same preparation supplied to admission
             manager._reset_quick_transition_batch()
         # Settings changed after the warm-up: the batch follows Settings, not the warm-up.
         manager.prepare_next_transition(selection)
@@ -470,7 +501,10 @@ def test_the_engine_prepares_the_next_transition_when_a_transition_completes(mon
 
     calls = []
     monkeypatch.setattr(image_pipeline, "notify_transition_complete", lambda engine, screen: calls.append("prefetch"))
-    engine = SimpleNamespace(_prepare_next_transition=lambda: calls.append("next"))
+    engine = SimpleNamespace(
+        _prepare_next_transition=lambda: calls.append("next"),
+        _ban_advance_pending=False,  # no user-initiated Ban Image transaction
+    )
     ScreensaverEngine._on_display_transition_completed(engine, 0)
     assert calls == ["prefetch", "next"]
 
@@ -501,3 +535,46 @@ def test_the_engine_prepares_the_first_transition_once_the_startup_reveal_comple
     ScreensaverEngine._on_startup_reveal_completed(engine, 3, object(), 3)
     assert calls == ["stale"]
 
+
+
+def test_stale_reservation_and_recreation_cancel_idle_gl_jobs(qt_app, monkeypatch):
+    """No stale callbacks after new batch, session teardown or new reservation."""
+    from types import SimpleNamespace
+    import engine.display_manager as source
+    from engine.display_manager import DisplayManager
+
+    warmed, deferred, cancelled = [], [], []
+    class _Threads:
+        def single_shot(self, delay, callback, *args):
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
+
+    monkeypatch.setattr(source, "resolve_quick_transition_spec",
+                        lambda *a, **k: SimpleNamespace(transition_id="crossfade", parameters={}))
+    monkeypatch.setattr(source, "preload_quick_transition_implementation", lambda *a: None)
+    manager = DisplayManager(settings_manager=object(), thread_manager=_Threads(), runtime_generation=710)
+    manager._prepare_transition_run_geometry = lambda spec: None
+    manager._authoritative_first_frame_emitted = True
+    manager.displays = [SimpleNamespace(
+        schedule_transition_warm_step=lambda *args: (warmed.append(args) or True),
+        cancel_transition_warm_up=lambda: cancelled.append(True),
+    )]
+    try:
+        manager.prepare_next_transition(None)
+        assert len(deferred) == 1
+        _, stale = deferred.pop(0)
+        manager._begin_quick_transition_batch({0})
+        stale()
+        assert warmed == [] and cancelled
+        manager._transition_work_pending = False
+        manager._reset_quick_transition_batch()
+        manager.prepare_next_transition(None)
+        deferred.pop(0)[1]()
+        assert len(warmed) == 1
+        old_ticket = warmed[-1][-1]
+        manager._cancel_idle_transition_warmup()
+        manager._on_idle_warm_step_finished(old_ticket, False)
+        assert not deferred
+    finally:
+        manager._cancel_idle_transition_warmup()
+        manager.displays = []

@@ -402,6 +402,7 @@ def test_show_images_for_displays_propagates_async_submission_rejection(
     engine = SimpleNamespace(
         display_manager=object(),
         thread_manager=object(),
+        _image_ban_store=None,  # zero-ban production admission path
     )
 
     assert ScreensaverEngine._show_images_for_displays(

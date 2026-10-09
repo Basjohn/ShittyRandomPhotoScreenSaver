@@ -63,6 +63,13 @@ Target, in order:
 - [ ] fix instrumentation that carries stale timestamps across runtime recreation before tuning from those numbers;
 - [ ] prefer removing a named allocation/lifetime/work source over changing GC thresholds or hiding pauses.
 
+### P1A — prefetch and widget completion admission
+
+- A request for N pending-image previews must inspect at most N queued candidates; never materialize an entire source-sized deque for a tiny lookahead.
+- Ban Image's eligible-only source index is authoritative in ordinary Next/Peek/Preview. Preview simulation must never clone the rejected full catalogue, hash every candidate or consult the filesystem. Reindexing is allowed only when the source catalogue or ban status changes.
+- Visualizer stalls during News/Feeds activity must be correlated by timestamps and callback duration, not blamed on the visualizer or on stable diagnostic instrumentation. Slow GUI deliveries may be logged through the existing perf gate; never introduce a new poll/thread/timer or use telemetry alone as proof of causality.
+- The GUI publication boundary and all widget-specific delivery callbacks remain distinct suspects for intermittent stalls. Protect Qt Quick scheduling and Bubble temporal semantics.
+
 ### P2 — allocation/lifetime mechanisms with exact owners
 
 The R-71 work proved the preferred shape:

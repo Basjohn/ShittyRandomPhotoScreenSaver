@@ -19,6 +19,7 @@ from ..bootstrap import validate_or_quit_current_opengl_context
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
 from .background_node import BackgroundRenderNode, SlideProofState
+from core.performance.frame_trace import FrameTraceEvent
 from .native_texture_bridge import NativeTextureUnavailable, wrap_gl_texture
 from .telemetry import RenderNodeTelemetry
 
@@ -90,6 +91,7 @@ class RetainedBackgroundSceneNode(QSGNode):
         self._native_image_source: PresentationImage | None = None
         self._image_identity: str | None = None
         self._image_byte_count = 0
+        self._native_trace_change_seq = 0  # only advances on a new image
         # PR-04: the shown texture wraps a GL texture lent by the custom node's
         # texture host (which still owns and eventually deletes it).
         self._image_adopted = False
@@ -132,11 +134,31 @@ class RetainedBackgroundSceneNode(QSGNode):
         # The native branch is intentionally omitted from pixel-oracle/proof
         # paths; those diagnostics must continue exercising the exact custom GL
         # renderer they were written to validate.
+        native_change = bool(
+            self._frame_trace is not None
+            and presentation_image is not None
+            and not self._telemetry.capture_pixels_enabled
+            and self._image_identity != presentation_image.identity
+        )
+        if native_change and self._frame_trace is not None:
+            self._native_trace_change_seq += 1
+            self._frame_trace.record(
+                FrameTraceEvent.NATIVE_TEXTURE_CHANGE_BEGIN,
+                screen_index=self._screen_index,
+                revision=self._native_trace_change_seq,
+            )
         if presentation_image is not None and not self._telemetry.capture_pixels_enabled:
             self._synchronize_native_image(
                 presentation_image,
                 logical_size=logical_size,
             )
+            if native_change and self._frame_trace is not None:
+                self._frame_trace.record(
+                    FrameTraceEvent.NATIVE_TEXTURE_CHANGE_READY,
+                    screen_index=self._screen_index,
+                    revision=self._native_trace_change_seq,
+                    auxiliary=1 if self._image_adopted else 2,  # adopted / uploaded
+                )
         elif self._image_node is not None:
             self._image_node.setRect(QRectF(0.0, 0.0, width, height))
 

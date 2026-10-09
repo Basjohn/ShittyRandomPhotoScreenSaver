@@ -39,6 +39,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Need | Read |
 | --- | --- |
 | current work / next sequence | `Current_Plan.md` |
+| R134–R145 dual-display collapse, reboot-dependent recovery and pre/post performance/cache/handles investigation | `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md` |
 | queued canonical CPython 3.14 migration and prerequisite/acceptance gates | `Current_Plan.md` §10 |
 | durable product / architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |

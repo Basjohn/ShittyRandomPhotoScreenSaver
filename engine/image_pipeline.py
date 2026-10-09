@@ -24,7 +24,7 @@ from core.logging.logger import (
     is_verbose_logging,
 )
 from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_ASYNC
-from core.constants.timing import TRANSITION_STAGGER_MS
+from core.constants.timing import FIRST_IMAGE_STAGGER_MS, PREFETCH_STAGGER_MS, TRANSITION_STAGGER_MS
 from core.threading.manager import ThreadManager
 from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
@@ -1093,12 +1093,55 @@ def build_image_prefetcher(engine: ScreensaverEngine, *, max_concurrent: int | N
             return lambda: None
         return derive_prefetch_via_worker(live_engine, path, requests, generation, complete)
 
+    def _defer_next_source_batch(delay_ms: int, callback: Callable[[], None]) -> None:
+        live_engine = engine_ref()
+        if live_engine is None:
+            return
+        # One bounded, generation-fenced continuation through the *existing*
+        # ThreadManager, never an independent polling scheduler.
+        generation, manager = _capture_runtime_identity(live_engine)
+
+        def _run_if_current() -> None:
+            current = engine_ref()
+            if current is not None and _runtime_identity_is_current(
+                current, generation, manager, label="prefetch_source_batch_stagger"
+            ):
+                callback()
+
+        # This continuation is a nested callback, not a QObject method. Tag
+        # it explicitly so ThreadManager's existing generation-retirement
+        # registry can cancel it rather than retaining it until timeout.
+        _run_if_current._srpss_runtime_generation = generation
+        scheduler = getattr(live_engine, "thread_manager", None)
+        if scheduler is None or not callable(getattr(scheduler, "single_shot", None)):
+            raise RuntimeError("prefetch source continuation requires ThreadManager")
+        scheduler.single_shot(int(delay_ms), _run_if_current)
+
+    def _may_start_speculative_source() -> bool:
+        live_engine = engine_ref()
+        if live_engine is None:
+            return False
+        # The GUI owns both fields; they are scalar, GIL-atomic admission
+        # snapshots. This callback may run on the supervisor response listener:
+        # never call QQuickWindow, inspect a scene node, or acquire a GUI lock.
+        # A foreground batch opens _transition_work_pending *before* selection.
+        manager = getattr(live_engine, "display_manager", None)
+        return bool(
+            manager is not None
+            and not getattr(live_engine, "_loading_in_progress", False)
+            and not getattr(manager, "_transition_work_pending", False)
+            and not getattr(manager, "_retired", False)
+        )
+
     if max_concurrent is None:
         max_concurrent = max(1, min(4, int(engine.settings_manager.get("cache.max_concurrent"))))
     return ImagePrefetcher(
         cache=engine._image_cache,
         max_concurrent=max_concurrent,
         derive=_derive,
+        schedule_next_batch=_defer_next_source_batch,
+        batch_stagger_ms=PREFETCH_STAGGER_MS,
+        may_start_source_batch=_may_start_speculative_source,
     )
 
 
@@ -1751,7 +1794,7 @@ def load_and_display_image_async(
 
             # Authored multi-display desync: each further display starts its
             # transition TRANSITION_STAGGER_MS after the previous one.
-            stagger_ms = TRANSITION_STAGGER_MS
+            stagger_ms = _image_batch_display_stagger_ms(display_manager)
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
                     continue
@@ -1978,7 +2021,7 @@ def load_and_display_image_async_with_metas(
                     setter = getattr(display_manager, "set_transition_work_pending", None)
                     if callable(setter):
                         setter(False, screen_index=descriptor.screen_index)
-            stagger_ms = TRANSITION_STAGGER_MS
+            stagger_ms = _image_batch_display_stagger_ms(display_manager)
             displayed = []
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
@@ -2070,6 +2113,18 @@ def _has_transition_work_pending(engine: ScreensaverEngine) -> bool:
     return False
 
 
+def _image_batch_display_stagger_ms(display_manager: object) -> int:
+    """Spread real transitions, but retain the quick first-image/gentle-start path.
+
+    A first-frame batch has no prior wallpaper transition to conceal; making its
+    second image wait 1.2 seconds would regress the accepted startup reveal.
+    Duration compensation is owned by DisplayManager's per-display request.
+    """
+    has_image = getattr(display_manager, "has_presented_image", None)
+    return (TRANSITION_STAGGER_MS if callable(has_image) and has_image()
+            else FIRST_IMAGE_STAGGER_MS)
+
+
 def schedule_prefetch(engine: ScreensaverEngine) -> None:
     """Schedule prefetch of upcoming images."""
     try:
@@ -2132,9 +2187,16 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
             max(0, len(paths) - len(source_paths)),
             " | ".join(paths[:5]),
         )
+        # Always wake already-registered source intents on the accepted
+        # transition-complete reseed, even when the *new* preview produces no
+        # derivative requests. Otherwise a foreground-paused source batch can
+        # remain stranded indefinitely when the lookahead was already queued.
+        # An empty registration only prunes the bounded queue and pumps it;
+        # it never decodes a source or adds another scheduler.
         if scaled_requests:
             _bump_cache_runtime_stat(engine, "scaled_prefetch_requests", len(scaled_requests))
-            queued_count = engine._prefetcher.register_scaled_requests(scaled_requests)
+        queued_count = engine._prefetcher.register_scaled_requests(scaled_requests)
+        if scaled_requests or queued_count:
             _cache_trace(
                 "Queued scaled warmup request_count=%d prepared=%d preview_source=%s",
                 queued_count,
@@ -2326,6 +2388,15 @@ def schedule_prefetch_after_runtime_ready(engine: ScreensaverEngine) -> None:
     prefetch owner after authoritative first frames instead.
     """
 
+    # A delayed source-batch continuation belongs to the old runtime's
+    # display dimensions even when the engine has retained its ImagePrefetcher.
+    # Invalidate that queue before the new generation reseeds it. Otherwise a
+    # stale generation-fenced callback could be dropped while its local
+    # "next batch pending" latch blocks the new generation indefinitely (R-65).
+    prefetcher = getattr(engine, "_prefetcher", None)
+    clear = getattr(prefetcher, "clear_inflight", None)
+    if callable(clear):
+        clear()
     if is_perf_metrics_enabled():
         logger.info(
             "[PERF] [PREFETCH] runtime_ready_reseed generation=%s",

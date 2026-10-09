@@ -1128,8 +1128,39 @@ class ProcessSupervisor:
         thread.start()
         return True
 
+    @staticmethod
+    def _configure_response_listener_priority(worker_type: WorkerType) -> None:
+        """Keep speculative *parent-side* RGBA handoff below Quick priority.
+
+        Demoting only the child IMAGE_PREFETCH process was insufficient: its
+        supervisor callback runs on this listener and can copy/admit tens of
+        megabytes of QImage data.  Reuse the existing native scheduling helper
+        on the listener itself; foreground and other listeners stay untouched.
+        The transport remains functional if Windows rejects priority tuning.
+        """
+        if worker_type != WorkerType.IMAGE_PREFETCH:
+            return
+        from core.windows.thread_priority import apply_best_effort_thread_priority
+        applied, mode, native_priority = apply_best_effort_thread_priority()
+        if not applied:
+            # Operational priority is best-effort; aborting the listener here
+            # could strand an already-admitted shared-memory response.
+            import os
+            if os.name == "nt":
+                logger.warning(
+                    "Speculative response listener could not lower OS thread priority: %s",
+                    mode,
+                )
+            return
+        logger.info(
+            "Speculative image response listener priority=%s native=%s",
+            mode,
+            native_priority,
+        )
+
     def _response_listener_loop(self, worker_type: WorkerType, response_queue: Queue) -> None:
         """Block on one worker queue and route responses to their owners."""
+        self._configure_response_listener_priority(worker_type)
         unexpected_callbacks: list[
             tuple[str, Callable[[Optional[WorkerResponse]], None]]
         ] = []

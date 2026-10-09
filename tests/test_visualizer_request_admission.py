@@ -100,7 +100,9 @@ def test_request_absent_activation_follows_canonical_mode_defaults(monkeypatch):
             assert mgr._request_quick_visualizer_mode(mode) is False
 
 
-def test_cross_profile_request_is_rejected_while_custom_edit_owns_the_source_key():
+def test_cross_profile_request_preserves_active_custom_edit_until_hidden_activation(monkeypatch):
+    # The one CUSTOM session now retains sibling geometry across mode swaps.
+    # Do not reject an enabled target or Save/Cancel the draft prematurely.
     owner = _Owner()
     owner.controller = SimpleNamespace(mode_id="spectrum")
     section = {
@@ -110,11 +112,21 @@ def test_cross_profile_request_is_rejected_while_custom_edit_owns_the_source_key
         ),
     }
     mgr = _make_manager(section, owner)
-    mgr._quick_custom_layout_owner = SimpleNamespace(
-        is_editing=True, is_direct=False, is_active=True
-    )
+    draft = SimpleNamespace(is_editing=True, is_direct=False, is_active=True)
+    mgr._quick_custom_layout_owner = draft
+    mgr._finish_quick_visualizer_gesture = lambda: pytest.fail("Edit draft was prematurely committed")
 
-    assert mgr._request_quick_visualizer_mode("extruded_spectrum") is False
+    class _ReachedActivation(RuntimeError):
+        pass
+
+    def resolve(candidate):
+        assert candidate["mode"] == "extruded_spectrum"
+        assert draft.is_editing and draft.is_active
+        raise _ReachedActivation
+
+    monkeypatch.setattr(visualizer_presets, "resolve_visualizer_activation_payload", resolve)
+    with pytest.raises(_ReachedActivation):
+        mgr._request_quick_visualizer_mode("extruded_spectrum")
     assert owner.request_calls == []
 
 

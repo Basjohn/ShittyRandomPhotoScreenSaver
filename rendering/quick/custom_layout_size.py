@@ -376,7 +376,7 @@ def uniform_scale_geometry(
     when it has a viewport extent), otherwise against the admitted reference
     (baseline rect / baseline scale; ``descriptor`` adds a legacy per-value
     payload floor there). The card keeps ``anchor_rect``'s
-    top-centre and is clamped into the display. Returns ``None`` when the
+    top-centre (or the centre for freeform 3D stages) and is clamped into the display. Returns ``None`` when the
     admitted scale does not change.
     """
 
@@ -469,10 +469,12 @@ def uniform_scale_geometry(
         width = max(1, int(round(reference_width * scale)))
         height = max(1, int(round(reference_height * scale)))
     center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
+    top_y = (int(round(float(anchor_rect.y()) + (float(anchor_rect.height()) - height) / 2.0))
+             if item.geometry_kind == "freeform_3d" else anchor_rect.y())
     local = clamp_local_rect_to_bounds(
         QRect(
             int(round(center_x - width / 2.0)) - display_geometry.x(),
-            anchor_rect.y() - display_geometry.y(),
+            top_y - display_geometry.y(),
             width,
             height,
         ),

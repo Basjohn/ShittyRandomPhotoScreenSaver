@@ -8,13 +8,13 @@ hit, silence), recording every authored Sphere output per frame, the resolved hi
 profile and each preset's resolved parameters.
 
 It is a reference, not a lock (operator 2026-10-04): a reaction change is allowed when it is
-measured and intended. Presets are authored content and never tested against (operator
-2026-10-04): a case is seeded from its curated preset only when recorded, and its resolved Sphere
-settings are frozen into the golden; replays use that frozen copy, so editing or adding presets
-never moves it. Only behaviour (the frames) fails; settings and the technical profile are
-reported for information. Without ``--write`` the tool replays and prints what differs from the
-committed golden, per segment; ``--write`` re-records it (only for an intended, documented
-change). ``tests/test_sphere_promotion_golden.py`` fails on any unreviewed difference.
+measured and intended. Authored presets are never a test oracle or a fixture source, including
+when the reference is re-recorded. Every case replays the *test-owned frozen settings* stored
+in the reference; a missing case fails closed, never falls back to a shipped preset.
+Only behavioural frames fail the replay comparison. Settings and the technical profile are
+reported for information. ``--write`` refreshes the behavioural evidence using the SAME
+frozen test settings. The visual review sheets are optional human evidence, not a pixel-perfect
+CI gate: artistic improvements and GPU-dependent reflection samples do not invalidate tests.
 """
 from __future__ import annotations
 
@@ -25,11 +25,10 @@ import statistics
 from pathlib import Path
 
 GOLDEN = Path(__file__).resolve().parents[2] / "tests/goldens/visualizer_replay/sphere_promotion.json"
-# Both original goldens as curated, and Voxel Bloom with Particle Outtake on so the outtake half of
-# the vocabulary is covered whatever the curated snapshots currently choose.
-# Indices only seed the frozen settings at --write (Glass Current moved to slot 5, 2026-10-04).
-PRESETS = ((4, "glass_current", None), (1, "voxel_bloom", None),
-           (1, "voxel_bloom_outtake", {"sphere_particle_outtake_enabled": True}))
+# Historical case labels, NOT live preset slots. Values come only from the committed
+# test-owned frozen reference. Changes to any operator-authored preset cannot change a test.
+CASES = (("glass_current", None), ("voxel_bloom", None),
+         ("voxel_bloom_outtake", {"sphere_particle_outtake_enabled": True}))
 FRAME_US = 11_111                           # the logical cadence (90 Hz)
 BANDS = 64
 # (name, seconds, loudness, presence, spectrum emphasis (low, mid, high), events: (kind, strength,
@@ -132,31 +131,25 @@ def _frame_record(state) -> dict:
     return _round(record)
 
 
-def _seed_settings(preset: int, overrides) -> dict:
-    """A case's Sphere settings as its curated preset resolves them today (used only to record)."""
-    from core.settings.models import SpotifyVisualizerSettings
-    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-
-    activation = resolve_visualizer_activation_payload({"mode": "sphere", "preset_sphere": preset})
-    model = SpotifyVisualizerSettings.from_mapping(activation.resolved_config, apply_preset_overlay=False,
-                                                   resolve_preset_indices=False)
-    values = {key: value for key, value in dataclasses.asdict(model).items() if key.startswith("sphere_")}
-    values.update(overrides or {})
-    return json.loads(json.dumps(values))
-
-
 def case_settings(golden: dict | None = None) -> dict:
-    """Each case's frozen Sphere settings: from ``golden`` when it holds them, else seeded."""
+    """Use only reference-owned frozen settings, never a live curated preset or default.
+
+    A missing case is a corrupted/incomplete test reference, not permission to use whatever
+    the operator happens to have authored this week. ``--write`` obeys the same rule.
+    """
+    reference = load_golden() if golden is None else golden
+    cases = reference.get("presets", {})
     out = {}
-    for preset, name, overrides in PRESETS:
-        frozen = None if golden is None else golden["presets"].get(name, {}).get("settings")
-        out[name] = dict(frozen) if frozen else _seed_settings(preset, overrides)
+    for name, _overrides in CASES:
+        values = cases.get(name, {}).get("settings")
+        if not isinstance(values, dict) or not values:
+            raise ValueError(f"missing test-owned frozen Sphere settings for {name}; never seed from a curated preset")
+        out[name] = dict(values)
     return out
 
 
 def capture(golden: dict | None = None) -> dict:
-    """Replay every case from its frozen settings (``golden``'s, or freshly seeded from the
-    curated presets when recording) and return the full reference document."""
+    """Replay from committed test-owned settings even when re-recording reference frames."""
     from core.settings.models import SpotifyVisualizerSettings
     from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 
@@ -165,12 +158,11 @@ def capture(golden: dict | None = None) -> dict:
     clip, bounds = golden_clip()
     settings = case_settings(golden)
     document = {"clip": {"frames": len(clip.frames), "segments": [list(b) for b in bounds]}, "presets": {}}
-    for preset, name, overrides in PRESETS:
+    for name, overrides in CASES:
         technical = resolve_technical_config(build_technical_cache(None, SpotifyVisualizerSettings()), "sphere")
         result = replay_clip(clip, "sphere", preset=0, overrides=settings[name])
         series = result["logical_series"]
         document["presets"][name] = {
-            "seeded_from_preset": preset,
             "overrides": overrides or {},
             "settings": settings[name],
             "technical_profile": _round(dict(technical)),
@@ -250,9 +242,9 @@ def differences(golden: dict, current: dict) -> list[str]:
 
 # Visual reference: renderer captures of replayed snapshots through the production render host,
 # offscreen, the item in the middle of a window one item larger on every side (Sphere overflows).
-# (name, golden preset, segment, frames into it, item width, height). Visual parity is a floor, not
-# a ceiling: a deliberate upgrade is reviewed by eye on the before/after sheets (--visual) and then
-# re-recorded (--write-visual).
+# (name, frozen test case, segment, frames into it, item width, height). Optional visual
+# review sheets help spot unintended changes; exact historical pixels are NOT a CI contract.
+# Shader/filtering improvements do not require modifying artist-authored presets or golden PNGs.
 VISUAL_DIR = GOLDEN.parent / "sphere_visual"
 VISUAL_TIER = "High"                         # pinned: the reference must not depend on the GPU
 VISUAL_REVIEW = Path(__file__).resolve().parents[2] / "logs" / "sphere_visual_review"
@@ -314,7 +306,7 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
 
     clip, bounds = golden_clip()
     starts = dict(bounds)
-    settings = case_settings(load_golden() if GOLDEN.exists() else None)
+    settings = case_settings()
     snapshots = {}
     for preset_name in sorted({case[1] for case in cases}):
         wanted = {name: starts[segment] + offset for name, golden, segment, offset, *_ in cases if golden == preset_name}
@@ -425,7 +417,7 @@ def main() -> None:
     from PySide6.QtCore import QCoreApplication
 
     QCoreApplication.instance() or QCoreApplication([])
-    golden = None if args.write or not GOLDEN.exists() else load_golden()
+    golden = load_golden()  # --write must NEVER change fixture values from live presets
     current = capture(golden)
     bounds = [tuple(b) for b in current["clip"]["segments"]]
     for name, data in current["presets"].items():

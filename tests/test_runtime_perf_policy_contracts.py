@@ -426,12 +426,16 @@ def test_replacement_runtime_first_frames_reseed_existing_prefetch_owner():
     engine = (ROOT / "engine/screensaver_engine.py").read_text()
     pipeline = (ROOT / "engine/image_pipeline.py").read_text()
 
-    # Replacement runtimes have a deterministic readiness seam. Do not add a
-    # second prefetch timer/owner: arm the existing generation-fenced retry only
-    # after authoritative first frames have arrived.
+    # Cold and replacement runtimes have a deterministic first-frames seam.
+    # No second prefetch timer/owner; the foreground startup image wins.
     assert "def _on_authoritative_first_frames_ready" in engine
-    assert 'self._runtime_lifecycle_event != "cold_start"' in engine
+    assert 'self._runtime_lifecycle_event != "cold_start"' not in engine
     assert "schedule_prefetch_after_runtime_ready(self)" in engine
+    # No eager speculative prescale at initialization: the foreground first
+    # image takes precedence, on either one or two displays.
+    initialize = engine.split("def initialize(self", 1)[1].split("def ", 1)[0]
+    assert "self._start_workers()" in initialize
+    assert "self._schedule_prefetch()" not in initialize
 
     assert "def schedule_prefetch_after_runtime_ready" in pipeline
     assert 'reason="runtime_ready"' in pipeline

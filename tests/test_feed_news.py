@@ -345,6 +345,50 @@ def _service(monkeypatch, sources, *, widget_id="feeds_news_world", values=None)
     return service, consumer, manager
 
 
+def test_news_startup_skips_unpublishable_partial_merges(monkeypatch):
+    """Warm-cache startup never composes NEWS from an incomplete provider set.
+
+    Every partial merge is discarded by the startup barrier, yet used to do
+    synchronous GUI-thread work. Actual complete and subsequent settled merges
+    must retain their existing publication semantics.
+    """
+    names = ("cbs_world", "bbc_world", "npr_world")
+    sources = {
+        f"news_{name}": _Source(
+            _runtime_result(_item(name, 100)),
+            _runtime_result(_item(name + "_fresh", 200)),
+        )
+        for name in names
+    }
+    service, consumer, manager = _service(
+        monkeypatch, sources,
+        values={"enabled": True, "providers": list(names)},
+    )
+    original_merge = feed_runtime.merge_news_results
+    merge_calls = []
+
+    def tracked_merge(*args, **kwargs):
+        merge_calls.append(1)
+        return original_merge(*args, **kwargs)
+
+    monkeypatch.setattr(feed_runtime, "merge_news_results", tracked_merge)
+    assert service.start() is True
+    for _attempt in range(30):
+        if len(service._results) >= len(service._leases):
+            break
+        assert manager.drain_one() is True
+        if len(service._results) < len(service._leases):
+            assert merge_calls == []  # no discarded partial aggregate
+    else:
+        pytest.fail("startup provider cache barrier did not complete")
+
+    assert len(service._results) == len(service._leases)
+    assert merge_calls  # complete aggregate is still composed
+    manager.drain()
+    assert consumer.accepted
+    service.retire()
+
+
 def test_news_service_runs_each_publisher_as_an_ordinary_lease_on_the_shared_owner(monkeypatch):
     no_cache = FeedRefreshResult("unavailable", None, FeedHealth(), failure="no_cache")
     sources = {

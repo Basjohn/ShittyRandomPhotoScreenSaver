@@ -26,6 +26,52 @@ from core.process.types import (
 from core.process.supervisor import ProcessSupervisor
 
 
+def test_speculative_response_listener_demotes_only_prefetch_role(monkeypatch):
+    """The supervisor-side 4K RGBA handoff also gets background priority."""
+    import core.windows.thread_priority as native_priority
+
+    called = []
+    monkeypatch.setattr(
+        native_priority, "apply_best_effort_thread_priority",
+        lambda: (called.append(threading.get_ident()) or (True, "test_demoted", -1)),
+    )
+    assert ProcessSupervisor._configure_response_listener_priority(WorkerType.IMAGE) is None
+    assert called == []
+    assert ProcessSupervisor._configure_response_listener_priority(WorkerType.IMAGE_PREFETCH) is None
+    assert called == [threading.get_ident()]
+
+
+def test_speculative_response_listener_priority_applied_on_its_own_thread(monkeypatch):
+    import core.windows.thread_priority as native_priority
+
+    called = []
+    configured = threading.Event()
+
+    def demote():
+        called.append(threading.get_ident())
+        configured.set()
+        return True, "test_demoted", -1
+
+    monkeypatch.setattr(native_priority, "apply_best_effort_thread_priority", demote)
+    supervisor = ProcessSupervisor()
+    responses = queue.Queue()
+    supervisor._response_queues[WorkerType.IMAGE_PREFETCH] = responses
+    done = threading.Event()
+    try:
+        assert supervisor.register_response_callback(
+            WorkerType.IMAGE_PREFETCH, "prefetch", lambda response: done.set()
+        )
+        assert configured.wait(1.0)
+        assert called != [threading.get_ident()]
+        responses.put(WorkerResponse(
+            msg_type=MessageType.IMAGE_RESULT, seq_no=1,
+            correlation_id="prefetch", success=True,
+        ).to_dict())
+        assert done.wait(1.0)
+    finally:
+        supervisor.shutdown()
+
+
 class TestWorkerTypes:
     """Tests for WorkerType enum."""
     

@@ -180,6 +180,7 @@ class BackgroundRenderNode(QSGRenderNode):
         self._frame_trace = frame_trace
         self._failure_log = RenderFailureLog(logger, "Background render node")
         self._trace_render_sequence = 0
+        self._trace_first_transition_run_id = -1  # trace-only first-use record
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
         self._render_target_size: tuple[int, int] | None = None   # the last one a render saw
@@ -267,7 +268,21 @@ class BackgroundRenderNode(QSGRenderNode):
                     auxiliary=transition_run_id,
                 )
             if not self._program:
+                if trace is not None:
+                    trace.record(
+                        FrameTraceEvent.BACKGROUND_GL_SETUP_BEGIN,
+                        screen_index=self._screen_index,
+                        revision=trace_sequence,
+                        auxiliary=transition_run_id,
+                    )
                 self._initialize_gl()
+                if trace is not None:
+                    trace.record(
+                        FrameTraceEvent.BACKGROUND_GL_SETUP_READY,
+                        screen_index=self._screen_index,
+                        revision=trace_sequence,
+                        auxiliary=transition_run_id,
+                    )
             sample = None
             if run is not None:
                 sample = run.sample(time.monotonic_ns())
@@ -518,6 +533,19 @@ class BackgroundRenderNode(QSGRenderNode):
         if run is not None:
             if sample is None or not textures.has_transition_pair:
                 raise RuntimeError("Quick transition render state is incomplete")
+            # Capture only the first render for each run. The ordinary fast
+            # render loop does not gain another pair of trace events per frame.
+            first_run_render = bool(
+                trace is not None
+                and self._trace_first_transition_run_id != int(run.run_id)
+            )
+            if first_run_render:
+                trace.record(
+                    FrameTraceEvent.TRANSITION_FIRST_RENDER_BEGIN,
+                    screen_index=self._screen_index,
+                    revision=trace_sequence,
+                    auxiliary=transition_run_id,
+                )
             renderer_id = self._transition_renderer.render(
                 QuickTransitionRenderFrame(
                     run=run,
@@ -530,6 +558,14 @@ class BackgroundRenderNode(QSGRenderNode):
                     destination_texture_id=textures.destination_texture_id,
                 )
             )
+            if first_run_render:
+                self._trace_first_transition_run_id = int(run.run_id)
+                trace.record(
+                    FrameTraceEvent.TRANSITION_FIRST_RENDER_READY,
+                    screen_index=self._screen_index,
+                    revision=trace_sequence,
+                    auxiliary=transition_run_id,
+                )
             self._telemetry.note_transition_drawn(transition_id=renderer_id)
         else:
             self._draw_base(

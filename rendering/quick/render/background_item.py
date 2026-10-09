@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import threading
 import time
+import weakref
 
-from PySide6.QtCore import Property, Signal, Qt
-from PySide6.QtQuick import QQuickItem, QSGNode
+from PySide6.QtCore import Property, QRunnable, Signal, Qt
+from PySide6.QtGui import QOpenGLContext
+from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
 from .background_image_node import RetainedBackgroundSceneNode
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
-from core.performance.frame_trace import current_frame_trace
+from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
 
 
 class _RenderNodeRetirement:
@@ -54,54 +56,65 @@ class _RenderNodeRetirement:
             node.releaseResources()
 
 
-class _TransitionWarmUp:
-    """The next run's gradual warm-up (S11): one bounded step on a frame the window renders
-    anyway (``beforeRendering``, render thread, context current), until done or cancelled.
+class _TransitionWarmStepJob:
+    """Plain-Python payload for one context-current *idle render job*.
 
-    A step compiles at most one program, and steps are at least ``SPACING_S`` apart, so no
-    two nearby frames both carry a compile whatever the refresh rate. No timer, no thread
-    and no polling: a window that renders nothing does no warm-up, and the run then
-    prepares whatever is left itself exactly as before.
+    NoStage executes on the window's render owner without requesting a frame.
+    Qt deletes its QRunnable on the render thread. A Python *subclass* of
+    QRunnable crosses the Shiboken virtual-override/destruction boundary on
+    that thread; the R137-R139 jobs coincided with native aborts and wrong-
+    thread QBasicTimer destruction during startup. Instead, Qt owns the
+    callable-based runnable created by QRunnable.create(self.run), while this
+    payload stays an ordinary Python object containing NO QObject owners.
+
+    In particular, never close over a strong QQuickWindow or GUI reporter. A
+    pending runnable can be discarded without run() during scene-graph teardown.
+    The display manager serializes displays and owns delayed admissions.
     """
 
-    SPACING_S = 0.2
+    def __init__(self, window, retirement, request, cancelled, reporter, ticket: int) -> None:
+        # The callable-owned payload is intentionally not a QRunnable/QObject.
+        # Qt destroys the native runnable on the render thread.
+        self._window_ref = weakref.ref(window)
+        self._reporter_ref = weakref.ref(reporter)
+        self._retirement = retirement  # plain Python render-thread owner
+        self._request = request        # detached scalar/dict state
+        self._cancelled = cancelled    # threading.Event; no Qt affinity
+        self._ticket = ticket
 
-    def __init__(self, window, retirement: "_RenderNodeRetirement", transition_id: str, parameters) -> None:
-        self._lock = threading.Lock()
-        self._window = window
-        self._retirement = retirement
-        self._request = (transition_id, parameters)
-        self._next_step_at = time.monotonic() + self.SPACING_S
-        window.beforeRendering.connect(self._step, Qt.ConnectionType.DirectConnection)
-
-    @property
-    def active(self) -> bool:
-        with self._lock:
-            return self._window is not None
-
-    def cancel(self) -> None:
-        with self._lock:
-            window, self._window = self._window, None
-        if window is not None:
-            try:
-                window.beforeRendering.disconnect(self._step)
-            except (RuntimeError, TypeError):
-                pass  # the native window may already be disconnecting
-
-    def _step(self) -> None:
-        with self._lock:
-            window = self._window
-        now = time.monotonic()
-        if window is None or now < self._next_step_at:
+    def run(self) -> None:
+        if self._cancelled.is_set():
             return
-        self._next_step_at = now + self.SPACING_S
-        window.beginExternalCommands()
+        window = self._window_ref()
+        if window is None:
+            return  # the GUI scene has already retired
+        done = True  # failed optional preparation must not strand the owner
         try:
-            done = self._retirement.warm_step(*self._request)
+            if QOpenGLContext.currentContext() is None:
+                raise RuntimeError("idle warm-up job has no Qt-owned OpenGL context")
+            window.beginExternalCommands()
+            try:
+                if not self._cancelled.is_set():
+                    done = bool(self._retirement.warm_step(*self._request))
+            finally:
+                window.endExternalCommands()
+        except Exception:
+            # Optional preparation may fail closed; the authoritative transition
+            # retains its normal render-thread first-use path.
+            done = True
         finally:
-            window.endExternalCommands()
-        if done:
-            self.cancel()
+            # Do not retain the temporary strong GUI wrapper reference while
+            # Qt destroys this job on the render thread.
+            window = None
+        if self._cancelled.is_set():
+            return
+        reporter = self._reporter_ref()
+        if reporter is not None:
+            try:
+                reporter.finished.emit(self._ticket, done)
+            except RuntimeError:
+                # The GUI receiver has been destroyed during runtime retirement.
+                pass
 
 
 class BackgroundRenderItem(QQuickItem):
@@ -133,7 +146,7 @@ class BackgroundRenderItem(QQuickItem):
         # item construction rather than resolving global state from render().
         self._frame_trace = current_frame_trace()
         self._retirement = _RenderNodeRetirement(self._telemetry)
-        self._warm_up: _TransitionWarmUp | None = None
+        self._warm_up_cancel: threading.Event | None = None
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
         self._bind_window_invalidation(self.window())
@@ -206,20 +219,43 @@ class BackgroundRenderItem(QQuickItem):
         self._transition_run = run
         self.update()
 
-    def request_warm_up(self, transition_id: str, parameters) -> None:
-        """GUI thread: prepare the next run gradually, in spaced single-program steps on frames
-        the window renders anyway, so its first frame compiles nothing (S11). Replaces any
-        earlier request."""
-        self._cancel_warm_up()
+    def schedule_warm_step(self, transition_id: str, parameters, reporter, ticket: int) -> bool:
+        """GUI thread: one GL step with NoStage, with no rendering request.
+
+        Only the shared idle-preparation owner may call this. A hidden or
+        retiring window must fail closed instead of creating a repaint loop.
+        """
         window = self.window()
-        if window is None or self._transition_run is not None:
-            return
-        self._warm_up = _TransitionWarmUp(window, self._retirement, str(transition_id), dict(parameters))
+        if window is None or not window.isExposed() or self._transition_run is not None:
+            return False
+        self._cancel_warm_up()
+        cancelled = threading.Event()
+        self._warm_up_cancel = cancelled
+        payload = _TransitionWarmStepJob(
+            window, self._retirement, (str(transition_id), dict(parameters)),
+            cancelled, reporter, int(ticket),
+        )
+        try:
+            # Qt owns and deletes the built-in callable runnable, never a
+            # Python subclass with a virtual run() override. The callback's
+            # only QObject references are weak; there is no render-thread
+            # owner-finalization or QObject timer release path in its payload.
+            job = QRunnable.create(payload.run)
+            window.scheduleRenderJob(job, QQuickWindow.RenderStage.NoStage)
+        except Exception:
+            cancelled.set()
+            self._warm_up_cancel = None
+            return False
+        return True
 
     def _cancel_warm_up(self) -> None:
-        warm_up, self._warm_up = self._warm_up, None
-        if warm_up is not None:
-            warm_up.cancel()
+        token, self._warm_up_cancel = self._warm_up_cancel, None
+        if token is not None:
+            token.set()
+
+    def cancel_warm_up(self) -> None:
+        """GUI owner: invalidate any queued idle render job."""
+        self._cancel_warm_up()
 
     def _bind_window_invalidation(self, window) -> None:
         if window is self._bound_window:
@@ -283,12 +319,25 @@ class BackgroundRenderItem(QQuickItem):
             node = old_node
         else:
             self._retire_replaced_node(old_node)
+            # One-time node construction may perform context validation before
+            # native image admission. Attribute it separately from GL upload.
+            trace = self._frame_trace
+            if trace is not None:
+                trace.record(
+                    FrameTraceEvent.RETAINED_NODE_CREATE_BEGIN,
+                    screen_index=self._screen_index,
+                )
             node = RetainedBackgroundSceneNode(
                 window=window,
                 telemetry=self._telemetry,
                 screen_index=self._screen_index,
                 frame_trace=self._frame_trace,
             )
+            if trace is not None:
+                trace.record(
+                    FrameTraceEvent.RETAINED_NODE_CREATE_READY,
+                    screen_index=self._screen_index,
+                )
 
         node.synchronize(
             logical_size=(float(self.width()), float(self.height())),

@@ -46,17 +46,21 @@ def _wheel(position, delta, modifiers, horizontal=False):
 
 def test_alt_right_drag_moves_and_never_opens_the_menu(qt_app):
     owner, events = _owner(qt_app)
+    presses = []
+    owner.visualizer_move_started.connect(lambda: presses.append(True))
     assert owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, INSIDE, Qt.MouseButton.RightButton, ALT))
     assert owner.handle_mouse_move(_mouse(QEvent.Type.MouseMove, INSIDE + QPointF(30, -12), Qt.MouseButton.RightButton,
                                           ALT))
     assert owner.handle_mouse_release(_mouse(QEvent.Type.MouseButtonRelease, INSIDE + QPointF(30, -12),
                                              Qt.MouseButton.RightButton, ALT))
     assert events == [("move", QPoint(30, -12), QPoint(1230, 138)), ("finished",)]
+    assert presses == [True]  # exactly one rebasing event at native press, not per move
     # Without Alt, or off the Visualizer, the right button is the context menu as before.
     events.clear()
     owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, INSIDE, Qt.MouseButton.RightButton, NONE))
     owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, OUTSIDE, Qt.MouseButton.RightButton, ALT))
     assert events == [("menu",), ("menu",)]
+    assert presses == [True]  # never rebase an unrelated context-menu gesture
     # Alt + left keeps orbiting.
     events.clear()
     owner.handle_mouse_press(_mouse(QEvent.Type.MouseButtonPress, INSIDE, Qt.MouseButton.LeftButton, ALT))
@@ -182,6 +186,15 @@ def test_a_direct_gesture_moves_and_resizes_live_and_commits_once_through_edits_
                                                                                                  abs=0.51)
         assert layout.scale_direct_visualizer(120)                              # wheel up: larger
         assert scene.visualizer_item.presentation.outer_rect[2] > moved[2]
+        # Alt-wheel keeps the direct transaction open. A second Alt+right press
+        # resets pointer offsets, so its new origin must be the currently
+        # displayed rectangle, never the old drag's unscaled baseline.
+        before_second_drag = QRect(layout.session.items()[0].current_global_rect)
+        layout.rebase_direct_visualizer_drag()
+        assert not layout.move_direct_visualizer(QPoint(0, 0), QPoint())
+        assert layout.session.items()[0].current_global_rect == before_second_drag
+        assert layout.move_direct_visualizer(QPoint(3, 2), QPoint(3, 2))
+        assert layout.session.items()[0].current_global_rect.topLeft() == before_second_drag.topLeft() + QPoint(3, 2)
         working = scene.visualizer_item.presentation
         assert layout.finish_direct_visualizer_gesture()
         assert settings.save_calls == 1 and len(config_commits) == 1 and not layout.is_active
