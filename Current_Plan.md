@@ -4,7 +4,7 @@ This is a **live work checklist**, not a checkpoint chronicle. The current extra
 
 ## 0. Accepted state and immediate gate
 
-**Accepted by the operator (2026-10-09):** R151 Steam-cache and Settings repairs (**106 focused Windows tests passed**); R150 Sphere analysis-only DSP isolation and Shockwave's intentionally authored Spectrum-shaped horizon (**96 focused tests passed**); both visualizer modes physically accepted. Earlier implemented/physically good visual and cache changes remain accepted unless an anomaly is reported. Ordinary transition desync **400 ms**, first-image startup **200 ms**. The earlier severe dual-display collapse recovered after a **Windows reboot**, not a proved SRPSS patch; its root cause remains unknown. Bubble's small-radius judder is **deferred watchlist-only**.
+**Accepted by the operator (2026-10-09):** R151 Steam-cache and Settings repairs (**106 focused Windows tests passed**); R150 Sphere analysis-only DSP isolation and Shockwave's intentionally authored Spectrum-shaped horizon (**96 focused tests passed**); both visualizer modes physically accepted. Earlier implemented/physically good visual and cache changes remain accepted unless an anomaly is reported. Ordinary transition desync **400 ms**, first-image startup **200 ms**. The earlier severe dual-display collapse recovered after a **Windows reboot**, not a proved SRPSS patch; its root cause remains unknown. Bubble's small-radius judder is **deferred watchlist-only**. Diagnostic frame-trace bins were confirmed restored by the operator; do not reopen R156 or request another diagnostic build on that basis.
 
 The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/Qt 6.11.2**. `.venv` is already recreated and the Python 3.11 install was removed. Do **not** rerun the destructive cutover. The last supplied four-chunk run (on the **pre-R151** tree) had chunks 1–3 passing and a single R149 Steam final-publication collision in chunk 4; R151 corrected it and its affected 106-test group subsequently passed. **Do not imply that a new full-suite run passed.**
 
@@ -14,7 +14,21 @@ The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/
 - [ ] **BUILD-2 | OPERATOR ONLY:** Operator launches frozen products, validates two-monitor startup/exit, transitions, real audio (Sphere + Shockwave already physically accepted on source), widgets, image cache/prefetch, handles/threads, and installer behavior. Provide exact operator-run steps if requested; agents do not launch long runtime acceptance or take physical acceptance on the operator's behalf.
 - [ ] **BUILD-3 | REPORT-DRIVEN:** Fix only failures in the operator's submitted logs. Use **relevant focused tests** for changed code; do not run or request another four-chunk suite or product build without explicit operator direction. When the operator chooses to perform a final complete gate and accepts the frozen products, promote Python 3.14 as release authority and checkpoint/commit the baseline.
 
+**Frozen-product update (operator accepted):** The fresh Standard and Media Center evidence bundles showed Ban Image compiled and consistent frozen Python/data/native inventories. Operator subsequently confirmed **Ban Image now works in the Standard SCR**, as it already did in Media Center and source. Close the missing-action investigation; preserve R153's build evidence receipts as release infrastructure. No speculative rebuild or runtime menu diagnostics.
+
 **Preservation:** OpenBLAS one-thread before-NumPy import and Qt GUI image-pool thread retention remain binding footprint/churn improvements (R-99/R-97). Retain R144/R145 prefetch priority and cache-lock containment, bounded RAM and zero prefetch side-timers. New work must not recreate the previous Windows/DWM regression through speculative pacing changes.
+
+## 1A. Settings callback burst reduction | focused acceptance
+
+- [ ] **SETTINGS WARM PAGES:** R158 narrows deferred hidden-tab construction to Display and Transitions. Themes activate before UI creation; all other nonselected pages build on visit. Confirm focused Settings hydration, tab navigation, reset/import, theme and Display backend tests in Windows `.venv`; no builds or chonky suite.
+- [ ] **CENTRAL OPENGL INVARIANT:** Only SettingsManager may repair retired backend/acceleration values. DisplayTab may not rewrite either key merely because it was opened. Verify seeded `software`/disabled-hardware values are repaired by the manager even when Display is never visited.
+
+## 1A. Targeted overnight diagnostic follow-up | operator tests only
+
+- [ ] **LIFECYCLE:** R154 removes the strong `QuickDisplayUnit` bound-method connection to `retirement_completed`, which the diagnostic referrer snapshots identified as the only outstanding Python owner on monitor topology/application exit. Run only `tests/test_qtquick_display_unit.py tests/test_runtime_destruction.py tests/test_terminal_runtime_destruction.py` on Windows; request no overnight rerun or builds. `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` has the evidence and constraints.
+- [ ] **CROSS-DISPLAY MEDIA SHORTCUTS (R155):** Shortcut transport now chooses one live Media owner across the active Quick displays (focused one first), and Previous sends the Media model's canonical `previous` action. Await focused Windows shortcut tests and a quick physical check with the Media widget on the *other* display; do not start a new build solely for this gate.
+- [ ] **DIAGNOSTIC PRESET ROOT (R155):** Frozen Diagnostic now uses exactly the same machine-wide `%ProgramData%\SRPSS\presets` curated and explicit override trees as Standard and Media Center. Old diagnostic-onefile curated copies are no longer read or migrated; R154's temporary read-only audit utility has been retired. Await focused Windows path tests; preserve actual authored ProgramData files unchanged.
+- [ ] **Scope restriction:** The 90 Hz versus 60 Hz observation is expressly **off limits**. Transitions and 3D feature work belong to the operator's locally executing agent, not this targeted handoff.
 
 ## 2. New transitions | implementation queue
 
@@ -146,7 +160,7 @@ These items **do not block** the accepted source implementation or the next feat
 - [ ] **Bubble small-radius judder (deferred):** Current physical reaction is good. No further filter, smoothing or cadence experiments without real-music, scale/DPR and renderer-radius evidence. Preserve Bubble's temporal golden. `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md` owns previous failed approaches.
 - [ ] **Dual-display reboot incident (historical):** If it returns, collect DWM/driver/Qt swap-state evidence **before reboot**, compare same workload, then investigate. Do not assert that R144/R145 patches caused the recovery. See R-134–R-145 history.
 - [ ] **3D CUSTOM / Extruded authoring:** Previously implemented profile isolation, projected cage, hot-swap and Edit gestures are accepted. If an actual anomaly appears, use `Docs/Guides/Visualizer_Change_Checklist.md` and R-111–R-113; do not rewrite the source or resurrect a separate CUSTOM store. Extruded shadow rendering remains disabled (R-125–R-128). Historical Organs resemblance must never make mutable Organs presets a golden.
-- [ ] **Lifecycle/long-duration metrics:** Investigate replacement-generation leak, unexpected driver GPU tail, Qt negative point-size warning, OpenBLAS/Qt thread re-creation, memory/handle slope or schema mismatch only upon reproducible operator logs. A separate old historical observation is not an active engineering task.
+- [ ] **Other lifecycle/long-duration metrics:** Reopen only for new operator-observed regressions. The specific R154 teardown retention and authored-preset-local inspection are tracked under §1A; unrelated frame-rate efficiency work is off limits.
 
 ## Execution and handoff guardrails
 

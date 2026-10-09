@@ -2,6 +2,12 @@
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
+## Preset and settings schema coherence (historical regression consolidation)
+
+- [ ] Per-mode curated slot label, editable filename, embedded slot metadata, persisted CUSTOM snapshot and runtime cycle refer to the same canonical slot identity; authored payloads remain freely editable.
+- [ ] Adding/renaming a Visualizer Settings bucket changes its builder, canonical defaults/schema, selected-mode state map and reset/save consumers coherently. No consumer constructs guessed family keys for a mode without that capability.
+- [ ] Synthetic test-owned fixtures assert exact behavior; operator-authored Organs, Sphere or other curated preset contents are tested for schema/round-trip/preservation, never frozen as historical response-oracle bytes.
+
 ## 1. Read first
 
 - `Docs/Guardrails/Visualizer_Presentation.md`

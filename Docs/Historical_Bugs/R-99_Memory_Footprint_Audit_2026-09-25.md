@@ -1,5 +1,7 @@
 # R-99 — Memory Footprint Audit (2026-09-25)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-25  
 Status: PARTIAL / AWAITING VALIDATION. Four owners are fixed and measured on the real app (Linux, 4K); the Windows effect is confirmed through the built check's Phase 3. The lookahead depth awaits an operator decision.
 

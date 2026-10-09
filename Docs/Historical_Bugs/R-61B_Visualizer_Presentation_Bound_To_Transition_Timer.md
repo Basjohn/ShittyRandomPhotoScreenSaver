@@ -1,5 +1,7 @@
 # R-61B — Visualizer Presentation Bound To The Transition-Scoped Render Timer
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Archival ID note:** this incident was originally created with the duplicate identifier `R-61`. The Settings Glass incident retains `R-61`; this Visualizer/transition-timer record is `R-61B` solely to remove documentation ambiguity. The incident chronology/mechanism is unchanged.
 
 Date: 2026-08-17

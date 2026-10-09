@@ -1,5 +1,7 @@
 # R-51 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-07-28  
 Status: Resolved
 

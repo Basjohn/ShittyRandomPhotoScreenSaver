@@ -1,5 +1,7 @@
 # R-97 — Overnight Main-Process Private Commit Growth
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-25  
 Status: AWAITING VALIDATION — root cause found and fixed 2026-09-26 (thread churn × GL-driver per-thread state); awaiting an unattended physical run
 

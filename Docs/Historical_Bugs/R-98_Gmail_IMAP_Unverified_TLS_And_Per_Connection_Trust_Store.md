@@ -1,5 +1,7 @@
 # R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-25  
 Status: FIXED IN CODE / AWAITING VALIDATION — Gmail refresh on Windows must still succeed with verification on
 

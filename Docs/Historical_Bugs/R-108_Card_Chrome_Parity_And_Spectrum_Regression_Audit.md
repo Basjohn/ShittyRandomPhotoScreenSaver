@@ -1,5 +1,7 @@
 # R-108 | Card chrome parity and Spectrum regression audit
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** Spectrum raster defect **SOLVED / PHYSICALLY ACCEPTED**; PyAudioWPatch packet-framing defect **SOLVED IN CODE / REGRESSION-PROTECTED**; broader C4 Organs reaction and C5 cross-display parity acceptance remain open.
 
 ## Trigger

@@ -18,9 +18,15 @@
 | Settings UI | existing QWidget/settings owners |
 | Settings theme semantics/backdrop contract | `Docs/Architecture/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
 
+**Settings construction contract:** SettingsManager repairs the OpenGL-only backend and acceleration before the dialog exists. The dialog constructs its selected/restored page immediately, warms only Display/Transitions after visibility with bounded, cancellable callbacks, and constructs other tabs only when visited. Pre-UI Settings/Widget Theme activation, first-visit reload, built-only reset/import and close durability are independent of hidden pages. No silent hidden-tab normalization or speculative About/Scene3D artwork construction.
+
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 The Qt Quick cutover is complete: deleted `DisplayWidget`/old-presenter paths are history, not compatibility architecture.
 Do not preserve or recreate a presenter facade merely because a stale test/comment once referenced it.
+
+## Explicit frame-trace admission and evidence
+
+`--frame-trace` is an **explicit** application tracing request, including in Diagnostic. Never infer that a missing trace means the operator omitted the switch. At startup, `main.py` records a single sanitized receipt with independent Python and Windows-native command-line admission states. The existing binary sink starts only when the flag appears in at least one actual process argument surface, and writer-side Windows priority/I/O failures are warnings, not silent losses. Tracing is never enabled merely because a build is Diagnostic. The original bounded four-segment binary writer, nonblocking producers, demoted writer priority and separated `--gui-stall-stacks` admission are unchanged. See `Docs/Guides/Qt_QML_Observability.md` for the still-open Windows runtime cause and acceptance constraints.
 
 ## Winlogon URL handoff authority
 

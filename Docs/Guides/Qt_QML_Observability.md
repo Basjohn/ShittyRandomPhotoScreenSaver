@@ -1,5 +1,9 @@
 # Qt / QML Observability Contract
 
+## Frozen frame-trace admission and evidence
+
+When a diagnostic run explicitly requests `--frame-trace`, a trace file/header and activation receipt should be observable. Check the admitted arguments, writer-open result, bin rotation and output directory from evidence before speculating about user launch flags. The Python argv and Windows native process command line can differ in frozen launchers. Failed open/priority/writer paths must log a classified failure; absence of records is a diagnostic problem, not proof the operator disabled tracing.
+
 ## Purpose
 
 SRPSS has more than one diagnostic plane. Python logging alone is not sufficient evidence for a Qt Quick application.

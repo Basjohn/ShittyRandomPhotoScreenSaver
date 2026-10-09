@@ -1,5 +1,7 @@
 # R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-07-29  
 Status: Resolved
 

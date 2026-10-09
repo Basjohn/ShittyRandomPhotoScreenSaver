@@ -2,6 +2,12 @@
 
 Quick transition presentation is the current production path. Use this for future transition changes.
 
+## Geometry and shader negative controls from retired minor incidents
+
+- Random selection or rotation never rewrites the operator's authored transition direction; session choice is separate from Settings persistence.
+- Circular/angle-dependent transitions must not treat wrapped `atan` angles as monotonically linear across the branch cut; inspect the wrap seam at representative aspect ratios.
+- Animated noise fields (including Melt) require spatial continuity: chaotic floating-point hashes can diverge between compiler/precision paths and make obvious rectangular cell boundaries; prefer deterministically defined lattice hashes with tested interpolation and end states.
+
 ## Canonical flow
 
 ```text

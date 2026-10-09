@@ -1,5 +1,7 @@
 # R-75 — A superseded audio-analysis callback could release a serial-lane slot a newer owner held
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** FIXED / GREEN (2026-09-01)
 
 ## Symptom

@@ -191,7 +191,7 @@ then regenerates the binary `ui/resources/onboarding_assets.rcc` pack when stale
 `QResource` only when Guided Setup explicitly requests an asset; its existing `:/srpss/onboarding/...` identities do
 not change. See
 `Docs/Architecture/Persisted_Input_Compatibility.md` for content-sized CUSTOM downgrade behavior. The mechanisms behind
-the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md`.
+the 2026-09-27 review's defects are recorded in `Docs/Contracts.md`.
 
 ## Optional operator-triggered physical review
 

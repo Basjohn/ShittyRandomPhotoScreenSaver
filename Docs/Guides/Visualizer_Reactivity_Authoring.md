@@ -364,10 +364,7 @@ Read these for the cases behind this guide rather than copying their old impleme
 
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md` — behavioral shape + temporal fidelity; loud-passage variation; cadence/delivery negative controls.
 - `Docs/Historical_Bugs.md` **U-02 Bubble / Blob Signal-Contract Trap** — dead smoothed/post-AGC hold vs raw-energy blowout, stale-event replay, hot-chorus hard-ceiling failure.
-- `Docs/Historical_Bugs/Voxel_Sphere_Clamped_Event_Strength_Was_Not_Particle_Velocity_2026-09-10.md` — event admission confidence is not continuous particle velocity authority.
-- `Docs/Historical_Bugs/Voxel_Sphere_Absolute_Loudness_Pinned_Particle_Density_2026-09-10.md` — absolute passage loudness is not event population authority.
-- `Docs/Historical_Bugs/Voxel_Sphere_Playback_State_Is_Not_Ingress_Authority_2026-09-10.md` — playback state is not acoustic presence.
-- `Docs/Historical_Bugs/Voxel_Sphere_Global_Intake_Decay_Was_Not_Velocity_2026-09-10.md` — one global decay is not a real per-cohort motion/arrival contract.
+- `Docs/Historical_Bugs/Sphere_2026-09-10_Acoustic_Admission_And_Cohort_Motion_Investigation.md` — consolidated acoustic intake and detached-cohort mistakes: playing state, loudness, saturated event confidence, and one global decay are **not** interchangeable admission/population/velocity authorities.
 - R-69 / Bubble viewport evidence — viewport adaptation may not globally damp authored reaction.
 - R-76 / tall Spectrum evidence — physical-pixel flicker caused by delivery/temporal scaling must not be “fixed” by reducing response.
 

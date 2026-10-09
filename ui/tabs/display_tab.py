@@ -791,14 +791,6 @@ class DisplayTab(QWidget):
             self._refresh_widget_glow_swatch()
             self._update_widget_glow_detail_visibility()
 
-            # Renderer backend — always OpenGL, normalize legacy values
-            backend_mode_raw = self._settings.get('display.render_backend_mode')
-            backend_mode = str(backend_mode_raw).lower()
-            if backend_mode != 'opengl':
-                logger.info("[DISPLAY] Legacy backend '%s' detected; normalizing to OpenGL", backend_mode)
-                self._settings.set('display.render_backend_mode', 'opengl')
-                self._settings.set('display.hw_accel', True)
-
             logger.debug(
                 "Loaded display settings: resample_filter=%s, sharpen=%s",
                 resample_filter,
@@ -916,10 +908,6 @@ class DisplayTab(QWidget):
             'input.widget_glow_jedi_mode',
             self.widget_glow_jedi_mode_check.isChecked(),
         )
-
-        # Renderer backend — always OpenGL
-        self._settings.set('display.render_backend_mode', 'opengl')
-        self._settings.set('display.hw_accel', True)
 
         self._settings.save()
         self.display_changed.emit()

@@ -12,7 +12,7 @@
 
 ## Evidence already accepted
 
-The operator's migration tooling selection passed **47/47**; R149's source repair focus passed **124/124**; R150 Sphere/Shockwave audio isolation focus passed **96/96**; and R151's Windows Steam/Settings regression selection passed **106/106**. Sphere and Shockwave were also physically accepted. Those focused results do not imply a full R151 destination-suite pass. The latest supplied four-chunk results, from before the R151 publication-lock repair, had one Windows Steam final-publication collision in chunk 4; its repair has now passed the relevant focused tests. See R-149/R-150/R-151 historical incident records for their original observations.
+The operator's migration tooling selection passed **47/47**; R149's source repair focus passed **124/124**; R150 Sphere/Shockwave audio isolation focus passed **96/96**; and R151's Windows Steam/Settings regression selection passed **106/106**. Sphere and Shockwave were also physically accepted. Those focused results do not imply a full R151 destination-suite pass. The latest supplied four-chunk results, from before the R151 publication-lock repair, had one Windows Steam final-publication collision in chunk 4; its repair has now passed the relevant focused tests. The now-retired R149 test diary is not current evidence authority; the substantial Sphere analysis and cache publication mechanisms remain in R150 and R151, linked from `Docs/Historical_Bugs.md`.
 
 ## Build and physical acceptance | operator owns execution
 
@@ -28,6 +28,14 @@ The operator may use the Build Runner GUI or the existing worker scripts. Worker
 - Reddit Helper: `scripts/venv/build_reddit_helper.ps1`
 
 Physical acceptance covers frozen launch/exit, dual-display transitions (400 ms ordinary desync, 200 ms first-image stagger), audio/widgets, image cache/prefetch, runtime/installer footprint and clean retirement. Native build acceptance can only be claimed from operator-run Windows results.
+
+## Build Runner evidence for onefile and onedir parity
+
+For each **operator-launched** build, Build Runner now uses the same run token for its wrapper log and the worker reports. After a job completes (including compiler failures), use the **Evidence ZIP** link beside that job or collect `logs/build_evidence_<job>_<run-id>.zip` (e.g. `build_evidence_standard_...zip`). It contains `evidence.json`, Build Runner transcript, and any reports actually generated for that run. An absent XML is reported as missing, not substituted from a different build. The large SCR/EXE is **not** duplicated in the ZIP; `evidence.json` records its size and SHA-256.
+
+For Nuitka jobs, the worker also validates `rendering.quick.context_menu`, `core.sources.image_bans`, and critical engine modules against the generated XML **before publishing**. A source fingerprint prevents reusing a onefile extraction directory across different tracked source revisions. This is a build-provenance safeguard, **not** proof of on-screen menu parity. The Normal onefile Ban Image discrepancy remains open in `Docs/Guides/Python314_Cutover.md` until operator physical confirmation.
+
+No agent should launch a build to generate this evidence. Use relevant focused source/packaging tests and wait for the operator's build reports.
 
 ## Operator-requested focused command format
 

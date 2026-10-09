@@ -1,5 +1,7 @@
 # R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-08-02  
 Last updated: 2026-08-08
 Status: Solved after mechanical and installed validation

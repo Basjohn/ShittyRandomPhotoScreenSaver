@@ -1,5 +1,7 @@
 # R-151 | Same-destination Steam cache publication collision on Windows
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-10-09  
 Status: **SOURCE REPAIR IMPLEMENTED / FOCUSED WINDOWS ACCEPTANCE PENDING**
 

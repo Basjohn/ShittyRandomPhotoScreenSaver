@@ -1,5 +1,7 @@
 # R-105 | Bubble Remaining Small-Radius Judder
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Status: **TINY-BREATH EXPERIMENT REJECTED AND REMOVED / PHYSICAL LOCALIZATION OPEN**
 Binding contract: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 Live acceptance: `Current_Plan.md` section 1.

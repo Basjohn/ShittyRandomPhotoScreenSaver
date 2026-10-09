@@ -1,5 +1,7 @@
 # R-65 — Image Change Admission Could Bare-Snap And Prefetch Could Strand Across Recreation
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-01
 Status: Solved (transaction/prefetch core); R-63 seam remains separate
 

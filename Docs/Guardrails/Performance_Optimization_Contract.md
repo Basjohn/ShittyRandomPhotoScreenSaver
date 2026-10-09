@@ -14,6 +14,10 @@ Cross-links:
 - R-71 audio-allocation/GC history: `Docs/Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md`
 - final installed/physical acceptance: the feature's own Reference/Future_Work/Historical_Bugs doc + `Docs/TestSuite.md`
 
+## Retired audit proposals (R-100 and legacy repaint failures)
+
+The September 2026 runtime audit explicitly rejected treating small theoretical CPU savings as permission to weaken the accepted logical freshness, Bubble fidelity, or Qt Quick scheduling authority. Do **not** re-propose, without new measured evidence, forced swap interval 1, arbitrary GIL switch/GC tuning, render-thread priority boosts, visualizer cadence/Update coalescing, speculative per-frame presentation caches, a Python display-refresh timer or `frameSwapped → requestUpdate()` rescue, legacy pending-paint/paint-ack throttles, or restoring the old QWidget/GL overlay repaint machinery. These ideas were tested or rejected for architecture/fidelity reasons, not merely forgotten. Keep diagnostic deep traces opt-in and outside normal frame work. An old repair's **30-second/no-paint** workaround is not current Qt Quick policy.
+
 ## 1. Definition of good performance
 
 SRPSS performance is good when the application remains **fresh, reactive, smooth and bounded under realistic load**. Lower counters are useful only when those qualities remain intact.

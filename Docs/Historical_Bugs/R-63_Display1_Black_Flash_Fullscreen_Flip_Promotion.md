@@ -1,5 +1,7 @@
 # R-63 — Display-1 Black Flash from Fullscreen-Flip PresentMode Transitions
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-08-31
 Status: Solved / H accepted — recurring black/stale flash eliminated; bounded mixed-DPR 1px shared-edge overshoot accepted residual
 

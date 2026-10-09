@@ -555,21 +555,17 @@ def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager
     assert dialog.widgets_tab_btn.isChecked() is True
 
 
-def test_settings_dialog_background_hydration_skips_widgets_and_visualizers(
+def test_settings_dialog_background_hydration_only_warms_display_and_transitions(
     qapp, settings_manager, animation_manager
 ):
-    """Widgets and Visualizers are excluded from off-screen background hydration,
-    and the Visualizers tab (once built) keeps every mode body dormant."""
+    """Keep hidden construction bounded; active pages and visualizers stay lazy."""
     dialog = SettingsDialog(settings_manager, animation_manager)
 
-    # The dialog is never shown in the test, so background hydration is queued but
-    # not drained by timers: the queue is a deterministic view of what WOULD be
-    # built off-screen. Widgets and Visualizers must not appear in it, while other
-    # non-initial tabs do.
+    # Before showEvent no queued callback fires. Only frequently visited UI
+    # subscribers may be warmed: no Themes/About art or heavyweight widget UI.
     queued_keys = {dialog._tab_key_for_index(i) for i in dialog._background_tab_queue}
-    assert "widgets" not in queued_keys
-    assert "visualizers" not in queued_keys
-    assert {"display", "transitions", "accessibility", "themes"} <= queued_keys
+    assert queued_keys == {"display", "transitions"}
+    assert {"sources", "widgets", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"}.isdisjoint(queued_keys)
 
     # Neither excluded tab has been constructed: their stacked-widget slots are
     # still the placeholders installed at setup.
@@ -586,6 +582,56 @@ def test_settings_dialog_background_hydration_skips_widgets_and_visualizers(
     assert vis is not None
     for descriptor in iter_visualizer_mode_descriptors():
         assert getattr(vis, descriptor.preset_slider_attr, None) is None
+
+
+def test_settings_dialog_only_warms_selected_pages_and_keeps_other_pages_lazy(
+    qapp, settings_manager, animation_manager, monkeypatch,
+):
+    """The delayed queue may construct Display/Transitions but no dormant pages."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    pending = []
+    built = []
+    try:
+        monkeypatch.setattr(
+            settings_dialog_module.ThreadManager,
+            "single_shot",
+            staticmethod(lambda delay, cb: pending.append((delay, cb))),
+        )
+        monkeypatch.setattr(
+            dialog, "_ensure_tab_built", lambda index: built.append(dialog._tab_key_for_index(index)),
+        )
+        dialog._start_background_tab_hydration()
+        assert len(pending) == 1
+        delay, admit = pending.pop(0)
+        assert delay == 1500
+        admit()
+        assert len(pending) == 1
+        for name in ("display", "transitions"):
+            delay, callback = pending.pop(0)
+            assert delay == 150
+            callback()
+            assert built[-1] == name
+        assert pending == []
+        assert built == ["display", "transitions"]
+        assert dialog.__dict__.get("about_tab") is None
+        assert dialog.__dict__.get("themes_tab") is None
+    finally:
+        dialog._closing = True
+        dialog.deleteLater()
+
+
+def test_settings_dialog_active_tab_is_never_requeued_for_warmup(
+    qapp, settings_manager, animation_manager,
+):
+    settings_manager.set("ui.last_tab_key", "transitions")
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    try:
+        assert dialog._tab_key_for_index(dialog._initial_tab_index) == "transitions"
+        queued = [dialog._tab_key_for_index(i) for i in dialog._background_tab_queue]
+        assert queued == ["display"]
+    finally:
+        dialog._closing = True
+        dialog.deleteLater()
 
 
 def test_settings_dialog_builds_widgets_tab_in_lazy_mode():

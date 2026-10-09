@@ -165,7 +165,7 @@ Settings-theme <-> Widget-theme linking is one persisted **bidirectional** stabl
 
 Live Settings theme publication must distinguish Python wrapper lifetime from C++ QObject lifetime. Registries may use weak references for ownership, but before applying live QSS they must verify that the PySide wrapper still owns a valid C++ QObject and prune stale wrappers. A stale deleted wrapper is cleanup, not a renderer failure; an exception from a still-live renderer remains transaction-fatal and rolls the theme back.
 
-Runtime cards remain the ordinary retained Qt Quick RGBA surface/border/shadow path. The rejected runtime Glass/Acrylic card experiment has no schema field, Surface Style override, card material Loader, background capture/layer, mask tree or cadence callback. The wallpaper/transition render node is directly composited under the display scene using the healthy pre-material topology, selectively restored while preserving the later Bidirectional theme/lifetime/C++ fixes. Settings-window Glass/Acrylic remains a separate native QWidget/HWND theme concern. The failed runtime-card experiments are preserved as negative-control history in `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md`.
+Runtime cards remain the ordinary retained Qt Quick RGBA surface/border/shadow path. The rejected runtime Glass/Acrylic card experiment has no schema field, Surface Style override, card material Loader, background capture/layer, mask tree or cadence callback. The wallpaper/transition render node is directly composited under the display scene using the healthy pre-material topology, selectively restored while preserving the later Bidirectional theme/lifetime/C++ fixes. Settings-window Glass/Acrylic remains a separate native QWidget/HWND theme concern. The failed runtime-card experiments are preserved as negative-control history in `Docs/Contracts.md`.
 
 The curated source pack currently contains 58 Settings themes and 58 deterministic colour-only Widget counterparts, including four deliberately light/white-adjacent themes and four silver/metal themes. Settings-theme filenames may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND. Widget counterpart display names and filenames omit those tags while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while frozen/installed runtime reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Normal and Media Center installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
 
@@ -384,6 +384,7 @@ Boolean or exception outcome to the single shared Media runtime owner, which
 generation-fences it and then refreshes accepted state. Play/Pause capability is
 the state-appropriate union of canonical GSMTC Play, Pause and Toggle controls;
 seek position is an absolute 100 ns tick value.
+Quick runtime Space/Home (play/pause), Left (previous) and Right (next) shortcuts route through `DisplayManager` to exactly one **live** Media presentation across all active displays, preferring the invoking display when it owns Media. Input focus on a display without Media must not drop the command. Retired display/generation units are ineligible. The canonical Media action names are `play`, `previous`, `next`; do not reintroduce `prev` at the Media boundary or emit commands on multiple displays.
 
 ## Dynamic images
 
@@ -579,6 +580,7 @@ The currently curated Sphere presentation examples include **Glass Current** (Pr
 ## Visualizer preset catalogue ownership
 
 Per-mode visualizer preset JSON files are **user-authored state**. Users may add arbitrary counts, delete presets down to one survivor, and leave sparse authored numbers such as `1, 5, 20`. Runtime compacts whatever authored presets exist into slider positions plus trailing Custom without renaming/deleting their files. Edit Preset resolves the real backing file; Save Preset As chooses a non-colliding authored number. Shipped preset manifests may support packaging/reconciliation but are never runtime authority over the user catalogue, and startup must never require authored numbers to be contiguous.
+Frozen Standard, Media Center **and Diagnostic** share the **same** `%ProgramData%\SRPSS\presets\visualizer_modes` curated directory and `%ProgramData%\SRPSS\presets\visualizer_mode_overrides` explicit-override directory. Diagnostic is a logging/build profile, never a separate curated-preset authority; it must not select or migrate old `diagnostic-onefile` preset copies. Source/dev mode retains repository preset resolution. Do not alter, normalize or silently replace operator-authored JSON when enforcing path parity.
 
 ## Visualizer interactions
 

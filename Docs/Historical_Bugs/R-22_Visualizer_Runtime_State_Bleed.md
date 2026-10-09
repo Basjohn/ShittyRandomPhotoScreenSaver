@@ -1,5 +1,7 @@
 # R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 ## Classification
 
 - [ ] COMPLETELY FUCKED

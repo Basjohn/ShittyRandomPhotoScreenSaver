@@ -1,5 +1,7 @@
 # R-104 — FEEDS Main-GIL Parsing Stalled Qt, Warm Artwork Lost Its Binding, And Hydration Drove Fades
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** SOLVED / ACCEPTED (2026-10-02). FEEDS retains robust cache-first/last-good semantics while expensive document examination is isolated from the Qt process GIL and warm artwork identity is durable.
 
 ## Symptoms

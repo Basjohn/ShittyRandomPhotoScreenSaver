@@ -210,7 +210,13 @@ $ReleaseRoot = Join-Path $Root 'release'
 $DistributionDir = Join-Path $ReleaseRoot $DistributionName
 $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+# Build Runner passes the same run ID to the worker, its reports and the
+# consolidated evidence bundle. Direct-script builds retain a local timestamp.
+$Timestamp = if ($env:SRPSS_BUILD_RUN_ID -match '^\d{8}_\d{6}_\d{6}$') {
+    $env:SRPSS_BUILD_RUN_ID
+} else {
+    Get-Date -Format "yyyyMMdd_HHmmss_ffffff"
+}
 $LogFile = Join-Path $LogDir ("{0}_{1}.log" -f $LogStem, $Timestamp)
 $NuitkaReportFile = Join-Path $LogDir ("{0}_report_{1}.xml" -f $LogStem, $Timestamp)
 $FootprintReportFile = Join-Path $LogDir ("{0}_footprint_{1}.json" -f $LogStem, $Timestamp)
@@ -343,6 +349,16 @@ if ($Console) {
 $consoleArg = "--windows-console-mode=disable"
 if ($Console) { $consoleArg = "--windows-console-mode=force" }
 
+# Hash the exact runtime source inputs before the expensive compile. Fixed
+# onefile cache roots allowed different snapshots with the same product version
+# to collide; each distinct source payload now owns its extraction directory.
+$FrozenAudit = Join-Path $Root 'tools\frozen_build_audit.py'
+$SourceFingerprint = (& $VenvPython $FrozenAudit fingerprint --root $Root | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $SourceFingerprint -notmatch '^[a-f0-9]{20}$') {
+    throw 'Could not establish frozen source identity before Nuitka compilation.'
+}
+Write-Host "[BUILD-VENV] Frozen source identity: $SourceFingerprint"
+
 $argsList = @(
     "-m", "nuitka",
     "--msvc=latest",
@@ -382,7 +398,7 @@ $argsList = @(
     "--include-module=winrt.windows.foundation",
     "--include-module=winrt.windows.foundation.collections",
     "--noinclude-default-mode=error",
-    "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/$OnefileCacheName"
+    "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/$OnefileCacheName/$SourceFingerprint"
 )
 
 $argsList += @(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $Root)
@@ -450,6 +466,12 @@ if (-not $Exe) {
     Write-Host "[BUILD-VENV] Build failed or no executable produced. See log: $LogFile"
     exit 1
 }
+
+# Fail closed if Nuitka dropped a required code module or sources changed during
+# compilation. An absent action must never be accepted as a successful build.
+$FrozenReceipt = Join-Path $LogDir ("{0}_frozen_audit_{1}.json" -f $LogStem, $Timestamp)
+& $VenvPython $FrozenAudit verify --root $Root --report $NuitkaReportFile --expected $SourceFingerprint --artifact $Exe.FullName --receipt $FrozenReceipt
+if ($LASTEXITCODE -ne 0) { throw 'Frozen module/source audit failed; refusing to publish a potentially incomplete screensaver.' }
 
 # A onefile payload embeds data; validate the source-derived Quick/QML and
 # visualizer declarations instead of looking for an adjacent dist directory

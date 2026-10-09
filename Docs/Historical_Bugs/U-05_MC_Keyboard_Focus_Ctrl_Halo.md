@@ -1,5 +1,7 @@
 # U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 ## Classification
 
 - [x] COMPLETELY FUCKED

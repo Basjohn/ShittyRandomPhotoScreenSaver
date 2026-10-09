@@ -1,5 +1,7 @@
 # R-86 — Forced VSync hypothesis for Qt Quick pacing
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Status: **REJECTED / ROLLED BACK 2026-09-14**
 
 ## Symptom

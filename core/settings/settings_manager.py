@@ -1416,32 +1416,24 @@ class SettingsManager(QObject):
                     f"Invalid value: {resample_filter!r}"
                 )
 
-            # Validate display.render_backend_mode - must be valid enum
+            # One rendering backend exists: Qt Quick OpenGL. Normalize at the
+            # central persistence boundary, never as a hidden DisplayTab side
+            # effect. This also repairs stale values before Settings is opened.
             backend_mode = self._settings.value('display.render_backend_mode')
-            valid_backends = {'opengl', 'software'}
-            if backend_mode is not None:
-                normalized = None
-                if isinstance(backend_mode, str):
-                    normalized = backend_mode.lower().strip()
-                if not isinstance(normalized, str) or normalized not in valid_backends:
-                    logger.warning(
-                        "Repairing display.render_backend_mode: %r not in %s",
-                        backend_mode,
-                        valid_backends,
-                    )
-                    self._settings.setValue(
-                        'display.render_backend_mode',
-                        require_canonical_default('display.render_backend_mode', self._application),
-                    )
-                    repairs['display.render_backend_mode'] = f"Invalid value: {backend_mode!r}"
+            canonical_backend = require_canonical_default(
+                'display.render_backend_mode', self._application
+            )
+            if backend_mode != canonical_backend:
+                logger.info(
+                    "Repairing retired display backend setting %r -> %r",
+                    backend_mode, canonical_backend,
+                )
+                self._settings.setValue('display.render_backend_mode', canonical_backend)
+                repairs['display.render_backend_mode'] = f"Unsupported value: {backend_mode!r}"
 
-            # Validate display.hw_accel - keep in sync with backend mode
+            # Hardware acceleration cannot be disabled in the Qt Quick runtime.
             hw_accel = self._settings.value('display.hw_accel')
-            backend_mode_final = self._settings.value('display.render_backend_mode')
-            backend_is_opengl = False
-            if isinstance(backend_mode_final, str) and backend_mode_final.lower().strip() == 'opengl':
-                backend_is_opengl = True
-            expected_hw = bool(backend_is_opengl)
+            expected_hw = True
             if hw_accel is not None:
                 if isinstance(hw_accel, bool):
                     hw_val = hw_accel
@@ -1451,13 +1443,12 @@ class SettingsManager(QObject):
                     hw_val = bool(hw_accel)
                 if hw_val != expected_hw:
                     logger.info(
-                        "Repairing display.hw_accel: %r -> %r (backend=%r)",
+                        "Repairing display.hw_accel: %r -> %r (OpenGL-only)",
                         hw_accel,
                         expected_hw,
-                        backend_mode_final,
                     )
                     self._settings.setValue('display.hw_accel', expected_hw)
-                    repairs['display.hw_accel'] = f"Mismatch with backend: {backend_mode_final!r}"
+                    repairs['display.hw_accel'] = "Hardware acceleration required"
             else:
                 # Missing key: populate to avoid ambiguous startup paths.
                 self._settings.setValue('display.hw_accel', expected_hw)

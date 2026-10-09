@@ -1791,6 +1791,20 @@ class DisplayManager(QObject):
             target.custom_presets_changed,
         )
 
+    def _route_quick_media_transport(self, source: QuickDisplayUnit, key: str) -> bool:
+        """Route a shortcut to one live Media owner, regardless of focused screen.
+
+        The focused display gets first refusal when it hosts Media; otherwise
+        try other current units in display order.  Never fan a transport
+        command out to multiple media controllers or retired generations.
+        """
+        if self._retired or source.is_retired or source not in self.displays:
+            return False
+        for unit in (source, *(unit for unit in self.displays if unit is not source)):
+            if not unit.is_retired and unit.request_media_transport(key):
+                return True
+        return False
+
     def _connect_quick_runtime(
         self,
         unit: QuickDisplayUnit,
@@ -1830,16 +1844,16 @@ class DisplayManager(QObject):
             else None
         )
         runtime.play_pause_requested.connect(
-            lambda display=unit: display.request_media_transport("play")
+            lambda display=unit: self._route_quick_media_transport(display, "play")
         )
         runtime.home_play_pause_requested.connect(
-            lambda display=unit: display.request_media_transport("play")
+            lambda display=unit: self._route_quick_media_transport(display, "play")
         )
         runtime.previous_track_requested.connect(
-            lambda display=unit: display.request_media_transport("prev")
+            lambda display=unit: self._route_quick_media_transport(display, "previous")
         )
         runtime.next_track_requested.connect(
-            lambda display=unit: display.request_media_transport("next")
+            lambda display=unit: self._route_quick_media_transport(display, "next")
         )
         runtime.slider_volume_up_requested.connect(
             lambda display=unit: display.request_app_volume_step(+1)

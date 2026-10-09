@@ -290,7 +290,7 @@ def test_display_manager_constructs_only_authoritative_quick_units(
         assert actions == [
             (0, "transport", "play"),
             (0, "transport", "play"),
-            (0, "transport", "prev"),
+            (0, "transport", "previous"),
             (0, "transport", "next"),
             (0, "app_volume", 1),
             (0, "app_volume", -1),
@@ -1512,3 +1512,52 @@ def test_runtime_binds_visualizer_viewport_config_with_committed_and_custom_over
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+def test_media_shortcuts_cross_displays_once_and_ignore_retired_owners() -> None:
+    """Transport is one GUI admission, not one action per display or per focus."""
+    from types import SimpleNamespace
+
+    commands: list[tuple[str, str]] = []
+
+    class _Unit:
+        def __init__(self, name: str, *, accepts: bool = False) -> None:
+            self.name = name
+            self.accepts = accepts
+            self.is_retired = False
+
+        def request_media_transport(self, key: str) -> bool:
+            commands.append((self.name, key))
+            return self.accepts
+
+    focused = _Unit("focused")
+    media_owner = _Unit("media", accepts=True)
+    another_owner = _Unit("another", accepts=True)
+    manager = SimpleNamespace(_retired=False, displays=[focused, media_owner, another_owner])
+
+    for action in ("play", "previous", "next"):
+        assert DisplayManager._route_quick_media_transport(manager, focused, action)
+        assert commands[-2:] == [("focused", action), ("media", action)]
+    assert not any(name == "another" for name, _ in commands)
+
+    commands.clear()
+    focused.accepts = True
+    assert DisplayManager._route_quick_media_transport(manager, focused, "play")
+    assert commands == [("focused", "play")]
+
+    commands.clear()
+    focused.is_retired = True
+    assert not DisplayManager._route_quick_media_transport(manager, focused, "play")
+    assert commands == []
+
+    focused.is_retired = False
+    media_owner.is_retired = True
+    focused.accepts = False
+    assert DisplayManager._route_quick_media_transport(manager, focused, "next")
+    assert commands == [("focused", "next"), ("another", "next")]
+    commands.clear()
+    manager._retired = True
+    assert not DisplayManager._route_quick_media_transport(manager, focused, "play")
+    manager._retired = False
+    assert not DisplayManager._route_quick_media_transport(manager, _Unit("stale"), "play")
+    assert commands == []

@@ -1,5 +1,7 @@
 # R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-01
 Status: H performance remediation accepted; residual rare deep-GC debt deferred to late J
 

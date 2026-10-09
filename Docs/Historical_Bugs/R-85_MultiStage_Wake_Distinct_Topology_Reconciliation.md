@@ -1,5 +1,7 @@
 # R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-14  
 Status: Correctness Preserved / Installed Soak Validation Pending
 

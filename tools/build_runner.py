@@ -46,6 +46,7 @@ from core.build_qml_contract import audit_qml_source_contract  # noqa: E402
 from core.visualizer_preset_manifest import (  # noqa: E402
     write_curated_visualizer_preset_manifest,
 )
+from tools.build_evidence import write_build_evidence  # noqa: E402
 from tools.regen_qrc import (  # noqa: E402
     QrcRegenerationError,
     QrcStatus,
@@ -297,6 +298,7 @@ class JobResult:
     log_path: Path
     output_path: Path
     aborted: bool = False
+    evidence_path: Path | None = None
 
 
 class _WindowsBuildJob:
@@ -1186,7 +1188,7 @@ def prune_build_runner_logs(
         return
 
     matcher = re.compile(
-        r"^build_runner_(?P<job>.+)_\d{8}_\d{6}\.log$",
+        r"^build_runner_(?P<job>.+)_\d{8}_\d{6}(?:_\d{6})?\.log$",
         flags=re.IGNORECASE,
     )
     requested_job = _safe_slug(job_key) if job_key is not None else None
@@ -1271,7 +1273,7 @@ def run_job(
         job_key=job.key,
         keep=max(0, RUNNER_LOGS_PER_JOB - 1),
     )
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     log_path = log_dir / f"build_runner_{_safe_slug(job.key)}_{timestamp}.log"
 
     if job.kind == "powershell":
@@ -1337,6 +1339,7 @@ def run_job(
                 cwd=str(REPO_ROOT),
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
+                env={**os.environ, "SRPSS_BUILD_RUN_ID": timestamp},
                 **_windows_subprocess_kwargs(),
             )
             completed_returncode = process.wait()
@@ -1362,7 +1365,20 @@ def run_job(
             detail = "Compiler exited 0, but the expected artifact is missing"
         else:
             detail = "Completed" if returncode == 0 else f"Failed (exit {returncode})"
-        return JobResult(returncode, detail, log_path, job.output_dir, aborted=aborted)
+        # Close/flush the wrapper log before creating the evidence bundle.
+        # Report missing/partial files as missing; never borrow an older XML.
+        evidence_path = None
+        try:
+            evidence_path = write_build_evidence(
+                log_dir, _safe_slug(job.key), timestamp, log_path,
+                job.expected_artifact, returncode,
+            )
+        except (OSError, ValueError) as exc:
+            detail += f"; evidence ZIP failed: {exc}"
+        return JobResult(
+            returncode, detail, log_path, job.output_dir,
+            aborted=aborted, evidence_path=evidence_path,
+        )
     except BuildPipelineCancelled:
         return JobResult(130, "Aborted by operator", log_path, job.output_dir, aborted=True)
     except OSError as exc:
@@ -1577,6 +1593,7 @@ class JobWidgets:
     status: tk.Label
     log_link: LinkLabel
     output_link: LinkLabel
+    evidence_link: LinkLabel
 
 
 class BuildRunnerApp:
@@ -2400,6 +2417,9 @@ class BuildRunnerApp:
         log_link = LinkLabel(frame, "Log", lambda: None)
         log_link.pack(side="right", padx=(4, 2))
         log_link.pack_forget()
+        evidence_link = LinkLabel(frame, "Evidence ZIP", lambda: None)
+        evidence_link.pack(side="right", padx=(4, 2))
+        evidence_link.pack_forget()
         self._job_widgets[job.key] = JobWidgets(
             frame,
             variable,
@@ -2407,6 +2427,7 @@ class BuildRunnerApp:
             status,
             log_link,
             output_link,
+            evidence_link,
         )
 
     def _preflight_worker(self, mode: ModeName) -> None:
@@ -2675,6 +2696,9 @@ class BuildRunnerApp:
             )
             widgets.log_link._command = lambda path=result.log_path: open_local_path(path)
             widgets.log_link.pack(side="right", padx=(4, 2), before=widgets.status)
+            if result.evidence_path is not None and result.evidence_path.is_file():
+                widgets.evidence_link._command = lambda path=result.evidence_path: open_local_path(path)
+                widgets.evidence_link.pack(side="right", padx=(4, 2), before=widgets.log_link)
             if result.output_path.exists():
                 widgets.output_link.pack(side="right", padx=(4, 2), before=widgets.log_link)
             return

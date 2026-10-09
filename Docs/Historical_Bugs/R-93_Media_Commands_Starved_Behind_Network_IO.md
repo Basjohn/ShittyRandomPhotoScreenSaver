@@ -1,5 +1,7 @@
 # R-93 — Media Commands And Refreshes Starved Behind Network IO
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-23  
 Status: SOLVED — runtime audit PW-02, accepted from operator logs 2026-09-23
 

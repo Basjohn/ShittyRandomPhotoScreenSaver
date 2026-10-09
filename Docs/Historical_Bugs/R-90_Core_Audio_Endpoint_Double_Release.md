@@ -1,5 +1,7 @@
 # R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-23  
 Status: SOLVED — `50052050`; closed 2026-09-23 by a native test on the real endpoint
 
