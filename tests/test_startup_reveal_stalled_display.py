@@ -218,7 +218,8 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
         startup = manager._display_startup_generation
         duration_s = display_manager_module.QUICK_STARTUP_REVEAL_DURATION_MS / 1000.0
         assert duration_s == 2.5
-        assert display_manager_module.QUICK_STARTUP_REVEAL_DELAY_MS == 300
+        from rendering.quick.startup_reveal import QUICK_STARTUP_REVEAL_DELAY_MS
+        assert QUICK_STARTUP_REVEAL_DELAY_MS == 300
 
         # Before: every display is primed closed.
         assert [widgets0.value, visualizer0.value, widgets1.value, visualizer1.value] == [0.0] * 4

@@ -246,6 +246,42 @@ def test_the_bars_stand_where_spectrums_do_coloured_across_the_spectrum_over_an_
     assert last[2] > last[1] + 40                           # the treble end is violet/blue
 
 
+def test_3d_rainbow_ghost_has_independent_spectral_color_in_bar_colors_mode(target):
+    """The existing ghost-column pass must show rainbow even with dark body/trim."""
+    import dataclasses
+
+    capture, host = target
+    snapshot = _snapshot(
+        extruded_spectrum_colouring="Bar Colours",
+        extruded_spectrum_rainbow_ghost=True,
+        spectrum_ghosting_enabled=True,
+        spectrum_ghost_alpha=0.9,
+        extruded_spectrum_reflection=0.0,
+    )
+    count = snapshot.logical.common.bar_count
+    common = dataclasses.replace(
+        snapshot.logical.common,
+        bars=(0.12,) * count,
+        style={**dict(snapshot.logical.common.style),
+               "fill_color": [0, 0, 0, 255],
+               "border_color": [0, 0, 0, 0]},
+    )
+    state = dataclasses.replace(snapshot.logical.mode_state, peaks=(0.92,) * count)
+    snap = dataclasses.replace(snapshot, logical=dataclasses.replace(
+        snapshot.logical, common=common, mode_state=state,
+    ))
+    rainbow_pixels = capture.render(host, snap)
+    without_ghost = dataclasses.replace(snap, logical=dataclasses.replace(
+        snap.logical, mode_state=dataclasses.replace(state,
+            parameters={**dict(state.parameters), "spectrum_ghosting_enabled": False},
+        ),
+    ))
+    base_pixels = capture.render(host, without_ghost)
+    visible = (rainbow_pixels[..., 3] - base_pixels[..., 3]) > 20
+    assert visible.sum() > 100
+    assert rainbow_pixels[..., :3][visible].max() > 45
+
+
 def test_the_content_fade_and_spectrum_colours(target):
     capture, host = target
     full = capture.render(host, _snapshot())

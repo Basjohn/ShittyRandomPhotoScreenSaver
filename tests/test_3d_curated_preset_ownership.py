@@ -351,7 +351,12 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
 @pytest.mark.parametrize(("mode", "index"), _CASES)
 def test_every_curated_3d_file_explicitly_owns_its_complete_consumed_namespace(mode, index):
     raw = _raw(mode, index)
-    assert set(raw) == _owned(mode) | {"mode"}
+    # Newly introduced controls need not be retroactively written into
+    # operator-editable curated files; normalization owns canonical repair.
+    required = _owned(mode) | {"mode"}
+    missing = required - set(raw)
+    assert missing <= ({"extruded_spectrum_rainbow_ghost"} if mode == "extruded_spectrum" else set())
+    assert set(raw) <= required
     assert raw["mode"] == mode
     # The loader may validate current types/ranges, but cannot be the author of
     # missing curated colours, response, material, ghost or source-shape state.
@@ -361,6 +366,9 @@ def test_every_curated_3d_file_explicitly_owns_its_complete_consumed_namespace(m
 @pytest.mark.parametrize(("mode", "index"), _CASES)
 def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned_custom_and_spectrum(mode, index):
     raw = _raw(mode, index)
+    # Runtime resolves optional newly-added mode keys through the canonical
+    # schema without silently changing the shipped curated JSON file.
+    normalized = normalize_visualizer_mode_payload(mode, raw)
     original = deepcopy(_BASE)
     original.update(mode=mode)
     original[f"preset_{mode}"] = index
@@ -388,7 +396,7 @@ def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned
     applied = apply_preset_to_config(mode, index, original)
     assert original == untouched
     for key in _owned(mode):
-        assert applied[key] == raw[key], key
+        assert applied[key] == normalized[key], key
     for key in _owned("spectrum"):
         assert applied[key] == original[key], key
 
@@ -397,8 +405,8 @@ def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned
     activation = resolve_visualizer_activation_payload(original)
     assert activation.mode == mode and activation.preset_index == index
     for key in _owned(mode):
-        assert serialized[f"widgets.spotify_visualizer.{key}"] == raw[key], key
-        assert activation.resolved_config[key] == raw[key], key
+        assert serialized[f"widgets.spotify_visualizer.{key}"] == normalized[key], key
+        assert activation.resolved_config[key] == normalized[key], key
     projected = resolve_mode_source_config(mode, activation.resolved_config)
     for suffix in ("mirrored", "shape_nodes", "notch_positions_mirrored", "notch_positions_linear",
                    "lane_strengths_mirrored", "lane_strengths_linear", "wave_amplitude", "profile_floor", "drop_speed"):
@@ -680,6 +688,7 @@ def test_existing_extruded_rainbow_colour_field_is_consumed_only_by_spectral_col
         "extruded_spectrum_colouring": colouring, "extruded_spectrum_hue_drift": 1.0,
         "extruded_spectrum_face_mirror": 0.0, "extruded_spectrum_reflection": 0.0,
         "extruded_spectrum_shadow_enabled": False,
+        "extruded_spectrum_rainbow_ghost": False,  # independent animated ghost pass is not under test
     }
     snapshot = _snapshot(**common)
     def at_animation(seconds):

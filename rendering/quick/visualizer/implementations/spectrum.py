@@ -257,6 +257,14 @@ class QuickSpectrumRenderer:
         gl.glUniform4f(uniforms["u_spectrum_glow_color"], *glow_color)
         gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)
         gl.glUniform1i(
+            uniforms["u_rainbow_ghost"],
+            1 if bool(parameter(parameters, "spectrum_rainbow_ghost")) else 0,
+        )
+        gl.glUniform1f(
+            uniforms["u_ghost_hue_offset"],
+            safe_hue(mode_state.animation_time * rainbow_speed * 0.1),
+        )
+        gl.glUniform1i(
             uniforms["u_rainbow_per_bar"],
             1 if rainbow_per_bar else 0,
         )
@@ -328,6 +336,8 @@ class QuickSpectrumRenderer:
                 "u_spectrum_glow_intensity",
                 "u_spectrum_glow_color",
                 "u_rainbow_hue_offset",
+                "u_rainbow_ghost",
+                "u_ghost_hue_offset",
                 "u_rainbow_per_bar",
                 "u_rainbow_fill",
                 "u_rainbow_border",

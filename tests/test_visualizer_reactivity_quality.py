@@ -19,6 +19,7 @@ def _make_spectrum_soak_worker(np_module, bar_count: int = 15):
 
     worker = SpotifyVisualizerAudioWorker(bar_count=bar_count, buffer=TripleBuffer())
     worker._np = np_module  # type: ignore[attr-defined]
+    worker.set_spectrum_shaping_enabled(True)  # synthetic Spectrum lane-soak fixture
     worker._spectrum_shape_nodes = [[0.0, 0.9], [0.5, 0.9], [1.0, 0.9]]
     worker._spectrum_mirrored = False
     worker._spectrum_notch_positions = [

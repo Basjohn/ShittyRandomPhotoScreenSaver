@@ -367,6 +367,7 @@ class TestLaneAwareSpectrumEnergy:
         buf: TripleBuffer[_AudioFrame] = TripleBuffer()
         worker = SpotifyVisualizerAudioWorker(bar_count=bar_count, buffer=buf)
         worker._np = np_module  # type: ignore[attr-defined]
+        worker.set_spectrum_shaping_enabled(True)  # this suite tests Spectrum itself
         worker._spectrum_shape_nodes = [[0.0, 0.9], [0.5, 0.9], [1.0, 0.9]]
         worker._spectrum_mirrored = False
         worker._spectrum_notch_positions = [

@@ -189,6 +189,20 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
     ghost_toggle_row.addWidget(tab.vis_ghost_enabled)
     ghost_toggle_row.addStretch()
 
+    ghost_rainbow_row = _aligned_row(ghost_bucket, "")
+    tab.spectrum_rainbow_ghost = QCheckBox("Rainbow Ghost")
+    tab.spectrum_rainbow_ghost.setProperty("circleIndicator", True)
+    tab.spectrum_rainbow_ghost.setChecked(
+        tab._default_bool("spotify_visualizer", "spectrum_rainbow_ghost")
+    )
+    tab.spectrum_rainbow_ghost.setToolTip(
+        "Colour only the existing falling peak trails with a per-bar rainbow, "
+        "independently of Rainbow Fill and Rainbow Borders."
+    )
+    bind_setting_signal(tab, tab.spectrum_rainbow_ghost.stateChanged)
+    ghost_rainbow_row.addWidget(tab.spectrum_rainbow_ghost)
+    ghost_rainbow_row.addStretch()
+
     tab._ghost_sub_container = QWidget()
     _ghost_layout = QVBoxLayout(tab._ghost_sub_container)
     _ghost_layout.setContentsMargins(0, 0, 0, 12)

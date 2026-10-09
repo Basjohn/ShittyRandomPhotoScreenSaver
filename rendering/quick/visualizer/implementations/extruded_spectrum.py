@@ -48,7 +48,7 @@ _BAR_BINDING = 3
 logger = get_logger(__name__)
 _UNIFORMS = ("uMatrix", "uField", "uCentre", "uBarGeometry", "uFit", "uView", "uHeightScale", "uBarCount",
              "uHueShift", "uColouring", "uFloorSpan", "uPass", "uFill", "uBorder", "uGloss", "uEdgePx",
-             "uGhostAlpha", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
+             "uGhostAlpha", "uRainbowGhost", "uReflection", "uSmooth", "uMirror", "uBackdrop", "uBackdropMap",
              "uBackdropPrevious", "uBackdropBlend", "uShadowColor", "uShadowVector", "uShadowMode")
 
 
@@ -263,6 +263,8 @@ class QuickExtrudedSpectrumRenderer:
             gl.glUniform1f(uniforms["uGloss"], float(parameter(parameters, "extruded_spectrum_gloss")))
             gl.glUniform1f(uniforms["uEdgePx"], max(1.0, scale))
             gl.glUniform1f(uniforms["uGhostAlpha"], ghost_alpha)
+            gl.glUniform1i(uniforms["uRainbowGhost"],
+                           1 if bool(parameter(parameters, "extruded_spectrum_rainbow_ghost")) else 0)
             gl.glUniform1f(uniforms["uReflection"], reflection)
             gl.glUniform1f(uniforms["uSmooth"], 1.0 if smooth else 0.0)
             gl.glUniform1f(uniforms["uMirror"], mirror)

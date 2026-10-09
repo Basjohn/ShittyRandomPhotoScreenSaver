@@ -325,7 +325,9 @@ def _capture_extruded_spectrum(
         widget, engine, context, mode_id="extruded_spectrum", frame_type=ExtrudedSpectrumFrame,
         extra_parameters=parameters,
         animation_enabled=bool(parameters["extruded_spectrum_hue_drift"] > 0.0
-                               and parameters["extruded_spectrum_colouring"] != "Bar Colours"),
+                               and (parameters["extruded_spectrum_colouring"] != "Bar Colours"
+                                    or (parameters["extruded_spectrum_rainbow_ghost"]
+                                        and widget._spectrum_ghosting_enabled))),
     )
 
 
@@ -423,6 +425,7 @@ def _capture_spectrum_family(
         animation_enabled=bool(
             extra["rainbow_enabled"]
             or extra["rainbow_per_bar"]
+            or (extra["spectrum_rainbow_ghost"] and extra["spectrum_ghosting_enabled"])
         ) if animation_enabled is None else animation_enabled,
     )
     if resolved is None:

@@ -47,7 +47,10 @@ def _apply_canonical_dsp_config(worker) -> None:
         apply_engine_vis_mode_kwargs,
     )
 
-    apply_engine_vis_mode_kwargs(worker, {"spectrum_mirrored": False})
+    apply_engine_vis_mode_kwargs(worker, {
+        "_source_spectrum_shaping_enabled": True,
+        "spectrum_mirrored": False,
+    })
     # Canonical Spectrum transient express-lane + gain/boost resolution.
     worker.set_transient_lane_config(1.0, 0.65, 1.5)
     worker.set_agc_strength(0.5)

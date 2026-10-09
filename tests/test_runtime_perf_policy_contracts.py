@@ -460,7 +460,9 @@ def test_image_change_admission_is_transactional_and_never_snaps_active_transiti
     show_start = engine.index("    def _show_next_image")
     show_end = engine.index("    def _schedule_startup_first_image_retry", show_start)
     show = engine[show_start:show_end]
-    assert "if not self._try_begin_image_change_work():" in show
+    assert "if not self._try_begin_image_change_work(" in show
+    assert "gate_reserved=_gate_reserved" in show
+    assert "deferred_callback=_resume_after_refresh" in show
     assert show.index("_try_begin_image_change_work") < show.index("self.image_queue.next()")
     assert show.index("_prepare_random_transition_if_needed") < show.index("self.image_queue.next()")
     assert show.index("has_admissible_transition_for_open_batch") < show.index("self.image_queue.next()")
