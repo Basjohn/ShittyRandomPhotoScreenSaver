@@ -31,6 +31,10 @@ from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICE
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
+from rendering.gl_programs.volumetric_dissolve_options import (
+    VOLUMETRIC_DIRECTION_CHOICES,
+    VOLUMETRIC_PARTICLE_SIZE_RANGE,
+)
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_EFFECT_CHOICES,
@@ -112,6 +116,7 @@ class TransitionsTab(QWidget):
                 "cube_turn",
                 "beam",
                 "jigsaw",
+                "volumetric_dissolve",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -575,6 +580,7 @@ class TransitionsTab(QWidget):
         "Cube Turn": "_build_cube_turn_group",
         "Beam": "_build_beam_group",
         "Jigsaw Piece Flip": "_build_jigsaw_group",
+        "Volumetric Dissolve": "_build_volumetric_dissolve_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -599,6 +605,7 @@ class TransitionsTab(QWidget):
         "Cube Turn": "cube_turn_group",
         "Beam": "beam_group",
         "Jigsaw Piece Flip": "jigsaw_group",
+        "Volumetric Dissolve": "volumetric_dissolve_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -616,6 +623,7 @@ class TransitionsTab(QWidget):
             "Cube Turn",
             "Beam",
             "Jigsaw Piece Flip",
+            "Volumetric Dissolve",
         }
     )
 
@@ -840,6 +848,13 @@ class TransitionsTab(QWidget):
             self._beam_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
             self.beam_color_btn.set_color(self._beam_color)
             self.beam_sparks_check.setChecked(bool(cfg.get('sparks', canonical['sparks'])))
+        if hasattr(self, 'volumetric_dissolve_group'):
+            canonical = canonical_transitions['volumetric_dissolve']
+            cfg = self._new_transition_section(transitions_config, 'volumetric_dissolve', canonical)
+            self.volumetric_dissolve_size_spin.setValue(self._new_transition_number(
+                cfg, 'particle_size', 'volumetric_dissolve', canonical['particle_size'],
+                self.volumetric_dissolve_size_spin, int,
+            ))
         if hasattr(self, 'jigsaw_group'):
             canonical = canonical_transitions['jigsaw']
             cfg = self._new_transition_section(transitions_config, 'jigsaw', canonical)
@@ -1136,6 +1151,10 @@ class TransitionsTab(QWidget):
         "disintegrate": (
             ("wind", "Wind:", .5, 2., "How hard the wind blows the grains away: their speed and how far they fly."),
         ),
+        "volumetric_dissolve": (
+            ("mist", "Mist:", 0., 1., "How much luminous mist, coloured by the old picture, rises as it dissolves."),
+            ("depth", "Depth:", 0., 1., "How far the particles fly toward you, growing and blurring as they near."),
+        ),
         "melt_drip": (
             ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
@@ -1170,6 +1189,7 @@ class TransitionsTab(QWidget):
         "relief_rise": (_ANTIALIASING_CONTROL,),
         "cube_turn": (_ANTIALIASING_CONTROL,),
         "jigsaw": (_ANTIALIASING_CONTROL,),
+        "volumetric_dissolve": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1427,6 +1447,25 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "accordion_fold")
         self._build_scene3d_choices(layout, "accordion_fold")
         self._specific_group_host_layout.addWidget(self.accordion_fold_group)
+
+    def _build_volumetric_dissolve_group(self) -> None:
+        self.volumetric_dissolve_group = QGroupBox("Volumetric Dissolve Settings")
+        self._style_group_box(self.volumetric_dissolve_group)
+        layout = QVBoxLayout(self.volumetric_dissolve_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        size_row = self._aligned_row(layout, "Particle Size:")
+        self.volumetric_dissolve_size_spin = QSpinBox()
+        self.volumetric_dissolve_size_spin.setRange(*VOLUMETRIC_PARTICLE_SIZE_RANGE)
+        self.volumetric_dissolve_size_spin.setSuffix(" px")
+        self.volumetric_dissolve_size_spin.setValue(int(_transition_default("volumetric_dissolve.particle_size")))
+        self.volumetric_dissolve_size_spin.setToolTip(
+            "Size of each particle in screen pixels. Very large screens use slightly bigger particles.")
+        self.volumetric_dissolve_size_spin.valueChanged.connect(self._save_settings)
+        size_row.addWidget(self.volumetric_dissolve_size_spin)
+        size_row.addStretch()
+        self._build_surface_controls(layout, "volumetric_dissolve")
+        self._build_scene3d_choices(layout, "volumetric_dissolve")
+        self._specific_group_host_layout.addWidget(self.volumetric_dissolve_group)
 
     def _build_jigsaw_group(self) -> None:
         self.jigsaw_group = QGroupBox("Jigsaw Piece Flip Settings")
@@ -2218,6 +2257,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'blinds_slats_spin', None),
             getattr(self, 'disintegrate_grain_spin', None),
             getattr(self, 'jigsaw_pieces_spin', None),
+            getattr(self, 'volumetric_dissolve_size_spin', None),
             getattr(self, 'beam_sparks_check', None),
             getattr(self, 'accordion_pleats_spin', None),
             # Ripple widgets
@@ -2344,7 +2384,8 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam", "jigsaw"):
+                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam", "jigsaw",
+                            "volumetric_dissolve"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2505,6 +2546,13 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Volumetric Dissolve":
+                    # Where the dissolve starts and the way it sweeps, or from the centre out.
+                    self.direction_combo.addItems(list(VOLUMETRIC_DIRECTION_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["volumetric_dissolve"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "Jigsaw Piece Flip":
                     # The order the pieces flip in: from a corner, from a random piece, or shuffled.
                     self.direction_combo.addItems(list(JIGSAW_ORDER_CHOICES))
@@ -2640,6 +2688,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["beam"] = cur_dir
         elif cur_type == "Jigsaw Piece Flip":
             self._direction_by_type["jigsaw"] = cur_dir
+        elif cur_type == "Volumetric Dissolve":
+            self._direction_by_type["volumetric_dissolve"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2812,6 +2862,12 @@ class TransitionsTab(QWidget):
             page_curl = {'direction': self._direction_by_type['page_curl']}
         else:
             page_curl = {**_existing_subdict('page_curl'), 'direction': self._direction_by_type['page_curl']}
+        if hasattr(self, 'volumetric_dissolve_group'):
+            volumetric_dissolve = {'direction': self._direction_by_type['volumetric_dissolve'],
+                                   'particle_size': self.volumetric_dissolve_size_spin.value()}
+        else:
+            volumetric_dissolve = {**_existing_subdict('volumetric_dissolve'),
+                                   'direction': self._direction_by_type['volumetric_dissolve']}
         if hasattr(self, 'jigsaw_group'):
             jigsaw = {'direction': self._direction_by_type['jigsaw'], 'pieces': self.jigsaw_pieces_spin.value()}
         else:
@@ -2822,7 +2878,8 @@ class TransitionsTab(QWidget):
                                 ("ink_bloom", ink_bloom),
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("accordion_fold", accordion_fold),
-                                ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam)):
+                                ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam),
+                                ("volumetric_dissolve", volumetric_dissolve)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2866,6 +2923,7 @@ class TransitionsTab(QWidget):
             'cube_turn': cube_turn,
             'beam': beam,
             'jigsaw': jigsaw,
+            'volumetric_dissolve': volumetric_dissolve,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):

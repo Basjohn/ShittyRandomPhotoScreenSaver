@@ -577,6 +577,30 @@ def test_jigsaw_page_offers_orders_and_round_trips(qapp, settings_manager, qtbot
     assert persisted == {"direction": order, "pieces": pieces, "antialiasing": "Off"}
 
 
+def test_volumetric_dissolve_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.volumetric_dissolve_options import (
+        VOLUMETRIC_DIRECTION_CHOICES,
+        VOLUMETRIC_PARTICLE_SIZE_RANGE,
+    )
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "volumetric_dissolve_group")
+    tab._activation_checkboxes["Volumetric Dissolve"].setChecked(True)
+    tab._on_nav_selected("Volumetric Dissolve")
+    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(
+        VOLUMETRIC_DIRECTION_CHOICES)
+    label, size = VOLUMETRIC_DIRECTION_CHOICES[-2], VOLUMETRIC_PARTICLE_SIZE_RANGE[0] + 1
+    tab.direction_combo.setCurrentText(label)
+    tab.volumetric_dissolve_size_spin.setValue(size)
+    tab.volumetric_dissolve_mist_spin.setValue(0.2)
+    tab.volumetric_dissolve_depth_spin.setValue(0.9)
+    tab.volumetric_dissolve_antialiasing_combo.setCurrentText("2x")
+    persisted = settings_manager.get("transitions", {})["volumetric_dissolve"]
+    assert persisted == {"direction": label, "particle_size": size, "mist": 0.2, "depth": 0.9,
+                         "antialiasing": "2x"}
+
+
 def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot):
     """Beam's direction, colour, sparks and surface values save and load back."""
     from PySide6.QtGui import QColor
