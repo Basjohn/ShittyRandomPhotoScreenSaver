@@ -114,12 +114,15 @@ void main() {
         }
         totalWave += wave;
 
-        // Reveal mask.
-        float localMix = smoothstep(-0.04, 0.18, front - rNorm);
+        // Reveal mask. Each ripple's reveal and ring ramp in over its first moments: at its start
+        // the front sits at the centre, where the mask would otherwise already show ~8% of the
+        // new picture and a ring on the very first frame (a visible start pop).
+        float start = smoothstep(0.0, 0.03, localT);
+        float localMix = start * smoothstep(-0.04, 0.18, front - rNorm);
         bestLocalMix = max(bestLocalMix, localMix);
 
         // Ring highlight.
-        float ringMask = smoothstep(front - 0.03, front, rNorm) *
+        float ringMask = start * smoothstep(front - 0.03, front, rNorm) *
                          (1.0 - smoothstep(front, front + 0.03, rNorm));
         bestRingMask = max(bestRingMask, ringMask);
     }
