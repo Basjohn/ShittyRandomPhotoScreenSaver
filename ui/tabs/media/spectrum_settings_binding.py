@@ -207,6 +207,10 @@ def load_spectrum_mode_settings(
             mirrored=False,
         )
 
+    if hasattr(tab, "spectrum_rainbow_ghost"):
+        tab.spectrum_rainbow_ghost.setChecked(
+            tab._config_bool("spotify_visualizer", config, "spectrum_rainbow_ghost")
+        )
     ghost_enabled = config.get(
         "spectrum_ghosting_enabled",
         tab._widget_default("spotify_visualizer", "spectrum_ghosting_enabled"),
@@ -244,6 +248,7 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
 
     shape_editor = getattr(tab, "spectrum_shape_editor", None)
     return {
+        "spectrum_rainbow_ghost": tab.spectrum_rainbow_ghost.isChecked() if hasattr(tab, "spectrum_rainbow_ghost") else d_bool("spectrum_rainbow_ghost"),
         "spectrum_ghosting_enabled": tab.vis_ghost_enabled.isChecked() if hasattr(tab, "vis_ghost_enabled") else d_bool("spectrum_ghosting_enabled"),
         "spectrum_ghost_alpha": (tab.vis_ghost_opacity_slider.value() if hasattr(tab, "vis_ghost_opacity_slider") else pct("spectrum_ghost_alpha")) / 100.0,
         "spectrum_ghost_decay": max(0.1, (tab.vis_ghost_decay_slider.value() if hasattr(tab, "vis_ghost_decay_slider") else pct("spectrum_ghost_decay")) / 100.0),

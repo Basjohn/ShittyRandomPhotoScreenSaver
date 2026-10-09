@@ -216,9 +216,10 @@ def test_compute_snapshot_seeds_every_attr_before_first_frame():
 
 def test_inline_analysis_commits_what_the_compute_lane_commits(monkeypatch):
     """Without a compute pool (the replay recorder, any headless engine) a live frame still
-    publishes smoothed bars, the continuous energy lane and the authoritative stamp, exactly as
-    the pool's result does. The inline path once published raw bars only, so every recording
-    carried a zero continuous lane."""
+    publishes smoothed bars and the authoritative stamp exactly as the pool's
+    result does. The fake returns bars only; unlike a real FFT analysis it does
+    not publish pre-AGC energy, and R160 forbids manufacturing that from
+    unrelated Spectrum visual shaping for nonshaper modes."""
     import time
 
     def run(manager):
@@ -238,5 +239,8 @@ def test_inline_analysis_commits_what_the_compute_lane_commits(monkeypatch):
     assert inline._latest_bars == pooled._latest_bars == [0.1, 0.2, 0.3, 0.4]
     assert inline._smoothed_bars == pooled._smoothed_bars
     assert inline.get_energy_bands() == pooled.get_energy_bands()
-    assert inline.get_energy_bands().overall > 0.0
+    # This fake analysis only publishes bars, *not* pre-AGC lanes; R160
+    # intentionally forbids deriving unshaped-mode energy from shaped bars.
+    assert inline._audio_worker._spectrum_shaping_enabled is False
+    assert inline.get_energy_bands().overall == 0.0
     assert inline.get_authoritative_frame_commit_seq() == pooled.get_authoritative_frame_commit_seq() == 1

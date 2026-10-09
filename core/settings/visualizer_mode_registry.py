@@ -172,6 +172,11 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.spectrum",
         settings_builder_module="ui.tabs.media.spectrum_builder",
         settings_builder_factory="build_spectrum_ui",
+        # The original Spectrum owns its peak-ghost settings as well as the
+        # Extruded family member. Without this capability, source-config
+        # projection forces ghosting off before logical capture, even when
+        # the authored Spectrum preset explicitly enables it.
+        spectrum_ghost_controls=True,
     ),
     VisualizerModeDescriptor(
         "oscilloscope",

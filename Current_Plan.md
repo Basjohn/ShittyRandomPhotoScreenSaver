@@ -2,13 +2,30 @@
 
 This is a **live work checklist**, not a checkpoint chronicle. The current extracted Godzip is the working-tree authority for archive handoffs; product requirements belong in `Spec.md`, subsystem contracts in `Docs/Contracts.md`, and concluded investigations in `Docs/Historical_Bugs/`. Source changes do not silently change authored presets or golden reaction behavior.
 
+## 0. CURRENT OWNER | R169 TEST AUTHORITY REVIEW / 3D + TRANSITIONS NEXT
+
+**Operator acceptance, 2026-10-09:** R167's repaired Spectrum source-routing physically restores BOTH ordinary and Rainbow Ghost in Spectrum 2D. Extruded Rainbow Ghost was separately accepted in R166. R166's four focused Windows test files passed before the routing correction; R167 was then physically accepted. The manifest-fixed R167 archive is the superseded source base. Do not reopen these visuals absent a new symptom.
+
+**Latest four-chunk result bundle (2026-10-09):** 7,105 outcomes: 7,075 passed, 29 failed, one skipped. Chunk failures 9 / 1 / 15 / 4. R168 contains **test/fixture-only** updates addressing 28 failures attributable to newly introduced ghost parameters, optionally missing keys in operator-editable curated preset files, R160 mode-owned DSP, R163 transition claims, and R165 reveal ownership. No production source, renderer, presets, defaults, audio DSP or animation was changed. The operator subsequently ran R168's focused Windows selection: **187 passed in 169.78 seconds (2026-10-09)**. That confirms the selected test repairs on R168, not a full chunk or physical acceptance. `tools.test_durability_audit.audit_tests()` reported zero findings locally; Python compilation passed.
+
+**One genuinely open quality gate:** `tests/test_visualizer_replay.py::test_current_reactivity_passes_fixed_floors[gradual_ramp__devcurve]` reported `output_flux=18.61387083343637` against existing floor `19.269285559818062`. The versioned replay fixture/golden resources are *not included* in the Godzip. R168 intentionally does NOT reseed/recalibrate/relax this floor, claim a Dev Curve regression, or change runtime dynamics. The operator reran this single Windows case and it **still fails** (2026-10-09); compare the actual fixture/reference and R160's independent Dev Curve pre-AGC feed before deciding whether the floor is stale or there is a genuine behavior regression. Do **not** restore unused Spectrum shaper dependencies as a purported fix. Preserve the floor and document evidence before any calibration decision.
+
+**R160 DO-NOT-REVERT audio rule:** Exactly Spectrum, Extruded Spectrum and Shockwave Grid own Spectrum visual shaping (the shared descriptor is the authority). Bubble, Sphere, Sine, Oscilloscope and Dev Curve use the shared FFT/pre-AGC/transient analysis **without shaping**. Dev Curve's *independent layer shaper* is not the Spectrum shaper. Sphere's R150 `KeyError('Treble')` exposed the invalid historical dependency. R168 explicitly turns on shaping only in synthetic Spectrum-specific DSP fixtures, while Bubble/nonshaper fixtures assert it stays OFF. Retain the 176-frame quantified Bubble upstream temporal parity proof and the accepted musical response of all modes.
+
+**NEXT TRANCHE, with the independent Dev Curve replay investigation explicitly tracked, no full chunks or builds:** feature work is **shared 3D primitives plus transitions** (not another general cleanup). Sequence below: reusable inactive-cost-neutral 3D foundations for the first transition consumers, Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom Reveal; then subsequent transitions and broader shared 3D features. See §2 and §4.
+
+- [x] **R168 focused regression:** operator's Windows `.venv` selection completed, **187 passed**; no affected runtime source files changed in R168/R169.
+- [ ] **Dev Curve replay:** one rerun confirmed the exact failure; inspect the real installed fixture, frozen test settings, reference metadata/history and Dev Curve independent output path. Do not recalibrate without evidence and never route Dev Curve through Spectrum shaping.
+- [ ] **Next graphics readiness:** inspect the existing Scene3D, `CompactedPopulation`, material/transition owners and reusable card/particle paths **without enabling unused passes or duplicating the engine**. This short audit immediately precedes T1/T2 implementation.
+- [ ] **T1–T4 as first transitions:** use exact locally stored mock references, retain legacy Block Puzzle Flip until the independently named Jigsaw successor is accepted, and avoid accidental feature scope creep.
+
+---
+
 ## 0. Accepted state and immediate gate
 
 **Accepted by the operator (2026-10-09):** R151 Steam-cache and Settings repairs (**106 focused Windows tests passed**); R150 Sphere analysis-only DSP isolation and Shockwave's intentionally authored Spectrum-shaped horizon (**96 focused tests passed**); both visualizer modes physically accepted. Earlier implemented/physically good visual and cache changes remain accepted unless an anomaly is reported. Ordinary transition desync **400 ms**, first-image startup **200 ms**. The earlier severe dual-display collapse recovered after a **Windows reboot**, not a proved SRPSS patch; its root cause remains unknown. Bubble's small-radius judder is **deferred watchlist-only**. Diagnostic frame-trace bins were confirmed restored by the operator; do not reopen R156 or request another diagnostic build on that basis.
 
-The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/Qt 6.11.2**. `.venv` is already recreated and Python 3.11 was removed; **do not rerun the destructive cutover**. The latest operator-run R158 four-chunk gate collected **7,072 tests: 7,066 passed, 6 failed**, with no Settings/Qt teardown failures. R159 corrects two test-only failure families (curated Extruded artistic-value freezes and old BeatEngine test doubles missing the mode-owned source policy); the focused Windows retest remains pending. Do not request another four-chunk run. No production runtime changes were made in R159.
-
-**Current focused gate:** R160 expands R150's Sphere-specific skip into descriptor-owned Spectrum shaping across all modes. Bubble's identical-PCM legacy/new replay compares 44 frames for both 512/2048 samples and fixed/dynamic floor, with <=1e-6 maximum absolute deviation for every consumed energy/transient/floor field; Sine heartbeat and Dev Curve receive pre-AGC energy independently of Spectrum bar outputs. Await focused Windows tests; no full-suite repeat or builds.
+The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/Qt 6.11.2**. The operator's existing `.venv` and cutover are accepted; do **not** repeat destructive version migrations. R160's capability-owned DSP design remains active and protected (§0). The R166/R167 2D and Extruded Rainbow Ghost implementation has operator physical acceptance; the R168 test-only repair is operator-verified by its 187-test focused Windows selection. R169 updates test-authority documentation and this live plan only. The detailed defect and accepted architecture live in `Docs/Historical_Bugs/R-167_Spectrum_2D_Ghost_Control_Source_Projection.md`, not a second pending checklist.
 
 **R165 startup reveal:** Relative to R164, hold the coordinated retained widget/Visualizer reveal for another **300 ms after the existing readiness milestone**, then run its existing InOutCubic fade for **2,500 ms (1,800 + 700)**. Desktop wallpaper staging remains 1,300 ms, and ordinary transitions are unchanged. One Qt unified sequential animation timeline; no new timer, poller or owner. FEEDS queued/busy UX explicitly unchanged.
 
@@ -19,7 +36,7 @@ The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/
 
 - [ ] **R163 SHARED ADMISSION / WINDOWS GATE:** R161's FEEDS/transition gate now wakes only one waiting source when a transition ends and resumes the next after its GUI publication completes. Gmail's live fetch and Reddit's provider fetch join FEEDS under this event-driven admission, with manual Reddit intent preserved and source retirement/cancellation fenced. FEEDS startup/cache/artwork work stays covered. Test the gate and affected Gmail/Reddit/FEEDS/transition suites on Windows. No application builds or four-chunk suite. The six R161 transition-distribution failures were repaired as R162 fixture omissions and await operator test.
 - [ ] **UNPROVEN SERVICES / NEXT EVIDENCE:** Steam, Weather, Friend Pulse, other services and Gmail/Reddit startup-cache readers remain outside cross-family claims. Do not attach until their worker, GUI publication and retirement/cancel paths have been audited and focused gates written. No shared refresh timer or scheduler migration. Check transition fairness and verify no post-transition stampede with a fresh dual-display operator trace after R163 focused acceptance.
-- [ ] **R160 FOCUSED TEST-REPAIR GATE:** R161 corrects five reported R160 test failures: optional Sphere analysis-notch defaults in a partial synthetic config, obsolete engine fake missing `set_notch_positions`, and the Spectrum test expecting the opposite shaping policy. Run only targeted Windows tests plus the new admission tests. Bubble's quantified 176-frame upstream audio parity contract remains unchanged.
+- [x] **R160/R161 source-policy fixes preserved:** Descriptor-owned shaping and R161 focused fixture repairs are retained. R168 owns the newest 2026-10-09 chunk failures; do not reopen the former R160 gate or relax Bubble parity.
 
 ## 1. Frozen-product validation | operator execution only
 
@@ -41,7 +58,7 @@ The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/
 - [ ] **LIFECYCLE:** R154 removes the strong `QuickDisplayUnit` bound-method connection to `retirement_completed`, which the diagnostic referrer snapshots identified as the only outstanding Python owner on monitor topology/application exit. Run only `tests/test_qtquick_display_unit.py tests/test_runtime_destruction.py tests/test_terminal_runtime_destruction.py` on Windows; request no overnight rerun or builds. `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` has the evidence and constraints.
 - [ ] **CROSS-DISPLAY MEDIA SHORTCUTS (R155):** Shortcut transport now chooses one live Media owner across the active Quick displays (focused one first), and Previous sends the Media model's canonical `previous` action. Await focused Windows shortcut tests and a quick physical check with the Media widget on the *other* display; do not start a new build solely for this gate.
 - [ ] **DIAGNOSTIC PRESET ROOT (R155):** Frozen Diagnostic now uses exactly the same machine-wide `%ProgramData%\SRPSS\presets` curated and explicit override trees as Standard and Media Center. Old diagnostic-onefile curated copies are no longer read or migrated; R154's temporary read-only audit utility has been retired. Await focused Windows path tests; preserve actual authored ProgramData files unchanged.
-- [ ] **Scope restriction:** The 90 Hz versus 60 Hz observation is expressly **off limits**. Transitions and 3D feature work belong to the operator's locally executing agent, not this targeted handoff.
+- [ ] **Scope restriction:** The 90 Hz versus 60 Hz observation remains expressly **off limits**. With R168 focused tests passed and the separate Dev Curve floor explicitly still open, proceed to the shared 3D/transition tranche of §0/§2/§4; do not revive old runtime-performance investigations to delay it.
 
 ## 2. New transitions | implementation queue
 
@@ -149,9 +166,11 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 ---
 
 
-## 4. Shared 3D primitives | after priority transitions and their physical acceptance
+## 4. Shared 3D primitives | immediate foundation for T1/T2, expand after first-wave acceptance
 
-Admit one measured, inactive-cost-neutral consumer at a time. Wait for the operator's frozen-product gate and first-wave transition results. Bubble temporal fidelity remains binding.
+Admit one measured, inactive-cost-neutral consumer at a time. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
+
+After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
 
 - [ ] **S17 remaining active-only scene facilities:** demand-created normal/material/depth/history attachments, reusable real
   3D shadows, GTAO only if justified, weighted blended OIT/depth-aware transparency, thickness/depth refraction, Fresnel,

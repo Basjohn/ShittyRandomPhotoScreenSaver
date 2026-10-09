@@ -353,7 +353,7 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "#version 460 core\nflat in vec3 vHue;\nin vec3 vWorld;\nin vec3 vNormal;\nin vec3 vLocal;\nin vec3 vSize;\n"
     "in float vItemY;\nout vec4 FragColor;\n"
     "uniform vec4 uFill;\nuniform vec4 uBorder;\nuniform float uGloss;\nuniform float uEdgePx;\n"
-    "uniform int uPass;\nuniform float uGhostAlpha;\nuniform float uReflection;\nuniform int uColouring;\n"
+    "uniform int uPass;\nuniform float uGhostAlpha;\nuniform int uRainbowGhost;\nuniform float uReflection;\nuniform int uColouring;\n"
     "uniform vec2 uFloorSpan;   // item y of the floor line and of the bar field's bottom\n"
     "uniform float uSmooth;     // 1: edge lines measured in screen pixels (anti-aliased at any angle)\n"
     "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
@@ -394,8 +394,8 @@ void main() {
     float rim = sceneLineCoverage(edge, edgeWidth);
     // 0 spectral bodies with Spectrum's border edges; 1 Spectrum's body with glowing spectral
     // edges; 2 Spectrum's fill and border.
-    vec3 body = uColouring == 0 ? vHue : uFill.rgb;
-    vec3 trim = uColouring == 1 ? vHue : uBorder.rgb;
+    vec3 body = (uPass == 1 && uRainbowGhost == 1) || uColouring == 0 ? vHue : uFill.rgb;
+    vec3 trim = (uPass == 1 && uRainbowGhost == 1) || uColouring == 1 ? vHue : uBorder.rgb;
     float trimAlpha = uColouring == 1 ? 1.0 : uBorder.a;
     float edgeAlpha = rim * trimAlpha;
     float surfaceAlpha = uFill.a + (1.0 - uFill.a) * edgeAlpha;

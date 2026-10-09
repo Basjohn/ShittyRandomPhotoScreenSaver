@@ -438,13 +438,8 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert owner.render_identity.activation_id == 23
         assert engine.acquire_count == 1
         assert engine.release_count == 0
-        assert [name for name, _value in engine.source_config_calls] == [
-            "mirrored",
-            "shape_nodes",
-            "notches",
-            "shape_config",
-            "drop_speed",
-        ]
+        assert [name for name, _value in engine.source_config_calls] == ["notches"]
+        assert engine.spectrum_shaping_enabled is False
         assert owner.is_started is True
         assert owner._publication_wake is not None
         assert not hasattr(QuickFrameDemand, "VISUALIZER")

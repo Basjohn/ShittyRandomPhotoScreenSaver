@@ -170,8 +170,8 @@ def test_quick_owner_routes_canonical_spectrum_preset_to_all_three_owners() -> N
     }
 
 
-def test_spectrum_source_contract_is_applied_even_when_active_mode_is_bubble() -> None:
-    """Historical full-model apply configured the shared FFT worker for every mode."""
+def test_bubble_uses_analysis_notches_without_inheriting_spectrum_shaper() -> None:
+    """R160: Bubble retains FFT zones, not Spectrum's visual shape editor."""
 
     engine = _SpectrumConfigEngine()
     owner = _owner(engine, mode="bubble")
@@ -180,11 +180,14 @@ def test_spectrum_source_contract_is_applied_even_when_active_mode_is_bubble() -
         playing=True,
     )
 
-    # These notches feed the shared pre-mode bass/mid/high split in fft_to_bars,
-    # so losing them can alter Bubble/Oscillo/Sine/DevCurve reactivity too.
-    assert engine.mirrored is False
+    # The shared analysis split remains, but Spectrum visual shaping must not
+    # leak across the mode activation boundary.
+    assert engine.spectrum_shaping_enabled is False
     assert engine.notches == _SPECTRUM_CANONICAL_CONFIG["spectrum_notch_positions_linear"]
-    assert engine.shape_config.wave_amplitude == pytest.approx(0.73)
+    assert engine.mirrored is None
+    assert engine.shape_nodes is None
+    assert engine.shape_config is None
+    assert engine.drop_speed is None
 
 
 def test_quick_logical_owner_restores_stranded_bubble_preset_controls() -> None:

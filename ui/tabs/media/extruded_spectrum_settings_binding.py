@@ -24,6 +24,7 @@ _CHECK_KEYS = (
     "extruded_spectrum_shadow_enabled",
     "extruded_spectrum_mirrored",
     "extruded_spectrum_ghosting_enabled",
+    "extruded_spectrum_rainbow_ghost",
     "extruded_spectrum_visual_smoothing_enabled",
     "extruded_spectrum_solid_bar_hysteresis_enabled",
 )

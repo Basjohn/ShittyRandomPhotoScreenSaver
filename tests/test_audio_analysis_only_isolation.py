@@ -130,7 +130,9 @@ def test_sphere_source_does_not_apply_spectrum_shape_to_engine(qt_app):
     assert worker._spectrum_shaping_enabled is False
     assert worker._spectrum_shape_config is None
     assert worker._spectrum_shape_nodes is None
-    for mode in ("shockwave_grid", "extruded_spectrum", "spectrum"):
-        assert resolve_mode_source_config(mode, asdict(model))["_source_spectrum_shaping_enabled"] is True
-    for mode in ("bubble", "oscilloscope", "sine_wave", "devcurve", "sphere"):
-        assert resolve_mode_source_config(mode, asdict(model))["_source_spectrum_shaping_enabled"] is False
+    from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+    for descriptor in iter_all_visualizer_mode_descriptors():
+        expected = descriptor.mode_id == "spectrum" or descriptor.spectrum_shape_controls
+        assert resolve_mode_source_config(descriptor.mode_id, asdict(model))[
+            "_source_spectrum_shaping_enabled"
+        ] is bool(expected)

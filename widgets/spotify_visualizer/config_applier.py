@@ -532,6 +532,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._spectrum_rainbow_fill = bool(kwargs['spectrum_rainbow_fill'])
     if 'spectrum_rainbow_border' in kwargs:
         host._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
+    if 'spectrum_rainbow_ghost' in kwargs:
+        host._spectrum_rainbow_ghost = bool(kwargs['spectrum_rainbow_ghost'])
     if 'spectrum_border_radius' in kwargs:
         host._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
     if 'spectrum_glow_enabled' in kwargs:
@@ -659,6 +661,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     for key, (low, high) in _EXTRUDED_SPECTRUM_KEYS.items():
         if key in kwargs:
             setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
+    if 'extruded_spectrum_rainbow_ghost' in kwargs:
+        host._extruded_spectrum_rainbow_ghost = bool(kwargs['extruded_spectrum_rainbow_ghost'])
     if 'extruded_spectrum_colouring' in kwargs:
         from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
         colouring = str(kwargs['extruded_spectrum_colouring'])
@@ -763,6 +767,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     pres = _presentation_source(widget)
     values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _EXTRUDED_SPECTRUM_KEYS}
     values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
+    values["extruded_spectrum_rainbow_ghost"] = bool(pres._extruded_spectrum_rainbow_ghost)
     values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
     values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
     values["extruded_spectrum_shadow_enabled"] = bool(pres._extruded_spectrum_shadow_enabled)
@@ -785,6 +790,7 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['rainbow_per_bar'] = pres._rainbow_per_bar
     extra['spectrum_rainbow_fill'] = pres._spectrum_rainbow_fill
     extra['spectrum_rainbow_border'] = pres._spectrum_rainbow_border
+    extra['spectrum_rainbow_ghost'] = pres._spectrum_rainbow_ghost
     extra['spectrum_glow_enabled'] = pres._spectrum_glow_enabled
     extra['spectrum_glow_intensity'] = pres._spectrum_glow_intensity
     extra['spectrum_glow_color'] = pres._spectrum_glow_color

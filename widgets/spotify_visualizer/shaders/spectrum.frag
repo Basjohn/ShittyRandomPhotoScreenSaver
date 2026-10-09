@@ -34,6 +34,8 @@ uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
 uniform int u_rainbow_fill;         // 1 = bar fill participates, 0 = preserve configured fill
 uniform int u_rainbow_border;       // 1 = borders participate in rainbow, 0 = borders keep base colour
+uniform int u_rainbow_ghost;        // independent spectral peak-trail colour
+uniform float u_ghost_hue_offset;   // existing Spectrum animation clock, no independent timer
 uniform float u_bars_left;
 uniform float u_bar_width_px;
 uniform float u_bar_gap_px;
@@ -75,6 +77,15 @@ vec4 apply_spectrum_rainbow(vec4 col, int bidx) {
     else if (h < 5.0/6.0) rgb = vec3(rb_x, 0.0, c);
     else                  rgb = vec3(c, 0.0, rb_x);
     return vec4(rgb + m, col.a);
+}
+
+vec4 spectrum_ghost_colour(int bidx, float alpha) {
+    if (u_rainbow_ghost != 1) return vec4(u_border_color.rgb, alpha);
+    // Independent per-bar spectral hue, even when the authored fill/border are black
+    // or global Rainbow is off. This does not alter ordinary bar colour/alpha.
+    float hue = fract(float(bidx) / max(float(u_bar_count - 1), 1.0) + u_ghost_hue_offset);
+    vec3 rgb = clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return vec4(rgb, alpha);
 }
 
 float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
@@ -338,11 +349,9 @@ void main() {
             float ghost_span = max(authored_scale, peak_height - active_height);
             float t = clamp(ghost_dist / ghost_span, 0.0, 1.0);
             float ghost_factor = mix(1.0, 0.15, t);
-            vec4 ghost_base = border;
-            // Per-bar rainbow: ghost inherits bar's unique hue
-            if (u_rainbow_per_bar == 1 && u_rainbow_hue_offset > 0.001) {
-                ghost_base = apply_spectrum_rainbow(ghost_base, bar_index);
-            }
+            // Ghost visibility is owned by its opacity, not border alpha. An
+            // author may deliberately use fully transparent or black borders.
+            vec4 ghost_base = spectrum_ghost_colour(bar_index, u_fade);
             ghost_base.a *= ghost_alpha * ghost_factor;
             sp_color = ghost_base;
             sp_is_border = true;
@@ -372,13 +381,11 @@ void main() {
         if (!sp_is_border) {
             sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
         }
-        // Fill and border participation are independent.  The ghost above is
-        // deliberately pre-rainbowed from the border colour when per-bar colour
-        // is enabled, so disabling fill rainbow can preserve black Organs while
-        // retaining its rainbow ghost.
-        bool sp_apply_rainbow = sp_is_border
+        // The independent ghost colour is complete. Do not reapply Rainbow
+        // Borders to it (double-hue shift) or recolour its authored opacity.
+        bool sp_apply_rainbow = !is_ghost && (sp_is_border
             ? (u_rainbow_border == 1)
-            : (u_rainbow_fill == 1);
+            : (u_rainbow_fill == 1));
         fragColor = sp_apply_rainbow ? apply_spectrum_rainbow(sp_color, bar_index) : sp_color;
         return;
     }
@@ -521,11 +528,7 @@ void main() {
             ghost_factor = mix(start, end, t);
         }
 
-        vec4 ghost = border;
-        // Per-bar rainbow: ghost inherits bar's unique hue
-        if (u_rainbow_per_bar == 1 && u_rainbow_hue_offset > 0.001) {
-            ghost = apply_spectrum_rainbow(ghost, bar_index);
-        }
+        vec4 ghost = spectrum_ghost_colour(bar_index, u_fade);
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
         seg_is_border = true;
@@ -541,8 +544,8 @@ void main() {
     }
 
     // Same independent fill/border participation contract as solid bars.
-    bool seg_apply_rainbow = seg_is_border
+    bool seg_apply_rainbow = !is_ghost_frag && (seg_is_border
         ? (u_rainbow_border == 1)
-        : (u_rainbow_fill == 1);
+        : (u_rainbow_fill == 1));
     fragColor = seg_apply_rainbow ? apply_spectrum_rainbow(out_color, bar_index) : out_color;
 }

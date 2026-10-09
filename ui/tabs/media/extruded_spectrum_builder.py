@@ -260,6 +260,19 @@ def build_extruded_spectrum_ui(tab, parent_layout) -> None:
     bind_setting_signal(tab, tab.extruded_spectrum_ghosting_enabled.toggled, auto_switch=True)
     content.addWidget(tab.extruded_spectrum_ghosting_enabled)
     content.addStretch()
+    content = row(ghost, "Rainbow Ghost:")
+    tab.extruded_spectrum_rainbow_ghost = QCheckBox("Colour trailing ghosts with rainbow hues")
+    tab.extruded_spectrum_rainbow_ghost.setProperty("circleIndicator", True)
+    tab.extruded_spectrum_rainbow_ghost.setChecked(
+        tab._default_bool("spotify_visualizer", "extruded_spectrum_rainbow_ghost")
+    )
+    tab.extruded_spectrum_rainbow_ghost.setToolTip(
+        "Colour only the existing 3D ghost columns; faces and edges retain their "
+        "independently authored Rainbow/Bar Colours presentation."
+    )
+    bind_setting_signal(tab, tab.extruded_spectrum_rainbow_ghost.toggled, auto_switch=True)
+    content.addWidget(tab.extruded_spectrum_rainbow_ghost)
+    content.addStretch()
     ghost_details = QWidget()
     ghost_details_layout = QVBoxLayout(ghost_details)
     ghost_details_layout.setContentsMargins(0, 0, 0, 0)

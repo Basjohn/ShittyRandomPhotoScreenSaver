@@ -648,10 +648,16 @@ def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation()
     assert "uniform int u_rainbow_fill" in source
     assert "? (u_rainbow_border == 1)" in source
     assert ": (u_rainbow_fill == 1)" in source
-    # Ghost keeps the explicit per-bar rainbow path even when fill participation
-    # is disabled, which is the Preset 1 Organs contract.
-    assert "ghost_base = apply_spectrum_rainbow(ghost_base, bar_index)" in source
-    assert "ghost = apply_spectrum_rainbow(ghost, bar_index)" in source
+    # Ghost owns colour and opacity independently of bar fill/border controls.
+    # In particular, no accidental second hue application and no border-alpha gate.
+    assert "uniform int u_rainbow_ghost" in source
+    assert "uniform float u_ghost_hue_offset" in source
+    assert "vec4 ghost_base = spectrum_ghost_colour(bar_index, u_fade)" in source
+    assert "vec4 ghost = spectrum_ghost_colour(bar_index, u_fade)" in source
+    assert "!is_ghost &&" in source
+    assert "!is_ghost_frag &&" in source
+    assert "ghost_base = apply_spectrum_rainbow" not in source
+    assert "ghost = apply_spectrum_rainbow" not in source
 
 
 def test_spectrum_rainbow_participation_contract_does_not_depend_on_curated_preset_payloads() -> None:
@@ -754,6 +760,85 @@ def _real_spectrum_gl(qt_app):
             gl.glDeleteTextures([color])
         context.doneCurrent()
         surface.destroy()
+
+
+@pytest.mark.qt
+def test_real_gl_rainbow_ghost_is_visible_without_border_color_or_border_alpha(
+    _real_spectrum_gl,
+) -> None:
+    """Synthetic authored state, not curated-preset expectations.
+
+    The peak is deliberately higher than the live bar. It must be painted even
+    with zero-alpha black borders, and Rainbow Ghost must not paint solid bars.
+    """
+    import dataclasses
+    import numpy as np
+    from core.settings.models import SpotifyVisualizerSettings
+    from widgets.spotify_visualizer.config_applier import _populate_shared_visualizer_extras
+
+    model = SpotifyVisualizerSettings.from_mapping({
+        "spectrum_rainbow_enabled": False,
+        "spectrum_unique_colors": False,
+        "spectrum_rainbow_fill": False,
+        "spectrum_rainbow_border": False,
+        "spectrum_rainbow_ghost": True,
+    }, apply_preset_overlay=False)
+    controller = VisualizerRuntimeController(runtime_generation=2, initial_mode="spectrum")
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, asdict(model))
+    fake = SimpleNamespace(
+        presentation_config_host=controller.presentation_state,
+        _spectrum_ghosting_enabled=True,
+        _spectrum_ghost_decay=0.18,
+        _osc_ghosting_enabled=False, _osc_ghost_intensity=0.0, _osc_ghost_decay=0.5,
+        _sine_ghosting_enabled=False, _sine_ghost_alpha=0.0, _sine_ghost_decay=0.5,
+        _sine_heartbeat=0.0, _heartbeat_intensity=0.0,
+    )
+    parameters = {}
+    _populate_shared_visualizer_extras(parameters, fake)
+    parameters["spectrum_ghost_alpha"] = 0.9
+    count = 12
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1380.0, 280.0), viewport_extent=(1380.0, 280.0),
+        border_width=0.0, corner_radius=0.0,
+    )
+    logical = _logical(
+        playing=True, source_generation=5, source_activation_id=7,
+        bars=(0.14,) * count, peaks=(0.88,) * count,
+    )
+    logical = dataclasses.replace(
+        logical,
+        common=dataclasses.replace(logical.common, style=freeze_render_fields({
+            "fill_color": (0, 0, 0, 255),
+            "border_color": (0, 0, 0, 0),
+            "single_piece": True, "border_radius": 0.0,
+        })),
+        mode_state=dataclasses.replace(
+            logical.mode_state, parameters=freeze_render_fields(parameters)
+        ),
+    )
+
+    def pixels(*, ghost: bool, rainbow: bool):
+        params = dict(parameters, spectrum_ghosting_enabled=ghost,
+                      spectrum_rainbow_ghost=rainbow)
+        frame = dataclasses.replace(
+            logical, mode_state=dataclasses.replace(
+                logical.mode_state, parameters=freeze_render_fields(params)
+            ),
+        )
+        snapshot = compose_visualizer_render_snapshot(frame, presentation, logical_revision=1)
+        return np.frombuffer(_real_spectrum_gl(snapshot), dtype=np.uint8).reshape(280, 1380, 4)
+
+    rainbow = pixels(ghost=True, rainbow=True)
+    neutral = pixels(ghost=True, rainbow=False)
+    disabled = pixels(ghost=False, rainbow=True)
+    ghost_pixels = (rainbow[..., 3].astype(int) - disabled[..., 3].astype(int)) > 20
+    assert ghost_pixels.sum() > 200  # real peak trail coverage, not only a checkbox
+    assert rainbow[..., :3][ghost_pixels].max() > 120
+    assert np.max(neutral[..., :3][ghost_pixels]) < 8  # black authored border
+    solid_pixels = disabled[..., 3] > 200
+    assert solid_pixels.sum() > 100
+    assert np.max(rainbow[..., :3][solid_pixels]) < 8  # black fill stays black
 
 
 @pytest.mark.qt

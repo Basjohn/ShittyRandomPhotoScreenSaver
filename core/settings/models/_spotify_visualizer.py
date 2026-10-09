@@ -186,6 +186,7 @@ _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_unique_colors": bool,
     "spectrum_rainbow_fill": bool,
     "spectrum_rainbow_border": bool,
+    "spectrum_rainbow_ghost": bool,
     "spectrum_border_radius": float,
     "spectrum_link_fill_border": bool,
     "spectrum_glow_enabled": bool,
@@ -321,6 +322,7 @@ _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_visual_smoothing': float,
     'spectrum_rainbow_fill': bool,
     'spectrum_rainbow_border': bool,
+    'spectrum_rainbow_ghost': bool,
     'spectrum_border_radius': float,
     'spectrum_link_fill_border': bool,
     'spectrum_glow_enabled': bool,
@@ -638,6 +640,7 @@ _EXTRUDED_SPECTRUM_LIMITS: Dict[str, Tuple[float, float]] = {
 _EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     **{key: float for key in _EXTRUDED_SPECTRUM_LIMITS},
     'extruded_spectrum_colouring': str,
+    'extruded_spectrum_rainbow_ghost': bool,
     'extruded_spectrum_allow_overflow': bool,
     'extruded_spectrum_smooth_edges': bool,
     'extruded_spectrum_shadow_reach': str,
@@ -1292,6 +1295,7 @@ class SpotifyVisualizerSettings:
     spectrum_unique_colors: bool = field(default_factory=lambda: _visualizer_default('spectrum_unique_colors'))
     spectrum_rainbow_fill: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_fill'))
     spectrum_rainbow_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_border'))
+    spectrum_rainbow_ghost: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_ghost'))
     spectrum_border_radius: float = field(default_factory=lambda: _visualizer_default('spectrum_border_radius'))
     spectrum_link_fill_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_link_fill_border'))
     spectrum_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_glow_enabled'))
@@ -1310,6 +1314,7 @@ class SpotifyVisualizerSettings:
     spectrum_profile_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_profile_floor'))
     spectrum_drop_speed: float = field(default_factory=lambda: _visualizer_default('spectrum_drop_speed'))
     extruded_spectrum_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghosting_enabled'))
+    extruded_spectrum_rainbow_ghost: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_rainbow_ghost'))
     extruded_spectrum_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghost_alpha'))
     extruded_spectrum_ghost_decay: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghost_decay'))
     extruded_spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_mirrored'))

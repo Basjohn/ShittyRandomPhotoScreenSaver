@@ -896,6 +896,7 @@ def _spectrum_snapshot(case: str, presentation):
                     "spectrum_rainbow_fill": False,
                     "spectrum_rainbow_border": False,
                     "spectrum_ghosting_enabled": case == "ghost",
+                    "spectrum_rainbow_ghost": False,
                     "spectrum_ghost_alpha": 0.85,
                     "spectrum_glow_enabled": True,
                     "spectrum_glow_intensity": 0.55,
