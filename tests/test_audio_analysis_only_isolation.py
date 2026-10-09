@@ -48,7 +48,7 @@ def test_sphere_analysis_skips_shape_without_losing_pre_agc_and_transients(qt_ap
         sphere_dynamic_floor=False,
         sphere_manual_floor=0.05,
     )
-    assert worker._analysis_only_audio is True
+    assert worker._spectrum_shaping_enabled is False
     assert worker._spectrum_shape_nodes is None
     assert worker._spectrum_shape_config is None
 
@@ -69,7 +69,7 @@ def test_sphere_analysis_skips_shape_without_losing_pre_agc_and_transients(qt_ap
     # The serial-lane snapshot must carry the mode policy, not accidentally
     # revive a Spectrum shaper in the detached worker state.
     detached = worker.make_compute_snapshot()
-    assert detached._analysis_only_audio is True
+    assert detached._spectrum_shaping_enabled is False
     assert bar_computation.compute_bars_from_samples(detached, pcm) == [0.0] * worker._bar_count
     worker.commit_compute_snapshot(detached)
     assert worker._pre_agc_live_bass > 0
@@ -85,7 +85,7 @@ def test_shockwave_owns_real_shaped_horizon_and_clears_sphere_policy(qt_app, mon
     )
     worker._np = np
     pcm = _deterministic_pcm(np)
-    assert worker._analysis_only_audio is True
+    assert worker._spectrum_shaping_enabled is False
 
     calls = []
     original = bar_computation._build_lane_energy_profile
@@ -96,8 +96,8 @@ def test_shockwave_owns_real_shaped_horizon_and_clears_sphere_policy(qt_app, mon
 
     monkeypatch.setattr(bar_computation, "_build_lane_energy_profile", observe)
     assert apply_engine_vis_mode_kwargs(engine, _shockwave_profile(model)) is True
-    assert worker._analysis_only_audio is False
-    assert worker.make_compute_snapshot()._analysis_only_audio is False
+    assert worker._spectrum_shaping_enabled is True
+    assert worker.make_compute_snapshot()._spectrum_shaping_enabled is True
     assert worker._spectrum_shape_nodes == [[0.0, 0.9], [1.0, 0.9]]
     assert worker._spectrum_notch_positions[1][1] == "Low-Mid"
     assert isinstance(worker.compute_bars_from_samples(pcm), list)
@@ -107,8 +107,8 @@ def test_shockwave_owns_real_shaped_horizon_and_clears_sphere_policy(qt_app, mon
     calls.clear()
     source_sphere = resolve_mode_source_config("sphere", asdict(model))
     assert apply_engine_vis_mode_kwargs(engine, source_sphere) is True
-    assert worker._analysis_only_audio is True
-    assert worker.make_compute_snapshot()._analysis_only_audio is True
+    assert worker._spectrum_shaping_enabled is False
+    assert worker.make_compute_snapshot()._spectrum_shaping_enabled is False
     assert worker._spectrum_notch_positions == model.sphere_analysis_notch_positions
     assert worker.compute_bars_from_samples(pcm) == [0.0] * worker._bar_count
     assert not calls, "Sphere unexpectedly inherited Shockwave's shaper"
@@ -116,19 +116,21 @@ def test_shockwave_owns_real_shaped_horizon_and_clears_sphere_policy(qt_app, mon
     # Spectrum does not inherit Sphere's analysis-only admission either.
     source_spectrum = resolve_mode_source_config("spectrum", asdict(model))
     apply_engine_vis_mode_kwargs(engine, source_spectrum)
-    assert worker._analysis_only_audio is False
-    assert worker.make_compute_snapshot()._analysis_only_audio is False
+    assert worker._spectrum_shaping_enabled is True
+    assert worker.make_compute_snapshot()._spectrum_shaping_enabled is True
 
 
 def test_sphere_source_does_not_apply_spectrum_shape_to_engine(qt_app):
     model, _technical, engine, worker = _configured_sphere_worker()
     source = resolve_mode_source_config("sphere", asdict(model))
-    assert source["_source_analysis_only"] is True
+    assert source["_source_spectrum_shaping_enabled"] is False
     from widgets.spotify_visualizer.source_config_applier import SPECTRUM_SOURCE_CONFIG_KEYS
     assert not SPECTRUM_SOURCE_CONFIG_KEYS.intersection(source)
     assert source["_source_analysis_notches"] == model.sphere_analysis_notch_positions
-    assert worker._analysis_only_audio is True
+    assert worker._spectrum_shaping_enabled is False
     assert worker._spectrum_shape_config is None
     assert worker._spectrum_shape_nodes is None
-    for mode in ("shockwave_grid", "extruded_spectrum", "spectrum", "bubble"):
-        assert resolve_mode_source_config(mode, asdict(model))["_source_analysis_only"] is False
+    for mode in ("shockwave_grid", "extruded_spectrum", "spectrum"):
+        assert resolve_mode_source_config(mode, asdict(model))["_source_spectrum_shaping_enabled"] is True
+    for mode in ("bubble", "oscilloscope", "sine_wave", "devcurve", "sphere"):
+        assert resolve_mode_source_config(mode, asdict(model))["_source_spectrum_shaping_enabled"] is False

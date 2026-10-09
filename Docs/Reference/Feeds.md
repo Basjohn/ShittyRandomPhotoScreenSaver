@@ -210,3 +210,18 @@ Implemented FEEDS work is operator-accepted; the checks below are reference scen
   two-display source run with active Bubble: the former recurring 180-350 ms refresh stalls were absent; the one 63 ms
   refresh-window outlier coincided with first lazy parser-child activation and subsequent windows returned to ordinary
   low tails. Warm cache restore supplied existing local artwork with zero network artwork attempts.
+
+## Transition admission for source work (R161)
+
+The running generation's single `RefreshTransitionGate` coordinates the FEEDS
+family's cache, remote refresh, optional artwork, and GUI publication with a
+whole-image transition batch. An already-admitted FEEDS job holds its claim until
+its final UI delivery, so image changes wait without advancing queue/history.
+A pending image transition outranks new FEEDS admissions; when the last selected
+display finalizes, deferred FEEDS intents resume from the existing source owner.
+Deferrals are generation-fenced and deduplicated per source, not polled. Retiring
+the display generation closes the gate before feed-owner cancellation.
+
+This is specifically a **FEEDS** admission contract. Other widget families
+retain their existing behavior until reviewed and explicitly integrated; the
+source gate is not a global promise that all widget refreshes are quiescent.

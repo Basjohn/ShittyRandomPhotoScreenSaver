@@ -165,6 +165,8 @@ class RedditRuntimeService:
         self._due_token = 0
         self._due_pending = False
         self._fetch_in_progress = False
+        self._refresh_gate_claim = None
+        self._refresh_gate_pending_manual = False
         self._running = False
         self._retired = False
 
@@ -238,6 +240,8 @@ class RedditRuntimeService:
             sort=self._config.sort,
         )
         self._invalidate_async_results()
+        self._cancel_deferred_refresh()
+        self._release_refresh_gate_claim()
         self._fetch_in_progress = False
         self._candidates = ()
         if self._running:
@@ -658,6 +662,24 @@ class RedditRuntimeService:
             time.monotonic() + self.MANUAL_REFRESH_INTERVAL.total_seconds()
         )
 
+    def _refresh_gate_key(self) -> tuple[str, int]:
+        return ("reddit", id(self))
+
+    def _release_refresh_gate_claim(self, claim=None) -> None:
+        current = self._refresh_gate_claim
+        if current is None or (claim is not None and claim != current):
+            return
+        self._refresh_gate_claim = None
+        gate, token = current
+        gate.finish_refresh(token)
+
+    def _cancel_deferred_refresh(self) -> None:
+        from core.threading.refresh_transition_gate import current_gate
+        gate = current_gate(self._runtime_generation) if self._runtime_generation is not None else None
+        if gate is not None:
+            gate.cancel_refresh(self._refresh_gate_key())
+        self._refresh_gate_pending_manual = False
+
     def fetch(self, *, mark_manual_attempt: bool = False) -> bool:
         if (
             self._retired
@@ -693,6 +715,26 @@ class RedditRuntimeService:
         except ImportError:
             pass
 
+        # The source retains its own timer, backoff, manual cooldown and dormancy.
+        # Only a due fetch crosses this gate, and its claim survives until GUI
+        # publication, not merely until the IO worker returns.
+        from core.threading.refresh_transition_gate import current_gate
+        gate = current_gate(self._runtime_generation) if self._runtime_generation is not None else None
+        claim = None
+        if gate is not None:
+            owner_ref = weakref.ref(self)
+            self._refresh_gate_pending_manual |= bool(mark_manual_attempt)
+            def _resume() -> None:
+                owner = owner_ref()
+                if owner is not None and owner.is_running():
+                    owner.fetch(mark_manual_attempt=owner._refresh_gate_pending_manual)
+            token = gate.begin_refresh(self._refresh_gate_key(), _resume)
+            if token is None:
+                return True  # due intent admitted into gate, not a network request
+            claim = (gate, token)
+            self._refresh_gate_claim = claim
+        mark_manual_attempt = bool(mark_manual_attempt or self._refresh_gate_pending_manual)
+        self._refresh_gate_pending_manual = False
         self._fetch_in_progress = True
         if mark_manual_attempt:
             self._mark_manual_attempt()
@@ -758,17 +800,28 @@ class RedditRuntimeService:
 
             def _deliver() -> None:
                 owner = self_ref()
-                if owner is None:
-                    return
-                if prepared is not None:
-                    owner._commit_fetch(request_id, config, prepared)
-                elif expected_failure is not None:
-                    owner._commit_fetch_unavailable(request_id, config, expected_failure)
-                else:
-                    owner._commit_fetch_error(request_id, config, str(error))
+                try:
+                    if owner is None:
+                        return
+                    if prepared is not None:
+                        owner._commit_fetch(request_id, config, prepared)
+                    elif expected_failure is not None:
+                        owner._commit_fetch_unavailable(request_id, config, expected_failure)
+                    else:
+                        owner._commit_fetch_error(request_id, config, str(error))
+                finally:
+                    if owner is not None and claim is not None:
+                        owner._release_refresh_gate_claim(claim)
+                    elif owner is None and claim is not None:
+                        claim[0].finish_refresh(claim[1])
 
             _deliver._srpss_runtime_generation = runtime_generation
-            ThreadManager.run_on_ui_thread(_deliver)
+            if not ThreadManager.run_on_ui_thread(_deliver):
+                # Generation cancellation rejects UI publication. Its stop path
+                # releases claims; if the owner is still live, close the gate
+                # rather than resume image presentation on a worker thread.
+                if claim is not None:
+                    claim[0].close()
 
         _on_result._srpss_runtime_generation = runtime_generation
         try:
@@ -780,6 +833,7 @@ class RedditRuntimeService:
             return True
         except Exception as exc:
             self._fetch_in_progress = False
+            self._release_refresh_gate_claim(claim)
             self._deliver_refreshing(False)
             logger.exception("[REDDIT_RT] fetch submission failed: %s", exc)
             return False
@@ -883,6 +937,8 @@ class RedditRuntimeService:
         self._running = False
         self._shutdown_event.set()
         self._invalidate_async_results()
+        self._cancel_deferred_refresh()
+        self._release_refresh_gate_claim()
         self._fetch_in_progress = False
         self._deliver_refreshing(False)
 

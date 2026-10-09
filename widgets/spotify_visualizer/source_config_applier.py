@@ -89,8 +89,9 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     """Resolve owned audio-source settings for one mode activation.
 
     Spectrum-family modes project their authored shape onto the shared engine.
-    Sphere instead projects only its analysis-zone boundaries and a transient
-    analysis-only policy, with no second persistence/fallback authority.
+    Non-Spectrum modes retain their FFT analysis-zone boundaries without
+    inheriting authored Spectrum visual shaping. Dev Curve owns a separate
+    layer-shaper, not a Spectrum bar profile.
     """
 
     if not isinstance(kwargs, Mapping):
@@ -98,24 +99,41 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 
     descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
-    if descriptor.analysis_notch_setting:
-        from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
-
-        # Sphere owns analysis SPLITS, not Spectrum visual shaping. Do not
-        # transport shape nodes, lane strengths, mirrored values or their
-        # fallback defaults through Sphere's source projection at all.
+    owns_spectrum_shaper = (
+        descriptor.mode_id == "spectrum"
+        or bool(descriptor.spectrum_shape_controls)
+    )
+    if not owns_spectrum_shaper:
+        # Every unshaped mode uses the shared FFT/zone/transient path only.
+        # Never project nodes, weights or Spectrum visual controls into it.
+        # Preserve the existing analysis split when callers supplied Spectrum
+        # source boundaries (historically also consumed by Bubble/Sine/etc.).
+        # Sphere has its own authored frequency-zone boundary authority.
         resolved = {
             key: value for key, value in kwargs.items()
             if key not in SPECTRUM_SOURCE_CONFIG_KEYS
         }
-        resolved["_source_analysis_only"] = True
-        resolved["_source_analysis_notches"] = normalize_sphere_analysis_notches(
-            kwargs[descriptor.analysis_notch_setting]
-        )
+        if descriptor.analysis_notch_setting:
+            from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
+            analysis_notches = normalize_sphere_analysis_notches(
+                kwargs.get(
+                        descriptor.analysis_notch_setting,
+                        _canonical(descriptor.analysis_notch_setting),
+                    )
+            )
+        else:
+            mirrored = bool(kwargs.get("spectrum_mirrored", _canonical("spectrum_mirrored")))
+            notch_key = (
+                "spectrum_notch_positions_mirrored" if mirrored
+                else "spectrum_notch_positions_linear"
+            )
+            analysis_notches = _normalize_list(
+                kwargs.get(notch_key), _canonical(notch_key), minimum=3
+            )
+        resolved["_source_spectrum_shaping_enabled"] = False
+        resolved["_source_analysis_notches"] = analysis_notches
         return resolved
-    if not bool(getattr(descriptor, "spectrum_shape_controls", False)):
-        return {**kwargs, "_source_analysis_only": False}
-    resolved = {**kwargs, "_source_analysis_only": False}
+    resolved = {**kwargs, "_source_spectrum_shaping_enabled": True}
     for suffix in SPECTRUM_SOURCE_SUFFIXES:
         owned_key = f"{descriptor.mode_id}_{suffix}"
         if owned_key in kwargs:
@@ -155,16 +173,15 @@ def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool
 
     if not isinstance(kwargs, Mapping):
         raise TypeError("visualizer source config must be a mapping")
-    if "_source_analysis_only" in kwargs:
-        # Always clear the policy on a new non-Sphere activation. The one
-        # retained BeatEngine is shared by all modes, including non-Spectrum
-        # modes that do not otherwise need source-shaper configuration.
-        _require_engine_method(engine, "set_analysis_only_audio")(
-            kwargs["_source_analysis_only"] is True
+    if "_source_spectrum_shaping_enabled" in kwargs:
+        # Mode-owned, explicit policy on the ONE shared BeatEngine. The engine
+        # fences detached compute snapshots when this policy changes.
+        _require_engine_method(engine, "set_spectrum_shaping_enabled")(
+            kwargs["_source_spectrum_shaping_enabled"] is True
         )
-    if kwargs.get("_source_analysis_only") is True:
-        # Analysis-zone boundaries are Sphere-owned. Bypass every Spectrum
-        # shaper setter, even if a caller provided poisoned Spectrum fields.
+    if kwargs.get("_source_spectrum_shaping_enabled") is False:
+        # Analysis-zone settings are still required before FFT but no shaped
+        # bars or authored lane setters belong to this activation.
         _require_engine_method(engine, "set_notch_positions")(
             deepcopy(kwargs["_source_analysis_notches"])
         )

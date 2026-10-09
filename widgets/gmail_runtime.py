@@ -233,6 +233,7 @@ class _SharedGmailRuntimeOwner:
         self._fetch_lock = threading.Lock()
         self._fetch_in_progress = False
         self._fetch_request_id = 0
+        self._refresh_gate_claim = None
         self._startup_cache_request_id = 0
         self._content_revision = 0
 
@@ -598,6 +599,23 @@ class _SharedGmailRuntimeOwner:
     # ------------------------------------------------------------------
     # Fetch / accepted state
     # ------------------------------------------------------------------
+    def _refresh_gate_key(self) -> tuple[str, int]:
+        return ("gmail", id(self))
+
+    def _release_refresh_gate_claim(self, claim=None) -> None:
+        current = self._refresh_gate_claim
+        if current is None or (claim is not None and claim != current):
+            return
+        self._refresh_gate_claim = None
+        gate, token = current
+        gate.finish_refresh(token)
+
+    def _cancel_deferred_refresh(self) -> None:
+        from core.threading.refresh_transition_gate import current_gate
+        gate = current_gate(self._runtime_generation) if self._runtime_generation is not None else None
+        if gate is not None:
+            gate.cancel_refresh(self._refresh_gate_key())
+
     def refresh(self) -> bool:
         started = time.perf_counter()
         try:
@@ -613,6 +631,21 @@ class _SharedGmailRuntimeOwner:
                 if self._fetch_in_progress:
                     logger.debug("[GMAIL] Fetch already in progress, skipping")
                     return False
+            from core.threading.refresh_transition_gate import current_gate
+            gate = current_gate(self._runtime_generation) if self._runtime_generation is not None else None
+            claim = None
+            if gate is not None:
+                owner_ref = weakref.ref(self)
+                def _resume() -> None:
+                    owner = owner_ref()
+                    if owner is not None and owner.is_running():
+                        owner.refresh()  # checks backend/auth/dormancy again
+                token = gate.begin_refresh(self._refresh_gate_key(), _resume)
+                if token is None:
+                    return True
+                claim = (gate, token)
+                self._refresh_gate_claim = claim
+            with self._fetch_lock:
                 self._fetch_in_progress = True
                 self._fetch_request_id += 1
                 request_id = self._fetch_request_id
@@ -626,6 +659,7 @@ class _SharedGmailRuntimeOwner:
             )
             if client is None:
                 self._end_fetch(request_id)
+                self._release_refresh_gate_claim(claim)
                 self._refreshing = False
                 # Authentication is an actionable state, unlike a transient
                 # network error, and historically replaces cached pixels.
@@ -635,7 +669,8 @@ class _SharedGmailRuntimeOwner:
 
             def _fetch() -> None:
                 self._fetch_emails_async(
-                    client, owner_generation, request_id
+                    client, owner_generation, request_id,
+                    _gate_claim=claim,
                 )
 
             _fetch._srpss_runtime_generation = self._runtime_generation
@@ -646,6 +681,7 @@ class _SharedGmailRuntimeOwner:
                 )
             except Exception as exc:
                 self._end_fetch(request_id)
+                self._release_refresh_gate_claim(claim)
                 self._refreshing = False
                 logger.error(
                     "[GMAIL] Fetch IO dispatch failed; request dropped: %s", exc
@@ -670,8 +706,10 @@ class _SharedGmailRuntimeOwner:
         )
 
     def _fetch_emails_async(
-        self, client: Any, owner_generation: int, request_id: int
+        self, client: Any, owner_generation: int, request_id: int,
+        *, _gate_claim=None,
     ) -> None:
+        publication_queued = False
         try:
             if self._fetch_is_retired(owner_generation, request_id):
                 return
@@ -703,13 +741,19 @@ class _SharedGmailRuntimeOwner:
 
             def _deliver() -> None:
                 owner = owner_ref()
-                if owner is not None:
-                    owner._commit_fetch(
-                        owner_generation, request_id, accepted, unread
-                    )
+                try:
+                    if owner is not None:
+                        owner._commit_fetch(
+                            owner_generation, request_id, accepted, unread
+                        )
+                finally:
+                    if owner is not None and _gate_claim is not None:
+                        owner._release_refresh_gate_claim(_gate_claim)
+                    elif owner is None and _gate_claim is not None:
+                        _gate_claim[0].finish_refresh(_gate_claim[1])
 
             _deliver._srpss_runtime_generation = self._runtime_generation
-            ThreadManager.run_on_ui_thread(_deliver)
+            publication_queued = bool(ThreadManager.run_on_ui_thread(_deliver))
         except GmailFetchCancelled:
             logger.debug(
                 "[GMAIL_RUNTIME] Fetch abandoned for retired generation=%s request=%s",
@@ -723,20 +767,34 @@ class _SharedGmailRuntimeOwner:
 
             def _deliver_error() -> None:
                 owner = owner_ref()
-                if owner is not None:
-                    owner._commit_fetch_error(
-                        owner_generation, request_id, error_message
-                    )
+                try:
+                    if owner is not None:
+                        owner._commit_fetch_error(
+                            owner_generation, request_id, error_message
+                        )
+                finally:
+                    if owner is not None and _gate_claim is not None:
+                        owner._release_refresh_gate_claim(_gate_claim)
+                    elif owner is None and _gate_claim is not None:
+                        _gate_claim[0].finish_refresh(_gate_claim[1])
 
             _deliver_error._srpss_runtime_generation = self._runtime_generation
             try:
-                ThreadManager.run_on_ui_thread(_deliver_error)
+                publication_queued = bool(ThreadManager.run_on_ui_thread(_deliver_error))
             except Exception:
                 logger.critical(
                     "[GMAIL_RUNTIME] run_on_ui_thread failed, dropping fetch error"
                 )
         finally:
             self._end_fetch(request_id)
+            if _gate_claim is not None and not publication_queued:
+                # A cancellation/dispatch failure cannot leave a transition
+                # waiting forever. Only the GUI thread may resume admission.
+                def _release_abandoned() -> None:
+                    self._release_refresh_gate_claim(_gate_claim)
+                _release_abandoned._srpss_runtime_generation = self._runtime_generation
+                if not ThreadManager.run_on_ui_thread(_release_abandoned):
+                    _gate_claim[0].close()
 
     def _fetch_emails_async_uncancellable(
         self, client: Any, owner_generation: int, request_id: int
@@ -1093,6 +1151,8 @@ class _SharedGmailRuntimeOwner:
         self._backend_initializing = False
         self._backend_ready = False
         self._pending_fetch_after_backend_ready = False
+        self._cancel_deferred_refresh()
+        self._release_refresh_gate_claim()
         with self._fetch_lock:
             self._fetch_in_progress = False
         self._action_in_progress = False

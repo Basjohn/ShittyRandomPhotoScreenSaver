@@ -39,8 +39,8 @@ class _SpectrumConfigEngine:
         self.shape_config = None
         self.drop_speed = None
 
-    def set_analysis_only_audio(self, enabled: bool) -> None:
-        self.analysis_only_audio = bool(enabled)
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_enabled = bool(enabled)
 
     def set_spectrum_mirrored(self, value: bool) -> None:
         self.mirrored = bool(value)

@@ -43,14 +43,12 @@ def _raw(mode, index):
 
 
 
-def test_extruded_curated_presets_freeze_the_historical_response_without_live_organs_borrowing():
-    """All shipped Extruded finishes preserve the frozen ownership-migration response.
+def test_extruded_curated_presets_preserve_their_own_response_without_live_organs_borrowing():
+    """Each editable Extruded preset must retain its *own* authored response.
 
-    Extruded historically consumed Spectrum/Organs at runtime, but the ownership
-    migration deliberately froze that accepted response into Extruded's own
-    canonical namespace.  The mutable Organs preset is therefore *not* a test or
-    migration oracle: retuning Organs must never rewrite Extruded's independent
-    authored response.
+    The old Spectrum/Organs lender cannot override curated Extruded ownership.
+    Neither canonical defaults nor the current shipped artistic values are
+    frozen regression oracles; only the round-trip/ownership contract is tested.
     """
     suffixes = (
         "visual_smoothing_enabled", "visual_smoothing",
@@ -64,16 +62,16 @@ def test_extruded_curated_presets_freeze_the_historical_response_without_live_or
         "audio_block_size", "adaptive_sensitivity", "sensitivity", "bar_count",
         "lane_transient_mix", "solid_bar_hysteresis_enabled",
     )
-    expected = {
-        suffix: deepcopy(_BASE[f"extruded_spectrum_{suffix}"])
-        for suffix in suffixes
-    }
     for index, preset in enumerate(get_presets("extruded_spectrum")):
         if preset.is_custom:
             continue
         raw = _raw("extruded_spectrum", index)
-        for suffix, value in expected.items():
-            assert raw[f"extruded_spectrum_{suffix}"] == value
+        # Presence/ownership are required; numeric/color/style choices are not.
+        expected = {}
+        for suffix in suffixes:
+            key = f"extruded_spectrum_{suffix}"
+            assert key in raw, key
+            expected[key] = deepcopy(raw[key])
 
         poisoned = deepcopy(_BASE)
         poisoned.update(
@@ -86,8 +84,8 @@ def test_extruded_curated_presets_freeze_the_historical_response_without_live_or
         assert applied["spectrum_shape_nodes"] == poisoned["spectrum_shape_nodes"]
         assert applied["spectrum_bar_count"] == 17
         assert applied["spectrum_lane_transient_mix"] == pytest.approx(0.01)
-        for suffix, value in expected.items():
-            assert applied[f"extruded_spectrum_{suffix}"] == value
+        for key, value in expected.items():
+            assert applied[key] == value, key
 
 
 class _ActivationAudioWorker:
@@ -111,7 +109,7 @@ class _ActivationEngine:
         self.notches = None
         self.shape_config = None
         self.drop_speed = None
-        self.analysis_only_audio = None
+        self.spectrum_shaping_enabled = None
         self.bar_count = None
         self.floor = None
         self.sensitivity = None
@@ -119,8 +117,8 @@ class _ActivationEngine:
         self.agc_strength = None
         self.input_gain = None
 
-    def set_analysis_only_audio(self, enabled: bool) -> None:
-        self.analysis_only_audio = bool(enabled)
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_enabled = bool(enabled)
 
     def set_spectrum_mirrored(self, value: bool) -> None:
         self.mirrored = bool(value)
@@ -319,7 +317,7 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
         assert state._transient_pulse_gain == pytest.approx(0.58)
 
     if mode in {"extruded_spectrum", "shockwave_grid"}:
-        assert engine.analysis_only_audio is False
+        assert engine.spectrum_shaping_enabled is True
         assert engine.mirrored is False
         assert engine.shape_nodes == config[f"{mode}_shape_nodes"]
         assert engine.notches == config[f"{mode}_notch_positions_linear"]
@@ -330,7 +328,7 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
     else:
         # Sphere owns the analysis splits, not a Spectrum shape. No shaper
         # configuration call may reach its source engine on activation.
-        assert engine.analysis_only_audio is True
+        assert engine.spectrum_shaping_enabled is False
         assert engine.shape_nodes is None
         assert engine.shape_config is None
         assert engine.mirrored is None
@@ -438,24 +436,40 @@ def test_raw_curated_3d_normalization_cannot_borrow_changed_spectrum_catalogue(m
     assert normalize_visualizer_mode_payload(mode, _raw(mode, index)) == before
 
 
-def test_extruded_presets_share_frozen_response_but_keep_distinct_3d_finishes():
-    raws = [_raw("extruded_spectrum", index) for index in range(4)]
-    response_keys = (
-        "extruded_spectrum_shape_nodes", "extruded_spectrum_wave_amplitude",
-        "extruded_spectrum_bar_count", "extruded_spectrum_audio_block_size",
-        "extruded_spectrum_input_gain", "extruded_spectrum_lane_transient_mix",
-    )
-    for key in response_keys:
-        assert len({json.dumps(raw[key], sort_keys=True) for raw in raws}) == 1
+@pytest.mark.parametrize("variant", (0, 1))
+def test_extruded_curated_schema_accepts_independently_authored_response_and_finish(variant):
+    """Synthetic editability proof, never an artistic golden for shipped presets.
 
-    # Persistent turn/tilt are authoring state, never curated-preset finishes.
-    assert all("extruded_spectrum_turn" not in raw and "extruded_spectrum_tilt" not in raw for raw in raws)
-    finishes = {
-        (raw["extruded_spectrum_colouring"], raw["extruded_spectrum_gloss"],
-         raw["extruded_spectrum_reflection"], raw["extruded_spectrum_face_mirror"])
-        for raw in raws
-    }
-    assert len(finishes) == 4
+    A curated 3D payload may have any valid response and material combination.
+    Runtime normalization must preserve both independently and must not absorb
+    persistent view-pose settings into a curated preset.
+    """
+    # Start from a structurally complete payload, then substitute *test-owned*
+    # authored values to prevent an accidentally frozen catalogue expectation.
+    index = next(i for i, preset in enumerate(get_presets("extruded_spectrum")) if not preset.is_custom)
+    synthetic = deepcopy(_raw("extruded_spectrum", index))
+    synthetic["extruded_spectrum_wave_amplitude"] = (0.14, 0.67)[variant]
+    synthetic["extruded_spectrum_input_gain"] = (0.83, 1.27)[variant]
+    synthetic["extruded_spectrum_bar_count"] = (23, 31)[variant]
+    synthetic["extruded_spectrum_ghost_alpha"] = (0.12, 0.26)[variant]
+    synthetic["extruded_spectrum_turn"] = (17.0, -21.0)[variant]
+    synthetic["extruded_spectrum_tilt"] = (3.0, 9.0)[variant]
+
+    normalized = normalize_visualizer_mode_payload("extruded_spectrum", synthetic)
+    for key in (
+        "extruded_spectrum_wave_amplitude", "extruded_spectrum_input_gain",
+        "extruded_spectrum_bar_count", "extruded_spectrum_ghost_alpha",
+    ):
+        assert normalized[key] == synthetic[key], key
+    assert "extruded_spectrum_turn" not in normalized
+    assert "extruded_spectrum_tilt" not in normalized
+    # Material/finish settings must survive too, without requiring uniqueness
+    # or equality between distinct operator-authored curated files.
+    for key in (
+        "extruded_spectrum_colouring", "extruded_spectrum_gloss",
+        "extruded_spectrum_reflection", "extruded_spectrum_face_mirror",
+    ):
+        assert normalized[key] == synthetic[key], key
 
 
 @pytest.mark.parametrize("mode", _MODES)
@@ -615,7 +629,7 @@ def test_recorder_applies_source_projection_before_its_engine_configuration(monk
     try:
         assert projected == ["sphere"]
         # The injected Spectrum nodes must not be applied by a Sphere recorder.
-        assert engine._audio_worker._analysis_only_audio is True
+        assert engine._audio_worker._spectrum_shaping_enabled is False
         assert engine._audio_worker._spectrum_shape_nodes is None
     finally:
         record._close_configured_engine(controller, engine)

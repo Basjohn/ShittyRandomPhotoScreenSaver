@@ -129,6 +129,7 @@ class DisplayManager(QObject):
     authoritative_first_frames_ready = Signal(int)  # runtime generation
     startup_reveal_completed = Signal(int)  # runtime generation
     transition_completed = Signal(int)  # screen index
+    transition_batch_idle = Signal()  # whole dual-display batch really finalized
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
     save_image_requested = Signal(int)  # context menu - save the image on this display
@@ -4322,6 +4323,7 @@ class DisplayManager(QObject):
             return False
         self._transition_work_pending = False
         self._reset_quick_transition_batch()
+        self.transition_batch_idle.emit()
         return True
 
     def set_random_transition_selection(

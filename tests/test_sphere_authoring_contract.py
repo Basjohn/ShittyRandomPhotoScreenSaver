@@ -148,8 +148,8 @@ def test_owned_source_and_complete_worker_profile_ignore_mutable_spectrum_settin
     first_source = resolve_mode_source_config("sphere", vars(first))
     second_source = resolve_mode_source_config("sphere", vars(second))
     from widgets.spotify_visualizer.source_config_applier import SPECTRUM_SOURCE_CONFIG_KEYS
-    assert first_source["_source_analysis_only"] is True
-    assert second_source["_source_analysis_only"] is True
+    assert first_source["_source_spectrum_shaping_enabled"] is False
+    assert second_source["_source_spectrum_shaping_enabled"] is False
     assert not SPECTRUM_SOURCE_CONFIG_KEYS.intersection(first_source)
     assert not SPECTRUM_SOURCE_CONFIG_KEYS.intersection(second_source)
     assert first_source["_source_analysis_notches"] == second_source["_source_analysis_notches"]

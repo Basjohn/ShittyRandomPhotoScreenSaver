@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
+from PySide6.QtCore import QCoreApplication, QEventLoop, QPauseAnimation, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from rendering.quick.startup_reveal import (
     QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
+    QUICK_STARTUP_REVEAL_DELAY_MS,
+    QUICK_STARTUP_REVEAL_DURATION_MS,
     QuickStartupRevealCoordinator,
 )
 
@@ -31,6 +33,7 @@ def test_startup_reveal_primes_zero_then_completes_at_one_once() -> None:
         runtime_generation=7,
         opacity_sink=sink,
         duration_ms=12,
+        delay_ms=0,
     )
     reveal.completed.connect(completions.append)
 
@@ -59,6 +62,7 @@ def test_startup_reveal_cancel_never_publishes_completion() -> None:
         runtime_generation=9,
         opacity_sink=lambda value: values.append(float(value)) or 2,
         duration_ms=50,
+        delay_ms=0,
     )
     reveal.completed.connect(completions.append)
 
@@ -85,6 +89,7 @@ def test_startup_reveal_with_no_initial_targets_still_runs_shared_scalar() -> No
         runtime_generation=11,
         opacity_sink=lambda value: values.append(float(value)) or 0,
         duration_ms=12,
+        delay_ms=0,
     )
     reveal.completed.connect(completions.append)
 
@@ -117,6 +122,7 @@ def test_startup_reveal_rescans_targets_created_during_wallpaper_crossfade() -> 
         runtime_generation=13,
         opacity_sink=sink,
         duration_ms=12,
+        delay_ms=0,
     )
 
     # Nothing existed when the hidden scene was primed. A retained family then
@@ -134,6 +140,64 @@ def test_startup_reveal_rescans_targets_created_during_wallpaper_crossfade() -> 
 
     assert reveal.is_completed is True
     assert values[-1] == 1.0
+
+
+def test_startup_reveal_adds_relative_hold_then_gentler_animation() -> None:
+    """300 ms later and 700 ms longer than previous 1,800 ms baseline."""
+    assert QUICK_STARTUP_REVEAL_DELAY_MS == 300
+    assert QUICK_STARTUP_REVEAL_DURATION_MS == 1800 + 700
+    _app()
+    values: list[float] = []
+    completions: list[int] = []
+    reveal = QuickStartupRevealCoordinator(
+        runtime_generation=27,
+        opacity_sink=lambda opacity: values.append(float(opacity)) or 1,
+        delay_ms=160,  # Shorten only this test; keep a measurable held gate.
+        duration_ms=80,
+    )
+    reveal.completed.connect(completions.append)
+    assert reveal.prime() == 1
+    assert reveal.start() is True
+    assert isinstance(reveal._timeline.currentAnimation(), QPauseAnimation)
+    assert reveal._timeline.duration() == 240
+    assert values == [0.0, 0.0]
+
+    hold = QEventLoop()
+    QTimer.singleShot(35, hold.quit)
+    hold.exec()
+    assert values == [0.0, 0.0]  # No premature opacity publication.
+    assert completions == []
+
+    done = QEventLoop()
+    reveal.completed.connect(lambda _generation: done.quit())
+    QTimer.singleShot(1000, done.quit)
+    done.exec()
+    assert completions == [27]
+    assert values[-1] == 1.0
+    assert any(0.0 < value < 1.0 for value in values)
+    assert all(0.0 <= value <= 1.0 for value in values)
+
+
+def test_startup_reveal_cancel_during_delay_keeps_gate_closed() -> None:
+    _app()
+    values: list[float] = []
+    completions: list[int] = []
+    reveal = QuickStartupRevealCoordinator(
+        runtime_generation=29,
+        opacity_sink=lambda opacity: values.append(float(opacity)) or 1,
+        delay_ms=110,
+        duration_ms=30,
+    )
+    reveal.completed.connect(completions.append)
+    reveal.prime()
+    assert reveal.start() is True
+    assert reveal.cancel() is True
+    hold = QEventLoop()
+    QTimer.singleShot(180, hold.quit)
+    hold.exec()
+    assert values == [0.0, 0.0]
+    assert completions == []
+
 
 def test_startup_desktop_crossfade_is_one_shot_signal_driven_and_precedes_reveal() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -157,8 +221,8 @@ def test_startup_desktop_crossfade_is_one_shot_signal_driven_and_precedes_reveal
     assert "opacity: fadeOpacity * startupRevealOpacity" in overlay
 
     # Startup staging must not introduce a recurring timer/poller. The existing
-    # reveal uses one bounded QVariantAnimation and the crossfade uses the retained
-    # transition lifecycle/finalization signal.
+    # reveal uses one Qt animation timeline (pause then QVariantAnimation)
+    # and the crossfade uses the retained transition lifecycle/finalization signal.
     prime_start = manager.index("    def _prime_quick_startup_desktop_sources")
     prime_end = manager.index("    def _apply_quick_startup_reveal_opacity", prime_start)
     prime = manager[prime_start:prime_end]

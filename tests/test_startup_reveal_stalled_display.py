@@ -209,7 +209,7 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
     qtbot,
     monkeypatch,
 ):
-    """Two monitors, real 1,800 ms fades: display 1 stalls, then recovers mid-fade."""
+    """Two monitors, real 300 ms hold + 2,500 ms fades: late sibling."""
 
     manager, units, reveals, _first = _make_manager(monkeypatch, reveal_ms=None)
     try:
@@ -217,7 +217,8 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
         (unit0, widgets0, visualizer0), (unit1, widgets1, visualizer1) = units
         startup = manager._display_startup_generation
         duration_s = display_manager_module.QUICK_STARTUP_REVEAL_DURATION_MS / 1000.0
-        assert duration_s == 1.8
+        assert duration_s == 2.5
+        assert display_manager_module.QUICK_STARTUP_REVEAL_DELAY_MS == 300
 
         # Before: every display is primed closed.
         assert [widgets0.value, visualizer0.value, widgets1.value, visualizer1.value] == [0.0] * 4
@@ -247,7 +248,7 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
         # The healthy display finishes on its own schedule, never restarted.
         qtbot.waitUntil(lambda: widgets0.value == 1.0, timeout=4000)
         healthy_done = time.monotonic()
-        assert healthy_done - shared_started < duration_s + 0.6
+        assert healthy_done - shared_started < duration_s + 0.3 + 0.6
         assert _non_decreasing(widgets0.history)
         assert reveals == [GENERATION]
         # Display 1 is still mid-fade when display 0 completes.
@@ -256,7 +257,7 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
         # After: display 1 reaches full opacity through its own gentle fade.
         qtbot.waitUntil(lambda: widgets1.value == 1.0, timeout=4000)
         late_done = time.monotonic()
-        assert late_done - late_started >= duration_s - 0.2
+        assert late_done - late_started >= duration_s + 0.3 - 0.2
         assert all(value == 0.0 for t, value in widgets1.history if t < late_started)
         assert _non_decreasing(widgets1.history)
         intermediate = [value for t, value in widgets1.history if 0.0 < value < 1.0]

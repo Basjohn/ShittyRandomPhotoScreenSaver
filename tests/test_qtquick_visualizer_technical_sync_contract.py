@@ -57,6 +57,10 @@ class _TechnicalEngine:
         self.energy_boosts: list[float] = []
         self.agc_strengths: list[float] = []
         self.input_gains: list[float] = []
+        self.spectrum_shaping_calls: list[bool] = []
+
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_calls.append(bool(enabled))
 
     def reconfigure_bar_count(self, value: int) -> None:
         self.reconfigured_bar_counts.append(int(value))
@@ -268,6 +272,12 @@ _ACT_ID = 7
 
 
 class _CaptureEngine:
+    def __init__(self) -> None:
+        self.spectrum_shaping_calls: list[bool] = []
+
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_calls.append(bool(enabled))
+
     def get_activation_id(self):
         return _ACT_ID
 
@@ -390,6 +400,7 @@ def test_sync_commits_same_presentation_to_retained_item_and_item_consumes_snaps
             # making this presentation-boundary test depend on live source timing.
             playing=False,
         )
+        assert owner.controller.engine.spectrum_shaping_calls == [True]
         identity = owner.bind(
             engine_generation=_ENGINE_GEN,
             activation_id=_ACT_ID,

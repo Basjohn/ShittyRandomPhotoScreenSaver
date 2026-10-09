@@ -34,6 +34,13 @@ class _Engine:
     def __init__(self) -> None:
         self.acquire_count = 0
         self.release_count = 0
+        self.spectrum_shaping_calls: list[bool] = []
+
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_calls.append(bool(enabled))
+
+    def set_notch_positions(self, positions) -> None:
+        self.analysis_notches = positions
 
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
@@ -137,6 +144,7 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         assert owner.controller.runtime_generation == 40
 
         owner.configure(logical_kwargs=_BUBBLE_CONFIG, playing=True)
+        assert engine.spectrum_shaping_calls == [False]
         assert owner.controller.enabled is True
         assert owner.controller.engine is not None
         assert owner.controller.logical_tick_state._bubble_big_count == 8

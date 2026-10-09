@@ -140,6 +140,9 @@ class _FeedFamilyOwner:
         # cadence/network/cache/presentation authority; it exists only to keep
         # feedparser + normalization outside the Qt/main-process GIL domain.
         self._parse_process: object | None = None
+        # Work retains its gate claim until GUI publication finishes.
+        self._refresh_gate_tokens: dict[tuple[str, int], tuple[object, object]] = {}
+        self._refresh_gate_deferred: set[str] = set()
 
     def _maybe_complete_initial_admission(self) -> None:
         """Close the family startup barrier once every active source is settled.
@@ -355,6 +358,15 @@ class _FeedFamilyOwner:
         if self._retired:
             return
         self._retired = True
+        from core.threading.refresh_transition_gate import current_gate
+        gate_for_waiters = current_gate(self._generation)
+        if gate_for_waiters is not None:
+            for key in tuple(self._refresh_gate_deferred):
+                gate_for_waiters.cancel_refresh((id(self), key))
+        self._refresh_gate_deferred.clear()
+        for gate, token in tuple(self._refresh_gate_tokens.values()):
+            gate.finish_refresh(token)
+        self._refresh_gate_tokens.clear()
         self._remote_bundle_key = None
         self._remote_not_before = 0.0
         self._deadline_token += 1
@@ -549,18 +561,43 @@ class _FeedFamilyOwner:
         remote_work = not cache_only
         cache_key = state.spec.cache_key
         if remote_work:
-            # A source bundle owns refresh + optional artwork as one serialized
-            # remote transaction.  No other source may overlap it.
+            # Source bundles are family-serialized. Claim refresh admission
+            # before changing the bundle or source generation.
             if self._remote_bundle_key not in (None, cache_key):
                 return False
             if self._remote_bundle_key is None and self._now() < self._remote_not_before:
                 return False
+        from core.threading.refresh_transition_gate import current_gate
+        gate = current_gate(self._generation)
+        gate_token = None
+        if gate is not None:
+            owner_ref_for_resume = weakref.ref(self)
+            def _resume_feed_work() -> None:
+                owner = owner_ref_for_resume()
+                if owner is None or owner._retired:
+                    return
+                owner._refresh_gate_deferred.discard(cache_key)
+                if cache_only or artwork_only:
+                    owner._submit(state, cache_only=cache_only, force=force,
+                                  artwork_only=artwork_only)
+                else:
+                    owner._admit_due_work()
+                owner._reschedule()
+            gate_token = gate.begin_refresh((id(self), cache_key), _resume_feed_work)
+            if gate_token is None:
+                self._refresh_gate_deferred.add(cache_key)
+                return False
+        self._refresh_gate_deferred.discard(cache_key)
+        if remote_work:
             self._remote_bundle_key = cache_key
             state.presentation_settled = False
         state.in_flight = True
         state.work_cancel = Event()
         state.work_token += 1
         token = state.work_token
+        admission_key = (cache_key, token)
+        if gate is not None and gate_token is not None:
+            self._refresh_gate_tokens[admission_key] = (gate, gate_token)
         cancel = state.work_cancel
         owner_ref = weakref.ref(self)
         base_artwork_result = state.last_result if artwork_only else None
@@ -608,6 +645,13 @@ class _FeedFamilyOwner:
 
         _work._srpss_runtime_generation = self._generation
 
+        def _release_admission() -> None:
+            owner = owner_ref()
+            if owner is not None:
+                owner._refresh_gate_tokens.pop(admission_key, None)
+            if gate is not None and gate_token is not None:
+                gate.finish_refresh(gate_token)
+
         def _completed(task_result: object) -> None:
             result = (
                 getattr(task_result, "result", None)
@@ -619,9 +663,16 @@ class _FeedFamilyOwner:
                 # Completion runs only after the worker returns. An obsolete
                 # session can now be closed without racing its HTTP read.
                 _FeedFamilyOwner._release_source(state)
+                # Worker completions may not resume an image transition on a
+                # foreign thread. Retired owners normally released this claim
+                # on UI already; otherwise request a UI-thread final release.
+                from core.threading.manager import ThreadManager
+                if not ThreadManager.run_on_ui_thread(_release_admission):
+                    if gate is not None:
+                        gate.close()  # no callbacks into a missing GUI loop
                 return
 
-            def _deliver() -> None:
+            def _publish_completed() -> None:
                 owner = owner_ref()
                 if owner is None or owner._retired:
                     _FeedFamilyOwner._release_source(state)
@@ -641,10 +692,37 @@ class _FeedFamilyOwner:
                                     elapsed_ms,
                                 )
 
+            def _deliver() -> None:
+                try:
+                    _publish_completed()
+                finally:
+                    _release_admission()
+
             _deliver._srpss_runtime_generation = self._generation
             try:
-                self._ui_dispatch(_deliver)
+                admitted = self._ui_dispatch(_deliver)
             except Exception:
+                # A dispatcher that executes inline may raise *after* delivery.
+                # Only attempt idempotent claim release, not duplicate publication.
+                _logger.exception("[REFRESH_GATE][FEEDS] GUI publication dispatch raised")
+                from core.threading.manager import ThreadManager
+                if not ThreadManager.run_on_ui_thread(_release_admission):
+                    if gate is not None:
+                        gate.close()  # no safe UI event loop for transition callbacks
+                return
+            if admitted is False:
+                # run_on_ui_thread explicitly returns False on rejected delivery.
+                # Missing this result previously left a claim held indefinitely.
+                # Legacy/test dispatchers returning None after executing inline
+                # are intentionally accepted; only False means rejection.
+                _logger.warning("[REFRESH_GATE][FEEDS] GUI publication rejected; retrying via UI owner")
+                from core.threading.manager import ThreadManager
+                if not ThreadManager.run_on_ui_thread(_deliver):
+                    # The runtime's own generation stop/retirement normally
+                    # releases claims. If there is no live GUI dispatcher, do
+                    # not invoke a deferred wallpaper callback on an IO thread.
+                    if gate is not None:
+                        gate.close()
                 return
 
         _completed._srpss_runtime_generation = self._generation
@@ -657,6 +735,7 @@ class _FeedFamilyOwner:
             )
         except Exception:
             state.in_flight = False
+            _release_admission()
             if remote_work and self._remote_bundle_key == cache_key:
                 self._finish_remote_bundle(cache_key)
             state.due_at = self._now() + 60.0
@@ -863,12 +942,14 @@ class _FeedFamilyOwner:
         candidates = [
             state.due_at
             for state in self._states.values()
-            if self._active_leases_for_state(state) and not state.in_flight and state.due_at > 0
+            if (self._active_leases_for_state(state) and not state.in_flight
+                and state.due_at > 0 and state.spec.cache_key not in self._refresh_gate_deferred)
         ]
         if any(
             not state.in_flight
             and self._active_leases_for_state(state)
             and self._artwork_needed(state)
+            and state.spec.cache_key not in self._refresh_gate_deferred
             for state in self._states.values()
         ):
             candidates.append(now)

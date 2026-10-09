@@ -6,8 +6,25 @@ from collections import Counter
 from types import SimpleNamespace
 
 from engine.screensaver_engine import RandomTransitionHistory, ScreensaverEngine
+from core.threading.refresh_transition_gate import RefreshTransitionGate
 from rendering.quick.transitions.request_resolution import RandomTransitionSelection
 from rendering.transition_registry import get_transition_setting_names
+
+
+def _admission_engine_stub(engine: SimpleNamespace) -> SimpleNamespace:
+    """Supply the real generation/transition admission seams to surgical engine stubs.
+
+    Tests deliberately call unbound ScreensaverEngine methods, so their stubs
+    must model the owned gate and generation identity too. Never make production
+    image admission silently optional merely to support these lightweight tests.
+    """
+    engine._runtime_generation = 16
+    engine._terminal_shutdown_requested = False
+    engine._refresh_transition_gate = RefreshTransitionGate(16)
+    engine._capture_runtime_identity = lambda: (
+        engine._runtime_generation, getattr(engine, "display_manager", None)
+    )
+    return engine
 
 
 class _FakeSettingsManager:
@@ -323,7 +340,7 @@ def test_manual_previous_rebases_after_fallback_request_is_accepted() -> None:
     engine = SimpleNamespace(
         image_queue=_Queue(),
         _display_image_history=[],
-        _try_begin_image_change_work=lambda: True,
+        _try_begin_image_change_work=lambda **_kwargs: True,
         _show_current_image=lambda: True,
         _rebase_rotation_timer=lambda *, reason: calls["rebase"].append(reason),
         _clear_unaccepted_image_change_work=lambda: calls.__setitem__(
@@ -332,6 +349,7 @@ def test_manual_previous_rebases_after_fallback_request_is_accepted() -> None:
         ),
     )
 
+    _admission_engine_stub(engine)
     ScreensaverEngine._on_previous_requested(engine)
 
     assert calls["previous"] == 1
@@ -350,12 +368,13 @@ def test_manual_previous_claims_work_before_queue_or_async_submission() -> None:
         image_queue=_Queue(),
         _display_image_history=[[object()]],
         _current_image=None,
-        _try_begin_image_change_work=lambda: events.append("claim") or True,
+        _try_begin_image_change_work=lambda **_kwargs: events.append("claim") or True,
         _show_images_for_displays=lambda _metas: events.append("submit") or True,
         _rebase_rotation_timer=lambda *, reason: events.append(reason),
         _clear_unaccepted_image_change_work=lambda: events.append("clear"),
     )
 
+    _admission_engine_stub(engine)
     ScreensaverEngine._on_previous_requested(engine)
 
     assert events == [
@@ -377,7 +396,7 @@ def test_manual_previous_releases_owner_and_does_not_rebase_rejected_submission(
         image_queue=_Queue(),
         _display_image_history=[[object()]],
         _current_image=None,
-        _try_begin_image_change_work=lambda: True,
+        _try_begin_image_change_work=lambda **_kwargs: True,
         _show_images_for_displays=lambda _metas: False,
         _rebase_rotation_timer=lambda *, reason: calls["rebase"].append(reason),
         _clear_unaccepted_image_change_work=lambda: calls.__setitem__(
@@ -386,6 +405,7 @@ def test_manual_previous_releases_owner_and_does_not_rebase_rejected_submission(
         ),
     )
 
+    _admission_engine_stub(engine)
     ScreensaverEngine._on_previous_requested(engine)
 
     assert calls["rebase"] == []
@@ -423,7 +443,9 @@ def test_previous_work_claim_is_visible_to_rotation_timer() -> None:
         display_manager=display_manager,
     )
 
+    _admission_engine_stub(engine)
     assert ScreensaverEngine._try_begin_image_change_work(engine) is True
+    assert engine._refresh_transition_gate.snapshot[0] is True
     assert engine._loading_in_progress is True
     assert pending == [True]
     assert ScreensaverEngine._has_active_image_change_work(engine) is True
@@ -500,11 +522,13 @@ def test_empty_queue_result_releases_opened_batch_and_shows_nothing() -> None:
         thread_manager=object(),
         _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
         _current_image=None,
+        _end_replacement_watchdog=lambda _reason: None,
     )
     # Exercise the real image-change admission gate (it marks the batch pending
     # True through the current transition-work contract) rather than stubbing it.
+    _admission_engine_stub(engine)
     engine._try_begin_image_change_work = (
-        lambda: ScreensaverEngine._try_begin_image_change_work(engine)
+        lambda **kwargs: ScreensaverEngine._try_begin_image_change_work(engine, **kwargs)
     )
 
     assert ScreensaverEngine._show_next_image(engine) is False
@@ -513,6 +537,7 @@ def test_empty_queue_result_releases_opened_batch_and_shows_nothing() -> None:
     assert calls["prepare"] == 1
     assert calls["load"] == 0
     assert calls["pending"] == [True, False]
+    assert engine._refresh_transition_gate.snapshot[0] is False
     assert engine._current_image is None
 
 
@@ -544,12 +569,14 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
     )
     # Exercise the real image-change admission gate (it marks the batch pending
     # True through the current transition-work contract) rather than stubbing it.
+    _admission_engine_stub(engine)
     engine._try_begin_image_change_work = (
-        lambda: ScreensaverEngine._try_begin_image_change_work(engine)
+        lambda **kwargs: ScreensaverEngine._try_begin_image_change_work(engine, **kwargs)
     )
 
     assert ScreensaverEngine._show_next_image(engine) is True
     assert calls["prepare"] == 1
     assert calls["load"] == 1
     assert calls["pending"] == [True]
+    assert engine._refresh_transition_gate.snapshot[0] is True
     assert engine._current_image is image_meta

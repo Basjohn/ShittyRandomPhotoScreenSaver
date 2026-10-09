@@ -986,3 +986,63 @@ def test_notification_decision_runs_once_for_all_displays(
     assert player.plays == 1
     assert player.file_path == "sound.wav"
     assert player.volume_percent == 37
+
+
+def test_gmail_refresh_waits_for_transition_and_gui_publication(_isolated_runtime, monkeypatch):
+    from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+    backend, _ = _isolated_runtime
+    manager = _QueuedIoManager()
+    consumer = _Consumer(manager, generation=87)
+    service = _lease(consumer)
+    owner = service.shared_owner
+    assert owner is not None
+    gate = RefreshTransitionGate(87)
+    install_gate(gate)
+    try:
+        assert service.start()
+        manager.tasks.clear()  # startup cache is a separate freshness owner
+        deliveries = []
+        monkeypatch.setattr(ThreadManager, "run_on_ui_thread",
+                            staticmethod(lambda cb: deliveries.append(cb) or True))
+        assert gate.begin_transition() == "started"
+        assert service.refresh() is True
+        assert manager.categories == []
+        gate.end_transition()
+        assert manager.categories == ["gmail_fetch"]
+        assert gate.snapshot[1] == 1
+        fired = []
+        assert gate.begin_transition(lambda: fired.append("transition")) == "deferred"
+        task = manager.pop("gmail_fetch")
+        task.func()
+        assert fired == [] and gate.snapshot[1] == 1
+        assert len(deliveries) == 1
+        deliveries.pop()()
+        assert fired == ["transition"]
+        assert gate.snapshot[0] is True
+        assert backend.client.list_calls
+    finally:
+        service.retire()
+        gate.close()
+        install_gate(None)
+
+
+def test_gmail_stop_discards_deferred_refresh(_isolated_runtime):
+    from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+    manager = _QueuedIoManager()
+    service = _lease(_Consumer(manager, generation=88))
+    gate = RefreshTransitionGate(88)
+    install_gate(gate)
+    try:
+        assert service.start()
+        manager.tasks.clear()
+        assert gate.begin_transition() == "started"
+        assert service.refresh() is True
+        assert gate.snapshot[2] == 1
+        service.stop()
+        assert gate.snapshot[2] == 0
+        gate.end_transition()
+        assert manager.categories == []
+    finally:
+        service.retire()
+        gate.close()
+        install_gate(None)

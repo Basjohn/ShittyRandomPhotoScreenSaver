@@ -258,6 +258,7 @@ class ScreensaverEngine(QObject):
         
         # Engine components
         self.display_manager: Optional[DisplayManager] = None
+        self._refresh_transition_gate = None  # one admission owner per display generation
         # Random rotation history is session memory; it never writes Settings.
         self._random_transition_history = RandomTransitionHistory()
         self.image_queue: Optional[ImageQueue] = None
@@ -416,6 +417,12 @@ class ScreensaverEngine(QObject):
 
     def _advance_runtime_generation(self, reason: str) -> int:
         """Invalidate all delayed publications owned by the current runtime."""
+        gate = self._refresh_transition_gate
+        if gate is not None:
+            gate.close()
+            from core.threading.refresh_transition_gate import install_gate
+            install_gate(None)
+            self._refresh_transition_gate = None
         # A retiring generation's reveal window closes with it; its replacement
         # arms its own.
         self._end_replacement_watchdog("generation_retired")
@@ -908,6 +915,12 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import schedule_prefetch
         schedule_prefetch(self)
 
+    def _on_transition_batch_idle(self) -> None:
+        """Only the last finalized display releases deferred feed admissions."""
+        gate = self._refresh_transition_gate
+        if gate is not None:
+            gate.end_transition()
+
     def _on_display_transition_completed(self, screen_index: int) -> None:
         """Notify the shared prefetch pipeline when a display transition finishes."""
         from engine.image_pipeline import notify_transition_complete
@@ -943,6 +956,15 @@ class ScreensaverEngine(QObject):
             
             same_image = self.settings_manager.get('display.same_image_all_monitors')
             
+            # One event-driven refresh/transition admission authority for this
+            # runtime generation; no new timer or source-presentation owner.
+            from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+            previous_gate = self._refresh_transition_gate
+            if previous_gate is not None:
+                previous_gate.close()
+            self._refresh_transition_gate = RefreshTransitionGate(self._runtime_generation)
+            install_gate(self._refresh_transition_gate)
+
             # Create display manager (inject core managers)
             self.display_manager = DisplayManager(
                 display_mode=display_mode,
@@ -978,6 +1000,7 @@ class ScreensaverEngine(QObject):
                 "transition_completed",
                 self._on_display_transition_completed,
             )
+            _connect_runtime_signal("transition_batch_idle", self._on_transition_batch_idle)
             _connect_runtime_signal("previous_requested", self._on_previous_requested)
             _connect_runtime_signal("next_requested", self._on_next_requested)
             _connect_runtime_signal("save_image_requested", self._on_save_image_requested)
@@ -1096,7 +1119,7 @@ class ScreensaverEngine(QObject):
         )
         self._schedule_startup_first_image_retry()
 
-    def _admit_monitor_replay_image(self, image: ImageMetadata) -> bool:
+    def _admit_monitor_replay_image(self, image: ImageMetadata, *, _gate_reserved: bool = False) -> bool:
         """Admit the topology replay as the replacement generation's one image batch.
 
         The replay claims the same image-change owner as every other request.
@@ -1107,7 +1130,30 @@ class ScreensaverEngine(QObject):
         """
 
         perf_trace = ImageChangePerfTrace(origin="monitor_replay")
-        if not self._try_begin_image_change_work():
+        generation, manager = self._capture_runtime_identity()
+        def _resume_monitor_replay() -> None:
+            if (generation != self._runtime_generation
+                or manager is not self.display_manager
+                or self._terminal_shutdown_requested):
+                gate = self._refresh_transition_gate
+                if gate is not None:
+                    gate.end_transition()
+                return
+            if not self._admit_monitor_replay_image(image, _gate_reserved=True):
+                gate = self._refresh_transition_gate
+                if gate is not None:
+                    gate.end_transition()
+                self._schedule_startup_first_image_retry()
+
+        deferred = [False]
+        if not self._try_begin_image_change_work(
+            deferred_callback=_resume_monitor_replay if not _gate_reserved else None,
+            gate_reserved=_gate_reserved,
+            deferred_flag=deferred,
+        ):
+            if deferred[0]:
+                perf_trace.finish("deferred", reason="active_widget_refresh")
+                return True  # replacement owns one pending replay; no duplicate retry
             perf_trace.finish("rejected", reason="image_change_active")
             logger.error(
                 "[TRANSITION][IMAGE_CHANGE] request_rejected origin=monitor_replay "
@@ -1422,7 +1468,7 @@ class ScreensaverEngine(QObject):
         from engine.engine_lifecycle import cleanup
         cleanup(self)
 
-    def _show_next_image(self, *, origin: str = "unspecified") -> bool:
+    def _show_next_image(self, *, origin: str = "unspecified", _gate_reserved: bool = False) -> bool:
         """Load and display next image from queue with passive admission tracing."""
         perf_trace = ImageChangePerfTrace(origin=origin)
         if not self.image_queue or not self.display_manager:
@@ -1434,7 +1480,33 @@ class ScreensaverEngine(QObject):
         # mutation.  A running/pending transition is authoritative busy state:
         # timer/manual requests are rejected here rather than cancelling the
         # active run to its destination or advancing the queue underneath it.
-        if not self._try_begin_image_change_work():
+        admitted_from_refresh_gate = [False]
+        generation, expected_display = self._capture_runtime_identity()
+
+        def _resume_after_refresh() -> None:
+            # The admission gate has reserved transition precedence. Never
+            # replay into a retired display generation or after Settings/exit.
+            if (self._runtime_generation != generation
+                or self.display_manager is not expected_display
+                or self._terminal_shutdown_requested):
+                gate = self._refresh_transition_gate
+                if gate is not None:
+                    gate.end_transition()
+                return
+            if not self._show_next_image(origin=origin, _gate_reserved=True):
+                gate = self._refresh_transition_gate
+                if gate is not None:
+                    gate.end_transition()
+
+        if not self._try_begin_image_change_work(
+            deferred_callback=_resume_after_refresh if not _gate_reserved else None,
+            gate_reserved=_gate_reserved,
+            deferred_flag=admitted_from_refresh_gate,
+        ):
+            if admitted_from_refresh_gate[0]:
+                perf_trace.finish("deferred", reason="active_widget_refresh")
+                logger.info("[REFRESH_GATE] transition_deferred origin=%s", origin)
+                return True  # accepted intent; never advance the image queue yet
             reason = (
                 "transition_work_pending"
                 if self._has_active_image_change_work()
@@ -1529,6 +1601,8 @@ class ScreensaverEngine(QObject):
                         mark_pending(False)
                 except Exception as e:
                     logger.debug("[TRANSITION] Failed to clear transition work pending: %s", e)
+                if self._refresh_transition_gate is not None:
+                    self._refresh_transition_gate.end_transition()
                 perf_trace.finish("no_image")
                 return False
 
@@ -1563,6 +1637,8 @@ class ScreensaverEngine(QObject):
                     mark_pending(False)
             except Exception as pending_exc:
                 logger.debug("[TRANSITION] Failed to clear transition work pending: %s", pending_exc)
+            if self._refresh_transition_gate is not None:
+                self._refresh_transition_gate.end_transition()
             return False
 
     def _schedule_startup_first_image_retry(self, attempt: int = 1) -> None:
@@ -1658,7 +1734,13 @@ class ScreensaverEngine(QObject):
             )
             return False
 
-    def _try_begin_image_change_work(self) -> bool:
+    def _try_begin_image_change_work(
+        self,
+        *,
+        deferred_callback=None,
+        gate_reserved: bool = False,
+        deferred_flag=None,
+    ) -> bool:
         """Atomically admit one whole image-change batch before queue mutation.
 
         The destination transition batch is part of the ownership claim, not a
@@ -1693,12 +1775,22 @@ class ScreensaverEngine(QObject):
                 )
                 return False
 
+            gate = self._refresh_transition_gate
+            if gate is not None and not gate_reserved:
+                decision = gate.begin_transition(deferred_callback)
+                if decision != "started":
+                    if decision == "deferred" and deferred_flag is not None:
+                        deferred_flag[0] = True
+                    return False
+
             mark_pending = getattr(display_manager, "set_transition_work_pending", None)
             if not callable(mark_pending):
                 logger.error(
                     "[TRANSITION] Image-change admission rejected: destination "
                     "has no transition-batch ownership contract"
                 )
+                if gate is not None:
+                    gate.end_transition()
                 return False
             try:
                 mark_pending(True)
@@ -1707,6 +1799,8 @@ class ScreensaverEngine(QObject):
                     "[TRANSITION] Image-change admission rejected while opening "
                     "destination transition batch"
                 )
+                if gate is not None:
+                    gate.end_transition()
                 return False
 
             self._loading_in_progress = True
@@ -1726,6 +1820,8 @@ class ScreensaverEngine(QObject):
                 "[TRANSITION] Failed to clear unaccepted image-change work",
                 exc_info=True,
             )
+        if self._refresh_transition_gate is not None:
+            self._refresh_transition_gate.end_transition()
 
     def _rebase_rotation_timer(self, *, reason: str) -> bool:
         """Restart the existing active timer from an accepted manual change."""
@@ -1856,7 +1952,7 @@ class ScreensaverEngine(QObject):
             return []
         return sizes
     
-    def _on_previous_requested(self) -> None:
+    def _on_previous_requested(self, *, _gate_reserved: bool = False) -> None:
         """Handle previous image request (Z key).
 
         Uses per-display history so each display reverts to its own
@@ -1866,8 +1962,24 @@ class ScreensaverEngine(QObject):
         if not self.image_queue:
             return
 
-        if not self._try_begin_image_change_work():
-            logger.debug("Image load already in progress, skipping previous request")
+        generation, manager = self._capture_runtime_identity()
+        def _resume_previous() -> None:
+            if (generation != self._runtime_generation
+                or manager is not self.display_manager
+                or self._terminal_shutdown_requested):
+                gate = self._refresh_transition_gate
+                if gate is not None:
+                    gate.end_transition()
+                return
+            self._on_previous_requested(_gate_reserved=True)
+
+        if not self._try_begin_image_change_work(
+            deferred_callback=_resume_previous if not _gate_reserved else None,
+            gate_reserved=_gate_reserved,
+        ):
+            if _gate_reserved and self._refresh_transition_gate is not None:
+                self._refresh_transition_gate.end_transition()
+            logger.debug("Image load busy or deferred; previous request not admitted yet")
             return
 
         accepted = False

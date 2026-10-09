@@ -16,13 +16,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QObject, QVariantAnimation, Signal
+from PySide6.QtCore import (
+    QEasingCurve, QObject, QPauseAnimation, QSequentialAnimationGroup,
+    QVariantAnimation, Signal,
+)
 
 
 # Historical accepted product timing used one soft shared overlay fade rather
 # than the old 300 ms generic UI fade constant.  Keep this destination-owned so
 # later J Parity+ tuning never needs to import the retired QWidget fade helper.
-QUICK_STARTUP_REVEAL_DURATION_MS = 1800
+# The startup gate remains closed 300 ms *after* the same readiness milestone
+# as before. This is a one-shot Qt animation pause, not a second timer or
+# another presentation clock; ordinary lifecycle/scene fades are untouched.
+QUICK_STARTUP_REVEAL_DELAY_MS = 300
+# Previously 1,800 ms; lengthen the easing by 700 ms, not to 700 ms.
+QUICK_STARTUP_REVEAL_DURATION_MS = 2500
 # The initial desktop snapshot is a one-session staging source, not authored
 # wallpaper state. Crossfade into the first processed wallpaper on the authored
 # startup-staging timing, then release the coordinated widget reveal. This is a
@@ -41,6 +49,7 @@ class QuickStartupRevealCoordinator(QObject):
         runtime_generation: int,
         opacity_sink: Callable[[float], int],
         duration_ms: int = QUICK_STARTUP_REVEAL_DURATION_MS,
+        delay_ms: int = QUICK_STARTUP_REVEAL_DELAY_MS,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -49,6 +58,7 @@ class QuickStartupRevealCoordinator(QObject):
         self._runtime_generation = int(runtime_generation)
         self._opacity_sink = opacity_sink
         self._duration_ms = max(0, int(duration_ms))
+        self._delay_ms = max(0, int(delay_ms))
         self._target_count = 0
         self._primed = False
         self._started = False
@@ -62,7 +72,15 @@ class QuickStartupRevealCoordinator(QObject):
         animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
         animation.valueChanged.connect(self._on_value_changed)
         animation.finished.connect(self._on_finished)
+        # Reuse Qt's single unified animation driver for both the held gate and
+        # the original opacity animation. QPauseAnimation does not write opacity
+        # or create a timer/poller; the same generation owner controls both.
+        timeline = QSequentialAnimationGroup(self)
+        if self._delay_ms:
+            timeline.addAnimation(QPauseAnimation(self._delay_ms))
+        timeline.addAnimation(animation)
         self._animation = animation
+        self._timeline = timeline
 
     @property
     def runtime_generation(self) -> int:
@@ -113,14 +131,16 @@ class QuickStartupRevealCoordinator(QObject):
         # The reveal scalar is generation-owned, not target-count-owned. Even an
         # empty initial target set runs the bounded startup animation so a late
         # Visualizer/family root admitted during the reveal inherits the current
-        # scalar rather than appearing at full opacity. Only an explicitly zero
-        # duration bypasses animation.
-        if self._duration_ms <= 0:
+        # scalar rather than appearing at full opacity. Only explicitly zero
+        # delay AND zero duration bypass the timeline.
+        if self._duration_ms <= 0 and self._delay_ms <= 0:
             self._opacity_sink(1.0)
             self._finish_once()
             return True
 
-        self._animation.start()
+        # The held gate must also apply to zero-duration overrides. The
+        # animation group's pause is the sole delay and is retired with us.
+        self._timeline.start()
         return True
 
     def cancel(self) -> bool:
@@ -129,7 +149,7 @@ class QuickStartupRevealCoordinator(QObject):
         if self._cancelled or self._completed:
             return False
         self._cancelled = True
-        self._animation.stop()
+        self._timeline.stop()
         return True
 
     def _on_value_changed(self, value: object) -> None:
@@ -156,6 +176,7 @@ class QuickStartupRevealCoordinator(QObject):
 
 __all__ = [
     "QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS",
+    "QUICK_STARTUP_REVEAL_DELAY_MS",
     "QUICK_STARTUP_REVEAL_DURATION_MS",
     "QuickStartupRevealCoordinator",
 ]
