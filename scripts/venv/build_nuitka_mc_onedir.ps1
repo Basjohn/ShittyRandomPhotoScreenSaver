@@ -19,7 +19,9 @@ param(
     [string]$EntryPoint = "main_mc.py",
     [string]$AppName = "SRPSS_Media_Center",
     [switch]$Console,
-    [switch]$ReinstallVenvDeps
+    [switch]$ReinstallVenvDeps,
+    [ValidateSet("normal", "venv")]
+    [string]$BuildWorkspace = "venv"
 )
 
 
@@ -70,35 +72,7 @@ function Invoke-NativeChecked {
     }
 }
 
-function Resolve-BasePython {
-    Write-Host "[BUILD-VENV] Locating Python 3.11..."
-
-    $candidates = @()
-
-    try {
-        $py311 = (& py -3.11 -c "import sys; print(sys.executable)" 2>$null).Trim()
-        if ($py311) { $candidates += $py311 }
-    } catch {}
-
-    try {
-        $pyDefault = (& python -c "import sys; print(sys.executable)" 2>$null).Trim()
-        if ($pyDefault) { $candidates += $pyDefault }
-    } catch {}
-
-    $candidates = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-
-    foreach ($candidate in $candidates) {
-        try {
-            $version = (& $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null).Trim()
-            if ($version -eq "3.11") {
-                Write-Host "[BUILD-VENV] Using base Python: $candidate"
-                return $candidate
-            }
-        } catch {}
-    }
-
-    throw "Python 3.11 was not found. Install Python 3.11 x64, then rerun this script."
-}
+. (Join-Path $PSScriptRoot '..\python314_runtime.ps1')
 
 function Ensure-ProjectVenv {
     param(
@@ -113,6 +87,14 @@ function Ensure-ProjectVenv {
 
     if (-not (Test-Path $RequirementsPath)) {
         throw "requirements.txt not found: $RequirementsPath"
+    }
+
+    if (Test-Path -LiteralPath $VenvPython -PathType Leaf) {
+        $existingVersion = Get-PythonVersionText -PythonExe $VenvPython
+        if (-not $existingVersion.StartsWith("3.14.")) {
+            Write-Host "[BUILD-VENV] Removing incompatible venv: $existingVersion"
+            Remove-Item -LiteralPath $VenvDir -Recurse -Force
+        }
     }
 
     if (-not (Test-Path $VenvPython)) {
@@ -131,8 +113,12 @@ function Ensure-ProjectVenv {
     }
 
     $venvVersion = Get-PythonVersionText -PythonExe $VenvPython
-    if (-not $venvVersion.StartsWith("3.11.")) {
-        throw "Existing repo-root .venv is Python $venvVersion, but SRPSS expects Python 3.11. Delete .venv and rerun."
+    $venvArchitecture = & $VenvPython -c "import sys, struct; print(int(struct.calcsize('P') == 8 and sys._is_gil_enabled()))"
+    if ($LASTEXITCODE -ne 0 -or $venvArchitecture.Trim() -ne '1') {
+        throw "SRPSS requires a 64-bit, GIL-enabled CPython 3.14 virtual environment."
+    }
+    if (-not $venvVersion.StartsWith("3.14.")) {
+        throw "Existing repo-root .venv is Python $venvVersion, but SRPSS expects Python 3.14. Delete .venv and rerun."
     }
 
     Write-Host "[BUILD-VENV] Using venv Python: $VenvPython"
@@ -201,7 +187,7 @@ $VenvDir = Join-Path $Root '.venv'
 $VenvPython = Ensure-ProjectVenv -RepoRoot $Root -ForceReinstallDeps:$ReinstallVenvDeps
 
 $BuildRoot = Join-Path $Root 'build'
-$BuildDir = Join-Path $BuildRoot 'venv\media_center'
+$BuildDir = Join-Path $BuildRoot ("{0}\media_center" -f $BuildWorkspace)
 $BuildOutputDir = Join-Path $BuildDir 'output'
 $ReleaseRoot = Join-Path $Root 'release'
 $DistributionDir = Join-Path $ReleaseRoot 'media_center'
@@ -341,7 +327,7 @@ if ($Console) { $consoleArg = "--windows-console-mode=force" }
 
 $argsList = @(
     "-m", "nuitka",
-    "--mingw64",
+    "--msvc=latest",
     "--jobs=4",
     "--standalone",
     "--remove-output",

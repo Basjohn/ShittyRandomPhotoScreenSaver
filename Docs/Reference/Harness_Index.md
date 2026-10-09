@@ -250,10 +250,10 @@ These harnesses are **not scheduled work** and rapid-switch startup hitching alo
 For the expanded effects, render deterministic textured progressions through the production GL host:
 
 ```powershell
-C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
-C:/Python311/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
-C:/Python311/python.exe tools/transition_contact_sheet.py --effect melt_drip --source <source-photo> --destination <destination-photo> --animate --output-dir <output-directory>
-C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
+./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
+./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
+./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect melt_drip --source <source-photo> --destination <destination-photo> --animate --output-dir <output-directory>
+./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
 ```
 
 The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.

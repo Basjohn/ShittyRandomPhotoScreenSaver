@@ -193,9 +193,9 @@ not change. See
 `Docs/Architecture/Persisted_Input_Compatibility.md` for content-sized CUSTOM downgrade behavior. The mechanisms behind
 the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md`.
 
-## Physical acceptance (open)
+## Optional operator-triggered physical review
 
-Implementation and automated coverage are complete; one operator pass on the real saver remains:
+The implemented feature is operator-accepted. Use the following checklist only if reopening a specific Guided Setup/Quick Start concern or when requesting fresh installed proof:
 
 - [ ] fresh/no-source automatic Guided Setup; Witch artwork and exact welcome copy;
 - [ ] source requirement;

@@ -8,6 +8,8 @@ This file is the **current test/acceptance authority** for SRPSS. It describes w
 snapshots, output schema and physical-acceptance limits are documented in `Docs/Reference/Harness_Index.md` → Bounded
 self-terminating RUN sessions. It is operator tooling, not a test-runner facade or product runtime owner.
 
+**Execution owner:** Frozen-product builds, installer compilation and lengthy whole-suite Windows acceptance are operator-run only, with logs delivered to the agent. A source/documentation agent must **never attempt a build**, and should return only affected focused tests unless asked to request or run a full suite.
+
 ## 1. Current authority and inventory
 
 The maintained product profile is `destination` in `tests/run_chunked.py`.

@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
+from uuid import uuid4
+from weakref import WeakValueDictionary
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +22,25 @@ logger = get_logger(__name__)
 STEAM_CACHE_SCHEMA_VERSION = 1
 _source_refresh_locks: dict[tuple[str, str], threading.RLock] = {}
 _source_refresh_locks_guard = threading.Lock()
+# A Steam source-refresh lock protects one logical fetch, but independent
+# callers may still target the same cache file. Windows can reject simultaneous
+# replacement of that destination even when writers have distinct temp files.
+# Retain locks only while a publisher still owns one: no per-profile/path cache
+# of permanently retained Lock objects, timer, retry or additional worker.
+_cache_publish_locks_guard = threading.Lock()
+_cache_publish_locks: WeakValueDictionary[str, threading.Lock] = WeakValueDictionary()
+
+
+def _cache_publish_lock_for(path: Path) -> threading.Lock:
+    # Normalise relative/case-variant Windows path spellings to the same key.
+    identity = os.path.normcase(os.path.abspath(os.fspath(path)))
+    with _cache_publish_locks_guard:
+        lock = _cache_publish_locks.get(identity)
+        if lock is None:
+            lock = threading.Lock()
+            _cache_publish_locks[identity] = lock
+        return lock
+
 
 
 @dataclass(frozen=True)
@@ -84,15 +106,24 @@ def cache_path_for_profile_key(
 
 
 def write_cache_record(record: SteamCacheRecord, path: Path) -> Path:
-    """Atomically write a Steam cache record."""
+    """Atomically write one record without sharing a temporary file with rivals.
+
+    One exclusive create per attempt: no retry loop or independent cache owner.
+    A concurrent refresh may replace the final record later, but each writer
+    publishes a complete record and can only clean up its own temporary file.
+    A short, per-destination lock serializes final publication on Windows;
+    unrelated caches never share that publication lock.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f"{path.name}.tmp")
+    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        tmp_path.write_text(
-            json.dumps(record.to_json_payload(), indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        tmp_path.replace(path)
+        with tmp_path.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(record.to_json_payload(), indent=2, sort_keys=True))
+        # Windows may deny simultaneous os.replace() on the same destination
+        # even after independently owned temporary files have been closed.
+        # Stage files concurrently, serialize only their final publication.
+        with _cache_publish_lock_for(path):
+            tmp_path.replace(path)
         logger.info(
             "[STEAM] Cache write source=%s cache_key=%s attempted=%s",
             record.source_id.value,

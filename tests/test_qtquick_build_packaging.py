@@ -16,10 +16,16 @@ PRODUCT_WORKERS = (
     ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
     ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
 )
+CANONICAL_PRODUCT_WORKERS = (
+    ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+    ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+)
 
 
 def test_every_product_nuitka_worker_packages_the_quick_qml_contract():
-    for worker in PRODUCT_WORKERS:
+    # The legacy entry points are delegates. The canonical workers own the
+    # actual compiler argv, so verify the effective packaging authority.
+    for worker in CANONICAL_PRODUCT_WORKERS:
         source = worker.read_text(encoding="utf-8")
         assert (
             "--include-data-dir=rendering/quick/qml=rendering/quick/qml" in source
@@ -34,6 +40,14 @@ def test_every_product_nuitka_worker_packages_the_quick_qml_contract():
         assert '"--include-module=PySide6.QtQuick"' in source, worker
         assert '"--include-module=PySide6.QtQml"' in source, worker
         assert "--include-qt-plugins=all" not in source, worker
+
+    for old_name, worker_name in (
+        ("build_nuitka.ps1", "build_nuitka.ps1"),
+        ("build_nuitka_mc_onedir.ps1", "build_nuitka_mc_onedir.ps1"),
+    ):
+        wrapper = (ROOT / "scripts" / old_name).read_text(encoding="utf-8")
+        assert f"'venv\\{worker_name}'" in wrapper
+        assert "& $worker" in wrapper
 
 
 def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_builds():

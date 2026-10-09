@@ -283,6 +283,16 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             worker._onset_strength = _t_snap.onset_strength
             worker._onset_events = _tb.recent_onsets
 
+        if worker._analysis_only_audio:
+            # Sphere consumes the raw frequency bins, three-zone pre-AGC
+            # energies, control lanes and typed onsets above, not shaped bars.
+            # Returning the established zero-bar output preserves its prior
+            # post-shape energy behavior (the broken shaper returned zeros),
+            # while avoiding shape-node interpolation, strength lookups, gates,
+            # smoothing, AGC and their needless allocations each audio frame.
+            # The immutable raw-spectrum snapshot is still captured on commit.
+            return get_zero_bars(worker)
+
         # ── Shape-node driven profile ────────────────────────────────
         # The shape editor remains the visual guide, but lane energy now
         # routes per-bar so a silent band can genuinely collapse instead of

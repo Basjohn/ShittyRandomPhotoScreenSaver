@@ -299,9 +299,9 @@ Each foundation slice adds what it learned here.
 - Tools that measure cost must run as production does: `tools/visualizer_cost_probe.py` now turns per-call GL
   error checking off first; per-call error checks materially distort CPU timing.
 
-## Physical acceptance (open)
+## Operator-triggered appearance review (reference checklist)
 
-Automated image differences are not aesthetic acceptance. One operator pass remains:
+Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
 
 - [ ] appearance and timing with actual photos at authored durations, including optics/depth controls;
 - [ ] Glass Shards Collide / Shards Break Again, and Crumble Slabs Collide (default and low Collapse Depth), judged in

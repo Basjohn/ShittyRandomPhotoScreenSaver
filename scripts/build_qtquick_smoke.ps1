@@ -18,6 +18,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$VenvPython = Join-Path $Root '.venv\Scripts\python.exe'
+if (-not (Test-Path -LiteralPath $VenvPython)) { throw 'Create the CPython 3.14 repo-root .venv before compiling smoke.' }
 $EntryPath = Join-Path $Root 'tools\qtquick_render_node_smoke.py'
 $QmlSource = Join-Path $Root 'rendering\quick\qml'
 $BuildOutputDir = Join-Path $Root 'build\a4_qtquick_smoke'
@@ -31,7 +33,7 @@ if (-not (Test-Path -LiteralPath $QmlSource -PathType Container)) {
 
 $NuitkaArgs = @(
     '-m', 'nuitka',
-    '--mingw64',
+    '--msvc=latest',
     '--jobs=2',
     '--standalone',
     '--remove-output',
@@ -53,7 +55,7 @@ $NuitkaArgs = @(
 Push-Location $Root
 try {
     Write-Host '[QUICK-A4] Compiling bounded Qt Quick smoke...'
-    & python @NuitkaArgs
+    & $VenvPython @NuitkaArgs
     $BuildExit = $LASTEXITCODE
     if ($BuildExit -ne 0) {
         throw "Qt Quick smoke compilation failed with exit code $BuildExit"

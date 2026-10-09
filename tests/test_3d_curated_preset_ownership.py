@@ -111,12 +111,16 @@ class _ActivationEngine:
         self.notches = None
         self.shape_config = None
         self.drop_speed = None
+        self.analysis_only_audio = None
         self.bar_count = None
         self.floor = None
         self.sensitivity = None
         self.energy_boost = None
         self.agc_strength = None
         self.input_gain = None
+
+    def set_analysis_only_audio(self, enabled: bool) -> None:
+        self.analysis_only_audio = bool(enabled)
 
     def set_spectrum_mirrored(self, value: bool) -> None:
         self.mirrored = bool(value)
@@ -198,8 +202,8 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
             f"{mode}_transient_clamp": 1.37,
         },
         # Poison the former lender. None of these values may become the active
-        # Extruded/Shockwave authored profile, and Sphere intentionally projects
-        # canonical source shape rather than live Spectrum authoring.
+        # Extruded/Shockwave authored profile. Sphere has no Spectrum visual
+        # shaping seam; it projects only its own analysis-zone boundaries.
         spectrum_mirrored=True,
         spectrum_shape_nodes=[[0.0, 0.97], [1.0, 0.03]],
         spectrum_notch_positions_mirrored=[[0.0, "Bass"], [1.0, "Treble"]],
@@ -315,6 +319,7 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
         assert state._transient_pulse_gain == pytest.approx(0.58)
 
     if mode in {"extruded_spectrum", "shockwave_grid"}:
+        assert engine.analysis_only_audio is False
         assert engine.mirrored is False
         assert engine.shape_nodes == config[f"{mode}_shape_nodes"]
         assert engine.notches == config[f"{mode}_notch_positions_linear"]
@@ -323,11 +328,13 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
         assert engine.shape_config.profile_floor == pytest.approx(0.17)
         assert engine.shape_nodes != config["spectrum_shape_nodes"]
     else:
-        # Sphere owns only the two consumed analysis splits. The unused shared
-        # shaper inputs deliberately resolve from canonical product defaults,
-        # not from the user's live Spectrum profile.
-        assert engine.shape_nodes == _BASE["spectrum_shape_nodes"]
-        assert engine.shape_nodes != config["spectrum_shape_nodes"]
+        # Sphere owns the analysis splits, not a Spectrum shape. No shaper
+        # configuration call may reach its source engine on activation.
+        assert engine.analysis_only_audio is True
+        assert engine.shape_nodes is None
+        assert engine.shape_config is None
+        assert engine.mirrored is None
+        assert engine.drop_speed is None
         assert engine.notches == config["sphere_analysis_notch_positions"]
 
     if mode == "extruded_spectrum":
@@ -607,7 +614,9 @@ def test_recorder_applies_source_projection_before_its_engine_configuration(monk
     controller, engine = record._configured_engine()
     try:
         assert projected == ["sphere"]
-        assert engine._audio_worker._spectrum_shape_nodes == expected_nodes
+        # The injected Spectrum nodes must not be applied by a Sphere recorder.
+        assert engine._audio_worker._analysis_only_audio is True
+        assert engine._audio_worker._spectrum_shape_nodes is None
     finally:
         record._close_configured_engine(controller, engine)
 

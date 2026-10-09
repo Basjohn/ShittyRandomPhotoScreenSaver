@@ -134,7 +134,11 @@ def test_alt_wheel_is_signed_reversible_uniform_and_zero_is_noop(edit_scene, hor
         assert edit.item.resize_scale == pytest.approx(before + (0.05 if delta > 0 else -0.05))
         rect = edit.item.current_global_rect
         assert rect.x() + rect.width() / 2 == pytest.approx(original.x() + original.width() / 2, abs=.5)
-        assert rect.y() == original.y()  # shared CUSTOM top-centre pivot
+        # Freeform 3D stages grow around their center; planar cards retain
+        # the historical top-centre pivot. Do not undo accepted 3D authoring.
+        assert rect.y() + rect.height() / 2 == pytest.approx(
+            original.y() + original.height() / 2, abs=.5
+        )
         assert edit.item.current_viewport_extent == original_extent
         presentation = edit.scene.visualizer_item.presentation
         # A uniform freeform-3D stage is stored as an integral QRect; rounding

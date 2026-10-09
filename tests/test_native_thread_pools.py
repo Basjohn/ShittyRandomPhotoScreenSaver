@@ -17,22 +17,18 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 _PROBE = r'''
-import ctypes, glob, multiprocessing, os, sys
+import multiprocessing, os, sys
 
 
 def openblas_threads():
     import numpy
-    base = os.path.dirname(numpy.__file__)
-    for pattern in ("../numpy.libs/*openblas*", ".libs/*openblas*", "../numpy.libs/*.dll"):
-        for path in glob.glob(os.path.join(base, pattern)):
-            try:
-                lib = ctypes.CDLL(path)
-            except OSError:
-                continue
-            for name in ("openblas_get_num_threads64_", "openblas_get_num_threads"):
-                fn = getattr(lib, name, None)
-                if fn is not None:
-                    return int(fn())
+    from threadpoolctl import threadpool_info
+    # NumPy 2.x uses vendor-prefixed OpenBLAS exports. Query the loaded
+    # library via threadpoolctl instead of guessing a DLL export name.
+    for desc in threadpool_info():
+        if isinstance(desc, dict) and desc.get('user_api') == 'blas':
+            assert desc.get('internal_api') == 'openblas', desc
+            return desc.get('num_threads')
     return None
 
 

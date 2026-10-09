@@ -5,7 +5,7 @@ import math
 import threading
 import json
 import weakref
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
@@ -262,7 +262,7 @@ class SettingsManager(QObject):
                     organization,
                     app_name,
                 )
-            self._settings.update_metadata(last_migration_completed=datetime.utcnow().isoformat() + "Z")
+            self._settings.update_metadata(last_migration_completed=datetime.now(UTC).isoformat().replace("+00:00", "Z"))
             self._settings.sync()
         except Exception:
             logger.exception("Failed to migrate legacy QSettings; falling back to defaults")
@@ -313,7 +313,7 @@ class SettingsManager(QObject):
         self._settings.replace_all(flat)
         self._settings.update_metadata(
             migrated_from="qsettings",
-            migrated_at=datetime.utcnow().isoformat() + "Z",
+            migrated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             legacy_profile=app_name,
         )
         self._settings.sync()
@@ -324,12 +324,12 @@ class SettingsManager(QObject):
         try:
             backup_dir = (self._storage_path.parent / "backups").resolve()
             backup_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
             backup_path = backup_dir / f"qsettings_snapshot_{timestamp}.json"
             backup_payload = {
                 "profile": self._application,
                 "organization": self._organization,
-                "created_at": datetime.utcnow().isoformat() + "Z",
+                "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "data": data,
             }
             backup_path.write_text(json.dumps(backup_payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -1570,7 +1570,7 @@ class SettingsManager(QObject):
         try:
             if backup_path is None:
                 # Default to settings directory with timestamp
-                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
                 settings_dir = Path(self._settings.fileName()).parent
                 backup_path = settings_dir / f"settings_backup_{timestamp}.json"
             

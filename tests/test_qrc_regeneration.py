@@ -466,11 +466,15 @@ def test_foundry_qrc_sidecar_uses_the_active_owner_and_cancellation(monkeypatch,
     assert captured["kwargs"]["stdout"] is subprocess.PIPE  # type: ignore[index]
 
 
-def test_venv_preparation_stops_before_build_mutation_and_normal_does_not_bootstrap(monkeypatch):
+def test_venv_preparation_stops_before_build_mutation_and_normal_shares_venv(monkeypatch):
     source = (build_runner.REPO_ROOT / "scripts/venv/build_nuitka.ps1").read_text(encoding="utf-8")
     bootstrap = source.index("$VenvPython = Ensure-ProjectVenv")
     stop = source.index("if ($PrepareEnvironmentOnly)", bootstrap)
     assert bootstrap < stop < source.index("$BuildRoot =", stop)
     assert "return" in source[stop:source.index("$BuildRoot =", stop)]
-    monkeypatch.setattr(build_runner, "_find_pwsh", lambda: pytest.fail("Normal mode must not bootstrap venv"))
+    calls = []
+    monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
+    monkeypatch.setattr(build_runner, "_run_qrc_with_process_owner", lambda command, **kwargs: calls.append(command) or subprocess.CompletedProcess(command, 0, "", ""))
     build_runner.prepare_qrc_environment("normal", object())
+    assert len(calls) == 1 and "-PrepareEnvironmentOnly" in calls[0]
+    assert build_runner.qrc_python_for_mode("normal", Path("X:/repo")) == build_runner.qrc_python_for_mode("venv", Path("X:/repo"))

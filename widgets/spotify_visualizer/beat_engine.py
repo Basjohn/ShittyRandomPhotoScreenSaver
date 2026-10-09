@@ -553,6 +553,15 @@ class _SpotifyBeatEngine(QObject):
         self._audio_worker.set_notch_positions(positions)
         self._invalidate_analysis_compute_state()
 
+    def set_analysis_only_audio(self, enabled: bool) -> None:
+        """Set mode-owned DSP output policy on the sole serialized audio worker."""
+        enabled = bool(enabled)
+        if self._audio_worker._analysis_only_audio == enabled:
+            return
+        self.cancel_pending_compute_tasks()
+        self._audio_worker.set_analysis_only_audio(enabled)
+        self._invalidate_analysis_compute_state()
+
     def set_spectrum_shape_config(self, config) -> None:
         self._audio_worker.set_spectrum_shape_config(config)
         self._invalidate_analysis_compute_state()

@@ -77,8 +77,6 @@ def test_jedi_player_has_hard_two_slot_cap_and_no_recurring_owner() -> None:
 
 def test_jedi_resource_is_explicit_in_every_build_family_and_installer() -> None:
     for relative in (
-        "scripts/build_nuitka.ps1",
-        "scripts/build_nuitka_mc_onedir.ps1",
         "scripts/venv/build_nuitka.ps1",
         "scripts/venv/build_nuitka_mc_onedir.ps1",
         "tools/build_layout.ps1",

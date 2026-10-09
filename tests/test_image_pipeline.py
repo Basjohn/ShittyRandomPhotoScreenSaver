@@ -957,7 +957,9 @@ def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
     schedule_prefetch(engine)
 
     assert prefetcher.prefetch_calls == []
-    assert prefetcher.register_calls == []
+    # R144: an empty plan must still wake/prune already-paused source intents.
+    # This registers no new decode work and is not a scheduler or poll loop.
+    assert prefetcher.register_calls == [[]]
     assert engine._cache_runtime_stats["prefetch_source_paths"] == 0
     assert (
         engine._cache_runtime_stats["prefetch_skipped_display_ready"]

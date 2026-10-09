@@ -86,12 +86,11 @@ def _require_engine_method(engine: Any, name: str):
 
 
 def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[str, Any]:
-    """Project one mode's owned Spectrum-shaper values onto the shared engine seam.
+    """Resolve owned audio-source settings for one mode activation.
 
-    Spectrum's DSP implementation remains the only source/shaper implementation.
-    A participating 3D mode supplies the same semantic values under its own
-    persisted namespace; this activation-time projection is deliberately not a
-    second persistence or fallback authority.
+    Spectrum-family modes project their authored shape onto the shared engine.
+    Sphere instead projects only its analysis-zone boundaries and a transient
+    analysis-only policy, with no second persistence/fallback authority.
     """
 
     if not isinstance(kwargs, Mapping):
@@ -101,18 +100,22 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
     if descriptor.analysis_notch_setting:
         from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
-        resolved = dict(kwargs)
-        # Sphere reads pre-shape FFT and the selected two splits. Unused
-        # Spectrum shaper outputs keep the canonical engine API configuration.
-        for key in SPECTRUM_SOURCE_CONFIG_KEYS:
-            resolved[key] = deepcopy(_canonical(key))
-        notches = normalize_sphere_analysis_notches(kwargs[descriptor.analysis_notch_setting])
-        for kind in ("mirrored", "linear"):
-            resolved[f"spectrum_notch_positions_{kind}"] = deepcopy(notches)
+
+        # Sphere owns analysis SPLITS, not Spectrum visual shaping. Do not
+        # transport shape nodes, lane strengths, mirrored values or their
+        # fallback defaults through Sphere's source projection at all.
+        resolved = {
+            key: value for key, value in kwargs.items()
+            if key not in SPECTRUM_SOURCE_CONFIG_KEYS
+        }
+        resolved["_source_analysis_only"] = True
+        resolved["_source_analysis_notches"] = normalize_sphere_analysis_notches(
+            kwargs[descriptor.analysis_notch_setting]
+        )
         return resolved
     if not bool(getattr(descriptor, "spectrum_shape_controls", False)):
-        return dict(kwargs)
-    resolved = dict(kwargs)
+        return {**kwargs, "_source_analysis_only": False}
+    resolved = {**kwargs, "_source_analysis_only": False}
     for suffix in SPECTRUM_SOURCE_SUFFIXES:
         owned_key = f"{descriptor.mode_id}_{suffix}"
         if owned_key in kwargs:
@@ -152,6 +155,20 @@ def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool
 
     if not isinstance(kwargs, Mapping):
         raise TypeError("visualizer source config must be a mapping")
+    if "_source_analysis_only" in kwargs:
+        # Always clear the policy on a new non-Sphere activation. The one
+        # retained BeatEngine is shared by all modes, including non-Spectrum
+        # modes that do not otherwise need source-shaper configuration.
+        _require_engine_method(engine, "set_analysis_only_audio")(
+            kwargs["_source_analysis_only"] is True
+        )
+    if kwargs.get("_source_analysis_only") is True:
+        # Analysis-zone boundaries are Sphere-owned. Bypass every Spectrum
+        # shaper setter, even if a caller provided poisoned Spectrum fields.
+        _require_engine_method(engine, "set_notch_positions")(
+            deepcopy(kwargs["_source_analysis_notches"])
+        )
+        return True
     if not any(key in kwargs for key in SPECTRUM_SOURCE_CONFIG_KEYS):
         return False
 

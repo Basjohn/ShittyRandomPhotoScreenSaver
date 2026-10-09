@@ -29,7 +29,7 @@ The Qt Quick runtime is operator-accepted and is the sole production presentatio
 - Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
 - Superseded implementation decompositions are source-control history, not live documentation.
 
-Performance/freshness changes are evidence-gated and symptom-driven. Treat the accepted golden as a regression reference and use `Docs/Guardrails/Performance_Optimization_Contract.md` for the current admission criteria; checkpoint sequencing belongs in the active plan and handoff.
+Python 3.14 source and focused migration/audio/cache repair gates are accepted; expensive frozen builds belong to the operator, who provides logs/reports. Agents must not execute builds. Performance/freshness changes are evidence-gated and symptom-driven. Treat the accepted golden as a regression reference and use `Docs/Guardrails/Performance_Optimization_Contract.md` for the current admission criteria; checkpoint sequencing belongs in the active plan and handoff.
 
 ## Current feature-extension boundary
 

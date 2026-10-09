@@ -14,7 +14,7 @@ Purpose:
   * Explain every failure instead of silently skipping it.
 
 Default target:
-    C:\Python311\python.exe
+    C:\Python314\python.exe
 
 Every touched registry key is snapshotted to JSON before modification.
 """
@@ -48,7 +48,7 @@ except Exception as exc:
     raise SystemExit(f"Tkinter is required for this GUI: {exc}") from exc
 
 
-DEFAULT_TARGET = Path(r"C:\Python311\python.exe")
+DEFAULT_TARGET = Path(r"C:\Python314\python.exe")
 FILE_EXTS = (".py", ".pyw", ".pyc")
 VIEWS = (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY)
 ROOTS = (
