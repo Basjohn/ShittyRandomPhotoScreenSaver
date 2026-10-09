@@ -36,20 +36,20 @@ MANIFEST = "release_media.json"
 USU_SCENES = tuple(ROOT / "assets" / "usu" / "scenes" / f"UsuScene{index}.png" for index in range(1, 5))
 TRANSITION_OUTPUT = ROOT / "assets" / "webp"
 TRANSITION_WIDTH = 480
-TRANSITION_FPS = 60
+TRANSITION_FPS = 30
+TRANSITION_QUALITY = 95
 TRANSITION_CAPTURE_SCALE = 2           # captured at twice the published size, then downsampled
 TRANSITION_MAX_BYTES = 10_000_000 - 1  # strictly below 10 MB (decimal)
 TRANSITION_MID_HOLD_MS = 700           # the new picture rests before the run back starts
 TRANSITION_LOOP_HOLD_MS = 350          # each loop end rests on the first picture (both ends meet)
-# Every ordered pair of distinct scenes; a case's pair follows from its key, so adding a
-# transition never reshuffles (and restales) the others.
+# Every ordered pair of distinct scenes. Each generation picks a pair and the run there's seed
+# at random (operator direction); the manifest records the pick, which does not stale an entry.
 SCENE_PAIRS = tuple((a, b) for a in range(4) for b in range(4) if a != b)
 
 
-def scene_pair(case_key: str) -> tuple[int, int]:
-    """The (first, second) Usu scene indices for one transition case."""
-    digest = hashlib.sha256(case_key.encode("utf-8")).digest()
-    return SCENE_PAIRS[int.from_bytes(digest[:4], "big") % len(SCENE_PAIRS)]
+def pick_showcase(rng: random.Random) -> tuple[tuple[int, int], int]:
+    """A random (first, second) scene pair and a random seed for the run there."""
+    return rng.choice(SCENE_PAIRS), rng.randrange(1, 2 ** 31)
 
 
 def transition_size(aspect: float = 16 / 9) -> tuple[int, int]:
@@ -217,35 +217,32 @@ def _transition_run(capture, identity: str, duration_ms: int, settings=None, see
     return TransitionRun.start(run_id=1, request=request, start_ns=0)
 
 
-SHOWCASE_SEED = 713
-
-
 def _look(spec) -> tuple:
     """What a viewer sees as a run's direction: its resolved direction, origin or order."""
     parameters = dict(spec.parameters)
     return spec.direction, parameters.get("order"), parameters.get("origin")
 
 
-def return_seed(case: "MediaCase", duration_ms: int, tries: int = 64) -> int:
+def return_seed(case: "MediaCase", duration_ms: int, seed: int, tries: int = 64) -> int:
     """A seed for the showcase's run back whose direction/order differs from the run there.
 
     The same direction twice in a row reads as a mistake; a transition with no direction choice
     keeps the first seed tried."""
-    there = _look(transition_spec(case.identity, duration_ms, case.settings, SHOWCASE_SEED))
-    for seed in range(SHOWCASE_SEED + 1, SHOWCASE_SEED + 1 + tries):
-        if _look(transition_spec(case.identity, duration_ms, case.settings, seed)) != there:
-            return seed
-    return SHOWCASE_SEED + 1
+    there = _look(transition_spec(case.identity, duration_ms, case.settings, seed))
+    for candidate in range(seed + 1, seed + 1 + tries):
+        if _look(transition_spec(case.identity, duration_ms, case.settings, candidate)) != there:
+            return candidate
+    return seed + 1
 
 
 def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[int, int], fps: int,
-                            duration_ms: int, scenes) -> list[Path]:
+                            duration_ms: int, scenes, pair: tuple[int, int], seed: int) -> list[Path]:
     """One looping showcase: first -> second, a rest on the second, then second -> first in another
     direction/order. Frames sample the whole timeline at ``fps``; the encoder adds the loop's rest on
     the first picture at both ends. Both runs' endpoints must be their photographs exactly."""
     from tools.transition_contact_sheet import TransitionCapture
 
-    first, second = (fit_scene(scenes[index], size) for index in scene_pair(case.key))
+    first, second = (fit_scene(scenes[index], size) for index in pair)
     directory.mkdir(parents=True, exist_ok=False)
     run_frames = max(2, round(duration_ms * fps / 1000) + 1)
     hold_frames = max(1, round(TRANSITION_MID_HOLD_MS * fps / 1000))
@@ -256,7 +253,7 @@ def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[i
         image.save(path)
         frames.append(path)
 
-    legs = ((first, second, SHOWCASE_SEED), (second, first, return_seed(case, duration_ms)))
+    legs = ((first, second, seed), (second, first, return_seed(case, duration_ms, seed)))
     for leg, (source, destination, seed) in enumerate(legs):
         capture = TransitionCapture(size[0], size[1], source=source, destination=destination)
         try:
@@ -366,10 +363,11 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
 
 
 def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes: int,
-                width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5)) -> dict:
+                width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5),
+                quality: int = 92) -> dict:
     from PIL import Image
 
-    if (not frames or not 0 < duration_ms <= 60000 or not 0 <= hold_ms <= 1000 or not 0 < max_bytes <= HOST_MAX_BYTES
+    if (not frames or not 0 < duration_ms <= 60000 or not 0 <= hold_ms <= 1000 or not 50 <= quality <= 100 or not 0 < max_bytes <= HOST_MAX_BYTES
             or not 10 <= fps <= 60 or width < 160):
         raise ValueError("invalid encoding budget/dimensions/fps")
     # Explicit quality-preserving encoding policy, not a renderer fallback.
@@ -399,7 +397,7 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
                 durations = [round((i + 1) * total_duration_ms / count) - round(i * total_duration_ms / count) for i in range(count)]
                 stream = io.BytesIO()
                 images[0].save(stream, format="WEBP", save_all=True, append_images=images[1:],
-                               duration=durations, loop=0, quality=92, method=WEBP_METHOD,
+                               duration=durations, loop=0, quality=quality, method=WEBP_METHOD,
                                kmin=WEBP_KEYFRAME_SPACING - 1, kmax=WEBP_KEYFRAME_SPACING,
                                exif=b"", icc_profile=b"", xmp=b"")
                 data = stream.getvalue()
@@ -417,7 +415,7 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
                 return {"dimensions": list(target_size), "fps": rate, "duration_ms": total_duration_ms,
                         "motion_duration_ms": duration_ms, "endpoint_hold_ms": hold_ms,
                         "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                        "quality": 92, "loop": 0, "attempts": attempts}
+                        "quality": quality, "loop": 0, "attempts": attempts}
     raise ValueError(f"media exceeds byte budget at retained quality: {attempts}")
 
 
@@ -515,11 +513,11 @@ def main(argv=None) -> int:
                 width, height = transition_size()
                 capture_size = (width * TRANSITION_CAPTURE_SCALE, height * TRANSITION_CAPTURE_SCALE)
                 max_bytes = min(args.max_bytes, TRANSITION_MAX_BYTES)
-                pair = scene_pair(case.key)
-                options = {"capture_size": list(capture_size), "width": width, "fps": TRANSITION_FPS, "max_bytes": max_bytes,
-                           "duration_ms": duration_ms, "endpoint_hold_ms": hold_ms,
-                           "mid_hold_ms": TRANSITION_MID_HOLD_MS, "scene_pair": list(pair),
-                           "scene_sha256": [scene_hashes[index] for index in pair]}
+                pair, seed = pick_showcase(random.SystemRandom())
+                options = {"capture_size": list(capture_size), "width": width, "fps": TRANSITION_FPS,
+                           "quality": TRANSITION_QUALITY, "max_bytes": max_bytes, "duration_ms": duration_ms,
+                           "endpoint_hold_ms": hold_ms, "mid_hold_ms": TRANSITION_MID_HOLD_MS,
+                           "scene_sha256": scene_hashes}
             else:
                 width, max_bytes = args.width, args.max_bytes
                 capture_size = (args.capture_width, round(args.capture_width * 9 / 16))
@@ -539,11 +537,13 @@ def main(argv=None) -> int:
                 encoded = Path(temporary) / "encoded.webp"
                 if case.kind == "transition":
                     frames = capture_transition_loop(case, Path(temporary) / "frames", size=capture_size,
-                                                     fps=TRANSITION_FPS, duration_ms=duration_ms, scenes=scenes)
+                                                     fps=TRANSITION_FPS, duration_ms=duration_ms, scenes=scenes,
+                                                     pair=pair, seed=seed)
                     # Reduce the frame rate before the size, and the size before any quality.
                     metadata = encode_webp(frames, encoded, duration_ms=transition_timeline_ms(duration_ms),
                                            max_bytes=max_bytes, width=width, fps=TRANSITION_FPS, hold_ms=hold_ms,
-                                           fps_steps=(1.0, .9, .8, .67, .5))
+                                           fps_steps=(1.0, .8, .67), quality=TRANSITION_QUALITY)
+                    metadata["scene_pair"], metadata["seeds"] = list(pair), [seed, return_seed(case, duration_ms, seed)]
                 else:
                     frames = capture_frames(case, Path(temporary) / "frames", size=capture_size, fps=args.fps,
                                             duration_ms=duration_ms, clip=clip, start_seconds=args.start_seconds)
@@ -560,7 +560,7 @@ def main(argv=None) -> int:
                                              "fingerprint": digest, "source": current_source,
                                              "source_after": after_source,
                                              "clip": (str(args.clip.resolve()) if clip is not None else
-                                                      "usu_scenes:" + "->".join(USU_SCENES[i].name for i in scene_pair(case.key))
+                                                      "usu_scenes:" + "->".join(USU_SCENES[i].name for i in pair)
                                                       if case.kind == "transition" else None),
                                              "clip_sha256": clip_hash, "start_seconds": args.start_seconds}
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

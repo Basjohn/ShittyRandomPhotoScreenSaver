@@ -19,13 +19,13 @@ def test_a_transition_showcase_runs_there_and_back_with_exact_ends(qt_app, tmp_p
     scenes = tuple(Image.new("RGB", (400, 225), colour) for colour in colours)
     case = MediaCase("transition", "crossfade", "default", "Canonical")
     fps, duration_ms, size = 10, 500, (160, 90)
+    pair = (2, 0)
     frames = capture_transition_loop(case, tmp_path / "frames", size=size, fps=fps, duration_ms=duration_ms,
-                                     scenes=scenes)
+                                     scenes=scenes, pair=pair, seed=713)
     run_frames = round(duration_ms * fps / 1000) + 1
     hold = round(TRANSITION_MID_HOLD_MS * fps / 1000)
     assert len(frames) == 2 * run_frames - 1 + hold
-    from tools.release_media import scene_pair
-    first, second = (fit_scene(scenes[index], size).tobytes() for index in scene_pair(case.key))
+    first, second = (fit_scene(scenes[index], size).tobytes() for index in pair)
 
     def rgb(path):
         with Image.open(path) as image:

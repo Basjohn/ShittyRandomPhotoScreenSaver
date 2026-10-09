@@ -35,14 +35,16 @@ bytes (decimal 10 MB)**. Keep the original artwork's aspect ratio when compositi
 Windows-local and intentionally absent from handoff archives and Linux CI; the production transition-media
 capture should combine the genuine images when the operator runs M1, never substitute fixtures for publication.
 **Implemented (2026-10-10).** Transition cases ignore the Visualizer size flags: each loads the four scenes (missing
-originals fail loudly, never a substitute), takes its ordered scene pair from a hash of its case key (stable when
-transitions are added), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
+originals fail loudly, never a substitute), picks an ordered scene pair and the first run's seed at random each generation (recorded in the
+manifest; a new pick never stales an entry), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
 then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
-twice in a row read as a mistake) at twice 480x270 and 60 fps; the encoder adds a 350 ms rest at both loop ends (both
+twice in a row read as a mistake) at twice 480x270 and 30 fps; the encoder adds a 350 ms rest at both loop ends (both
 on the first picture, so the loop is seamless). Published at 480x270, strictly under 10,000,000 bytes; frame rate
-steps 60→54→48→40→30 before the width shrinks, quality stays 92. Encoding uses method 4 with keyframes every 150 frames:
+steps 30→24→20 before the width shrinks, quality stays 95 (raised from 92 at operator request; measured, neither
+the Lanczos downscale nor q92 blurred: decoded frames keep 96-99% of the lossless frames' Laplacian sharpness, so
+the softness is the 480 px size of 4K art). Encoding uses method 4 with keyframes every 150 frames:
 method 6 cost 11x the time for 2% smaller files, and delta frames roughly halve the bytes of mostly-still transition
-frames (the 15.4 s Jigsaw loop: 11.1 MB at 60 fps, 10.1 MB at 54, 9.1 MB at 48; the first draft at 854x480 needed ~22 fps). Output defaults to the ignored
+frames (the 15.4 s Jigsaw loop: 4.8 MB at q95 and 30 fps; at 60 fps q92 it was 11.1 MB; the first draft at 854x480 needed ~22 fps). Output defaults to the ignored
 `assets/webp/` (a GODZIP never-transfer prefix); the manifest records the pair and both scene hashes. The agent reviews
 each new or changed transition's WebP itself. This paragraph does not change visualizer WebP rules.
 
