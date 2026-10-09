@@ -232,3 +232,27 @@ def test_the_showcase_never_runs_back_in_the_same_direction() -> None:
         back = _look(transition_spec(case.identity, 500, case.settings, return_seed(case, 500, 713)))
         if len(looks) > 1:                       # the transition has a direction/order choice
             assert back != there, case.key
+
+
+def test_transition_showcases_play_faster_before_shrinking_or_dropping_frames(tmp_path: Path) -> None:
+    from tools.release_media import transition_encoding_plan
+
+    plan = transition_encoding_plan(480, 30)
+    assert all(width == 480 for width, _fps, _scale in plan)
+    scales = [scale for _width, fps, scale in plan if fps == 30]
+    assert scales == sorted(scales, reverse=True) and scales[0] == 1.0 and len(scales) > 1
+    assert plan.index(next(step for step in plan if step[1] < 30)) == len(scales)
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    frames = []
+    for index in range(120):                     # distinct frames: playing faster really drops some
+        path = tmp_path / f"{index}.png"
+        Image.fromarray(rng.integers(0, 256, (180, 320, 3), dtype=np.uint8)).save(path)
+        frames.append(path)
+    full = encode_webp(frames, tmp_path / "full.webp", duration_ms=2000, max_bytes=10**7, width=320, fps=30,
+                       plan=[(320, 30, 1.0)])
+    faster = encode_webp(frames, tmp_path / "faster.webp", duration_ms=2000, max_bytes=full["bytes"] - 1,
+                         width=320, fps=30, plan=[(320, 30, 1.0), (320, 30, .6)])
+    assert faster["dimensions"] == [320, 180] and faster["fps"] == 30 and faster["time_scale"] == .6
+    assert faster["motion_duration_ms"] == 1200

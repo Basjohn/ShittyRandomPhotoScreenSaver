@@ -362,60 +362,74 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
     return frames
 
 
+def transition_encoding_plan(width: int, fps: int) -> list[tuple[int, int, float]]:
+    """Transition showcases keep their width and frame rate: a long run plays a little faster
+    first (operator direction: 480 wide at 30 fps), and only then does the frame rate drop."""
+    plan = [(width, fps, scale) for scale in (1.0, .85, .72, .6)]
+    return plan + [(width, max(10, round(fps * step)), .6) for step in (.8, .67)]
+
+
 def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes: int,
                 width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5),
-                quality: int = 92) -> dict:
+                quality: int = 92, plan: list[tuple[int, int, float]] | None = None) -> dict:
+    """Encode the lossless capture with the first (width, fps, time scale) attempt under budget.
+
+    Without a ``plan`` the width steps down (x0.75, x0.5) and inside each width the frame rate
+    steps by ``fps_steps``; a time scale below 1 plays the motion faster (holds keep their length).
+    Quality never drops. All candidates come from the same lossless high-resolution capture."""
     from PIL import Image
 
     if (not frames or not 0 < duration_ms <= 60000 or not 0 <= hold_ms <= 1000 or not 50 <= quality <= 100 or not 0 < max_bytes <= HOST_MAX_BYTES
             or not 10 <= fps <= 60 or width < 160):
         raise ValueError("invalid encoding budget/dimensions/fps")
-    # Explicit quality-preserving encoding policy, not a renderer fallback.
-    # All candidates come from the same lossless high-resolution capture.
-    widths = list(dict.fromkeys([width, max(160, round(width * .75)), max(160, round(width * .5))]))
-    rates = list(dict.fromkeys(max(10, round(fps * step)) for step in fps_steps))
+    if plan is None:
+        widths = list(dict.fromkeys([width, max(160, round(width * .75)), max(160, round(width * .5))]))
+        rates = list(dict.fromkeys(max(10, round(fps * step)) for step in fps_steps))
+        plan = [(target, rate, 1.0) for target in widths for rate in rates]
     attempts = []
-    total_duration_ms = duration_ms + 2 * hold_ms
     with Image.open(frames[0]) as first:
         source_size = first.size
-    for target_width in widths:
+    for target_width, rate, scale in plan:
+        if target_width < 160 or not 10 <= rate <= 60 or not 0 < scale <= 1:
+            raise ValueError("invalid encoding attempt")
         target_size = (target_width, max(1, round(source_size[1] * target_width / source_size[0])))
-        for rate in rates:
-            count = max(2, round(total_duration_ms * rate / 1000))
-            images = []
-            try:
-                for index in range(count):
-                    if hold_ms:
-                        motion_ms = max(0, min(duration_ms, index * total_duration_ms / count - hold_ms))
-                        source_index = round(motion_ms / duration_ms * (len(frames) - 1))
-                    else:
-                        source_index = round(index * (len(frames) - 1) / (count - 1))
-                    with Image.open(frames[source_index]) as source:
-                        image = source.convert("RGB").resize(target_size, Image.Resampling.LANCZOS)
-                        image.info.clear()
-                        images.append(image)
-                durations = [round((i + 1) * total_duration_ms / count) - round(i * total_duration_ms / count) for i in range(count)]
-                stream = io.BytesIO()
-                images[0].save(stream, format="WEBP", save_all=True, append_images=images[1:],
-                               duration=durations, loop=0, quality=quality, method=WEBP_METHOD,
-                               kmin=WEBP_KEYFRAME_SPACING - 1, kmax=WEBP_KEYFRAME_SPACING,
-                               exif=b"", icc_profile=b"", xmp=b"")
-                data = stream.getvalue()
-            finally:
-                for image in images:
-                    image.close()
-            attempts.append({"width": target_width, "fps": rate, "bytes": len(data)})
-            if len(data) <= max_bytes:
-                with Image.open(io.BytesIO(data)) as encoded:
-                    if not encoded.is_animated or encoded.info.get("loop") != 0:
-                        raise ValueError("capture encoded as a still image, not an infinite animation")
-                    if any(encoded.info.get(key) for key in ("exif", "icc_profile", "xmp")):
-                        raise ValueError("unexpected encoded metadata")
-                output.write_bytes(data)
-                return {"dimensions": list(target_size), "fps": rate, "duration_ms": total_duration_ms,
-                        "motion_duration_ms": duration_ms, "endpoint_hold_ms": hold_ms,
-                        "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                        "quality": quality, "loop": 0, "attempts": attempts}
+        motion_ms = max(1, round(duration_ms * scale))
+        total_duration_ms = motion_ms + 2 * hold_ms
+        count = max(2, round(total_duration_ms * rate / 1000))
+        images = []
+        try:
+            for index in range(count):
+                if hold_ms:
+                    at = max(0, min(motion_ms, index * total_duration_ms / count - hold_ms))
+                    source_index = round(at / motion_ms * (len(frames) - 1))
+                else:
+                    source_index = round(index * (len(frames) - 1) / (count - 1))
+                with Image.open(frames[source_index]) as source:
+                    image = source.convert("RGB").resize(target_size, Image.Resampling.LANCZOS)
+                    image.info.clear()
+                    images.append(image)
+            durations = [round((i + 1) * total_duration_ms / count) - round(i * total_duration_ms / count) for i in range(count)]
+            stream = io.BytesIO()
+            images[0].save(stream, format="WEBP", save_all=True, append_images=images[1:],
+                           duration=durations, loop=0, quality=quality, method=WEBP_METHOD,
+                           kmin=WEBP_KEYFRAME_SPACING - 1, kmax=WEBP_KEYFRAME_SPACING,
+                           exif=b"", icc_profile=b"", xmp=b"")
+            data = stream.getvalue()
+        finally:
+            for image in images:
+                image.close()
+        attempts.append({"width": target_width, "fps": rate, "time_scale": scale, "bytes": len(data)})
+        if len(data) <= max_bytes:
+            with Image.open(io.BytesIO(data)) as encoded:
+                if not encoded.is_animated or encoded.info.get("loop") != 0:
+                    raise ValueError("capture encoded as a still image, not an infinite animation")
+                if any(encoded.info.get(key) for key in ("exif", "icc_profile", "xmp")):
+                    raise ValueError("unexpected encoded metadata")
+            output.write_bytes(data)
+            return {"dimensions": list(target_size), "fps": rate, "duration_ms": total_duration_ms,
+                    "motion_duration_ms": motion_ms, "endpoint_hold_ms": hold_ms, "time_scale": scale,
+                    "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                    "quality": quality, "loop": 0, "attempts": attempts}
     raise ValueError(f"media exceeds byte budget at retained quality: {attempts}")
 
 
@@ -542,7 +556,8 @@ def main(argv=None) -> int:
                     # Reduce the frame rate before the size, and the size before any quality.
                     metadata = encode_webp(frames, encoded, duration_ms=transition_timeline_ms(duration_ms),
                                            max_bytes=max_bytes, width=width, fps=TRANSITION_FPS, hold_ms=hold_ms,
-                                           fps_steps=(1.0, .8, .67), quality=TRANSITION_QUALITY)
+                                           quality=TRANSITION_QUALITY,
+                                           plan=transition_encoding_plan(width, TRANSITION_FPS))
                     metadata["scene_pair"], metadata["seeds"] = list(pair), [seed, return_seed(case, duration_ms, seed)]
                 else:
                     frames = capture_frames(case, Path(temporary) / "frames", size=capture_size, fps=args.fps,
