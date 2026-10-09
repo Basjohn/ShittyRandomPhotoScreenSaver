@@ -256,3 +256,19 @@ def test_transition_showcases_play_faster_before_shrinking_or_dropping_frames(tm
                          width=320, fps=30, plan=[(320, 30, 1.0), (320, 30, .6)])
     assert faster["dimensions"] == [320, 180] and faster["fps"] == 30 and faster["time_scale"] == .6
     assert faster["motion_duration_ms"] == 1200
+
+
+def test_showcase_sampling_shows_every_motion_frame_once() -> None:
+    from tools.release_media import timeline_source_indices
+
+    # 30 fps capture of a 4700 ms motion, 30 fps output with 350 ms rests (10.5 frames each):
+    # the old round-half-to-even sampling repeated every other frame (54 repeats, 15 fps motion).
+    motion, hold, fps = 4700, 350, 30
+    sources = round(motion * fps / 1000) + 1
+    count = round((motion + 2 * hold) * fps / 1000)
+    indices = timeline_source_indices(sources, motion, hold, count)
+    assert indices[0] == 0 and indices[-1] == sources - 1
+    inside = [i for i in indices if 0 < i < sources - 1]
+    assert len(inside) == len(set(inside)) == sources - 2          # every motion frame, once
+    assert all(b - a in (0, 1) for a, b in zip(indices, indices[1:]))
+
