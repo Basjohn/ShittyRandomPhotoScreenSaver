@@ -261,6 +261,7 @@ TRANSITION_COPY = {
     "cube_turn": "The picture turns like a cube to show the next one.",
     "beam": "A beam of light sweeps across, leaving the next picture behind.",
     "jigsaw": "The picture becomes a jigsaw whose pieces flip over one by one to the next.",
+    "volumetric_dissolve": "The picture bursts into glowing particles and mist as the next one appears.",
 }
 
 

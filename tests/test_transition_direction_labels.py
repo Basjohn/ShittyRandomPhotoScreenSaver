@@ -43,6 +43,7 @@ _REVEALS = (
     ("exploding_tiles", "exploding_tiles", _CARDINAL + _DIAGONAL, {}, 6000),
     ("pixel_accretion", "pixel_accretion", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
     ("disintegrate", "disintegrate", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
+    ("volumetric_dissolve", "volumetric_dissolve", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
     ("relief_rise", "relief_rise", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
     ("beam", "beam", _CARDINAL + _ALL_DIAGONALS, {}, 3500),
     ("burn", "burn", _CARDINAL + _DIAGONAL, {}, 3000),

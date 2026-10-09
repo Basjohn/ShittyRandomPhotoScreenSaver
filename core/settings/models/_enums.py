@@ -38,6 +38,7 @@ class TransitionType(Enum):
     CUBE_TURN = "Cube Turn"
     BEAM = "Beam"
     JIGSAW = "Jigsaw Piece Flip"
+    VOLUMETRIC_DISSOLVE = "Volumetric Dissolve"
 
 
 class WidgetPosition(Enum):

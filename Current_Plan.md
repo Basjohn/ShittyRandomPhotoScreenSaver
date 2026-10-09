@@ -17,7 +17,7 @@ This is a **live work checklist**, not a checkpoint chronicle. The current extra
 - [x] **R168 focused regression:** operator's Windows `.venv` selection completed, **187 passed**; no affected runtime source files changed in R168/R169.
 - [x] **Dev Curve replay (2026-10-10):** the drop was entirely R160's protected pre-AGC routing (forcing the old routing restored 21.605556 exactly); on the operator's call `gradual_ramp__devcurve` alone was re-seeded via `tools.visualizer_replay.floors.calibrate` (output_flux floor 19.27 → 9.31, 50% of today's 18.61). Never route Dev Curve through Spectrum shaping.
 - [x] **Next graphics readiness (2026-10-09):** T1 reuses `scene3d.py` projection/hash/`SceneMaterial`, `PhotoEnvironment`, `SceneTarget`, `MeshResources` (per-run vertex bytes as a keyed mesh dropped at `park()`), `warm()`/`warm_run_resources` and the registry/resolver/Settings path exactly as Cube Turn/Beam do. Legacy Block Puzzle Flip is a flat 2D strip shader with no geometry or schedule worth reusing. `fracture_geometry` prisms fan from a centre and so only admit convex cells; jigsaw knobs are non-convex, so T1 owns a new pure **piece-layout generator** (`rendering/quick/transitions/piece_layout.py`: shared-edge jigsaw contours, per-piece ear-clip triangulation, extruded walls, bevel ring) plus the **order planner** (corner, random-start wavefront, unordered). T2 starts from `CompactedPopulation` (Disintegrate) but must not be a Disintegrate reskin; the S18 fog volume is its only new primitive. T3/T4 are 2D full-picture passes like Beam (no scene target); T4's edge field is a per-run renderer-owned derived texture.
-- [ ] **T1–T4 as first transitions:** T1 Jigsaw Piece Flip is implemented (2026-10-10, §2); T2–T4 next. Use exact locally stored mock references, retain legacy Block Puzzle Flip until the independently named Jigsaw successor is accepted, and avoid accidental feature scope creep.
+- [ ] **T1–T4 as first transitions:** T1 Jigsaw Piece Flip and T2 Volumetric Dissolve are implemented (2026-10-10, §2); T3–T4 next. Use exact locally stored mock references, retain legacy Block Puzzle Flip until the independently named Jigsaw successor is accepted, and avoid accidental feature scope creep.
 
 ---
 
@@ -80,7 +80,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
   per-piece scheduling/order-planning helper so future tiled/card effects can reuse the same geometry/order substrate. Leave the
   legacy Block Puzzle Flip installed for now; remove it only after this clean-room successor is accepted and the operator chooses
   retirement timing.
-- [ ] **T2. Volumetric Dissolve.** Use the mock as the target feeling: the outgoing image disintegrates into colored particles,
+- [ ] **T2. Volumetric Dissolve. IMPLEMENTED 2026-10-10, look reviewed from its showcase WebP; awaiting the installed-build check** (second `CompactedPopulation` consumer; analytic parallax mist and haze-to-sharp reveal, no volume texture; deactivated by default). Use the mock as the target feeling: the outgoing image disintegrates into colored particles,
   mist and shallow volume while the incoming image resolves behind/through it. Useful existing architecture: Scene3D lifecycle,
   shared uniform/state ownership, retained presentation control, and any particle infrastructure admitted by the shared 3D
   primitives work. New useful architecture: bounded reduced-resolution smoke/fog volume support, color-carrying image emitters,

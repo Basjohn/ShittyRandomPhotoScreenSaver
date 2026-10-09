@@ -117,6 +117,10 @@ _IMPLEMENTATIONS = (
         transition_id="jigsaw",
         module_name="rendering.quick.transitions.implementations.jigsaw",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="volumetric_dissolve",
+        module_name="rendering.quick.transitions.implementations.volumetric_dissolve",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

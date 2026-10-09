@@ -20,6 +20,7 @@ from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYL
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
+from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -942,6 +943,25 @@ def _resolve_jigsaw(
     })
 
 
+def _resolve_volumetric_dissolve(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "volumetric_dissolve")
+    defaults = _canonical("volumetric_dissolve")
+    direction = VOLUMETRIC_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if direction is None:
+        direction = str(rng.choice(tuple(VOLUMETRIC_DIRECTIONS.values())))
+    low, high = VOLUMETRIC_PARTICLE_SIZE_RANGE
+    size = max(low, min(high, _integer(_value(cfg, defaults, "particle_size"), int(defaults["particle_size"]))))
+    return _finish(direction, {
+        "seed": _seed(rng),
+        "particle_size": size,
+        **_surface_values(cfg, defaults, ("mist", "depth")),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -961,6 +981,7 @@ _RESOLVERS = {
     "cube_turn": _resolve_cube_turn,
     "beam": _resolve_beam,
     "jigsaw": _resolve_jigsaw,
+    "volumetric_dissolve": _resolve_volumetric_dissolve,
 }
 
 
