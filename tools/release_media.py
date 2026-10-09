@@ -223,14 +223,28 @@ def _look(spec) -> tuple:
     return spec.direction, parameters.get("order"), parameters.get("origin")
 
 
+def _reads_alike(there: tuple, back: tuple) -> bool:
+    """Whether the run back would read as the same motion as the run there: the same look, or two
+    sweeps travelling broadly the same way (Right to Left then a diagonal from the top right)."""
+    if there == back:
+        return True
+    from rendering.quick.transitions.directions import _DIRECTIONS
+
+    a, b = _DIRECTIONS.get(str(there[0])), _DIRECTIONS.get(str(back[0]))
+    if a is None or b is None:
+        return False
+    dot = (a[0] * b[0] + a[1] * b[1]) / (math.hypot(*a) * math.hypot(*b))
+    return dot > 0.25
+
+
 def return_seed(case: "MediaCase", duration_ms: int, seed: int, tries: int = 64) -> int:
-    """A seed for the showcase's run back whose direction/order differs from the run there.
+    """A seed for the showcase's run back that reads as a different motion from the run there.
 
     The same direction twice in a row reads as a mistake; a transition with no direction choice
     keeps the first seed tried."""
     there = _look(transition_spec(case.identity, duration_ms, case.settings, seed))
     for candidate in range(seed + 1, seed + 1 + tries):
-        if _look(transition_spec(case.identity, duration_ms, case.settings, candidate)) != there:
+        if not _reads_alike(there, _look(transition_spec(case.identity, duration_ms, case.settings, candidate))):
             return candidate
     return seed + 1
 
