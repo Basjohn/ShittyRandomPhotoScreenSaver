@@ -52,9 +52,14 @@ float fbm(vec2 p){return .62*vnoise(p)+.38*vnoise(p*2.13+7.1);}
 float meltStart(vec2 s,float aspect){
     float d;
     if(uOriginMode>.5){
-        // Centre-in: every edge melts first, the centre last.
-        vec2 e=min(s,1.-s);
-        d=clamp(2.*min(e.x,e.y),0.,1.);
+        // Centre-in: every edge melts first, the centre last. A smooth minimum of the four
+        // edge distances: near an edge it is that edge's distance, near the centre its contours
+        // round into ovals. The hard min(e.x, e.y) creased along the diagonals, so the last
+        // patch melted as straight-sided wedges meeting in the middle.
+        const float K=.12;
+        vec4 e=vec4(s,1.-s);
+        float soft=-K*log(dot(exp(-e/K),vec4(1.)));
+        d=clamp(soft/(.5-K*log(4.)),0.,1.);
     }else{
         vec2 p=vec2(s.x*aspect,s.y),o=vec2(uOrigin.x*aspect,uOrigin.y);
         float far=max(max(length(o),length(o-vec2(aspect,0.))),
