@@ -23,15 +23,20 @@ from __future__ import annotations
 import math
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.quick.transitions.piece_layout import JIGSAW_BEVEL
 
 JIGSAW_MAX_PIECES = 160
 JIGSAW_OUTLINE_IN = 0.10      # the cut lines fade in over the first part of the run
-JIGSAW_FLIP_START = 0.06
+JIGSAW_FLIP_START = 0.12      # after the cut lines have faded in: the whole jigsaw shows first
 JIGSAW_FLIP_END = 0.97
 JIGSAW_LAND_FADE = 0.03       # a landed piece's cut line fades over this much of the run
 JIGSAW_THICKNESS = 0.09       # a card's thickness, as a share of the smaller cell side
 JIGSAW_HOP = 0.30             # extra lift at mid-flip, as a share of the smaller cell side
-JIGSAW_SHADOW = 0.42
+JIGSAW_SHADOW = 0.60
+# The cut line, in scene height units from the cut (each piece draws its own side, so the line
+# seen is twice this), and the light lip beside it; both at least about a pixel wide.
+JIGSAW_CUT_LINE = 0.0016
+JIGSAW_CUT_LIP = 0.0012
 _BOARD = (0.88, 0.87, 0.84)
 _CARD = (0.80, 0.72, 0.58)
 
@@ -95,19 +100,23 @@ float jigsawOutline(float rank) {{
 }}
 """
 
-# The cut line: a dark line on the cut with a faint light lip inside it, both in screen pixels,
-# kept off the picture's own border. ``bevel`` is the distance from the cut (scene units).
-_OUTLINE_GLSL = """
-vec3 jigsawCut(vec3 colour, float bevel, float alpha, vec2 uv, vec2 itemSize) {
-    if (alpha <= 0.0) return colour;
-    float pixels = bevel / max(fwidth(bevel), 1e-7);
+# The cut line: a dark line on the cut and a light lip beside it, sized to the picture (so it
+# reads at every resolution) but never under about a pixel, antialiased by ``fwidth``, kept off
+# the picture's own border and inside the bevel ring. ``bevel`` is the distance from the cut.
+_OUTLINE_GLSL = f"""
+const float RING = {JIGSAW_BEVEL:.6f};
+vec3 jigsawCut(vec3 colour, float bevel, float alpha, vec2 uv, vec2 itemSize) {{
+    float aa = max(fwidth(bevel), 1e-6);   // before any branch: derivatives need uniform flow
+    if (alpha <= 0.0 || bevel >= 0.98 * RING) return colour;
+    float width = min(max({JIGSAW_CUT_LINE:.6f}, 0.6 * aa), 0.45 * RING);
+    float lipEnd = min(width + max({JIGSAW_CUT_LIP:.6f}, 0.8 * aa), 0.9 * RING);
     vec2 border = min(uv, 1.0 - uv) * itemSize;
-    float keep = smoothstep(1.5, 3.5, min(border.x, border.y));
-    float line = (1.0 - smoothstep(0.35, 1.15, pixels)) * keep * alpha;
-    float lip = smoothstep(1.0, 1.6, pixels) * (1.0 - smoothstep(1.6, 2.6, pixels)) * keep * alpha;
-    colour = mix(colour, colour * 0.18, 0.85 * line);
-    return colour + (1.0 - colour) * 0.22 * lip;
-}
+    float keep = smoothstep(1.5, 3.5, min(border.x, border.y)) * alpha;
+    float line = (1.0 - smoothstep(width - aa, width + aa, bevel)) * keep;
+    float lip = smoothstep(width, width + aa, bevel) * (1.0 - smoothstep(lipEnd - aa, lipEnd, bevel)) * keep;
+    colour = mix(colour, colour * 0.12, 0.9 * line);
+    return colour + (1.0 - colour) * 0.30 * lip;
+}}
 """
 
 _INPUTS_GLSL = (

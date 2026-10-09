@@ -23,7 +23,59 @@ if __package__ in (None, ""):
 ROOT = Path(__file__).resolve().parents[1]
 HOST_MAX_BYTES = 2 * 1024 ** 3 - 1
 HOST_MAX_ASSETS = 1000
+# WebP encoding: method 6 cost 11x the time of method 4 for 2% smaller files, and keyframes every
+# 150 frames (delta frames between) roughly halved the bytes of mostly-still transition frames.
+WEBP_METHOD = 4
+WEBP_KEYFRAME_SPACING = 150
 MANIFEST = "release_media.json"
+
+# Operator transition showcase directive: every transition WebP is composed from the four
+# operator-owned Usu scenes (Windows-local, never bundled), 480 px wide ("480p" means the width:
+# 854x480 was far too large), smooth (60 fps first), strictly under 10,000,000 bytes. Its own
+# ignored folder; never a normal GODZIP payload.
+USU_SCENES = tuple(ROOT / "assets" / "usu" / "scenes" / f"UsuScene{index}.png" for index in range(1, 5))
+TRANSITION_OUTPUT = ROOT / "assets" / "webp"
+TRANSITION_WIDTH = 480
+TRANSITION_FPS = 60
+TRANSITION_CAPTURE_SCALE = 2           # captured at twice the published size, then downsampled
+TRANSITION_MAX_BYTES = 10_000_000 - 1  # strictly below 10 MB (decimal)
+TRANSITION_MID_HOLD_MS = 700           # the new picture rests before the run back starts
+TRANSITION_LOOP_HOLD_MS = 350          # each loop end rests on the first picture (both ends meet)
+# Every ordered pair of distinct scenes; a case's pair follows from its key, so adding a
+# transition never reshuffles (and restales) the others.
+SCENE_PAIRS = tuple((a, b) for a in range(4) for b in range(4) if a != b)
+
+
+def scene_pair(case_key: str) -> tuple[int, int]:
+    """The (first, second) Usu scene indices for one transition case."""
+    digest = hashlib.sha256(case_key.encode("utf-8")).digest()
+    return SCENE_PAIRS[int.from_bytes(digest[:4], "big") % len(SCENE_PAIRS)]
+
+
+def transition_size(aspect: float = 16 / 9) -> tuple[int, int]:
+    """The published transition size: 480 px wide, height from the composition's aspect (even)."""
+    return TRANSITION_WIDTH, round(TRANSITION_WIDTH / aspect / 2) * 2
+
+
+def load_scenes(paths=USU_SCENES) -> tuple:
+    """The four scenes, read once. Missing originals fail loudly: never a substitute."""
+    from PIL import Image
+
+    missing = [str(path) for path in paths if not Path(path).is_file()]
+    if missing:
+        raise FileNotFoundError(f"operator Usu scene originals are missing (never substituted): {missing}")
+    scenes = []
+    for path in paths:
+        with Image.open(path) as image:
+            scenes.append(image.convert("RGB"))
+    return tuple(scenes)
+
+
+def fit_scene(scene, size: tuple[int, int]):
+    """The scene cropped (never stretched) to the composition, keeping its aspect ratio."""
+    from PIL import Image, ImageOps
+
+    return ImageOps.fit(scene, size, Image.Resampling.LANCZOS, centering=(0.5, 0.5))
 
 
 class SourceChangedError(RuntimeError):
@@ -125,7 +177,7 @@ def sample_indices(clip, start_seconds: float, duration_seconds: float, fps: int
     return indices
 
 
-def transition_spec(identity: str, duration_ms: int, settings: dict | None = None):
+def transition_spec(identity: str, duration_ms: int, settings: dict | None = None, seed: int = 713):
     """Use the complete production resolver, including non-Phase-C identities."""
     from core.settings.default_contract import require_canonical_default
     from rendering.transition_registry import get_transition_descriptor
@@ -147,22 +199,88 @@ def transition_spec(identity: str, duration_ms: int, settings: dict | None = Non
                 return "High"
             return require_canonical_default(key)
 
-    spec = resolve_quick_transition_spec(CaptureInput(), random_source=random.Random(713))
+    spec = resolve_quick_transition_spec(CaptureInput(), random_source=random.Random(seed))
     if spec is None or spec.transition_id != identity:
         raise ValueError(f"production resolver did not admit selected transition {identity}")
     return spec
 
 
-def _transition_run(capture, identity: str, duration_ms: int, settings=None):
+def _transition_run(capture, identity: str, duration_ms: int, settings=None, seed: int = 713):
     from rendering.quick.image_state import PresentationImage
     from rendering.quick.transitions.state import TransitionRun
 
     images = [PresentationImage(str(index), "release_capture", (capture.width, capture.height), 1.,
                                 (capture.width, capture.height), capture.width * 4, image.tobytes())
               for index, image in enumerate(capture.images)]
-    request = transition_spec(identity, duration_ms, settings).build_request(
+    request = transition_spec(identity, duration_ms, settings, seed).build_request(
         runtime_generation=0, source_image=images[0], destination_image=images[1])
     return TransitionRun.start(run_id=1, request=request, start_ns=0)
+
+
+SHOWCASE_SEED = 713
+
+
+def _look(spec) -> tuple:
+    """What a viewer sees as a run's direction: its resolved direction, origin or order."""
+    parameters = dict(spec.parameters)
+    return spec.direction, parameters.get("order"), parameters.get("origin")
+
+
+def return_seed(case: "MediaCase", duration_ms: int, tries: int = 64) -> int:
+    """A seed for the showcase's run back whose direction/order differs from the run there.
+
+    The same direction twice in a row reads as a mistake; a transition with no direction choice
+    keeps the first seed tried."""
+    there = _look(transition_spec(case.identity, duration_ms, case.settings, SHOWCASE_SEED))
+    for seed in range(SHOWCASE_SEED + 1, SHOWCASE_SEED + 1 + tries):
+        if _look(transition_spec(case.identity, duration_ms, case.settings, seed)) != there:
+            return seed
+    return SHOWCASE_SEED + 1
+
+
+def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[int, int], fps: int,
+                            duration_ms: int, scenes) -> list[Path]:
+    """One looping showcase: first -> second, a rest on the second, then second -> first in another
+    direction/order. Frames sample the whole timeline at ``fps``; the encoder adds the loop's rest on
+    the first picture at both ends. Both runs' endpoints must be their photographs exactly."""
+    from tools.transition_contact_sheet import TransitionCapture
+
+    first, second = (fit_scene(scenes[index], size) for index in scene_pair(case.key))
+    directory.mkdir(parents=True, exist_ok=False)
+    run_frames = max(2, round(duration_ms * fps / 1000) + 1)
+    hold_frames = max(1, round(TRANSITION_MID_HOLD_MS * fps / 1000))
+    frames: list[Path] = []
+
+    def save(image) -> None:
+        path = directory / f"{len(frames):06d}.png"
+        image.save(path)
+        frames.append(path)
+
+    legs = ((first, second, SHOWCASE_SEED), (second, first, return_seed(case, duration_ms)))
+    for leg, (source, destination, seed) in enumerate(legs):
+        capture = TransitionCapture(size[0], size[1], source=source, destination=destination)
+        try:
+            run = _transition_run(capture, case.identity, duration_ms, case.settings, seed)
+            for index in range(run_frames):
+                if leg and index == 0:
+                    continue                      # the second run starts on the rest's last frame
+                image, _ = capture.render(run, index / (run_frames - 1))
+                if index in (0, run_frames - 1):
+                    endpoint = capture.images[0 if index == 0 else 1]
+                    if image.tobytes() != endpoint.tobytes():
+                        raise RuntimeError("production transition endpoint does not match its photograph")
+                save(image)
+                if not leg and index == run_frames - 1:
+                    for _ in range(hold_frames):
+                        save(image)
+        finally:
+            capture.close()
+    return frames
+
+
+def transition_timeline_ms(duration_ms: int) -> int:
+    """The looping showcase's motion timeline (both runs and the rest between them)."""
+    return 2 * duration_ms + TRANSITION_MID_HOLD_MS
 
 
 def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], fps: int,
@@ -248,16 +366,16 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
 
 
 def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes: int,
-                width: int, fps: int, hold_ms: int = 0) -> dict:
+                width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5)) -> dict:
     from PIL import Image
 
-    if (not frames or not 0 < duration_ms <= 30000 or not 0 <= hold_ms <= 1000 or not 0 < max_bytes <= HOST_MAX_BYTES
+    if (not frames or not 0 < duration_ms <= 60000 or not 0 <= hold_ms <= 1000 or not 0 < max_bytes <= HOST_MAX_BYTES
             or not 10 <= fps <= 60 or width < 160):
         raise ValueError("invalid encoding budget/dimensions/fps")
     # Explicit quality-preserving encoding policy, not a renderer fallback.
     # All candidates come from the same lossless high-resolution capture.
     widths = list(dict.fromkeys([width, max(160, round(width * .75)), max(160, round(width * .5))]))
-    rates = list(dict.fromkeys([fps, max(10, round(fps * .75)), max(10, round(fps * .5))]))
+    rates = list(dict.fromkeys(max(10, round(fps * step)) for step in fps_steps))
     attempts = []
     total_duration_ms = duration_ms + 2 * hold_ms
     with Image.open(frames[0]) as first:
@@ -281,7 +399,8 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
                 durations = [round((i + 1) * total_duration_ms / count) - round(i * total_duration_ms / count) for i in range(count)]
                 stream = io.BytesIO()
                 images[0].save(stream, format="WEBP", save_all=True, append_images=images[1:],
-                               duration=durations, loop=0, quality=92, method=6,
+                               duration=durations, loop=0, quality=92, method=WEBP_METHOD,
+                               kmin=WEBP_KEYFRAME_SPACING - 1, kmax=WEBP_KEYFRAME_SPACING,
                                exif=b"", icc_profile=b"", xmp=b"")
                 data = stream.getvalue()
             finally:
@@ -328,6 +447,9 @@ def main(argv=None) -> int:
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--max-bytes", type=int, default=10 * 1024 ** 2)
     args = parser.parse_args(argv)
+    transitions_only = args.kind == "transition"
+    if transitions_only and args.output_dir is None and not args.list:
+        args.output_dir = TRANSITION_OUTPUT
     from tools.run_matrix import _source_attribution
     provenance = _source_attribution() if not args.list else None
     if provenance is not None:
@@ -348,8 +470,16 @@ def main(argv=None) -> int:
         parser.error("invalid capture bounds")
     output = args.output_dir.resolve()
     if (output == ROOT or output == ROOT / "logs"
-            or ROOT in output.parents and ROOT / "logs" not in output.parents):
-        parser.error("repository captures must use a dedicated ignored logs subdirectory; external release directories are allowed")
+            or ROOT in output.parents and ROOT / "logs" not in output.parents and output != TRANSITION_OUTPUT):
+        parser.error("repository captures must use assets/webp (transitions) or a dedicated ignored logs "
+                     "subdirectory; external release directories are allowed")
+    if output == TRANSITION_OUTPUT and not transitions_only:
+        parser.error("assets/webp holds transition showcases only (--kind transition)")
+    scenes = None
+    scene_hashes = None
+    if any(case.kind == "transition" for case in cases):
+        scenes = load_scenes()
+        scene_hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for path in USU_SCENES]
     output.mkdir(parents=True, exist_ok=True)
     manifest_path = output / MANIFEST
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {"schema_version": 1, "entries": {}}
@@ -368,7 +498,7 @@ def main(argv=None) -> int:
             if current_source["unavailable"] or current_source.get("source_tree_sha256") != provenance.get("source_tree_sha256"):
                 raise SourceChangedError(f"source unavailable/changed during catalogue generation; rerun at a stable checkpoint: {current_source['unavailable']}")
             duration_ms = round(args.duration_seconds * 1000) if args.duration_seconds else case.duration_ms
-            hold_ms = 100 if case.kind == "transition" else 0
+            hold_ms = TRANSITION_LOOP_HOLD_MS if case.kind == "transition" else 0
             clip = None
             clip_hash = None
             if case.kind == "visualizer":
@@ -381,9 +511,21 @@ def main(argv=None) -> int:
                 if batch_clip_hash is not None and batch_clip_hash != clip_hash:
                     raise SourceChangedError("recorded clip changed between cases; rerun with stable recorded input")
                 batch_clip_hash = clip_hash
-            options = {"capture_width": args.capture_width, "width": args.width, "fps": args.fps,
-                       "max_bytes": args.max_bytes, "duration_ms": duration_ms, "start_seconds": args.start_seconds,
-                       "endpoint_hold_ms": hold_ms}
+            if case.kind == "transition":
+                width, height = transition_size()
+                capture_size = (width * TRANSITION_CAPTURE_SCALE, height * TRANSITION_CAPTURE_SCALE)
+                max_bytes = min(args.max_bytes, TRANSITION_MAX_BYTES)
+                pair = scene_pair(case.key)
+                options = {"capture_size": list(capture_size), "width": width, "fps": TRANSITION_FPS, "max_bytes": max_bytes,
+                           "duration_ms": duration_ms, "endpoint_hold_ms": hold_ms,
+                           "mid_hold_ms": TRANSITION_MID_HOLD_MS, "scene_pair": list(pair),
+                           "scene_sha256": [scene_hashes[index] for index in pair]}
+            else:
+                width, max_bytes = args.width, args.max_bytes
+                capture_size = (args.capture_width, round(args.capture_width * 9 / 16))
+                options = {"capture_width": args.capture_width, "width": args.width, "fps": args.fps,
+                           "max_bytes": args.max_bytes, "duration_ms": duration_ms, "start_seconds": args.start_seconds,
+                           "endpoint_hold_ms": hold_ms}
             digest = fingerprint(case, current_source, options, clip_hash)
             entry = manifest["entries"].get(case.key, {})
             target = output / case.filename
@@ -394,11 +536,19 @@ def main(argv=None) -> int:
                 continue
             import tempfile
             with tempfile.TemporaryDirectory(prefix="capture_", dir=output) as temporary:
-                frames = capture_frames(case, Path(temporary) / "frames", size=(args.capture_width, round(args.capture_width * 9 / 16)),
-                                        fps=args.fps, duration_ms=duration_ms, clip=clip, start_seconds=args.start_seconds)
                 encoded = Path(temporary) / "encoded.webp"
-                metadata = encode_webp(frames, encoded, duration_ms=duration_ms, max_bytes=args.max_bytes,
-                                       width=args.width, fps=args.fps, hold_ms=hold_ms)
+                if case.kind == "transition":
+                    frames = capture_transition_loop(case, Path(temporary) / "frames", size=capture_size,
+                                                     fps=TRANSITION_FPS, duration_ms=duration_ms, scenes=scenes)
+                    # Reduce the frame rate before the size, and the size before any quality.
+                    metadata = encode_webp(frames, encoded, duration_ms=transition_timeline_ms(duration_ms),
+                                           max_bytes=max_bytes, width=width, fps=TRANSITION_FPS, hold_ms=hold_ms,
+                                           fps_steps=(1.0, .9, .8, .67, .5))
+                else:
+                    frames = capture_frames(case, Path(temporary) / "frames", size=capture_size, fps=args.fps,
+                                            duration_ms=duration_ms, clip=clip, start_seconds=args.start_seconds)
+                    metadata = encode_webp(frames, encoded, duration_ms=duration_ms, max_bytes=max_bytes,
+                                           width=width, fps=args.fps, hold_ms=hold_ms)
                 after_source = _source_attribution()
                 after_source["captured"] = "after_capture"
                 if after_source["unavailable"] or after_source.get("source_tree_sha256") != current_source.get("source_tree_sha256"):
@@ -409,7 +559,9 @@ def main(argv=None) -> int:
             manifest["entries"][case.key] = {**vars(case), **metadata, "file": case.filename,
                                              "fingerprint": digest, "source": current_source,
                                              "source_after": after_source,
-                                             "clip": str(args.clip.resolve()) if clip is not None else "transition_fixture_images",
+                                             "clip": (str(args.clip.resolve()) if clip is not None else
+                                                      "usu_scenes:" + "->".join(USU_SCENES[i].name for i in scene_pair(case.key))
+                                                      if case.kind == "transition" else None),
                                              "clip_sha256": clip_hash, "start_seconds": args.start_seconds}
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             print(f"GENERATED {case.key}: {metadata['bytes']} bytes, {metadata['dimensions']} at {metadata['fps']} fps, "

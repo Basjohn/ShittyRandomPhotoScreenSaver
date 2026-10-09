@@ -174,7 +174,13 @@ def test_source_change_during_capture_discards_media(tmp_path: Path, monkeypatch
             frames.append(path)
         return frames
 
-    monkeypatch.setattr(tool, "capture_frames", capture)
+    monkeypatch.setattr(tool, "capture_transition_loop", lambda case, directory, **kwargs: capture(case, directory))
+    scenes = []
+    for index in range(4):
+        path = tmp_path / f"scene{index}.png"
+        Image.new("RGB", (64, 36), (index * 60, 30, 30)).save(path)
+        scenes.append(path)
+    monkeypatch.setattr(tool, "USU_SCENES", tuple(scenes))
     out = tmp_path / "output"
     code = tool.main(["--output-dir", str(out), "--capture-width", "320", "--width", "320",
                       "--duration-seconds", "0.5", "--fps", "10"])
@@ -193,3 +199,35 @@ def test_every_catalogued_transition_uses_complete_production_request_resolution
         assert spec.transition_id == case.identity
         assert spec.duration_ms == 500
         assert not spec.selected_from_random
+
+
+def test_each_transition_keeps_its_own_ordered_scene_pair() -> None:
+    from tools.release_media import SCENE_PAIRS, scene_pair, transition_size
+
+    keys = [case.key for case in catalogue() if case.kind == "transition"]
+    pairs = {key: scene_pair(key) for key in keys}
+    assert all(pair in SCENE_PAIRS and pair[0] != pair[1] for pair in pairs.values())
+    assert pairs == {key: scene_pair(key) for key in keys}            # stable, independent of order
+    assert len(set(pairs.values())) > len(SCENE_PAIRS) // 2           # the scenes are used in many orders
+    width, height = transition_size()
+    assert width == 480 and height % 2 == 0 and abs(width / height - 16 / 9) < 0.02
+
+
+def test_missing_operator_scenes_fail_loudly(tmp_path: Path) -> None:
+    from tools.release_media import load_scenes
+
+    with pytest.raises(FileNotFoundError, match="never substituted"):
+        load_scenes((tmp_path / "absent.png",))
+
+
+def test_the_showcase_never_runs_back_in_the_same_direction() -> None:
+    from tools.release_media import SHOWCASE_SEED, _look, return_seed
+
+    for case in catalogue():
+        if case.kind != "transition":
+            continue
+        there = _look(transition_spec(case.identity, 500, case.settings, SHOWCASE_SEED))
+        looks = {_look(transition_spec(case.identity, 500, case.settings, seed)) for seed in range(700, 760)}
+        back = _look(transition_spec(case.identity, 500, case.settings, return_seed(case, 500)))
+        if len(looks) > 1:                       # the transition has a direction/order choice
+            assert back != there, case.key

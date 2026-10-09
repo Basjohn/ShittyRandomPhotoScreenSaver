@@ -5,7 +5,7 @@ the normal GODZIP, or runtime asset trees. Use a dedicated ignored `logs/<direct
 
 ```powershell
 python tools/release_media.py --list
-python tools/release_media.py --kind transition --output-dir logs/release_media
+python tools/release_media.py --kind transition --id jigsaw      # -> assets/webp (the default for transitions)
 python tools/release_media.py --kind visualizer --clip logs/visualizer_recordings/balanced.jsonl --start-seconds 5 --output-dir logs/release_media
 ```
 
@@ -30,12 +30,21 @@ of these four local source images, not the superseded `UsuScenePaper1/2` artwork
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene2.png`
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png` Every published transition
-animated WebP must be a high-quality approximately 480p loop with a **strict per-file size below 10,000,000
+animated WebP must be a high-quality loop 480 px wide (keeping the aspect ratio; "480p" means the width) with a **strict per-file size below 10,000,000
 bytes (decimal 10 MB)**. Keep the original artwork's aspect ratio when compositing. These four source PNGs are
 Windows-local and intentionally absent from handoff archives and Linux CI; the production transition-media
 capture should combine the genuine images when the operator runs M1, never substitute fixtures for publication.
-The current tool defaults documented below (960x540 and 10 MiB) are NOT acceptance for future transition
-media; M1 must adapt/override them before publication. This paragraph does not change visualizer WebP rules.
+**Implemented (2026-10-10).** Transition cases ignore the Visualizer size flags: each loads the four scenes (missing
+originals fail loudly, never a substitute), takes its ordered scene pair from a hash of its case key (stable when
+transitions are added), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
+then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
+twice in a row read as a mistake) at twice 480x270 and 60 fps; the encoder adds a 350 ms rest at both loop ends (both
+on the first picture, so the loop is seamless). Published at 480x270, strictly under 10,000,000 bytes; frame rate
+steps 60→54→48→40→30 before the width shrinks, quality stays 92. Encoding uses method 4 with keyframes every 150 frames:
+method 6 cost 11x the time for 2% smaller files, and delta frames roughly halve the bytes of mostly-still transition
+frames (the 15.4 s Jigsaw loop: 11.1 MB at 60 fps, 10.1 MB at 54, 9.1 MB at 48; the first draft at 854x480 needed ~22 fps). Output defaults to the ignored
+`assets/webp/` (a GODZIP never-transfer prefix); the manifest records the pair and both scene hashes. The agent reviews
+each new or changed transition's WebP itself. This paragraph does not change visualizer WebP rules.
 
 Visualizer identities come from the active canonical mode registry and each mode's actual curated preset catalogue;
 Custom is excluded. The filename-derived variant survives sparse authored slots. The tool accepts only non-archived,
@@ -65,7 +74,8 @@ the catalogue's initial source or during capture fail loudly and discard the new
 again before publication too. Rerun at a stable checkpoint; there is no mixed-source fallback. Existing files without manifest ownership are refused. Successful entries are persisted
 after each case; failures are printed and saved to `release_media_failures.json`, and the command exits nonzero.
 
-Focused regression authority is `tests/test_release_media.py`: canonical enumeration, real WebP loop/duration/metadata,
+Focused regression authority is `tests/test_release_media.py` and `tests/test_release_media_transition_loop.py`
+(scene pairs stable and varied, 480 px wide at the composition's aspect, missing scenes refused, the loop's frame count, exact ends and rest): canonical enumeration, real WebP loop/duration/metadata,
 quality-preserving size reduction, stale/corrupt output admission, recorded-clip restrictions and Extruded Spectrum's
 registered production replay/snapshot path, endpoint-hold duration and discarding media when source changes. A bounded local offscreen sample proves artifact generation on the current
 GPU; full selected release catalogue and visual review remain separate gates. In particular, promotion/authoring work can
