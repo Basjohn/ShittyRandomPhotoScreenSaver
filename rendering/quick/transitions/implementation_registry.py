@@ -113,6 +113,10 @@ _IMPLEMENTATIONS = (
         transition_id="page_curl",
         module_name="rendering.quick.transitions.implementations.page_curl",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="jigsaw",
+        module_name="rendering.quick.transitions.implementations.jigsaw",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

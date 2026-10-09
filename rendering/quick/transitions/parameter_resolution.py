@@ -19,6 +19,7 @@ from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGES, ACCORD
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
+from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -921,6 +922,26 @@ def _resolve_page_curl(
                             **resolve_scene_quality(settings, cfg, defaults)})
 
 
+def _resolve_jigsaw(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "jigsaw")
+    defaults = _canonical("jigsaw")
+    # The stored "direction" is the flip order. The run itself has no direction: the order
+    # travels as a parameter, so the per-run layout can be keyed (and warmed) from parameters.
+    order = JIGSAW_ORDERS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if order is None:
+        order = str(rng.choice(tuple(JIGSAW_ORDERS.values())))
+    low, high = JIGSAW_PIECES_RANGE
+    return _finish(None, {
+        "seed": _seed(rng),
+        "order": order,
+        "pieces": max(low, min(high, _integer(_value(cfg, defaults, "pieces"), int(defaults["pieces"])))),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -939,6 +960,7 @@ _RESOLVERS = {
     "relief_rise": _resolve_relief_rise,
     "cube_turn": _resolve_cube_turn,
     "beam": _resolve_beam,
+    "jigsaw": _resolve_jigsaw,
 }
 
 

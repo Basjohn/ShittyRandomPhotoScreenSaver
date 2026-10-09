@@ -29,6 +29,7 @@ from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGE_CHOICES,
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
+from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
@@ -110,6 +111,7 @@ class TransitionsTab(QWidget):
                 "relief_rise",
                 "cube_turn",
                 "beam",
+                "jigsaw",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -572,6 +574,7 @@ class TransitionsTab(QWidget):
         "Relief Rise": "_build_relief_rise_group",
         "Cube Turn": "_build_cube_turn_group",
         "Beam": "_build_beam_group",
+        "Jigsaw Piece Flip": "_build_jigsaw_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -595,6 +598,7 @@ class TransitionsTab(QWidget):
         "Relief Rise": "relief_rise_group",
         "Cube Turn": "cube_turn_group",
         "Beam": "beam_group",
+        "Jigsaw Piece Flip": "jigsaw_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -611,6 +615,7 @@ class TransitionsTab(QWidget):
             "Relief Rise",
             "Cube Turn",
             "Beam",
+            "Jigsaw Piece Flip",
         }
     )
 
@@ -835,6 +840,12 @@ class TransitionsTab(QWidget):
             self._beam_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
             self.beam_color_btn.set_color(self._beam_color)
             self.beam_sparks_check.setChecked(bool(cfg.get('sparks', canonical['sparks'])))
+        if hasattr(self, 'jigsaw_group'):
+            canonical = canonical_transitions['jigsaw']
+            cfg = self._new_transition_section(transitions_config, 'jigsaw', canonical)
+            self.jigsaw_pieces_spin.setValue(self._new_transition_number(
+                cfg, 'pieces', 'jigsaw', canonical['pieces'], self.jigsaw_pieces_spin, int,
+            ))
         if hasattr(self, 'disintegrate_group'):
             canonical = canonical_transitions['disintegrate']
             cfg = self._new_transition_section(transitions_config, 'disintegrate', canonical)
@@ -1158,6 +1169,7 @@ class TransitionsTab(QWidget):
         "accordion_fold": (_ANTIALIASING_CONTROL,),
         "relief_rise": (_ANTIALIASING_CONTROL,),
         "cube_turn": (_ANTIALIASING_CONTROL,),
+        "jigsaw": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1415,6 +1427,23 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "accordion_fold")
         self._build_scene3d_choices(layout, "accordion_fold")
         self._specific_group_host_layout.addWidget(self.accordion_fold_group)
+
+    def _build_jigsaw_group(self) -> None:
+        self.jigsaw_group = QGroupBox("Jigsaw Piece Flip Settings")
+        self._style_group_box(self.jigsaw_group)
+        layout = QVBoxLayout(self.jigsaw_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        pieces_row = self._aligned_row(layout, "Pieces:")
+        self.jigsaw_pieces_spin = QSpinBox()
+        self.jigsaw_pieces_spin.setRange(*JIGSAW_PIECES_RANGE)
+        self.jigsaw_pieces_spin.setValue(int(_transition_default("jigsaw.pieces")))
+        self.jigsaw_pieces_spin.setToolTip(
+            "About how many pieces the picture is cut into. More pieces flip faster, more at once.")
+        self.jigsaw_pieces_spin.valueChanged.connect(self._save_settings)
+        pieces_row.addWidget(self.jigsaw_pieces_spin)
+        pieces_row.addStretch()
+        self._build_scene3d_choices(layout, "jigsaw")
+        self._specific_group_host_layout.addWidget(self.jigsaw_group)
 
     def _build_disintegrate_group(self) -> None:
         self.disintegrate_group = QGroupBox("Disintegrate Settings")
@@ -2188,6 +2217,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'blinds_style_combo', None),
             getattr(self, 'blinds_slats_spin', None),
             getattr(self, 'disintegrate_grain_spin', None),
+            getattr(self, 'jigsaw_pieces_spin', None),
             getattr(self, 'beam_sparks_check', None),
             getattr(self, 'accordion_pleats_spin', None),
             # Ripple widgets
@@ -2314,7 +2344,7 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam"):
+                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam", "jigsaw"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2475,6 +2505,13 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Jigsaw Piece Flip":
+                    # The order the pieces flip in: from a corner, from a random piece, or shuffled.
+                    self.direction_combo.addItems(list(JIGSAW_ORDER_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["jigsaw"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
 
@@ -2601,6 +2638,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["cube_turn"] = cur_dir
         elif cur_type == "Beam":
             self._direction_by_type["beam"] = cur_dir
+        elif cur_type == "Jigsaw Piece Flip":
+            self._direction_by_type["jigsaw"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2773,6 +2812,10 @@ class TransitionsTab(QWidget):
             page_curl = {'direction': self._direction_by_type['page_curl']}
         else:
             page_curl = {**_existing_subdict('page_curl'), 'direction': self._direction_by_type['page_curl']}
+        if hasattr(self, 'jigsaw_group'):
+            jigsaw = {'direction': self._direction_by_type['jigsaw'], 'pieces': self.jigsaw_pieces_spin.value()}
+        else:
+            jigsaw = {**_existing_subdict('jigsaw'), 'direction': self._direction_by_type['jigsaw']}
 
         for section, values in (("blinds", blinds), ("crumble", crumble), ("glass_shatter", glass_shatter),
                                 ("exploding_tiles", exploding_tiles),
@@ -2822,6 +2865,7 @@ class TransitionsTab(QWidget):
             'relief_rise': relief_rise,
             'cube_turn': cube_turn,
             'beam': beam,
+            'jigsaw': jigsaw,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):
