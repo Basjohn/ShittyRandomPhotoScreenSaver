@@ -474,3 +474,73 @@ def test_expected_reddit_provider_unavailability_is_not_a_failed_thread_task(
     assert "reddit_service_gate" in threads.categories
     assert consumer.errors == ["Reddit public sources returned HTTP 429/403"]
     assert service._fetch_in_progress is False
+
+
+def test_reddit_fetch_waits_for_transition_and_claims_through_gui_delivery(monkeypatch, tmp_path):
+    """No network request starts under transition; completion owns UI publish."""
+    from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+    import widgets.reddit_runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
+    ui_deliveries = []
+    monkeypatch.setattr(runtime_module.ThreadManager, "run_on_ui_thread",
+                        staticmethod(lambda fn: ui_deliveries.append(fn) or True))
+    gate = RefreshTransitionGate(79)
+    install_gate(gate)
+    class QueuedManager:
+        def __init__(self):
+            self.work = []
+        def submit_io_task(self, fn, *, callback, **kwargs):
+            self.work.append((fn, callback))
+    manager = QueuedManager()
+    provider = _Provider([RedditProviderResult.with_posts(_rows("Live"), source_id="test")])
+    service = RedditRuntimeService(
+        config=RedditRuntimeConfig("reddit", "python", "reddit", _REDDIT_PROVIDER_SORT),
+        provider=provider, runtime_generation=79,
+    )
+    service._running = True
+    service.set_thread_manager(manager)
+    try:
+        assert gate.begin_transition() == "started"
+        assert service.fetch() is True
+        assert manager.work == [] and provider.requests == []
+        gate.end_transition()
+        assert len(manager.work) == 1
+        assert gate.snapshot[1] == 1
+        assert gate.begin_transition(lambda: None) == "deferred"
+        work, callback = manager.work.pop()
+        callback(SimpleNamespace(success=True, result=work(), error=None))
+        assert gate.snapshot[0] is False
+        assert gate.snapshot[1] == 1  # completion is not GUI publication
+        assert len(ui_deliveries) == 1
+        ui_deliveries.pop()()
+        assert service.candidates and service.candidates[0].title == "Live"
+        assert gate.snapshot[0] is True
+    finally:
+        service.stop()
+        gate.close()
+        install_gate(None)
+
+
+def test_reddit_dormant_owner_drops_deferred_fetch(monkeypatch):
+    from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+    gate = RefreshTransitionGate(83)
+    install_gate(gate)
+    service = RedditRuntimeService(
+        config=RedditRuntimeConfig("reddit", "python", "reddit", _REDDIT_PROVIDER_SORT),
+        provider=_Provider([]), runtime_generation=83,
+    )
+    service._running = True
+    service.set_thread_manager(_ImmediateThreadManager())
+    try:
+        assert gate.begin_transition() == "started"
+        assert service.fetch() is True
+        assert gate.snapshot[2] == 1
+        service.stop()
+        assert gate.snapshot[2] == 0
+        gate.end_transition()
+        assert gate.snapshot == (False, 0, 0, False)
+    finally:
+        gate.close()
+        install_gate(None)

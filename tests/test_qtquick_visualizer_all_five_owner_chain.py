@@ -111,7 +111,7 @@ class _Engine:
     def reconfigure_bar_count(self, *args, **kwargs):
         pass
 
-    def set_analysis_only_audio(self, *args, **kwargs):
+    def set_spectrum_shaping_enabled(self, *args, **kwargs):
         pass
 
     def set_spectrum_mirrored(self, *args, **kwargs):

@@ -300,3 +300,27 @@ Stable CPU/GPU/cache/thread/handle numbers and small distributed driver/GL costs
 - Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.
 
 The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+
+### Refresh families versus whole-display image transition admission (R161–R163)
+
+`core/threading/refresh_transition_gate.py` is a **generation-scoped admission
+arbiter**, not a global scheduler, new timer, worker pool or presentation owner.
+FEEDS, Gmail's live fetch and Reddit's provider fetch participate in R163.
+Each keeps its own dormancy, source cadence, cache freshness, retries, manual
+cooldowns, source generations and cancellation. This gate holds one refresh
+claim across participating sources **through GUI publication**; completed
+background work alone does not release it. A waiting transition reserves the
+next batch before new refresh admission; after *all* displays complete, wake
+one deferred source in arrival order, not all at once. On a stale/dormant wake,
+advance to the next source event-driven; repeated intents for one source
+coalesce latest-wins. A delayed manual Reddit request must not be overwritten
+by an automatic due event. Stop, retirement, submission failures and cancellation
+must release active claims or remove deferred intents without reviving dormant
+sources. Never silence slow-callback diagnostics to hide contention.
+
+Scope is deliberate: startup cache bootstrap outside FEEDS, Steam, Weather,
+and other services are **not** certified participants. Before adding any,
+prove worker completion, GUI delivery, cancellation and generation retirement,
+including the case where a worker completion cannot reach the GUI dispatcher.
+Do not fence unrelated cache persistence, audio DSP, QML painting or passive
+sampling. Do not add polling, speculative work or a second cache/cadence owner.

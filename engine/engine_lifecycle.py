@@ -75,6 +75,14 @@ def teardown_display_runtime(
     returned barrier represents only Qt/Python root destruction, which must be
     observed on a later event-loop turn before constructing a replacement.
     """
+    # Invalidate delayed admission before any retained widget owner can retire.
+    # Otherwise finishing a canceled feed lease could replay a rotation while
+    # the display generation is being destroyed.
+    gate = getattr(engine, "_refresh_transition_gate", None)
+    if gate is not None:
+        gate.close()
+        from core.threading.refresh_transition_gate import install_gate
+        install_gate(None)
     manager = getattr(engine, "display_manager", None)
     if manager is None:
         engine._display_initialized = False

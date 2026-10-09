@@ -283,14 +283,19 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             worker._onset_strength = _t_snap.onset_strength
             worker._onset_events = _tb.recent_onsets
 
-        if worker._analysis_only_audio:
-            # Sphere consumes the raw frequency bins, three-zone pre-AGC
-            # energies, control lanes and typed onsets above, not shaped bars.
-            # Returning the established zero-bar output preserves its prior
-            # post-shape energy behavior (the broken shaper returned zeros),
-            # while avoiding shape-node interpolation, strength lookups, gates,
-            # smoothing, AGC and their needless allocations each audio frame.
-            # The immutable raw-spectrum snapshot is still captured on commit.
+        if not worker._spectrum_shaping_enabled:
+            # This is *analysis*, not authored bar shaping. Preserve the
+            # drop/valley history that the shared adaptive floor consults on
+            # NEXT frames. Previously the Spectrum-shaped tail happened to
+            # update this value, including when Bubble consumed only raw
+            # energies. Skipping it changed Bubble's response to drops.
+            worker._last_bass_drop_ratio = (
+                max(bass_drop_ratio, drop_accum)
+                if low_resolution else bass_drop_ratio
+            )
+            # Bubble/Sphere/Oscilloscope consume raw FFT/zone/transients;
+            # Sine/DevCurve receive independent pre-AGC energy through the
+            # BeatEngine energy API. None consumes authored Spectrum bars.
             return get_zero_bars(worker)
 
         # ── Shape-node driven profile ────────────────────────────────

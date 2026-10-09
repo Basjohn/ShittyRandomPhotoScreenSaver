@@ -102,8 +102,8 @@ class _ManagerVisualizerEngine:
             float(transient_clamp),
         )
 
-    def set_analysis_only_audio(self, enabled: bool) -> None:
-        self.analysis_only_audio = bool(enabled)
+    def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
+        self.spectrum_shaping_enabled = bool(enabled)
 
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
         self.source_config_calls.append(("mirrored", bool(mirrored)))
