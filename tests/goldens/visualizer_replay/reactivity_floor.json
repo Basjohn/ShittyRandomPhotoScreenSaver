@@ -1291,9 +1291,9 @@
     "gradual_ramp__devcurve": {
       "reference_metrics": {
         "attack_slope_per_s": 0.9698174,
-        "bar_centroid": 14.1510525,
+        "bar_centroid": 14.1511387,
         "bar_flux": 20.4031542,
-        "bar_mean": 0.2838479,
+        "bar_mean": 0.283837,
         "bar_peak": 0.8728357,
         "beat_count": 0,
         "bubble_centroid_speed_peak": 0.0,
@@ -1310,10 +1310,10 @@
         "decay_to_half_ms": -1.0,
         "discontinuity_count": 0,
         "input_peak": 0.64,
-        "integrated_bar_energy": 0.2666645,
+        "integrated_bar_energy": 0.2666541,
         "mode_summary": {
           "devcurve": {
-            "activity": 0.2838479,
+            "activity": 0.283837,
             "frames": 48
           }
         },
@@ -1324,20 +1324,20 @@
         "settling_time_ms": -1.0,
         "state_derivative_max_per_s": 0.7161789,
         "time_to_peak_ms": 900.0,
-        "waveform_peak": 0.6466385,
-        "waveform_rms": 0.1313729,
-        "waveform_zero_crossings": 308
+        "waveform_peak": 0.0,
+        "waveform_rms": 0.0,
+        "waveform_zero_crossings": 0
       },
       "reference_mode_metrics": {
-        "output_flux": 38.538571119636124,
-        "output_peak": 0.9520952373426876
+        "output_flux": 18.61387083343637,
+        "output_peak": 0.7981877867928568
       },
       "minimums": {
         "bar_peak": 0.43641785,
         "bar_flux": 10.2015771,
-        "integrated_bar_energy": 0.13333225,
+        "integrated_bar_energy": 0.13332705,
         "attack_slope_per_s": 0.4849087,
-        "output_flux": 19.269285559818062
+        "output_flux": 9.306935416718185
       },
       "maximums": {}
     },
