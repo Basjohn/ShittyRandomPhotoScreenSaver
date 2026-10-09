@@ -40,7 +40,10 @@ manifest; a new pick never stales an entry), crops both to 16:9 without stretchi
 then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
 twice in a row read as a mistake) at twice 480x270 and 30 fps; the encoder adds a 350 ms rest at both loop ends (both
 on the first picture, so the loop is seamless). Published at 480x270, strictly under 10,000,000 bytes; frame rate
-steps 30→24→20 before the width shrinks, quality stays 95 (raised from 92 at operator request; measured, neither
+holds 480 px at 30 fps and plays a long run faster (x0.85, x0.72, x0.6) before dropping to 24/20 fps; the
+width never shrinks; quality stays 95. Output frames map to source frames rounding halves up (a 350 ms rest is
+10.5 frames at 30 fps, and round-half-to-even showed every other motion frame twice: 15 fps motion until
+2026-10-10) (raised from 92 at operator request; measured, neither
 the Lanczos downscale nor q92 blurred: decoded frames keep 96-99% of the lossless frames' Laplacian sharpness, so
 the softness is the 480 px size of 4K art). Encoding uses method 4 with keyframes every 150 frames:
 method 6 cost 11x the time for 2% smaller files, and delta frames roughly halve the bytes of mostly-still transition

@@ -369,6 +369,24 @@ def transition_encoding_plan(width: int, fps: int) -> list[tuple[int, int, float
     return plan + [(width, max(10, round(fps * step)), .6) for step in (.8, .67)]
 
 
+def timeline_source_indices(source_count: int, motion_ms: int, hold_ms: int, count: int) -> list[int]:
+    """The source frame each of ``count`` output frames shows: a rest of ``hold_ms`` on the first
+    frame, the motion spread over ``motion_ms``, a rest on the last frame.
+
+    Rounds halves up, never to even: a 350 ms rest is exactly 10.5 frames at 30 fps, and
+    ``round()`` then showed every other source frame twice (motion played at 15 fps)."""
+    total = motion_ms + 2 * hold_ms
+    indices = []
+    for index in range(count):
+        if hold_ms:
+            at = max(0.0, min(motion_ms, index * total / count - hold_ms))
+            position = at / motion_ms * (source_count - 1)
+        else:
+            position = index * (source_count - 1) / max(count - 1, 1)
+        indices.append(min(source_count - 1, math.floor(position + 0.5 + 1e-9)))
+    return indices
+
+
 def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes: int,
                 width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5),
                 quality: int = 92, plan: list[tuple[int, int, float]] | None = None) -> dict:
@@ -398,12 +416,7 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
         count = max(2, round(total_duration_ms * rate / 1000))
         images = []
         try:
-            for index in range(count):
-                if hold_ms:
-                    at = max(0, min(motion_ms, index * total_duration_ms / count - hold_ms))
-                    source_index = round(at / motion_ms * (len(frames) - 1))
-                else:
-                    source_index = round(index * (len(frames) - 1) / (count - 1))
+            for source_index in timeline_source_indices(len(frames), motion_ms, hold_ms, count):
                 with Image.open(frames[source_index]) as source:
                     image = source.convert("RGB").resize(target_size, Image.Resampling.LANCZOS)
                     image.info.clear()
