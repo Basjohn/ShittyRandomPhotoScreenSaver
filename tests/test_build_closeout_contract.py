@@ -29,8 +29,6 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
     # reference it again.
     forbidden = ("rendering.gl_compositor_pkg",)
     for relative in (
-        "scripts/build_nuitka.ps1",
-        "scripts/build_nuitka_mc_onedir.ps1",
         "scripts/venv/build_nuitka.ps1",
         "scripts/venv/build_nuitka_mc_onedir.ps1",
     ):
@@ -108,3 +106,15 @@ def test_installers_offer_profile_scoped_settings_reset() -> None:
         assert len(registry_lines) == 1, reset_lines
         assert "Flags: deletekey" in registry_lines[0]
         assert len(reset_lines) == 2, reset_lines
+
+
+def test_legacy_nuitka_entrypoints_delegate_only_to_canonical_workers() -> None:
+    for legacy, worker in (
+        ("scripts/build_nuitka.ps1", "venv\\build_nuitka.ps1"),
+        ("scripts/build_nuitka_mc_onedir.ps1", "venv\\build_nuitka_mc_onedir.ps1"),
+    ):
+        source = _text(legacy)
+        assert worker in source
+        assert "& $worker" in source
+        assert "--mingw64" not in source
+        assert "-m nuitka" not in source

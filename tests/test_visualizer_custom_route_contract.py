@@ -189,11 +189,8 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
     import widgets.spotify_visualizer.quick_display_visualizer_owner as owner_module
 
     monkeypatch.setattr(owner_module, "QuickDisplayVisualizerOwner", _Owner)
-    monkeypatch.setattr(
-        display_manager_module,
-        "resolve_quick_custom_entry",
-        lambda *_args, **_kwargs: None,
-    )
+    # CUSTOM routing now belongs to visualizer_failover_lifecycle, not the
+    # removed display_manager.resolve_quick_custom_entry shim.
     try:
         assert manager._admit_quick_visualizer(manager.displays) is True
         assert len(owners) == 1

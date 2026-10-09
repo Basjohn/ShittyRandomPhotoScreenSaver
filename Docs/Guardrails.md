@@ -31,6 +31,10 @@ Never improve counters by silently reducing authored work/fidelity.
 
 Performance-specific admission, telemetry semantics, load-class evidence and reference envelopes live in `Docs/Guardrails/Performance_Optimization_Contract.md`. Use that checklist before changing cadence, GC policy, scheduling, caching, resource lifetime or presentation for performance.
 
+## Operator-owned build acceptance
+
+Agents **do not run frozen builds** (Build Runner, Nuitka, helper compilation, installers or trial builds). The operator owns expensive build execution and frozen/physical acceptance and shares reports. Agents audit source and supplied results and may run only appropriate bounded focused non-build tests; do not call for the full chunked suite by default.
+
 ## Read / scope discipline
 
 ```text

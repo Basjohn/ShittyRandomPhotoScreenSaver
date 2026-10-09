@@ -15,9 +15,7 @@ dormancy, switching and harness coverage.
 This reference documents shared policy plus mode-specific exceptions where they matter. Experimental status is an admission
 state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
 metadata. Spectrum-family 3D modes reuse its source implementation but own their persisted technical and shaper profiles;
-the former borrowed profile is copied once only when an old input lacks those owned keys. Sphere owns its consumed analysis
-profile too; its one-time bridge preserves the former RAW Spectrum values. Heavy implementation resources remain lazy and
-retire through the normal owner.
+the former borrowed profile is copied once only when an old input lacks those owned keys. Sphere owns its consumed analysis profile too; its one-time bridge preserves the former RAW Spectrum values. Sphere uses a mode-scoped **analysis-only FFT/energy/onset path** and does not enter Spectrum visual shaping. Shockwave Grid deliberately **does** evaluate its independently authored Spectrum shape field because the grid horizon consumes shaped bars. Switching modes restores each policy without another worker, clock or silent preset dependency. Heavy implementation resources remain lazy and retire through the normal owner.
 
 ## 1A. Registered modes vs enabled modes
 
@@ -476,7 +474,7 @@ A test name does not prove it exercises the real output path.
 
 Extruded Spectrum and Shockwave Grid use the shared 3D foundation the transitions use. Voxel Sphere also uses its GPU
 resource/ring substrate while its reaction semantics remain mode-owned and its authoring/product promotion remains in
-`Current_Plan.md` §7. The binding lessons in
+`Docs/Reference/Sphere_Visualizer.md` (already operator-accepted). The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,

@@ -102,6 +102,9 @@ class _ManagerVisualizerEngine:
             float(transient_clamp),
         )
 
+    def set_analysis_only_audio(self, enabled: bool) -> None:
+        self.analysis_only_audio = bool(enabled)
+
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
         self.source_config_calls.append(("mirrored", bool(mirrored)))
 
@@ -1223,7 +1226,10 @@ def test_display_manager_resolves_one_transition_spec_and_commits_on_finalize(
         assert first.request is not None
         assert second.request is not None
         assert first.request.transition_id == second.request.transition_id == "slide"
-        assert first.request.duration_ms == second.request.duration_ms == 275
+        # R146 compensates the delayed secondary presentation with 400 ms
+        # of additional duration; both displays still share one specification.
+        assert first.request.duration_ms == 275
+        assert second.request.duration_ms == 675
         assert first.request.direction == second.request.direction
         assert first.request.parameters == second.request.parameters
         assert first.request.source_image.source_path == "old-two.jpg"

@@ -1,6 +1,8 @@
 # USU MOONSCAPE VISUALIZER — DISTANT FUTURE IMPLEMENTATION PLAN
 
-> **STALE-BY-DESIGN HANDOFF DOCUMENT**
+> **ARCHIVED CONCEPT/ART REFERENCE ONLY — NOT A LIVE IMPLEMENTATION PLAN**
+>
+> The staged implementation, test suggestions, language/tooling and architecture here are a snapshot from an older tree. Do not execute them as a roadmap, resurrect older mode-specific infrastructure, or treat older Blender/Maya commentary as a software choice. `Future_Work.md` is the only admission router; current shared Scene3D/Visualizer contracts are authoritative. Preserve the useful character look, moonscape and live-music intent.
 > **Project HEAD when authored:** `f104a29eec`
 > **Authored:** 2026-10-02
 > **Status:** distant future concept / implementation handoff, **not current roadmap authority**

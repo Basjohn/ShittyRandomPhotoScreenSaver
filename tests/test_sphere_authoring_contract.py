@@ -148,8 +148,14 @@ def test_owned_source_and_complete_worker_profile_ignore_mutable_spectrum_settin
     first_source = resolve_mode_source_config("sphere", vars(first))
     second_source = resolve_mode_source_config("sphere", vars(second))
     from widgets.spotify_visualizer.source_config_applier import SPECTRUM_SOURCE_CONFIG_KEYS
-    assert {key: first_source[key] for key in SPECTRUM_SOURCE_CONFIG_KEYS} == {key: second_source[key] for key in SPECTRUM_SOURCE_CONFIG_KEYS}
-    assert [item[0] for item in first_source["spectrum_notch_positions_mirrored"]] == [item[0] for item in config["sphere_analysis_notch_positions"]]
+    assert first_source["_source_analysis_only"] is True
+    assert second_source["_source_analysis_only"] is True
+    assert not SPECTRUM_SOURCE_CONFIG_KEYS.intersection(first_source)
+    assert not SPECTRUM_SOURCE_CONFIG_KEYS.intersection(second_source)
+    assert first_source["_source_analysis_notches"] == second_source["_source_analysis_notches"]
+    assert [item[0] for item in first_source["_source_analysis_notches"]] == [
+        item[0] for item in config["sphere_analysis_notch_positions"]
+    ]
     payload = first.to_dict()
     for suffix in ("agc_strength", "dynamic_range_enabled", "kick_lane_gain", "transient_pulse_gain"):
         assert "widgets.spotify_visualizer.sphere_" + suffix not in payload

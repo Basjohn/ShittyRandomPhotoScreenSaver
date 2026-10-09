@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-10-08
+Last updated: 2026-10-09
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -24,19 +24,27 @@ not automatic current architecture instructions.
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
 - [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Handle-type attribution rejected a continuous steady-generation leak; one bounded 3–5-cycle Settings churn acceptance now decides whether the first replacement-generation handle bundle is one-time lazy initialization or cumulative retention.
 
-## Active / Pending Acceptance Records
+## Accepted R149–R151 repair records (historical evidence)
 
-- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **BOUNDED EDGE-TRANSITION REPAIR IN CODE / REGRESSION-PROTECTED / PHYSICAL PERF RECHECK PENDING**. Infinite per-widget refresh animators tied network `refreshing` lifetime to full-scene rendering; the repair replaces them with one 240 ms display-scoped transition epoch shared by Reddit, Gmail, every NEWS/CUSTOM Feed instance and Games You Follow, inert while BUSY is steady.
+The focused source/Windows gates are accepted; a post-R151 full four-chunk run has **not** been performed or claimed. Incident reports preserve the original failed runs.
+
+- [R-151 — Steam cache same-destination Windows publication race](Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md) — **ACCEPTED: 106 WINDOWS FOCUSED TESTS / FULL SUITE NOT RE-RUN**. Short per-file publish mutex with weakly held locks; Settings aware UTC metadata retains `Z` format.
+- [R-150 — Sphere Analysis-Only DSP / Shockwave Shaper Audit](Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md) — **ACCEPTED: 96 WINDOWS FOCUSED TESTS + OPERATOR PHYSICAL SPHERE/SHOCKWAVE**. Sphere skips unrelated Spectrum bar shaping; Shockwave retains authored horizon-shaping behavior.
+- [R-149 — Python 3.14 four-chunk and runtime trace](Historical_Bugs/R-149_Python314_Four_Chunk_And_Runtime_Trace.md) — **FOCUSED SOURCE FIXES ACCEPTED / FULL R151 SUITE NOT RE-RUN**. Removed private logging lock calls; fixed fixed-name Steam cache temporary collisions; repaired stale test authority; NumPy 2 BLAS probe uses loaded library; historic Sphere `Treble` warning is addressed by the R150 accepted analysis-only boundary.
+
+## Conditional follow-up records (not automatically admitted)
+
+- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **PHYSICALLY ACCEPTED 2026-10-08**. Infinite per-widget refresh animators tied network `refreshing` lifetime to full-scene rendering; the repair replaces them with one 240 ms display-scoped transition epoch shared by Reddit, Gmail, every NEWS/CUSTOM Feed instance and Games You Follow, inert while BUSY is steady.
 - [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](Historical_Bugs/R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Stable Bar Appearance/Rainbow accessories now bootstrap without consulting an incompatible active mode, and C6 Extruded/Shockwave bucket identities match canonical defaults.
-- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **ACTIVE / PHYSICAL ACCEPTANCE OPEN**. The render-release repair is baseline; the tiny-breath helper failed recorded/fixture A/B and was removed. Remaining physical localization and acceptance stay in the live plan.
-- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **AWAITING VALIDATION**. Windows dual-monitor built check in `Current_Plan.md`.
+- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **DEFERRED WATCHLIST / PHYSICALLY GOOD**. The render-release repair is baseline; the tiny-breath helper failed recorded/fixture A/B and was removed. Reopen only on a newly reported physical anomaly.
+- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **HISTORICAL / REOPEN ONLY ON REPRODUCTION**. Repeat a bounded operator-run dual-monitor replacement case if it recurs.
 - [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. The 58-minute Windows soak preserved scaled-prefetch liveness through sustained cache eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. The 58-minute Windows soak showed no recursive zero-delay due storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**. No long debounce admitted; physical multi-stage wake remains the acceptance gate.
-- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
-- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Dedicated automated coverage is intentionally deferred to the next test pass; current sequencing remains in `Current_Plan.md`.
+- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **REPAIRED / CONDITIONAL WAKE WATCHLIST**. Implementation is independently audited; reopen only on a newly observed late-return failure.
+- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **REPAIRED / CONDITIONAL FOLLOW-UP**. Reopen only on a fresh Clock layout-slot/face-state repro; no standing migration gate.
 
 No other R-series record is current implementation sequencing. Current work is owned by
 `Current_Plan.md`; historical Phase/P-number status prose never admits current work.

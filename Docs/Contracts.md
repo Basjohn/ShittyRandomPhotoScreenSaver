@@ -516,9 +516,7 @@ their Quick window/context and retire through one-shot render events on admissio
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
 Sphere owns only the descriptor-declared technical inputs its analysis consumes, plus the two selected frequency splits.
 Startup, legacy Custom-cache and SST migration seed absent owned values from the former RAW Spectrum profile once before
-defaults; later Spectrum preset or Custom changes cannot affect Sphere. Shared worker outputs that Sphere does not consume
-use canonical engine configuration without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent
-retain direct renderer consumers; the mode's curated snapshots and Custom cache own their complete authored values.
+defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Shockwave is different:** its renderer intentionally consumes Spectrum-shaped bars for the grid horizon, and its authored Shape editor remains active. Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
 
 ## Geometry / CUSTOM
 

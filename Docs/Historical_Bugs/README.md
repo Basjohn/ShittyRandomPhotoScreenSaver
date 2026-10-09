@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-10-08
+Last updated: 2026-10-09
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -24,18 +24,26 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Current Open / Watchlist
 
-- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[~] OPEN / SIGNIFICANTLY IMPROVED, NOT SOLVED**. Installed Checkpoint-3 evidence shows event-driven Quick admission is the correct direction and operator-observed Checkpoint-5 dual-display behavior improves further; residual settled-heavy crawl remains downstream of fresh-state admission. — CHK5 dual-display binary confirms ~90 Hz is logical cadence, D0 is much fresher in steady state, and the remaining `frameSwapped -> requestUpdate()` transition feedback can overdrive D0 to ~287 draws/s and sharply worsen freshness; swap-trace attribution was repaired in CHK8; CHK10 additionally exposed a separate mode-hotswap live-audio authority regression at Spectrum -> Oscilloscope, now tracked without rolling back the pacing gains.
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **HISTORICAL / CHK26 GOLDEN**. Original measured phase/pacing issues and rejected feedback loops remain regression evidence. The later severe R134–R145 two-display collapse recovered following a Windows restart; its root cause remains unknown. Do not reopen either without new physical reproduction.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
 - [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Type attribution shows stable steady-generation handles; one bounded 3–5-cycle Settings churn acceptance remains to classify the replacement-generation baseline step.
 
-## Active / Pending Acceptance
+## Accepted R149–R151 repair records (historical evidence)
 
-- [R-113 — 3D Edit profile stage, mesh, cage and mode-switch regression](R-113_3D_Edit_Profile_Stage_And_Cage_Regression.md) — **CODE REPAIR / WINDOWS GROUPED & PHYSICAL ACCEPTANCE PENDING**. Saved stage dimensions no longer forced to world aspect; Edit hotswaps preserve parked drafts; cage exists without audio footprint; strict Save remains guarded.
+The focused source/Windows gates are accepted; a post-R151 full four-chunk run has **not** been performed or claimed. Incident reports preserve the original failed runs.
 
-- [R-112 — Extruded historical response must not use mutable Organs as a frozen oracle](R-112_Extruded_Historical_Response_Must_Not_Use_Mutable_Organs_Oracle.md) — **TEST / MIGRATION CONTRACT REPAIR IN CODE / WINDOWS GATE PENDING**. Narrow schema-10 repair and curated ownership tests now use Extruded's own frozen baseline; genuine old lender migration remains one-time input compatibility.
-- [R-111 — Shared freeform-3D profile aliased incompatible mode poses](R-111_Shared_Freeform3D_Profile_Aliased_Incompatible_Mode_Poses.md) — **ARCHITECTURAL REPAIR IN CODE / PHYSICAL ACCEPTANCE PENDING**. Geometry mechanics and persisted layout compatibility are separate descriptor facts; 3D Edit gains a derivative projected cage.
+- [R-151 — Steam cache same-destination Windows publication race](R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md) — **ACCEPTED: 106 WINDOWS FOCUSED TESTS / FULL SUITE NOT RE-RUN**. Short per-file publish mutex with weakly held locks; Settings aware UTC metadata retains `Z` format.
+- [R-150 — Sphere Analysis-Only DSP / Shockwave Shaper Audit](R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md) — **ACCEPTED: 96 WINDOWS FOCUSED TESTS + OPERATOR PHYSICAL SPHERE/SHOCKWAVE**. Sphere skips unrelated Spectrum bar shaping; Shockwave retains authored horizon-shaping behavior.
+- [R-149 — Python 3.14 four-chunk and runtime trace](R-149_Python314_Four_Chunk_And_Runtime_Trace.md) — **FOCUSED REPAIRS ACCEPTED / NO LATER FULL-SUITE CLAIM**. 26 failed assertions/28 errors attributed, real Steam write failure contained, Sphere audio shaping defect is closed by R150 acceptance.
+
+## Conditional follow-up records (not automatically admitted)
+
+- [R-113 — 3D Edit profile stage, mesh, cage and mode-switch regression](R-113_3D_Edit_Profile_Stage_And_Cage_Regression.md) — **CODE IMPLEMENTED / OPERATOR ACCEPTED; REOPEN ON ANOMALY**. Saved stage dimensions no longer forced to world aspect; Edit hotswaps preserve parked drafts; cage exists without audio footprint; strict Save remains guarded.
+
+- [R-112 — Extruded historical response must not use mutable Organs as a frozen oracle](R-112_Extruded_Historical_Response_Must_Not_Use_Mutable_Organs_Oracle.md) — **SOURCE CONTRACT REPAIRED / REOPEN IF OPERATOR REPORTS REGRESSION**. Narrow schema-10 repair and curated ownership tests now use Extruded's own frozen baseline; genuine old lender migration remains one-time input compatibility.
+- [R-111 — Shared freeform-3D profile aliased incompatible mode poses](R-111_Shared_Freeform3D_Profile_Aliased_Incompatible_Mode_Poses.md) — **ARCHITECTURAL REPAIR ACCEPTED; REOPEN ON ANOMALY**. Geometry mechanics and persisted layout compatibility are separate descriptor facts; 3D Edit gains a derivative projected cage.
 - [R-110 — Refresh animator turned network latency into an unbounded Qt Quick render storm](R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **SOLVED / PERF-PHYSICALLY ACCEPTED 2026-10-08**. Infinite QML refresh animators were the only new continuous animation owners; they drove the retained 4K scene into the hundreds of swaps/s for the lifetime of network refreshes.
 - [R-109 — Visualizer Settings bucket schema drift crashed Settings open](R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Parked shared accessories no longer query an incompatible persisted active mode, and C6 Extruded/Shockwave bucket identities are canonical again.
 - [R-108 — Card chrome parity, Spectrum raster flicker and native-capture packet framing](R-108_Card_Chrome_Parity_And_Spectrum_Regression_Audit.md) — **SPECTRUM PHYSICALLY ACCEPTED / CAPTURE FIX REGRESSION-PROTECTED / C4-C5 WIDER PHYSICAL GATE OPEN**. Moving-cap raster coverage and PyAudioWPatch actual-payload framing now have permanent regression oracles.
@@ -43,7 +51,7 @@ Rehome surviving regression coverage before deleting an old owner.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. 58-minute Windows soak preserved scaled-prefetch liveness under sustained eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. 58-minute Windows soak showed no zero-delay recursive re-arm storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**.
-- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
+- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **REPAIRED / CONDITIONAL WAKE WATCHLIST**. Historic E2.7 implementation and proof retained; reopen only for a newly observed late-return failure.
 
 Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
 
@@ -53,7 +61,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
-- [R-110 — Refresh Animator Unbounded Quick Render Storm](R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **FIXED IN CODE / REGRESSION-PROTECTED / PHYSICAL RECHECK PENDING**. Never bind an infinite retained-QML animation to asynchronous network lifetime under the accepted interval-0 surface policy.
+- [R-110 — Refresh Animator Unbounded Quick Render Storm](R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **PHYSICALLY ACCEPTED 2026-10-08**. Never bind an infinite retained-QML animation to asynchronous network lifetime under the accepted interval-0 surface policy.
 - [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Stable accessory bootstrap and C6 bucket-schema ownership are now explicit.
 - [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Parser-process isolation, durable warm artwork identity and coherent presentation-state ownership.
 - [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. Retained Media affinity context; no per-query Proactor/manager churn.

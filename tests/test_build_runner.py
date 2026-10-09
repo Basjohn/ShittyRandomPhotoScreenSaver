@@ -298,7 +298,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     assert not (tmp_path / "ui" / "resources" / "assets.rcc").exists()
     assert result.errors == []
     assert {"diagnostic"} == result.unavailable_jobs
-    assert any("Diagnostic Runtime" in warning for warning in result.warnings)
+    assert any("both build modes" in warning for warning in result.warnings)
 
 
 
@@ -368,10 +368,10 @@ def test_workers_and_installers_share_the_canonical_output_layout():
         encoding="utf-8"
     )
 
-    assert "'normal\\screensaver'" in normal_standard
+    assert "-BuildWorkspace normal" in normal_standard
     assert '[string]$BuildTarget = "screensaver"' in venv_standard
-    assert '("venv\\{0}" -f $BuildTarget)' in venv_standard
-    assert "--output-dir=$BuildOutputDir" in normal_standard
+    assert '("{0}\\{1}" -f $BuildWorkspace, $BuildTarget)' in venv_standard
+    assert "venv\\build_nuitka.ps1" in normal_standard
     assert "--output-dir=$BuildOutputDir" in venv_standard
     assert r"OutputDir=..\release\installers" in standard_installer
     assert r"release\screensaver\SRPSS.scr" in standard_installer
@@ -395,8 +395,12 @@ def test_workers_and_installers_share_the_canonical_output_layout():
         for key in ("standard", "media_center", "reddit_helper"):
             job = jobs[key]
             worker = job.script.read_text(encoding="utf-8")
-            assert "$BuildExit = $LASTEXITCODE" in worker
-            assert "if ($BuildExit -ne 0)" in worker
+            if mode == "normal":
+                assert "-BuildWorkspace normal" in worker
+                assert "& $worker" in worker
+            else:
+                assert "$BuildExit = $LASTEXITCODE" in worker
+                assert "if ($BuildExit -ne 0)" in worker
 
 
 def test_visualizer_shader_validation_tracks_source_assets_without_retired_blob():

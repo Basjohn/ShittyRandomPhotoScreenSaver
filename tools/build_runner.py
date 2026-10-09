@@ -607,21 +607,14 @@ def normalize_mode(value: str) -> ModeName:
 
 
 def qrc_python_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> Path:
-    """Return the exact interpreter used by the selected product worker.
+    """R148: both normal and venv workers compile using the repo-root 3.14 .venv.
 
-    The normal workers invoke ``python`` and the venv workers invoke the
-    repository venv directly.  Resource compilation must follow that same
-    selected PySide toolchain rather than whichever ``pyside6-rcc`` happens to
-    be globally visible.
+    R147 redirected the normal build workers to that environment. The old
+    global-python fallback for QRC was a toolchain mismatch, not a feature.
     """
-    if mode == "venv":
-        return repo_root / ".venv" / "Scripts" / "python.exe"
-    selected = shutil.which("python")
-    if selected is None:
-        raise QrcRegenerationError(
-            "Normal worker Python is unavailable; cannot regenerate QRC resources"
-        )
-    return Path(selected)
+    if mode not in ("normal", "venv"):
+        raise QrcRegenerationError(f"Unknown build mode: {mode}")
+    return repo_root / ".venv" / "Scripts" / "python.exe"
 
 
 def _run_qrc_with_process_owner(
@@ -675,14 +668,14 @@ def ensure_selected_qrc_current(
 def prepare_qrc_environment(
     mode: ModeName, process_owner: BuildProcessOwner, repo_root: Path = REPO_ROOT,
 ) -> None:
-    """Use the existing venv bootstrap before the Foundry's resource prerequisite.
+    """Use the canonical venv bootstrap before either mode's resource prerequisite.
 
     Fresh checkouts and changed requirements must still get the worker's ordinary
     environment preparation. The explicit preparation-only switch returns before
     build-directory mutation or compilation; the same cancellation owner covers it.
     """
-    if mode != "venv":
-        return
+    if mode not in ("normal", "venv"):
+        raise QrcRegenerationError(f"Unknown build mode: {mode}")
     pwsh = _find_pwsh()
     if pwsh is None:
         raise QrcRegenerationError("PowerShell 7 is required to prepare the selected venv")
@@ -854,14 +847,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
 
     if not (repo_root / ".venv").is_dir():
-        if mode == "venv":
-            result.warnings.append(
-                "Repo-root .venv is absent; the venv workers will create it on first build"
-            )
-        else:
-            result.warnings.append(
-                "Diagnostic Runtime uses the repo-root venv worker and will create .venv if selected"
-            )
+        result.warnings.append(
+            "Repo-root Python 3.14 .venv is absent; both build modes prepare the same environment"
+        )
 
     required_assets = (
         repo_root / "SRPSS.ico",
@@ -1832,7 +1820,7 @@ class BuildRunnerApp:
         tk.Label(
             body,
             text=(
-                "Build Normal or repo-root-venv artifacts from one place. "
+                "Build Normal or repo-root-venv artifacts using one Python 3.14 toolchain. "
                 "Workers stay sequential so build products cannot collide. "
                 "Installer-only selections package the existing canonical release payload."
             ),

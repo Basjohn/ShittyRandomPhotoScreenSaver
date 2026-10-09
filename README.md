@@ -10,6 +10,10 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 ---
 
+## Developer Python toolchain
+
+Windows development and frozen builds use a single standard-GIL CPython 3.14 x64 repo-root `.venv`. See [`Docs/Guides/Python314_Cutover.md`](Docs/Guides/Python314_Cutover.md) for the destructive operator-authorized cutover and MSVC build requirements. The operator has accepted the source migration and focused Windows tests; frozen-product build and packaging acceptance remain operator-run.
+
 ## Features
 A look at the current features. Developer contracts and work-in-progress details live under `Docs/`.
 
@@ -27,7 +31,7 @@ A look at the current features. Developer contracts and work-in-progress details
   - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
   - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. Registry-driven 2D/3D modes include Bubble, Spectrum, Oscilloscope, Curve/Dev Curve, Sine, Extruded Spectrum, Shockwave Grid and the optional experimental Voxel Sphere, with curated presets and a user-owned Custom slot. The source registry owns the catalog, so documentation and tooling do not depend on a fixed mode count.
+  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. Registry-driven 2D/3D modes include Bubble, Spectrum, Oscilloscope, Curve/Dev Curve, Sine, Extruded Spectrum, Shockwave Grid and Voxel Sphere as a standard mode, with curated presets and a user-owned Custom slot. The source registry owns the catalog, so documentation and tooling do not depend on a fixed mode count.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
   - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
   - **FEEDS** Ten retained feed cards: four Custom RSS/Atom/JSON/h-feed slots plus six News categories, with List/Grid/Compact layouts, optional locally cached article artwork, clickable HTTP/S stories and validated magnet actions.

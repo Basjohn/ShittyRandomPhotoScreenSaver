@@ -93,8 +93,8 @@ def test_gmail_action_icon_paths_are_covered_by_asset_manifest():
 def test_nuitka_builds_include_binary_qrc_packs():
     """Normal and MC builds ship binary immutable-resource packs as data."""
     scripts = (
-        ROOT / "scripts" / "build_nuitka.ps1",
-        ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
     )
 
     for script in scripts:
@@ -107,8 +107,8 @@ def test_nuitka_builds_include_binary_qrc_packs():
 def test_nuitka_builds_include_ui_tabs_package_for_descriptor_loaded_sections():
     """Frozen builds must include dynamically imported WidgetsTab section modules."""
     scripts = (
-        ROOT / "scripts" / "build_nuitka.ps1",
-        ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
     )
 
     for script in scripts:
@@ -119,8 +119,8 @@ def test_nuitka_builds_include_ui_tabs_package_for_descriptor_loaded_sections():
 def test_builds_package_gmail_notification_sound_and_qt_multimedia():
     """Frozen builds need the default sound file and Qt multimedia plugins."""
     scripts = (
-        ROOT / "scripts" / "build_nuitka.ps1",
-        ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
     )
 
     for script in scripts:

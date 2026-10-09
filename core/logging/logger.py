@@ -2432,19 +2432,20 @@ def _install_closing_warning_handoff(
             return existing
         closing_handler = _ClosingWarningHandler(controller)
         root_logger = logging.getLogger()
-        logging._acquireLock()
-        try:
-            handlers = list(root_logger.handlers)
-            replaced = False
-            for index, handler in enumerate(handlers):
-                if handler is controller.ingress_handler:
-                    handlers[index] = closing_handler
-                    replaced = True
-            if not replaced:
-                handlers.append(closing_handler)
-            root_logger.handlers = handlers
-        finally:
-            logging._releaseLock()
+        # Python 3.13+ removed logging._acquireLock/_releaseLock. The SRPSS
+        # controller lock owns our handler topology; publish a fresh complete
+        # handler list in one reference assignment rather than doing a
+        # remove/add pair with a momentary gap in WARNING delivery. This
+        # targets the supported, GIL-enabled interpreter, not free threading.
+        handlers = list(root_logger.handlers)
+        replaced = False
+        for index, handler in enumerate(handlers):
+            if handler is controller.ingress_handler:
+                handlers[index] = closing_handler
+                replaced = True
+        if not replaced:
+            handlers.append(closing_handler)
+        root_logger.handlers = handlers
         _ACTIVE_CLOSING_WARNING_HANDLER = closing_handler
     try:
         controller.ingress_handler.close()
@@ -2461,18 +2462,16 @@ def _retire_closing_warning_handoff() -> None:
     with _LOGGING_CONTROLLER_LOCK:
         closing_handler = _ACTIVE_CLOSING_WARNING_HANDLER
         _ACTIVE_CLOSING_WARNING_HANDLER = None
+        if closing_handler is not None:
+            root_logger = logging.getLogger()
+            # One publication under the same owner lock as installation.
+            root_logger.handlers = [
+                handler
+                for handler in root_logger.handlers
+                if handler is not closing_handler
+            ]
     if closing_handler is None:
         return
-    root_logger = logging.getLogger()
-    logging._acquireLock()
-    try:
-        root_logger.handlers = [
-            handler
-            for handler in root_logger.handlers
-            if handler is not closing_handler
-        ]
-    finally:
-        logging._releaseLock()
     try:
         closing_handler.close()
     except Exception:
@@ -2793,26 +2792,20 @@ def setup_logging(
             exe_path_valid = exe_path
             base_dir = exe_path.parent
 
-    # Command-line flag overrides config file / environment fallback.
-    if perf:
-        _PERF_METRICS_ENABLED = True
-    if usage:
-        _USAGE_LOGGING_ENABLED = True
-    if viz:
-        _VIZ_LOGGING_ENABLED = True
-        _VIZ_DIAGNOSTICS_ENABLED = True
-    if geo:
-        _GEOMETRY_LOGGING_ENABLED = True
-    if settings_trace:
-        _SETTINGS_LOGGING_ENABLED = True
-    if lifecycle:
-        _LIFECYCLE_LOGGING_ENABLED = True
-    if cache_trace:
-        _CACHE_LOGGING_ENABLED = True
-    if steam_trace:
-        _STEAM_LOGGING_ENABLED = True
-    if feeds_trace:
-        _FEEDS_LOGGING_ENABLED = True
+    # A new logging generation is entirely defined by its CLI/profile flags.
+    # Previously these were only set True, so re-entering setup with e.g.
+    # --feeds absent left the retired sidecar logically enabled and discarded
+    # WARNING records explicitly destined for the central-log fallback.
+    _PERF_METRICS_ENABLED = bool(perf)
+    _USAGE_LOGGING_ENABLED = bool(usage or handle_attribution)
+    _VIZ_LOGGING_ENABLED = bool(viz)
+    _VIZ_DIAGNOSTICS_ENABLED = bool(viz)
+    _GEOMETRY_LOGGING_ENABLED = bool(geo)
+    _SETTINGS_LOGGING_ENABLED = bool(settings_trace)
+    _LIFECYCLE_LOGGING_ENABLED = bool(lifecycle)
+    _CACHE_LOGGING_ENABLED = bool(cache_trace)
+    _STEAM_LOGGING_ENABLED = bool(steam_trace)
+    _FEEDS_LOGGING_ENABLED = bool(feeds_trace)
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     if diagnostic_build:

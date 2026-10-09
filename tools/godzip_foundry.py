@@ -264,7 +264,7 @@ from godzip_foundry_theme import (  # noqa: E402
 )
 
 APP_TITLE = "SRPSS GODZIP Foundry"
-CHUNKED_SUITE_COMMAND = r"python tests\run_chunked.py --chunks 4 --log"
+CHUNKED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --chunks 4 --log"
 PERSONAL_GODZIP_DROP_DIR = Path(r"Z:\Torrents\Torrentfiles")
 
 ROLE_PAYLOAD = int(Qt.ItemDataRole.UserRole)
@@ -4402,7 +4402,11 @@ class FoundriesTab(QWidget):
                 GodzipError(f"Tool is missing: {script}"),
             )
             return
-        command = [sys.executable, str(script)]
+        python_exe = repo_venv_python(self.repo_root)
+        if not python_exe.is_file():
+            self.window.show_error("Cannot launch Foundry", GodzipError(f"Repo Python 3.14 venv is missing: {python_exe}"))
+            return
+        command = [str(python_exe), str(script)]
         if needs_repo:
             command.extend(["--repo", str(self.repo_root)])
         try:

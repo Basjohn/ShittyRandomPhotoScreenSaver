@@ -22,7 +22,9 @@ param(
     [string]$EntryPoint = "helpers/reddit_helper_worker.py",
     [string]$AppName = "SRPSS_RedditHelper",
     [switch]$Console,
-    [switch]$ReinstallVenvDeps
+    [switch]$ReinstallVenvDeps,
+    [ValidateSet("normal", "venv")]
+    [string]$BuildWorkspace = "venv"
 )
 
 Set-StrictMode -Version Latest
@@ -77,39 +79,7 @@ function Get-PythonVersionText {
     return (& $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null).Trim()
 }
 
-function Resolve-BasePython {
-    Write-Host "[BUILD-HELPER] Locating Python 3.11..."
-
-    $candidates = @()
-
-    try {
-        $py311 = (& py -3.11 -c "import sys; print(sys.executable)" 2>$null).Trim()
-        if ($py311) {
-            $candidates += $py311
-        }
-    } catch {}
-
-    try {
-        $pyDefault = (& python -c "import sys; print(sys.executable)" 2>$null).Trim()
-        if ($pyDefault) {
-            $candidates += $pyDefault
-        }
-    } catch {}
-
-    $candidates = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-
-    foreach ($candidate in $candidates) {
-        try {
-            $version = (& $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null).Trim()
-            if ($version -eq "3.11") {
-                Write-Host "[BUILD-HELPER] Using base Python: $candidate"
-                return $candidate
-            }
-        } catch {}
-    }
-
-    throw "Python 3.11 was not found. Install Python 3.11 x64, then rerun this script."
-}
+. (Join-Path $PSScriptRoot '..\python314_runtime.ps1')
 
 function Ensure-HelperVenv {
     param(
@@ -128,6 +98,14 @@ function Ensure-HelperVenv {
     $VenvPython = Join-Path $VenvDir 'Scripts\python.exe'
     $StampPath = Join-Path $VenvDir '.srpss_reddit_helper_deps_stamp.txt'
 
+    if (Test-Path -LiteralPath $VenvPython -PathType Leaf) {
+        $existingVersion = Get-PythonVersionText -PythonExe $VenvPython
+        if (-not $existingVersion.StartsWith("3.14.")) {
+            Write-Host "[BUILD-HELPER] Removing incompatible venv: $existingVersion"
+            Remove-Item -LiteralPath $VenvDir -Recurse -Force
+        }
+    }
+
     if (-not (Test-Path $VenvPython)) {
         $BasePython = Resolve-BasePython
 
@@ -145,8 +123,12 @@ function Ensure-HelperVenv {
     }
 
     $venvVersion = Get-PythonVersionText -PythonExe $VenvPython
-    if (-not $venvVersion.StartsWith("3.11.")) {
-        throw "Existing repo-root .venv is Python $venvVersion, but this build expects Python 3.11. Delete .venv and rerun."
+    $venvArchitecture = & $VenvPython -c "import sys, struct; print(int(struct.calcsize('P') == 8 and sys._is_gil_enabled()))"
+    if ($LASTEXITCODE -ne 0 -or $venvArchitecture.Trim() -ne '1') {
+        throw "SRPSS requires a 64-bit, GIL-enabled CPython 3.14 virtual environment."
+    }
+    if (-not $venvVersion.StartsWith("3.14.")) {
+        throw "Existing repo-root .venv is Python $venvVersion, but this build expects Python 3.14. Delete .venv and rerun."
     }
 
     Write-Host "[BUILD-HELPER] Using helper venv Python: $VenvPython"
@@ -233,7 +215,7 @@ $BuildDepsDir = Join-Path $Root 'build_deps'
 $VenvDir = Join-Path $Root '.venv'
 $RequirementsFile = Join-Path $BuildDepsDir 'requirements_helper.txt'
 $BuildRoot = Join-Path $Root 'build'
-$BuildDir = Join-Path $BuildRoot 'venv\reddit_helper'
+$BuildDir = Join-Path $BuildRoot ("{0}\reddit_helper" -f $BuildWorkspace)
 $StagingDistDir = Join-Path $BuildDir 'dist'
 $PyInstallerWorkDir = Join-Path $BuildDir 'work'
 $SpecDir = Join-Path $BuildDir 'spec'

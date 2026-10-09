@@ -80,9 +80,13 @@ def test_installer_declares_minimal_programdata_permissions_without_acl_reconcil
 
 
 def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
-    build_script = (REPO_ROOT / "scripts" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
+    # The top-level script delegates; installer layout is controlled by venv worker.
+    build_script = (REPO_ROOT / "scripts" / "venv" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
+    wrapper = (REPO_ROOT / "scripts" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
     installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
 
+    assert "venv\\build_reddit_helper.ps1" in wrapper
+    assert "& $worker" in wrapper
     assert '"--onedir"' in build_script
     assert '"--onefile"' not in build_script
     assert r"release\reddit_helper\*" in installer

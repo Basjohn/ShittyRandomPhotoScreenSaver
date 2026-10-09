@@ -36,6 +36,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_activation_id",
     "_np",
     "_bar_count",
+    "_analysis_only_audio",
     "_band_cache_key",
     "_band_log_idx",
     "_band_bins",
@@ -170,6 +171,9 @@ class SpotifyVisualizerAudioWorker(QObject):
     ) -> None:
         super().__init__(parent)
         self._bar_count = max(1, int(bar_count))
+        # Sole mode-configured DSP policy. Only Sphere currently opts in;
+        # every other mode retains its existing Spectrum bar computation.
+        self._analysis_only_audio = False
         self._buffer = buffer if buffer is not None else TripleBuffer[_AudioFrame]()
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
@@ -429,6 +433,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         if not isinstance(positions, list) or len(positions) < 2:
             raise ValueError("Spectrum notch positions must contain at least two entries")
         self._spectrum_notch_positions = positions
+
+    def set_analysis_only_audio(self, enabled: bool) -> None:
+        """Configure the Sphere analysis-only path at a mode activation boundary."""
+        self._analysis_only_audio = bool(enabled)
 
     def set_spectrum_shape_config(self, config) -> None:
         """Push one fully-resolved SpectrumShapeConfig to the DSP pipeline."""

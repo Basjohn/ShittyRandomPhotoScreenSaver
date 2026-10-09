@@ -190,7 +190,9 @@ Supported formats are listed above. Deliberately not built, each with the condit
 - WebSub: push notification, not a format; the pull cadence does not need it.
 - Microformats1 hAtom: common theme markup rather than a feed on sites that advertise RSS anyway (see supported formats above).
 
-## Physical acceptance (open)
+## Optional operator-triggered physical review
+
+Implemented FEEDS work is operator-accepted; the checks below are reference scenarios, not an automatic release blocker. Reopen only on a reported defect or explicit new request.
 
 - [ ] Two or more Custom slots live on the saver at once, first with different endpoints and then the same endpoint in
   two slots; Settings round-trips every slot.

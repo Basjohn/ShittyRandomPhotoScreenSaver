@@ -5,7 +5,7 @@
 # winrt, numpy, PIL, sounddevice, pycaw and pytest, and the worker's only PySide6
 # use is a lazy URL-open fallback (webbrowser is primary). These pins therefore
 # cover only the PyInstaller build toolchain, installed into the shared repo-root
-# .venv. Captured from the working Python 3.11.9 build environment.
+# .venv. Pinned for the canonical Python 3.14 build environment.
 
 pyinstaller==6.22.2
 pyinstaller-hooks-contrib==2026.7

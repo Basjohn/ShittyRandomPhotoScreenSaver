@@ -47,8 +47,8 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
   SDF route or jump directly to full 3D SPH without measured justification.
 - **Holographic depth slices** — layered photo/spectrum planes only if the result reads as actual depth rather than cards.
 - **Procedural storm scene** — lightning, rain, smoke/fog and reflected light after each primitive is independently cheap.
-- **Usu Moonscape Visualizer** — distant character/scene vertical. The concept and asset gates live in
-  `Docs/Future_Work/Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`; it must consume the current shared Scene3D quality,
+- **Usu Moonscape Visualizer** — distant character/scene vertical. An old concept/art snapshot survives at
+  `Docs/Future_Work/Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md` for creative intent only; its stages and historic architecture are **not live admission authority**. A new implementation must consume the current shared Scene3D quality,
   resource, lifecycle and Visualizer contracts rather than inventing private infrastructure.
 
 ## Rejected Extruded cast shadows (deferred)

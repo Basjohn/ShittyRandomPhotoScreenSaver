@@ -82,6 +82,10 @@ For a meaningful ownership change, inspect at least:
 
 For Settings theme/backdrop ownership changes also inspect `Docs/Architecture/Settings_Theme_Architecture.md`, Theme Foundry and the owning theme/native-backdrop source together.
 
+## Build and test execution ownership
+
+An archive/documentation agent may run read-only audits and bounded relevant focused tests. **Never invoke frozen product compilation, Build Runner, Nuitka, installer packaging or trial builds:** the operator runs those costly gates and supplies reports/logs. Do not automatically request another four-chunk suite; provide only affected focused tests unless the operator chooses the expensive full gate. Instructions copied into Godzip Foundry RUN SCRIPT must be one line and semicolon-separated.
+
 ## Test documentation
 
 `Docs/TestSuite.md` is inventory/status authority, not sequence authority. Keep row-level ownership truthful and avoid hand-maintained aggregate counts unless generated from the exact current tree for a durable reason.

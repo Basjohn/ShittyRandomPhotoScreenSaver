@@ -47,8 +47,7 @@ Descriptor metadata selects only its eight consumed technical fields; the comple
 knobs from canonical engine defaults, never mutable Spectrum settings. The selected notch record owns only the first and
 penultimate interior fractions consumed by the worker, with no unused Spectrum shaper nodes. Spectrum shape/ghost
 presentation controls are not Sphere controls. Existing audio-contract tests and the frozen
-promotion golden protect event/response vocabulary; visual control usability and standard-mode promotion still require the
-operator acceptance gate.
+promotion golden protect event/response vocabulary; visual control usability and standard-mode promotion have now received operator physical acceptance (2026-10-09).
 
 ### Shared frame upload and retirement
 
@@ -78,7 +77,7 @@ background preparation or cleanup poller exists.
 
 The **boundary mechanism** remains valuable: descriptor-driven lazy Settings/runtime/renderer/capture resolution, independent enable/disable/dormancy, a private persisted prefix where behaviour is mode-specific, explicit capability metadata and normal renderer retirement. Sphere itself is a legacy exception because it was built before shared Scene3D. **Future experimental modes must use the canonical shared low-level Scene3D/compute/resource/material/quality substrate from their first implementation.** Experimental status may keep them default-off and behaviorally private; it must not create a private GPU engine that later requires a second "promotion" job.
 
-Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. The active substrate promotion does not authorize extracting or refactoring those behavioural owners into a shared experimental framework. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
+Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. The completed substrate promotion does not authorize extracting or refactoring those behavioural owners into a shared experimental framework. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
 
 ## Current Settings hygiene
 
@@ -106,9 +105,9 @@ Additional presentation controls expose existing renderer constants rather than 
 
 The current Sphere drop-shadow implementation is a **projected voxel silhouette**, not the old circular proxy and not voxel-to-voxel lighting. Shadow and hero compile the same Sphere vertex shader and consume the same rigid rotation, fragmentation, size pulse, tracer-local turns, perspective and intake/outtake cohort transforms. The shadow fragment contributes flat inherited shadow colour only. Sphere-local **Shadow Opacity / Softness / Distance / Size** controls parameterize this pass; softness may add one expanded instanced feather layer, while disabled/zero-opacity shadow adds no second shadow clear/draw. Do not generalize this into shared 3D shadow infrastructure unless another concrete consumer proves the same contract.
 
-## Promotion golden gate — active
+## Promotion replay reference and future-change preservation gate
 
-Before any architectural promotion into shared/permanent ownership, capture both **Glass Current** and **Voxel Bloom** with:
+For future shared-substrate changes, retain the *test-owned* replay and visual preservation evidence for **Glass Current** and **Voxel Bloom**, rather than freezing the current user-authored presets, with:
 
 - their exact persisted Sphere snapshots, including presentation baselines such as Edge Weight `1.0`, Voxel Size Variation `0.35`, the accepted Tracer Color and Depth Shading disabled unless explicitly re-authored;
 - the exact resolved hidden technical profile/settings that reproduce today's behaviour;
@@ -140,7 +139,7 @@ Two interleaved runs measured CPU submit median `0.490–0.504 ms` before and `0
 run measured `185` versus `78` GL calls. Whole-host GPU median stayed around `0.025 ms`, but its p90 rose from about
 `0.026 ms` to `0.21–0.33 ms`. Draw-only diagnostic queries measured voxel draw p90 `0.0102 ms` before and `0.0133 ms`
 after: the larger whole-host tail includes submission/stream intervals rather than a corresponding increase in voxel
-draw time. This is scoped offscreen evidence; loaded-desktop cadence/GPU-tail acceptance remains open. No behavioural
+draw time. This is scoped offscreen evidence; loaded-desktop p90 comparison remains historical scoped evidence; source behavior and physical mode acceptance are complete, and only new concrete symptoms reopen this audit. No behavioural
 or visual golden was rewritten for this migration.
 
 Presets are authored content and never tested against (operator 2026-10-04). Every case is wholly test-owned:
@@ -164,35 +163,34 @@ before/after sheets to `logs/sphere_visual_review/` for review by eye. `--write`
 using the same frozen test-owned inputs. `--write-visual` is optional, manual review evidence, not a required
 step to repair CI after a legitimate renderer change. Neither operation reads curated preset values.
 
-After the candidate promotion, replay identical evidence. Sphere's behavioural golden is a **reference, not a lock** (operator 2026-10-04): its current reaction numbers are known to be poor and the migration is expected to retune them (the ramp, `Current_Plan.md` S19). Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the formerly hidden RAW resolved values are preserved behavioural input at migration.
+For any future shared-resource change, replay the same test-owned evidence. Sphere's behavioural golden is a **historical reference, not a lock**: the 2026-10-04 replay identified under-reactive and overactive bands, after which the mode-owned passage ramp was retuned and operator-accepted. New work must compare against test-owned preservation inputs, not today's mutable curated preset contents. Promotion is rejected if event ownership, the response vocabulary, voxel/cohort identity or source freshness are lost, if loud passages or big hits react less strongly, if a behavioural difference is not measured against the golden and intended, or if the recognisable stepped-voxel/preset identity is lost, **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Pixel-for-pixel visual parity is not the objective: improved antialiasing, lighting, material/depth readability, shadows, reflection/refraction or other presentation quality is welcome when it is demonstrably better and preserves musical response, silhouette/voxel identity and preset intent. Technical controls require particular caution because the formerly hidden RAW resolved values are preserved behavioural input at migration.
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 
 This gate removes competing low-level 3D architectures. Promotion
 means moving Sphere onto the shared `rendering/quick/scene3d/` GPU/resource/material/post/compute substrate while
 preserving the complete behavioural golden above. It does **not** authorise retuning/renaming Sphere behavioural state, replacing its logical runtime, or turning Sphere
-into a base class. `Current_Plan.md` §7 **does** authorise replacing the hidden Spectrum-profile borrow with deliberate
-Sphere-owned technical-control resolution after the current values are captured as the migration golden.
+into a base class. R150 already replaced Sphere's old hidden Spectrum-profile projection with a Sphere-owned **analysis-only** policy, retaining required acoustic inputs while skipping the Spectrum visual shaper; Shockwave intentionally retains its shape output. Do not reopen that completed migration or reseed tests from curated presets.
 
 ## Current shared-boundary rule
 
-Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. The low-level GPU/resource/material/post/compute seams and consumed authoring controls named by `Current_Plan.md` §7 are in the active promotion; behavioural extraction requires separate approval and the golden gate above.
+Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. The low-level shared Scene3D substrate is the accepted presentation path; further behavioural extraction requires separate approval and a test-owned preservation gate, not another migration programme.
 
-## Open operator gate: energy-floor controls
+## Accepted energy-floor control boundaries
 
 The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection.
 
-- [ ] Native Windows Settings/preset run proves fragment and particle floors change independently.
-- [ ] Active-music observation confirms the two floors affect only their intended admission paths.
-- [ ] Musical reward: near-silence and quiet intros stay calm (no full fragmentation or particle bursts), a pause's
+- Native Settings/preset controls preserve independent fragment and particle energy floors.
+- Each floor affects only its own event admission path.
+- Near-silence and quiet intros stay calm (no full fragmentation or particle bursts); a pause's
   first quiet frames throw nothing, loud passages and drops react as before.
-- [ ] Reset restores the authored defaults.
-- [ ] Custom Save/reopen preserves user-authored values.
+- Reset restores the canonical authored defaults.
+- Custom Save/reopen preserves user-authored values.
 
 Do not retune authored values on the operator's behalf.
 
 ## Shared camera and drag-release inertia (current)
 
-The mode's shared Scene3D view (turn and tilt) comes from presentation pose, not the voxel shell's continuous audio/base spin. Alt+left dragging steps that view directly. Release samples the last admitted drag velocity, adds one finite cubic ease-out tail on the **existing** logical capture clock, and writes the final camera pose once to the canonical mode-owned view-settings authority. A new drag, held-key motion or preset rebase cancels the stale tail without a snapback or extra resource owner. The basic Sphere orbit was physically accepted; the new inertia tail still needs Windows/dual-display assessment. See `Current_Plan.md` and `tests/test_visualizer_view_orbit.py`.
+The mode's shared Scene3D view (turn and tilt) comes from presentation pose, not the voxel shell's continuous audio/base spin. Alt+left dragging steps that view directly. Release samples the last admitted drag velocity, adds one finite cubic ease-out tail on the **existing** logical capture clock, and writes the final camera pose once to the canonical mode-owned view-settings authority. A new drag, held-key motion or preset rebase cancels the stale tail without a snapback or extra resource owner. Sphere orbit and inertia are operator-accepted; reopen only on a concrete drag or momentum regression. See `Current_Plan.md` and `tests/test_visualizer_view_orbit.py`.
 
 Extruded shadow geometry is unrelated: that rejected optional cast pass is centrally disabled; do not reenable it as part of Sphere/parity work.
