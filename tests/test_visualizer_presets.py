@@ -113,6 +113,30 @@ def test_get_visualizer_presets_dir_uses_shared_programdata_tree_for_frozen_buil
     assert vp.get_visualizer_presets_dir("spectrum") == shared_root / "spectrum"
 
 
+def test_diagnostic_frozen_curated_and_override_roots_share_programdata(tmp_path, monkeypatch):
+    from core import build_profile
+
+    bundled_root = tmp_path / "LocalAppData" / "SRPSS" / "diagnostic-onefile" / "presets" / "visualizer_modes"
+    bundled_overrides = bundled_root.parent / "visualizer_mode_overrides"
+    shared_base = tmp_path / "ProgramData" / "SRPSS" / "presets"
+    shared_root = shared_base / "visualizer_modes"
+    (shared_root / "sphere").mkdir(parents=True)
+    (bundled_root / "sphere").mkdir(parents=True)
+    (bundled_root / "sphere" / "preset_1_stale.json").write_text('{"preset_index": 0}')
+
+    monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: True)
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+    monkeypatch.setattr(vp, "_bundled_snapshot_overrides_root", lambda: bundled_overrides)
+    monkeypatch.setattr(vp, "_shared_presets_base_dir", lambda: shared_base)
+
+    assert vp.get_visualizer_presets_dir("sphere") == shared_root / "sphere"
+    assert vp._snapshot_presets_root() == shared_base / "visualizer_mode_overrides"
+    # Merely resolving the active location must not import old diagnostic state.
+    assert not (shared_root / "sphere" / "preset_1_stale.json").exists()
+
+
 def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_copy(tmp_path, monkeypatch):
     bundled_root = tmp_path / "bundled" / "presets" / "visualizer_modes"
     shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"

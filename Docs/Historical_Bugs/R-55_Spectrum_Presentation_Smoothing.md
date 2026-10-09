@@ -1,5 +1,7 @@
 # R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-08-02  
 Status: Resolved by exact revert
 

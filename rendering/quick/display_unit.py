@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
+import weakref
 
 from PySide6.QtCore import QObject, QSize
 from PySide6.QtGui import QScreen
@@ -245,7 +246,7 @@ class QuickDisplayUnit:
         """Dispatch one admitted transport action to this unit's Media owner."""
 
         normalized = str(key or "").strip().lower()
-        if normalized not in {"play", "prev", "next"}:
+        if normalized not in {"play", "previous", "next"}:
             raise ValueError(f"unsupported Media transport action: {key!r}")
         presentation = self._presenter.presentation_for_widget_id("media")
         request = getattr(presentation, "request_transport", None)
@@ -426,9 +427,20 @@ class QuickDisplayUnit:
         self._retired = True
         self._presenter.retire()
         runtime = self._runtime
-        runtime.retirement_completed.connect(
-            self._release_terminal_generation_references
-        )
+        # PySide retains Python callables connected to Qt signals. A bound
+        # method here keeps this Python-only display owner alive even after
+        # the runtime QObject and its window have been destroyed. Destruction
+        # barriers track the *owner*, not merely the QObject, so this caused
+        # real monitor-topology and application-exit timeouts. Capture only a
+        # weak reference; the manager owns the unit until this signal fires.
+        owner_ref = weakref.ref(self)
+
+        def release_retired_owner(generation: int) -> None:
+            owner = owner_ref()
+            if owner is not None:
+                owner._release_terminal_generation_references(generation)
+
+        runtime.retirement_completed.connect(release_retired_owner)
         runtime.retirement_completed.connect(runtime.deleteLater)
         closed = runtime.close_runtime()
         self._ctrl_coordinator.forget(self._ctrl_key)

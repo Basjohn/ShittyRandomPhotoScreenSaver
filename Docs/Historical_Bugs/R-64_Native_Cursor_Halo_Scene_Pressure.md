@@ -1,5 +1,7 @@
 # R-64 — Retained Cursor Halo Turned Passive Pointer Motion Into Scene Pressure
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-01
 Status: Solved (performance architecture); visual cursor/Halo parity carried separately
 

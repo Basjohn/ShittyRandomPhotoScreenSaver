@@ -1,5 +1,7 @@
 # R-134 through R-145 | Dual-display collapse recovered after Windows restart
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-10-09  
 Status: **PHYSICALLY RECOVERED / ROOT CAUSE UNKNOWN**; closed as an active performance blocker by operator report, not as a proven application fix.
 

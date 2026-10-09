@@ -17,6 +17,10 @@ Two original Sphere goldens remain (two additional Rainbow variants are separate
 
 The historical reference contains test-owned frozen settings. `sphere_golden.py` always replays those same settings, including for `--write`, and never seeds from curated slots. The curated files are operator-authored content, not a test oracle. The active substrate promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
 
+## Consolidated Sphere event/cohort investigation
+
+The five September 10 incidents about silent intakes, density, velocity and corner continuity are preserved together in `Docs/Historical_Bugs/Sphere_2026-09-10_Acoustic_Admission_And_Cohort_Motion_Investigation.md`. The lasting distinction is **source active ≠ live acoustic energy ≠ transient confidence ≠ particle population ≠ per-cohort speed**. A new cohort needs current pre-AGC energy and a qualified event, not a stale playing flag or held gate. Shared event confidence may saturate at 1.0 and cannot alone set maximum velocity; local onset contrast/flux accents and stable per-cohort launch state own travel. Passage loudness is not population authority. Each quadrant keeps a stable voxel-seed rank; dominance affects only the feathered fringe, without re-ranking the entire shell. New events must not teleport or accelerate existing cohorts. Specific historical threshold/population percentages are evidence, not immutable operator-curated preset defaults.
+
 ## Isolation / ownership contract
 
 ### Consumed controls and source seams

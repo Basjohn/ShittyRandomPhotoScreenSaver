@@ -1,5 +1,7 @@
 # R-111 | Shared freeform-3D layout profile aliased incompatible mode poses
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** ARCHITECTURAL REPAIR IN CODE / REGRESSION-PROTECTED / PHYSICAL ACCEPTANCE PENDING
 
 ## Trigger

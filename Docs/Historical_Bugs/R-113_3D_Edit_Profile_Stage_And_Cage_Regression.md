@@ -1,5 +1,7 @@
 # R-113 | Independent 3D CUSTOM profiles exposed Edit stage / mesh / cage and mode-change regressions
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** Code repair staged, Windows grouped test and physical acceptance pending.
 
 ## Evidence

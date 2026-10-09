@@ -17,6 +17,50 @@ def test_frame_trace_requires_explicit_flag() -> None:
     assert frame_trace.frame_trace_requested(["--frame-trace"]) is True
 
 
+def test_frozen_windows_cli_recovery_admits_only_explicit_native_flag(tmp_path: Path) -> None:
+    """A frozen wrapper must not silently swallow the OS's trace request."""
+    args = ("/s", "--usage")
+    native = ("/s", "--frame-trace", "--gui-stall-stacks")
+    admission = frame_trace.frame_trace_admission(args, native)
+    assert admission == {
+        "python_requested": False,
+        "native_requested": True,
+        "stack_requested": True,
+    }
+    # Testing without the heavy GUI stall sampler: the explicit trace token
+    # alone must recover through the native argument surface.
+    sink = frame_trace.start_frame_trace(
+        tmp_path, args, native_argv=("/s", "--frame-trace")
+    )
+    assert sink is not None
+    try:
+        assert sink.path == tmp_path / "screensaver_frame_trace.bin"
+        assert sink.path.is_file()
+        assert sink.record(FrameTraceEvent.LOGICAL_PUBLISH, revision=17)
+    finally:
+        assert frame_trace.close_frame_trace() is not None
+    assert sink.path.stat().st_size > 16
+
+
+def test_no_native_or_python_trace_flag_never_creates_writer(tmp_path: Path) -> None:
+    assert frame_trace.frame_trace_admission(("/s",), ()) == {
+        "python_requested": False,
+        "native_requested": False,
+        "stack_requested": False,
+    }
+    assert frame_trace.start_frame_trace(tmp_path, ("/s",), native_argv=()) is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_frame_trace_bootstrap_writes_admission_receipt() -> None:
+    root = Path(__file__).resolve().parents[1]
+    main_source = (root / "main.py").read_text(encoding="utf-8")
+    assert '"[FRAME_TRACE] admission python_requested=%s native_requested=%s "' in main_source
+    assert '"active=%s stack_requested=%s log_dir=%s"' in main_source
+    assert 'windows_native_command_line_args()' in main_source
+    assert 'native_argv=_trace_native_argv' in main_source
+
+
 def test_binary_sink_writes_fixed_records_without_standard_logging(tmp_path: Path) -> None:
     path = tmp_path / "trace.bin"
     sink = FrameTraceSink(path, capacity=512)

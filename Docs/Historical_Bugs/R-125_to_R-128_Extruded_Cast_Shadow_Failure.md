@@ -1,5 +1,7 @@
 # Rejected Extruded cast shadow projections (R125–R128)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Resolution:** cast shadow is unavailable. One canonical availability flag excludes the GL pass and Edit/target reach even when historical user/curated values request it. Cast Shadow / Reach / Strength stay visible but disabled. General ordinary-widget shadows and Extruded floor reflections remain active. Never modify authored response or Spectrum Organs to compensate for rejected cast shapes.
 
 **Failure mechanism and negative evidence:**

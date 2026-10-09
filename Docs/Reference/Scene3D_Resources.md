@@ -4,6 +4,10 @@ The retained Quick transition host remains the render owner. `rendering/quick/sc
 lazy resources; it does not create a clock, scheduler, global texture cache or alternate renderer. All admitted
 operations require the validated OpenGL 4.6 context. PyOpenGL DSA creation calls use explicit output arrays.
 
+## Rejected Extruded cast-shadow receiver and Scene3D camera (R-120/R-121 consolidation)
+
+Early E8 receiver attempts produced triangular near-footprint casts or a corner-only sliver even at long distance. A translated top cap is **not** the requested cast: any future operator-approved design must sweep from the bar base footprint toward the shifted upper silhouette, stay visible without gigantic side smear, and respect screen-edge clipping and overflow without shrinking the authored Spectrum geometry. These experiments remain rejected/disabled; see `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md` for the full negative history. Sphere's turn/tilt/box and Edit cage share the live Scene3D pose authority, not preset-managed camera copies. The E8-era Python 3.13 sequencing and two-original WebP paths were superseded and are **not** current product instructions.
+
 ## Static meshes and per-draw image bindings
 
 `MeshResources` owns named programs, uniform locations and static interleaved meshes. A mesh's VAO and VBO use DSA

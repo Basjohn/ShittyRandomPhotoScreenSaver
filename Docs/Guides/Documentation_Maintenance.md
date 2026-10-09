@@ -2,6 +2,10 @@
 
 SRPSS documentation is organized by **current role**, not by the phase/checkpoint that created it. The repository should help a fresh agent find the present owner quickly; source control and Historical Bugs preserve archaeology.
 
+## Historical archive admission and indexing
+
+`Docs/Historical_Bugs.md` is the **only** Historical Bugs index/status authority. Do not create a folder-local README, competing catalogue, incident-per-test diary, or second historical status table. A historical report is justified by difficult multi-step investigation, significant architecture/resource/timing/performance learning, or genuinely elusive hardware evidence, **not** by an ordinary fix having existed. Short resolved routing, schema, stylesheet and stale-test mistakes belong in their nearest living guide/test. A one-line fix may still be historically valuable if discovering it required extensive forensic work. Keep original evidence in retained histories, but never take their deprecated QWidget/GL details as current source authority. Mark exceptionally protected incidents with `STRONG RETENTION VALUE DOCUMENT` near the beginning.
+
 ## Roles
 
 | Location | Role |

@@ -4,6 +4,10 @@ Scope: **current ordinary-widget CUSTOM child editor contract**. Current ordinar
 
 This feature extends the existing CUSTOM presentation/edit system into a **role-declared visual editor** for ordinary widgets. The role catalogue may grow aggressively as useful edit affordances are identified; the boundary is architectural, not a feature-count ceiling. Every adjustable element/group still enters through the shared descriptor/session/persistence owner rather than exposing arbitrary QML geometry or creating a second layout, sizing, persistence, or runtime owner.
 
+## Consolidated CUSTOM geometry safeguards
+
+Ordinary-widget `CUSTOM` resize persists one absolute scale relative to the preferred/unscaled family size, **not** the last reopened, already-resized rectangle. The shared floor is 40% unless a tighter, family-owned content minimum refuses shrinking earlier. A new edit/reopen cycle may not compound shrink. Gmail's model `contentWidth` is already the outer preferred width, while its content-derived height requires the shell inset for preferred outer height; don't shrink its shell beneath retained rows. Clock stores digital and analogue CUSTOM geometry separately, while per-display face override and global `display_mode` remain distinct; a layout-slot restore must replay the matching face and rectangle together. Visualizer is excluded from the ordinary child-resize contract.
+
 ## 1. Ownership model
 
 ```text

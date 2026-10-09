@@ -883,11 +883,35 @@ def main(*, entrypoint: str = "main"):
     # Deep publication->Quick->draw timing is intentionally separate from the
     # normal logging bootstrap. Only the explicit CLI flag creates its binary
     # ring/writer; diagnostic-all must never admit it implicitly.
-    from core.performance.frame_trace import start_frame_trace
+    from core.performance.frame_trace import (
+        frame_trace_admission,
+        start_frame_trace,
+        windows_native_command_line_args,
+    )
 
-    frame_trace = start_frame_trace(get_log_dir(), sys.argv[1:])
+    # An OS-launched frozen SCR may have two observable argument surfaces.
+    # Check both once at startup. Never turn tracing on automatically merely
+    # because this is the Diagnostic build, and never log arbitrary arguments.
+    _trace_native_argv = windows_native_command_line_args()
+    _trace_admission = frame_trace_admission(sys.argv[1:], _trace_native_argv)
+    frame_trace = start_frame_trace(
+        get_log_dir(), sys.argv[1:], native_argv=_trace_native_argv,
+    )
+    if diagnostic_build or frame_trace is not None:
+        logger.info(
+            "[FRAME_TRACE] admission python_requested=%s native_requested=%s "
+            "active=%s stack_requested=%s log_dir=%s",
+            _trace_admission["python_requested"],
+            _trace_admission["native_requested"],
+            frame_trace is not None,
+            _trace_admission["stack_requested"],
+            get_log_dir(),
+        )
     if frame_trace is not None:
-        logger.info("[FRAME_TRACE] explicit binary trace active path=%s", frame_trace.path)
+        logger.info(
+            "[FRAME_TRACE] binary path=%s writer_alive=%s",
+            frame_trace.path, frame_trace.describe()["writer_alive"],
+        )
     # Route Qt/QML engine messages (binding TypeErrors, missing properties,
     # shader/component errors) into a bounded, rotating screensaver_qml.log.
     # These emit through Qt's own stderr channel, invisible to the Python log

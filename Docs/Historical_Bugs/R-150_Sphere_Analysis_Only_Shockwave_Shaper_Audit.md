@@ -1,5 +1,7 @@
 # R-150 | Sphere analysis-only DSP, Shockwave shaping audit
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** Source correction landed; Windows tests and a short Sphere/ Shockwave/ Spectrum physical acceptance still pending. 2026-10-09. Baseline `8448717216`, supersedes R149 as a full dirty working tree.
 
 ## Actual defect

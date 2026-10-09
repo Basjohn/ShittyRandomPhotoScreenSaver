@@ -1,5 +1,7 @@
 # R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-01
 Status: Solved (CUSTOM presentation-authority admission); later Bubble extreme-viewport scaling weakness is a separate presentation contract
 

@@ -1,5 +1,7 @@
 # R-49 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-07-28  
 Status: Resolved
 

@@ -1,5 +1,7 @@
 # R-62 — Transition-Scoped Presentation Deferral Degraded Bubble
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-08-17
 Status: Rejected on fidelity; reverted to the approved anchor
 

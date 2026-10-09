@@ -242,6 +242,44 @@ def test_unit_terminal_retirement_breaks_frozen_generation_owner_edges(
 
 
 @pytest.mark.qt
+def test_retirement_signal_does_not_keep_python_unit_alive_with_runtime_wrapper_held(
+    qt_app, qtbot
+) -> None:
+    """Qt's retained signal callable must not pin a retired Python owner.
+
+    Reproduces the overnight lifecycle-barrier report, which saw only a
+    ``QuickDisplayUnit._release_terminal_generation_references`` bound method
+    holding each owner after its QObject roots had drained. Holding the runtime
+    wrapper after its Qt death is deliberate; no cyclic collection is allowed.
+    """
+    import gc
+    import weakref
+
+    unit, factory = _make_unit(qt_app, 101, SharedCtrlCoordinator())
+    runtime = unit.runtime
+    window = runtime.window
+    unit_ref = weakref.ref(unit)
+    froze = False
+    try:
+        gc.freeze()
+        froze = True
+        assert unit.retire() is True
+        qtbot.waitUntil(
+            lambda: not is_valid_qobject(window) and not is_valid_qobject(runtime),
+            timeout=1000,
+        )
+        assert unit._runtime is None
+        assert unit._presenter is None
+        del unit
+        assert unit_ref() is None  # no gc.collect(), even while runtime is held
+    finally:
+        if froze:
+            gc.unfreeze()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_unit_visualizer_owner_is_single_and_blocks_runtime_retirement(qt_app) -> None:
     class _VisualizerOwner:
         def __init__(self) -> None:
@@ -320,7 +358,7 @@ def test_unit_routes_media_actions_to_its_retained_presentation(
     )
     try:
         assert unit.request_media_transport("play") is True
-        assert unit.request_media_transport("prev") is True
+        assert unit.request_media_transport("previous") is True
         assert unit.request_media_transport("next") is True
         assert unit.request_app_volume_step(-1) is True
         assert unit.request_system_volume_step(0.05) == pytest.approx(0.65)
@@ -329,7 +367,7 @@ def test_unit_routes_media_actions_to_its_retained_presentation(
             unit.request_media_transport("stop")
         assert media.calls == [
             ("transport", "play"),
-            ("transport", "prev"),
+            ("transport", "previous"),
             ("transport", "next"),
             ("app_volume", -1),
             ("system_volume", 0.05),

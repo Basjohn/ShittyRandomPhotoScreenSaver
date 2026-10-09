@@ -1,5 +1,7 @@
 # R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Status: **[x] CLOSED — CHK26 / `a0bf70932c` IS THE OPERATOR-ACCEPTED GOLDEN PERFORMANCE/FRESHNESS BASELINE**
 
 The early sections below preserve the historical regression, the investigation branches that followed, and former closure gates. They are evidence and negative controls, not current work sequencing. R-87 is closed: CHK26 removed the last proven low-risk local waste, later CHK27-CHK29 sidecar attribution showed the large remaining scheduler-shaped intervals are Qt frame/render-phase ownership or small distributed Bubble/driver costs, and the operator accepted CHK26 as neutral-or-better. Performance work is now symptom-driven only.

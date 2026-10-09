@@ -1,5 +1,7 @@
 # R-118 | 3D Edit geometry and activation lifecycle audit
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Scope:** complete source-level review of the G17–G21 implementation and adjacent runtime contracts after the R-116 green 757-test gate exposed a physical Extruded → Shockwave hidden-target failure and Edit-exit corruption. This is NOT a product acceptance certificate; real Windows Qt 6.11 / GL 4.6 physical tests remain required.
 
 **Baseline:** superseding R-117 Godzip, anchored to `8448717216`. Do not migrate to another repo or infer a missing mode from an unrelated prior Godzip. Operator's authoritative `presets/visualizer_modes/spectrum/preset_1_organs.json` is copied unchanged.

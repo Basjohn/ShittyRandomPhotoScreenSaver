@@ -1,5 +1,7 @@
 # R-80 — ABC event-loop rolling history contaminated named steady windows
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Date:** 2026-09-12  
 **Status:** **FIXED / LIVE-VALIDATED / PERFORMANCE INVESTIGATION CLOSED**
 

@@ -68,7 +68,7 @@ Do not implement hidden per-property named-theme override inheritance on top of 
 - **Reset All Colours to Theme** — explicit operator action that normalizes ordinary family colour/card-alpha compatibility overrides to canonical Inherit values; never runs at startup and never touches Visualizer-authored colours;
 - **Card Border Width** — global card geometry style, outside Widget Theme schema.
 
-There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; the durable failed-method record is `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md`.
+There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; the durable failed-method record is `Docs/Contracts.md`.
 
 ## Theme-file layout
 

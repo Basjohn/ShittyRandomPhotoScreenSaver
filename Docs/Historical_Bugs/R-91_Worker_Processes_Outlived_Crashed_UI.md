@@ -1,5 +1,7 @@
 # R-91 — Worker Processes Outlived A Crashed UI Process
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-23  
 Status: SOLVED — `e42fb948`; validated on a frozen Nuitka build 2026-09-24
 

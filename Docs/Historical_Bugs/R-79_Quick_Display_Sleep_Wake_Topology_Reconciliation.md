@@ -1,5 +1,7 @@
 # R-79 — 2026-09-12 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 ## Classification
 
 - [ ] COMPLETELY FUCKED

@@ -1,5 +1,7 @@
 # R-110 | Refresh animator turned network latency into an unbounded Qt Quick render storm
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** SOLVED / REGRESSION-PROTECTED / PERF-PHYSICALLY ACCEPTED 2026-10-08
 
 ## Trigger

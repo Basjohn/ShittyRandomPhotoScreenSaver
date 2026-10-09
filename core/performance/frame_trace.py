@@ -14,6 +14,7 @@ from __future__ import annotations
 from enum import IntEnum
 from pathlib import Path
 import atexit
+import logging
 import os
 import struct
 import threading
@@ -401,6 +402,10 @@ class FrameTraceSink:
                 with self._lock:
                     self._write_errors += 1
                     self._closed = True
+                logging.getLogger(__name__).warning(
+                    "[FRAME_TRACE] writer stopped: Windows priority demotion "
+                    "failed (%s); path=%s", mode, self._path,
+                )
                 return
 
             while True:
@@ -416,10 +421,14 @@ class FrameTraceSink:
                         wrote_any = written_records > 0
                         with self._lock:
                             self._written += written_records
-                    except Exception:
+                    except Exception as exc:
                         with self._lock:
                             self._write_errors += 1
                             self._closed = True
+                        logging.getLogger(__name__).warning(
+                            "[FRAME_TRACE] writer stopped: %s while writing %s",
+                            type(exc).__name__, self._path,
+                        )
                         return
 
                 # The trace exists to survive a bad/hung run. Flush each bounded
@@ -465,16 +474,73 @@ def frame_trace_requested(argv: list[str] | tuple[str, ...]) -> bool:
     return any(str(arg).strip().lower() == "--frame-trace" for arg in argv)
 
 
+def windows_native_command_line_args() -> tuple[str, ...]:
+    """Read exact Windows process arguments without relying on ``sys.argv``.
+
+    This is an independent admission witness for frozen ``.scr``/onefile
+    launches. Windows may launch through a screensaver host or wrapper; if
+    Nuitka's Python argument list differs from the actual OS command line,
+    an explicitly supplied trace switch must not silently disappear. Neither
+    source can enable tracing unless that source actually contains the flag.
+    """
+    if os.name != "nt":
+        return ()
+    try:
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCommandLineW.argtypes = []
+        kernel32.GetCommandLineW.restype = ctypes.c_wchar_p
+        raw = kernel32.GetCommandLineW()
+        if not raw:
+            return ()
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        shell32.CommandLineToArgvW.argtypes = [
+            ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_int),
+        ]
+        shell32.CommandLineToArgvW.restype = ctypes.POINTER(ctypes.c_wchar_p)
+        count = ctypes.c_int(0)
+        words = shell32.CommandLineToArgvW(raw, ctypes.byref(count))
+        if not words:
+            return ()
+        try:
+            return tuple(words[i] for i in range(1, count.value))
+        finally:
+            kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+            kernel32.LocalFree.restype = ctypes.c_void_p
+            kernel32.LocalFree(ctypes.cast(words, ctypes.c_void_p))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return ()
+
+
+def frame_trace_admission(argv: list[str] | tuple[str, ...],
+                          native_argv: tuple[str, ...] | None = None) -> dict[str, bool]:
+    """Bounded, path-free account of trace admission from both Windows seams."""
+    native = windows_native_command_line_args() if native_argv is None else native_argv
+    return {
+        "python_requested": frame_trace_requested(argv),
+        "native_requested": frame_trace_requested(native),
+        "stack_requested": gui_stall_stacks_requested(tuple(argv) + tuple(native)),
+    }
+
+
 def gui_stall_stacks_requested(argv: list[str] | tuple[str, ...]) -> bool:
     """Heavy all-thread stack sampling is separately admitted from the binary trace."""
 
     return any(str(arg).strip().lower() == "--gui-stall-stacks" for arg in argv)
 
 
-def start_frame_trace(log_dir: Path, argv: list[str] | tuple[str, ...]) -> FrameTraceSink | None:
-    """Start the binary trace; heavy stack sampling has separate admission."""
+def start_frame_trace(
+    log_dir: Path,
+    argv: list[str] | tuple[str, ...],
+    *,
+    native_argv: tuple[str, ...] | None = None,
+) -> FrameTraceSink | None:
+    """Admit an explicitly requested trace from Python or native Windows argv."""
 
-    if not frame_trace_requested(argv):
+    native = windows_native_command_line_args() if native_argv is None else native_argv
+    effective = tuple(argv) + tuple(native)
+    if not frame_trace_requested(effective):
         return None
     global _active_sink, _active_stall_sampler
     with _active_lock:
@@ -485,7 +551,7 @@ def start_frame_trace(log_dir: Path, argv: list[str] | tuple[str, ...]) -> Frame
         # N1e all-thread stack formatting is intentionally heavier than the
         # binary trace. Keep historical --frame-trace low-observer-effect and
         # admit the sampler only through its own explicit CLI switch.
-        if gui_stall_stacks_requested(argv):
+        if gui_stall_stacks_requested(effective):
             from core.performance.gui_stall_sampler import GuiStallSampler
 
             _active_stall_sampler = GuiStallSampler(Path(log_dir) / "gui_stall_stacks.log")
@@ -536,6 +602,8 @@ __all__ = [
     "close_frame_trace",
     "current_frame_trace",
     "frame_trace_requested",
+    "frame_trace_admission",
+    "windows_native_command_line_args",
     "gui_stall_stacks_requested",
     "logical_timestamp_ns",
     "start_frame_trace",

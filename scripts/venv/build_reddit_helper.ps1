@@ -221,7 +221,13 @@ $PyInstallerWorkDir = Join-Path $BuildDir 'work'
 $SpecDir = Join-Path $BuildDir 'spec'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+# Build Runner passes the same run ID to the worker, its reports and the
+# consolidated evidence bundle. Direct-script builds retain a local timestamp.
+$Timestamp = if ($env:SRPSS_BUILD_RUN_ID -match '^\d{8}_\d{6}_\d{6}$') {
+    $env:SRPSS_BUILD_RUN_ID
+} else {
+    Get-Date -Format "yyyyMMdd_HHmmss_ffffff"
+}
 $LogFile = Join-Path $LogDir ("build_reddit_helper_{0}.log" -f $Timestamp)
 $MaxLogFiles = 10
 

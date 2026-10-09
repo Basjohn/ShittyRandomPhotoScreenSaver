@@ -6,6 +6,14 @@ geometry, and presentation work.
 For Bubble also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 For any performance-motivated change also read `Docs/Guardrails/Performance_Optimization_Contract.md`; it makes freshness/reactivity and R-69 explicit admission vetoes, not post-hoc checks.
 
+## Consolidated preset, mode, and participation safeguards (archive pruning, October 2026)
+
+- Curated preset **filename slot** and embedded index must be reconciled by the canonical preset resolver; the UI label, Edit target, loader and Save target must agree. A frozen onedir/onefile/diagnostic process uses the accepted ProgramData curated/override authority, never an extracted bundle directory. A save or replacement must not manufacture duplicate competing authored slot files. Presets are editable product data, never fixed pixel or numeric test oracles.
+- CUSTOM is a **mode-owned user snapshot**, not the last viewed curated slot. Simple `Custom → curated → Custom` runtime cycling may not replace it or alter independent modes. Settings and runtime must use the shared snapshot/restore/slot ownership path; preserve authored values on Save/Cancel/Restore and after source/mode changes.
+- New Visualizer modes declare their actual shared settings capabilities in the canonical descriptor. Do not synthesize `{mode}_bar_*` or `{mode}_rainbow_*` keys in downstream consumers. Sphere owns its mode-specific keys and acoustic analysis; Shockwave deliberately owns shaped Spectrum bars. Registry metadata never becomes a second default-value authority.
+- A display that no longer participates may not leave an extra active Visualizer owner or rewrite committed CUSTOM monitor/geometry. Only the current Quick topology coordinator can admit, retire or transfer an owner; stale monitor-generation callbacks and failed retirements cannot silently declare success. The old pre-Quick fallback/grace implementation and durations are **historical evidence**, not instructions to recreate old timers.
+- Spectrum solid-bar quantization must avoid one-step chattering **without** replacing movement with robotic hysteresis. Audio smoothing is fidelity work, not a reason to lower the authoring cadence or clamp live event response.
+
 ## 1. Ownership
 
 Accepted direction:

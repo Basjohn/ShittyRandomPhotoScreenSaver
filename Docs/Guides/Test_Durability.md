@@ -4,6 +4,10 @@ SRPSS tests should be strict about **contracts** and tolerant of **authored data
 
 This guide owns test-authoring durability policy. `Docs/TestSuite.md` owns current suite/acceptance routing. Production source and canonical settings/registries remain the authorities that tests consume.
 
+## Archived visualizer oracle trap (R-112)
+
+Do not regenerate synthetic/golden expected data from the *current* curated Organs/Sphere/other editable preset and call the result a regression oracle. Own the fixture explicitly and test behavior against that independent source; shipped preset files receive schema, ownership, parse and preservation checks only. An intentional operator edit is not an error.
+
 ## 1. The rule
 
 Before writing an exact assertion, ask what owns the expected value.

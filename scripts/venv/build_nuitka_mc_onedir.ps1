@@ -193,7 +193,13 @@ $ReleaseRoot = Join-Path $Root 'release'
 $DistributionDir = Join-Path $ReleaseRoot 'media_center'
 $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+# Build Runner passes the same run ID to the worker, its reports and the
+# consolidated evidence bundle. Direct-script builds retain a local timestamp.
+$Timestamp = if ($env:SRPSS_BUILD_RUN_ID -match '^\d{8}_\d{6}_\d{6}$') {
+    $env:SRPSS_BUILD_RUN_ID
+} else {
+    Get-Date -Format "yyyyMMdd_HHmmss_ffffff"
+}
 $LogFile = Join-Path $LogDir ("build_nuitka_mc_onedir_{0}.log" -f $Timestamp)
 $NuitkaReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_report_{0}.xml" -f $Timestamp)
 $FootprintReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_footprint_{0}.json" -f $Timestamp)
@@ -325,6 +331,13 @@ if ($Console) {
 $consoleArg = "--windows-console-mode=disable"
 if ($Console) { $consoleArg = "--windows-console-mode=force" }
 
+$FrozenAudit = Join-Path $Root 'tools\frozen_build_audit.py'
+$SourceFingerprint = (& $VenvPython $FrozenAudit fingerprint --root $Root | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $SourceFingerprint -notmatch '^[a-f0-9]{20}$') {
+    throw 'Could not establish frozen source identity before Nuitka compilation.'
+}
+Write-Host "[BUILD-VENV] Frozen source identity: $SourceFingerprint"
+
 $argsList = @(
     "-m", "nuitka",
     "--msvc=latest",
@@ -430,6 +443,10 @@ if (-not $Exe) {
     Write-Host "[BUILD-VENV] Build failed or no executable produced. See log: $LogFile"
     exit 1
 }
+
+$FrozenReceipt = Join-Path $LogDir ("build_nuitka_mc_onedir_frozen_audit_{0}.json" -f $Timestamp)
+& $VenvPython $FrozenAudit verify --root $Root --report $NuitkaReportFile --expected $SourceFingerprint --artifact $Exe.FullName --receipt $FrozenReceipt
+if ($LASTEXITCODE -ne 0) { throw 'Frozen module/source audit failed; refusing to publish an incomplete Media Center build.' }
 
 # Validate the onedir payload against the current source Quick/QML and shader sets.
 try {

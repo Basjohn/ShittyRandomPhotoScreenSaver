@@ -1,5 +1,7 @@
 # R-103 — Media/GSMTC Per-Query Proactor Context Ratcheted Semaphore Handles
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** SOLVED (2026-10-02). The retained Media affinity lane now retains its WinRT/async query context too.
 
 ## Symptom

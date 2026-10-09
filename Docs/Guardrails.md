@@ -66,6 +66,10 @@ Behavioral tests may intentionally choose non-default values; mark ambiguous cas
 and derive downstream expectations from that fixture input. Never “fix” such a test by coupling it to the current product
 default.
 
+## Specific guardrail owners
+
+For Visualizer mode/preset lifecycle, GPU presentation, Sphere acoustic admission, and multi-display ownership, use [Visualizer Presentation](Guardrails/Visualizer_Presentation.md). For authored Bubble response, use [Bubble Temporal Fidelity](Guardrails/Bubble_Temporal_Fidelity.md). For rejected cadence, thread, memory, render or cache optimizations, use [Performance Optimization Contract](Guardrails/Performance_Optimization_Contract.md). These are existing subject owners; avoid replicating their detailed requirements in this top-level document.
+
 ## Immediate stop conditions
 
 Stop/reassess when:

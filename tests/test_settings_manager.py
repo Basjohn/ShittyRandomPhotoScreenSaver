@@ -1038,6 +1038,24 @@ class TestSettingsManagerValidation:
         assert repairs.get("display.hw_accel") == "Missing key"
         assert manager._settings.value("display.hw_accel") is expected_hw
 
+    @pytest.mark.parametrize("retired_backend", ["software", "SOFTWARE", "vulkan", None])
+    def test_opengl_only_backend_is_repaired_without_opening_display_tab(
+        self, tmp_path: Path, retired_backend,
+    ) -> None:
+        """Persistent backend repair belongs to SettingsManager, not a QWidget."""
+        manager = _make_manager(tmp_path)
+        manager._settings.setValue("display.render_backend_mode", retired_backend)
+        manager._settings.setValue("display.hw_accel", False)
+        repairs = manager.validate_and_repair()
+
+        assert manager.get("display.render_backend_mode") == "opengl"
+        assert manager.get("display.hw_accel") is True
+        assert "display.render_backend_mode" in repairs
+        assert "display.hw_accel" in repairs
+        assert "display" not in repairs  # no whole-section reset of authored state
+        assert "widgets" not in repairs
+        assert manager.validate_and_repair().get("display.render_backend_mode") is None
+
     def test_validate_and_repair_fixes_invalid_types(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
         manager.set("timing.interval", "invalid")

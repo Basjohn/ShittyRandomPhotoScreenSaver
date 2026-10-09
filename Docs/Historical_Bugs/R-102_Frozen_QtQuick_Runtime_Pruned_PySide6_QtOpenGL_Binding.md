@@ -1,5 +1,7 @@
 # R-102 — Frozen Qt Quick Runtime Pruned The PySide6.QtOpenGL Binding
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 **Status:** SOLVED (2026-10-02). Frozen runtime/build contracts now retain the Qt OpenGL binding required by Qt Quick while the genuinely unused OpenGLWidgets layer remains pruned.
 
 ## Symptom

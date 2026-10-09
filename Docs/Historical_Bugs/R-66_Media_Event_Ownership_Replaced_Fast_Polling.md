@@ -1,5 +1,7 @@
 # R-66 — Media Runtime Fast Polling Replaced By Provider Event Ownership
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-01
 Status: Solved (runtime observation architecture); slow reconciliation watchdog intentionally retained
 

@@ -1,5 +1,7 @@
 # R-106 | Visualizer Dormancy Audit and Frame-Trace Observer Pressure
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Status: **CLOSED / PHYSICAL ACCEPTANCE GREEN**
 Opened: 2026-10-05
 Closed: 2026-10-05

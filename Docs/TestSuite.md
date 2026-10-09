@@ -303,6 +303,7 @@ Protect:
 - generated snapshot/SST parity;
 - no second fallback/default authority;
 - lazy Settings hydration cannot masquerade as user edits;
+- Settings warms only hidden Display/Transitions; dormant tabs construct on first visit. Only SettingsManager repairs the OpenGL-only backend and hardware acceleration, without DisplayTab load/save writes; retain `test_settings_dialog.py`, `test_display_tab.py`, and `test_settings_manager.py` as targeted acceptance;
 - descriptor/load/save/default keys remain mutually complete;
 - compatibility normalization happens at explicit input boundaries and retired aliases do not become current output;
 - read-oriented defaults/manifest validation and runtime preset catalogue loading must not rewrite shipped Visualizer preset artifacts; explicit regeneration is the source-tree write authority and no-op manifest writes must remain byte-stable across host newline conventions;

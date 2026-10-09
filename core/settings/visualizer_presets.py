@@ -374,20 +374,13 @@ def _presets_root() -> Path:
 
     Script mode uses the repository source tree directly.
 
-    Frozen SCR/MC builds converge on a shared ProgramData curated tree so both
+    All frozen SCR/MC/Diagnostic builds converge on a shared ProgramData curated tree so both
     installs see the same shipped preset state. If that shared tree is missing
     but the packaged/bundled preset tree exists, we bootstrap ProgramData from
     the bundled copy once and then keep using the shared location.
     """
     bundled_root = _bundled_presets_root()
     shared_root = _shared_presets_root()
-    try:
-        from core.build_profile import is_diagnostic_build
-
-        if is_diagnostic_build():
-            return bundled_root
-    except Exception:
-        pass
     frozen_like_runtime = _is_frozen_build() or _looks_like_onefile_extraction_path(bundled_root)
     if not frozen_like_runtime:
         return bundled_root
@@ -435,17 +428,10 @@ def get_packaged_visualizer_presets_dir(mode: str | None = None) -> Path:
 def _snapshot_presets_root() -> Path:
     """Return the directory containing explicit visualizer preset overrides.
 
-    Script mode uses the repository tree. Frozen SCR/MC builds share a
+    Script mode uses the repository tree. All frozen SCR/MC/Diagnostic builds share a
     ProgramData override folder so repair/import flows are not split by build.
     """
     bundled_overrides_root = _bundled_snapshot_overrides_root()
-    try:
-        from core.build_profile import is_diagnostic_build
-
-        if is_diagnostic_build():
-            return bundled_overrides_root
-    except Exception:
-        pass
     if _is_frozen_build() or _looks_like_onefile_extraction_path(bundled_overrides_root):
         return _shared_presets_base_dir() / "visualizer_mode_overrides"
     return bundled_overrides_root

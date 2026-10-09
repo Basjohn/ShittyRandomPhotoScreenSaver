@@ -58,15 +58,12 @@ def test_build_preflight_and_onedir_validation_cover_qml_shaders_themes_presets_
         assert token in layout
 
 
-def test_diagnostic_frozen_profile_uses_bundled_theme_and_preset_payloads() -> None:
-    theme_paths = _text("ui/settings_theme_paths.py")
-    assert "is_diagnostic_build" in theme_paths
-    assert "return _source_themes_directory()" in theme_paths
-
+def test_diagnostic_frozen_presets_use_shared_curated_authority() -> None:
     presets = _text("core/settings/visualizer_presets.py")
-    assert presets.count("is_diagnostic_build") >= 2
-    assert "return bundled_root" in presets
-    assert "return bundled_overrides_root" in presets
+    # Diagnostics are a build profile, not a second authored preset library.
+    assert "is_diagnostic_build" not in presets
+    assert "return shared_root" in presets
+    assert '_shared_presets_base_dir() / "visualizer_mode_overrides"' in presets
 
 
 def test_installers_offer_profile_scoped_settings_reset() -> None:

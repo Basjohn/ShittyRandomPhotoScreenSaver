@@ -1,5 +1,7 @@
 # R-107 | RSS index denied-write startup spin
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Status: **FIXED IN CODE**
 
 The MC process could consume a core before RUN started when its profile cache was not writable. `RSSCache._write_state`

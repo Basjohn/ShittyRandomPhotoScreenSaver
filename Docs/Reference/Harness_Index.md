@@ -481,7 +481,7 @@ Do not interpret startup/capture rows before intentional presentation as active-
 Do not infer continuous displayed FPS from sparse/non-occupancy GDI `DisplayedTime` rows.
 Use p95/p99/tails/severe gaps plus phase correlation when cadence evidence is actually needed.
 
-R-26 remains a separate **PARTIAL / AWAITING VALIDATION** historical topology/failover record until its full off/asleep/late-return sequence is exercised on corresponding hardware. That residual requires physical evidence; implementation review alone does not manufacture the missing scenario.
+Current display-topology/Visualizer failover must be assessed against its active Quick coordinator and `Docs/Guardrails/Visualizer_Presentation.md`, not the retired pre-Quick R-26 grace implementation. If a real off/asleep/late-return symptom recurs, collect hardware evidence instead of assuming source inspection proves physical acceptance.
 
 ## 10. Runtime diagnostics
 

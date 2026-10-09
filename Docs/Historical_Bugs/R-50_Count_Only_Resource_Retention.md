@@ -1,5 +1,7 @@
 # R-50 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-07-28  
 Status: Resolved
 

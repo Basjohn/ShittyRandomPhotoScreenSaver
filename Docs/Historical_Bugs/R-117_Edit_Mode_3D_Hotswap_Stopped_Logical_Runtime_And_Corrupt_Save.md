@@ -1,5 +1,7 @@
 # R-117 | 3D Edit hot-swap left old logical runtime stopped and invalid CUSTOM Save
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 ## Operator / source evidence (2026-10-08)
 
 Windows targeted Qt gate: **757 passed in 72.65s**, but physical test failed. In Edit on Extruded Spectrum, requesting Shockwave left only the stage and wireframe cage, no visible mode. Exiting Edit initiated a runtime shutdown and exit code 1. `logs6de7ccbbf33.zip` records:

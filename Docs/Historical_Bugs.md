@@ -1,201 +1,112 @@
-# Historical Bugs
+# Historical Bugs — single archive index
 
-Last updated: 2026-10-09
+**Updated:** 2026-10-09 (approved archival pruning). **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
-Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
-`Docs/Historical_Bugs/`.
+**Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
-Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) for the folder reading rule and
-complete record set.
+**Retention flag:** reports marked `STRONG RETENTION VALUE DOCUMENT` contain particularly hard-won evidence. The marker protects diagnostic reasoning, not an unchangeable design. After archival consolidation, old identifiers may appear in Git history, but removed documents are no longer active navigation targets.
 
-Historical incident bodies may name old owners. They are evidence for the failure/mechanism at the time,
-not automatic current architecture instructions.
+**Known current corrections:** Ban Image is operator-accepted in Standard and MC. Diagnostic frame-trace binaries are restored. Sphere and Shockwave audio paths are physically accepted. Bubble small-radius judder is a deferred watchlist only; dual-display catastrophic slowdown recovered after reboot with unproved OS root cause. Python 3.14 migration focused gates are accepted. R154 terminal-generation display-retirement fix remains dependent on any later physical lifecycle evidence. Do not infer a fresh build or test request from this index.
 
-## Current negative controls
+## Consolidated significant incidents
 
-- [Rejected Extruded cast-shadow approaches (R125–R128)](Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md) — cast shadows disabled; renderer, Edit and greyed Settings follow a single availability authority.
+The September 10 Sphere acoustic-admission and cohort-motion incident merges five linked investigations without inventing additional guardrail files; see its entry below. Detailed current behavior lives in [Sphere reference](Reference/Sphere_Visualizer.md).
 
-## Open / Watchlist Records
+## Incident catalogue (one link per surviving document)
 
-- [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **AWAITING VALIDATION**. Thread churn (a new heartbeat `threading.Timer` every 3 s, Qt's image pool recreated each wallpaper) × the NVIDIA GL driver's never-returned per-thread state (~70 KB each) ≈ 130 MB/h; fixed at both owners, measured flat; unattended physical run pending.
-- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **SOLVED / CHK26 GOLDEN**. CHK23 removed steady Python/PyOpenGL background redraw through retained Qt-native content; CHK26 removed proven duplicate non-stencil GL-state queries and was physically accepted neutral-or-better at repository commit `a0bf70932c`. CHK27–CHK29 then attributed the largest apparent residuals to Qt frame/render-phase ownership or small distributed Bubble/driver work and closed generic performance fishing. Reopen only from a concrete reproduced symptom.
-- [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
-- [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
-- [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Handle-type attribution rejected a continuous steady-generation leak; one bounded 3–5-cycle Settings churn acceptance now decides whether the first replacement-generation handle bundle is one-time lazy initialization or cumulative retention.
+| Record | Historical classification | Retention |
+| --- | --- | --- |
+| [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](Historical_Bugs/R-02_Reddit_Helper_Link_Handoff.md) | Archived investigation | **STRONG** |
+| [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](Historical_Bugs/R-03_Sine_Idle_Paused_Motion.md) | Archived investigation | Standard |
+| [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](Historical_Bugs/R-04_Visualizer_Curated_Preset_Custom_Authority.md) | Archived investigation | Standard |
+| [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](Historical_Bugs/R-06_Visualizer_Preset_Merge_Pollution.md) | Archived investigation | Standard |
+| [R-10 — 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)](Historical_Bugs/R-10_Deleted_QObject_Provider_Switch_Callback.md) | Archived investigation | Standard |
+| [R-13 — 2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted (Resolved)](Historical_Bugs/R-13_Sine_Oscilloscope_Lines_4_6_Persistence.md) | Archived investigation | Standard |
+| [R-15 — 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)](Historical_Bugs/R-15_Frozen_Curated_Preset_Root.md) | Archived investigation | Standard |
+| [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](Historical_Bugs/R-18_Settings_Dialog_Taskbar_Ghost.md) | Archived investigation | **STRONG** |
+| [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](Historical_Bugs/R-22_Visualizer_Runtime_State_Bleed.md) | Archived investigation | **STRONG** |
+| [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](Historical_Bugs/R-29_Reddit_Refresh_Provider_Authority.md) | Archived investigation | Standard |
+| [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](Historical_Bugs/R-31_ImageWorker_Display_Replacement_On_Rejection.md) | Archived investigation | Standard |
+| [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](Historical_Bugs/R-33_Defaults_SST_Regeneration_Safety.md) | Archived investigation | **STRONG** |
+| [R-41 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership](Historical_Bugs/R-41_Gmail_OAuth_Callback_Thread_Ownership.md) | Archived investigation | Standard |
+| [R-46 — Failed Blob Visualizer Retired End To End](Historical_Bugs/R-46_Blob_Visualizer_Retirement.md) | Archived investigation | Standard |
+| [R-48 — Clock Double-Click Replaced Per-Display Mode With Shared Setting](Historical_Bugs/R-48_Clock_Per_Display_Mode_Override.md) | Archived investigation | Standard |
+| [R-49 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup](Historical_Bugs/R-49_Settings_Edit_Hide_Only_Runtime_Retention.md) | Archived investigation | **STRONG** |
+| [R-50 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog](Historical_Bugs/R-50_Count_Only_Resource_Retention.md) | Archived investigation | **STRONG** |
+| [R-51 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity](Historical_Bugs/R-51_Shared_Shader_Cache_Deletion_Ownership.md) | Archived investigation | **STRONG** |
+| [R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit](Historical_Bugs/R-52_ImageWorker_Shared_Memory_Retention.md) | Archived investigation | **STRONG** |
+| [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md) | Archived investigation | **STRONG** |
+| [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](Historical_Bugs/R-54_Bubble_Cadence_Gate.md) | Archived investigation | **STRONG** |
+| [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md) | Archived investigation | **STRONG** |
+| [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md) | Archived investigation | Standard |
+| [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md) | Archived investigation | **STRONG** |
+| [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md) | Archived investigation | Standard |
+| [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md) | Archived investigation | Standard |
+| [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](Historical_Bugs/R-60_ImagePresenter_DPR_Texture_Identity.md) | Archived investigation | Standard |
+| [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](Historical_Bugs/R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md) | Archived investigation | Standard |
+| [R-61B — Visualizer Presentation Bound To The Transition-Scoped Render Timer](Historical_Bugs/R-61B_Visualizer_Presentation_Bound_To_Transition_Timer.md) | Archived investigation | **STRONG** |
+| [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](Historical_Bugs/R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md) | Archived investigation | **STRONG** |
+| [R-63 — Display-1 Black Flash from Fullscreen-Flip PresentMode Transitions](Historical_Bugs/R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md) | Archived investigation | **STRONG** |
+| [R-64 — Retained Cursor Halo Turned Passive Pointer Motion Into Scene Pressure](Historical_Bugs/R-64_Native_Cursor_Halo_Scene_Pressure.md) | Archived investigation | **STRONG** |
+| [R-65 — Image Change Admission Could Bare-Snap And Prefetch Could Strand Across Recreation](Historical_Bugs/R-65_Transactional_Image_Admission_And_Prefetch_Latch.md) | Archived investigation | **STRONG** |
+| [R-66 — Media Runtime Fast Polling Replaced By Provider Event Ownership](Historical_Bugs/R-66_Media_Event_Ownership_Replaced_Fast_Polling.md) | Archived investigation | **STRONG** |
+| [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](Historical_Bugs/R-68_Visualizer_Custom_Presentation_Authority_Rebase.md) | Archived investigation | **STRONG** |
+| [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md) | Archived investigation | **STRONG** |
+| [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md) | Archived investigation | **STRONG** |
+| [R-74 — Quick card shadows could overpaint sibling widget content](Historical_Bugs/R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md) | Archived investigation | Standard |
+| [R-75 — A superseded audio-analysis callback could release a serial-lane slot a newer owner held](Historical_Bugs/R-75_Superseded_Compute_Callback_Released_Held_Serial_Lane_Slot.md) | Archived investigation | **STRONG** |
+| [R-76 — Spectrum viewport temporal scaling used the wrong axis and the wrong owner](Historical_Bugs/R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md) | Archived investigation | Standard |
+| [R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement](Historical_Bugs/R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md) | Archived investigation | Standard |
+| [R-79 — 2026-09-12 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) | Archived investigation | **STRONG** |
+| [R-80 — ABC event-loop rolling history contaminated named steady windows](Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md) | Archived investigation | **STRONG** |
+| [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) | Archived investigation | **STRONG** |
+| [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) | Archived investigation | **STRONG** |
+| [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) | Archived investigation | **STRONG** |
+| [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) | Archived investigation | **STRONG** |
+| [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) | Archived investigation | **STRONG** |
+| [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) | CHK26 accepted / historical perf baseline | **STRONG** |
+| [R-88 / Qt Quick CUSTOM Edit paint, semantic-role lifetime and churn](Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) | Archived investigation | Standard |
+| [R-89 — Recurring Timer Released Its Owner Inside Its Own Deferred Deletion](Historical_Bugs/R-89_Recurring_Timer_Owner_Released_Inside_Deferred_Delete.md) | Archived investigation | **STRONG** |
+| [R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)](Historical_Bugs/R-90_Core_Audio_Endpoint_Double_Release.md) | Archived investigation | **STRONG** |
+| [R-91 — Worker Processes Outlived A Crashed UI Process](Historical_Bugs/R-91_Worker_Processes_Outlived_Crashed_UI.md) | Archived investigation | **STRONG** |
+| [R-93 — Media Commands And Refreshes Starved Behind Network IO](Historical_Bugs/R-93_Media_Commands_Starved_Behind_Network_IO.md) | Archived investigation | **STRONG** |
+| [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](Historical_Bugs/R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) | Archived investigation | **STRONG** |
+| [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) | Archived investigation | **STRONG** |
+| [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) | Historical memory investigation / later single-display soak healthy | **STRONG** |
+| [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) | Archived investigation | **STRONG** |
+| [R-99 — Memory Footprint Audit (2026-09-25)](Historical_Bugs/R-99_Memory_Footprint_Audit_2026-09-25.md) | OpenBLAS and cache optimizations retained | **STRONG** |
+| [R-102 — Frozen Qt Quick Runtime Pruned The PySide6.QtOpenGL Binding](Historical_Bugs/R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) | Archived investigation | **STRONG** |
+| [R-103 — Media/GSMTC Per-Query Proactor Context Ratcheted Semaphore Handles](Historical_Bugs/R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) | Archived investigation | **STRONG** |
+| [R-104 — FEEDS Main-GIL Parsing Stalled Qt, Warm Artwork Lost Its Binding, And Hydration Drove Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) | Archived investigation | **STRONG** |
+| [R-105 / Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) | Deferred Bubble watchlist | **STRONG** |
+| [R-106 / Visualizer Dormancy Audit and Frame-Trace Observer Pressure](Historical_Bugs/R-106_Visualizer_Dormancy_And_Shutdown_Ownership_Followup.md) | Archived investigation | **STRONG** |
+| [R-107 / RSS index denied-write startup spin](Historical_Bugs/R-107_RSS_Index_Denied_Write_Startup_Spin.md) | Archived investigation | **STRONG** |
+| [R-108 / Card chrome parity and Spectrum regression audit](Historical_Bugs/R-108_Card_Chrome_Parity_And_Spectrum_Regression_Audit.md) | Archived investigation | **STRONG** |
+| [R-110 / Refresh animator turned network latency into an unbounded Qt Quick render storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) | Archived investigation | **STRONG** |
+| [R-111 / Shared freeform-3D layout profile aliased incompatible mode poses](Historical_Bugs/R-111_Shared_Freeform3D_Profile_Aliased_Incompatible_Mode_Poses.md) | Archived investigation | **STRONG** |
+| [R-113 / Independent 3D CUSTOM profiles exposed Edit stage / mesh / cage and mode-change regressions](Historical_Bugs/R-113_3D_Edit_Profile_Stage_And_Cage_Regression.md) | Archived investigation | **STRONG** |
+| [R-117 / 3D Edit hot-swap left old logical runtime stopped and invalid CUSTOM Save](Historical_Bugs/R-117_Edit_Mode_3D_Hotswap_Stopped_Logical_Runtime_And_Corrupt_Save.md) | Archived investigation | **STRONG** |
+| [R-118 / 3D Edit geometry and activation lifecycle audit](Historical_Bugs/R-118_3D_Edit_Mode_Lifecycle_Adjacent_Contract_Audit.md) | Archived investigation | **STRONG** |
+| [Rejected Extruded cast shadow projections (R125–R128)](Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md) | Rejected cast-shadow approach / disabled | **STRONG** |
+| [R-134 through R-145 / Dual-display collapse recovered after Windows restart](Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md) | Reboot recovered / root cause unknown | **STRONG** |
+| [R-150 / Sphere analysis-only DSP, Shockwave shaping audit](Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md) | Sphere/Shockwave accepted | **STRONG** |
+| [R-151 / Same-destination Steam cache publication collision on Windows](Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md) | Steam cache focused gate accepted | **STRONG** |
+| [R-154 / Retired QuickDisplayUnit signal retention and Sphere slot-1 conflict](Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md) | Source repair / physical lifecycle gate open | **STRONG** |
+| [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
+| [U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md) | Archived investigation | Standard |
+| [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md) | Archived investigation | **STRONG** |
+| [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md) | Archived investigation | Standard |
+| [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](Historical_Bugs/U-07_Bubble_Loud_Path_Oracle_Drift.md) | Archived investigation | Standard |
+| [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](Historical_Bugs/U-08_Custom_Replay_Shrink_Minimum_Constraints.md) | Archived investigation | Standard |
+| [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md) | Archived investigation | Standard |
+| [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](Historical_Bugs/U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md) | Archived investigation | Standard |
+| [Historical Bug — Canonical defaults schema drift and duplicate authority](Historical_Bugs/Defaults_Canonical_Schema_Dedup_2026-09-06.md) | Archived investigation | Standard |
+| [Installer Reset Could Re-import Legacy QSettings — 2026-09-06](Historical_Bugs/Installer_Reset_Reimported_Legacy_QSettings_2026-09-06.md) | Archived investigation | Standard |
+| [Sphere audio admission and detached-cohort motion: consolidated September 2026 investigation](Historical_Bugs/Sphere_2026-09-10_Acoustic_Admission_And_Cohort_Motion_Investigation.md) | Consolidated acoustic/cohort investigation | **STRONG** |
+| [Historical Bug — Theme defaults split authority](Historical_Bugs/Theme_Defaults_Split_Authority_2026-09-06.md) | Archived investigation | Standard |
+| [Historical bug — Visualizer cross-display split ownership (2026-09-05)](Historical_Bugs/Visualizer_Cross_Display_Split_Ownership_2026-09-05.md) | Archived investigation | Standard |
+| [Visualizer Preset Sparse Catalog + Failed Settings Body Leak — 2026-09-10](Historical_Bugs/Visualizer_Preset_Sparse_Catalog_And_Failed_Body_Leak_2026-09-10.md) | Archived investigation | Standard |
 
-## Accepted R149–R151 repair records (historical evidence)
+## Document ownership
 
-The focused source/Windows gates are accepted; a post-R151 full four-chunk run has **not** been performed or claimed. Incident reports preserve the original failed runs.
-
-- [R-151 — Steam cache same-destination Windows publication race](Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md) — **ACCEPTED: 106 WINDOWS FOCUSED TESTS / FULL SUITE NOT RE-RUN**. Short per-file publish mutex with weakly held locks; Settings aware UTC metadata retains `Z` format.
-- [R-150 — Sphere Analysis-Only DSP / Shockwave Shaper Audit](Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md) — **ACCEPTED: 96 WINDOWS FOCUSED TESTS + OPERATOR PHYSICAL SPHERE/SHOCKWAVE**. Sphere skips unrelated Spectrum bar shaping; Shockwave retains authored horizon-shaping behavior.
-- [R-149 — Python 3.14 four-chunk and runtime trace](Historical_Bugs/R-149_Python314_Four_Chunk_And_Runtime_Trace.md) — **FOCUSED SOURCE FIXES ACCEPTED / FULL R151 SUITE NOT RE-RUN**. Removed private logging lock calls; fixed fixed-name Steam cache temporary collisions; repaired stale test authority; NumPy 2 BLAS probe uses loaded library; historic Sphere `Treble` warning is addressed by the R150 accepted analysis-only boundary.
-
-## Conditional follow-up records (not automatically admitted)
-
-- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **PHYSICALLY ACCEPTED 2026-10-08**. Infinite per-widget refresh animators tied network `refreshing` lifetime to full-scene rendering; the repair replaces them with one 240 ms display-scoped transition epoch shared by Reddit, Gmail, every NEWS/CUSTOM Feed instance and Games You Follow, inert while BUSY is steady.
-- [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](Historical_Bugs/R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Stable Bar Appearance/Rainbow accessories now bootstrap without consulting an incompatible active mode, and C6 Extruded/Shockwave bucket identities match canonical defaults.
-- [R-105 — Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) — **DEFERRED WATCHLIST / PHYSICALLY GOOD**. The render-release repair is baseline; the tiny-breath helper failed recorded/fixture A/B and was removed. Reopen only on a newly reported physical anomaly.
-- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **HISTORICAL / REOPEN ONLY ON REPRODUCTION**. Repeat a bounded operator-run dual-monitor replacement case if it recurs.
-- [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
-- [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
-- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. The 58-minute Windows soak preserved scaled-prefetch liveness through sustained cache eviction pressure.
-- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. The 58-minute Windows soak showed no recursive zero-delay due storm or request multiplication.
-- [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**. No long debounce admitted; physical multi-stage wake remains the acceptance gate.
-- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **REPAIRED / CONDITIONAL WAKE WATCHLIST**. Implementation is independently audited; reopen only on a newly observed late-return failure.
-- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **REPAIRED / CONDITIONAL FOLLOW-UP**. Reopen only on a fresh Clock layout-slot/face-state repro; no standing migration gate.
-
-No other R-series record is current implementation sequencing. Current work is owned by
-`Current_Plan.md`; historical Phase/P-number status prose never admits current work.
-
-Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDATION` describe the incident record unless this index and `Current_Plan.md` explicitly promote the item as current. They do not independently admit work.
-
-- R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate visual debt.
-
-## Standalone R Records
-
-- [R-110 — Refresh Animator Unbounded Quick Render Storm](Historical_Bugs/R-110_Refresh_Animator_Unbounded_Quick_Render_Storm.md) — **SOLVED / PERF-PHYSICALLY ACCEPTED 2026-10-08**. Keep refresh activity stateful without creating an independent continuous Quick animation cadence.
-- [R-109 — Visualizer Settings Bucket Schema Drift Crashed Settings Open](Historical_Bugs/R-109_Visualizer_Settings_Bucket_Schema_Drift_Crashed_Settings_Open.md) — **SOLVED / PHYSICALLY ACCEPTED 2026-10-08**. Opening Settings is guarded across every persisted active Visualizer mode; 3D bucket schema changes must stay atomic with their builders.
-- [R-108 — Card Chrome Parity, Spectrum Raster Flicker And Native-Capture Packet Framing](Historical_Bugs/R-108_Card_Chrome_Parity_And_Spectrum_Regression_Audit.md) — **SPECTRUM PHYSICALLY ACCEPTED / CAPTURE FIX REGRESSION-PROTECTED / C4-C5 PHYSICAL GATE OPEN**. The moving Spectrum cap receives a one-logical-pixel raster-coverage floor; PyAudioWPatch shapes valid float32 PCM from the delivered channel-divisible payload rather than advisory callback `frame_count`.
-- [R-107 — RSS Index Denied-Write Startup Spin](Historical_Bugs/R-107_RSS_Index_Denied_Write_Startup_Spin.md) — **FIXED IN CODE**. One exclusive atomic index write replaces Windows temporary-file permission retries; denied cache writes log immediately and preserve last-good state.
-- [R-106 — Visualizer Dormancy Audit and Frame-Trace Observer Pressure](Historical_Bugs/R-106_Visualizer_Dormancy_And_Shutdown_Ownership_Followup.md) — **CLOSED / 10 OF 10 PHYSICAL GREEN**. Plain frame trace was restored to low-observer behavior; all-thread stall stacks became separately admitted/lifecycle-suppressed; ten bounded startup/reveal/normal-terminal-shutdown cycles completed without memoryview/native faults. Remaining dormancy/Python-owner cleanup is live work, not incident closure debt.
-- [R-104 — FEEDS Main-GIL Parsing, Durable Artwork And Hydration Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) — **SOLVED / ACCEPTED**. Pure-Python remote parsing moved to one lazy spawned family process; durable warm artwork bindings and coherent presentation states restore cache-first startup and remove the recurring parser/GIL hitch.
-- [R-103 — Media/GSMTC Per-Query Proactor Semaphore Handle Churn](Historical_Bugs/R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) — **SOLVED**. One retained Media-owner Proactor loop/manager replaces per-query kernel-object churn; deterministic reuse and real Windows handle gates pass.
-- [R-102 — Frozen Qt Quick Runtime Pruned PySide6.QtOpenGL](Historical_Bugs/R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) — **SOLVED**. Frozen dependency pruning now respects Qt Quick's binding/runtime graph while the unrelated OpenGLWidgets layer stays pruned.
-- [R-101 — Guided Setup / Settings Review 2026-09-27](Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md) — **SOLVED IN CODE**. The wizard persisted every click (now a draft saved on Finish), Arrange lost updates, hover-focus list scrolling, QSS rounded-border seams, unthemed popups, light-theme indicators, blurry previews, a lost edit on close, and generated defaults copies; mechanisms and negative controls.
-- [R-100 — Runtime Audit 2026-09-22: Outcomes, Rejections and Closure](Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md) — **CLOSED**. Accepted items with commits and bars; every item left watched/parked was rejected by the operator (2026-09-27); the considered-and-rejected list stays binding.
-- [R-99 — Memory Footprint Audit (2026-09-25)](Historical_Bugs/R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.
-- [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
-- [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **AWAITING VALIDATION**. Thread churn (a new heartbeat `threading.Timer` every 3 s, Qt's image pool recreated each wallpaper) × the NVIDIA GL driver's never-returned per-thread state (~70 KB each) ≈ 130 MB/h; fixed at both owners, measured flat; unattended physical run pending.
-- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **FIXED IN CODE / AWAITING VALIDATION**. Two first images per rebuild, no hang window after construction, synchronous `quit()` GIL deadlock with render-thread Python, reveal held by a stalled sibling, work-area rebuilds.
-- [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](Historical_Bugs/R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) — **SOLVED IN CODE**. COMPUTE keyed on the monitor rect, the renderer on the (larger) R-63 window: every Glass/Crumble run rebuilt on both render threads; key on the renderer's own size, prove a hit.
-- [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](Historical_Bugs/R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) — **SOLVED IN CODE**. Compiler-rounding divergence in a chaotic float hash made each noise cell melt separately; exact integer lattice hash + field-render bar.
-- [R-93 — Media Commands And Refreshes Starved Behind Network IO](Historical_Bugs/R-93_Media_Commands_Starved_Behind_Network_IO.md) — **SOLVED** (runtime audit PW-02). Dedicated lazy `media` lane; never the FIFO IO pool or the observation worker.
-- [R-92 — Random Transition Rotation Overwrote The User's Authored Direction](Historical_Bugs/R-92_Random_Rotation_Overwrote_Authored_Direction.md) — **FIXED IN CODE / AWAITING VALIDATION** (runtime audit TX-02). Settings are never inter-component scratch space.
-- [R-91 — Worker Processes Outlived A Crashed UI Process](Historical_Bugs/R-91_Worker_Processes_Outlived_Crashed_UI.md) — **SOLVED**. Workers detect parent death; verified on a frozen build (worker gone 0.2 s after a hard parent exit).
-- [R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)](Historical_Bugs/R-90_Core_Audio_Endpoint_Double_Release.md) — **SOLVED**. `QueryInterface`, never `ctypes.cast`, between COM interfaces; native real-endpoint rebind test.
-- [R-89 — Recurring Timer Released Its Owner Inside Its Own Deferred Deletion](Historical_Bugs/R-89_Recurring_Timer_Owner_Released_Inside_Deferred_Delete.md) — **SOLVED**. The cross-file native abort; release timer callbacks before `deleteLater()`.
-- [R-88 — Qt Quick CUSTOM Edit painted geometry, role churn and false test oracles](Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **ACCEPTED for tested multi-family Edit and retained child guides**; not a claim of whole-project churn clearance.
-- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
-- [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
-- [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)
-- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md)
-- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md)
-- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md)
-- [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md)
-- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **SOLVED / PHYSICAL WAKE VALIDATED 2026-09-12**.
-- [R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut](Historical_Bugs/R-78_Particle_Center_Outward_Swirl_Branch_Cut.md)
-- [R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement](Historical_Bugs/R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md)
-- [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](Historical_Bugs/R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md) — **IMPLEMENTED / AWAITING VALIDATION**. Production ordinary shadows now live in one display underlay below all ordinary cards.
-- [R-76 — Spectrum viewport temporal scaling axis / solid-domain migration seam](Historical_Bugs/R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md)
-- [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](Historical_Bugs/R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)
-- [R-72 — Production Shutdown Imported A Dead Performance Parser](Historical_Bugs/R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
-- [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)
-- [R-70 — Gmail CUSTOM Uniform Scale Needed Different Width And Height Shell Semantics](Historical_Bugs/R-70_Gmail_Custom_Uniform_Scale_Preferred_Dimension_Split.md)
-- [R-69 — Bubble Extreme-Viewport Global Radius Compression Suppressed Reactivity](Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md)
-- [R-68 — Visualizer CUSTOM Working Geometry Rejected Fresh Logical Snapshots](Historical_Bugs/R-68_Visualizer_Custom_Presentation_Authority_Rebase.md)
-- [R-67 — CUSTOM Resize Re-entry Rebased Persisted Geometry And Could Compound Shrink](Historical_Bugs/R-67_Custom_Resize_Reentry_Absolute_Scale.md)
-- [R-66 — Media Runtime Fast Polling Replaced By Provider Event Ownership](Historical_Bugs/R-66_Media_Event_Ownership_Replaced_Fast_Polling.md)
-- [R-65 — Image Change Admission Could Bare-Snap And Prefetch Could Strand Across Recreation](Historical_Bugs/R-65_Transactional_Image_Admission_And_Prefetch_Latch.md)
-- [R-64 — Retained Cursor Halo Turned Passive Pointer Motion Into Scene Pressure](Historical_Bugs/R-64_Native_Cursor_Halo_Scene_Pressure.md)
-- [R-63 — Display-1 Black Flash From Fullscreen-Flip PresentMode Transitions](Historical_Bugs/R-63_Display1_Black_Flash_Fullscreen_Flip_Promotion.md)
-- [R-62 — Transition-Scoped Presentation Deferral Degraded Bubble](Historical_Bugs/R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md)
-
-- [R-61 — Settings Glass Used The Wrong Composition Family For A Layered QWidget](Historical_Bugs/R-61_Settings_Glass_Layered_HWND_Backdrop_Mismatch.md)
-- [R-61B — Visualizer Presentation Became Bound To Transition Timing](Historical_Bugs/R-61B_Visualizer_Presentation_Bound_To_Transition_Timer.md)
-- [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](Historical_Bugs/R-60_ImagePresenter_DPR_Texture_Identity.md)
-- [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
-- [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
-- [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md)
-- [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
-- [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md)
-- [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](Historical_Bugs/R-54_Bubble_Cadence_Gate.md)
-- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md)
-- [R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit](Historical_Bugs/R-52_ImageWorker_Shared_Memory_Retention.md)
-- [R-51 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity](Historical_Bugs/R-51_Shared_Shader_Cache_Deletion_Ownership.md)
-- [R-50 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog](Historical_Bugs/R-50_Count_Only_Resource_Retention.md)
-- [R-49 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup](Historical_Bugs/R-49_Settings_Edit_Hide_Only_Runtime_Retention.md)
-- [R-48 — Clock Double-Click Replaced Per-Display Mode With Shared Setting](Historical_Bugs/R-48_Clock_Per_Display_Mode_Override.md)
-- [R-47 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push](Historical_Bugs/R-47_Oscilloscope_Diagnostic_NameError.md)
-- [R-46 — Failed Blob Visualizer Retired End To End](Historical_Bugs/R-46_Blob_Visualizer_Retirement.md)
-- [R-45 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry](Historical_Bugs/R-45_Clock_Custom_Geometry_Authority.md)
-- [R-44 — Gmail CUSTOM Resize Payload Overrode Live Text Balance](Historical_Bugs/R-44_Gmail_Custom_Text_Balance_Authority.md)
-- [R-43 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor](Historical_Bugs/R-43_Foundry_Modal_Colour_Editor_Lifetime.md)
-- [R-42 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path](Historical_Bugs/R-42_Abandonment_Selected_Game_Achievement_Acquisition.md)
-- [R-41 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership](Historical_Bugs/R-41_Gmail_OAuth_Callback_Thread_Ownership.md)
-- [R-40 — Abandonment Ignored The Shared Steam Refresh Interval](Historical_Bugs/R-40_Abandonment_Shared_Steam_Refresh_Authority.md)
-- [R-39 — Abandonment Automatic Rotation Lost Uncached Selected Artwork](Historical_Bugs/R-39_Abandonment_Automatic_Rotation_Artwork_Hydration.md)
-- [R-38 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts](Historical_Bugs/R-38_Achievement_Pulse_Unlock_Ranking_And_Count_Elision.md)
-- [R-37 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order](Historical_Bugs/R-37_Abandonment_Rotation_Expiry_And_Sequential_Selection.md)
-- [R-36 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion](Historical_Bugs/R-36_Blob_Mighty_Shaped_Contour_Motion.md)
-- [R-35 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards](Historical_Bugs/R-35_Steam_Family_Master_Runtime_Gate.md)
-- [R-34 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card](Historical_Bugs/R-34_Blank_Weather_Location_Lifecycle_Fallback.md)
-- [R-33 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots](Historical_Bugs/R-33_Defaults_SST_Regeneration_Safety.md)
-- [R-32 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations](Historical_Bugs/R-32_WidgetsTab_Lazy_Save_Hydration_Guard.md)
-- [R-31 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss](Historical_Bugs/R-31_ImageWorker_Display_Replacement_On_Rejection.md)
-- [R-30 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit](Historical_Bugs/R-30_Adaptive_Timer_Shutdown_Ownership.md)
-- [R-29 — Reddit Refresh Cadence And Provider Fallback Authority](Historical_Bugs/R-29_Reddit_Refresh_Provider_Authority.md)
-- [R-28 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper](Historical_Bugs/R-28_Settings_Last_Moved_Deleted_QObject.md)
-- [R-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap](Historical_Bugs/R-27_Pending_Paint_Requeue_UI_Pressure.md)
-- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md)
-- [R-25 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up](Historical_Bugs/R-25_Spectrum_Solid_Bar_Hysteresis.md)
-- [R-24 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn](Historical_Bugs/R-24_Retired_Overlay_Effect_Cache_Busting.md)
-- [R-23 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family](Historical_Bugs/R-23_Custom_Edit_Surface_Geometry_Regression.md)
-- [R-22 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions](Historical_Bugs/R-22_Visualizer_Runtime_State_Bleed.md)
-- [R-21 — Visualizer Painted-Card GL Content Escaping Card Boundary](Historical_Bugs/R-21_Visualizer_Painted_Card_GL_Boundary.md)
-- [R-18 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`)](Historical_Bugs/R-18_Settings_Dialog_Taskbar_Ghost.md)
-- [R-17 — Goo No-Gap/Artifact Regression Family](Historical_Bugs/R-17_Goo_No_Gap_Artifact_Regression.md)
-- [R-16 — One-Dir Runtime Misdetected As Script + Curated Slot Drift](Historical_Bugs/R-16_One_Dir_Frozen_Detection_And_Slot_Drift.md)
-- [R-15 — Frozen Curated Presets Silently Fell Back to Onefile Tree](Historical_Bugs/R-15_Frozen_Curated_Preset_Root.md)
-- [R-14 — Blob Inward-Liquid Runtime Handoff Broke GL Overlay Push](Historical_Bugs/R-14_Blob_Inward_Liquid_Overlay_Handoff.md)
-- [R-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted](Historical_Bugs/R-13_Sine_Oscilloscope_Lines_4_6_Persistence.md)
-- [R-12 — Runtime Custom Slot Replaced While Cycling Presets](Historical_Bugs/R-12_Runtime_Custom_Preset_Cycling.md)
-- [R-11 — Visualizer Preset Tooling Regression](Historical_Bugs/R-11_Visualizer_Preset_Tooling_Regression.md)
-- [R-10 — Widget C++ Object Already Deleted on Provider Switch Callback](Historical_Bugs/R-10_Deleted_QObject_Provider_Switch_Callback.md)
-- [R-09 — Settings Spinbox/LineEdit Fill Regression](Historical_Bugs/R-09_Settings_Input_Fill_QSS_Specificity.md)
-- [R-08 — Pixel Shift Visualizer Bleed-Through](Historical_Bugs/R-08_Pixel_Shift_Visualizer_Bleed_Through.md)
-- [R-07 — Startup Fade / Visualizer Secondary-Stage Ownership Split](Historical_Bugs/R-07_Startup_Fade_Visualizer_Secondary_Stage.md)
-- [R-06 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE)](Historical_Bugs/R-06_Visualizer_Preset_Merge_Pollution.md)
-- [R-05 — Visualizer Preset Slot Label Mismatched Edit Target](Historical_Bugs/R-05_Visualizer_Preset_Slot_Label_Target.md)
-- [R-04 — Visualizer Curated Preset Selection Reused Custom Runtime Values](Historical_Bugs/R-04_Visualizer_Curated_Preset_Custom_Authority.md)
-- [R-03 — Sine Idle Motion Dead/Flat During Paused State](Historical_Bugs/R-03_Sine_Idle_Paused_Motion.md)
-- [R-02 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime](Historical_Bugs/R-02_Reddit_Helper_Link_Handoff.md)
-- [R-01 — Settings Shell Outer Border Radius / Corner Bleed](Historical_Bugs/R-01_Settings_Shell_Outer_Border_Radius.md)
-
-### Historical numbering note
-
-`R-19` and `R-20` were aliases for `U-02` and `U-03`; no independent source bodies existed, so no
-duplicate records are manufactured.
-
-## U Records
-
-- [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](Historical_Bugs/U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
-- [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Handle-type attribution rejected a continuous steady-generation leak; one bounded 3–5-cycle Settings churn acceptance now decides whether the first replacement-generation handle bundle is one-time lazy initialization or cumulative retention.
-- [U-08 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift](Historical_Bugs/U-08_Custom_Replay_Shrink_Minimum_Constraints.md)
-- [U-07 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family](Historical_Bugs/U-07_Bubble_Loud_Path_Oracle_Drift.md)
-- [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
-- [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
-- [U-04 — Settings Dialog Flicker / Taskbar Ghost Investigation Archive](Historical_Bugs/U-04_Settings_Dialog_Flicker_Investigation_Archive.md)
-- [U-03 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing](Historical_Bugs/U-03_Spectrum_Vocal_Lane_Migration.md)
-- [U-02 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md)
-
-## Archived Investigation Records
-
-- [A-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets](Historical_Bugs/A-06_Visualizer_Mode_Preset_Bleed_Investigation.md)
-- [A-05 — Blob Ghost/Pulse Investigation](Historical_Bugs/A-05_Blob_Ghost_Pulse_Investigation.md)
-- [A-04 — MC Keyboard Focus / Ctrl Halo Interaction Regressions](Historical_Bugs/A-04_MC_Keyboard_Focus_Ctrl_Halo_Archive.md)
-- [A-03 — Settings Dialog Flicker / Placeholder Regression](Historical_Bugs/A-03_Settings_Dialog_Flicker_Resolved_Archive.md)
-- [A-02 — Spotify Visualizer Crossover Persistence (Blob muted after mode switch)](Historical_Bugs/A-02_Visualizer_Crossover_Persistence_Blob.md)
-- [A-01 — Settings Dialog Flicker / Placeholder Regression — Historical Investigation](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md)
-
-## Maintenance Rule
-
-Do not add full incident bodies here. New substantial incidents receive one standalone record, then
-links here and in the folder README.
-
-When an incident changes from implementation-open to audit-green/acceptance-only/solved, update the
-status navigation here and in `Docs/Historical_Bugs/README.md` without rewriting its historical
-chronology.
+Do not add another index inside `Docs/Historical_Bugs/`. Significant new incident histories must meet the admission bar above and should be linked once here. Put accepted behavior, test-oracle policy and negative controls into their existing topic-specific guides; [Guardrails](Guardrails.md) routes to the right owner. There are no open source-change tasks in this index.

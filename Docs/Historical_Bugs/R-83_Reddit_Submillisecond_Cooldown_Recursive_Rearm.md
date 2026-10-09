@@ -1,5 +1,7 @@
 # R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-14  
 Status: SOLVED — Installed 58-Minute Soak Closed The Scheduler Gate
 

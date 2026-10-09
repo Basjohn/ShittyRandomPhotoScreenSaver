@@ -1,5 +1,7 @@
 # R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-14  
 Status: PARTIAL — steady-generation leak hypothesis rejected; replacement-generation retention requires one final bounded churn proof
 

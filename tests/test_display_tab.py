@@ -252,3 +252,14 @@ class TestDisplayTab:
         # Tab should have child widgets
         children = display_tab.children()
         assert len(children) > 0, "Display tab should have child widgets"
+
+
+def test_display_tab_does_not_repair_backend_during_load_or_save():
+    """Backend/acceleration normalization is SettingsManager startup work."""
+    import inspect
+    from ui.tabs.display_tab import DisplayTab
+
+    for method in (DisplayTab._load_settings, DisplayTab._save_settings):
+        implementation = inspect.getsource(method)
+        assert "self._settings.set('display.render_backend_mode'" not in implementation
+        assert "self._settings.set('display.hw_accel'" not in implementation

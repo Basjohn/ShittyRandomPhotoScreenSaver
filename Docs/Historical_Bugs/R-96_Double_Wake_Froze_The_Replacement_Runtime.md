@@ -1,5 +1,7 @@
 # R-96 — Double Wake Froze The Replacement Runtime
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-25  
 Status: FIXED IN CODE / AWAITING VALIDATION — Windows dual-monitor built check (§ Validation)
 

@@ -1,5 +1,7 @@
 # R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 Date: 2026-09-24  
 Status: SOLVED IN CODE — the next ordinary `--frame-trace` run confirms Glass's first moving frame
 

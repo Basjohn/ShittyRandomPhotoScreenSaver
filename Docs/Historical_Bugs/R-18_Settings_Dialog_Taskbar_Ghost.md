@@ -1,5 +1,7 @@
 # R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)
 
+**STRONG RETENTION VALUE DOCUMENT**
+
 ## Classification
 
 - [ ] COMPLETELY FUCKED

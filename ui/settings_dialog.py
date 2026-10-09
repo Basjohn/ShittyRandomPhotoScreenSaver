@@ -658,6 +658,10 @@ class SettingsDialog(QDialog):
         self._background_build_scheduled = False
         self._background_tab_queue: list[int] = []
         self._background_hydration_started = False
+        # Warm only cheap, frequently navigated configuration owners after first
+        # paint. Dormant tabs remain lazy; their constructors must never be
+        # required to keep runtime settings/themes valid.
+        self._background_warm_tab_keys = frozenset({"display", "transitions"})
         self._background_hydration_delay_ms = 1500
         self._background_hydration_step_delay_ms = 150
         self._closing = False
@@ -1248,16 +1252,17 @@ class SettingsDialog(QDialog):
         return widget
 
     def _hydrate_remaining_tabs_async(self) -> None:
-        # Widgets and Visualizers are intentionally excluded from background hydration.
-        # Its constructor is large enough that hidden/off-screen builds can
-        # stall the visible shell and confuse persisted subtab/bucket state
-        # restoration. Build it only when explicitly selected or restored
-        # as the active top-level tab.
+        # The initial/restored tab was built synchronously. Only Display and
+        # Transitions are subsequently warmed, staggered and cancellable; their
+        # presentation-only subscriptions benefit from being ready on first
+        # switch. Theme selection is activated before QWidget construction.
+        # All other hidden pages build only when visited, with no lost settings:
+        # SettingsManager owns persistence, reset/import, and global activation.
         remaining = [
             i
             for i in range(len(self._tab_keys))
             if i not in self._built_tab_indices
-            and self._tab_key_for_index(i) not in {"widgets", "visualizers", "quick_start"}
+            and self._tab_key_for_index(i) in self._background_warm_tab_keys
         ]
         if not remaining:
             return
