@@ -227,6 +227,8 @@ output/
 
 # Jank Ass Shit I Don't Want Being Jank In Public
 /assets/usu
+# Transition showcase WebPs (tools/release_media.py), release-only and regenerable.
+/assets/webp/
 
 # GODZIP archive metadata, Foundry repo-local state and debris staging.
 # A GODZIP archive embeds its manifest at .godzip/manifest.json; if an archive

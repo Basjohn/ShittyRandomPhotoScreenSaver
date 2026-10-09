@@ -72,6 +72,7 @@ def is_generated_qrc_python(path: str) -> bool:
 
 NEVER_TRANSFER_PREFIXES = (
     "ui/assets/",
+    "assets/webp/",   # release showcase WebPs (tools/release_media.py)
 )
 
 HEAVY_DEFAULT_PREFIXES = (
