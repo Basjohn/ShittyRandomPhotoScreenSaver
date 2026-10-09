@@ -1348,7 +1348,8 @@ def _resolved_transition_run(capture: object, transition_id: str):
     transitions.setdefault("activation", {})[descriptor.setting_name] = True
     transitions.setdefault("pool", {})[descriptor.setting_name] = True
     class DefaultsOnlySettings:
-        def get(self, key: str): return transitions if key == "transitions" else None
+        # Other sections (the 3D tier) read their canonical defaults through ``default``.
+        def get(self, key: str, default=None): return transitions if key == "transitions" else default
         def get_bool(self, _key: str): return True
     spec = resolve_quick_transition_spec(DefaultsOnlySettings(), random_source=random.Random(713))
     if spec is None or spec.transition_id != transition_id:
