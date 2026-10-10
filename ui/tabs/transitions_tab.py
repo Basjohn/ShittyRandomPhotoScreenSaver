@@ -32,6 +32,7 @@ from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PI
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
 from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
+from rendering.gl_programs.surface_tension_program import TENSION_POOLS_RANGE
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_CHOICES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGIN_CHOICES
 from rendering.gl_programs.volumetric_dissolve_options import (
@@ -581,6 +582,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
         "VHS Distortion": "_build_vhs_group",
+        "Surface Tension Merge": "_build_surface_tension_group",
         "Membrane Turnover": "_build_membrane_group",
         "Liquid Lens": "_build_liquid_lens_group",
         "Edge Bloom Reveal": "_build_edge_bloom_group",
@@ -605,6 +607,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
         "VHS Distortion": "vhs_group",
+        "Surface Tension Merge": "surface_tension_group",
         "Membrane Turnover": "membrane_group",
         "Liquid Lens": "liquid_lens_group",
         "Edge Bloom Reveal": "edge_bloom_group",
@@ -842,6 +845,12 @@ class TransitionsTab(QWidget):
             canonical = canonical_transitions['liquid_lens']
             cfg = self._new_transition_section(transitions_config, 'liquid_lens', canonical)
             self.liquid_lens_droplets_check.setChecked(bool(cfg.get('droplets', canonical['droplets'])))
+        if hasattr(self, 'surface_tension_group'):
+            canonical = canonical_transitions['surface_tension']
+            cfg = self._new_transition_section(transitions_config, 'surface_tension', canonical)
+            self.surface_tension_pools_spin.setValue(self._new_transition_number(
+                cfg, 'pools', 'surface_tension', canonical['pools'], self.surface_tension_pools_spin, int,
+            ))
         if hasattr(self, 'edge_bloom_group'):
             canonical = canonical_transitions['edge_bloom']
             cfg = self._new_transition_section(transitions_config, 'edge_bloom', canonical)
@@ -1097,6 +1106,9 @@ class TransitionsTab(QWidget):
         ),
         "membrane": (
             ("gloss", "Gloss:", 0.0, 1.0, "Shine of the membrane and reflections of the next picture on it as it twists."),
+        ),
+        "surface_tension": (
+            ("gloss", "Gloss:", 0.0, 1.0, "Light on the liquid where the two pictures meet: highlights and sheen along every edge."),
         ),
         "vhs": (
             ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
@@ -1410,6 +1422,22 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "membrane")
         self._build_scene3d_choices(layout, "membrane")
         self._specific_group_host_layout.addWidget(self.membrane_group)
+
+    def _build_surface_tension_group(self) -> None:
+        self.surface_tension_group = QGroupBox("Surface Tension Merge Settings")
+        self._style_group_box(self.surface_tension_group)
+        layout = QVBoxLayout(self.surface_tension_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        pools_row = self._aligned_row(layout, "Pools:")
+        self.surface_tension_pools_spin = QSpinBox()
+        self.surface_tension_pools_spin.setRange(*TENSION_POOLS_RANGE)
+        self.surface_tension_pools_spin.setValue(int(_transition_default("surface_tension.pools")))
+        self.surface_tension_pools_spin.setToolTip("How many pools of the next picture appear: a few large ones up to many small ones.")
+        self.surface_tension_pools_spin.valueChanged.connect(self._save_settings)
+        pools_row.addWidget(self.surface_tension_pools_spin)
+        pools_row.addStretch()
+        self._build_surface_controls(layout, "surface_tension")
+        self._specific_group_host_layout.addWidget(self.surface_tension_group)
 
     def _build_vhs_group(self) -> None:
         self.vhs_group = QGroupBox("VHS Distortion Settings")
@@ -2196,6 +2224,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'jigsaw_pieces_spin', None),
             getattr(self, 'volumetric_dissolve_size_spin', None),
             getattr(self, 'beam_sparks_check', None),
+            getattr(self, 'surface_tension_pools_spin', None),
             getattr(self, 'liquid_lens_droplets_check', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
@@ -2802,6 +2831,10 @@ class TransitionsTab(QWidget):
             membrane = {'direction': self._direction_by_type['membrane']}
         else:
             membrane = {**_existing_subdict('membrane'), 'direction': self._direction_by_type['membrane']}
+        if hasattr(self, 'surface_tension_group'):
+            surface_tension = {'pools': self.surface_tension_pools_spin.value()}
+        else:
+            surface_tension = _existing_subdict('surface_tension')
         if hasattr(self, 'vhs_group'):
             vhs = {'direction': self._direction_by_type['vhs']}
         else:
@@ -2816,7 +2849,7 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
                                 ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
-                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane)):
+                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2858,6 +2891,7 @@ class TransitionsTab(QWidget):
             'volumetric_dissolve': volumetric_dissolve,
             'vhs': vhs,
             'edge_bloom': edge_bloom,
+            'surface_tension': surface_tension,
             'membrane': membrane,
             'liquid_lens': liquid_lens,
         }

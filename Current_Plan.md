@@ -78,10 +78,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
 - [ ] **T4. Edge Bloom Reveal** — implemented 2026-10-10 on the shared edge field and photo-colour helpers (`Docs/Reference/Transitions.md`, `Docs/Reference/Scene3D_Resources.md`); awaiting operator acceptance. Deactivated by default.
 - [ ] **T5. Liquid Lens** — implemented 2026-10-10 on the new shared refraction helpers and the preserved vortex flow (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
 - [ ] **T6. Membrane Turnover** — implemented 2026-10-10 on the shared sheet module (new `sheetTwist`, preserved two-sided helpers) and refraction's Fresnel (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_membrane_default.webp`). Deactivated by default.
-- [ ] **T7. Surface Tension Merge.** Source and destination behave like two fluids separated by a moving meniscus boundary;
-  rounded pools swell, merge and take territory. Useful existing architecture: fullscreen passes, mask/reveal sequencing,
-  transition registry. New useful architecture: a shared organic-boundary/meniscus field helper that can also serve capillary or
-  liquid-family effects.
+- [ ] **T7. Surface Tension Merge** — implemented 2026-10-10 on the new shared meniscus field and the refraction helpers (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_surface_tension_default.webp`). Deactivated by default.
 - [ ] **T8. Chromatic Shear.** A clean prismatic transition where the source image splits into offset spectral layers and broad
   shear slices before reconverging as the destination. Useful existing architecture: fullscreen post/material passes and timing
   plumbing. New useful architecture: shared chromatic-channel displacement/spectral-slice helpers so the effect stays elegant
