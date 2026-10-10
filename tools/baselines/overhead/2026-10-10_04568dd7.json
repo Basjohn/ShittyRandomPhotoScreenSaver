@@ -1,0 +1,292 @@
+{
+ "commit": "04568dd7",
+ "date": "2026-10-10T21:26:56",
+ "size": "1920x1080",
+ "frames": 48,
+ "passes": 3,
+ "transitions": {
+  "ripple/default": {
+   "cpu_median": 0.156149995746091,
+   "cpu_p90": 0.1731000083964318,
+   "gpu_median": 0.017408,
+   "gpu_p90": 0.018432,
+   "gl_calls": 52.0,
+   "py_calls": 314.0
+  },
+  "wipe/default": {
+   "cpu_median": 0.15979999443516135,
+   "cpu_p90": 0.18430000636726618,
+   "gpu_median": 0.007168,
+   "gpu_p90": 0.007168,
+   "gl_calls": 50.0,
+   "py_calls": 306.0
+  },
+  "block_spins/off": {
+   "cpu_median": 0.2606999914860353,
+   "cpu_p90": 0.2935999946203083,
+   "gpu_median": 0.031232000000000003,
+   "gpu_p90": 0.036864,
+   "gl_calls": 95.0,
+   "py_calls": 572.0
+  },
+  "block_spins/reflection": {
+   "cpu_median": 0.26715001149568707,
+   "cpu_p90": 0.31859998125582933,
+   "gpu_median": 0.031232000000000003,
+   "gpu_p90": 0.037888,
+   "gl_calls": 95.0,
+   "py_calls": 582.0
+  },
+  "diffuse/default": {
+   "cpu_median": 0.18160001491196454,
+   "cpu_p90": 0.2612000098451972,
+   "gpu_median": 0.074752,
+   "gpu_p90": 0.089088,
+   "gl_calls": 51.0,
+   "py_calls": 324.0
+  },
+  "slide/default": {
+   "cpu_median": 0.20029999723192304,
+   "cpu_p90": 0.22390001686289907,
+   "gpu_median": 0.01024,
+   "gpu_p90": 0.011264,
+   "gl_calls": 51.0,
+   "py_calls": 310.0
+  },
+  "glass_shatter/default": {
+   "cpu_median": 0.2947999892057851,
+   "cpu_p90": 0.3507999936118722,
+   "gpu_median": 0.066048,
+   "gpu_p90": 0.073728,
+   "gl_calls": 103.0,
+   "py_calls": 649.0
+  },
+  "exploding_tiles/default": {
+   "cpu_median": 0.49775000661611557,
+   "cpu_p90": 0.659500015899539,
+   "gpu_median": 0.12492800000000001,
+   "gpu_p90": 0.20992,
+   "gl_calls": 169.5,
+   "py_calls": 1054.0
+  },
+  "pixel_accretion/default": {
+   "cpu_median": 0.30419998802244663,
+   "cpu_p90": 0.4025000089313835,
+   "gpu_median": 0.055296,
+   "gpu_p90": 0.067584,
+   "gl_calls": 95.0,
+   "py_calls": 641.0
+  },
+  "ink_bloom/default": {
+   "cpu_median": 0.21030001516919583,
+   "cpu_p90": 0.25209999876096845,
+   "gpu_median": 0.06912,
+   "gpu_p90": 0.0768,
+   "gl_calls": 68.0,
+   "py_calls": 466.0
+  },
+  "melt_drip/default": {
+   "cpu_median": 0.18545000057201833,
+   "cpu_p90": 0.26989998877979815,
+   "gpu_median": 0.141824,
+   "gpu_p90": 0.943104,
+   "gl_calls": 50.0,
+   "py_calls": 369.0
+  },
+  "beam/default": {
+   "cpu_median": 0.22045000514481217,
+   "cpu_p90": 0.3591999993659556,
+   "gpu_median": 0.013312,
+   "gpu_p90": 0.014336,
+   "gl_calls": 78.0,
+   "py_calls": 503.0
+  },
+  "volumetric_dissolve/default": {
+   "cpu_median": 0.41560000681784004,
+   "cpu_p90": 0.5691999976988882,
+   "gpu_median": 0.080384,
+   "gpu_p90": 0.141312,
+   "gl_calls": 108.0,
+   "py_calls": 962.0
+  },
+  "vhs/default": {
+   "cpu_median": 0.17815000319387764,
+   "cpu_p90": 0.3063999756705016,
+   "gpu_median": 0.036864,
+   "gpu_p90": 0.037888,
+   "gl_calls": 53.0,
+   "py_calls": 382.0
+  },
+  "jigsaw/default": {
+   "cpu_median": 0.39134999678935856,
+   "cpu_p90": 0.6031999946571887,
+   "gpu_median": 0.049152,
+   "gpu_p90": 0.0512,
+   "gl_calls": 119.0,
+   "py_calls": 863.0
+  },
+  "cube_turn/default": {
+   "cpu_median": 0.32005000684875995,
+   "cpu_p90": 0.42100000428035855,
+   "gpu_median": 0.044544,
+   "gpu_p90": 0.053248,
+   "gl_calls": 98.0,
+   "py_calls": 635.0
+  },
+  "relief_rise/default": {
+   "cpu_median": 0.31925000075716525,
+   "cpu_p90": 0.4233999934513122,
+   "gpu_median": 0.07680000000000001,
+   "gpu_p90": 0.098304,
+   "gl_calls": 95.0,
+   "py_calls": 585.0
+  },
+  "accordion_fold/default": {
+   "cpu_median": 0.31694999779574573,
+   "cpu_p90": 0.41280000004917383,
+   "gpu_median": 0.064,
+   "gpu_p90": 0.070656,
+   "gl_calls": 101.0,
+   "py_calls": 652.0
+  },
+  "disintegrate/default": {
+   "cpu_median": 0.4193500062683597,
+   "cpu_p90": 0.5900999822188169,
+   "gpu_median": 0.08191999999999999,
+   "gpu_p90": 0.1536,
+   "gl_calls": 98.0,
+   "py_calls": 916.0
+  },
+  "page_curl/default": {
+   "cpu_median": 0.3343499993206933,
+   "cpu_p90": 0.454099994385615,
+   "gpu_median": 0.049152,
+   "gpu_p90": 0.052224,
+   "gl_calls": 101.0,
+   "py_calls": 709.0
+  },
+  "crossfade/default": {
+   "cpu_median": 0.155549991177395,
+   "cpu_p90": 0.17449998995289207,
+   "gpu_median": 0.007168,
+   "gpu_p90": 0.008192,
+   "gl_calls": 49.0,
+   "py_calls": 301.0
+  },
+  "block_flip/default": {
+   "cpu_median": 0.1572499895701185,
+   "cpu_p90": 0.20019998191855848,
+   "gpu_median": 0.007679999999999999,
+   "gpu_p90": 0.011264,
+   "gl_calls": 51.0,
+   "py_calls": 317.0
+  },
+  "warp_dissolve/default": {
+   "cpu_median": 0.18509999790694565,
+   "cpu_p90": 0.3005000180564821,
+   "gpu_median": 0.012288,
+   "gpu_p90": 0.012288,
+   "gl_calls": 50.0,
+   "py_calls": 302.0
+  },
+  "blinds/flat": {
+   "cpu_median": 0.15469998470507562,
+   "cpu_p90": 0.1936999906320125,
+   "gpu_median": 0.009216,
+   "gpu_p90": 0.01024,
+   "gl_calls": 52.0,
+   "py_calls": 327.0
+  },
+  "blinds/3d_slats": {
+   "cpu_median": 0.3098500019405037,
+   "cpu_p90": 0.41439998312853277,
+   "gpu_median": 0.06144,
+   "gpu_p90": 0.067584,
+   "gl_calls": 99.0,
+   "py_calls": 689.0
+  },
+  "crumble/default": {
+   "cpu_median": 0.34950001281686127,
+   "cpu_p90": 0.49989999388344586,
+   "gpu_median": 0.074752,
+   "gpu_p90": 0.078848,
+   "gl_calls": 107.0,
+   "py_calls": 784.0
+  },
+  "particle/default": {
+   "cpu_median": 0.16835000133141875,
+   "cpu_p90": 0.19600000814534724,
+   "gpu_median": 0.737792,
+   "gpu_p90": 1.716224,
+   "gl_calls": 65.0,
+   "py_calls": 385.0
+  },
+  "burn/default": {
+   "cpu_median": 0.1713499950710684,
+   "cpu_p90": 0.20890001906082034,
+   "gpu_median": 0.109568,
+   "gpu_p90": 0.743424,
+   "gl_calls": 63.0,
+   "py_calls": 404.0
+  }
+ },
+ "visualizers": {
+  "spectrum": {
+   "cpu_median": 0.1873500004876405,
+   "cpu_p90": 0.24339999072253704,
+   "gpu_median": 0.013312,
+   "gpu_p90": 0.013312,
+   "gl_calls": 17.0
+  },
+  "oscilloscope": {
+   "cpu_median": 0.37024998164270073,
+   "cpu_p90": 0.4975000047124922,
+   "gpu_median": 0.9743360000000001,
+   "gpu_p90": 1.787904,
+   "gl_calls": 17.0
+  },
+  "sine_wave": {
+   "cpu_median": 0.22509999689646065,
+   "cpu_p90": 0.27030002092942595,
+   "gpu_median": 0.104448,
+   "gpu_p90": 0.105472,
+   "gl_calls": 17.0
+  },
+  "bubble": {
+   "cpu_median": 0.13010000111535192,
+   "cpu_p90": 0.1616999797988683,
+   "gpu_median": 0.014336,
+   "gpu_p90": 0.01536,
+   "gl_calls": 17.0
+  },
+  "devcurve": {
+   "cpu_median": 0.3812500071944669,
+   "cpu_p90": 0.5487999878823757,
+   "gpu_median": 0.132096,
+   "gpu_p90": 0.13312,
+   "gl_calls": 17.0
+  },
+  "sphere": {
+   "cpu_median": 0.43399998685345054,
+   "cpu_p90": 0.5898000090382993,
+   "gpu_median": 0.06144,
+   "gpu_p90": 0.272384,
+   "gl_calls": 78.0
+  },
+  "extruded_spectrum": {
+   "cpu_median": 0.3180999920004979,
+   "cpu_p90": 0.4152999899815768,
+   "gpu_median": 0.078848,
+   "gpu_p90": 0.082944,
+   "gl_calls": 77.0
+  },
+  "shockwave_grid": {
+   "cpu_median": 0.430750020314008,
+   "cpu_p90": 0.6120000034570694,
+   "gpu_median": 0.135168,
+   "gpu_p90": 0.137216,
+   "gl_calls": 146.0
+  }
+ },
+ "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2"
+}
