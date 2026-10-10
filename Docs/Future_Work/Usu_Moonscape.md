@@ -140,6 +140,12 @@ reactivity lanes. **Missing**, each a shared foundation slice (no Usu-private en
 | S26 | **Sphere world + crater field + starscape** | the moon and sky | analytic sphere with seeded crater perturbation, instanced craters/stars, rotation from logical travel; reusable by transitions/Visualizers |
 | S27 | **Perspective orbit camera** | free 3D framing | view/projection matrices independent of the photo-plane camera (`sceneProjectCamera` stays for transitions), authored presets + logical interpolation, overscan rules where a photo is visible |
 
+**Authoring cost is not runtime cost.** Cycles path tracing of the procedural felt takes ~30 s a frame offline; the runtime
+never runs those node graphs. S19 bakes them once into ordinary maps (albedo, normal, roughness/sheen), so per frame Usu
+costs a few texture samples per pixel on a modest skinned mesh (cages ~13k vertices before any LOD). Authoring materials must therefore stay bakeable:
+no Blender hair/particle fur (tried 2026-10-10: ~10 min per frame and nothing to bake); fuzz is authored as sheen and
+delivered at runtime as S24 shells/fins.
+
 Each slice obeys the shared rules: lazy, demand-created, released at park/retirement, count-invariant dormancy, one
 measured consumer at a time (TIME_ELAPSED + per-frame flush, median/p90), warm-up lists every program/resource a first
 frame would create, CPU mirrors for shader maths, quality tiers decide optional cost.
@@ -161,7 +167,7 @@ frame would create, CPU mirrors for shader maths, quality tiers decide optional 
 | Gate | Requirement | Status |
 | --- | --- | --- |
 | A — static model | silhouette/proportions match the turnaround | approved 2026-10-08 |
-| A2 — surface | soft felt, no wood grain, faint dirt; parity with the turnaround | reworked 2026-10-10 (procedural; bake at S19) |
+| A2 — surface | soft felt, no wood grain, faint dirt; parity with the turnaround | felt v4 2026-10-10: fibre/stain/relief node group on rest-pose coordinates (no swimming under the rig), charcoal felt mittens, darker iris, tan thread, sheen-only fuzz; rebuilt by `assets/usu/source/usu_felt_materials.py`; bake at S19 |
 | B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | rough rig built 2026-10-10 in `assets/usu/Usu_Rig.blend` (procedural per-part weights, bone-scale blink); refinement pending |
 | B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | first pass rendered 2026-10-10 (`assets/usu/review/pose_tests/`) |
 | C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | rough blocking done 2026-10-10 (19 actions; sheet `assets/usu/review/Usu_Rough_Clips_Sheet.png`); refine after acceptance |
