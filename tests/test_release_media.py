@@ -238,14 +238,13 @@ def test_the_showcase_never_runs_back_in_the_same_direction() -> None:
                 assert a[0] * b[0] + a[1] * b[1] <= 0.25 * (a[0] ** 2 + a[1] ** 2) ** .5 * (b[0] ** 2 + b[1] ** 2) ** .5
 
 
-def test_transition_showcases_play_faster_before_shrinking_or_dropping_frames(tmp_path: Path) -> None:
-    from tools.release_media import transition_encoding_plan
+def test_transition_showcases_keep_one_frame_rate_and_speed_and_step_only_quality(tmp_path: Path) -> None:
+    from tools.release_media import TRANSITION_FPS, transition_encoding_plan
 
-    plan = transition_encoding_plan(480, 30)
-    assert all(width == 480 for width, _fps, _scale in plan)
-    scales = [scale for _width, fps, scale in plan if fps == 30]
-    assert scales == sorted(scales, reverse=True) and scales[0] == 1.0 and len(scales) > 1
-    assert plan.index(next(step for step in plan if step[1] < 30)) == len(scales)
+    plan = transition_encoding_plan(480, TRANSITION_FPS)
+    assert {(width, fps, scale) for width, fps, scale, _quality in plan} == {(480, TRANSITION_FPS, 1.0)}
+    qualities = [quality for *_rest, quality in plan]
+    assert qualities == sorted(qualities, reverse=True) and qualities[0] == 95 and len(qualities) > 1
     import numpy as np
 
     rng = np.random.default_rng(3)
@@ -256,10 +255,10 @@ def test_transition_showcases_play_faster_before_shrinking_or_dropping_frames(tm
         frames.append(path)
     full = encode_webp(frames, tmp_path / "full.webp", duration_ms=2000, max_bytes=10**7, width=320, fps=30,
                        plan=[(320, 30, 1.0)])
-    faster = encode_webp(frames, tmp_path / "faster.webp", duration_ms=2000, max_bytes=full["bytes"] - 1,
-                         width=320, fps=30, plan=[(320, 30, 1.0), (320, 30, .6)])
-    assert faster["dimensions"] == [320, 180] and faster["fps"] == 30 and faster["time_scale"] == .6
-    assert faster["motion_duration_ms"] == 1200
+    lower = encode_webp(frames, tmp_path / "lower.webp", duration_ms=2000, max_bytes=full["bytes"] - 1,
+                        width=320, fps=30, plan=[(320, 30, 1.0, 95), (320, 30, 1.0, 80)])
+    assert lower["dimensions"] == [320, 180] and lower["fps"] == 30 and lower["time_scale"] == 1.0
+    assert lower["quality"] == 80 and lower["motion_duration_ms"] == 2000
 
 
 def test_showcase_sampling_shows_every_motion_frame_once() -> None:
@@ -275,4 +274,9 @@ def test_showcase_sampling_shows_every_motion_frame_once() -> None:
     inside = [i for i in indices if 0 < i < sources - 1]
     assert len(inside) == len(set(inside)) == sources - 2          # every motion frame, once
     assert all(b - a in (0, 1) for a, b in zip(indices, indices[1:]))
+
+
+def test_block_spins_showcases_omit_refraction() -> None:
+    variants = {case.variant for case in catalogue() if case.identity == "block_spins"}
+    assert variants == {"off", "reflection"}
 
