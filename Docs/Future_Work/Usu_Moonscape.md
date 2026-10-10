@@ -162,9 +162,9 @@ frame would create, CPU mirrors for shader maths, quality tiers decide optional 
 | --- | --- | --- |
 | A — static model | silhouette/proportions match the turnaround | approved 2026-10-08 |
 | A2 — surface | soft felt, no wood grain, faint dirt; parity with the turnaround | reworked 2026-10-10 (procedural; bake at S19) |
-| B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | in progress |
-| B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | pending |
-| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | pending |
+| B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | rough rig built 2026-10-10 in `assets/usu/Usu_Rig.blend` (procedural per-part weights, bone-scale blink); refinement pending |
+| B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | first pass rendered 2026-10-10 (`assets/usu/review/pose_tests/`) |
+| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | rough blocking done 2026-10-10 (19 actions; sheet `assets/usu/review/Usu_Rough_Clips_Sheet.png`); refine after acceptance |
 | C2 — export proof | clips, skins, eye states and materials survive export into the SRPSS path (S19), not just Blender | blocked on S19 |
 | D — runtime | S19–S27 accepted through other consumers, then the mode is admitted | deferred |
 
