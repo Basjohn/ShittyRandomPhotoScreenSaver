@@ -25,7 +25,12 @@ from rendering.gl_programs.edge_bloom_program import (
     edge_bloom_fill_time,
     edge_bloom_thresholds,
 )
-from rendering.quick.scene3d.edge_field import EDGE_FIELD_SEED, edge_field_jumps, edge_ridge_reference
+from rendering.quick.scene3d.edge_field import (
+    EDGE_FIELD_SEED,
+    edge_distance_reference,
+    edge_field_jumps,
+    edge_seed_reference,
+)
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
 from tools.transition_contact_sheet import TransitionCapture
 
@@ -87,16 +92,40 @@ def test_the_field_matches_its_cpu_mirror(capture):
     low, high = edge_bloom_thresholds(float(run.request.parameter_dict()["detail"]))
     blurred = _read(field._textures["luma"], size, 1)[..., 0]       # holds the twice-blurred luma
     strength = _read(field._textures["edge"], size, 1)[..., 0]
-    expected = edge_ridge_reference(blurred, low, high)
+    expected, points = edge_seed_reference(blurred, low, high)
     seeds, expected_seeds = strength >= EDGE_FIELD_SEED, expected >= EDGE_FIELD_SEED
     assert seeds.sum() > 50
     assert (seeds != expected_seeds).mean() < 0.005
     distance = _read(field._textures["field"], size, 2)[..., 0]
-    points = np.argwhere(seeds)
-    ys, xs = np.mgrid[0:size[1], 0:size[0]]
-    exact = np.sqrt(((ys[..., None] - points[:, 0]) ** 2 + (xs[..., None] - points[:, 1]) ** 2).min(-1)) / size[1]
+    exact, _strength = edge_distance_reference(expected, points)
     texel = 1.0 / size[1]
     assert np.abs(distance - exact).mean() < 0.25 * texel and np.abs(distance - exact).max() < 2.0 * texel
+
+
+@pytest.mark.qt
+def test_contours_sit_on_their_sub_texel_ridge_not_on_the_texel_grid(qt_app):
+    # A gently slanted, anti-aliased edge: texel-snapped seeds would stair-step about 0.29 texels RMS.
+    big = Image.new("L", (W * 4, H * 4), 20)
+    ImageDraw.Draw(big).polygon([(0, 240), (W * 4, 240 + 0.15 * W * 4), (W * 4, H * 4), (0, H * 4)], fill=235)
+    destination = big.resize((W, H), Image.BOX).convert("RGB")
+    capture = TransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), destination)
+    try:
+        run = capture.run("edge_bloom", duration_ms=5000)
+        capture.render(run, 0.3)
+        field = capture.host._implementations["edge_bloom"]._new_field
+        size = field._size
+        final = field._textures["ping" if len(edge_field_jumps(size)) % 2 == 0 else "pong"]
+        seeds = _read(final, size, 2)
+        ys, xs = np.mgrid[0:size[1], 0:size[0]]
+        own = (seeds[..., 0] >= 0) & (np.abs(seeds[..., 0] - xs) <= 0.5) & (np.abs(seeds[..., 1] - ys) <= 0.5)
+        inner = own & (xs > 8) & (xs < size[0] - 8)          # away from the clamped picture borders
+        x, y = seeds[..., 0][inner], seeds[..., 1][inner]
+        assert len(x) > size[0] // 2
+        slope, offset = np.polyfit(x, y, 1)
+        assert slope == pytest.approx(0.15, abs=0.01)
+        assert np.sqrt(np.mean((y - (slope * x + offset)) ** 2)) < 0.12
+    finally:
+        capture.close()
 
 
 @pytest.mark.qt

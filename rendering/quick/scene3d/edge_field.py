@@ -10,9 +10,11 @@ five compute stages at a reduced size (``EDGE_FIELD_SIZE`` on the longer side, t
    reading as edges;
 3. edges: Sobel gradient magnitude thinned to its ridges (non-maximum suppression across the
    gradient, as Canny does) and mapped to a 0-1 strength by ``low``/``high``: the picture's
-   structural contours, one texel wide. Texels at least half strength seed the flood;
-4. jump flooding (one dispatch per step, N/2 ... 1 plus a final 1): every texel finds its nearest
-   seed;
+   structural contours, one texel wide. Texels from ``EDGE_FIELD_SEED`` strength seed the flood at
+   their sub-texel ridge position (a parabola through the magnitudes across the ridge), so lines
+   drawn from the distance do not stair-step on the texel grid;
+4. jump flooding (one dispatch per step, N/2 ... 1 plus a final 1) on 32-bit seed positions: every
+   texel finds its nearest seed;
 5. resolve: the field texture holds, per texel, the distance to the nearest contour (picture
    heights) and that contour's strength. It is sampled with linear filtering at the photograph's
    uv; a consumer draws smooth lines of any width from the distance.
@@ -88,7 +90,7 @@ uniform float uLow;
 uniform float uHigh;
 layout(r16f, binding = 0) readonly uniform image2D uLuma;
 layout(r16f, binding = 1) writeonly uniform image2D uEdge;
-layout(rg16f, binding = 2) writeonly uniform image2D uSeed;
+layout(rg32f, binding = 2) writeonly uniform image2D uSeed;
 float lumaAt(ivec2 q) {{
     return imageLoad(uLuma, clamp(q, ivec2(0), uSize - 1)).r;
 }}
@@ -103,22 +105,31 @@ void main() {{
     if (p.x >= uSize.x || p.y >= uSize.y) return;
     vec2 gradient = gradientAt(p);
     float magnitude = length(gradient);
-    // Thin to the ridge: keep a texel only if it is the strongest across the gradient.
+    vec2 seed = vec2(p);
+    // Thin to the ridge: keep a texel only if it is the strongest across the gradient, and place it
+    // where a parabola through the three magnitudes across the ridge peaks.
     if (magnitude > 0.0) {{
         ivec2 o = ivec2(floor(gradient / magnitude + 0.5));
         ivec2 ahead = clamp(p + o, ivec2(0), uSize - 1), behind = clamp(p - o, ivec2(0), uSize - 1);
-        if (magnitude < length(gradientAt(ahead)) || magnitude <= length(gradientAt(behind))) magnitude = 0.0;
+        float forward = length(gradientAt(ahead)), backward = length(gradientAt(behind));
+        if (magnitude < forward || magnitude <= backward) {{
+            magnitude = 0.0;
+        }} else {{
+            float curve = backward - 2.0 * magnitude + forward;
+            float shift = curve < -1e-6 ? clamp(0.5 * (backward - forward) / curve, -0.49, 0.49) : 0.0;
+            seed += shift * vec2(o);
+        }}
     }}
     float strength = smoothstep(uLow, uHigh, magnitude);
     imageStore(uEdge, p, vec4(strength, 0.0, 0.0, 0.0));
-    imageStore(uSeed, p, strength >= {EDGE_FIELD_SEED} ? vec4(vec2(p), 0.0, 0.0) : vec4(-1.0, -1.0, 0.0, 0.0));
+    imageStore(uSeed, p, strength >= {EDGE_FIELD_SEED} ? vec4(seed, 0.0, 0.0) : vec4(-1.0, -1.0, 0.0, 0.0));
 }}
 """
 
 _FLOOD_COMPUTE = _HEADER + """
 uniform int uJump;
-layout(rg16f, binding = 0) readonly uniform image2D uSeedIn;
-layout(rg16f, binding = 1) writeonly uniform image2D uSeedOut;
+layout(rg32f, binding = 0) readonly uniform image2D uSeedIn;
+layout(rg32f, binding = 1) writeonly uniform image2D uSeedOut;
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= uSize.x || p.y >= uSize.y) return;
@@ -143,7 +154,7 @@ void main() {
 """
 
 _RESOLVE_COMPUTE = _HEADER + f"""
-layout(rg16f, binding = 0) readonly uniform image2D uSeed;
+layout(rg32f, binding = 0) readonly uniform image2D uSeed;
 layout(r16f, binding = 1) readonly uniform image2D uEdge;
 layout(rg16f, binding = 2) writeonly uniform image2D uField;
 void main() {{
@@ -152,7 +163,7 @@ void main() {{
     vec2 seed = imageLoad(uSeed, p).rg;
     vec2 value = vec2({EDGE_FIELD_NONE:.1f}, 0.0);
     if (seed.x >= 0.0) {{
-        value = vec2(length(seed - vec2(p)) / float(uSize.y), imageLoad(uEdge, ivec2(seed)).r);
+        value = vec2(length(seed - vec2(p)) / float(uSize.y), imageLoad(uEdge, ivec2(floor(seed + 0.5))).r);
     }}
     imageStore(uField, p, vec4(value, 0.0, 0.0));
 }}
@@ -203,7 +214,13 @@ def edge_strength_reference(luma: np.ndarray, low: float, high: float) -> np.nda
 
 
 def edge_ridge_reference(blurred: np.ndarray, low: float, high: float) -> np.ndarray:
-    """CPU mirror of the edges stage alone, on an already blurred luma image."""
+    """CPU mirror of the edges stage's strengths, on an already blurred luma image."""
+    return edge_seed_reference(blurred, low, high)[0]
+
+
+def edge_seed_reference(blurred: np.ndarray, low: float, high: float) -> tuple[np.ndarray, np.ndarray]:
+    """CPU mirror of the edges stage on an already blurred luma image: the strengths, and the seeds'
+    sub-texel positions as an (N, 2) array of (row, column)."""
     blurred = np.asarray(blurred, dtype=np.float64)
     rows, cols = blurred.shape
     padded = np.pad(blurred, 1, mode="edge")
@@ -221,29 +238,39 @@ def edge_ridge_reference(blurred: np.ndarray, low: float, high: float) -> np.nda
     behind = magnitude[np.clip(ys - oy, 0, rows - 1), np.clip(xs - ox, 0, cols - 1)]
     ridge = np.where((magnitude > 0) & ((magnitude < ahead) | (magnitude <= behind)), 0.0, magnitude)
     t = np.clip((ridge - low) / (high - low), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
+    strength = t * t * (3.0 - 2.0 * t)
+    curve = behind - 2.0 * magnitude + ahead
+    shift = np.where(curve < -1e-6, np.clip(0.5 * (behind - ahead) / np.where(curve < -1e-6, curve, -1.0),
+                                            -0.49, 0.49), 0.0)
+    seeded = strength >= EDGE_FIELD_SEED
+    points = np.stack(((ys + shift * oy)[seeded], (xs + shift * ox)[seeded]), axis=1)
+    return strength, points
 
 
 def edge_field_reference(luma: np.ndarray, low: float, high: float) -> tuple[np.ndarray, np.ndarray]:
     """Exact distance (picture heights) to the nearest seed and its strength, by brute force
     (small images only): the field jump flooding approximates."""
-    strength = edge_strength_reference(luma, low, high)
+    return edge_distance_reference(*edge_seed_reference(_blur_reference(_blur_reference(luma)), low, high))
+
+
+def edge_distance_reference(strength: np.ndarray, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Brute-force distance (picture heights) from every texel to the nearest sub-texel seed, and
+    that seed's strength."""
     rows, cols = strength.shape
-    seeds = np.argwhere(strength >= EDGE_FIELD_SEED)
-    if not len(seeds):
+    if not len(points):
         return np.full(strength.shape, EDGE_FIELD_NONE), np.zeros(strength.shape)
     ys, xs = np.mgrid[0:rows, 0:cols]
-    d2 = (ys[..., None] - seeds[:, 0]) ** 2 + (xs[..., None] - seeds[:, 1]) ** 2
+    d2 = (ys[..., None] - points[:, 0]) ** 2 + (xs[..., None] - points[:, 1]) ** 2
     nearest = d2.argmin(axis=-1)
-    distance = np.sqrt(d2.min(axis=-1)) / rows
-    return distance, strength[seeds[nearest, 0], seeds[nearest, 1]]
+    texels = np.floor(points + 0.5).astype(int)
+    return np.sqrt(d2.min(axis=-1)) / rows, strength[texels[nearest, 0], texels[nearest, 1]]
 
 
 class EdgeField:
     """One photograph's edge field, rebuilt when the run, photograph or thresholds change."""
 
     _ROLES = (("luma", gl.GL_R16F, False), ("blur", gl.GL_R16F, False), ("edge", gl.GL_R16F, False),
-              ("ping", gl.GL_RG16F, False), ("pong", gl.GL_RG16F, False), ("field", gl.GL_RG16F, True))
+              ("ping", gl.GL_RG32F, False), ("pong", gl.GL_RG32F, False), ("field", gl.GL_RG16F, True))
 
     def __init__(self, label: str) -> None:
         self.label = label
@@ -314,20 +341,20 @@ class EdgeField:
         gl.glUniform1f(uniforms["uHigh"], high)
         with bound_image(0, t["luma"], gl.GL_READ_ONLY, gl.GL_R16F), \
                 bound_image(1, t["edge"], gl.GL_WRITE_ONLY, gl.GL_R16F), \
-                bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RG16F):
+                bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RG32F):
             dispatch(groups, image_barrier)
 
         uniforms = use("edge_field_flood", _FLOOD_COMPUTE, ("uJump",))
         source, target = t["ping"], t["pong"]
         for jump in edge_field_jumps(self._size):
             gl.glUniform1i(uniforms["uJump"], jump)
-            with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG16F), \
-                    bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RG16F):
+            with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
+                    bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RG32F):
                 dispatch(groups, image_barrier)
             source, target = target, source
 
         use("edge_field_resolve", _RESOLVE_COMPUTE, ())
-        with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG16F), \
+        with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
                 bound_image(1, t["edge"], gl.GL_READ_ONLY, gl.GL_R16F), \
                 bound_image(2, t["field"], gl.GL_WRITE_ONLY, gl.GL_RG16F):
             dispatch(groups, gl.GL_TEXTURE_FETCH_BARRIER_BIT)
