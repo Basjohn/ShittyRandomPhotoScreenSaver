@@ -12,7 +12,7 @@ This is a **live work checklist**, not a checkpoint chronicle. The current extra
 
 **R160 DO-NOT-REVERT audio rule:** Exactly Spectrum, Extruded Spectrum and Shockwave Grid own Spectrum visual shaping (the shared descriptor is the authority). Bubble, Sphere, Sine, Oscilloscope and Dev Curve use the shared FFT/pre-AGC/transient analysis **without shaping**. Dev Curve's *independent layer shaper* is not the Spectrum shaper. Sphere's R150 `KeyError('Treble')` exposed the invalid historical dependency. R168 explicitly turns on shaping only in synthetic Spectrum-specific DSP fixtures, while Bubble/nonshaper fixtures assert it stays OFF. Retain the 176-frame quantified Bubble upstream temporal parity proof and the accepted musical response of all modes.
 
-**NEXT TRANCHE, with the independent Dev Curve replay investigation explicitly tracked, no full chunks or builds:** feature work is **shared 3D primitives plus transitions** (not another general cleanup). Sequence below: reusable inactive-cost-neutral 3D foundations for the first transition consumers, Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom Reveal; then subsequent transitions and broader shared 3D features. See §2 and §4.
+**NEXT TRANCHE, with the independent Dev Curve replay investigation explicitly tracked, no full chunks or builds:** feature work is **shared 3D primitives plus transitions** (not another general cleanup). Sequence below: reusable inactive-cost-neutral 3D foundations, Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom Reveal; then subsequent transitions and broader shared 3D features. See §2 and §4.
 
 - [x] **R168 focused regression:** operator's Windows `.venv` selection completed, **187 passed**; no affected runtime source files changed in R168/R169.
 - [x] **Dev Curve replay (2026-10-10):** the drop was entirely R160's protected pre-AGC routing (forcing the old routing restored 21.605556 exactly); on the operator's call `gradual_ramp__devcurve` alone was re-seeded via `tools.visualizer_replay.floors.calibrate` (output_flux floor 19.27 → 9.31, 50% of today's 18.61). Never route Dev Curve through Spectrum shaping.
@@ -168,12 +168,14 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 
 ## 4. Shared 3D primitives | immediate foundation for T1/T2, expand after first-wave acceptance
 
-Admit one measured, inactive-cost-neutral consumer at a time. **Extending a shared primitive is opt-in:** a new lobe,
+Admit one measured, inactive-cost-neutral slice at a time. **A planned primitive needs no shipping consumer first:**
+it is proved by focused tests, offscreen renders and measurements and costs nothing until activated; never shape an
+effect around a primitive to give it one (`Spec.md`, 3D substrate). **Extending a shared primitive is opt-in:** a new lobe,
 attachment or pass (e.g. S24's sheen in `SceneMaterial`) is a separate function, shader variant or demand-created resource
 that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change. Record
 `tools/overhead_baseline.py` before and after any shared-primitive or host edit and `--compare` them: per-frame GL and
 Python call counts are deterministic, so any rise on an unrelated transition or mode is real added work; baselines live in
-`tools/baselines/overhead/`. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
+`tools/baselines/overhead/`. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. Runtime allocation stays demand-driven: building a facility is fine, allocating or executing it while nothing is active is not.
 
 After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
 
@@ -185,8 +187,8 @@ After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in 
   Measure each primitive independently before combinations.
 - [ ] **Visualizer vertical sequence:** Reactive Particle Field -> Spectrum Terrain/Skyline/Tunnel -> Waveform Ribbon ->
   Deformable Blob Sphere -> Bubble Depth Field under Bubble Temporal Fidelity.
-- [ ] **S19–S27 character and world foundations** (needed by the deferred Usu Moonscape vertical; contracts and candidate
-  consumers in `Docs/Future_Work/Usu_Moonscape.md` §5). Admit one at a time through a transition or Visualizer consumer,
+- [ ] **S19–S27 character and world foundations** (needed by the deferred Usu Moonscape vertical; contracts and effect
+  ideas in `Docs/Future_Work/Usu_Moonscape.md` §5). Build and prove one at a time (own tests, offscreen harness, measurements),
   each lazy, dormant when unused, measured, warmed and tier-gated:
   - [ ] **S19 asset import + bake pipeline:** Blender → validated glTF 2.0 → packed SRPSS binary (meshes, skins, morphs,
     clips, baked materials), provenance-stamped; runtime reads only the packed form.

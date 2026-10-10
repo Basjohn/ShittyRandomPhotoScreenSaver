@@ -252,8 +252,11 @@ This is a **substrate**, not a general-purpose scene engine. Reusable low-level 
 ownership, small aspect-correct projection/MVP helpers, GL resource lifetime helpers, safe depth-state composition and
 presentation-neutral direction/light math. Feature semantics remain local: deformation fields, fracture logic, material
 identities, audio mapping, per-effect physics/easing and authored visual behavior do not move into a generic 3D framework
-merely because two features both contain Z coordinates. Extract shared primitives when a real consumer justifies them;
-defer speculative abstraction until another concrete consumer proves it.
+merely because two features both contain Z coordinates. A shared primitive the roadmap plans to use (the Current_Plan
+§4 S-slices, the Usu Moonscape foundations) may be built before any transition or mode consumes it: it is proved by its
+own focused tests, offscreen renders and measurements, and costs nothing until something activates it. Never design or
+ship an effect around a primitive merely to give it a consumer. What stays forbidden is abstraction nothing on the
+roadmap needs.
 
 3D work inherits the existing clock rule. `VisualizerLogicalRuntime` remains the mode-general authored Visualizer clock;
 a mode-owned logical/frame runtime may produce compact 3D state, but render refresh never becomes simulation cadence.

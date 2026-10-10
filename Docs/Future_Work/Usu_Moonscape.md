@@ -144,7 +144,7 @@ reactivity lanes. **Missing**, each a shared foundation slice (no Usu-private en
 | # | Foundation | Purpose | Notes / contract |
 | --- | --- | --- | --- |
 | S19 | **Asset import + bake pipeline** | load authored meshes, skins, morphs, clips, materials | offline `tools/` exporter from Blender → glTF 2.0 (validated) → a packed SRPSS binary asset; runtime reads only the packed form (no glTF parser at runtime unless measured cheaper); procedural Blender materials baked to texture maps; deterministic, versioned, provenance-stamped; assets stay outside normal Godzips like other private art |
-| S20 | **Static mesh renderer** | draw imported static meshes with shared materials | instanced draws, per-object UBO via stream ring, depth, tier-aware LOD; first consumer can be a transition |
+| S20 | **Static mesh renderer** | draw imported static meshes with shared materials | instanced draws, per-object UBO via stream ring, depth, tier-aware LOD |
 | S21 | **GPU skinning** | deform skinned meshes | linear-blend skinning (dual-quaternion only if the ears/arms prove it necessary), joint palette in a streamed block/SSBO, ≤4 influences, skinned stitches bound to their surface owner; dormant when unused |
 | S22 | **Animation clips + graph** | play, blend and layer clips on logical time | clip sampling (CPU, cheap, deterministic), state machine with hysteretic cross-fades, additive layers (blink, ears, accents), per-channel masks (body/head/eyes/ears), root-motion contract, morph/visibility tracks for eye states; no wall clock, no worker, no per-frame Settings |
 | S23 | **Deterministic secondary motion** | ear follow-through, body jiggle | critically damped springs advanced per logical step from clip motion; no physics engine, no soft-body sim |
@@ -159,13 +159,17 @@ costs a few texture samples per pixel on a modest skinned mesh (cages ~13k verti
 no Blender hair/particle fur (tried 2026-10-10: ~10 min per frame and nothing to bake); fuzz is authored as sheen and
 delivered at runtime as S24 shells/fins.
 
-Each slice obeys the shared rules: lazy, demand-created, released at park/retirement, count-invariant dormancy, one
-measured consumer at a time (TIME_ELAPSED + per-frame flush, median/p90), warm-up lists every program/resource a first
-frame would create, CPU mirrors for shader maths, quality tiers decide optional cost.
+Each slice obeys the shared rules: lazy, demand-created, released at park/retirement, count-invariant dormancy, measured
+one slice at a time (TIME_ELAPSED + per-frame flush, median/p90), warm-up lists every program/resource a first frame would
+create, CPU mirrors for shader maths, quality tiers decide optional cost.
 
-### 5.1 Suggested side-building consumers (proposals; operator chooses)
+**A slice does not need a shipping consumer to be built.** Each is proved by its own focused tests, an offscreen render
+harness and measurements (the Usu asset itself is a fine test subject), and is accepted on that proof. Transitions and
+modes adopt a slice only when it makes them better; none is designed or watered down just to host one.
 
-| Slice | Candidate consumer before Usu |
+### 5.1 Effects that could also use these slices (ideas, not prerequisites)
+
+| Slice | Idea |
 | --- | --- |
 | S26 + S27 + S25 | **Moon Turn** transition: the old photo wraps a small moon that rotates/orbits away against a starscape, revealing the new photo on its far side (sphere, orbit camera, starfield, shadow map) |
 | S19 + S20 | **Paper Lantern / Origami** transition using an authored static mesh (proves the bake pipeline, materials, instancing) |
@@ -185,7 +189,7 @@ frame would create, CPU mirrors for shader maths, quality tiers decide optional 
 | B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | first pass 2026-10-10 (now in `assets/usu/archive/Usu_history_2026-10.zip`); superseded as the working gate by the per-frame BVH scan of every clip (gate C) |
 | C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | done for the rough stage 2026-10-10: 23 clips incl. Jump and the accents, grounded, in place, exact hand-offs, no interpenetration in any frame (BVH scan); previews `assets/usu/review/clips_webp/`; hand polish later (`Usu_Blender_Work.md` B4b) |
 | C2 — export proof | clips, skins, eye states and materials survive export into the SRPSS path (S19), not just Blender | blocked on S19 |
-| D — runtime | S19–S27 accepted through other consumers, then the mode is admitted | deferred |
+| D — runtime | S19–S27 accepted on their own proofs, then the mode is admitted | deferred |
 
 Blender is the authoring tool (live MCP available); the runtime format is decided at S19, not assumed. The open Blender
 items behind gates B–C2 (B1 rig refinement through B6 export proof) are in [`Usu_Blender_Work.md`](Usu_Blender_Work.md).
