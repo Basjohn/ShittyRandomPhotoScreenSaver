@@ -150,6 +150,12 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
+        setting_name="Surface Tension Merge",
+        stable_id="surface_tension",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Jigsaw Piece Flip",
         stable_id="jigsaw",
         easing_curve=EasingCurve.LINEAR,

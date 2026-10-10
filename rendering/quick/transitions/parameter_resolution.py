@@ -22,6 +22,7 @@ from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RA
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGINS
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
+from rendering.gl_programs.surface_tension_program import TENSION_POOLS_RANGE
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -955,6 +956,20 @@ def _resolve_membrane(
     })
 
 
+def _resolve_surface_tension(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "surface_tension")
+    defaults = _canonical("surface_tension")
+    low, high = TENSION_POOLS_RANGE
+    return _finish(None, {
+        "seed": _seed(rng),
+        "pools": max(low, min(high, _integer(_value(cfg, defaults, "pools"), int(defaults["pools"])))),
+        **_surface_values(cfg, defaults, ("gloss",)),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -975,6 +990,7 @@ _RESOLVERS = {
     "edge_bloom": _resolve_edge_bloom,
     "liquid_lens": _resolve_liquid_lens,
     "membrane": _resolve_membrane,
+    "surface_tension": _resolve_surface_tension,
 }
 
 

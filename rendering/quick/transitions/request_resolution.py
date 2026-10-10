@@ -270,6 +270,7 @@ def resolve_quick_transition_spec(
         "edge_bloom",
         "liquid_lens",
         "membrane",
+        "surface_tension",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

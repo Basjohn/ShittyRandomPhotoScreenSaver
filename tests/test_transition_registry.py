@@ -97,6 +97,7 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "edge_bloom": EasingCurve.LINEAR,
         "liquid_lens": EasingCurve.LINEAR,
         "membrane": EasingCurve.LINEAR,
+        "surface_tension": EasingCurve.LINEAR,
     }
 
 

@@ -38,6 +38,7 @@ class TransitionType(Enum):
     EDGE_BLOOM = "Edge Bloom Reveal"
     LIQUID_LENS = "Liquid Lens"
     MEMBRANE_TURNOVER = "Membrane Turnover"
+    SURFACE_TENSION = "Surface Tension Merge"
 
 
 class WidgetPosition(Enum):

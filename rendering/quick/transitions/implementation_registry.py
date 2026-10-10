@@ -117,6 +117,10 @@ _IMPLEMENTATIONS = (
         transition_id="membrane",
         module_name="rendering.quick.transitions.implementations.membrane",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="surface_tension",
+        module_name="rendering.quick.transitions.implementations.surface_tension",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

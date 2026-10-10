@@ -23,6 +23,7 @@
     <file alias="onboarding/transition_pixel_accretion.png" compression-algorithm="none">../assets/onboarding/source/transition_pixel_accretion.png</file>
     <file alias="onboarding/transition_ripple.png" compression-algorithm="none">../assets/onboarding/source/transition_ripple.png</file>
     <file alias="onboarding/transition_slide.png" compression-algorithm="none">../assets/onboarding/source/transition_slide.png</file>
+    <file alias="onboarding/transition_surface_tension.png" compression-algorithm="none">../assets/onboarding/source/transition_surface_tension.png</file>
     <file alias="onboarding/transition_volumetric_dissolve.png" compression-algorithm="none">../assets/onboarding/source/transition_volumetric_dissolve.png</file>
     <file alias="onboarding/transition_vhs.png" compression-algorithm="none">../assets/onboarding/source/transition_vhs.png</file>
     <file alias="onboarding/transition_edge_bloom.png" compression-algorithm="none">../assets/onboarding/source/transition_edge_bloom.png</file>
