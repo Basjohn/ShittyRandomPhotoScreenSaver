@@ -1,0 +1,272 @@
+{
+ "commit": "4ae1db71",
+ "date": "2026-10-10T13:38:56",
+ "size": "1920x1080",
+ "frames": 48,
+ "passes": 3,
+ "transitions": {
+  "ripple/default": {
+   "cpu_median": 0.1898500049719587,
+   "cpu_p90": 0.20410001161508262,
+   "gpu_median": 0.017408,
+   "gpu_p90": 0.018432,
+   "gl_calls": 52.0,
+   "py_calls": 314.0
+  },
+  "wipe/default": {
+   "cpu_median": 0.1520000005257316,
+   "cpu_p90": 0.16340000729542226,
+   "gpu_median": 0.007168,
+   "gpu_p90": 0.007168,
+   "gl_calls": 50.0,
+   "py_calls": 306.0
+  },
+  "block_spins/off": {
+   "cpu_median": 0.2446999933454208,
+   "cpu_p90": 0.255300008575432,
+   "gpu_median": 0.03072,
+   "gpu_p90": 0.036864,
+   "gl_calls": 95.0,
+   "py_calls": 572.0
+  },
+  "block_spins/reflection": {
+   "cpu_median": 0.262550005572848,
+   "cpu_p90": 0.3164999943692237,
+   "gpu_median": 0.03072,
+   "gpu_p90": 0.036864,
+   "gl_calls": 95.0,
+   "py_calls": 582.0
+  },
+  "diffuse/default": {
+   "cpu_median": 0.2061500053969212,
+   "cpu_p90": 0.23910000163596123,
+   "gpu_median": 0.055296,
+   "gpu_p90": 0.062464,
+   "gl_calls": 51.0,
+   "py_calls": 324.0
+  },
+  "slide/default": {
+   "cpu_median": 0.20249999943189323,
+   "cpu_p90": 0.2099999983329326,
+   "gpu_median": 0.007168,
+   "gpu_p90": 0.007168,
+   "gl_calls": 51.0,
+   "py_calls": 310.0
+  },
+  "glass_shatter/default": {
+   "cpu_median": 0.33769999572541565,
+   "cpu_p90": 0.4360000020824373,
+   "gpu_median": 0.1152,
+   "gpu_p90": 0.130048,
+   "gl_calls": 103.0,
+   "py_calls": 649.0
+  },
+  "exploding_tiles/default": {
+   "cpu_median": 0.5598499992629513,
+   "cpu_p90": 0.724199999240227,
+   "gpu_median": 0.23552,
+   "gpu_p90": 0.405504,
+   "gl_calls": 169.5,
+   "py_calls": 1054.0
+  },
+  "pixel_accretion/default": {
+   "cpu_median": 0.3940500027965754,
+   "cpu_p90": 0.4819000023417175,
+   "gpu_median": 0.137216,
+   "gpu_p90": 0.162816,
+   "gl_calls": 95.0,
+   "py_calls": 641.0
+  },
+  "ink_bloom/default": {
+   "cpu_median": 0.2678500022739172,
+   "cpu_p90": 0.2869000018108636,
+   "gpu_median": 0.17459200000000002,
+   "gpu_p90": 0.193536,
+   "gl_calls": 68.0,
+   "py_calls": 466.0
+  },
+  "melt_drip/default": {
+   "cpu_median": 0.21304999972926453,
+   "cpu_p90": 0.2930999908130616,
+   "gpu_median": 0.41011200000000003,
+   "gpu_p90": 0.503808,
+   "gl_calls": 50.0,
+   "py_calls": 369.0
+  },
+  "beam/default": {
+   "cpu_median": 0.25024999922607094,
+   "cpu_p90": 0.331900009769015,
+   "gpu_median": 0.037888,
+   "gpu_p90": 0.038912,
+   "gl_calls": 78.0,
+   "py_calls": 503.0
+  },
+  "volumetric_dissolve/default": {
+   "cpu_median": 0.6247000055736862,
+   "cpu_p90": 0.6591999990632758,
+   "gpu_median": 0.175616,
+   "gpu_p90": 0.346112,
+   "gl_calls": 108.0,
+   "py_calls": 962.0
+  },
+  "jigsaw/default": {
+   "cpu_median": 0.4427500025485642,
+   "cpu_p90": 0.47840000479482114,
+   "gpu_median": 0.112128,
+   "gpu_p90": 0.114688,
+   "gl_calls": 119.0,
+   "py_calls": 863.0
+  },
+  "cube_turn/default": {
+   "cpu_median": 0.37634999898727983,
+   "cpu_p90": 0.40079999598674476,
+   "gpu_median": 0.085504,
+   "gpu_p90": 0.091136,
+   "gl_calls": 98.0,
+   "py_calls": 635.0
+  },
+  "relief_rise/default": {
+   "cpu_median": 0.3621500000008382,
+   "cpu_p90": 0.38019999919924885,
+   "gpu_median": 0.17254399999999998,
+   "gpu_p90": 0.238592,
+   "gl_calls": 95.0,
+   "py_calls": 585.0
+  },
+  "accordion_fold/default": {
+   "cpu_median": 0.37510000402107835,
+   "cpu_p90": 0.4462999932002276,
+   "gpu_median": 0.178176,
+   "gpu_p90": 0.187392,
+   "gl_calls": 101.0,
+   "py_calls": 652.0
+  },
+  "disintegrate/default": {
+   "cpu_median": 0.5895499998587184,
+   "cpu_p90": 0.6333999917842448,
+   "gpu_median": 0.17971199999999998,
+   "gpu_p90": 0.310272,
+   "gl_calls": 98.0,
+   "py_calls": 916.0
+  },
+  "page_curl/default": {
+   "cpu_median": 0.41865000093821436,
+   "cpu_p90": 0.5005999992135912,
+   "gpu_median": 0.125952,
+   "gpu_p90": 0.141312,
+   "gl_calls": 101.0,
+   "py_calls": 709.0
+  },
+  "crossfade/default": {
+   "cpu_median": 0.2012999975704588,
+   "cpu_p90": 0.2435000060359016,
+   "gpu_median": 0.02048,
+   "gpu_p90": 0.02048,
+   "gl_calls": 49.0,
+   "py_calls": 301.0
+  },
+  "block_flip/default": {
+   "cpu_median": 0.20289999520173296,
+   "cpu_p90": 0.21529999503400177,
+   "gpu_median": 0.02048,
+   "gpu_p90": 0.02048,
+   "gl_calls": 51.0,
+   "py_calls": 317.0
+  },
+  "warp_dissolve/default": {
+   "cpu_median": 0.19869999960064888,
+   "cpu_p90": 0.20569999469444156,
+   "gpu_median": 0.027648,
+   "gpu_p90": 0.027648,
+   "gl_calls": 50.0,
+   "py_calls": 302.0
+  },
+  "blinds/flat": {
+   "cpu_median": 0.17604999447939917,
+   "cpu_p90": 0.22680000984109938,
+   "gpu_median": 0.024576,
+   "gpu_p90": 0.024576,
+   "gl_calls": 52.0,
+   "py_calls": 327.0
+  },
+  "blinds/3d_slats": {
+   "cpu_median": 0.38515000051120296,
+   "cpu_p90": 0.4166000144323334,
+   "gpu_median": 0.043008,
+   "gpu_p90": 0.047104,
+   "gl_calls": 99.0,
+   "py_calls": 689.0
+  },
+  "crumble/default": {
+   "cpu_median": 0.3934999986086041,
+   "cpu_p90": 0.4292999947210774,
+   "gpu_median": 0.053248000000000004,
+   "gpu_p90": 0.055296,
+   "gl_calls": 107.0,
+   "py_calls": 784.0
+  },
+  "particle/default": {
+   "cpu_median": 0.23645000328542665,
+   "cpu_p90": 0.31519999902229756,
+   "gpu_median": 0.737792,
+   "gpu_p90": 0.787456,
+   "gl_calls": 65.0,
+   "py_calls": 385.0
+  },
+  "burn/default": {
+   "cpu_median": 0.21825000294484198,
+   "cpu_p90": 0.2773000014713034,
+   "gpu_median": 0.123904,
+   "gpu_p90": 0.124928,
+   "gl_calls": 63.0,
+   "py_calls": 404.0
+  }
+ },
+ "visualizers": {
+  "spectrum": {
+   "cpu_median": 0.21470000501722097,
+   "cpu_p90": 0.221800000872463,
+   "gpu_median": 0.013312,
+   "gpu_p90": 0.014336,
+   "gl_calls": 17.0
+  },
+  "oscilloscope": {
+   "error": "AttributeError: 'VisualizerLogicalTickState' object has no attribute '_osc_transient_width_mix'"
+  },
+  "sine_wave": {
+   "error": "AttributeError: 'VisualizerLogicalTickState' object has no attribute '_sine_wave_transient_width_mix'"
+  },
+  "bubble": {
+   "cpu_median": 0.1538500000606291,
+   "cpu_p90": 0.16339999274350703,
+   "gpu_median": 0.033792,
+   "gpu_p90": 0.034816,
+   "gl_calls": 17.0
+  },
+  "devcurve": {
+   "error": "KeyError: 'immutable visualizer frame missing parameter: devcurve_sample_count'"
+  },
+  "sphere": {
+   "cpu_median": 0.4847000091103837,
+   "cpu_p90": 0.519599998369813,
+   "gpu_median": 0.139264,
+   "gpu_p90": 0.35328,
+   "gl_calls": 78.0
+  },
+  "extruded_spectrum": {
+   "cpu_median": 0.3735499922186136,
+   "cpu_p90": 0.41310000233352184,
+   "gpu_median": 0.186368,
+   "gpu_p90": 0.187392,
+   "gl_calls": 77.0
+  },
+  "shockwave_grid": {
+   "cpu_median": 0.5111999998916872,
+   "cpu_p90": 0.6168000109028071,
+   "gpu_median": 0.5073920000000001,
+   "gpu_p90": 0.779264,
+   "gl_calls": 146.0
+  }
+ },
+ "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2"
+}
