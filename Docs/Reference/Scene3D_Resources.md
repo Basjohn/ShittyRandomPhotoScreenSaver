@@ -189,9 +189,9 @@ the CPU side stays constant. A future consumer with a smaller pool should be mea
 
 `rendering/quick/scene3d/edge_field.py` derives, once per run and photograph, a field of the distance to the
 picture's nearest structural contour and that contour's strength (RG16F, linear) from the lent presentation texture:
-luma copy, two binomial blurs, Sobel ridges after non-maximum suppression, jump flooding, resolve. Seven dispatches
+luma copy, two binomial blurs, Sobel ridges after non-maximum suppression (seeded at their sub-texel ridge position), jump flooding on 32-bit positions, resolve. Seven dispatches
 plus one per flood step, on the render thread in the frame that first needs it; image units are scoped by
-`bound_image`. Six textures at 768 px on the longer side (about 4.6 MB at 16:9), allocated by the consumer's warm-up
+`bound_image`. Six textures at 768 px on the longer side (about 8.6 MB at 16:9: three R16F, two RG32F flood buffers, the RG16F field), allocated by the consumer's warm-up
 for the render size and dropped at its `park()`; nothing exists otherwise. `edge_field_reference` is the CPU mirror
 (tests compare ridges and flooded distances). First consumer: Edge Bloom Reveal. Seeded differently it can serve
 organic fills (Capillary Bloom, Surface Tension Merge).
