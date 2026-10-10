@@ -100,6 +100,7 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "surface_tension": EasingCurve.LINEAR,
         "chromatic_shear": EasingCurve.LINEAR,
         "depth_cascade": EasingCurve.LINEAR,
+        "capillary_bloom": EasingCurve.LINEAR,
     }
 
 

@@ -81,10 +81,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
 - [ ] **T7. Surface Tension Merge** — implemented 2026-10-10 on the new shared meniscus field and the refraction helpers (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_surface_tension_default.webp`). Deactivated by default.
 - [ ] **T8. Chromatic Shear** — implemented 2026-10-11 on the new shared spectral layers (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_chromatic_shear_default.webp`). Deactivated by default.
 - [ ] **T9. Depth Card Cascade** — implemented 2026-10-11 on the new shared depth-card primitive (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_depth_cascade_default.webp`). Deactivated by default.
-- [ ] **T10. Capillary Bloom.** The destination image spreads through the source like dye moving through wet fibres: branching
-  tendrils, joins and bloom fronts, but the final destination image resolves cleanly. Useful existing architecture: fullscreen
-  material passes, reveal/mask sequencing. New useful architecture: a shared organic propagation field / capillary-front helper,
-  preferably compatible with Surface Tension Merge rather than an isolated solver.
+- [ ] **T10. Capillary Bloom** — implemented 2026-10-11 on the new shared propagation field and capillary cost, with the meniscus and refraction helpers (`Docs/Reference/Transitions.md`, `Docs/Reference/Scene3D_Resources.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_capillary_bloom_default.webp`). Deactivated by default.
 
 Implementation order inside this tranche is deliberate: **Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom
 Reveal first; then Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth Card Cascade and Capillary

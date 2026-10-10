@@ -196,6 +196,16 @@ for the render size and dropped at its `park()`; nothing exists otherwise. `edge
 (tests compare ridges and flooded distances). First consumer: Edge Bloom Reveal. Seeded differently it can serve
 organic fills (Capillary Bloom, Surface Tension Merge).
 
+## Propagation fields (geodesic arrival)
+
+`rendering/quick/scene3d/propagation_field.py` derives, once per run, the cheapest cost-weighted arrival from a few
+sources over a consumer's GLSL cost function (`propagationCost`): a seed stage (cost plus a straight-line upper bound),
+192 in-place relaxation passes over a 16-neighbour stencil (monotone, so read races only speed convergence) and a
+one-workgroup reduction to the largest arrival in a 1x1 texture consumers read with `texelFetch`. Three R32F textures,
+256 px on the longer side (about 0.3 MB at 16:9), allocated and built by the consumer's gradual warm-up in bounded steps
+(48 passes per step) because the cost depends only on the run's seed and the render's aspect, and dropped at its
+`park()`; nothing exists otherwise. `propagation_reference` is the CPU mirror. First consumer: Capillary Bloom.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the

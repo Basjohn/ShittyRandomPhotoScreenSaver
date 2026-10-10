@@ -32,6 +32,7 @@ from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PI
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
 from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
+from rendering.gl_programs.capillary_bloom_program import CAPILLARY_SOURCES_RANGE
 from rendering.gl_programs.depth_cascade_program import CASCADE_CARDS_RANGE
 from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEP_CHOICES
 from rendering.gl_programs.chromatic_shear_program import SHEAR_SLICES_RANGE
@@ -588,6 +589,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
         "VHS Distortion": "_build_vhs_group",
+        "Capillary Bloom": "_build_capillary_bloom_group",
         "Depth Card Cascade": "_build_depth_cascade_group",
         "Chromatic Shear": "_build_chromatic_shear_group",
         "Surface Tension Merge": "_build_surface_tension_group",
@@ -615,6 +617,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
         "VHS Distortion": "vhs_group",
+        "Capillary Bloom": "capillary_bloom_group",
         "Depth Card Cascade": "depth_cascade_group",
         "Chromatic Shear": "chromatic_shear_group",
         "Surface Tension Merge": "surface_tension_group",
@@ -875,6 +878,12 @@ class TransitionsTab(QWidget):
             self.depth_cascade_shadows_check.setChecked(bool(cfg.get('shadows', canonical['shadows'])))
             self.depth_cascade_cards_spin.setValue(self._new_transition_number(
                 cfg, 'cards', 'depth_cascade', canonical['cards'], self.depth_cascade_cards_spin, int,
+            ))
+        if hasattr(self, 'capillary_bloom_group'):
+            canonical = canonical_transitions['capillary_bloom']
+            cfg = self._new_transition_section(transitions_config, 'capillary_bloom', canonical)
+            self.capillary_bloom_sources_spin.setValue(self._new_transition_number(
+                cfg, 'sources', 'capillary_bloom', canonical['sources'], self.capillary_bloom_sources_spin, int,
             ))
         if hasattr(self, 'edge_bloom_group'):
             canonical = canonical_transitions['edge_bloom']
@@ -1140,6 +1149,9 @@ class TransitionsTab(QWidget):
         ),
         "depth_cascade": (
             ("gloss", "Gloss:", 0.0, 1.0, "Shine of the cards and reflections of the next picture on them as they tilt."),
+        ),
+        "capillary_bloom": (
+            ("fibres", "Fibres:", 0.0, 1.0, "How strongly the dye races along the paper's fibres: a smooth, round bloom at 0, branching tendrils at 1."),
         ),
         "vhs": (
             ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
@@ -1511,6 +1523,22 @@ class TransitionsTab(QWidget):
         shadows_row.addStretch()
         self._build_scene3d_choices(layout, "depth_cascade")
         self._specific_group_host_layout.addWidget(self.depth_cascade_group)
+
+    def _build_capillary_bloom_group(self) -> None:
+        self.capillary_bloom_group = QGroupBox("Capillary Bloom Settings")
+        self._style_group_box(self.capillary_bloom_group)
+        layout = QVBoxLayout(self.capillary_bloom_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        sources_row = self._aligned_row(layout, "Sources:")
+        self.capillary_bloom_sources_spin = QSpinBox()
+        self.capillary_bloom_sources_spin.setRange(*CAPILLARY_SOURCES_RANGE)
+        self.capillary_bloom_sources_spin.setValue(int(_transition_default("capillary_bloom.sources")))
+        self.capillary_bloom_sources_spin.setToolTip("How many drops of dye start the bloom.")
+        self.capillary_bloom_sources_spin.valueChanged.connect(self._save_settings)
+        sources_row.addWidget(self.capillary_bloom_sources_spin)
+        sources_row.addStretch()
+        self._build_surface_controls(layout, "capillary_bloom")
+        self._specific_group_host_layout.addWidget(self.capillary_bloom_group)
 
     def _build_vhs_group(self) -> None:
         self.vhs_group = QGroupBox("VHS Distortion Settings")
@@ -2297,6 +2325,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'jigsaw_pieces_spin', None),
             getattr(self, 'volumetric_dissolve_size_spin', None),
             getattr(self, 'beam_sparks_check', None),
+            getattr(self, 'capillary_bloom_sources_spin', None),
             getattr(self, 'depth_cascade_shadows_check', None),
             getattr(self, 'depth_cascade_cards_spin', None),
             getattr(self, 'chromatic_shear_slices_spin', None),
@@ -2935,6 +2964,10 @@ class TransitionsTab(QWidget):
             depth_cascade = {'direction': self._direction_by_type['depth_cascade'], 'shadows': self.depth_cascade_shadows_check.isChecked(), 'cards': self.depth_cascade_cards_spin.value()}
         else:
             depth_cascade = {**_existing_subdict('depth_cascade'), 'direction': self._direction_by_type['depth_cascade']}
+        if hasattr(self, 'capillary_bloom_group'):
+            capillary_bloom = {'sources': self.capillary_bloom_sources_spin.value()}
+        else:
+            capillary_bloom = _existing_subdict('capillary_bloom')
         if hasattr(self, 'vhs_group'):
             vhs = {'direction': self._direction_by_type['vhs']}
         else:
@@ -2949,7 +2982,7 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
                                 ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
-                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension), ("chromatic_shear", chromatic_shear), ("depth_cascade", depth_cascade)):
+                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension), ("chromatic_shear", chromatic_shear), ("depth_cascade", depth_cascade), ("capillary_bloom", capillary_bloom)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2991,6 +3024,7 @@ class TransitionsTab(QWidget):
             'volumetric_dissolve': volumetric_dissolve,
             'vhs': vhs,
             'edge_bloom': edge_bloom,
+            'capillary_bloom': capillary_bloom,
             'depth_cascade': depth_cascade,
             'chromatic_shear': chromatic_shear,
             'surface_tension': surface_tension,

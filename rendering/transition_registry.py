@@ -168,6 +168,12 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
+        setting_name="Capillary Bloom",
+        stable_id="capillary_bloom",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Jigsaw Piece Flip",
         stable_id="jigsaw",
         easing_curve=EasingCurve.LINEAR,

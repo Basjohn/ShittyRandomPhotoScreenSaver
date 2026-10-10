@@ -262,6 +262,7 @@ TRANSITION_COPY = {
     "volumetric_dissolve": "The picture bursts into glowing particles and mist as the next one appears.",
     "vhs": "The tape loses tracking and the picture rolls over to the next one.",
     "edge_bloom": "The next picture grows out of its own glowing edges.",
+    "capillary_bloom": "The next picture spreads through the old like dye through wet paper, racing along its fibres.",
     "depth_cascade": "The picture splits into large cards that lift off one by one and slide past you, revealing the next one.",
     "chromatic_shear": "The picture shears into slices that split into rainbow layers, then slide back together as the next one.",
     "surface_tension": "Pools of the next picture swell, reach for each other and merge until they cover the old one.",

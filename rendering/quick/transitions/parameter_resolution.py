@@ -27,6 +27,7 @@ from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
 from rendering.gl_programs.chromatic_shear_program import SHEAR_SLICES_RANGE
 from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEPS
 from rendering.gl_programs.depth_cascade_program import CASCADE_CARDS_RANGE
+from rendering.gl_programs.capillary_bloom_program import CAPILLARY_SOURCES_RANGE
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -1010,6 +1011,20 @@ def _resolve_depth_cascade(
     })
 
 
+def _resolve_capillary_bloom(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "capillary_bloom")
+    defaults = _canonical("capillary_bloom")
+    low, high = CAPILLARY_SOURCES_RANGE
+    return _finish(None, {
+        "seed": _seed(rng),
+        "sources": max(low, min(high, _integer(_value(cfg, defaults, "sources"), int(defaults["sources"])))),
+        **_surface_values(cfg, defaults, ("fibres",)),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -1033,6 +1048,7 @@ _RESOLVERS = {
     "surface_tension": _resolve_surface_tension,
     "chromatic_shear": _resolve_chromatic_shear,
     "depth_cascade": _resolve_depth_cascade,
+    "capillary_bloom": _resolve_capillary_bloom,
 }
 
 

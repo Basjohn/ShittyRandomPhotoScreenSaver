@@ -7,6 +7,7 @@
     <file alias="onboarding/transition_blinds.png" compression-algorithm="none">../assets/onboarding/source/transition_blinds.png</file>
     <file alias="onboarding/transition_block_spins.png" compression-algorithm="none">../assets/onboarding/source/transition_block_spins.png</file>
     <file alias="onboarding/transition_burn.png" compression-algorithm="none">../assets/onboarding/source/transition_burn.png</file>
+    <file alias="onboarding/transition_capillary_bloom.png" compression-algorithm="none">../assets/onboarding/source/transition_capillary_bloom.png</file>
     <file alias="onboarding/transition_chromatic_shear.png" compression-algorithm="none">../assets/onboarding/source/transition_chromatic_shear.png</file>
     <file alias="onboarding/transition_crossfade.png" compression-algorithm="none">../assets/onboarding/source/transition_crossfade.png</file>
     <file alias="onboarding/transition_crumble.png" compression-algorithm="none">../assets/onboarding/source/transition_crumble.png</file>
