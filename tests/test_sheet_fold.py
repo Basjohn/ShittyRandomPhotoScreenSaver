@@ -11,7 +11,14 @@ import numpy as np
 import pytest
 
 from rendering.gl_programs.scene3d import SCENE3D_CAMERA, SCENE3D_DETAIL_TIERS
-from rendering.gl_programs.sheet_fold import SHEET_FOLD_GLSL, SHEET_SIDES_GLSL, crease_grid, sheet_fold
+from rendering.gl_programs.sheet_fold import (
+    SHEET_FOLD_GLSL,
+    SHEET_SIDES_GLSL,
+    SHEET_TWIST_GLSL,
+    crease_grid,
+    sheet_fold,
+    sheet_twist,
+)
 
 ASPECT = 16 / 9
 MAX_FOLD = 0.36 * math.pi
@@ -88,5 +95,37 @@ def test_the_fold_and_the_sides_match_their_mirrors_on_the_gpu(qt_app):
             expected.append((1.0 if back else 0.0, uv[0] + mirror[0] * (1.0 - 2.0 * uv[0]),
                              uv[1] + mirror[1] * (1.0 - 2.0 * uv[1]), 0.0))
         _check(gpu, expected)
+    finally:
+        probe.close()
+
+
+def test_a_twisted_cross_section_keeps_its_width_stays_in_front_and_lands_back_up():
+    axis, pivot, half = (1.0, 0.0), (0.0, 0.0), 0.5
+    for angle in (0.0, 0.7, math.pi / 2, 2.4, math.pi):
+        top, bottom = (sheet_twist((0.3, y), axis, pivot, angle, half) for y in (half, -half))
+        assert math.dist(top, bottom) == pytest.approx(2 * half)
+        assert min(top[2], bottom[2]) >= -1e-12
+        assert top[0] == bottom[0] == pytest.approx(0.3)         # turns about the axis, never along it
+    assert sheet_twist((0.3, 0.2), axis, pivot, 0.0, half) == pytest.approx((0.3, 0.2, 0.0))
+    # Turned over, it lies flat again with the cross-section reversed.
+    assert sheet_twist((0.3, 0.2), axis, pivot, math.pi, half) == pytest.approx((0.3, -0.2, 0.0), abs=1e-12)
+
+
+@pytest.mark.qt
+def test_the_twist_matches_its_mirror_on_the_gpu(qt_app):
+    from tests.test_scene3d_glsl_mirrors import _GlslProbe, _check
+
+    probe = _GlslProbe()
+    try:
+        rng = random.Random(6)
+        cases = []
+        for _ in range(96):
+            a = rng.uniform(0, 2 * math.pi)
+            cases.append(((rng.uniform(-0.9, 0.9), rng.uniform(-0.5, 0.5)), (math.cos(a), math.sin(a)),
+                          (rng.uniform(-0.2, 0.2), rng.uniform(-0.2, 0.2)), rng.uniform(0, math.pi), rng.uniform(0.3, 1.0)))
+        gpu = probe.run("vec4 a = arg(0), b = arg(1); FragColor = vec4(sheetTwist(a.xy, a.zw, b.xy, b.z, b.w), 0.0);",
+                        [[(*p, *axis), (*pivot, angle, half)] for p, axis, pivot, angle, half in cases],
+                        declarations=SHEET_TWIST_GLSL)
+        _check(gpu, [(*sheet_twist(*case), 0.0) for case in cases])
     finally:
         probe.close()

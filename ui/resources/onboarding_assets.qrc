@@ -17,6 +17,7 @@
     <file alias="onboarding/transition_jigsaw.png" compression-algorithm="none">../assets/onboarding/source/transition_jigsaw.png</file>
     <file alias="onboarding/transition_liquid_lens.png" compression-algorithm="none">../assets/onboarding/source/transition_liquid_lens.png</file>
     <file alias="onboarding/transition_melt_drip.png" compression-algorithm="none">../assets/onboarding/source/transition_melt_drip.png</file>
+    <file alias="onboarding/transition_membrane.png" compression-algorithm="none">../assets/onboarding/source/transition_membrane.png</file>
     <file alias="onboarding/transition_page_curl.png" compression-algorithm="none">../assets/onboarding/source/transition_page_curl.png</file>
     <file alias="onboarding/transition_particle.png" compression-algorithm="none">../assets/onboarding/source/transition_particle.png</file>
     <file alias="onboarding/transition_pixel_accretion.png" compression-algorithm="none">../assets/onboarding/source/transition_pixel_accretion.png</file>

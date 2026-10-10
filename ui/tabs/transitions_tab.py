@@ -32,6 +32,7 @@ from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PI
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
 from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
+from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_CHOICES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGIN_CHOICES
 from rendering.gl_programs.volumetric_dissolve_options import (
     VOLUMETRIC_DIRECTION_CHOICES,
@@ -119,6 +120,7 @@ class TransitionsTab(QWidget):
                 "volumetric_dissolve",
                 "vhs",
                 "liquid_lens",
+                "membrane",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -579,6 +581,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
         "VHS Distortion": "_build_vhs_group",
+        "Membrane Turnover": "_build_membrane_group",
         "Liquid Lens": "_build_liquid_lens_group",
         "Edge Bloom Reveal": "_build_edge_bloom_group",
     }
@@ -602,6 +605,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
         "VHS Distortion": "vhs_group",
+        "Membrane Turnover": "membrane_group",
         "Liquid Lens": "liquid_lens_group",
         "Edge Bloom Reveal": "edge_bloom_group",
     }
@@ -622,6 +626,7 @@ class TransitionsTab(QWidget):
             "Volumetric Dissolve",
             "VHS Distortion",
             "Liquid Lens",
+            "Membrane Turnover",
         }
     )
 
@@ -1090,6 +1095,9 @@ class TransitionsTab(QWidget):
             ("refraction", "Refraction:", 0.0, 1.0, "How strongly the water bends the next picture: thin and clear at 0, a thick, magnifying lens at 1."),
             ("dispersion", "Colour Fringes:", 0.0, 1.0, "Rainbow fringes where the water's rim bends the light most. Zero keeps the colours together."),
         ),
+        "membrane": (
+            ("gloss", "Gloss:", 0.0, 1.0, "Shine of the membrane and reflections of the next picture on it as it twists."),
+        ),
         "vhs": (
             ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
              "and the bent top of each frame as the picture rolls."),
@@ -1130,6 +1138,7 @@ class TransitionsTab(QWidget):
         "cube_turn": (_ANTIALIASING_CONTROL,),
         "jigsaw": (_ANTIALIASING_CONTROL,),
         "volumetric_dissolve": (_ANTIALIASING_CONTROL,),
+        "membrane": (_ANTIALIASING_CONTROL,),
         "blockspin": (
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
@@ -1392,6 +1401,15 @@ class TransitionsTab(QWidget):
         droplets_row.addWidget(self.liquid_lens_droplets_check)
         droplets_row.addStretch()
         self._specific_group_host_layout.addWidget(self.liquid_lens_group)
+
+    def _build_membrane_group(self) -> None:
+        self.membrane_group = QGroupBox("Membrane Turnover Settings")
+        self._style_group_box(self.membrane_group)
+        layout = QVBoxLayout(self.membrane_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        self._build_surface_controls(layout, "membrane")
+        self._build_scene3d_choices(layout, "membrane")
+        self._specific_group_host_layout.addWidget(self.membrane_group)
 
     def _build_vhs_group(self) -> None:
         self.vhs_group = QGroupBox("VHS Distortion Settings")
@@ -2303,7 +2321,7 @@ class TransitionsTab(QWidget):
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
                             "disintegrate", "cube_turn", "beam", "jigsaw", "volumetric_dissolve", "vhs",
-                            "liquid_lens"):
+                            "liquid_lens", "membrane"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2469,6 +2487,12 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Membrane Turnover":
+                    self.direction_combo.addItems(list(MEMBRANE_SWEEP_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["membrane"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "VHS Distortion":
                     # The way the picture rolls: where the new picture comes in.
                     self.direction_combo.addItems(list(VHS_DIRECTION_CHOICES))
@@ -2611,6 +2635,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["volumetric_dissolve"] = cur_dir
         elif cur_type == "VHS Distortion":
             self._direction_by_type["vhs"] = cur_dir
+        elif cur_type == "Membrane Turnover":
+            self._direction_by_type["membrane"] = cur_dir
         elif cur_type == "Liquid Lens":
             self._direction_by_type["liquid_lens"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
@@ -2772,6 +2798,10 @@ class TransitionsTab(QWidget):
             liquid_lens = {'direction': self._direction_by_type['liquid_lens'], 'droplets': self.liquid_lens_droplets_check.isChecked()}
         else:
             liquid_lens = {**_existing_subdict('liquid_lens'), 'direction': self._direction_by_type['liquid_lens']}
+        if hasattr(self, 'membrane_group'):
+            membrane = {'direction': self._direction_by_type['membrane']}
+        else:
+            membrane = {**_existing_subdict('membrane'), 'direction': self._direction_by_type['membrane']}
         if hasattr(self, 'vhs_group'):
             vhs = {'direction': self._direction_by_type['vhs']}
         else:
@@ -2786,7 +2816,7 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
                                 ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
-                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens)):
+                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2828,6 +2858,7 @@ class TransitionsTab(QWidget):
             'volumetric_dissolve': volumetric_dissolve,
             'vhs': vhs,
             'edge_bloom': edge_bloom,
+            'membrane': membrane,
             'liquid_lens': liquid_lens,
         }
         for section, controls in self._SCENE3D_CHOICES.items():

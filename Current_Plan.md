@@ -77,10 +77,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
 
 - [ ] **T4. Edge Bloom Reveal** — implemented 2026-10-10 on the shared edge field and photo-colour helpers (`Docs/Reference/Transitions.md`, `Docs/Reference/Scene3D_Resources.md`); awaiting operator acceptance. Deactivated by default.
 - [ ] **T5. Liquid Lens** — implemented 2026-10-10 on the new shared refraction helpers and the preserved vortex flow (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
-- [ ] **T6. Membrane Turnover.** A taut glossy sheet deforms, stretches and turns through itself to reveal the destination
-  image. Useful existing architecture: any shared mesh deformation/card surface math admitted by Scene3D primitives plus current
-  transition sequencing. New useful architecture: a reusable deformable-sheet or low-resolution transition mesh substrate rather
-  than a one-off transition-only simulation.
+- [ ] **T6. Membrane Turnover** — implemented 2026-10-10 on the shared sheet module (new `sheetTwist`, preserved two-sided helpers) and refraction's Fresnel (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_membrane_default.webp`). Deactivated by default.
 - [ ] **T7. Surface Tension Merge.** Source and destination behave like two fluids separated by a moving meniscus boundary;
   rounded pools swell, merge and take territory. Useful existing architecture: fullscreen passes, mask/reveal sequencing,
   transition registry. New useful architecture: a shared organic-boundary/meniscus field helper that can also serve capillary or

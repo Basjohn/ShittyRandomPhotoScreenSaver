@@ -15,7 +15,13 @@ unfolds the sheet's back side across the picture.
 * ``crease_grid``: grid columns and rows putting a vertex row on every crease, so creases stay
   sharp at any 3D Detail tier (one cell across: the pleats are flat strips);
 * ``SHEET_SIDES_GLSL``: which side of a two-sided sheet faces the viewer, the back's mirrored
-  print, and a flat pleat face's normal from screen-space derivatives (fragment shaders only).
+  print, and a flat pleat face's normal from screen-space derivatives (fragment shaders only);
+* ``SHEET_TWIST_GLSL`` / ``sheet_twist``: a ribbon twist (Membrane Turnover first): each
+  cross-section of the sheet across an axis turns about that axis by its own angle, the axis
+  rising by the sheet's half-width times ``sin(angle)`` so the turning sheet stays in front of the
+  picture plane and lands back on it, back up, at ``angle = pi``. Each cross-section turns
+  rigidly (its width is kept); varying the angle along the axis stretches the sheet between
+  them, as a membrane would.
 """
 
 from __future__ import annotations
@@ -56,6 +62,31 @@ vec3 sheetFaceNormal(vec3 world) {
     return dot(n, vec3(0.0, 0.0, SCENE_CAMERA) - world) < 0.0 ? -n : n;
 }
 """
+
+
+SHEET_TWIST_GLSL = """
+// Turn the plane point p (z = 0) about the axis through pivot along unit axis by angle, the axis
+// rising by halfWidth * sin(angle): every point stays at or in front of the plane.
+vec3 sheetTwist(vec2 p, vec2 axis, vec2 pivot, float angle, float halfWidth) {
+    vec2 across = vec2(-axis.y, axis.x);
+    vec2 rel = p - pivot;
+    float along = dot(rel, axis), off = dot(rel, across);
+    float c = cos(angle), s = sin(angle);
+    return vec3(pivot + axis * along + across * (off * c), (off + halfWidth) * s);
+}
+"""
+
+
+def sheet_twist(p: tuple[float, float], axis: tuple[float, float], pivot: tuple[float, float], angle: float,
+                half_width: float) -> tuple[float, float, float]:
+    """CPU mirror of ``sheetTwist``."""
+    across = (-axis[1], axis[0])
+    rel = (p[0] - pivot[0], p[1] - pivot[1])
+    along = rel[0] * axis[0] + rel[1] * axis[1]
+    off = rel[0] * across[0] + rel[1] * across[1]
+    c, s = math.cos(angle), math.sin(angle)
+    return (pivot[0] + axis[0] * along + across[0] * off * c, pivot[1] + axis[1] * along + across[1] * off * c,
+            (off + half_width) * s)
 
 
 def sheet_fold(a: float, length: float, pleats: int, fold: float, turn: float) -> tuple[float, float]:

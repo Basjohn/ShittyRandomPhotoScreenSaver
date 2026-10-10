@@ -21,6 +21,7 @@ from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGINS
+from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -938,6 +939,22 @@ def _resolve_liquid_lens(
     })
 
 
+def _resolve_membrane(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "membrane")
+    defaults = _canonical("membrane")
+    sweep = MEMBRANE_SWEEPS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if sweep is None:
+        sweep = str(rng.choice(tuple(MEMBRANE_SWEEPS.values())))
+    return _finish(sweep, {
+        "seed": _seed(rng),
+        **_surface_values(cfg, defaults, ("gloss",)),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -957,6 +974,7 @@ _RESOLVERS = {
     "vhs": _resolve_vhs,
     "edge_bloom": _resolve_edge_bloom,
     "liquid_lens": _resolve_liquid_lens,
+    "membrane": _resolve_membrane,
 }
 
 
