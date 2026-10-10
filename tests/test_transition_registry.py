@@ -96,3 +96,15 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "vhs": EasingCurve.LINEAR,
         "edge_bloom": EasingCurve.LINEAR,
     }
+
+
+def test_every_transition_section_belongs_to_one_transition() -> None:
+    from core.settings.defaults import get_default_settings
+    from rendering.transition_registry import iter_transition_descriptors
+
+    transitions = get_default_settings()["transitions"]
+    sections = {key for key, value in transitions.items()
+                if isinstance(value, dict) and key not in {"activation", "pool", "durations"}}
+    owners = [descriptor.settings_section for descriptor in iter_transition_descriptors()]
+    assert len(owners) == len(set(owners))
+    assert sections <= set(owners)

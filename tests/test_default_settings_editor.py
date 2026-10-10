@@ -434,3 +434,41 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
         ] == [12, 34, 56, 78]
     finally:
         editor.close()
+
+
+def test_by_transition_view_gathers_each_transitions_settings_and_edits_in_place(qt_app, tmp_path) -> None:
+    from rendering.transition_registry import iter_transition_descriptors
+    from tools.default_settings_editor import PATH_ROLE, VIEW_TRANSITIONS, get_path
+
+    base_path = _copy_base_source(tmp_path)
+    overrides_path = tmp_path / "default_profile_overrides.py"
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    editor = DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
+                                   undo_path=tmp_path / "undo.json", validate=lambda: "")
+    keep_off_screen(editor)
+    try:
+        stored = {path for path in editor._leaf_items if path[0] == "transitions"}
+        editor.set_view(VIEW_TRANSITIONS)
+        assert set(editor._leaf_items) == stored                 # nothing lost or doubled
+        tops = {editor.tree.topLevelItem(i).text(0): editor.tree.topLevelItem(i)
+                for i in range(editor.tree.topLevelItemCount())}
+        transitions = editor._models[NORMAL_PROFILE]["transitions"]
+        for descriptor in iter_transition_descriptors():
+            node = tops[descriptor.setting_name]
+            paths = {node.child(i).data(0, PATH_ROLE) for i in range(node.childCount())}
+            assert ("transitions", "durations", descriptor.setting_name) in paths
+            assert ("transitions", "activation", descriptor.setting_name) in paths
+            for key in transitions.get(descriptor.settings_section, {}):
+                assert ("transitions", descriptor.settings_section, key) in paths
+        assert "Other Transition Settings" not in tops
+
+        path = ("transitions", "durations", "Beam")
+        editor._leaf_items[path].setData(1, VALUE_ROLE, 4321)
+        assert get_path(editor._models[NORMAL_PROFILE], path) == 4321
+        assert "4,321 ms" in tops["Beam"].text(1)
+
+        editor.changed_only_check.setChecked(True)
+        assert [p for p, item in editor._leaf_items.items() if not item.isHidden()] == [path]
+        assert not tops["Beam"].isHidden() and tops["Burn"].isHidden()
+    finally:
+        editor.close()

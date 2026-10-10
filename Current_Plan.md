@@ -121,6 +121,9 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   Shockwave Grid preview differs between two runs of the same tree (max 14/255), so it is not reproducible: find the
   time or state input; (3) GPU timings of the heaviest transitions swing with clock state between runs (Particle
   0.73 → 1.27 ms on identical code), so `overhead_baseline.py` GPU flags on untouched effects need a rerun before they count.
+  (4) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
+  direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
+  forward-only strip (operator's defaults file, so on the operator's call).
 
 - [ ] **RM1. Land the tool and generate transition media.** Review/checkpoint `tools/release_media.py` and its focused tests,
   then capture every admitted canonical registry identity plus meaningful curated appearance variants on a stable source tree.
