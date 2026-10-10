@@ -59,8 +59,7 @@ def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_build
 
     for manifest in (ROOT / "ui" / "resources").glob("*.qrc"):
         assert "assets/usu" not in manifest.read_text(encoding="utf-8").replace("\\", "/"), manifest
-    scripts = [*PRODUCT_WORKERS, ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1",
-               ROOT / "tools" / "build_layout.ps1", *(ROOT / "scripts").glob("*.iss")]
+    scripts = [*PRODUCT_WORKERS, ROOT / "tools" / "build_layout.ps1", *(ROOT / "scripts").glob("*.iss")]
     for script in scripts:
         source = script.read_text(encoding="utf-8").replace("\\", "/").lower()
         assert "usu" not in re.findall(r"[a-z_]+", source), script
@@ -71,13 +70,12 @@ def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_build
     assert [path for path in tracked if not path.startswith("assets/usu/")] == []
 
 
-def test_diagnostic_build_reuses_the_qml_aware_canonical_worker():
-    source = (
-        ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
-    ).read_text(encoding="utf-8")
+def test_the_diagnostic_file_comes_from_the_qml_aware_canonical_worker():
+    source = (ROOT / "scripts" / "venv" / "build_nuitka.ps1").read_text(encoding="utf-8")
 
-    assert "$Worker = Join-Path $PSScriptRoot 'build_nuitka.ps1'" in source
-    assert "& $Worker" in source
+    assert not (ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1").exists()
+    assert "Get-SRPSSNuitkaQmlPruneArguments" in source
+    assert "-TargetPath $DiagnosticDir" in source
 
 
 def test_build_runner_dispatches_every_qml_aware_product_worker():

@@ -1,16 +1,22 @@
 """Process-local build flavour identity.
 
-Release entry points leave the default flavour untouched.  The dedicated
-diagnostic entry point activates its flavour before importing the ordinary
-runtime so logging and crash capture can be enabled without environment
-variables, marker files, or release-build heuristics.
+One compile publishes two files from the same binary: ``SRPSS.scr`` and
+``SRPSS_Diagnostic.scr`` (operator direction 2026-10-10: the diagnostic
+artifact always comes with a Standard build, with no second compile). In a
+compiled runtime the published file's own name selects the flavour, exactly
+``SRPSS_Diagnostic`` and nothing looser, read from the launched binary's long
+path before anything else is imported (``main.py``). Source runs select it only
+through the explicit ``main_diagnostic.py`` entry point. No environment
+variables or marker files.
 """
 from __future__ import annotations
 
+import os
 import sys
 
 
 _DIAGNOSTIC_BUILD = False
+DIAGNOSTIC_ARTIFACT_STEM = "SRPSS_Diagnostic"
 
 
 def is_compiled_runtime() -> bool:
@@ -38,6 +44,40 @@ def is_compiled_runtime() -> bool:
     return bool(main_mod is not None and getattr(main_mod, "__compiled__", False))
 
 
+def _long_path(path: str) -> str:
+    """``path`` with any 8.3 short components expanded (Windows stores screensavers by short path)."""
+    if sys.platform != "win32" or not path:
+        return path
+    try:
+        import ctypes
+
+        absolute = os.path.abspath(path)
+        size = ctypes.windll.kernel32.GetLongPathNameW(absolute, None, 0)
+        if size:
+            buffer = ctypes.create_unicode_buffer(size)
+            if ctypes.windll.kernel32.GetLongPathNameW(absolute, buffer, size):
+                return buffer.value
+    except Exception:
+        pass
+    return path
+
+
+def artifact_selects_diagnostic(argv0: str) -> bool:
+    """Whether the launched binary ``argv0`` is the published diagnostic file."""
+    name = os.path.basename(_long_path(str(argv0 or "")))
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    return stem.casefold() == DIAGNOSTIC_ARTIFACT_STEM.casefold()
+
+
+def activate_flavour_for_artifact(argv0: str) -> bool:
+    """Select the diagnostic flavour when this compiled runtime was launched as
+    ``SRPSS_Diagnostic``; source runs never select it by name. Returns whether it did."""
+    if is_compiled_runtime() and artifact_selects_diagnostic(argv0):
+        activate_diagnostic_build()
+        return True
+    return False
+
+
 def activate_diagnostic_build() -> None:
     """Mark this process as the dedicated diagnostic build flavour."""
 
@@ -46,7 +86,7 @@ def activate_diagnostic_build() -> None:
 
 
 def is_diagnostic_build() -> bool:
-    """Return whether the dedicated diagnostic entry point owns this process."""
+    """Return whether this process runs the diagnostic flavour."""
 
     return bool(_DIAGNOSTIC_BUILD)
 

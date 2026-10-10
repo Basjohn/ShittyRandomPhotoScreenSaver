@@ -12,6 +12,12 @@ import time
 from pathlib import Path
 from enum import Enum
 
+# One compile publishes SRPSS.scr and SRPSS_Diagnostic.scr; the published file's name selects the
+# diagnostic flavour before anything else is imported (core/build_profile.py).
+from core.build_profile import activate_flavour_for_artifact
+
+activate_flavour_for_artifact(sys.argv[0] if sys.argv else "")
+
 # Before anything imports numpy (the engine graph does), in this process and in
 # every worker it spawns: see core/native_threads.py.
 from core.native_threads import configure_native_thread_pools
@@ -842,12 +848,37 @@ def run_config_session(app: QApplication) -> tuple[int, bool]:
     return exit_code, run_requested
 
 
+def default_diagnostic_launch_to_run() -> None:
+    """A direct diagnostic launch (double-click, or with only flags such as ``--debug``) runs the
+    screensaver rather than opening Settings; an explicit mode is kept.
+
+    ``parse_screensaver_args`` only consumes the first non-filtered argument, so ``/s`` goes right
+    after argv[0], ahead of any unknown convenience token.
+    """
+    args = tuple(str(arg).strip().lower() for arg in sys.argv[1:])
+    has_mode = any(
+        arg == "/s"
+        or arg.startswith("/c")
+        or arg in ("/p", "-c", "-p", "-s", "--s")
+        for arg in args
+    )
+    if not has_mode:
+        sys.argv.insert(1, "/s")
+
+
 def main(*, entrypoint: str = "main"):
     """Main entry point for the screensaver application."""
     entrypoint_token = str(entrypoint).strip().lower()
     if entrypoint_token == "main_diagnostic":
         activate_diagnostic_build()
     diagnostic_build = is_diagnostic_build()
+    if diagnostic_build:
+        default_diagnostic_launch_to_run()
+        from core.windows.debug_console import debug_console_requested, open_debug_console
+
+        # The terminal is opt-in: only ``--debug`` opens one, before logging binds its console handler.
+        if debug_console_requested(sys.argv):
+            open_debug_console()
 
     fresh_mode = '--fresh' in sys.argv
     fresh_result: tuple[Path, int] | None = None
@@ -1000,7 +1031,7 @@ def main(*, entrypoint: str = "main"):
     mode, preview_hwnd = parse_screensaver_args()
     if entrypoint_token == "main_mc":
         entrypoint_name = "main_mc"
-    elif entrypoint_token == "main_diagnostic":
+    elif entrypoint_token == "main_diagnostic" or diagnostic_build:
         entrypoint_name = "main_diagnostic"
     else:
         entrypoint_name = "main"

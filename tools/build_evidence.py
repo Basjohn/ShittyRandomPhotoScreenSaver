@@ -16,7 +16,6 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 STEMS = {
     "standard": "build_nuitka",
-    "diagnostic": "build_nuitka_diagnostic",
     "media_center": "build_nuitka_mc_onedir",
     "reddit_helper": "build_reddit_helper",
 }
@@ -44,9 +43,20 @@ def evidence_files(job_key: str, token: str) -> tuple[str, ...]:
     )
 
 
+def _artifact_identity(artifact: Path, receipt: object) -> dict:
+    published = {"path": str(artifact), "exists": artifact.is_file()}
+    if artifact.is_file():
+        published.update({"bytes": artifact.stat().st_size, "sha256": sha256_file(artifact)})
+    if isinstance(receipt, dict) and isinstance(receipt.get("artifact_sha256"), str):
+        published["matches_compiled_artifact_sha256"] = (
+            published.get("sha256") == receipt["artifact_sha256"]
+        ) if published["exists"] else False
+    return published
+
+
 def write_build_evidence(
     log_dir: Path, job_key: str, token: str, runner_log: Path,
-    artifact: Path, returncode: int, *, retain: int = 8,
+    artifact: Path, returncode: int, *, companions: tuple[Path, ...] = (), retain: int = 8,
 ) -> Path:
     """Bundle the completed run and its exact artifact identity, including failures.
 
@@ -69,13 +79,7 @@ def write_build_evidence(
             receipt = json.loads((log_dir / frozen_name).read_text(encoding="utf-8"))
         except (ValueError, OSError):
             receipt = None
-    published = {"path": str(artifact), "exists": artifact.is_file()}
-    if artifact.is_file():
-        published.update({"bytes": artifact.stat().st_size, "sha256": sha256_file(artifact)})
-    if isinstance(receipt, dict) and isinstance(receipt.get("artifact_sha256"), str):
-        published["matches_compiled_artifact_sha256"] = (
-            published.get("sha256") == receipt["artifact_sha256"]
-        ) if published["exists"] else False
+    published = _artifact_identity(artifact, receipt)
 
     manifest = {
         "schema_version": 1,
@@ -84,6 +88,8 @@ def write_build_evidence(
         "recorded_utc": datetime.now(timezone.utc).isoformat(),
         "runner_exit_code": returncode,
         "published_artifact": published,
+        # The same compiled binary published under further names (the diagnostic copy).
+        "companion_artifacts": [_artifact_identity(path, receipt) for path in companions],
         "included_files": {p.name: {"size": p.stat().st_size, "sha256": sha256_file(p)} for p in files},
         "missing_files": [name for name in expected if name not in {p.name for p in files}],
         "note": "An absent report is recorded, never substituted with another run's report."

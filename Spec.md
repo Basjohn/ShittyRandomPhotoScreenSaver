@@ -58,8 +58,12 @@ one-way migration and quality/cost measurements live in `Docs/Reference/Image_Qu
 `tools/build_runner.py` owns sequential build execution. One active process owner places the Windows build root
 in a kill-on-close Job Object before resuming it; Emergency Stop and runner shutdown cancel that tree and prevent
 queued jobs from starting. Operator abort is distinct from compiler failure. A new run creates a fresh owner.
-Diagnostic publishes `SRPSS_Diagnostic.scr` through the canonical SCR builder; only Standard and Media Center have
-installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
+The Standard job compiles once and publishes the same binary twice: `release/screensaver/SRPSS.scr` and
+`release/diagnostic/SRPSS_Diagnostic.scr` (checked byte-for-byte against the compiled binary). The published file's
+name selects the diagnostic flavour at startup (`core/build_profile.py`: exactly `SRPSS_Diagnostic`, read from the
+launched binary's long path), so there is no Diagnostic job or second compile (operator direction, 2026-10-10).
+Builds compile without a console; the diagnostic flavour opens a terminal only with `--debug`, so installing it from
+Explorer or running a soak never pops one. Only Standard and Media Center have installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
 The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
 distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
 Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic
@@ -68,7 +72,7 @@ cancellation owner. Direct build scripts invoke the same prerequisite. A generat
 unchanged resources do not recompile for each job. Before any expensive PowerShell product compilation, Build Foundry
 and the direct worker both clear that job's canonical `release/<product>` directory. A locked old artifact therefore
 fails before compilation rather than after a full Nuitka run, and publication retains one bounded four-attempt retry for
-a transient Windows handle race. Every Standard, Diagnostic and Media Center runtime build also
+a transient Windows handle race. Every Standard and Media Center runtime build also
 writes a persistent Nuitka compilation report and a compact footprint JSON into `logs/`: artifact/published bytes,
 file count, largest payload files/top-level buckets, and QRC source-vs-generated-module reference sizes. These reports
 describe the current build only and exist to identify real package/dependency bloat before exclusions are added.
@@ -79,7 +83,7 @@ imports only `QtQuick` and `QtQuick.Effects`; the shared build-layout authority 
 until the package contract is deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven
 unused families, including WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, Controls
 families, Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
-the same exclusion authority; Diagnostic inherits it through the Venv Standard worker. Native Qt Multimedia remains
+the same exclusion authority; the diagnostic file is the Standard binary itself. Native Qt Multimedia remains
 packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
 context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
 The PySide6 QtQuick binding has a binding-level dependency on `PySide6.QtOpenGL`, even though SRPSS application
@@ -108,7 +112,7 @@ app-payload copy. The obsolete `ui/assets/installer/LogoBMP.bmp` has no remainin
 retired rather than retained as dead source baggage.
 
 For venv products, the Foundry first invokes the existing worker's preparation-only mode, which returns before
-build-directory mutation or compilation. Diagnostic follows its venv worker even when the Foundry is in Normal mode.
+build-directory mutation or compilation.
 
 ## Retired presentation architecture
 

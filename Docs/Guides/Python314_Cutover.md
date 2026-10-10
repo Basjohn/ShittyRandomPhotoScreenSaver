@@ -16,14 +16,13 @@ The operator's migration tooling selection passed **47/47**; R149's source repai
 
 ## Build and physical acceptance | operator owns execution
 
-**Agents must not launch Build Runner, Nuitka, installers, trial builds, helper freezes, or expensive product compilation.** The **operator** runs Standard, Diagnostic, Media Center and Reddit Helper frozen builds and provides their outputs, Nuitka compilation reports and footprint JSON. The agent then diagnoses the actual logs and returns source corrections with only relevant focused tests. A full four-chunk repeat is **not requested** unless the operator chooses it.
+**Agents must not launch Build Runner, Nuitka, installers, trial builds, helper freezes, or expensive product compilation.** The **operator** runs Standard (which also publishes the Diagnostic file), Media Center and Reddit Helper frozen builds and provides their outputs, Nuitka compilation reports and footprint JSON. The agent then diagnoses the actual logs and returns source corrections with only relevant focused tests. A full four-chunk repeat is **not requested** unless the operator chooses it.
 
 The operator may use the Build Runner GUI or the existing worker scripts. Workers remain documented as entry points, **not agent-run instructions**:
 
 `script/venv` is **not** a valid owner; the canonical build worker directory is `scripts/venv/`.
 
-- Standard: `scripts/venv/build_nuitka.ps1`
-- Diagnostic: `scripts/venv/build_nuitka_diagnostic.ps1`
+- Standard and Diagnostic (one compile, two files): `scripts/venv/build_nuitka.ps1`
 - Media Center: `scripts/venv/build_nuitka_mc_onedir.ps1`
 - Reddit Helper: `scripts/venv/build_reddit_helper.ps1`
 
