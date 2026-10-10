@@ -1,7 +1,8 @@
 """Jigsaw Piece Flip: shaders and CPU mirrors (loaded only when Jigsaw Piece Flip renders).
 
-The cut lines of a jigsaw fade in over the old picture. Then the pieces flip, one after another
-in the run's order: each lifts toward the viewer, turns over about an axis across the way the
+The cut lines of a jigsaw fade in over the old picture, each piece's whole outline at once, in
+the run's order: a quick wave from where the flips start that always stays ahead of them. Then
+the pieces flip, one after another in the same order: each lifts toward the viewer, turns over about an axis across the way the
 flips travel and lands on its own place showing its part of the new picture, and its cut line
 fades once it has landed. Where a piece is in the air its empty place shows the puzzle board.
 
@@ -26,8 +27,11 @@ from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick.transitions.piece_layout import JIGSAW_BEVEL
 
 JIGSAW_MAX_PIECES = 160
-JIGSAW_OUTLINE_IN = 0.10      # the cut lines fade in over the first part of the run
-JIGSAW_FLIP_START = 0.12      # after the cut lines have faded in: the whole jigsaw shows first
+# Each piece's cut line fades in over JIGSAW_OUTLINE_FADE, the first piece at once and the last
+# JIGSAW_OUTLINE_SWEEP later; every outline is whole before its own piece lifts.
+JIGSAW_OUTLINE_SWEEP = 0.10
+JIGSAW_OUTLINE_FADE = 0.07
+JIGSAW_FLIP_START = 0.12      # the first flips start once the nearest outlines have shown
 JIGSAW_FLIP_END = 0.97
 JIGSAW_LAND_FADE = 0.03       # a landed piece's cut line fades over this much of the run
 JIGSAW_THICKNESS = 0.09       # a card's thickness, as a share of the smaller cell side
@@ -58,10 +62,16 @@ def jigsaw_piece_phase(progress: float, rank: int, count: int) -> float:
     return max(0.0, min(1.0, (float(progress) - jigsaw_piece_start(rank, count)) / jigsaw_flip_window(count)))
 
 
+def jigsaw_outline_start(rank: int, count: int) -> float:
+    """When the piece's cut line starts to fade in: CPU mirror of ``jigsawOutlineStart``."""
+    order = rank / (count - 1) if count > 1 else 0.0
+    return JIGSAW_OUTLINE_SWEEP * order
+
+
 def jigsaw_outline_alpha(progress: float, rank: int, count: int) -> float:
     """How strongly the piece's cut line shows: CPU mirror of ``jigsawOutline``."""
     t = float(progress)
-    u = max(0.0, min(1.0, t / JIGSAW_OUTLINE_IN))
+    u = max(0.0, min(1.0, (t - jigsaw_outline_start(rank, count)) / JIGSAW_OUTLINE_FADE))
     alpha = u * u * (3.0 - 2.0 * u)
     end = jigsaw_piece_start(rank, count) + jigsaw_flip_window(count)
     v = max(0.0, min(1.0, (t - end) / JIGSAW_LAND_FADE))
@@ -77,7 +87,8 @@ def jigsaw_flip_pose(phase: float) -> tuple[float, float, float]:
 
 
 _SCHEDULE_GLSL = f"""
-const float OUTLINE_IN = {JIGSAW_OUTLINE_IN:.6f};
+const float OUTLINE_SWEEP = {JIGSAW_OUTLINE_SWEEP:.6f};
+const float OUTLINE_FADE = {JIGSAW_OUTLINE_FADE:.6f};
 const float FLIP_START = {JIGSAW_FLIP_START:.6f};
 const float FLIP_END = {JIGSAW_FLIP_END:.6f};
 const float LAND_FADE = {JIGSAW_LAND_FADE:.6f};
@@ -94,9 +105,13 @@ float jigsawStart(float rank) {{
 float jigsawPhase(float rank) {{
     return clamp((uProgress - jigsawStart(rank)) / jigsawWindow(), 0.0, 1.0);
 }}
+float jigsawOutlineStart(float rank) {{
+    return OUTLINE_SWEEP * (uCount > 1 ? rank / float(uCount - 1) : 0.0);
+}}
 float jigsawOutline(float rank) {{
+    float start = jigsawOutlineStart(rank);
     float end = jigsawStart(rank) + jigsawWindow();
-    return smoothstep(0.0, OUTLINE_IN, uProgress) * (1.0 - smoothstep(end, end + LAND_FADE, uProgress));
+    return smoothstep(start, start + OUTLINE_FADE, uProgress) * (1.0 - smoothstep(end, end + LAND_FADE, uProgress));
 }}
 """
 
