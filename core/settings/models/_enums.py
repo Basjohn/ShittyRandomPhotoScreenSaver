@@ -39,6 +39,7 @@ class TransitionType(Enum):
     BEAM = "Beam"
     JIGSAW = "Jigsaw Piece Flip"
     VOLUMETRIC_DISSOLVE = "Volumetric Dissolve"
+    VHS_DISTORTION = "VHS Distortion"
 
 
 class WidgetPosition(Enum):

@@ -1,7 +1,7 @@
 {
-  "inputs_sha256": "355f7f4b758ade1032deaec5a7589ca5e84048e0568966f3ae0945108c54cde7",
-  "pack_bytes": 23509282,
-  "pack_sha256": "33fe5795f8de84e7c182b50dc878f382afa60fa9c8a92a31766aa00baa58e07f",
+  "inputs_sha256": "e1aa017f7cecb9fab1cc89b60a7b77a0974f6bafb813638841e22843ee7c0b13",
+  "pack_bytes": 25015411,
+  "pack_sha256": "c4837b5a6adac0b09bdb8520a40f9e43a83639ba57a2ab3d8ed02500f3629b9c",
   "qrc": "onboarding_assets.qrc",
   "schema": 2,
   "toolchain_sha256": "e8e6c0e55d019979888e0f9d518c0194f87b2c5a23f7234eb46febf57892189b"

@@ -46,6 +46,7 @@ _REVEALS = (
     ("volumetric_dissolve", "volumetric_dissolve", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
     ("relief_rise", "relief_rise", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
     ("beam", "beam", _CARDINAL + _ALL_DIAGONALS, {}, 3500),
+    ("vhs", "vhs", ("Top to Bottom", "Bottom to Top"), {}, 3000),
     ("burn", "burn", _CARDINAL + _DIAGONAL, {}, 3000),
     ("particle", "particle", _CARDINAL + ("Top-Left to Bottom-Right", "Top-Right to Bottom-Left",
                                           "Bottom-Left to Top-Right", "Bottom-Right to Top-Left"),

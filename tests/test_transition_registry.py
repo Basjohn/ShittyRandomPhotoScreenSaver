@@ -99,4 +99,5 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "beam": EasingCurve.LINEAR,
         "jigsaw": EasingCurve.LINEAR,
         "volumetric_dissolve": EasingCurve.LINEAR,
+        "vhs": EasingCurve.LINEAR,
     }

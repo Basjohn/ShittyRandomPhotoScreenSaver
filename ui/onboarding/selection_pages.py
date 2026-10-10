@@ -262,6 +262,7 @@ TRANSITION_COPY = {
     "beam": "A beam of light sweeps across, leaving the next picture behind.",
     "jigsaw": "The picture becomes a jigsaw whose pieces flip over one by one to the next.",
     "volumetric_dissolve": "The picture bursts into glowing particles and mist as the next one appears.",
+    "vhs": "The tape loses tracking and the picture rolls over to the next one.",
 }
 
 

@@ -17,7 +17,7 @@ This is a **live work checklist**, not a checkpoint chronicle. The current extra
 - [x] **R168 focused regression:** operator's Windows `.venv` selection completed, **187 passed**; no affected runtime source files changed in R168/R169.
 - [x] **Dev Curve replay (2026-10-10):** the drop was entirely R160's protected pre-AGC routing (forcing the old routing restored 21.605556 exactly); on the operator's call `gradual_ramp__devcurve` alone was re-seeded via `tools.visualizer_replay.floors.calibrate` (output_flux floor 19.27 → 9.31, 50% of today's 18.61). Never route Dev Curve through Spectrum shaping.
 - [x] **Next graphics readiness (2026-10-09):** T1 reuses `scene3d.py` projection/hash/`SceneMaterial`, `PhotoEnvironment`, `SceneTarget`, `MeshResources` (per-run vertex bytes as a keyed mesh dropped at `park()`), `warm()`/`warm_run_resources` and the registry/resolver/Settings path exactly as Cube Turn/Beam do. Legacy Block Puzzle Flip is a flat 2D strip shader with no geometry or schedule worth reusing. `fracture_geometry` prisms fan from a centre and so only admit convex cells; jigsaw knobs are non-convex, so T1 owns a new pure **piece-layout generator** (`rendering/quick/transitions/piece_layout.py`: shared-edge jigsaw contours, per-piece ear-clip triangulation, extruded walls, bevel ring) plus the **order planner** (corner, random-start wavefront, unordered). T2 starts from `CompactedPopulation` (Disintegrate) but must not be a Disintegrate reskin; the S18 fog volume is its only new primitive. T3/T4 are 2D full-picture passes like Beam (no scene target); T4's edge field is a per-run renderer-owned derived texture.
-- [ ] **T1–T4 as first transitions:** T1 Jigsaw Piece Flip and T2 Volumetric Dissolve are accepted (operator, 2026-10-10); T3–T4 next. Use exact locally stored mock references and avoid accidental feature scope creep.
+- [ ] **T1–T4 as first transitions:** T1 Jigsaw Piece Flip and T2 Volumetric Dissolve are accepted (operator, 2026-10-10); T3 VHS Distortion implemented 2026-10-10 (awaiting operator acceptance; showcase `assets/webp/transition_vhs_default.webp`); T4 next. Use exact locally stored mock references and avoid accidental feature scope creep.
 
 ---
 
@@ -76,11 +76,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
 
 - [ ] **Block Puzzle Flip retirement.** Its clean-room successor Jigsaw Piece Flip is accepted (2026-10-10, with smooth
   adaptive cut curves and a per-piece outline wave). Retire the legacy transition when the operator chooses the timing.
-- [ ] **T3. VHS Distortion.** Treat this as a deliberate stylized transition, not a joke/glitch throwaway: horizontal tearing,
-  scanline interference, chroma drift, dropout bands and unstable tracking carrying the source toward the destination. Useful
-  existing architecture: fullscreen material/post passes, transition registry/timing, retained Quick presentation authority and
-  the current transition harness/capture path. New useful architecture: a reusable distortion/noise primitive set (scanline,
-  dropout, luma wobble, chroma offset, line displacement) so VHS can ship cleanly without becoming a bespoke hard-coded pile.
+- [ ] **T3. VHS Distortion** — implemented 2026-10-10 on the shared analog-signal library (`Docs/Reference/Transitions.md`); awaiting operator acceptance. Deactivated by default.
 - [ ] **T4. Edge Bloom Reveal.** Promote the grouped mock's second concept into the first-wave batch: strong edges from the
   destination image appear as luminous structural lines over the source, thicken, and fill into full image regions. Useful
   existing architecture: fullscreen shader passes, existing mask/reveal sequencing, transition registry and capture harness. New
