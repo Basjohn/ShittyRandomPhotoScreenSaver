@@ -40,9 +40,9 @@ EEVEE from the 3/4 camera, are in `assets/usu/review/clips_webp/` (open them in 
 | --- | --- |
 | Static model | approved 2026-10-08 (`Usu.blend`) |
 | Materials | felt v4: procedural fibre/stain/relief group on rest-pose coordinates, charcoal felt mittens, darker iris, tan thread, sheen fuzz; rebuilt by `assets/usu/source/usu_felt_materials.py` in either file |
-| Rig | rough, `Usu_Rig.blend` (copy): 30 bones (root, spine chain, 4-bone ears, limbs, eye-state bones), procedural per-part weights, Blink_L/Blink_R/Blink drivers, pose library and pose tests |
-| Clips | 19 rough actions at 30 fps (`USU_CLIPS.py` then `USU_GROUND.py` rebuild them); grounded, in place, ear-cleared for gaits and prone poses (2026-10-10) |
-| Export | nothing yet; blocked on S19 (format decided there) |
+| Rig | `Usu_Rig.blend` (copy): 30 bones (root, spine chain, 4-bone ears, limbs, eye-state bones), procedural per-part weights with a blended ear root, ear pivots on the root's back-top edge, Blink_L/Blink_R/Blink drivers, pose library |
+| Clips | 23 actions at 30 fps, rebuilt by `USU_CLIPS.py` → `USU_EARS.py` → `USU_GROUND.py` (text blocks; source copies in `assets/usu/source/`): grounded, in place, every chain and loop seam exact, no ear/arm/body/foot interpenetration in any frame (2026-10-10) |
+| Interchange | `assets/usu/Usu_Rig.fbx` from `source/usu_export_fbx.py` (rig + meshes, every clip as a take, validated by re-import); not the runtime format, which S19 decides |
 
 ---
 
@@ -51,66 +51,32 @@ EEVEE from the 3/4 camera, are in `assets/usu/review/clips_webp/` (open them in 
 Each item ends with its check. Visual checks are judged from rendered previews (clip WebPs, pose sheets), not by asking the
 operator; the operator accepts milestones.
 
-### B1 — Rig refinement
+### B1–B4 — done for the rough stage (2026-10-10)
 
-Done 2026-10-10: the ear root blends from `head` to `ear.01` over the ear's first ~0.65 units (it was a hinge within
-4% of the ear), and the clips bend swings along the ear instead of folding it at the root. The crown "horn" is smaller
-but not gone. Remaining:
+- **Ground and in place** (`USU_GROUND.py`): only the root is re-keyed per frame from the evaluated meshes; contact
+  frames sit exactly on the floor (worst sink had been 1.87 units), flight phases only lift, root-rotating clips keep the
+  pelvis horizontally at rest; additive overlays are never grounded.
+- **Ear clearance:** ears flare outward with their swing and bend along the ear (`ears(..., clear=True)`), and
+  `USU_EARS.py` searches mirrored ear.01 corrections on any frame where an ear still touches an arm, the body or a foot
+  (per-ear only where no mirrored turn clears), smoothed, with clip ends pinned so hand-offs and loop seams stay exact.
+  Lying now rests the arms along the sides (chin-on-mittens cannot clear Usu's big head); a full roll ends back on the
+  belly and PushUpFacingCamera rises from there.
+- **Ear root:** weights blend head→ear.01 over ~0.65 units and the ear.01 pivots sit on the root's back-top edge, so a
+  backward swing seats the root instead of lifting a knuckle above the crown (rise at NarutoRun's widest swing +0.07 →
+  −0.03 units).
+- **New clips:** `Jump` (markers `takeoff`/`apex`/`land`; planted outside them), `IdleLieFootTap` (IdleLie variant),
+  `StrideAccent` and `DustStep` (additive; `dust` marker). `yawed()` turns body-relative swings with a yaw (fixed
+  TurnToTravel's ears and LieDown's crossing legs).
+- **Gate:** the BVH scan (arms vs ears/head/feet, ears vs body) reports nothing above the rest pose except upper arms
+  brushing the underside of the head (26-130 face pairs, 136 already at rest by construction, hidden under the head):
+  accepted, no shoulder repaint.
+- **Decided against for now:** authoring IK. The ground pass already plants contacts and in-place gaits must let the
+  feet slide with the moon; IK becomes useful only when clips are hand-polished.
 
-- **Ear-root knuckle:** at the largest swings (NarutoRun, Run) the front edge of the far ear's root still lifts above
-  the skull outline. Fix with a corrective shape key driven by `ear.01` X rotation (or a deeper ear socket); weights alone
-  cannot hide it.
-- Painted/smoothed weights at shoulders, hips and neck (still procedural there).
-- Authoring-only **IK** for hands and feet (foot roll pivots, hand plant targets) so contacts can be locked; clips are baked
-  back to FK for export. The ground pass (B2) already puts the lowest point on the floor; IK adds per-limb locks.
-- Confirm every stitch stays on its owner under extreme poses; keep ≤4 influences per vertex.
-- **Check:** pose tests re-rendered (`USU_POSE_TESTS.json` plus arms-trailing and ears-back), no pinch, seam drift or
-  stitch lift.
+### B4b — Polish (when the clips are refined by hand)
 
-### B2 — Clip fixes
-
-Done 2026-10-10 (`USU_CLIPS.py` + new text `USU_GROUND.py`, always run in that order; source copies in
-`assets/usu/source/`):
-
-- **Ground pass** re-keys only the root per frame from the evaluated meshes: contact clips put their lowest point exactly
-  on the floor (worst sink was 1.87 units in RollOver, 0.83 in Fall; floats up to 0.38 at the PushUp/Stand hand-off), gait
-  flight phases only lift; every contact clip now measures 0.000 sink and float.
-- **In place:** clips that rotate the root keep the pelvis horizontally at rest (the plan's in-place rule; the engine owns
-  travel), so falls no longer slide ~2 units out of frame and every chained hand-off (Skid→Fall→GetUp,
-  SitDown→LieDown→IdleLie→RollOver→PushUpFacingCamera→StandFacingCamera, PushUp→Stand) matches bone for bone.
-- **Ear clearance:** a BVH scan of every frame found the lower ears passing through the upper arms in nearly every gait
-  and prone pose (they hang just outside the arms). Ears now flare outward as they swing, prone poses no longer press them
-  inward, and the fall's lurch sweeps them back: Walk, Jog, Run, Skid, GetUp, PushUp, Stand, TurnToTravel and EarRecoil
-  scan clean.
-- NarutoRun arms trail lower and wider; Walk swings its arms more; TurnToTravel's ear swing turns with the body; ear
-  swings bend along the ear (root 0.3, each further segment 0.27 of the swing) instead of folding at the root.
-
-Remaining (from the same scan; counts are intersecting face pairs above the rest pose):
-
-| Clip(s) | Problem | Fix |
-| --- | --- | --- |
-| Fall (around frame 12) | lower ears still cross the arms between the lurch and the face-down landing (~300 pairs, was 692) | an extra key holding the ear sweep until the arms have passed |
-| IdleLie, LieDown end, RollOver | "chin on mittens" presses the forearms into the head (298); the roll drags ears through the body and arms (~530-670) | hand-author the roll with the ears splayed and the arms tucked; decide whether the chin-on-mittens squash is intended (plush squash) or should part |
-| LieDown (frame ~10) | legs cross each other and an arm while turning to lie down | re-time the turn so the legs part before the body rotates |
-| Prone poses, NarutoRun, Stand | upper arms brush the side of the head (26-130) | shoulder weights (B1) or a little arm abduction |
-
-- **Check:** the BVH scan (arms vs ears/head/feet, ears vs body) reports no pairs above the rest pose, and the clip previews
-  (3/4 and Side) show no interpenetration.
-
-### B3 — Missing clips (from `Usu_Moonscape.md` §3.1)
-
-- `IdleLieFootTap` (additive, occasional slower foot tipping/ear twitch), `StrideAccent`, `DustStep` (additive transient
-  accents). They are authored as additive layers on the matching base clips.
-- **Check:** each plays over its base clip without popping; additive layers return exactly to zero.
-
-### B4 — Continuity and polish
-
-- Matching boundary poses for every authored chain: Skid→Fall→GetUp, SitDown→LieDown→IdleLie,
-  IdleLie→RollOver→PushUp→Stand, and loop entry/exit poses close enough for short cross-fades.
-- Contacts: foot-plant markers on every locomotion loop (Walk/Jog/Run/NarutoRun already have `contact.L/R`); no foot
-  sliding while planted.
-- Ear motion stays keyed lightly: the runtime adds springs (S23), so authored ears must not fight them.
-- **Check:** a chained preview of each sequence renders without a visible pop.
+- Hand-polish timing and arcs per clip; IK for hand/foot locks if a polished clip needs them; stitches checked under
+  extreme poses (≤4 influences). Previews: `assets/usu/review/clips_webp/` (3/4 and Side).
 
 ### B5 — Export preparation (needs the S19 contract)
 
