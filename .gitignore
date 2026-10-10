@@ -229,6 +229,8 @@ output/
 /assets/usu
 # Transition showcase WebPs (tools/release_media.py), release-only and regenerable.
 /assets/webp/
+# Machine-local MCP servers for Claude Code (e.g. Blender via uvx mcp-for-blender).
+/.mcp.json
 
 # GODZIP archive metadata, Foundry repo-local state and debris staging.
 # A GODZIP archive embeds its manifest at .godzip/manifest.json; if an archive
