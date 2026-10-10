@@ -69,10 +69,16 @@ visible; wink possible.
 | Jog | `Jog` | yes | in place; balanced head |
 | Run | `Run` | yes | in place; stronger lean, ears trailing |
 | Naruto run | `NarutoRun` | yes | absolute top speed: deep forward lean, arms trailing, ears streaming |
+| Jump | `Jump` (markers `takeoff`, `apex`, `land`) | no | a reward on a strong admitted transient while jogging/running (see §3.2); crouch, push-off, tuck, apex, reach, land, squash, recover; the runtime may stretch takeoff..land and scale the arc between them |
 | Sudden stop | `Skid` → `Fall` → `GetUp` | no | only from Naruto/high run on an abrupt pressure collapse; contiguous performance |
 | Settle down | `SitDown` → `LieDown` | no | from standing/walking into the lying idle when silence persists |
 | Blink | `Blink` (L/R/both) | overlay | over every clip; wink possible |
 | Accents | `StrideAccent`, `EarRecoil`, `DustStep` | additive | consumed-once transient rewards |
+
+**Ears move together.** Both ears answer the head's vertical motion (one bob per footfall, the jump's rise, fall and
+landing) in phase, with a slight lag and one overshoot; they never alternate left/right, which reads busy and is wrong for
+floppy felt. The runtime springs (S23) may give each ear a few percent different stiffness so they drift apart a hair
+instead of moving as one rigid pair.
 
 Locomotion clips are **in place**; the engine owns travel (moon rotation). Non-loop clips that move the body (skid slide,
 fall, roll) declare a **root-motion contract**: either the engine reads the clip's root delta and converts it into travel,
@@ -90,6 +96,11 @@ Re-read `Docs/Guides/Visualizer_Reactivity_Authoring.md`; it wins if it has evol
 5. **slow passage weight**;
 6. **presentation interpolation** (presentation only; never changes authored timing);
 7. **idle behaviour** (honest: no fake energy in silence).
+
+**Jump admission:** only from Jog/Run/NarutoRun, on a consumed strong transient (consume-once at the logical owner,
+never replayed), with a logical-time cooldown so jumps stay occasional; jump height and airtime come from the transient
+reward (the arc between `takeoff` and `land` scaled and stretched, capped), never from raw loudness; a jump never chains
+into another and always lands back into the current gait. Sustained pressure keeps choosing the gait underneath.
 
 State selection is a **hysteretic blend** over pressure: walk ↔ jog ↔ run ↔ Naruto with overlapping enter/exit bands and
 cross-fades, never per-frame chatter. **Sudden-stop detection**: entering Skid requires (a) Naruto/high run held for a
@@ -170,9 +181,9 @@ frame would create, CPU mirrors for shader maths, quality tiers decide optional 
 | --- | --- | --- |
 | A — static model | silhouette/proportions match the turnaround | approved 2026-10-08 |
 | A2 — surface | soft felt, no wood grain, faint dirt; parity with the turnaround | felt v4 2026-10-10: fibre/stain/relief node group on rest-pose coordinates (no swimming under the rig), charcoal felt mittens, darker iris, tan thread, sheen-only fuzz; rebuilt by `assets/usu/source/usu_felt_materials.py`; bake at S19 |
-| B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | rough rig built 2026-10-10 in `assets/usu/Usu_Rig.blend` (procedural per-part weights, bone-scale blink); refinement pending |
+| B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | rough rig 2026-10-10 in `assets/usu/Usu_Rig.blend` (procedural weights, blended ear root, ear pivots on the root edge, bone-scale blink); see `Usu_Blender_Work.md` |
 | B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | first pass rendered 2026-10-10 (`assets/usu/review/pose_tests/`) |
-| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | rough blocking done 2026-10-10 (19 actions; moving previews `assets/usu/review/clips_webp/`); grounded and in place with matching hand-offs, gaits and prone poses ear-cleared (2026-10-10); lying/roll interpenetration remains, `Usu_Blender_Work.md` B2 |
+| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | done for the rough stage 2026-10-10: 23 clips incl. Jump and the accents, grounded, in place, exact hand-offs, no interpenetration in any frame (BVH scan); previews `assets/usu/review/clips_webp/`; hand polish later (`Usu_Blender_Work.md` B4b) |
 | C2 — export proof | clips, skins, eye states and materials survive export into the SRPSS path (S19), not just Blender | blocked on S19 |
 | D — runtime | S19–S27 accepted through other consumers, then the mode is admitted | deferred |
 
