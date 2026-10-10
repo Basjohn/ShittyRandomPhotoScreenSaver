@@ -31,18 +31,18 @@ MANIFEST = "release_media.json"
 
 # Operator transition showcase directive: every transition WebP is composed from the four
 # operator-owned Usu scenes (Windows-local, never bundled), 480 px wide ("480p" means the width:
-# 854x480 was far too large), smooth (60 fps first), strictly under 10,000,000 bytes. Its own
-# ignored folder; never a normal GODZIP payload.
+# 854x480 was far too large), smooth. Its own ignored folder; never a normal GODZIP payload.
 USU_SCENES = tuple(ROOT / "assets" / "usu" / "scenes" / f"UsuScene{index}.png" for index in range(1, 5))
 TRANSITION_OUTPUT = ROOT / "assets" / "webp"
 TRANSITION_WIDTH = 480
 # Parity (operator direction): every showcase plays at the same frame rate and its authored speed,
-# so none looks faster than another. Only a transition that does not fit steps its quality down.
+# so none looks faster than another. One encode at one quality: about 10 MB is a comfortable size,
+# not a cap (operator, 2026-10-10: 15-20 MB is fine), so no showcase steps its quality down unless
+# an explicit --max-bytes asks for a ceiling.
 TRANSITION_FPS = 24
-TRANSITION_QUALITY = 95
-TRANSITION_QUALITY_STEPS = (95, 92, 90, 88, 85, 82, 80)
+TRANSITION_QUALITY = 92
+TRANSITION_QUALITY_STEPS = (92, 90, 88, 85, 82, 80)   # only under an explicit --max-bytes
 TRANSITION_CAPTURE_SCALE = 2           # captured at twice the published size, then downsampled
-TRANSITION_MAX_BYTES = 10_000_000 - 1  # strictly below 10 MB (decimal)
 TRANSITION_MID_HOLD_MS = 700           # the new picture rests before the run back starts
 TRANSITION_LOOP_HOLD_MS = 350          # each loop end rests on the first picture (both ends meet)
 # Every ordered pair of distinct scenes. Each generation picks a pair and the run there's seed
@@ -384,8 +384,8 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
 
 def transition_encoding_plan(width: int, fps: int) -> list[tuple[int, int, float, int]]:
     """Every transition showcase keeps one width, one frame rate and its authored speed (parity:
-    some moving faster than others unnerves a viewer); a showcase that does not fit steps only its
-    quality down."""
+    some moving faster than others unnerves a viewer); under an explicit byte ceiling, a showcase
+    that does not fit steps only its quality down."""
     return [(width, fps, 1.0, quality) for quality in TRANSITION_QUALITY_STEPS]
 
 
@@ -494,7 +494,8 @@ def main(argv=None) -> int:
     parser.add_argument("--capture-width", type=int, default=1280)
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--max-bytes", type=int, default=10 * 1024 ** 2)
+    parser.add_argument("--max-bytes", type=int, default=None,
+                        help="optional byte ceiling (default: none for transitions, 10 MiB for Visualizers)")
     args = parser.parse_args(argv)
     transitions_only = args.kind == "transition"
     if transitions_only and args.output_dir is None and not args.list:
@@ -515,7 +516,7 @@ def main(argv=None) -> int:
     if (not math.isfinite(args.start_seconds) or args.start_seconds < 0
             or args.duration_seconds is not None and (not math.isfinite(args.duration_seconds) or not 0 < args.duration_seconds <= 30)
             or not 160 <= args.width <= args.capture_width <= 3840 or not 10 <= args.fps <= 60
-            or not 0 < args.max_bytes <= HOST_MAX_BYTES):
+            or (args.max_bytes is not None and not 0 < args.max_bytes <= HOST_MAX_BYTES)):
         parser.error("invalid capture bounds")
     output = args.output_dir.resolve()
     if (output == ROOT or output == ROOT / "logs"
@@ -563,7 +564,7 @@ def main(argv=None) -> int:
             if case.kind == "transition":
                 width, height = transition_size()
                 capture_size = (width * TRANSITION_CAPTURE_SCALE, height * TRANSITION_CAPTURE_SCALE)
-                max_bytes = min(args.max_bytes, TRANSITION_MAX_BYTES)
+                max_bytes = args.max_bytes or HOST_MAX_BYTES
                 pair, seed = pick_showcase(random.SystemRandom())
                 options = {"capture_size": list(capture_size), "width": width, "fps": TRANSITION_FPS,
                            "quality": list(TRANSITION_QUALITY_STEPS), "encoding": "parity-1",
@@ -571,10 +572,10 @@ def main(argv=None) -> int:
                            "endpoint_hold_ms": hold_ms, "mid_hold_ms": TRANSITION_MID_HOLD_MS,
                            "scene_sha256": scene_hashes}
             else:
-                width, max_bytes = args.width, args.max_bytes
+                width, max_bytes = args.width, args.max_bytes or 10 * 1024 ** 2
                 capture_size = (args.capture_width, round(args.capture_width * 9 / 16))
                 options = {"capture_width": args.capture_width, "width": args.width, "fps": args.fps,
-                           "max_bytes": args.max_bytes, "duration_ms": duration_ms, "start_seconds": args.start_seconds,
+                           "max_bytes": max_bytes, "duration_ms": duration_ms, "start_seconds": args.start_seconds,
                            "endpoint_hold_ms": hold_ms}
             digest = fingerprint(case, current_source, options, clip_hash)
             entry = manifest["entries"].get(case.key, {})

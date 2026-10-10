@@ -30,8 +30,9 @@ of these four local source images, not the superseded `UsuScenePaper1/2` artwork
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene2.png`
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png` Every published transition
-animated WebP must be a high-quality loop 480 px wide (keeping the aspect ratio; "480p" means the width) with a **strict per-file size below 10,000,000
-bytes (decimal 10 MB)**. Keep the original artwork's aspect ratio when compositing. These four source PNGs are
+animated WebP must be a high-quality loop 480 px wide (keeping the aspect ratio; "480p" means the width). About
+10 MB is a comfortable size, **not a cap**: 15-20 MB is fine (operator, 2026-10-10; the first catalogue's strict
+10,000,000-byte limit was a one-off). Keep the original artwork's aspect ratio when compositing. These four source PNGs are
 Windows-local and intentionally absent from handoff archives and Linux CI; the production transition-media
 capture should combine the genuine images when the operator runs M1, never substitute fixtures for publication.
 **Implemented (2026-10-10).** Transition cases ignore the Visualizer size flags: each loads the four scenes (missing
@@ -39,10 +40,11 @@ originals fail loudly, never a substitute), picks an ordered scene pair and the 
 manifest; a new pick never stales an entry), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
 then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
 twice in a row read as a mistake) at twice 480x270 and 24 fps; the encoder adds a 350 ms rest at both loop ends (both
-on the first picture, so the loop is seamless). Published at 480x270, strictly under 10,000,000 bytes; frame rate
-has **parity**: every showcase plays at 24 fps, 480 px wide and its authored speed (operator direction:
-some moving faster than others unnerves a viewer); one that does not fit steps only its quality down
-(95, 92, 90, 88, 85, 82, 80) and fails loudly below that. Measured: Block Spins Reflection 9.80 MB at q90
+on the first picture, so the loop is seamless). Published at 480x270 in one encode at quality 92 (no byte cap
+unless `--max-bytes` gives one; then only the quality steps down, 92 to 80, failing loudly below that); frame
+rate has **parity**: every showcase plays at 24 fps, 480 px wide and its authored speed (operator direction:
+some moving faster than others unnerves a viewer). The first catalogue (2026-10-10) was encoded under the
+former strict 10,000,000-byte cap, starting at quality 95. Measured: Block Spins Reflection 9.80 MB at q90
 (11.8 MB at q92); Refraction needed q88 and, with Both, is not showcased (operator direction). Output frames map to source frames rounding halves up (a 350 ms rest is
 10.5 frames at 30 fps, and round-half-to-even showed every other motion frame twice: 15 fps motion until
 2026-10-10) (raised from 92 at operator request; measured, neither

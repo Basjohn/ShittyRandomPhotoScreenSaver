@@ -138,17 +138,17 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`,
   `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png`.
   Keep a pleasant loop, **480 px wide** output keeping the aspect ratio (480x270 for the 16:9 scenes; operator
-  clarified 2026-10-10 that "480p" means the width, and 854x480 is far too large), smooth (60 fps first), high-quality WebP, and each individual WebP **strictly under 10,000,000 bytes** (10 MB,
-  not 10 MiB). Aim close to this per-file cap where quality benefits, without padding or fabricating detail.
-  Reduce fps/duration/dimensions carefully to obey the cap before sacrificing important edges or gradients.
+  clarified 2026-10-10 that "480p" means the width, and 854x480 is far too large), smooth (60 fps first), high-quality WebP. About 10 MB per file is a comfortable size, **not a cap**: 15-20 MB is fine and no
+  showcase should be squeezed to fit (operator, 2026-10-10; the first catalogue's strict 10,000,000-byte cap was a
+  one-off).
   These four paths exist **only on the operator's Windows tree** and must be loaded at capture time, never
   invented, substituted, embedded in a normal Godzip, or assumed accessible in Linux/CI. Capture/encoding tool
   defaults and release registry must be adapted to this exact source/size directive when M1 is executed.
   Generate media only when the operator has supplied the four originals and selected a stable source tree. Do not fabricate or substitute unavailable local originals.
   **Tool adapted 2026-10-10:** `--kind transition` writes to the ignored `assets/webp/` (also a GODZIP never-transfer
   prefix): a per-transition ordered scene pair (stable from the case key), A→B, a rest on B, B→A with another seed
-  (a seamless loop), captured at 2x and published at 480x270, strictly < 10,000,000 bytes, with parity: 24 fps and authored speed for
-  every showcase, only quality stepping down (95 → 80) for one that does not fit; Block Spins shows Off and
+  (a seamless loop), captured at 2x and published at 480x270 in one encode at quality 92 (no cap), with parity: 24 fps and authored speed for
+  every showcase; Block Spins shows Off and
   Reflection only; scene pair and seeds picked at random per generation; the run back always
   changes direction/order; method 4 with keyframes every 150 frames (method 6 was 11x slower for 2% smaller).
   **Every new or visually changed transition gets its WebP generated and reviewed by the agent before it is called

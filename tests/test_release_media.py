@@ -239,12 +239,12 @@ def test_the_showcase_never_runs_back_in_the_same_direction() -> None:
 
 
 def test_transition_showcases_keep_one_frame_rate_and_speed_and_step_only_quality(tmp_path: Path) -> None:
-    from tools.release_media import TRANSITION_FPS, transition_encoding_plan
+    from tools.release_media import TRANSITION_FPS, TRANSITION_QUALITY, transition_encoding_plan
 
     plan = transition_encoding_plan(480, TRANSITION_FPS)
     assert {(width, fps, scale) for width, fps, scale, _quality in plan} == {(480, TRANSITION_FPS, 1.0)}
     qualities = [quality for *_rest, quality in plan]
-    assert qualities == sorted(qualities, reverse=True) and qualities[0] == 95 and len(qualities) > 1
+    assert qualities == sorted(qualities, reverse=True) and qualities[0] == TRANSITION_QUALITY and len(qualities) > 1
     import numpy as np
 
     rng = np.random.default_rng(3)
