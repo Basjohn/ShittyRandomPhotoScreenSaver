@@ -76,10 +76,7 @@ and should be preserved for implementation review:
 The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
 
 - [ ] **T4. Edge Bloom Reveal** — implemented 2026-10-10 on the shared edge field and photo-colour helpers (`Docs/Reference/Transitions.md`, `Docs/Reference/Scene3D_Resources.md`); awaiting operator acceptance. Deactivated by default.
-- [ ] **T5. Liquid Lens.** The destination image is seen first through a moving/refractive lens that expands and distorts until
-  it consumes the frame. Useful existing architecture: current transition timing/identity plumbing, fullscreen distortion passes,
-  retained presentation authority. New useful architecture: shared restrained refraction/thickness/dispersion helpers from the
-  3D primitives program, kept bounded and consumer-owned.
+- [ ] **T5. Liquid Lens** — implemented 2026-10-10 on the new shared refraction helpers and the preserved vortex flow (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
 - [ ] **T6. Membrane Turnover.** A taut glossy sheet deforms, stretches and turns through itself to reveal the destination
   image. Useful existing architecture: any shared mesh deformation/card surface math admitted by Scene3D primitives plus current
   transition sequencing. New useful architecture: a reusable deformable-sheet or low-resolution transition mesh substrate rather
