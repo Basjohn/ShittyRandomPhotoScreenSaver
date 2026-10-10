@@ -58,7 +58,7 @@ LOG_DIR = REPO_ROOT / "logs"
 RELEASE_DIR = REPO_ROOT / "release"
 CANONICAL_SCRIPTS_DIR = REPO_ROOT / "scripts"
 VENV_SCRIPTS_DIR = CANONICAL_SCRIPTS_DIR / "venv"
-QRC_RUNTIME_JOB_KEYS = frozenset({"standard", "media_center", "diagnostic"})
+QRC_RUNTIME_JOB_KEYS = frozenset({"standard", "media_center"})
 
 
 def _build_runner_data_dir() -> Path:
@@ -260,6 +260,12 @@ class Job:
     output_dir: Path
     expected_artifact: Path
     default_selected: bool = True
+    # Further files the same job publishes (the Standard build's diagnostic copy).
+    companion_artifacts: tuple[Path, ...] = ()
+
+    @property
+    def artifacts(self) -> tuple[Path, ...]:
+        return (self.expected_artifact, *self.companion_artifacts)
 
 
 @dataclass
@@ -703,11 +709,14 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
     return (
         Job(
             "standard",
-            "Standard Screensaver",
+            "Standard + Diagnostic",
             "powershell",
             worker_dir / "build_nuitka.ps1",
             release_dir / "screensaver",
             release_dir / "screensaver" / "SRPSS.scr",
+            # One compile: the worker publishes the same binary as SRPSS_Diagnostic.scr, whose
+            # name selects the diagnostic flavour (core/build_profile.py).
+            companion_artifacts=(release_dir / "diagnostic" / "SRPSS_Diagnostic.scr",),
         ),
         Job(
             "media_center",
@@ -716,15 +725,6 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             worker_dir / "build_nuitka_mc_onedir.ps1",
             release_dir / "media_center",
             release_dir / "media_center" / "SRPSS_Media_Center.exe",
-        ),
-        Job(
-            "diagnostic",
-            "Diagnostic Runtime",
-            "powershell",
-            scripts_dir / "venv" / "build_nuitka_diagnostic.ps1",
-            release_dir / "diagnostic",
-            release_dir / "diagnostic" / "SRPSS_Diagnostic.scr",
-            default_selected=False,
         ),
         Job(
             "reddit_helper",
@@ -1236,7 +1236,12 @@ def _clear_previous_product_output(
     runner-side guard also prevents a stale artifact from satisfying the footer.
     """
 
-    target = job.output_dir
+    targets = dict.fromkeys((job.output_dir, *(artifact.parent for artifact in job.companion_artifacts)))
+    for target in targets:
+        _clear_output_directory(target, attempts=attempts, delay_seconds=delay_seconds)
+
+
+def _clear_output_directory(target: Path, *, attempts: int, delay_seconds: float) -> None:
     if not target.exists():
         return
 
@@ -1346,7 +1351,9 @@ def run_job(
             aborted = owner.retire(process)
             process = None
             returncode = 130 if aborted else completed_returncode
-            artifact_missing = not aborted and returncode == 0 and not job.expected_artifact.is_file()
+            artifact_missing = not aborted and returncode == 0 and not all(
+                artifact.is_file() for artifact in job.artifacts
+            )
             if artifact_missing:
                 returncode = 1
             footer = (
@@ -1354,9 +1361,11 @@ def run_job(
                 f"Process exit code: {completed_returncode}\n"
                 f"Runner exit code: {returncode}\n"
                 f"Operator abort: {aborted}\n"
-                f"Expected artifact: {job.expected_artifact}\n"
-                f"Artifact present: {job.expected_artifact.is_file()}\n"
-                f"Finished: {datetime.now().isoformat(timespec='seconds')}\n"
+                + "".join(
+                    f"Expected artifact: {artifact}\nArtifact present: {artifact.is_file()}\n"
+                    for artifact in job.artifacts
+                )
+                + f"Finished: {datetime.now().isoformat(timespec='seconds')}\n"
             )
             log_handle.write(footer.encode("utf-8", errors="replace"))
         if aborted:
@@ -1371,7 +1380,7 @@ def run_job(
         try:
             evidence_path = write_build_evidence(
                 log_dir, _safe_slug(job.key), timestamp, log_path,
-                job.expected_artifact, returncode,
+                job.expected_artifact, returncode, companions=job.companion_artifacts,
             )
         except (OSError, ValueError) as exc:
             detail += f"; evidence ZIP failed: {exc}"
@@ -2532,9 +2541,7 @@ class BuildRunnerApp:
                         COLORS["amber"],
                     )
                 )
-                # Diagnostic always uses the venv worker, including in Normal mode.
-                qrc_mode = "venv" if selected_runtime_jobs == {"diagnostic"} else mode
-                qrc_statuses = ensure_selected_qrc_current(qrc_mode, process_owner)
+                qrc_statuses = ensure_selected_qrc_current(mode, process_owner)
                 qrc_assets = sum(len(status.input_paths) - 1 for status in qrc_statuses)
                 self._events.put(
                     (

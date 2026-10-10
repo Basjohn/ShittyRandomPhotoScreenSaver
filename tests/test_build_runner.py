@@ -36,18 +36,18 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
 
     assert normal[0].script == tmp_path / "scripts" / "build_nuitka.ps1"
     assert venv[0].script == tmp_path / "scripts" / "venv" / "build_nuitka.ps1"
-    assert normal[2].script == venv[2].script == tmp_path / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
-    assert normal[2].default_selected is False
-    assert normal[3].script == tmp_path / "scripts" / "build_reddit_helper.ps1"
-    assert venv[3].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
-    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
-    assert normal[5].script == venv[5].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
-    assert normal[2].expected_artifact == tmp_path / "release" / "diagnostic" / "SRPSS_Diagnostic.scr"
-    assert "diagnostic_installer" not in {job.key for job in normal}
+    assert normal[2].script == tmp_path / "scripts" / "build_reddit_helper.ps1"
+    assert venv[2].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
+    assert normal[3].script == venv[3].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
+    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
+    # No separate diagnostic job: the Standard compile also publishes SRPSS_Diagnostic.scr.
+    assert not {"diagnostic", "diagnostic_installer"} & {job.key for job in normal}
+    for jobs in (normal, venv):
+        assert jobs[0].companion_artifacts == (tmp_path / "release" / "diagnostic" / "SRPSS_Diagnostic.scr",)
+        assert all(job.default_selected for job in jobs)
     assert [job.output_dir for job in normal] == [
         tmp_path / "release" / "screensaver",
         tmp_path / "release" / "media_center",
-        tmp_path / "release" / "diagnostic",
         tmp_path / "release" / "reddit_helper",
         tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
@@ -195,14 +195,20 @@ def test_run_job_rejects_zero_exit_without_expected_artifact(monkeypatch, tmp_pa
 
 
 
-def test_diagnostic_stale_exe_cannot_satisfy_scr_result(tmp_path):
-    job = next(job for job in build_runner.jobs_for_mode("venv", tmp_path) if job.key == "diagnostic")
-    job.output_dir.mkdir(parents=True)
-    job.expected_artifact.with_suffix(".exe").write_bytes(b"stale diagnostic executable")
-    owner = SimpleNamespace(
-        start=lambda *_args, **_kwargs: SimpleNamespace(wait=lambda: 0),
-        retire=lambda _process: False,
-    )
+def test_a_standard_build_without_its_diagnostic_copy_fails(tmp_path, monkeypatch):
+    job = next(job for job in build_runner.jobs_for_mode("venv", tmp_path) if job.key == "standard")
+    stale = job.companion_artifacts[0]
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"stale diagnostic from an older build")
+
+    def compile_standard_only(*_args, **_kwargs):
+        assert not stale.exists(), "the old diagnostic copy survived until the worker started"
+        job.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
+        job.expected_artifact.write_bytes(b"fresh standard")
+        return SimpleNamespace(wait=lambda: 0)
+
+    owner = SimpleNamespace(start=compile_standard_only, retire=lambda _process: False)
+    monkeypatch.setattr(build_runner, "_windows_subprocess_kwargs", lambda: {})
     result = build_runner.run_job(
         job, build_runner.PreflightResult(pwsh=Path("pwsh.exe")),
         tmp_path / "logs", process_owner=owner,
@@ -225,15 +231,14 @@ def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")
 
     assert payload["mode"] == "venv"
-    assert len(payload["jobs"]) == 6
-    assert Path(payload["jobs"][2]["script"]) == build_runner.REPO_ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
-    assert payload["jobs"][2]["default_selected"] is False
-    assert Path(payload["jobs"][4]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
+    assert len(payload["jobs"]) == 5
+    assert all(job["default_selected"] for job in payload["jobs"])
+    assert Path(payload["jobs"][3]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
     assert not (build_runner.REPO_ROOT / "scripts" / "build_runner.py").exists()
     assert not (build_runner.REPO_ROOT / "scripts" / "venv" / "build_runner_venv.py").exists()
 
 
-def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missing(
+def test_preflight_passes_a_complete_release_tree(
     tmp_path,
     monkeypatch,
 ):
@@ -297,7 +302,7 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
     # Generated binary packs may be absent: the Foundry prerequisite creates them.
     assert not (tmp_path / "ui" / "resources" / "assets.rcc").exists()
     assert result.errors == []
-    assert {"diagnostic"} == result.unavailable_jobs
+    assert result.unavailable_jobs == set()
     assert any("both build modes" in warning for warning in result.warnings)
 
 
@@ -361,12 +366,6 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     media_installer = (scripts / "SRPSS_MediaCenter_Installer.iss").read_text(
         encoding="utf-8"
     )
-    diagnostic_worker = (scripts / "venv" / "build_nuitka_diagnostic.ps1").read_text(
-        encoding="utf-8"
-    )
-    diagnostic_entrypoint = (build_runner.REPO_ROOT / "main_diagnostic.py").read_text(
-        encoding="utf-8"
-    )
 
     assert "-BuildWorkspace normal" in normal_standard
     assert '[string]$BuildTarget = "screensaver"' in venv_standard
@@ -378,14 +377,11 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert r"release\reddit_helper\*" in standard_installer
     assert r"OutputDir=..\release\installers" in media_installer
     assert r"release\media_center\*" in media_installer
-    assert "main_diagnostic.py" in diagnostic_worker
-    assert "SRPSS_Diagnostic" in diagnostic_worker
-    assert "-DistributionName 'diagnostic'" in diagnostic_worker
-    assert "    -Console `" in diagnostic_worker
-    assert "-Console:$Console" not in diagnostic_worker
-    assert "from core.build_profile import activate_diagnostic_build" in diagnostic_entrypoint
-    assert "from core.logging import crash_capture" in diagnostic_entrypoint
-    assert "from core.logging import ownership_trace" in diagnostic_entrypoint
+    # The Standard worker publishes its own binary as the diagnostic file, never a second compile.
+    assert not (scripts / "venv" / "build_nuitka_diagnostic.ps1").exists()
+    assert '[string]$DiagnosticArtifactName = "SRPSS_Diagnostic"' in venv_standard
+    assert "-TargetPath $DiagnosticDir" in venv_standard
+    assert "Copy-Item -LiteralPath $primaryArtifact.FullName" in venv_standard
 
     for mode in ("normal", "venv"):
         jobs = {

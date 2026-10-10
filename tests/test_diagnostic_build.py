@@ -43,37 +43,59 @@ def test_diagnostic_build_profile_is_explicit_and_idempotent(monkeypatch) -> Non
     assert build_profile.get_build_flavour() == "diagnostic"
 
 
-def test_diagnostic_identity_is_not_inferred_from_executable_name(monkeypatch) -> None:
+def test_only_the_published_diagnostic_file_name_selects_the_flavour(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
-    monkeypatch.setattr(
-        build_profile.sys,
-        "executable",
-        r"C:\Program Files\SRPSS Diagnostic\SRPSS_Diagnostic.scr",
-    )
+    monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: True)
+    for name in ("SRPSS.scr", "SRPSS_Diagnostic_old.scr", "My SRPSS_Diagnostic.scr", "SRPSS Diagnostic.scr", ""):
+        assert build_profile.activate_flavour_for_artifact(rf"C:\Apps\{name}") is False, name
+    assert build_profile.is_diagnostic_build() is False
+    # Windows stores screensavers by their 8.3 short path; the long name still selects it.
+    published = tmp_path / "a long folder name" / "SRPSS_Diagnostic.scr"
+    published.parent.mkdir()
+    published.write_bytes(b"binary")
+    short = published
+    if sys.platform == "win32":
+        import ctypes
 
+        buffer = ctypes.create_unicode_buffer(1024)
+        if ctypes.windll.kernel32.GetShortPathNameW(str(published), buffer, 1024):
+            short = Path(buffer.value)
+    assert build_profile.activate_flavour_for_artifact(str(short)) is True
+    assert build_profile.is_diagnostic_build() is True
+
+
+def test_source_runs_never_select_the_flavour_by_name(monkeypatch) -> None:
+    monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
+    monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: False)
+    assert build_profile.activate_flavour_for_artifact(r"C:\Apps\SRPSS_Diagnostic.scr") is False
     assert build_profile.is_diagnostic_build() is False
 
 
-def test_diagnostic_runtime_worker_publishes_scr_without_an_installer() -> None:
-    worker = (ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1").read_text(
-        encoding="utf-8"
-    )
-    canonical_workers = (
-        ROOT / "scripts" / "build_nuitka.ps1",
-        ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-    )
+def test_the_standard_build_publishes_the_diagnostic_file_from_its_own_binary() -> None:
+    worker = (ROOT / "scripts" / "venv" / "build_nuitka.ps1").read_text(encoding="utf-8")
 
-    assert "-SkipScrRename" not in worker
-    # Diagnostic must always own a console failure surface. Build Runner does
-    # not pass -Console, so the wrapper itself forces the canonical worker into
-    # console mode.
-    assert "    -Console `" in worker
-    assert "-Console:$Console" not in worker
-    assert all(
-        "SkipScrRename" not in path.read_text(encoding="utf-8")
-        for path in canonical_workers
-    )
+    assert not (ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1").exists()
     assert not (ROOT / "scripts" / "SRPSS_Diagnostic_Installer.iss").exists()
+    assert '[string]$DiagnosticArtifactName = "SRPSS_Diagnostic"' in worker
+    assert f'"{build_profile.DIAGNOSTIC_ARTIFACT_STEM}"' in worker
+    assert "Copy-Item -LiteralPath $primaryArtifact.FullName" in worker
+    # The copy is checked byte-for-byte against the compiled binary, and a console build
+    # (-Console) never publishes one: the diagnostic file has no forced terminal.
+    assert "differs from the compiled binary" in worker
+    assert "(-not $Console)" in worker
+    assert '$consoleArg = "--windows-console-mode=disable"' in worker
+
+
+def test_the_diagnostic_terminal_opens_only_with_debug() -> None:
+    from core.windows.debug_console import debug_console_requested
+
+    assert debug_console_requested(["SRPSS_Diagnostic.scr"]) is False
+    assert debug_console_requested(["SRPSS_Diagnostic.scr", "/s"]) is False
+    assert debug_console_requested(["SRPSS_Diagnostic.scr", "/p", "123"]) is False
+    assert debug_console_requested(["SRPSS_Diagnostic.scr", "--debug"]) is True
+    assert debug_console_requested(["--debug"]) is False           # argv[0] is never an option
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    assert "if debug_console_requested(sys.argv):\n            open_debug_console()" in source
 
 
 def test_diagnostic_crash_capture_is_inert_for_release(tmp_path, monkeypatch) -> None:
@@ -146,23 +168,20 @@ def test_diagnostic_crash_capture_trims_raw_fatal_output_before_retaining_backup
     crash_capture.close_diagnostic_crash_capture()
 
 
-def test_diagnostic_entrypoint_defaults_to_run_without_overriding_explicit_mode(
+def test_a_direct_diagnostic_launch_runs_without_overriding_an_explicit_mode(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
-    sys.modules.pop("main_diagnostic", None)
-    import main_diagnostic
+    import main
 
-    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.scr", "--perf"])
-    main_diagnostic._inject_run_mode_arg()
-    assert main_diagnostic.sys.argv[1] == "/s"
-    assert main_diagnostic.sys.argv[-1] == "--perf"
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "--debug"])
+    main.default_diagnostic_launch_to_run()
+    assert main.sys.argv == ["SRPSS_Diagnostic.scr", "/s", "--debug"]
 
-    monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.scr", "/c:1234"])
-    main_diagnostic._inject_run_mode_arg()
-    assert main_diagnostic.sys.argv == ["SRPSS_Diagnostic.scr", "/c:1234"]
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "/c:1234"])
+    main.default_diagnostic_launch_to_run()
+    assert main.sys.argv == ["SRPSS_Diagnostic.scr", "/c:1234"]
 
-    source = Path(main_diagnostic.__file__).read_text(encoding="utf-8")
+    source = (ROOT / "main_diagnostic.py").read_text(encoding="utf-8")
     assert "rendering.display_widget" not in source
     assert "DisplayWidget" not in source
 

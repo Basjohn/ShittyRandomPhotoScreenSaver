@@ -253,8 +253,9 @@ sidecar (30-second cadence), and retains longer bounded usage/lifecycle/main his
 `--usage` still does **not** imply handle attribution; outside Diagnostic the helper remains owned
 only by explicit `--handle-attribution`.
 
-It is not a performance baseline, and ordinary work must not trigger a Diagnostic rebuild
-unless a specific frozen-only failure requires it.
+It is not a performance baseline. Every Standard build also publishes it as `SRPSS_Diagnostic.scr` (the same
+binary; its name selects the flavour), so it never needs a build of its own. It has no terminal unless started with
+`--debug`, which reuses the terminal it was launched from or opens one; a direct launch runs the screensaver.
 
 ## Correlation Workflow
 

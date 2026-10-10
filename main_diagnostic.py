@@ -1,18 +1,16 @@
-"""Dedicated installable diagnostic entry point for SRPSS.
+"""Source-run diagnostic entry point for SRPSS.
 
-This is intentionally separate from both release entry points.  It runs the
-ordinary screensaver runtime and settings profile, but activates bounded
-per-user logging and fatal traceback capture before importing ``main``.
+``python main_diagnostic.py`` runs the ordinary screensaver runtime and settings
+profile with the diagnostic flavour: bounded per-user logging and fatal traceback
+capture are activated before ``main`` is imported. Compiled builds have no
+separate diagnostic compile: the Standard build publishes the same binary a
+second time as ``SRPSS_Diagnostic.scr`` and ``main`` selects the flavour from
+that name (``core/build_profile.py``). A direct launch runs the screensaver, and
+``--debug`` opens a terminal.
 """
 from __future__ import annotations
 
-import sys
-
 from core.build_profile import activate_diagnostic_build
-# Keep the locally imported crash owner visible to Nuitka's static graph even
-# though ordinary runtime setup only opens it after logging is configured.
-from core.logging import crash_capture as _crash_capture  # noqa: F401
-from core.logging import ownership_trace as _ownership_trace  # noqa: F401
 
 
 activate_diagnostic_build()
@@ -20,33 +18,9 @@ activate_diagnostic_build()
 from main import main as core_main  # noqa: E402
 
 
-def _inject_run_mode_arg() -> None:
-    """Default a direct diagnostic launch to the ordinary RUN route.
-
-    ``main.parse_screensaver_args`` only consumes the first non-filtered
-    argument.  Diagnostic-only/unknown convenience arguments (for example
-    ``-console``) must therefore not be allowed to sit in front of the injected
-    ``/s`` token or a frozen build will fall back to CONFIG mode.
-    """
-
-    args = tuple(str(arg).strip().lower() for arg in sys.argv[1:])
-    has_mode = any(
-        arg == "/s"
-        or arg.startswith("/c")
-        or arg in ("/p", "-c", "-p", "-s", "--s")
-        for arg in args
-    )
-    if not has_mode:
-        # Insert immediately after argv[0], rather than appending, so the
-        # screensaver parser sees RUN first even when an unknown diagnostic
-        # convenience token (such as ``-console``) was supplied.
-        sys.argv.insert(1, "/s")
-
-
 def main() -> int:
-    _inject_run_mode_arg()
     return int(core_main(entrypoint="main_diagnostic"))
 
 
-if __name__ == "__main__":  # pragma: no cover - thin compiled wrapper
+if __name__ == "__main__":  # pragma: no cover - thin wrapper
     raise SystemExit(main())

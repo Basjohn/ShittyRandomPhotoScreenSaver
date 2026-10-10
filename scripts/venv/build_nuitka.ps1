@@ -33,7 +33,14 @@ param(
     [ValidatePattern('^[a-z0-9_-]+$')]
     [string]$OnefileCacheName = "onefile",
     [string]$ProductNameOverride = "",
-    [string]$DescriptionOverride = ""
+    [string]$DescriptionOverride = "",
+    # The Standard build also publishes its binary as release\diagnostic\SRPSS_Diagnostic.scr:
+    # the runtime selects the diagnostic flavour from that file name (core/build_profile.py),
+    # so the diagnostic artifact needs no second compile.
+    [ValidatePattern('^[A-Za-z0-9_]*$')]
+    [string]$DiagnosticArtifactName = "SRPSS_Diagnostic",
+    [ValidatePattern('^[a-z0-9_-]+$')]
+    [string]$DiagnosticDistributionName = "diagnostic"
 )
 
 
@@ -208,6 +215,9 @@ $BuildOutputDir = Join-Path $BuildDir 'output'
 $PackageDir = Join-Path $BuildDir 'package'
 $ReleaseRoot = Join-Path $Root 'release'
 $DistributionDir = Join-Path $ReleaseRoot $DistributionName
+$PublishDiagnostic = ($EntryPoint -eq 'main.py') -and (-not $Console) -and ($DiagnosticArtifactName -ne '')
+$DiagnosticDir = Join-Path $ReleaseRoot $DiagnosticDistributionName
+$DiagnosticPackageDir = Join-Path $BuildDir 'diagnostic-package'
 $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 # Build Runner passes the same run ID to the worker, its reports and the
@@ -287,6 +297,10 @@ try {
 try {
     Clear-SRPSSPublishedProductDirectory -Path $DistributionDir -ReleaseRoot $ReleaseRoot
     Write-Host "[BUILD] Cleared previous published payload before compilation: $DistributionDir"
+    if ($PublishDiagnostic) {
+        Clear-SRPSSPublishedProductDirectory -Path $DiagnosticDir -ReleaseRoot $ReleaseRoot
+        Write-Host "[BUILD] Cleared previous diagnostic payload before compilation: $DiagnosticDir"
+    }
 } catch {
     throw "Existing published payload is locked; aborting before compilation: $($_.Exception.Message)"
 }
@@ -564,6 +578,31 @@ try {
     exit 1
 }
 
+$diagnosticArtifact = $null
+if ($PublishDiagnostic) {
+    try {
+        if (Test-Path -LiteralPath $DiagnosticPackageDir) {
+            Remove-Item -LiteralPath $DiagnosticPackageDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $DiagnosticPackageDir | Out-Null
+        $diagnosticName = "$DiagnosticArtifactName$($primaryArtifact.Extension)"
+        Copy-Item -LiteralPath $primaryArtifact.FullName -Destination (Join-Path $DiagnosticPackageDir $diagnosticName) -Force
+        $publishedDiagnosticDir = Publish-SRPSSDirectory `
+            -SourcePath $DiagnosticPackageDir `
+            -TargetPath $DiagnosticDir `
+            -ReleaseRoot $ReleaseRoot `
+            -RequiredRelativePaths @($diagnosticName)
+        $diagnosticArtifact = Get-Item -LiteralPath (Join-Path $publishedDiagnosticDir $diagnosticName)
+        if ((Get-FileSha256 -Path $diagnosticArtifact.FullName) -ne (Get-FileSha256 -Path $primaryArtifact.FullName)) {
+            throw "the published diagnostic file differs from the compiled binary"
+        }
+        Write-Host "[BUILD-VENV] Diagnostic artifact (same binary, selected by its name): $($diagnosticArtifact.FullName)"
+    } catch {
+        Write-Host "[BUILD-VENV] Error: failed to publish the diagnostic artifact - $($_.Exception.Message)"
+        exit 1
+    }
+}
+
 try {
     Write-SRPSSBuildFootprintReport `
         -RepoRoot $Root `
@@ -585,6 +624,7 @@ try {
 }
 
 Write-Host "[BUILD-VENV] Build success: $($primaryArtifact.FullName)"
+if ($diagnosticArtifact) { Write-Host "[BUILD-VENV] Diagnostic: $($diagnosticArtifact.FullName)" }
 Write-Host "[BUILD-VENV] Release directory: $DistributionDir"
 Write-Host "[BUILD-VENV] Log: $LogFile"
 Write-Host "[BUILD-VENV] Nuitka report: $NuitkaReportFile"
