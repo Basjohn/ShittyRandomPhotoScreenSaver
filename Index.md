@@ -96,6 +96,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |
 | Usu Moonscape vertical: behaviour, reactivity, required 3D architecture (S19–S27), asset gates | `Docs/Future_Work/Usu_Moonscape.md` |
+| Usu Blender work: previewing Usu, rig/clip fixes, missing clips, bake/export preparation | `Docs/Future_Work/Usu_Blender_Work.md` |
 | Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
 | system master-volume OSD | `Docs/Reference/System_Volume_OSD.md` |
 

@@ -4,7 +4,9 @@
 any promoted slice. The shared 3D foundations it needs are being **side-built by transitions and Visualizer modes first**
 (Current_Plan §4, "S19–S27 character and world foundations"). This document is the single plan for the vertical: the
 2026-10-02 snapshot (`Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`) is superseded and removed; its still-valid intent
-is carried here. Asset-authoring status lives in the Windows-local `assets/usu/README.md` (never in Godzips).
+is carried here. The remaining **Blender** work (rig, clips, export preparation, how to preview Usu) is ordered in
+[`Usu_Blender_Work.md`](Usu_Blender_Work.md); asset-authoring history lives in the Windows-local `assets/usu/README.md`
+(never in Godzips).
 
 Authored 2026-10-10 against HEAD `21880417`+. Re-orient from the then-current `Current_Plan.md`, `Spec.md`,
 `Docs/Reference/Visualizer_Reference.md`, `Docs/Guides/Visualizer_Reactivity_Authoring.md`,
@@ -170,11 +172,12 @@ frame would create, CPU mirrors for shader maths, quality tiers decide optional 
 | A2 — surface | soft felt, no wood grain, faint dirt; parity with the turnaround | felt v4 2026-10-10: fibre/stain/relief node group on rest-pose coordinates (no swimming under the rig), charcoal felt mittens, darker iris, tan thread, sheen-only fuzz; rebuilt by `assets/usu/source/usu_felt_materials.py`; bake at S19 |
 | B — rig | rig copy (`Usu_Rig.blend`) per the reference pack: root, pelvis/spine/chest/neck/head, shoulders/elbows/wrists, hips/knees/ankles + foot pivots, 3–5 bones per ear, Blink_L/Blink_R/Blink controls; stitches bound to their owners | rough rig built 2026-10-10 in `assets/usu/Usu_Rig.blend` (procedural per-part weights, bone-scale blink); refinement pending |
 | B2 — pose tests | A-pose, extreme head turns, arms forward, stride, Naruto lean, skid, prone, hands planted, push to stand, ear fold; no seam drift, detached ears, clipping, collapse or foot penetration | first pass rendered 2026-10-10 (`assets/usu/review/pose_tests/`) |
-| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | rough blocking done 2026-10-10 (19 actions; sheet `assets/usu/review/Usu_Rough_Clips_Sheet.png`); refine after acceptance |
+| C — rough clips | every clip in §3.1 roughly blocked, loops seamless, contacts readable | rough blocking done 2026-10-10 (19 actions; moving previews `assets/usu/review/clips_webp/`); floor penetration, floating hand-offs and ear/arm clipping listed for fixing in `Usu_Blender_Work.md` B2 |
 | C2 — export proof | clips, skins, eye states and materials survive export into the SRPSS path (S19), not just Blender | blocked on S19 |
 | D — runtime | S19–S27 accepted through other consumers, then the mode is admitted | deferred |
 
-Blender is the authoring tool (live MCP available); the runtime format is decided at S19, not assumed.
+Blender is the authoring tool (live MCP available); the runtime format is decided at S19, not assumed. The open Blender
+items behind gates B–C2 (B1 rig refinement through B6 export proof) are in [`Usu_Blender_Work.md`](Usu_Blender_Work.md).
 
 ---
 
