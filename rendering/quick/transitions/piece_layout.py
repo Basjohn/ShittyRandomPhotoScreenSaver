@@ -6,13 +6,16 @@ head width, head height, lean and tilt so no two knobs look alike) stored once, 
 that share it use the very same points and the cut is watertight. A piece whose knobs would cross
 (two large knobs meeting near a corner) has its edges re-seeded with calmer variation until its
 outline and its bevel are simple; the nominal knob, always simple, is the last resort. Border edges are
-straight. Each piece is solid: a front face, a back face, a narrow bevel ring around each (whose
+straight. Knob curves are flattened adaptively to an absolute tolerance (a pixel at 1080 lines), so
+cut lines and silhouettes stay smooth at any piece count while flat stretches spend few points. Each
+piece is solid: a front face, a back face, a narrow bevel ring around each (whose
 attribute is the distance from the cut, for screen-pixel outlines and a rounded edge normal) and
 the wall between them.
 
-A piece outline is not convex (knobs have necks), so each piece is ear-clipped (about 1.4 ms of
-pure Python per piece; a run prepares its layout on COMPUTE ahead of time). Shared templates per
-edge configuration were measured and rejected: the seeded jitter folded 35-45% of them.
+A piece outline is not convex (knobs have necks), so each piece is ear-clipped incrementally (only
+the two neighbours of a clipped ear are re-tested; about a millisecond of pure Python per piece; a run prepares
+its layout on COMPUTE ahead of time). Shared templates per edge configuration were measured and
+rejected: the seeded jitter folded 35-45% of them.
 
 The order planner ranks pieces for a flip that spreads from a corner or a random piece (a ragged
 wavefront: distance plus a seeded jitter), or in a shuffled order, and gives each piece the axis
@@ -48,7 +51,11 @@ _HEAD_RANGE = (-0.15, 0.20)
 _LEAN = 0.05
 _TILT = 0.05
 _RESEEDS = 4
-_CUBIC_SAMPLES = (4, 8, 4)  # points per Bezier of a knob edge: the head gets the most
+# Largest distance a flattened knob curve may stray from the true Bezier (scene height units):
+# two pixels at 2160 lines (one at 1080): cheaper to build than the old uniform sampling (4/8/4
+# points per Bezier), whose corners strayed about 6 px on large knobs at 2160.
+JIGSAW_CURVE_TOLERANCE = 2.0 / 2160.0
+_FLATTEN_DEPTH = 10
 # The bevel ring's width (scene height units) and how far its outer normal leans outward.
 JIGSAW_BEVEL = 0.004
 _RING_TILT = 1.1
@@ -106,14 +113,9 @@ def _seeded_edge(rng: random.Random, sign: int, variety: float = 1.0) -> EdgeSha
                      1.0 + spread(*_HEAD_RANGE), jitter(_LEAN), jitter(_TILT))
 
 
-def _cubic(p0, p1, p2, p3, samples: int) -> np.ndarray:
-    s = np.arange(samples, dtype=np.float64)[:, None] / samples
-    r = 1.0 - s
-    return r ** 3 * p0 + 3.0 * r * r * s * p1 + 3.0 * r * s * s * p2 + s ** 3 * p3
-
-
-def edge_profile(shape: EdgeShape) -> np.ndarray:
-    """The edge in its own frame, (along 0..1, across), start to end inclusive."""
+def edge_controls(shape: EdgeShape) -> np.ndarray:
+    """The knob's three cubic Beziers in the edge's own frame, (along 0..1, across): ten control
+    points, start to end. A straight edge is just its two ends."""
     if shape.sign == 0:
         return np.array([[0.0, 0.0], [1.0, 0.0]])
     t, a, b, c, d, e = shape.tab, shape.a, shape.b, shape.c, shape.d, shape.e
@@ -125,20 +127,66 @@ def edge_profile(shape: EdgeShape) -> np.ndarray:
         (0.5 + neck + b, t + c), (0.5 + b + d, -t + c), (0.8, e), (1.0, 0.0),
     ])
     p[:, 1] *= shape.sign
-    parts = [_cubic(p[3 * i], p[3 * i + 1], p[3 * i + 2], p[3 * i + 3], n) for i, n in enumerate(_CUBIC_SAMPLES)]
-    return np.vstack((*parts, p[9:10]))
+    return p
 
 
-def _edge_points(start, end, knob: float, shape: EdgeShape) -> np.ndarray:
+def _segment_distance(px, py, ax, ay, bx, by) -> float:
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    u = 0.0 if length2 <= 0.0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    return math.hypot(px - ax - u * dx, py - ay - u * dy)
+
+
+def _flatten(p0, p1, p2, p3, tolerance: float, out: list, depth: int = _FLATTEN_DEPTH) -> None:
+    """Append the cubic's points from ``p0`` (inclusive) to ``p3`` (exclusive), halving it until
+    its points at a quarter, half and three quarters lie within ``tolerance`` of the chord (and,
+    against S-bends, its control polygon within four times that). Three samples estimate the
+    error: the curve strays at most about 10% beyond ``tolerance``. Deterministic: the same
+    controls always give the very same points."""
+    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = p0, p1, p2, p3
+    ax, ay = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+    bx, by = 0.5 * (x1 + x2), 0.5 * (y1 + y2)
+    cx, cy = 0.5 * (x2 + x3), 0.5 * (y2 + y3)
+    dx, dy = 0.5 * (ax + bx), 0.5 * (ay + by)
+    ex, ey = 0.5 * (bx + cx), 0.5 * (by + cy)
+    mx, my = 0.5 * (dx + ex), 0.5 * (dy + ey)
+    if depth <= 0:
+        out.append(p0)
+        return
+    hull = max(_segment_distance(x1, y1, x0, y0, x3, y3), _segment_distance(x2, y2, x0, y0, x3, y3))
+    if hull <= 4.0 * tolerance:
+        # B(1/4) and B(3/4) by their Bernstein weights (27, 27, 9, 1) / 64.
+        qx = (27.0 * x0 + 27.0 * x1 + 9.0 * x2 + x3) / 64.0
+        qy = (27.0 * y0 + 27.0 * y1 + 9.0 * y2 + y3) / 64.0
+        rx = (x0 + 9.0 * x1 + 27.0 * x2 + 27.0 * x3) / 64.0
+        ry = (y0 + 9.0 * y1 + 27.0 * y2 + 27.0 * y3) / 64.0
+        if max(_segment_distance(mx, my, x0, y0, x3, y3), _segment_distance(qx, qy, x0, y0, x3, y3),
+               _segment_distance(rx, ry, x0, y0, x3, y3)) <= tolerance:
+            out.append(p0)
+            return
+    _flatten(p0, (ax, ay), (dx, dy), (mx, my), tolerance, out, depth - 1)
+    _flatten((mx, my), (ex, ey), (cx, cy), p3, tolerance, out, depth - 1)
+
+
+def _edge_points(start, end, knob: float, shape: EdgeShape,
+                 tolerance: float = JIGSAW_CURVE_TOLERANCE) -> np.ndarray:
     """The edge in the scene from ``start`` to ``end`` (axis-aligned), knobs scaled by ``knob``
-    across, to the left of the direction. Both ends are the given corners exactly, so every piece
-    meeting at a corner holds the very same point."""
+    across, to the left of the direction, flattened to ``tolerance``. Both ends are the given
+    corners exactly, so every piece meeting at a corner holds the very same point."""
     start, end = np.asarray(start, dtype=np.float64), np.asarray(end, dtype=np.float64)
     length = float(np.linalg.norm(end - start))
     direction = (end - start) / length
     left = np.array([-direction[1], direction[0]])
-    profile = edge_profile(shape)
-    points = start + profile[:, :1] * length * direction + profile[:, 1:] * knob * left
+    controls = edge_controls(shape)
+    scene = start + controls[:, :1] * length * direction + controls[:, 1:] * knob * left
+    if len(scene) == 2:
+        return np.array([start, end])
+    pts = [tuple(map(float, p)) for p in scene]
+    out: list = []
+    for i in range(3):
+        _flatten(pts[3 * i], pts[3 * i + 1], pts[3 * i + 2], pts[3 * i + 3], tolerance, out)
+    out.append(pts[9])
+    points = np.asarray(out, dtype=np.float64)
     points[0], points[-1] = start, end
     return points
 
@@ -147,42 +195,62 @@ def _edge_points(start, end, knob: float, shape: EdgeShape) -> np.ndarray:
 
 
 def ear_clip(points: np.ndarray) -> tuple[tuple[int, int, int], ...]:
-    """Triangles (counter-clockwise) of a simple counter-clockwise polygon."""
-    pts = [(float(x), float(y)) for x, y in points]
-    remaining = list(range(len(pts)))
+    """Triangles (counter-clockwise) of a simple counter-clockwise polygon.
+
+    Incremental: every vertex's ear status is computed once, and clipping an ear re-tests only
+    its two neighbours (a reflex vertex can only turn convex). Only reflex vertices can lie inside
+    a candidate ear, and a bounding-box test rejects most of them cheaply."""
+    n = len(points)
+    xs = [float(x) for x in points[:, 0]]
+    ys = [float(y) for y in points[:, 1]]
+    prev = [(i - 1) % n for i in range(n)]
+    nxt = [(i + 1) % n for i in range(n)]
+
+    def convex(i: int) -> bool:
+        a, b = prev[i], nxt[i]
+        return (xs[i] - xs[a]) * (ys[b] - ys[a]) - (ys[i] - ys[a]) * (xs[b] - xs[a]) > 1e-14
+
+    reflex = {i for i in range(n) if not convex(i)}
+
+    def is_ear(i: int) -> bool:
+        if i in reflex:
+            return False
+        a, c = prev[i], nxt[i]
+        ax, ay, bx, by, cx, cy = xs[a], ys[a], xs[i], ys[i], xs[c], ys[c]
+        lo_x, hi_x, lo_y, hi_y = min(ax, bx, cx), max(ax, bx, cx), min(ay, by, cy), max(ay, by, cy)
+        for j in reflex:
+            if j == a or j == c:
+                continue
+            px, py = xs[j], ys[j]
+            if px < lo_x or px > hi_x or py < lo_y or py > hi_y:
+                continue
+            if ((bx - ax) * (py - ay) - (by - ay) * (px - ax) >= 0.0
+                    and (cx - bx) * (py - by) - (cy - by) * (px - bx) >= 0.0
+                    and (ax - cx) * (py - cy) - (ay - cy) * (px - cx) >= 0.0):
+                return False
+        return True
+
+    ear = [is_ear(i) for i in range(n)]
     triangles: list[tuple[int, int, int]] = []
-
-    def cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    def inside(p, a, b, c):
-        return cross(a, b, p) >= 0.0 and cross(b, c, p) >= 0.0 and cross(c, a, p) >= 0.0
-
-    def reflex(k: int) -> bool:
-        count = len(remaining)
-        return cross(pts[remaining[k - 1]], pts[remaining[k]], pts[remaining[(k + 1) % count]]) <= 1e-14
-
-    guard = 0
-    while len(remaining) > 3:
-        count = len(remaining)
-        # Only reflex vertices can lie inside a candidate ear.
-        blockers = [remaining[k] for k in range(count) if reflex(k)]
-        chosen = -1
-        for k in range(count):
-            i0, i1, i2 = remaining[k - 1], remaining[k], remaining[(k + 1) % count]
-            a, b, c = pts[i0], pts[i1], pts[i2]
-            if cross(a, b, c) <= 1e-14:
-                continue
-            if any(inside(pts[j], a, b, c) for j in blockers if j != i0 and j != i2):
-                continue
-            chosen = k
-            break
-        guard += 1
-        if chosen < 0 or guard > 4 * len(pts):
-            raise ValueError("polygon could not be ear-clipped (not simple)")
-        triangles.append((remaining[chosen - 1], remaining[chosen], remaining[(chosen + 1) % count]))
-        del remaining[chosen]
-    triangles.append(tuple(remaining))  # type: ignore[arg-type]
+    count, i, misses = n, 0, 0
+    while count > 3:
+        if not ear[i]:
+            i = nxt[i]
+            misses += 1
+            if misses > count:
+                raise ValueError("polygon could not be ear-clipped (not simple)")
+            continue
+        misses = 0
+        a, c = prev[i], nxt[i]
+        triangles.append((a, i, c))
+        nxt[a], prev[c] = c, a
+        count -= 1
+        for v in (a, c):
+            if v in reflex and convex(v):
+                reflex.discard(v)
+        ear[a], ear[c] = is_ear(a), is_ear(c)
+        i = c
+    triangles.append((prev[i], i, nxt[i]))
     return tuple(triangles)
 
 
@@ -217,15 +285,63 @@ def _outline(edges) -> np.ndarray:
     return np.vstack(parts)
 
 
+_FOLD_WINDOW = 24   # how many segments apart a local fold of the inset may close
+
+
+def _remove_folds(points: np.ndarray) -> np.ndarray:
+    """Cut the small loops an inward offset forms where the outline curves tighter than the offset
+    (knob necks of small pieces): every point of a loop moves onto the loop's crossing, so the
+    polygon keeps one point per outline point (some repeated) and becomes simple again."""
+    p = points.copy()
+    n = len(p)
+    window = min(_FOLD_WINDOW, n - 2)
+    if window < 2:
+        return p
+    ks = np.arange(2, window + 1)
+    for _ in range(4):
+        a = p[:, None, :]                                    # segment i: p[i] -> p[i + 1]
+        r = (np.roll(p, -1, axis=0) - p)[:, None, :]
+        j = (np.arange(n)[:, None] + ks[None, :]) % n        # segment i + k
+        c = p[j]
+        q = p[(j + 1) % n] - c
+        den = r[..., 0] * q[..., 1] - r[..., 1] * q[..., 0]
+        ok = np.abs(den) > 1e-18
+        safe = np.where(ok, den, 1.0)
+        w = c - a
+        t = (w[..., 0] * q[..., 1] - w[..., 1] * q[..., 0]) / safe
+        u = (w[..., 0] * r[..., 1] - w[..., 1] * r[..., 0]) / safe
+        hit_i, hit_k = np.nonzero(ok & (t > 0.0) & (t < 1.0) & (u > 0.0) & (u < 1.0))
+        if not len(hit_i):
+            break
+        taken = np.zeros(n, dtype=bool)
+        for slot in np.argsort(-hit_k, kind="stable"):           # the widest loop first
+            i, k = int(hit_i[slot]), int(ks[hit_k[slot]])
+            loop = (i + 1 + np.arange(k)) % n
+            if taken[loop].any():
+                continue
+            taken[loop] = True
+            p[loop] = p[i] + t[i, hit_k[slot]] * r[i, 0]
+    return p
+
+
 def _inset(points: np.ndarray, distance: float) -> tuple[np.ndarray, np.ndarray]:
-    """The outline moved ``distance`` inward, and the outward unit normal at each point."""
+    """The outline moved ``distance`` inward (local folds removed), and the outward unit normal at
+    each point."""
     forward = np.roll(points, -1, axis=0) - points
     forward /= np.maximum(np.linalg.norm(forward, axis=1, keepdims=True), 1e-12)
     left = np.stack((-forward[:, 1], forward[:, 0]), axis=1)      # inward for a CCW outline
     inward = left + np.roll(left, 1, axis=0)
     inward /= np.maximum(np.linalg.norm(inward, axis=1, keepdims=True), 1e-12)
     miter = 1.0 / np.maximum(np.sum(inward * left, axis=1, keepdims=True), 0.5)
-    return points + inward * distance * miter, -inward
+    return _remove_folds(points + inward * distance * miter), -inward
+
+
+def _distinct(points: np.ndarray) -> np.ndarray:
+    """Indices of the points that differ from their predecessor (a cleaned inset repeats some)."""
+    keep = np.any(points != np.roll(points, 1, axis=0), axis=1)
+    if not keep.any():
+        keep[0] = True
+    return np.flatnonzero(keep)
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,12 +391,20 @@ def jigsaw_layout(seed: int, count: int, aspect: float) -> PieceLayout:
                 cache[key] = points(key)
         return _outline(tuple((cache[key], reverse) for key, reverse in sides(r, c)))
 
-    def acceptable(shape_outline):
-        return is_simple(shape_outline) and is_simple(_inset(shape_outline, JIGSAW_BEVEL)[0])
+    checked: dict = {}
+
+    def acceptable(r, c):
+        # A cell is re-checked only when one of its edges was re-seeded.
+        key = tuple(shapes.get(k) for k, _reverse in sides(r, c))
+        if key not in checked:
+            shape_outline = outline(r, c)
+            inner = _inset(shape_outline, JIGSAW_BEVEL)[0]
+            checked[key] = is_simple(shape_outline) and is_simple(inner[_distinct(inner)])
+        return checked[key]
 
     cells = [(r, c) for r in range(rows) for c in range(cols)]
     for attempt in range(_RESEEDS + 1):
-        crossed = [cell for cell in cells if not acceptable(outline(*cell))]
+        crossed = [cell for cell in cells if not acceptable(*cell)]
         if not crossed:
             break
         for r, c in crossed:
@@ -360,7 +484,8 @@ def piece_vertices(layout: PieceLayout) -> tuple[np.ndarray, int]:
     aspect = layout.aspect
     for index, outline in enumerate(layout.outlines):
         inner, outward = _inset(outline, JIGSAW_BEVEL)
-        triangles = np.asarray(ear_clip(inner), dtype=np.int64)
+        distinct = _distinct(inner)
+        triangles = distinct[np.asarray(ear_clip(inner[distinct]), dtype=np.int64)]
         n = len(outline)
         nxt = np.roll(np.arange(n), -1)
         uv_out, uv_in = _uv(outline, aspect), _uv(inner, aspect)
@@ -396,13 +521,14 @@ def piece_vertices(layout: PieceLayout) -> tuple[np.ndarray, int]:
 __all__ = [
     "EdgeShape",
     "JIGSAW_BEVEL",
+    "JIGSAW_CURVE_TOLERANCE",
     "PIECE_LAYOUT_MAX_PIECES",
     "PIECE_ORDERS",
     "PIECE_VERTEX_ATTRIBUTES",
     "PIECE_VERTEX_FLOATS",
     "PieceLayout",
     "ear_clip",
-    "edge_profile",
+    "edge_controls",
     "is_simple",
     "jigsaw_layout",
     "piece_grid",
