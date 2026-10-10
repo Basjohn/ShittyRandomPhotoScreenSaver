@@ -56,8 +56,12 @@ R154 lifecycle (`test_qtquick_display_unit`, `test_runtime_destruction`, `test_t
 
 ## 2. New transitions | implementation queue
 
-These transition concepts are promoted into the active roadmap rather than left as distant-future backlog. The current
-visual mocks are local-repo references only and should be preserved for implementation review:
+These transition concepts are promoted into the active roadmap rather than left as distant-future backlog. **Every entry
+expands the product without taxing it:** zero recurring cost while inactive (Performance_Optimization_Contract "Effect
+dormancy and count invariance"), lazy resources released at `park()`, gradual warm-up, and its measured active cost (CPU
+submit + GPU, median/p90, per-frame flush) recorded in `Docs/Reference/Transitions.md` beside comparable transitions; new
+shared helpers are reused by later entries rather than duplicated. The current visual mocks are local-repo references only
+and should be preserved for implementation review:
 
 - `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TBlockPuzzle.png` — clean-room jigsaw/puzzle-piece
   flip replacement concept.
@@ -157,7 +161,10 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 
 ## 4. Shared 3D primitives | immediate foundation for T1/T2, expand after first-wave acceptance
 
-Admit one measured, inactive-cost-neutral consumer at a time. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
+Admit one measured, inactive-cost-neutral consumer at a time. **Extending a shared primitive is opt-in:** a new lobe,
+attachment or pass (e.g. S24's sheen in `SceneMaterial`) is a separate function, shader variant or demand-created resource
+that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change (re-measure
+one existing consumer before and after any shared-primitive edit). **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
 
 After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
 
