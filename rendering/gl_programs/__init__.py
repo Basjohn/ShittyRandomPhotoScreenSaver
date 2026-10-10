@@ -13,14 +13,6 @@ from typing import TYPE_CHECKING
 
 _LAZY_EXPORTS = {
     "BaseGLProgram": ("rendering.gl_programs.base_program", "BaseGLProgram"),
-    "BlockFlipProgram": (
-        "rendering.gl_programs.blockflip_program",
-        "BlockFlipProgram",
-    ),
-    "blockflip_program": (
-        "rendering.gl_programs.blockflip_program",
-        "blockflip_program",
-    ),
     "CrossfadeProgram": (
         "rendering.gl_programs.crossfade_program",
         "CrossfadeProgram",
@@ -31,14 +23,6 @@ _LAZY_EXPORTS = {
     ),
     "BlindsProgram": ("rendering.gl_programs.blinds_program", "BlindsProgram"),
     "blinds_program": ("rendering.gl_programs.blinds_program", "blinds_program"),
-    "DiffuseProgram": (
-        "rendering.gl_programs.diffuse_program",
-        "DiffuseProgram",
-    ),
-    "diffuse_program": (
-        "rendering.gl_programs.diffuse_program",
-        "diffuse_program",
-    ),
     "SlideProgram": ("rendering.gl_programs.slide_program", "SlideProgram"),
     "slide_program": ("rendering.gl_programs.slide_program", "slide_program"),
     "WipeProgram": ("rendering.gl_programs.wipe_program", "WipeProgram"),
@@ -76,12 +60,8 @@ if TYPE_CHECKING:
     from .base_program import BaseGLProgram as BaseGLProgram
     from .blinds_program import BlindsProgram as BlindsProgram
     from .blinds_program import blinds_program as blinds_program
-    from .blockflip_program import BlockFlipProgram as BlockFlipProgram
-    from .blockflip_program import blockflip_program as blockflip_program
     from .crossfade_program import CrossfadeProgram as CrossfadeProgram
     from .crossfade_program import crossfade_program as crossfade_program
-    from .diffuse_program import DiffuseProgram as DiffuseProgram
-    from .diffuse_program import diffuse_program as diffuse_program
     from .raindrops_program import RaindropsProgram as RaindropsProgram
     from .raindrops_program import raindrops_program as raindrops_program
     from .slide_program import SlideProgram as SlideProgram

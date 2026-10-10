@@ -578,7 +578,7 @@ SCENE3D_BOX_VERTICES = _scene3d_box()
 SCENE3D_BOX_ATTRIBUTES = (3, 3)   # position, outward normal; counter-clockwise faces
 
 
-# ---- The bendable grid surface (Page Curl, Accordion, Relief Rise, terrains, ribbons) ----
+# ---- The bendable grid surface (Page Curl, Shockwave Grid, folded sheets, reliefs, terrains, ribbons) ----
 
 def scene3d_grid_size(detail: Scene3DDetail, aspect: float) -> tuple[int, int]:
     """Grid cells (columns, rows): the tier's density along the longer side, square cells."""

@@ -22,11 +22,6 @@ from rendering.quick.transitions.implementation_registry import (
     iter_quick_transition_implementations,
     resolve_quick_transition_renderer,
 )
-from rendering.quick.transitions.implementations.block_flip import (
-    _BLOCK_FLIP_FRAGMENT_SOURCE,
-    _block_flip_direction_vector,
-    _block_flip_grid,
-)
 from rendering.quick.transitions.implementations.block_spins import (
     _block_spin_direction_state,
 )
@@ -361,83 +356,6 @@ print(json.dumps({
             "rendering.gl_programs.warp_program",
         ],
     }
-
-
-def test_enabled_resolution_imports_only_block_flip_surface():
-    report = _probe(
-        """
-import json
-import sys
-from rendering.quick.transitions.implementation_registry import (
-    resolve_quick_transition_renderer,
-)
-
-renderer = resolve_quick_transition_renderer(
-    "block_flip",
-    enabled_transition_ids=frozenset({"block_flip"}),
-)
-implementation_modules = sorted(
-    name for name in sys.modules
-    if name.startswith("rendering.quick.transitions.implementations.")
-)
-shader_modules = sorted(
-    name for name in sys.modules
-    if name.startswith("rendering.gl_programs.") and name.endswith("_program")
-)
-print(json.dumps({
-    "renderer": type(renderer).__name__,
-    "implementation_modules": implementation_modules,
-    "shader_modules": shader_modules,
-}))
-"""
-    )
-
-    assert report == {
-        "renderer": "QuickBlockFlipRenderer",
-        "implementation_modules": [
-            "rendering.quick.transitions.implementations.block_flip"
-        ],
-        "shader_modules": [],
-    }
-
-
-@pytest.mark.parametrize(
-    ("direction", "vector"),
-    (
-        ("left", (-1.0, 0.0)),
-        ("right", (1.0, 0.0)),
-        ("up", (0.0, -1.0)),
-        ("down", (0.0, 1.0)),
-        ("diag_tl_br", (1.0, 1.0)),
-        ("diag_tr_bl", (-1.0, 1.0)),
-    ),
-)
-def test_block_flip_vectors_point_the_way_the_flip_travels(
-    direction,
-    vector,
-):
-    # Screen axes: x grows right, y grows down. Labels on screen: test_transition_direction_labels.
-    assert _block_flip_direction_vector(direction) == vector
-
-
-def test_block_flip_requires_resolved_settings_owned_grid_and_direction():
-    assert _block_flip_grid({"cols": 5, "rows": 7}) == (5, 7)
-    with pytest.raises(ValueError, match="requires resolved integer parameter 'cols'"):
-        _block_flip_grid({"rows": 7})
-    with pytest.raises(ValueError, match="cols must be between 2 and 25"):
-        _block_flip_grid({"cols": 1, "rows": 7})
-    with pytest.raises(ValueError, match="unknown resolved Block Puzzle Flip"):
-        _block_flip_direction_vector("Random")
-
-
-def test_block_flip_shader_is_strip_slab_authoritative_with_clean_endpoints():
-    assert "if (t <= 0.0)" in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "if (t >= 1.0)" in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "stripCount" in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "faceScale" in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "showsNewFace" in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "cellIndex" not in _BLOCK_FLIP_FRAGMENT_SOURCE
-    assert "hash1" not in _BLOCK_FLIP_FRAGMENT_SOURCE
 
 
 def test_block_spins_gives_every_authored_direction_its_own_axis_and_spin():

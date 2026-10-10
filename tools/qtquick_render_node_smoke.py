@@ -64,7 +64,6 @@ _TRANSITION_IDS = (
     "slide",
     "wipe",
     "warp_dissolve",
-    "block_flip",
     "block_spins",
 )
 _TRANSITION_SMOKE_DIRECTIONS = {
@@ -79,14 +78,6 @@ _TRANSITION_SMOKE_DIRECTIONS = {
         "diag_tr_bl",
     ),
     "warp_dissolve": (None,),
-    "block_flip": (
-        "left",
-        "right",
-        "up",
-        "down",
-        "diag_tl_br",
-        "diag_tr_bl",
-    ),
     "block_spins": (
         "left",
         "right",
@@ -107,7 +98,7 @@ _TRANSITION_DIRECTION_CHOICES = tuple(
     )
 )
 # The shared sparse grid the geometry-precise transition oracles are tuned to.
-# Do not change: block_spins/block_flip encode 5x5 geometry (divmod(index, 5)).
+# Do not change: block_spins encodes 5x5 geometry (divmod(index, 5)).
 _SAMPLE_FRACTIONS = (1.0 / 12.0, 0.25, 0.5, 0.75, 11.0 / 12.0)
 _TRANSITION_SAMPLE_COORDINATES = tuple(
     (sample_x, 1.0 - readback_y)
@@ -128,12 +119,12 @@ _TRANSITION_DENSE_SAMPLE_COORDINATES = tuple(
     for sample_x in _DENSE_SAMPLE_FRACTIONS
 )
 # Transition ids whose midpoint oracle consumes the dense grid. The block slab
-# transitions are validated on the dense grid because the production telemetry
+# transition is validated on the dense grid because the production telemetry
 # captures the first transition frame in its wide [0.30, 0.75] window, which on
 # dense frame cadence lands early (~0.35) where the thin slab void is not
 # resolvable on the coarse 5x5 sparse grid. The Phase-C effect smoke wrapper adds
 # further ids via _install_contract.
-_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = {"block_flip", "block_spins"}
+_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = {"block_spins"}
 _DIRECTIONAL_PALETTE_RGB = {
     "initial": (
         (12, 32, 120),
@@ -174,14 +165,9 @@ _TRANSITION_PALETTE_RGB = {
     "slide": _DIRECTIONAL_PALETTE_RGB,
     "wipe": _DIRECTIONAL_PALETTE_RGB,
     "warp_dissolve": _DIRECTIONAL_PALETTE_RGB,
-    "block_flip": _DIRECTIONAL_PALETTE_RGB,
     "block_spins": _DIRECTIONAL_PALETTE_RGB,
 }
-_TRANSITION_SMOKE_PARAMETERS = {
-    # Thirteen strips place the fixed 5x5 sample grid on both projected faces
-    # and exposed voids during the first eligible midpoint frame.
-    "block_flip": {"cols": 13, "rows": 13},
-}
+_TRANSITION_SMOKE_PARAMETERS: dict[str, dict[str, object]] = {}
 _TRANSITION_PIXEL_PROBES = {
     "block_spins": (0.42, 0.50, 0.60),
 }
@@ -570,7 +556,6 @@ _TRANSITION_MIDPOINT_ORACLES = {
     "slide": _matches_slide_samples,
     "wipe": _matches_wipe_samples,
     "warp_dissolve": _matches_warp_samples,
-    "block_flip": _matches_block_slab_dense_midpoint,
     "block_spins": _matches_block_slab_dense_midpoint,
 }
 # Exact per-tile block-slab UV/projection probe geometry is validated on the
@@ -587,7 +572,7 @@ def _presentation_image(
     variant: str,
     transition_id: str,
 ) -> PresentationImage:
-    if transition_id in {"block_flip", "block_spins"}:
+    if transition_id == "block_spins":
         image = QImage(32, 24, QImage.Format.Format_RGBA8888)
         for x in range(image.width()):
             normalized_x = x / max(1, image.width() - 1)

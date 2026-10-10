@@ -22,7 +22,6 @@ CASES = (
         ("thickness", "transparency", "refraction", "dispersion", "sheen"),
     ),
     ("exploding_tiles", "Exploding Tiles", ("thickness", "force")),
-    ("ink_bloom", "Ink Bloom", ("depth", "gloss")),
     ("melt_drip", "Melt Drip", ("depth", "gloss")),
 )
 

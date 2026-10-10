@@ -153,23 +153,6 @@
       ]
     },
     {
-      "transition_id": "block_flip",
-      "path": "transition_block_flip.png",
-      "size": [
-        2400,
-        450
-      ],
-      "frame_size": [
-        800,
-        450
-      ],
-      "progress": [
-        0.25,
-        0.5,
-        0.75
-      ]
-    },
-    {
       "transition_id": "block_spins",
       "path": "transition_block_spins.png",
       "size": [
@@ -189,23 +172,6 @@
     {
       "transition_id": "blinds",
       "path": "transition_blinds.png",
-      "size": [
-        2400,
-        450
-      ],
-      "frame_size": [
-        800,
-        450
-      ],
-      "progress": [
-        0.25,
-        0.5,
-        0.75
-      ]
-    },
-    {
-      "transition_id": "diffuse",
-      "path": "transition_diffuse.png",
       "size": [
         2400,
         450
@@ -340,23 +306,6 @@
       ]
     },
     {
-      "transition_id": "ink_bloom",
-      "path": "transition_ink_bloom.png",
-      "size": [
-        2400,
-        450
-      ],
-      "frame_size": [
-        800,
-        450
-      ],
-      "progress": [
-        0.25,
-        0.5,
-        0.75
-      ]
-    },
-    {
       "transition_id": "melt_drip",
       "path": "transition_melt_drip.png",
       "size": [
@@ -405,40 +354,6 @@
         0.25,
         0.5,
         0.75
-      ]
-    },
-    {
-      "transition_id": "relief_rise",
-      "path": "transition_relief_rise.png",
-      "size": [
-        2400,
-        450
-      ],
-      "frame_size": [
-        800,
-        450
-      ],
-      "progress": [
-        0.25,
-        0.5,
-        0.75
-      ]
-    },
-    {
-      "transition_id": "accordion_fold",
-      "path": "transition_accordion_fold.png",
-      "size": [
-        2400,
-        450
-      ],
-      "frame_size": [
-        800,
-        450
-      ],
-      "progress": [
-        0.3,
-        0.45,
-        0.72
       ]
     },
     {
@@ -614,5 +529,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 25815233
+  "total_bytes": 22406761
 }

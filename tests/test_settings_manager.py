@@ -684,11 +684,11 @@ class TestSettingsManagerDefaults:
         repairs = manager.validate_and_repair()
         assert "widgets.spotify_visualizer" not in repairs
 
-    def test_startup_migrates_block_flip_columns_to_canonical_cols(
+    def test_startup_strips_retired_transitions_from_a_stored_profile(
         self,
         tmp_path: Path,
     ) -> None:
-        storage_root = tmp_path / "legacy_block_flip_columns"
+        storage_root = tmp_path / "retired_transitions"
         app_name = f"TestApp_{uuid.uuid4().hex}"
         manager = SettingsManager(
             organization="TestOrg",
@@ -696,12 +696,11 @@ class TestSettingsManagerDefaults:
             storage_base_dir=storage_root,
         )
         transitions = manager.get("transitions", {})
-        transitions["block_flip"] = {
-            "rows": 7,
-            "cols": 24,
-            "columns": 9,
-            "direction": "Diagonal TL to BR",
-        }
+        transitions["type"] = "Accordion Fold"
+        transitions["block_flip"] = {"rows": 7, "cols": 9, "direction": "Random"}
+        transitions["ink_bloom"] = {"detail": 1.0}
+        for section in ("activation", "pool", "durations"):
+            transitions[section] = {**transitions.get(section, {}), "Diffuse": True, "Relief Rise": True}
         manager.set("transitions", transitions)
         manager.save()
 
@@ -711,12 +710,12 @@ class TestSettingsManagerDefaults:
             storage_base_dir=storage_root,
         )
 
-        block_flip = reloaded.get("transitions", {})["block_flip"]
-        assert block_flip == {
-            "rows": 7,
-            "cols": 9,
-            "direction": "Diagonal TL to BR",
-        }
+        stored = reloaded.get("transitions", {})
+        assert "block_flip" not in stored and "ink_bloom" not in stored
+        assert stored["type"] == "Crossfade"
+        for section in ("activation", "pool", "durations"):
+            assert not {"Diffuse", "Relief Rise"} & set(stored[section])
+            assert "Crossfade" in stored[section]
 
     def test_visualizer_schema_migration_runs_once_for_legacy_persisted_payload(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "legacy_visualizer_schema"

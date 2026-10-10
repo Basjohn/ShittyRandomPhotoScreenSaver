@@ -252,7 +252,6 @@ def resolve_quick_transition_spec(
     parameters: Mapping[str, object] = {}
     if transition_id in {
         "blinds",
-        "diffuse",
         "ripple",
         "crumble",
         "particle",
@@ -260,12 +259,9 @@ def resolve_quick_transition_spec(
         "glass_shatter",
         "exploding_tiles",
         "pixel_accretion",
-        "ink_bloom",
         "melt_drip",
         "page_curl",
         "disintegrate",
-        "accordion_fold",
-        "relief_rise",
         "cube_turn",
         "beam",
         "jigsaw",
@@ -303,8 +299,8 @@ def resolve_quick_transition_spec(
             mapping=_WIPE_DIRECTION_MAP,
             rng=rng,
         )
-    elif transition_id in {"block_flip", "block_spins"}:
-        section_name = "block_flip" if transition_id == "block_flip" else "blockspin"
+    elif transition_id == "block_spins":
+        section_name = "blockspin"
         cfg = _section(transitions, defaults, section_name)
         direction = _resolve_direction(
             cfg.get("direction"),
@@ -319,13 +315,7 @@ def resolve_quick_transition_spec(
             mapping=_DIRECTION_MAP,
             rng=rng,
         )
-        if transition_id == "block_flip":
-            parameters = {
-                "cols": int(cfg["cols"]),
-                "rows": int(cfg["rows"]),
-            }
-        else:
-            parameters = resolve_block_spins_parameters(transitions, cfg, _section({}, defaults, section_name))
+        parameters = resolve_block_spins_parameters(transitions, cfg, _section({}, defaults, section_name))
 
     return ResolvedQuickTransitionSpec(
         transition_id=transition_id,

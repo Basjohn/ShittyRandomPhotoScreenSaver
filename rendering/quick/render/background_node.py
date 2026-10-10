@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 # Diagnostic pixel-readback grids, used only when telemetry pixel capture is
 # enabled (tests/harnesses); capture_pixels defaults to False so there is no
 # production cost. The sparse 5x5 grid is the long-standing shared grid that the
-# geometry-precise transition oracles (slide/wipe/warp/block_flip/block_spins)
+# geometry-precise transition oracles (slide/wipe/warp/block_spins)
 # are tuned to; it must not change. The dense grid is an ADDITIONAL midpoint-only
 # readback that reliably samples thin authored effect regions (burn fire front,
 # crumble cracks, particle displacement) so the Phase-C effect oracles are not

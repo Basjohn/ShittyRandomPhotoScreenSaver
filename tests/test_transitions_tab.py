@@ -185,7 +185,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
         "Glass Shatter",
         "Exploding Tiles",
         "Directional Pixel Accretion",
-        "Ink Bloom",
         "Melt Drip",
     )
     for name in names:
@@ -201,7 +200,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     for section in (
         "exploding_tiles",
         "pixel_accretion",
-        "ink_bloom",
         "melt_drip",
     ):
         external[section] = "bad"
@@ -215,7 +213,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     assert tab.exploding_tiles_depth_spin.value() == pytest.approx(canonical["exploding_tiles"]["depth"])
     assert tab.pixel_tile_size_spin.value() == canonical["pixel_accretion"]["tile_size"]
     assert tab.pixel_travel_spin.value() == pytest.approx(canonical["pixel_accretion"]["travel"])
-    assert tab.ink_bloom_detail_spin.value() == pytest.approx(canonical["ink_bloom"]["detail"])
     assert tab.melt_drip_detail_spin.value() == pytest.approx(canonical["melt_drip"]["detail"])
 
     # An unrelated duration write must serialize repaired controls rather than
@@ -226,7 +223,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     assert persisted["glass_shatter"]["shards"] == canonical["glass_shatter"]["shards"]
     assert persisted["exploding_tiles"]["columns"] == canonical["exploding_tiles"]["columns"]
     assert persisted["pixel_accretion"]["tile_size"] == canonical["pixel_accretion"]["tile_size"]
-    assert persisted["ink_bloom"]["detail"] == pytest.approx(canonical["ink_bloom"]["detail"])
     assert persisted["melt_drip"]["detail"] == pytest.approx(canonical["melt_drip"]["detail"])
 
 
@@ -271,29 +267,6 @@ def test_transition_easing_control_and_saved_preference_are_retired(
 
     assert not hasattr(tab, "easing_combo")
     assert "easing" not in settings_manager.get("transitions", {})
-
-
-def test_block_flip_grid_saves_the_canonical_rows_and_cols_contract(
-    qapp,
-    settings_manager,
-    qtbot,
-):
-    tab = TransitionsTab(settings_manager)
-    qtbot.addWidget(tab)
-    # Nav is activation-gated: a deactivated transition redirects to SETUP and
-    # never builds its page. Activate Block Puzzle Flip via its activation
-    # checkbox (which takes precedence), then select its pill so the lazy page
-    # (with the grid spinboxes) builds.
-    tab._activation_checkboxes["Block Puzzle Flip"].setChecked(True)
-    tab._on_nav_selected("Block Puzzle Flip")
-    tab.grid_rows_spin.setValue(7)
-    tab.grid_cols_spin.setValue(9)
-    tab._save_settings()
-
-    block_flip = settings_manager.get("transitions", {})["block_flip"]
-    assert block_flip["rows"] == 7
-    assert block_flip["cols"] == 9
-    assert "columns" not in block_flip
 
 
 def test_melt_origin_combo_offers_origins_and_retires_edge_directions(
@@ -513,35 +486,6 @@ def test_disintegrate_page_round_trips_its_controls(qapp, settings_manager, qtbo
     settings_manager.set("transitions", external)
     qapp.processEvents()
     assert tab.disintegrate_grain_spin.value() == tab.disintegrate_grain_spin.maximum()
-
-
-def test_accordion_fold_page_offers_edges_and_round_trips(qapp, settings_manager, qtbot):
-    from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGE_CHOICES
-
-    tab = TransitionsTab(settings_manager)
-    qtbot.addWidget(tab)
-    tab._activation_checkboxes["Accordion Fold"].setChecked(True)
-    tab._on_nav_selected("Accordion Fold")
-    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(ACCORDION_EDGE_CHOICES)
-    tab.direction_combo.setCurrentText("Top")
-    tab.accordion_pleats_spin.setValue(12)
-    tab.accordion_fold_gloss_spin.setValue(0.6)
-    tab.accordion_fold_antialiasing_combo.setCurrentText("2x")
-    persisted = settings_manager.get("transitions", {})["accordion_fold"]
-    assert persisted == {"direction": "Top", "pleats": 12, "gloss": 0.6, "antialiasing": "2x"}
-
-
-def test_relief_rise_page_round_trips(qapp, settings_manager, qtbot):
-    tab = TransitionsTab(settings_manager)
-    qtbot.addWidget(tab)
-    tab._activation_checkboxes["Relief Rise"].setChecked(True)
-    tab._on_nav_selected("Relief Rise")
-    tab.direction_combo.setCurrentText("Diagonal BL-TR")
-    tab.relief_rise_depth_spin.setValue(0.9)
-    tab.relief_rise_gloss_spin.setValue(0.1)
-    tab.relief_rise_antialiasing_combo.setCurrentText("Off")
-    persisted = settings_manager.get("transitions", {})["relief_rise"]
-    assert persisted == {"direction": "Diagonal BL-TR", "depth": 0.9, "gloss": 0.1, "antialiasing": "Off"}
 
 
 def test_cube_turn_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):

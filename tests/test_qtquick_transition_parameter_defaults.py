@@ -62,23 +62,6 @@ def test_sparse_ripple_uses_canonical_ripple_count():
     assert resolved["ripple_seed"] == pytest.approx(0.25 * 1000.0)
 
 
-def test_sparse_diffuse_uses_canonical_block_size_and_shape():
-    defaults = _defaults("diffuse")
-    resolved = resolve_parameterized_phase_c_inputs(
-        "diffuse", {}, random_source=_Rng()
-    ).parameter_dict()
-    expected_shape = {
-        "rectangle": 0,
-        "membrane": 1,
-        "lines": 2,
-        "diamonds": 3,
-        "amorph": 4,
-        "random": 5,
-    }.get(str(defaults["shape"]).strip().lower(), 0)
-    assert resolved["block_size"] == int(defaults["block_size"])
-    assert resolved["shape_mode"] == expected_shape
-
-
 def test_sparse_crumble_uses_canonical_piece_count_and_complexity():
     defaults = _defaults("crumble")
     resolved = resolve_parameterized_phase_c_inputs(

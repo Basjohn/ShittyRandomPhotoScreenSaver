@@ -3154,12 +3154,9 @@ def setup_logging(
         "transitions.gl_crossfade_transition",
         "transitions.gl_slide_transition",
         "transitions.gl_wipe_transition",
-        "transitions.gl_diffuse_transition",
         "transitions.gl_xfade",
         "transitions.gl_slide",
         "transitions.gl_wipe",
-        "transitions.gl_diffuse",
-        "transitions.gl_blockflip",
         "transitions.gl_blinds",
         "transitions.gl_compositor",
         "transitions.gl_compositor_crumble_transition",
@@ -3245,8 +3242,6 @@ _SHORT_NAME_OVERRIDES = {
     "transitions.gl_crossfade_transition": "transitions.gl_xfade",
     "transitions.gl_slide_transition": "transitions.gl_slide",
     "transitions.gl_wipe_transition": "transitions.gl_wipe",
-    "transitions.gl_diffuse_transition": "transitions.gl_diffuse",
-    "transitions.gl_block_puzzle_flip_transition": "transitions.gl_blockflip",
     "transitions.gl_blinds": "transitions.gl_blinds",
 }
 

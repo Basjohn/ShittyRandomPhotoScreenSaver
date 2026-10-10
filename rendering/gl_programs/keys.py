@@ -3,9 +3,7 @@
 CROSSFADE = "crossfade"
 SLIDE = "slide"
 WIPE = "wipe"
-BLOCK_FLIP = "blockflip"
 BLINDS = "blinds"
-DIFFUSE = "diffuse"
 WARP = "warp"
 RAINDROPS = "raindrops"
 CRUMBLE = "crumble"
@@ -16,9 +14,7 @@ ALL_PROGRAM_KEYS = (
     CROSSFADE,
     SLIDE,
     WIPE,
-    BLOCK_FLIP,
     BLINDS,
-    DIFFUSE,
     WARP,
     RAINDROPS,
     CRUMBLE,
@@ -29,11 +25,9 @@ ALL_PROGRAM_KEYS = (
 __all__ = [
     "ALL_PROGRAM_KEYS",
     "BLINDS",
-    "BLOCK_FLIP",
     "BURN",
     "CROSSFADE",
     "CRUMBLE",
-    "DIFFUSE",
     "PARTICLE",
     "RAINDROPS",
     "SLIDE",

@@ -179,39 +179,35 @@ def test_random_selection_direction_overrides_without_touching_authored_value(
     assert manual.direction != expected
 
 
-def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
+def test_admitted_random_choice_and_its_direction_are_frozen() -> None:
     spec = resolve_quick_transition_spec(
         _Settings(
             {
                 "type": "Crossfade",
                 "random_always": True,
-                "pool": {"Block Puzzle Flip": True},
-                "activation": {"Block Puzzle Flip": True},
-                "durations": {"Block Puzzle Flip": 777},
-                "block_flip": {
-                    "direction": "Diagonal TL-BR",
-                    "rows": 7,
-                    "cols": 11,
-                },
-            }
+                "pool": {"3D Block Spins": True},
+                "activation": {"3D Block Spins": True},
+                "durations": {"3D Block Spins": 777},
+                "blockspin": {"direction": "Diagonal TL-BR"},
+            },
+            hw_accel=True,
         ),
-        random_selection=RandomTransitionSelection("Block Puzzle Flip"),
+        random_selection=RandomTransitionSelection("3D Block Spins"),
     )
 
     assert spec is not None
-    assert spec.transition_id == "block_flip"
+    assert spec.transition_id == "block_spins"
     assert spec.requested_name == "Crossfade"
     assert spec.selected_from_random is True
     assert spec.duration_ms == 777
     assert spec.direction == "diag_tl_br"
-    assert spec.parameters == (("cols", 11), ("rows", 7))
+    assert isinstance(spec.parameters, tuple)
 
 
 _FUTURE_TRANSITIONS = (
     ("Glass Shatter", "glass_shatter", {"direction": "Center Out", "shards": 120, "depth": 1.1}),
     ("Exploding Tiles", "exploding_tiles", {"direction": "Diagonal TL-BR", "columns": 22, "depth": 1.0}),
     ("Directional Pixel Accretion", "pixel_accretion", {"direction": "Diagonal BR-TL", "tile_size": 12, "travel": 0.6}),
-    ("Ink Bloom", "ink_bloom", {"detail": 1.4, "direction": None}),
     ("Melt Drip", "melt_drip", {"detail": 1.2, "direction": "Top Center"}),
 )
 

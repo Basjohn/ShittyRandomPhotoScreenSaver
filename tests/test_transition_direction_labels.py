@@ -44,7 +44,6 @@ _REVEALS = (
     ("pixel_accretion", "pixel_accretion", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
     ("disintegrate", "disintegrate", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
     ("volumetric_dissolve", "volumetric_dissolve", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
-    ("relief_rise", "relief_rise", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
     ("beam", "beam", _CARDINAL + _ALL_DIAGONALS, {}, 3500),
     ("vhs", "vhs", ("Top to Bottom", "Bottom to Top"), {}, 3000),
     ("burn", "burn", _CARDINAL + _DIAGONAL, {}, 3000),
@@ -53,7 +52,6 @@ _REVEALS = (
      {"mode": "Directional"}, 3000),
     ("slide", "slide", _CARDINAL, {"motion_style": "Linear"}, 3000),
     ("wipe", "wipe", _CARDINAL + _DIAGONAL, {}, 3000),
-    ("block_flip", "block_flip", _CARDINAL + ("Diagonal TL to BR", "Diagonal TR to BL"), {}, 3000),
 )
 
 

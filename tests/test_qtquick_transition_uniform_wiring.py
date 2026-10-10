@@ -18,7 +18,6 @@ from rendering.quick.transitions.render_contract import QuickTransitionRenderFra
 from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 
 from rendering.quick.transitions.implementations import burn as burn_module
-from rendering.quick.transitions.implementations import diffuse as diffuse_module
 from rendering.quick.transitions.implementations import particle as particle_module
 from rendering.quick.transitions.implementations import ripple as ripple_module
 from rendering.quick.transitions.implementations import slide as slide_module
@@ -171,25 +170,6 @@ def _frame(
         source_texture_id=8,
         destination_texture_id=9,
     )
-
-
-def test_diffuse_request_parameters_reach_intended_uniforms(monkeypatch):
-    recorder = _RecordingGL()
-    _install(monkeypatch, diffuse_module, recorder)
-    frame = _frame("diffuse", "Diffuse", {"block_size": 32, "shape_mode": 4})
-
-    diffuse_module.QuickDiffuseRenderer().render(frame)
-
-    assert recorder.used_program == _FAKE_PROGRAM
-    assert recorder.draw_calls == 1
-    # shape_mode is uploaded as an integer uniform unchanged.
-    assert recorder.uniforms["u_shapeMode"] == 4
-    # block_size drives the authored grid geometry: ceil(1920/32), ceil(1080/32).
-    assert recorder.uniforms["u_grid"] == (60.0, 34.0)
-    assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
-    assert recorder.uniforms["u_resolution"] == (1920.0, 1080.0)
-    assert recorder.uniforms["uOldTex"] == 0
-    assert recorder.uniforms["uNewTex"] == 1
 
 
 def test_ripple_request_parameters_reach_intended_uniforms(monkeypatch):
