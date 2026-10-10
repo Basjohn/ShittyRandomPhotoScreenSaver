@@ -372,10 +372,6 @@ Automated image differences are not aesthetic acceptance. Previously implemented
 - [ ] Page Curl (laminate roll) on real photos from every origin at 5000 ms and longer: roll size and
   growth across Curl Size (the thinnest roll on Performance's coarser grid especially), pace, the print's colour on the roll, the clear coat and Gloss, the shade under the roll, High vs Balanced
   vs Performance smoothness of the roll on both displays;
-- [ ] Volumetric Dissolve in the installed build on both displays (its look is reviewed from its showcase WebP):
-  High vs Balanced vs Performance and GPU cost with active Visualizers;
-- [ ] Jigsaw Piece Flip in the installed build on both displays (its look is reviewed from its showcase WebP):
-  High vs Balanced vs Performance, and how it compares with Block Puzzle Flip before retiring that;
 - [ ] Blinds 3D Slats on real photos in both orientations at its default 4000 ms and longer: the wave's pace, slat
   lighting and Slat Gloss, the shade through the gaps, 6 vs 48 slats, High vs Balanced;
 - [ ] the installed/frozen build: activation and Settings round-trip, repeated switch/interrupt/retire.
