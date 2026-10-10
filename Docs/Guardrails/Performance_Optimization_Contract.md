@@ -160,6 +160,11 @@ warm-up while that reservation exists.
 Tests must guard against mode/effect-count scaling in common hot paths and prove that inactive implementations do not acquire
 or retain effect-specific runtime resources.
 
+**Additions must not tax what does not use them.** Extending a shared primitive (material lobe, attachment, pass) is opt-in:
+a separate function, shader variant or demand-created resource only its consumer pays for. Before and after any
+shared-primitive or render-host change, record `tools/overhead_baseline.py` and `--compare` the two; per-frame GL/Python call
+counts are deterministic, so any rise on an unrelated transition or mode is real added work (procedure: `Current_Plan.md` §4).
+
 The speculative image process remains an approved isolation boundary, not a second presentation owner: foreground image
 work cannot queue behind it; parent-owned generation/byte/backlog bounds admit at most one speculative request at a time;
 late generations are tombstoned; failure skips speculative warm-up rather than falling back into the main-process compute
