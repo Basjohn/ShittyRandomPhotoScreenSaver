@@ -125,6 +125,13 @@ The capture/encode/manifest tool and its focused smoke proof are implemented in 
 full catalogue output. Release/readme media stays outside runtime QRCs and normal GODZIPs. `Docs/Reference/Release_Media.md`
 owns the tool's registry, source-attribution, capture and encoding contract.
 
+- [ ] **Preview-builder fixture gap (found 2026-10-10).** `tools/onboarding_preview_foundry._build_spectrum_preview_snapshot`
+  never applies the mode's technical config (production's `apply_controller_technical_config`), so Oscilloscope and Sine
+  Wave fail on missing `_osc_transient_width_mix` / `_sine_wave_transient_width_mix`, and Dev Curve on a missing
+  `devcurve_sample_count` frame parameter. `tools/visualizer_cost_probe.py` and `tools/overhead_baseline.py` cannot measure
+  those three modes until it is fixed: apply the resolved technical config as `tools/visualizer_replay/driver.py` does, then
+  check whether regenerated onboarding previews change.
+
 - [ ] **RM1. Land the tool and generate transition media.** Review/checkpoint `tools/release_media.py` and its focused tests,
   then capture every admitted canonical registry identity plus meaningful curated appearance variants on a stable source tree.
   **Current transition-WebP source/size directive (local paths, not bundled):** Every transition WebP must be composed
@@ -163,8 +170,10 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 
 Admit one measured, inactive-cost-neutral consumer at a time. **Extending a shared primitive is opt-in:** a new lobe,
 attachment or pass (e.g. S24's sheen in `SceneMaterial`) is a separate function, shader variant or demand-created resource
-that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change (re-measure
-one existing consumer before and after any shared-primitive edit). **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
+that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change. Record
+`tools/overhead_baseline.py` before and after any shared-primitive or host edit and `--compare` them: per-frame GL and
+Python call counts are deterministic, so any rise on an unrelated transition or mode is real added work; baselines live in
+`tools/baselines/overhead/`. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. This is architectural preparation only: do not pre-allocate or execute S17/S18 facilities with no active consumer.
 
 After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
 
