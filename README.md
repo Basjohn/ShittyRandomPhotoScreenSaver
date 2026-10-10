@@ -23,7 +23,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that 
 Transition and Visualizer availability is COMPLETELY configurable so you can disable or enable whatever you want.
 ---
 
-## Feet Chores
+## Supposed Features
 
 ### Wallpapers, sources and displays
 
@@ -70,7 +70,8 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 - **Interaction Mode:** Keep the saver open while interacting with widgets. Normal cursor movement needn't exit it; `Ctrl` can temporarily expose the interaction halo when needed.
 - **Media Center (MC) builds:** Designed especially for keeping the display running as an interactive, always-on dashboard.
 
-<img width="40%" alt="GuidedWidgets" src="https://github.com/user-attachments/assets/7ab76f65-2b6e-456f-88d5-6147a9d02776" />
+<img width="40%" alt="GuidedWidgets" src="https://github.com/user-attachments/assets/21b4ac58-50ee-42dd-a80f-4247c34c9197" />
+
 
 ---
 
@@ -81,86 +82,83 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 **Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:**
 
 <details>
-<summary><b>Fracture, particles and destruction · 9 transitions</b></summary>
-
-#### Glass Shatter
-<!-- WebP: Glass Shatter -->
-
-#### Exploding Tiles
-<!-- WebP: Exploding Tiles -->
-
-#### Crumble
-<!-- WebP: Crumble -->
-
-#### Disintegrate
-<!-- WebP: Disintegrate -->
-
-#### Particle
-<!-- WebP: Particle -->
-
-#### Burn
-<!-- WebP: Burn -->
-
-#### Directional Pixel Accretion
-<!-- WebP: Directional Pixel Accretion -->
+<summary><b>Fracture, particles and destruction.</b></summary>
 
 #### Volumetric Dissolve
-<!-- WebP: Volumetric Dissolve. Newly registered; check physical/release acceptance. -->
+<img width="480" height="270" alt="transition_volumetric_dissolve_default" src="https://github.com/user-attachments/assets/5ce467ab-452e-4a0a-a676-5471bde2368e" />
+
+
+#### Glass Shatter
+<img width="480" height="270" alt="transition_glass_shatter_default" src="https://github.com/user-attachments/assets/5ace2947-01c2-4803-8dcb-312da4b4092e" />
+
+
+#### Exploding Tiles
+<img width="480" height="270" alt="transition_exploding_tiles_default" src="https://github.com/user-attachments/assets/d02afac5-bb5f-4a88-bc41-685e7cea827d" />
+
+
+#### Crumble
+<img width="480" height="270" alt="transition_crumble_default" src="https://github.com/user-attachments/assets/c1c565ec-9b23-4678-b593-c056a3ed7122" />
+
+
+#### Disintegrate
+<img width="480" height="270" alt="transition_disintegrate_default" src="https://github.com/user-attachments/assets/51572be9-df07-4f49-969c-e7312a65ab60" />
+
+
+#### Burn
+<img width="480" height="270" alt="transition_burn_default" src="https://github.com/user-attachments/assets/05f98fe0-349f-42c6-a986-9133013b111b" />
+
+#### Directional Pixel Accretion
+<img width="480" height="270" alt="transition_pixel_accretion_default" src="https://github.com/user-attachments/assets/b3c49c88-489e-4ff9-9ce3-11addbdcc30b" />
+
+
 
 #### Jigsaw Piece Flip
-<!-- WebP: Jigsaw Piece Flip. Distinct from the older Block Puzzle Flip; check physical/release acceptance. -->
+<img width="480" height="270" alt="transition_jigsaw_default" src="https://github.com/user-attachments/assets/13bf95e6-9956-42bc-9639-1c0af1d851c3" />
 
 </details>
 
 <details>
-<summary><b>3D surfaces, materials and reveals · 7 transitions</b></summary>
-
-#### Cube Turn
-<!-- WebP: Cube Turn -->
-
-#### Relief Rise
-<!-- WebP: Relief Rise -->
-
-#### Accordion Fold
-<!-- WebP: Accordion Fold -->
+<summary><b>3D surfaces, materials and reveals</b></summary>
 
 #### Page Curl
-<!-- WebP: Page Curl -->
+<img width="480" height="270" alt="transition_page_curl_default" src="https://github.com/user-attachments/assets/d8501e5e-1028-4bc1-b31c-401221ccf20b" />
+
+
 
 #### Ink Bloom
-<!-- WebP: Ink Bloom -->
+<img width="480" height="270" alt="transition_ink_bloom_default" src="https://github.com/user-attachments/assets/8edbf372-c04b-447c-b276-c16a32724505" />
+
 
 #### Melt Drip
-<!-- WebP: Melt Drip -->
+<img width="480" height="270" alt="transition_melt_drip_default" src="https://github.com/user-attachments/assets/2dc2a0ed-fb1b-4964-a2f3-a26bf19db201" />
+
 
 #### Beam
-<!-- WebP: Beam -->
+<img width="480" height="270" alt="transition_beam_default" src="https://github.com/user-attachments/assets/15ed14df-a2ac-4466-b0a4-6c1826c495e1" />
+
 
 </details>
 
 <details>
 <summary><b>Classic, patterned and screen-space effects · 7 transitions</b></summary>
 
-#### Crossfade
-<!-- WebP: Crossfade -->
 
 #### Slide
-<!-- WebP: Slide -->
+<img width="480" height="270" alt="transition_slide_default" src="https://github.com/user-attachments/assets/c6509f30-b2f3-472f-973e-b380dd5becda" />
 
 #### Wipe
-<!-- WebP: Wipe -->
+<img width="480" height="270" alt="transition_wipe_default" src="https://github.com/user-attachments/assets/e5f52bbe-b4a7-4c50-be96-61bddadd6779" />
 
 #### Ripple
-<!-- WebP: Ripple -->
+<img width="480" height="270" alt="transition_ripple_default" src="https://github.com/user-attachments/assets/e5dbe298-3e01-4b5b-8d2a-3b4838e4216e" />
 
 #### Diffuse
-<!-- WebP: Diffuse -->
+<img width="480" height="270" alt="transition_diffuse_default" src="https://github.com/user-attachments/assets/fe90f3f2-b4b0-44bd-a86e-91b89033826d" />
 
-#### Warp Dissolve
-<!-- WebP: Warp Dissolve -->
 
 #### 3D Block Spins
-<!-- WebP: 3D Block Spins -->
+<img width="480" height="270" alt="transition_block_spins_reflection" src="https://github.com/user-attachments/assets/fdb486df-ca50-4943-a54d-11655183c471" />
+
 
 </details>
 ---
@@ -169,7 +167,8 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 ### This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
 
-<img width="50%" alt="SRPSS settings dialog showing its custom theme and controls" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
+<img width="45%" alt="SRPSS Settings Theme Section" src="https://github.com/user-attachments/assets/8ab3fa5f-3b5b-42f6-8833-e0a0d3bc8b6e" />
+
 
 It's a dark, fully themeable, frameless interface that even simulates DWM transparency from the Vista era.
 
@@ -177,10 +176,10 @@ You can open it from **Windows Screen Saver Settings → Settings...**, or from 
 
 The settings dialog lets you:
 
-- Configure EVERYTHING.
-- Change EVERYTHING.
-- DEVOUR EVERYTHING.
-- BECOME ONE.
+- CONFIGURE EVERYTHING.
+- CHANGE EVERYTHING.
+- **DEVOUR** EVERYTHING.
+- **BECOME ONE**.
 
 <details>
 <summary><b>Settings pages and what lives in them</b></summary>
