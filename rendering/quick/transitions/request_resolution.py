@@ -272,6 +272,7 @@ def resolve_quick_transition_spec(
         "membrane",
         "surface_tension",
         "chromatic_shear",
+        "depth_cascade",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

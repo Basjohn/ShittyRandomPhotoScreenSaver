@@ -125,6 +125,10 @@ _IMPLEMENTATIONS = (
         transition_id="chromatic_shear",
         module_name="rendering.quick.transitions.implementations.chromatic_shear",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="depth_cascade",
+        module_name="rendering.quick.transitions.implementations.depth_cascade",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
