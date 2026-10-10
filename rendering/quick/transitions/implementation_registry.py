@@ -125,6 +125,10 @@ _IMPLEMENTATIONS = (
         transition_id="vhs",
         module_name="rendering.quick.transitions.implementations.vhs",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="edge_bloom",
+        module_name="rendering.quick.transitions.implementations.edge_bloom",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

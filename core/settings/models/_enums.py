@@ -40,6 +40,7 @@ class TransitionType(Enum):
     JIGSAW = "Jigsaw Piece Flip"
     VOLUMETRIC_DISSOLVE = "Volumetric Dissolve"
     VHS_DISTORTION = "VHS Distortion"
+    EDGE_BLOOM = "Edge Bloom Reveal"
 
 
 class WidgetPosition(Enum):

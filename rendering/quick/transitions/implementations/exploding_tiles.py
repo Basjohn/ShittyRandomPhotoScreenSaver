@@ -24,12 +24,12 @@ from rendering.gl_programs.exploding_tiles_program import (
     EXPLODING_TILES_SPARKS,
     EXPLODING_TILES_VERTEX_SOURCE,
     exploding_tiles_blast,
-    exploding_tiles_dominant_colour,
     exploding_tiles_epicentre,
     exploding_tiles_grid,
     exploding_tiles_parameters,
     exploding_tiles_sparks_live,
 )
+from rendering.gl_programs.photo_colour import photo_dominant_colour
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
@@ -219,7 +219,7 @@ class QuickExplodingTilesRenderer:
         image = frame.run.request.source_image
         key = (frame.run.run_id, image.identity)
         if key != self._body_key:
-            self._body = exploding_tiles_dominant_colour(image.rgba8, image.pixel_size, image.row_stride)
+            self._body = photo_dominant_colour(image.rgba8, image.pixel_size, image.row_stride)
             self._body_key = key
         return self._body
 

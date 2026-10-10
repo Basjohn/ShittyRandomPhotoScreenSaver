@@ -183,7 +183,8 @@ run by onboarding.
   from the operator artworks `GonnadsBIIIGYProdBlue.jpg` -> `MassiveDS.jpg`, as three unlabelled 800x450 frames
   side by side. `TransitionStrip` paints the gaps and the percentage labels as live text, 90% of the page width.
 - Captures wait for decoded logos, avatars and artwork and for artwork fades; a readiness failure is a capture
-  failure, not permission to ship a blank placeholder. Lossless PNG only (never JPEG), 24 MB budget; a rebuild
+  failure, not permission to ship a blank placeholder. Lossless PNG only (never JPEG), 32 MiB budget (raised from
+  24 MiB on 2026-10-10: each transition strip adds about 1 MB and the planned T5-T10 transitions must fit); a rebuild
   removes generated files the new set no longer contains.
 
 The build resource prerequisite checks the preview sources and operator-provided `ui/assets/onboarding/source/SRPSSWitch.png`,

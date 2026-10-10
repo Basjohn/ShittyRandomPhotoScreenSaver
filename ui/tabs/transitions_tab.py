@@ -31,6 +31,7 @@ from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICE
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
+from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
 from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
 from rendering.gl_programs.volumetric_dissolve_options import (
     VOLUMETRIC_DIRECTION_CHOICES,
@@ -584,6 +585,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
         "VHS Distortion": "_build_vhs_group",
+        "Edge Bloom Reveal": "_build_edge_bloom_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -610,6 +612,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
         "VHS Distortion": "vhs_group",
+        "Edge Bloom Reveal": "edge_bloom_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -853,6 +856,19 @@ class TransitionsTab(QWidget):
             self._beam_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
             self.beam_color_btn.set_color(self._beam_color)
             self.beam_sparks_check.setChecked(bool(cfg.get('sparks', canonical['sparks'])))
+        if hasattr(self, 'edge_bloom_group'):
+            canonical = canonical_transitions['edge_bloom']
+            cfg = self._new_transition_section(transitions_config, 'edge_bloom', canonical)
+            color = cfg.get('color', canonical['color'])
+            if not (isinstance(color, (list, tuple)) and len(color) >= 3
+                    and all(isinstance(c, (int, float)) for c in color[:3])):
+                color = canonical['color']
+            self._edge_bloom_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
+            self.edge_bloom_color_btn.set_color(self._edge_bloom_color)
+            source = cfg.get('color_source', canonical['color_source'])
+            self.edge_bloom_colour_source_combo.setCurrentText(
+                str(source if source in EDGE_BLOOM_COLOUR_SOURCE_CHOICES else canonical['color_source']))
+            self._sync_edge_bloom_colour_source()
         if hasattr(self, 'volumetric_dissolve_group'):
             canonical = canonical_transitions['volumetric_dissolve']
             cfg = self._new_transition_section(transitions_config, 'volumetric_dissolve', canonical)
@@ -1160,6 +1176,11 @@ class TransitionsTab(QWidget):
             ("mist", "Mist:", 0., 1., "How much luminous mist, coloured by the old picture, rises as it dissolves."),
             ("depth", "Depth:", 0., 1., "How far the particles fly toward you, growing and blurring as they near."),
         ),
+        "edge_bloom": (
+            ("glow", "Glow:", 0., 1., "How brightly the edges and the growing fill glow."),
+            ("detail", "Detail:", 0., 1., "How many edges light up: only the strongest outlines at 0, fine "
+             "detail at 1."),
+        ),
         "vhs": (
             ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
              "and the bent top of each frame as the picture rolls."),
@@ -1459,6 +1480,45 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "accordion_fold")
         self._build_scene3d_choices(layout, "accordion_fold")
         self._specific_group_host_layout.addWidget(self.accordion_fold_group)
+
+    def _build_edge_bloom_group(self) -> None:
+        self.edge_bloom_group = QGroupBox("Edge Bloom Reveal Settings")
+        self._style_group_box(self.edge_bloom_group)
+        layout = QVBoxLayout(self.edge_bloom_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        source_row = self._aligned_row(layout, "Glow Colour:")
+        self.edge_bloom_colour_source_combo = StyledComboBox(size_variant="compact")
+        self.edge_bloom_colour_source_combo.addItems(list(EDGE_BLOOM_COLOUR_SOURCE_CHOICES))
+        self.edge_bloom_colour_source_combo.setCurrentText(str(_transition_default("edge_bloom.color_source")))
+        self.edge_bloom_colour_source_combo.setToolTip(
+            "Custom: the colour you choose. Next Picture: every line glows in the next picture's most vivid "
+            "colour. Each Picture: each picture's lines glow in its own colour.")
+        self.edge_bloom_colour_source_combo.currentTextChanged.connect(self._sync_edge_bloom_colour_source)
+        self.edge_bloom_colour_source_combo.currentTextChanged.connect(self._save_settings)
+        source_row.addWidget(self.edge_bloom_colour_source_combo)
+        source_row.addStretch()
+        color_row = self._swatch_row(layout, "Custom Colour:")
+        self.edge_bloom_color_btn = ColorSwatchButton(title="Choose Glow Colour", show_alpha=False, auto_picker=False)
+        self._edge_bloom_color = QColor(*_transition_default("edge_bloom.color")[:3])
+        self.edge_bloom_color_btn.set_color(self._edge_bloom_color)
+        self.edge_bloom_color_btn.setFixedSize(60, 24)
+        self.edge_bloom_color_btn.setToolTip("The colour of the glowing edges; the strongest lines burn toward white.")
+        self.edge_bloom_color_btn.clicked.connect(self._pick_edge_bloom_color)
+        color_row.addWidget(self.edge_bloom_color_btn)
+        self._build_surface_controls(layout, "edge_bloom")
+        self._sync_edge_bloom_colour_source()
+        self._specific_group_host_layout.addWidget(self.edge_bloom_group)
+
+    def _sync_edge_bloom_colour_source(self, *_args) -> None:
+        """The custom colour applies only to the Custom source."""
+        self.edge_bloom_color_btn.setEnabled(self.edge_bloom_colour_source_combo.currentText() == "Custom")
+
+    def _pick_edge_bloom_color(self) -> None:
+        color = StyledColorPicker.get_color(self._edge_bloom_color, self, "Glow Colour", show_alpha=False)
+        if color is not None:
+            self._edge_bloom_color = color
+            self.edge_bloom_color_btn.set_color(color)
+            self._save_settings()
 
     def _build_vhs_group(self) -> None:
         self.vhs_group = QGroupBox("VHS Distortion Settings")
@@ -2274,6 +2334,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'blinds_direction_combo', None),
             getattr(self, 'blinds_feather_slider', None),
             getattr(self, 'blinds_style_combo', None),
+            getattr(self, 'edge_bloom_colour_source_combo', None),
             getattr(self, 'blinds_slats_spin', None),
             getattr(self, 'disintegrate_grain_spin', None),
             getattr(self, 'jigsaw_pieces_spin', None),
@@ -2897,6 +2958,12 @@ class TransitionsTab(QWidget):
         else:
             volumetric_dissolve = {**_existing_subdict('volumetric_dissolve'),
                                    'direction': self._direction_by_type['volumetric_dissolve']}
+        if hasattr(self, 'edge_bloom_group'):
+            c = self._edge_bloom_color
+            edge_bloom = {'color': [c.red(), c.green(), c.blue(), 255],
+                          'color_source': self.edge_bloom_colour_source_combo.currentText()}
+        else:
+            edge_bloom = _existing_subdict('edge_bloom')
         if hasattr(self, 'vhs_group'):
             vhs = {'direction': self._direction_by_type['vhs']}
         else:
@@ -2912,7 +2979,8 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("accordion_fold", accordion_fold),
                                 ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam),
-                                ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs)):
+                                ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
+                                ("edge_bloom", edge_bloom)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2958,6 +3026,7 @@ class TransitionsTab(QWidget):
             'jigsaw': jigsaw,
             'volumetric_dissolve': volumetric_dissolve,
             'vhs': vhs,
+            'edge_bloom': edge_bloom,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):
