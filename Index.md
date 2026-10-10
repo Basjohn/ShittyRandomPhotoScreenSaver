@@ -95,6 +95,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` (sole index) |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |
+| Usu Moonscape vertical: behaviour, reactivity, required 3D architecture (S19–S27), asset gates | `Docs/Future_Work/Usu_Moonscape.md` |
 | Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
 | system master-volume OSD | `Docs/Reference/System_Volume_OSD.md` |
 
