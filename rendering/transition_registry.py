@@ -41,6 +41,12 @@ class TransitionDescriptor:
     unavailable_reason: Optional[str] = None
     random_pool_name: Optional[str] = None
     legacy_names: tuple[str, ...] = ()
+    section_key: Optional[str] = None
+
+    @property
+    def settings_section(self) -> str:
+        """The key of this transition's own section under ``transitions`` (most use the stable id)."""
+        return self.section_key or self.stable_id
 
 
 _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
@@ -72,6 +78,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         gl_program_key=WARP,
         compositor_transition_class="GLCompositorBlockSpinTransition",
         requires_hw_accel=True,
+        section_key="blockspin",
     ),
     TransitionDescriptor(
         setting_name="Slide",

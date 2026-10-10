@@ -207,6 +207,14 @@ Family deactivation and ordinary enabled=False remain distinct.
 
 A Defaults Foundry/editor may edit canonical defaults/profile differences, but it is an authoring surface rather than authority. After a save, `tools/default_settings_editor.py` runs `tools/check_defaults_authority.py` in a fresh interpreter (so the written sources are what gets imported) and restores the previous sources if it fails; it generates nothing. Any Foundry must remain import-safe, must not carry its own product-default literals, must strip private/machine-local state on import, and must never mutate installed user settings merely because defaults are being edited.
 
+Finding values (operator UX pass, 2026-10-10): **All Settings** shows every default as stored, each section's loose
+values first and its subsections sorted by label (a transition's own section reads as its Settings name, e.g.
+`blockspin` as 3D Block Spins). **By Transition** gathers each registered transition into one row, named and sorted
+as in Settings, whose value reads On/Off, Random Pool and its duration; opening it shows Activated, In Random Pool,
+Duration and every value of its own section (`TransitionDescriptor.settings_section`), and **All Transitions** holds
+the shared ones. Both views edit the same paths. **Changed Only** shows just the unsaved edits (in the MC view also
+every MC difference); a matching section in a search shows everything inside it.
+
 ## Visualizer / CUSTOM defaults
 
 Visualizer default changes require registry/field-spec, curated preset and import/export review plus

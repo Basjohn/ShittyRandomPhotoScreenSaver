@@ -300,7 +300,7 @@ def resolve_quick_transition_spec(
             rng=rng,
         )
     elif transition_id == "block_spins":
-        section_name = "blockspin"
+        section_name = descriptor.settings_section
         cfg = _section(transitions, defaults, section_name)
         direction = _resolve_direction(
             cfg.get("direction"),

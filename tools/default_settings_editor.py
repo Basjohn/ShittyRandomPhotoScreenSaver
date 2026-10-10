@@ -26,6 +26,8 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -66,6 +68,7 @@ from tools.defaults_foundry_core import (  # noqa: E402
     validate_no_absolute_machine_paths,
     validate_no_private_fields,
 )
+from rendering.transition_registry import iter_transition_descriptors  # noqa: E402
 from ui.styled_popup import ColorSwatchButton  # noqa: E402
 from tools.foundry_chrome import (  # noqa: E402
     FoundryAppearanceDialog,
@@ -88,6 +91,12 @@ PROFILE_LABELS = {
 PATH_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VALUE_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 TYPE_ROLE = int(Qt.ItemDataRole.UserRole) + 3
+TRANSITION_ROLE = int(Qt.ItemDataRole.UserRole) + 4
+VIEW_ALL = "all"
+VIEW_TRANSITIONS = "transitions"
+# Per-transition maps under ``transitions`` keyed by the transition's Settings name, with the
+# label each gets in the By Transition view.
+_TRANSITION_NAME_MAPS = (("activation", "Activated"), ("pool", "In Random Pool"), ("durations", "Duration (ms)"))
 _MISSING = object()
 _NO_DEFAULT = object()
 _PROFILE_MODULE_HEADER = '''"""Profile-specific canonical default overrides.
@@ -558,6 +567,15 @@ def _pretty_name(raw: str) -> str:
     return raw.replace("_", " ").strip().title()
 
 
+def _section_label(path: tuple[str, ...]) -> str:
+    """A section's label: a transition's own section reads as its Settings name."""
+    if len(path) == 2 and path[0] == "transitions":
+        for descriptor in iter_transition_descriptors():
+            if descriptor.settings_section == path[1]:
+                return descriptor.setting_name
+    return _pretty_name(path[-1])
+
+
 def _valid_text_hint(path: tuple[str, ...]) -> str:
     key = path[-1]
     if key == "monitor":
@@ -911,6 +929,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._mc_explicit_paths: set[tuple[str, ...]] = set()
         self._reload_sources_from_disk()
         self._profile = NORMAL_PROFILE
+        self._view = VIEW_ALL
         self._building_tree = False
         self._leaf_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
 
@@ -963,18 +982,40 @@ class DefaultSettingsEditor(QMainWindow):
         )
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         controls.addWidget(self.profile_combo)
-        self.import_button = QPushButton("Import SST / JSON Into Selected Profile")
+        self.view_buttons = QButtonGroup(self)
+        self.view_buttons.setExclusive(True)
+        for view, label, tip in (
+            (VIEW_ALL, "All Settings", "Every default, laid out as it is stored."),
+            (VIEW_TRANSITIONS, "By Transition",
+             "One row per transition, named as in Settings, showing whether it is on, in the Random pool and "
+             "its duration; open it for all of its own settings."),
+        ):
+            button = QPushButton(label)
+            button.setObjectName("cmdTabButton")
+            button.setCheckable(True)
+            button.setChecked(view == VIEW_ALL)
+            button.setToolTip(tip)
+            button.setProperty("view", view)
+            self.view_buttons.addButton(button)
+            controls.addWidget(button)
+        self.view_buttons.buttonClicked.connect(self._on_view_changed)
+        self.import_button = QPushButton("Import SST / JSON")
         self.import_button.setToolTip(
-            "Merge a main-application SST or settings JSON snapshot into the selected defaults view. "
+            "Merge a main-application SST or settings JSON snapshot into the selected Build Profile. "
             "Credentials, source lists, weather location, and machine-local absolute paths are excluded."
         )
         self.import_button.clicked.connect(self._import_snapshot)
-        controls.addWidget(self.import_button)
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search dotted keys, labels, values, or types...")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._apply_filter)
         controls.addWidget(self.search_edit, stretch=1)
+        self.changed_only_check = QCheckBox("Changed Only")
+        self.changed_only_check.setToolTip(
+            "Show only unsaved edits; in the MC view, also every value MC changes from Normal."
+        )
+        self.changed_only_check.toggled.connect(lambda _checked: self._apply_filter(self.search_edit.text()))
+        controls.addWidget(self.changed_only_check)
         self.count_label = QLabel()
         controls.addWidget(self.count_label)
         layout.addLayout(controls)
@@ -1006,6 +1047,7 @@ class DefaultSettingsEditor(QMainWindow):
         self.status_label = QLabel("Ready.")
         self.status_label.setObjectName("defaultsFoundryStatus")
         actions.addWidget(self.status_label, stretch=1)
+        actions.addWidget(self.import_button)
         self.validate_button = QPushButton("Validate / Dry Run")
         self.validate_button.setToolTip(
             "Validate current edits (schema, privacy) and the checked-in defaults without writing files."
@@ -1063,6 +1105,22 @@ class DefaultSettingsEditor(QMainWindow):
         self._profile = str(self.profile_combo.currentData() or NORMAL_PROFILE)
         self._reload_tree()
 
+    def _on_view_changed(self, button: QPushButton) -> None:
+        self.set_view(str(button.property("view")))
+
+    def set_view(self, view: str) -> None:
+        """Show every default as stored (``VIEW_ALL``) or grouped per transition (``VIEW_TRANSITIONS``)."""
+        self._view = view
+        for button in self.view_buttons.buttons():
+            button.setChecked(button.property("view") == view)
+        self._reload_tree()
+
+    def _is_changed(self, path: tuple[str, ...]) -> bool:
+        current = get_path(self._models[self._profile], path, _MISSING)
+        if current != get_path(self._initial_models[self._profile], path, _MISSING):
+            return True
+        return self._profile == MC_PROFILE and self._origin_for(path) == "MC override"
+
     def _origin_for(self, path: tuple[str, ...]) -> str:
         if self._profile == NORMAL_PROFILE:
             return (
@@ -1086,47 +1144,126 @@ class DefaultSettingsEditor(QMainWindow):
         self.tree.clear()
         self._leaf_items.clear()
         model = self._models[self._profile]
-
-        def _add(parent: QTreeWidgetItem | None, key: str, value: Any, path: tuple[str, ...]) -> None:
-            if path_is_under(path, NON_EDITABLE_PREFIXES):
-                return
-            container = self.tree if parent is None else parent
-            if isinstance(value, Mapping) and value:
-                item = QTreeWidgetItem(container, [_pretty_name(key), "", "section", ""])
-                item.setData(0, PATH_ROLE, None)
-                item.setForeground(0, self._theme_qcolor("window.titlebar.text"))
-                item.setFont(0, QFont("Jost", 10, QFont.Weight.Bold))
-                item.setToolTip(0, _SECTION_DESCRIPTIONS.get(path[0], f"{_pretty_name(key)} settings"))
-                for child_key, child_value in value.items():
-                    _add(item, str(child_key), child_value, (*path, str(child_key)))
-                return
-
-            item = QTreeWidgetItem(
-                container,
-                [_pretty_name(key), format_value(value), value_type_name(value), self._origin_for(path)],
-            )
-            item.setData(0, PATH_ROLE, path)
-            item.setData(1, PATH_ROLE, path)
-            item.setData(1, VALUE_ROLE, deepcopy(value))
-            item.setData(1, TYPE_ROLE, value_type_name(value))
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-            if _is_color_setting(path, value):
-                item.setIcon(1, _color_icon(value))
-            tooltip = setting_tooltip(path, value, self._profile)
-            for column in range(4):
-                item.setToolTip(column, tooltip)
-            if value != get_path(self._initial_models[self._profile], path, _MISSING):
-                item.setForeground(1, self._theme_qcolor("popup.icon.warning"))
-            self._leaf_items[path] = item
-
-        for top_key, top_value in model.items():
-            _add(None, str(top_key), top_value, (str(top_key),))
+        if self._view == VIEW_TRANSITIONS:
+            self._build_transition_view(model)
+        else:
+            for top_key, top_value in model.items():
+                self._add_setting(None, str(top_key), top_value, (str(top_key),))
         for index in range(self.tree.topLevelItemCount()):
             self.tree.topLevelItem(index).setExpanded(False)
         self._building_tree = False
         self.count_label.setText(f"{len(self._leaf_items)} settings")
         self._apply_filter(self.search_edit.text())
         self._set_status(f"Viewing {PROFILE_LABELS[self._profile]} defaults.")
+
+    def _add_section(self, container, label: str, tooltip: str) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(container, [label, "", "", ""])
+        item.setData(0, PATH_ROLE, None)
+        item.setForeground(0, self._theme_qcolor("window.titlebar.text"))
+        item.setFont(0, QFont("Jost", 10, QFont.Weight.Bold))
+        item.setToolTip(0, tooltip)
+        return item
+
+    def _add_setting(self, parent: QTreeWidgetItem | None, key: str, value: Any, path: tuple[str, ...],
+                     label: str | None = None) -> None:
+        if path_is_under(path, NON_EDITABLE_PREFIXES):
+            return
+        container = self.tree if parent is None else parent
+        if isinstance(value, Mapping) and value:
+            section_label = label or _section_label(path)
+            item = self._add_section(
+                container, section_label, _SECTION_DESCRIPTIONS.get(path[0], f"{_pretty_name(key)} settings")
+                if len(path) == 1 else f"{section_label}\n\nKey: {'.'.join(path)}")
+            # Loose values first (as stored), so they never hide between subsections; then the
+            # subsections by label.
+            loose = [(k, v) for k, v in value.items() if not (isinstance(v, Mapping) and v)]
+            nested = sorted(((k, v) for k, v in value.items() if isinstance(v, Mapping) and v),
+                            key=lambda entry: _section_label((*path, str(entry[0]))).lower())
+            children = loose + nested
+            for child_key, child_value in children:
+                self._add_setting(item, str(child_key), child_value, (*path, str(child_key)))
+            return
+
+        item = QTreeWidgetItem(
+            container,
+            [label or _pretty_name(key), format_value(value), value_type_name(value), self._origin_for(path)],
+        )
+        item.setData(0, PATH_ROLE, path)
+        item.setData(1, PATH_ROLE, path)
+        item.setData(1, VALUE_ROLE, deepcopy(value))
+        item.setData(1, TYPE_ROLE, value_type_name(value))
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        if _is_color_setting(path, value):
+            item.setIcon(1, _color_icon(value))
+        tooltip = setting_tooltip(path, value, self._profile)
+        for column in range(4):
+            item.setToolTip(column, tooltip)
+        if value != get_path(self._initial_models[self._profile], path, _MISSING):
+            item.setForeground(1, self._theme_qcolor("popup.icon.warning"))
+        self._leaf_items[path] = item
+
+    def _build_transition_view(self, model: Mapping[str, Any]) -> None:
+        transitions = model.get("transitions", {})
+        if not isinstance(transitions, Mapping):
+            return
+        general = self._add_section(self.tree, "All Transitions",
+                                    "Settings shared by every transition: the current one, Random, timing.")
+        for key, value in transitions.items():
+            if not isinstance(value, Mapping):
+                self._add_setting(general, str(key), value, ("transitions", str(key)))
+        claimed = {name for name, _label in _TRANSITION_NAME_MAPS}
+        named: dict[str, set[str]] = {name: set() for name, _label in _TRANSITION_NAME_MAPS}
+        for descriptor in sorted(iter_transition_descriptors(), key=lambda item: item.setting_name.lower()):
+            node = self._add_section(
+                self.tree, descriptor.setting_name,
+                f"{descriptor.setting_name}: Settings -> Transitions -> {descriptor.setting_name}.")
+            node.setData(0, TRANSITION_ROLE, descriptor.setting_name)
+            for map_key, label in _TRANSITION_NAME_MAPS:
+                entries = transitions.get(map_key)
+                name = descriptor.random_pool_name or descriptor.setting_name if map_key == "pool" else descriptor.setting_name
+                if isinstance(entries, Mapping) and name in entries:
+                    named[map_key].add(name)
+                    self._add_setting(node, name, entries[name], ("transitions", map_key, name), label=label)
+            section = transitions.get(descriptor.settings_section)
+            if isinstance(section, Mapping):
+                claimed.add(descriptor.settings_section)
+                for key, value in section.items():
+                    self._add_setting(node, str(key), value, ("transitions", descriptor.settings_section, str(key)))
+            self._refresh_transition_summary(node)
+        other = None
+        for key, value in transitions.items():
+            if not isinstance(value, Mapping):
+                continue
+            if key in claimed:
+                if key in named:
+                    for name, entry in value.items():
+                        if name not in named[key]:
+                            other = other or self._add_section(
+                                self.tree, "Other Transition Settings", "Stored values that match no transition.")
+                            self._add_setting(other, str(name), entry, ("transitions", key, str(name)),
+                                              label=f"{name} ({_pretty_name(key)})")
+                continue
+            other = other or self._add_section(self.tree, "Other Transition Settings",
+                                               "Stored values that match no transition.")
+            self._add_setting(other, str(key), value, ("transitions", str(key)))
+
+    def _refresh_transition_summary(self, node: QTreeWidgetItem) -> None:
+        name = node.data(0, TRANSITION_ROLE)
+        if not name:
+            return
+        model = self._models[self._profile].get("transitions", {})
+        parts = []
+        activation = model.get("activation", {}).get(name)
+        if isinstance(activation, bool):
+            parts.append("On" if activation else "Off")
+        descriptor = next((item for item in iter_transition_descriptors() if item.setting_name == name), None)
+        pool_name = (descriptor.random_pool_name if descriptor else None) or name
+        if model.get("pool", {}).get(pool_name) is True:
+            parts.append("Random Pool")
+        duration = model.get("durations", {}).get(name)
+        if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+            parts.append(f"{int(duration):,} ms")
+        node.setText(1, " · ".join(parts))
 
     def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
         if self._building_tree or column != 1:
@@ -1145,6 +1282,9 @@ class DefaultSettingsEditor(QMainWindow):
             self._mc_explicit_paths.add(path)
         self._building_tree = True
         try:
+            parent = item.parent()
+            if parent is not None:
+                self._refresh_transition_summary(parent)
             item.setText(3, self._origin_for(path))
             item.setIcon(1, _color_icon(value) if _is_color_setting(path, value) else QIcon())
             initial = get_path(self._initial_models[self._profile], path, _MISSING)
@@ -1160,23 +1300,29 @@ class DefaultSettingsEditor(QMainWindow):
 
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
+        changed_only = self.changed_only_check.isChecked()
 
-        def _visit(item: QTreeWidgetItem) -> bool:
-            child_match = False
-            for index in range(item.childCount()):
-                child_match = _visit(item.child(index)) or child_match
+        def _visit(item: QTreeWidgetItem, ancestor_matched: bool) -> bool:
             own = " ".join(item.text(column) for column in range(4)).lower()
             path = item.data(0, PATH_ROLE) or item.data(1, PATH_ROLE)
             if isinstance(path, tuple):
                 own += " " + ".".join(path).lower()
-            matches = not needle or needle in own or child_match
+            # A matching section shows everything inside it.
+            own_match = not needle or needle in own or ancestor_matched
+            child_match = False
+            for index in range(item.childCount()):
+                child_match = _visit(item.child(index), own_match and bool(needle)) or child_match
+            if isinstance(path, tuple):
+                matches = own_match and (not changed_only or self._is_changed(path))
+            else:
+                matches = child_match or (own_match and not changed_only and item.childCount() == 0)
             item.setHidden(not matches)
-            if needle and child_match:
+            if (needle or changed_only) and child_match:
                 item.setExpanded(True)
             return matches
 
         for index in range(self.tree.topLevelItemCount()):
-            _visit(self.tree.topLevelItem(index))
+            _visit(self.tree.topLevelItem(index), False)
 
     def _set_status(self, message: str) -> None:
         self.status_label.setText(message)
