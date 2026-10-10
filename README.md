@@ -1,131 +1,179 @@
+
 # ShittyRandomPhotoScreenSaver (SRPSS)
+
 <img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
-ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
+ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
+<img width="100%" alt="SRPSS running with the Bubble visualizer across a wide desktop" src="https://github.com/user-attachments/assets/2f7273e4-3e91-4491-88c2-a00d31cc514f" />
 
-<img width="3825" height="2159" alt="widebubble" src="https://github.com/user-attachments/assets/2f7273e4-3e91-4491-88c2-a00d31cc514f" />
+**It's a random wallpaper screensaver, a multi-monitor display, a widget dashboard, a media controller, gmail notifier, reddit aggrigator, news reader with images, custom rss feed dashboard and a disturbingly configurable audio visualizer.** You can use as much or as little of that as you want. AlsoisbasicallyafuckingcustomopenglengineatthispointtoobecauseIhaveboundaryissuesorsomething.
 
+[**Download the latest release**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/latest) · [**All releases**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases) · [**Installation**](#installation--usage-windows-10--11) · [**Controls**](#keyboard--mouse-controls)
 
+### At a glance
+
+| Feature | Current source catalogue |
+| --- | ---: |
+| Image transitions | **25** registered effects |
+| Audio-reactive visualizers | **8** modes |
+| Feed cards | **10** (4 custom + 6 news) |
+| Widget families | **10** |
+| Custom layout slots | **10** (keys `0`–`9`) |
+
+Transition and Visualizer availability is COMPLETELY configurable so you can disable or enable whatever you want.
+---
+
+## Feet Chores
+
+### Wallpapers, sources and displays
+
+- **Random image slideshow:** Choose one or several local folders, including subfolders, for your wallpaper library.
+- **Online wallpaper feeds:** Optional RSS/JSON image sources, including curated Reddit wallpaper feeds. Press **Just Make It Work** if you don't feel like finding them yourself.
+- **Mix local and online:** Use both together, with a ratio slider to control the balance.
+- **Image presentation:** High-quality scaling, optional sharpening, pan & scan and configurable timing.
+- **Multiple monitors:** Mirror an image across screens or run independent image selections and transitions per display. Choose which displays participate.
+- **Keep and reject images:** **Images → Save Image**, **Ban Image**, and **Clear Image Bans** are available from the running saver's context menu. Bans persist across sessions, so unwanted wallpapers stay out of subsequent rotation until cleared.
+- **Transitions:** Simple fades and wipes through to glass, particles, 3D surfaces, fracturing and other less reasonable choices. Choose an effect, tune its controls, or enable effects for the Random pool.
+
+### Audio, media and visualizers
+
+- **Now-playing media widget:** Spotify/MusicBee/AppleMusic/Browser integration with artwork, playback information and optional media controls; MusicBee plugin information is available in Settings.
+- **Audio-reactive Beat Visualizer:** **8 registered modes** with mode-specific tuning, editable curated presets and a separate user-owned **Custom** state. Overly robust and feature filled af. Available modes include:
+  - **Spectrum**
+  - **Oscilloscope**
+  - **Sine Waves**
+  - **Bubble**
+  - **Spline Curve** (Dev Curve)
+  - **Voxel Sphere** (3D)
+  - **Extruded Spectrum** (3D)
+  - **Shockwave Grid** (3D)
+- **Properly adjustable 3D views like it's 2002:** Orbit the applicable 3D visualizers, move or resize their stage and preserve your poorly chosen viewpoint. Alt-Left to rotate, Alt-Scroll to resize and Alt-Right to drag 3D Visualizers.
+- **System Audio OSD:** Optional reminder that you are always being watched when this pops up from small sound adjustments.
+
+### Widgets, feeds and everything else
+
+- **GMAIL:** IMAP unread-mail notifications and an interactive inbox summary. Custom sounds, full moldable display.
+- **Clocks:** Up to **three** clocks, analogue or digital, 12/24-hour time, different time zones and optional weekday/date rows.
+- **Weather:** Open-Meteo weather without an API key. First-run location detection is available, but city autocomplete is there for when geolocation inevitably has ideas of its own.
+- **Reddit:** Two configurable subreddit widgets. Click posts to visit their comments because no one reads the articles/links anyway.
+- **STEAM:** Achievement Pulse (**Your glorious work.**), Abandonment Issues (**Your backlog.**), Friend Pulse (**Your people.**) and Games You Follow (**news from the games you actually follow**).
+- **FEEDS:** **Ten** independent cards: **Custom 1–4** (RSS/Atom/JSON/h-feed sources) and **six News categories** (World, US, Politics, Gaming, Tech and Anime). List/Grid/Compact presentation, optionally cached article images and clickable stories.
+- **System Stats:** An optional system-information card for CPU, memory and other selectable system metrics.
+
+### Customizability
+
+- **Edit Mode:** Right-click to edit and move, resize or reposition widgets however your kinky ass wants. Edit works across displays and includes child-widget adjustment, snapping, reset and undo. Save or cancel changes explicitly. Child editing is accessed not only through poor real life decisions but also clicking the little lock inside each widget while editing.
+- **Ten saved layouts:** `Shift+0` through `Shift+9` save your current arrangement; `0` through `9` recall one while the saver is running.
+- **Guided Setup & Quick Start:** Set up sources, displays, themes, accounts and widget arrangements without digging through every advanced option. Quick Start can be reopened later.
+- **Separate themes:** Customizable Settings themes and widget themes, including Windows (vista but shut the fuck up about it) glass/acrylic-inspired presentation and configurable card styling.
+- **Accessibility/display options:** Background brightness dimming and pixel shifting, alongside display and interaction controls.
+- **Interaction Mode:** Keep the saver open while interacting with widgets. Normal cursor movement needn't exit it; `Ctrl` can temporarily expose the interaction halo when needed.
+- **Media Center (MC) builds:** Designed especially for keeping the display running as an interactive, always-on dashboard.
 
 ---
 
-## Developer Python toolchain
+## Transition gallery
 
-Windows development and frozen builds use a single standard-GIL CPython 3.14 x64 repo-root `.venv`. See [`Docs/Guides/Python314_Cutover.md`](Docs/Guides/Python314_Cutover.md) for the destructive operator-authorized cutover and MSVC build requirements. The operator has accepted the source migration and focused Windows tests; frozen-product build and packaging acceptance remain operator-run.
+Some fancy ass transition effects are below, expand each group to see its fancy-ass-ness and hopefully not make your browser memory eat dirt. 
 
-## Features
-A look at the current features. Developer contracts and work-in-progress details live under `Docs/`.
+**Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:**
+<details>
 
-- **Random Image Slideshow**
-  - Local folders (recursive) as primary source
-  - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds) with a one click "Just Make It Work" button to fill feeds for you.
-  - Mixed mode (folders + RSS) support with ratio control
-  - High‑quality scaling with optional sharpening
-  - **Transitions** are registry-driven and include everything from the simple classics (Crossfade, Slide, Wipe, Ripple) to the considerably less sensible 3D/material effects such as Glass Shatter, Exploding Tiles, Page Curl, Accordion Fold, Relief Rise and Cube Turn. The application registry is the catalog authority; `Docs/Reference/Transitions.md` documents effect-specific behavior without freezing a transition count into the README.
 
-  - Multi‑monitor aware: same image on all screens or independent images per screen
+<details>
+<summary><b>Fracture, particles and destruction · 9 transitions</b></summary>
 
-- **Overlay widgets**
-  - **GMAIL** Via Imap with customizable notifications, control from inside the app/saver etc.
-  - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
-  - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
-  - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. Registry-driven 2D/3D modes include Bubble, Spectrum, Oscilloscope, Curve/Dev Curve, Sine, Extruded Spectrum, Shockwave Grid and Voxel Sphere as a standard mode, with curated presets and a user-owned Custom slot. The source registry owns the catalog, so documentation and tooling do not depend on a fixed mode count.
-  - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
-  - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
-  - **FEEDS** Ten retained feed cards: four Custom RSS/Atom/JSON/h-feed slots plus six News categories, with List/Grid/Compact layouts, optional locally cached article artwork, clickable HTTP/S stories and validated magnet actions.
-  - **System Audio OSD** Optional retained master-volume/mute overlay driven from the shared Windows audio source.
+#### Glass Shatter
+<!-- WebP: Glass Shatter -->
 
-- **Custom Layouts**
+#### Exploding Tiles
+<!-- WebP: Exploding Tiles -->
 
-  - **Edit Mode** Right click, go into edit mode and resize and repositions widgets however your kinky ass wants, right click save to confirm it.
-  - **Layout Slots** Use Shift+1/2/3/4/5/6/7/8/9/0 to save your current layout and 1/2/3/4/5/6/7/8/9/0 to bring it back at any point.
+#### Crumble
+<!-- WebP: Crumble -->
 
-- **Settings dialog (config mode)**
-  - Dark, fully themeable, frameless UI
+#### Disintegrate
+<!-- WebP: Disintegrate -->
 
-  ## This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
-  <img width="2038" height="1247" alt="image" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
+#### Particle
+<!-- WebP: Particle -->
 
-  - Tabs:
-    - **Sources** – folders + RSS/JSON feeds
-    - **Display** – mode, interval, sharpen, pan & scan, monitor selection
-    - **Transitions** – transition type, duration, directions, per‑type tuning
-    - **Widgets** – clocks, weather, media, Reddit, Gmail, Steam families, FEEDS, System Stats and the optional system-audio OSD (You'll need to configure these to your liking! Geolocation is kinda shit.)
-    - **Visualizers** – mode selection, presets/Custom state and per-mode presentation/reactivity controls.
-    - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
-    - **Themes** – Settings and Widget theme selection/customisation.
-    - **About** – version, credits, SST/JSON-based settings Import/Export, emergency defaults button and preset import/export.
-    - **Quick Start** – lazy guided shortcuts for setup and layout changes after first run.
+#### Burn
+<!-- WebP: Burn -->
 
-- **Interaction Mode & Interaction Gating**
-  - Optional "Interaction" mode: ordinary mouse movement/clicks no longer exit; explicit external-link actions can hand off to the desktop and exit cleanly.
-  - Ctrl‑driven halo to interact with overlays (e.g. media controls and admitted Reddit/Gmail/FEEDS/Steam actions) while the screensaver stays active.
+#### Directional Pixel Accretion
+<!-- WebP: Directional Pixel Accretion -->
 
-  Why? Because you can actually click the things that are meant to be clicked: Reddit/Gmail/FEEDS/Steam links and media controls. I never clicked the clock or weather though, you probably shouldn't try it.
+#### Volumetric Dissolve
+<!-- WebP: Volumetric Dissolve. Newly registered; check physical/release acceptance. -->
 
-  Ctrl holding gives you a temporary interaction mode that lets you move/see/click the mouse without exiting. An admitted external-link action can then hand off to the desktop and close the saver normally.
+#### Jigsaw Piece Flip
+<!-- WebP: Jigsaw Piece Flip. Distinct from the older Block Puzzle Flip; check physical/release acceptance. -->
 
-  Interaction Mode on the other hand keeps ordinary pointer interaction inside the saver; `Esc`/`Q`, the context menu and explicit external-link handoff remain exit paths. (This is replicated in the SRPSS_MC release version)
-  While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
+</details>
 
-  MC/Media Center Builds are designed for Interaction Mode especially. These come with it turned on and run in the background with minimal resource usage.
+<details>
+<summary><b>3D surfaces, materials and reveals · 7 transitions</b></summary>
 
-  (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)
+#### Cube Turn
+<!-- WebP: Cube Turn -->
+
+#### Relief Rise
+<!-- WebP: Relief Rise -->
+
+#### Accordion Fold
+<!-- WebP: Accordion Fold -->
+
+#### Page Curl
+<!-- WebP: Page Curl -->
+
+#### Ink Bloom
+<!-- WebP: Ink Bloom -->
+
+#### Melt Drip
+<!-- WebP: Melt Drip -->
+
+#### Beam
+<!-- WebP: Beam -->
+
+</details>
+
+<summary><b>Classic, patterned and screen-space effects · 9 transitions</b></summary>
+
+#### Crossfade
+<!-- WebP: Crossfade -->
+
+#### Slide
+<!-- WebP: Slide -->
+
+#### Wipe
+<!-- WebP: Wipe -->
+
+#### Ripple
+<!-- WebP: Ripple -->
+
+#### Diffuse
+<!-- WebP: Diffuse -->
+
+#### Warp Dissolve
+<!-- WebP: Warp Dissolve -->
+
+#### 3D Block Spins
+<!-- WebP: 3D Block Spins -->
+
+</details>
 ---
 
-Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
-<img width="600" height="337" alt="SSRPSTrOnly" src="https://github.com/user-attachments/assets/38e2984a-f37b-41c5-a3aa-1bd2b7ffd288" />
+## Settings dialog
 
+### This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
 
-## Keyboard & Mouse Controls
+<img width="100%" alt="SRPSS settings dialog showing its custom theme and controls" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
 
-### While the screensaver is running
+It's a dark, fully themeable, frameless interface that even simulates DWM transparency from the Vista era.
 
-- **Hotkeys (do not exit)**
-  -  'Z'             - Previous image
-  -  'X'             - Next image
-  -  'C'             - Cycle transition type
-  -  'W/A/S/D'       - With a 3D Visualizer showing (Extruded Spectrum, Shockwave Grid): orbit its view live; saved
-                       when you let go (or hold Alt and drag it with the left mouse button in Interaction mode)
-  -  'Alt + right drag' - In Interaction mode, move a shown 3D Visualizer without Edit (no context menu while Alt is
-                       held on it); saved when you let go
-  -  'Alt + wheel'   - In Interaction mode, resize a shown 3D Visualizer without Edit; saved when you release Alt
-  -  'PgUp/PgDown'   - Global Volume Up/Down
-  -  'Spacebar'      - Play/Pause
-  -  'Home'          - Global Media Play Pause
-  -  'END'           - Global System Mute On/Off
-
-- **Exit keys (always exit)**
-  - `Esc` – Exit screensaver
-  - `Q` – Exit screensaver
-
-- **Mouse**
-  - **Normal mode** (Interaction Mode OFF):
-    - Move the mouse beyond a small threshold → exits the screensaver.
-    - Any mouse button click → exits the screensaver.
-  - **Interaction mode** (Interaction ON):
-    - Mouse movement and clicks **do not exit**, Double Clicks advance to the next image; use `Esc` or `Q` or the context menu to exit.
-  - **Right Click Context Menu**
-    - Right Click while holding Ctrl and a glorious context menu is born.
-    - Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
-    -
-
-- **Ctrl Halo interaction**
-  - Hold `Ctrl` to show a halo/cursor proxy over the active display.
-  - While Ctrl/halo is active, mouse clicks can interact with overlay widgets
-    (e.g. media controls and admitted Reddit/Gmail/FEEDS/Steam actions) without immediately exiting.
-  - Right Click while holding Ctrl and a glorious context menu is born.
-
----
-
-## Settings Dialog
-
-You can open the settings dialog in two ways:
-
-- From Windows Screen Saver Settings, by clicking **Settings...** for SRPSS (see below).
-- From your precious right-click context menu on the running screensaver.
+You can open it from **Windows Screen Saver Settings → Settings...**, or from your precious right-click context menu while SRPSS is running.
 
 The settings dialog lets you:
 
@@ -134,63 +182,110 @@ The settings dialog lets you:
 - DEVOUR EVERYTHING.
 - BECOME ONE.
 
-It also is a riduclously pretty looking thing that even simulates DWM transparency from the Vista era.
+<details>
+<summary><b>Settings pages and what lives in them</b></summary>
 
-Settings are persisted between runs; controls with continuous input commit on their normal completion/release path rather than writing to disk for every pointer increment. Edit-mode widget layout changes use the explicit Save/Cancel workflow.
+- **Sources:** Local folders and online wallpaper feeds, plus **Just Make It Work**.
+- **Display:** Screen selection, slideshow mode and interval, sharpening, pan & scan and interaction/display options.
+- **Transitions:** Activate effects, select the Random pool, set duration/direction and tune individual transitions.
+- **Widgets:** Clocks, Weather, Media, Reddit, Gmail, Steam, FEEDS, System Stats and the optional volume/mute OSD. You'll need to configure these to your liking! Geolocation is kinda shit.
+- **Visualizers:** Mode activation/selection, curated presets, Custom and per-mode appearance/reactivity settings.
+- **Accessibility:** Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
+- **Themes:** Choose/customize separate Settings and Widget themes.
+- **About:** Version, credits, SST/JSON settings import/export, preset import/export and emergency defaults.
+- **Quick Start:** Reopen the guided setup/arrangement flow after first run.
+
+</details>
+
+<details>
+<summary><b>Settings persistence and preset ownership</b></summary>
+
+Settings persist between runs. Continuous controls save on their normal completion/release path rather than writing to disk for every pointer movement. Edit-mode layouts have an explicit Save/Cancel workflow.
+
+Curated Visualizer presets and your authored preset files are separate. **Back up your presets before reinstalling, importing settings or resetting anything.** Don't assume a shipped preset and a user-owned preset are the same thing.
+
+</details>
 
 ---
 
-## Installation & Usage (Windows 10 / 11)
+## Interaction Mode & interaction gating
 
-Download a version, ideally the setup version if you want it to actually work.
+**Why?** Because you can actually click the things that are meant to be clicked: Reddit/Gmail/FEEDS/Steam links and media controls. I never clicked the clock or weather though, you probably shouldn't try it.
 
-### 1. Run the installer.
+- **Normal screensaver mode:** Ordinary mouse movement or clicks exit the saver. Hold `Ctrl` to reveal the temporary interaction halo so you can operate supported overlays without exiting.
+- **Interaction Mode:** Ordinary pointer movement and clicks stay inside SRPSS. External-link actions can hand off to the desktop and close the saver cleanly. `Esc`, `Q` and the context menu remain explicit exit paths.
+- **Media Center builds:** Interaction Mode is enabled by design. You can select one or more displays and leave SRPSS running as a widget dashboard.
 
-1. Yeah that's literally it.
-2. Really.
+While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
-- Back up your own visualizer presets before reinstalling or resetting settings. Shipped presets and user-authored presets have separate ownership; do not assume a normal installer run will overwrite user files.
+*(If you have an OLED nothing is gonna stop burn in except a black screen but you know that already.)*
 
-### 2. Set SRPSS as your screensaver
+---
 
-Check the open screensaver settings box in the installer (or leave it checked) and it will even take your lazy ass there.
+## Keyboard & mouse controls
 
-In the **Screen Saver Settings** dialog:
+<details>
+<summary><b>Keyboard shortcuts while the screensaver is running</b></summary>
 
-1. Open the **Screen saver** dropdown.
-2. Select **SRPSS** (this is the name of the `SRPSS.scr` file).
-3. Optionally adjust **Wait** time and **On resume, display logon screen**.
-4. Click **Apply** and **OK**.
+| Key | Action |
+| --- | --- |
+| `Cntrl + Right Click` | Open Context Menu
+| `Double Right Click Empty Space` | Enter Edit Mode
+| `Double Left Click Empty Space` | Save and Leave Edit Mode
+| `Z` / `X` | Previous / next image |
+| `C` | Cycle transition type |
+| `Shift+0`–`Shift+9` | Save a layout slot |
+| `0`–`9` | Recall a layout slot |
+| `W` / `A` / `S` / `D` | Orbit a shown Extruded Spectrum or Shockwave Grid in 3D; viewpoint saves on release |
+| `PgUp` / `PgDown` | System volume up / down |
+| `Space` | Play/pause |
+| `Home` | Global media play/pause |
+| `End` | Global system mute toggle |
+| `Esc` / `Q` | Exit the screensaver |
 
-### 3. Settings
 
-  - Set your sources! Either a folder (or multiple) on your system with your wallpapers or RSS/JSON feeds or....both with a weird ratio slider!
-  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.
-  - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
-  - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
-  - Reddit can be set to any kinky ass subreddit you want.
+</details>
 
-- If you change sources, apply the Settings changes and launch the screensaver normally; a first-run shutdown is not a supported setup step.
+<details>
+<summary><b>Mouse, interaction halo and 3D visualizer gestures</b></summary>
 
-### 4. Layout
+- **Normal mode:** Moving the mouse beyond a small threshold, or clicking a mouse button, exits the screensaver unless the temporary `Ctrl` interaction halo is active.
+- **Interaction Mode ON:** Mouse movement and regular clicks do not exit. Double-clicking advances to the next image.
+- **Hold `Ctrl`:** Reveal the interaction halo/cursor proxy for admitted widget actions.
+- **`Ctrl` + right-click:** Open the glorious context menu.
+- **Alt + left-drag on a 3D visualizer:** Orbit the applicable 3D view, including Voxel Sphere.
+- **Alt + right-drag on a 3D visualizer:** Move its stage without entering Edit Mode (Interaction Mode).
+- **Alt + mouse wheel on a 3D visualizer:** Resize its stage without entering Edit Mode (Interaction Mode).
 
-  - Right Click (With CNTRL held or Interaction Mode on) to open your betrothed context menu and choose Edit.
-  - In this sexy new mode drag around the widgets, resize them by the corners or your scroll wheel however you like, even across displays.
-  - When things look positioned like you'd like choose save in the context menu (or press enter like a bitch who cannot handle context menus) and it will apply.
-  - Revert in Edit is for going back to non-custom mode or saving yourself from weird changes. Each widget has a reset button in Edit mode and the Spotify widget even has an extra one for if the visualizer gets lost.
+Right Click while holding Ctrl and a glorious context menu is born.
 
+Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
+
+</details>
+
+---
+
+
+Useful documentation for completely acceptable stealing of any code:
+
+- [`Index.md`](Index.md): project documentation map.
+- [`Docs/00_PROJECT_OVERVIEW.md`](Docs/00_PROJECT_OVERVIEW.md): architecture and project position.
+- [`Docs/Reference/Transitions.md`](Docs/Reference/Transitions.md): transition catalogue behaviour and controls.
+- [`Docs/Reference/Visualizer_Reference.md`](Docs/Reference/Visualizer_Reference.md): Visualizer modes and presentation.
+- [`Docs/Reference/Feeds.md`](Docs/Reference/Feeds.md): feed card capabilities.
+- [`Docs/Reference/Release_Media.md`](Docs/Reference/Release_Media.md): animated WebP showcase generation.
+- [`Current_Plan.md`](Current_Plan.md): work currently in progress and outstanding acceptance.
+
+</details>
+
+---
 
 ## Credits
 
-Jayde Ver Elst/Basjohn
+Jayde Ver Elst / Basjohn
+
 Did you know I'm actually a published [author](https://www.goodreads.com/book/show/25006763-usu)? No? How could writing this cringe get published? I don't know either, and neither do most readers apparently.
 
-https://basmilius.github.io/ For the pillaged weather icons!
+[basmilius.github.io](https://basmilius.github.io/) for the pillaged weather icons!
 
 This README focuses on wasting your time.
-
-### Image exclusions and Sphere orbit
-
-While the screensaver is running, **Images → Ban Image** rejects the currently displayed wallpaper for subsequent rotation on every display. **Images → Clear Image Bans** is the explicit reset. Only hashed image identities persist; a runtime digest set is loaded once when bans exist, not written to Settings. Active image queues exclude banned sources up front, so even a mostly banned library has no ban checks, file operations or skip loops during ordinary rotation. Clearing bans restores eligible sources without refreshing folders. Windows validation for these actions is tracked in `Current_Plan.md`.
-
-Voxel Sphere supports Alt+left-drag camera orbit. The drag-release momentum tail gradually settles on the existing animation clock without interrupting Sphere's continuous authored spin; its new behavior awaits physical acceptance.
