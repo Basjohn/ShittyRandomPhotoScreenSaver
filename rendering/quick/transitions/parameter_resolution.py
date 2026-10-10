@@ -25,6 +25,8 @@ from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
 from rendering.gl_programs.surface_tension_program import TENSION_POOLS_RANGE
 from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
 from rendering.gl_programs.chromatic_shear_program import SHEAR_SLICES_RANGE
+from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEPS
+from rendering.gl_programs.depth_cascade_program import CASCADE_CARDS_RANGE
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -989,6 +991,25 @@ def _resolve_chromatic_shear(
     })
 
 
+def _resolve_depth_cascade(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "depth_cascade")
+    defaults = _canonical("depth_cascade")
+    sweep = CASCADE_SWEEPS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if sweep is None:
+        sweep = str(rng.choice(tuple(CASCADE_SWEEPS.values())))
+    low, high = CASCADE_CARDS_RANGE
+    return _finish(sweep, {
+        "seed": _seed(rng),
+        "cards": max(low, min(high, _integer(_value(cfg, defaults, "cards"), int(defaults["cards"])))),
+        "shadows": _bool(_value(cfg, defaults, "shadows"), bool(defaults["shadows"])),
+        **_surface_values(cfg, defaults, ("gloss",)),
+        **resolve_scene_quality(settings, cfg, defaults),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -1011,6 +1032,7 @@ _RESOLVERS = {
     "membrane": _resolve_membrane,
     "surface_tension": _resolve_surface_tension,
     "chromatic_shear": _resolve_chromatic_shear,
+    "depth_cascade": _resolve_depth_cascade,
 }
 
 

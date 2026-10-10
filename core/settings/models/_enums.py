@@ -40,6 +40,7 @@ class TransitionType(Enum):
     MEMBRANE_TURNOVER = "Membrane Turnover"
     SURFACE_TENSION = "Surface Tension Merge"
     CHROMATIC_SHEAR = "Chromatic Shear"
+    DEPTH_CASCADE = "Depth Card Cascade"
 
 
 class WidgetPosition(Enum):
