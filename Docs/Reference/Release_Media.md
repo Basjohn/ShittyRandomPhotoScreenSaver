@@ -38,10 +38,12 @@ capture should combine the genuine images when the operator runs M1, never subst
 originals fail loudly, never a substitute), picks an ordered scene pair and the first run's seed at random each generation (recorded in the
 manifest; a new pick never stales an entry), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
 then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
-twice in a row read as a mistake) at twice 480x270 and 30 fps; the encoder adds a 350 ms rest at both loop ends (both
+twice in a row read as a mistake) at twice 480x270 and 24 fps; the encoder adds a 350 ms rest at both loop ends (both
 on the first picture, so the loop is seamless). Published at 480x270, strictly under 10,000,000 bytes; frame rate
-holds 480 px at 30 fps and plays a long run faster (x0.85, x0.72, x0.6) before dropping to 24/20 fps; the
-width never shrinks; quality stays 95. Output frames map to source frames rounding halves up (a 350 ms rest is
+has **parity**: every showcase plays at 24 fps, 480 px wide and its authored speed (operator direction:
+some moving faster than others unnerves a viewer); one that does not fit steps only its quality down
+(95, 92, 90, 88, 85, 82, 80) and fails loudly below that. Measured: Block Spins Reflection 9.80 MB at q90
+(11.8 MB at q92); Refraction needed q88 and, with Both, is not showcased (operator direction). Output frames map to source frames rounding halves up (a 350 ms rest is
 10.5 frames at 30 fps, and round-half-to-even showed every other motion frame twice: 15 fps motion until
 2026-10-10) (raised from 92 at operator request; measured, neither
 the Lanczos downscale nor q92 blurred: decoded frames keep 96-99% of the lossless frames' Laplacian sharpness, so

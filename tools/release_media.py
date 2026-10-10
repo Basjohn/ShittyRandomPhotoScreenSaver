@@ -36,14 +36,18 @@ MANIFEST = "release_media.json"
 USU_SCENES = tuple(ROOT / "assets" / "usu" / "scenes" / f"UsuScene{index}.png" for index in range(1, 5))
 TRANSITION_OUTPUT = ROOT / "assets" / "webp"
 TRANSITION_WIDTH = 480
-TRANSITION_FPS = 30
+# Parity (operator direction): every showcase plays at the same frame rate and its authored speed,
+# so none looks faster than another. Only a transition that does not fit steps its quality down.
+TRANSITION_FPS = 24
 TRANSITION_QUALITY = 95
+TRANSITION_QUALITY_STEPS = (95, 92, 90, 88, 85, 82, 80)
 TRANSITION_CAPTURE_SCALE = 2           # captured at twice the published size, then downsampled
 TRANSITION_MAX_BYTES = 10_000_000 - 1  # strictly below 10 MB (decimal)
 TRANSITION_MID_HOLD_MS = 700           # the new picture rests before the run back starts
 TRANSITION_LOOP_HOLD_MS = 350          # each loop end rests on the first picture (both ends meet)
 # Every ordered pair of distinct scenes. Each generation picks a pair and the run there's seed
 # at random (operator direction); the manifest records the pick, which does not stale an entry.
+SHOWCASE_BLOCK_SPIN_EDGE_GLASS = ("Off", "Reflection")
 SCENE_PAIRS = tuple((a, b) for a in range(4) for b in range(4) if a != b)
 
 
@@ -120,8 +124,10 @@ def catalogue() -> list[MediaCase]:
         if identity == "blinds":
             variants = [(_slug(value), value, {"blinds": {"style": value}}) for value in BLINDS_STYLE_CHOICES]
         elif identity == "block_spins":
+            # Showcase the plain slab and its Reflection edge glass (with the sheen); Refraction
+            # (and Both, which includes it) is not shown (operator direction 2026-10-10).
             variants = [(_slug(value), value, {"blockspin": {"edge_glass": value}})
-                        for value in BLOCK_SPIN_EDGE_GLASS_CHOICES]
+                        for value in BLOCK_SPIN_EDGE_GLASS_CHOICES if value in SHOWCASE_BLOCK_SPIN_EDGE_GLASS]
         for variant, label, settings in variants:
             cases.append(MediaCase("transition", identity, variant, label, settings=settings,
                                    duration_ms=int(durations[descriptor.setting_name])))
@@ -376,11 +382,11 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
     return frames
 
 
-def transition_encoding_plan(width: int, fps: int) -> list[tuple[int, int, float]]:
-    """Transition showcases keep their width and frame rate: a long run plays a little faster
-    first (operator direction: 480 wide at 30 fps), and only then does the frame rate drop."""
-    plan = [(width, fps, scale) for scale in (1.0, .85, .72, .6)]
-    return plan + [(width, max(10, round(fps * step)), .6) for step in (.8, .67)]
+def transition_encoding_plan(width: int, fps: int) -> list[tuple[int, int, float, int]]:
+    """Every transition showcase keeps one width, one frame rate and its authored speed (parity:
+    some moving faster than others unnerves a viewer); a showcase that does not fit steps only its
+    quality down."""
+    return [(width, fps, 1.0, quality) for quality in TRANSITION_QUALITY_STEPS]
 
 
 def timeline_source_indices(source_count: int, motion_ms: int, hold_ms: int, count: int) -> list[int]:
@@ -403,12 +409,13 @@ def timeline_source_indices(source_count: int, motion_ms: int, hold_ms: int, cou
 
 def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes: int,
                 width: int, fps: int, hold_ms: int = 0, fps_steps: tuple[float, ...] = (1.0, .75, .5),
-                quality: int = 92, plan: list[tuple[int, int, float]] | None = None) -> dict:
-    """Encode the lossless capture with the first (width, fps, time scale) attempt under budget.
+                quality: int = 92, plan: list[tuple] | None = None) -> dict:
+    """Encode the lossless capture with the first (width, fps, time scale[, quality]) attempt under budget.
 
     Without a ``plan`` the width steps down (x0.75, x0.5) and inside each width the frame rate
-    steps by ``fps_steps``; a time scale below 1 plays the motion faster (holds keep their length).
-    Quality never drops. All candidates come from the same lossless high-resolution capture."""
+    steps by ``fps_steps`` at ``quality``; a time scale below 1 plays the motion faster (holds keep
+    their length); a plan step may name its own quality. All candidates come from the same lossless
+    high-resolution capture."""
     from PIL import Image
 
     if (not frames or not 0 < duration_ms <= 60000 or not 0 <= hold_ms <= 1000 or not 50 <= quality <= 100 or not 0 < max_bytes <= HOST_MAX_BYTES
@@ -421,8 +428,10 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
     attempts = []
     with Image.open(frames[0]) as first:
         source_size = first.size
-    for target_width, rate, scale in plan:
-        if target_width < 160 or not 10 <= rate <= 60 or not 0 < scale <= 1:
+    for step in plan:
+        target_width, rate, scale = step[:3]
+        step_quality = step[3] if len(step) > 3 else quality
+        if target_width < 160 or not 10 <= rate <= 60 or not 0 < scale <= 1 or not 50 <= step_quality <= 100:
             raise ValueError("invalid encoding attempt")
         target_size = (target_width, max(1, round(source_size[1] * target_width / source_size[0])))
         motion_ms = max(1, round(duration_ms * scale))
@@ -438,14 +447,15 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
             durations = [round((i + 1) * total_duration_ms / count) - round(i * total_duration_ms / count) for i in range(count)]
             stream = io.BytesIO()
             images[0].save(stream, format="WEBP", save_all=True, append_images=images[1:],
-                           duration=durations, loop=0, quality=quality, method=WEBP_METHOD,
+                           duration=durations, loop=0, quality=step_quality, method=WEBP_METHOD,
                            kmin=WEBP_KEYFRAME_SPACING - 1, kmax=WEBP_KEYFRAME_SPACING,
                            exif=b"", icc_profile=b"", xmp=b"")
             data = stream.getvalue()
         finally:
             for image in images:
                 image.close()
-        attempts.append({"width": target_width, "fps": rate, "time_scale": scale, "bytes": len(data)})
+        attempts.append({"width": target_width, "fps": rate, "time_scale": scale, "quality": step_quality,
+                         "bytes": len(data)})
         if len(data) <= max_bytes:
             with Image.open(io.BytesIO(data)) as encoded:
                 if not encoded.is_animated or encoded.info.get("loop") != 0:
@@ -456,7 +466,7 @@ def encode_webp(frames: list[Path], output: Path, *, duration_ms: int, max_bytes
             return {"dimensions": list(target_size), "fps": rate, "duration_ms": total_duration_ms,
                     "motion_duration_ms": motion_ms, "endpoint_hold_ms": hold_ms, "time_scale": scale,
                     "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                    "quality": quality, "loop": 0, "attempts": attempts}
+                    "quality": step_quality, "loop": 0, "attempts": attempts}
     raise ValueError(f"media exceeds byte budget at retained quality: {attempts}")
 
 
@@ -556,7 +566,8 @@ def main(argv=None) -> int:
                 max_bytes = min(args.max_bytes, TRANSITION_MAX_BYTES)
                 pair, seed = pick_showcase(random.SystemRandom())
                 options = {"capture_size": list(capture_size), "width": width, "fps": TRANSITION_FPS,
-                           "quality": TRANSITION_QUALITY, "max_bytes": max_bytes, "duration_ms": duration_ms,
+                           "quality": list(TRANSITION_QUALITY_STEPS), "encoding": "parity-1",
+                           "max_bytes": max_bytes, "duration_ms": duration_ms,
                            "endpoint_hold_ms": hold_ms, "mid_hold_ms": TRANSITION_MID_HOLD_MS,
                            "scene_sha256": scene_hashes}
             else:

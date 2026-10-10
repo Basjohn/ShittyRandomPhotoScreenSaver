@@ -152,8 +152,9 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   Generate media only when the operator has supplied the four originals and selected a stable source tree. Do not fabricate or substitute unavailable local originals.
   **Tool adapted 2026-10-10:** `--kind transition` writes to the ignored `assets/webp/` (also a GODZIP never-transfer
   prefix): a per-transition ordered scene pair (stable from the case key), A→B, a rest on B, B→A with another seed
-  (a seamless loop), captured at 2x and published at 480x270, q95, 30 fps, strictly < 10,000,000 bytes, fps reduced before size and
-  size before quality (Jigsaw: 4.8 MB); scene pair and seeds picked at random per generation; the run back always
+  (a seamless loop), captured at 2x and published at 480x270, strictly < 10,000,000 bytes, with parity: 24 fps and authored speed for
+  every showcase, only quality stepping down (95 → 80) for one that does not fit; Block Spins shows Off and
+  Reflection only; scene pair and seeds picked at random per generation; the run back always
   changes direction/order; method 4 with keyframes every 150 frames (method 6 was 11x slower for 2% smaller).
   **Every new or visually changed transition gets its WebP generated and reviewed by the agent before it is called
   done** (Jigsaw first). Remaining: the full catalogue at a stable checkpoint.
