@@ -113,6 +113,10 @@ _IMPLEMENTATIONS = (
         transition_id="liquid_lens",
         module_name="rendering.quick.transitions.implementations.liquid_lens",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="membrane",
+        module_name="rendering.quick.transitions.implementations.membrane",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

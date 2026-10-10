@@ -37,6 +37,7 @@ class TransitionType(Enum):
     VHS_DISTORTION = "VHS Distortion"
     EDGE_BLOOM = "Edge Bloom Reveal"
     LIQUID_LENS = "Liquid Lens"
+    MEMBRANE_TURNOVER = "Membrane Turnover"
 
 
 class WidgetPosition(Enum):

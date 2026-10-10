@@ -474,6 +474,23 @@
         0.5,
         0.75
       ]
+    },
+    {
+      "transition_id": "membrane",
+      "path": "transition_membrane.png",
+      "size": [
+        2400,
+        450
+      ],
+      "frame_size": [
+        800,
+        450
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
     }
   ],
   "visualizer_modes": [
@@ -546,5 +563,5 @@
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 23268492
+  "total_bytes": 23885670
 }

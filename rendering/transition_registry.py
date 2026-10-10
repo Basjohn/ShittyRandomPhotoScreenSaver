@@ -144,6 +144,12 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
+        setting_name="Membrane Turnover",
+        stable_id="membrane",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Jigsaw Piece Flip",
         stable_id="jigsaw",
         easing_curve=EasingCurve.LINEAR,
