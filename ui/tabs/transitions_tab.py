@@ -32,6 +32,8 @@ from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PI
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
 from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
+from rendering.gl_programs.chromatic_shear_program import SHEAR_SLICES_RANGE
+from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTION_CHOICES
 from rendering.gl_programs.surface_tension_program import TENSION_POOLS_RANGE
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_CHOICES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGIN_CHOICES
@@ -122,6 +124,7 @@ class TransitionsTab(QWidget):
                 "vhs",
                 "liquid_lens",
                 "membrane",
+                "chromatic_shear",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -582,6 +585,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
         "VHS Distortion": "_build_vhs_group",
+        "Chromatic Shear": "_build_chromatic_shear_group",
         "Surface Tension Merge": "_build_surface_tension_group",
         "Membrane Turnover": "_build_membrane_group",
         "Liquid Lens": "_build_liquid_lens_group",
@@ -607,6 +611,7 @@ class TransitionsTab(QWidget):
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
         "VHS Distortion": "vhs_group",
+        "Chromatic Shear": "chromatic_shear_group",
         "Surface Tension Merge": "surface_tension_group",
         "Membrane Turnover": "membrane_group",
         "Liquid Lens": "liquid_lens_group",
@@ -630,6 +635,7 @@ class TransitionsTab(QWidget):
             "VHS Distortion",
             "Liquid Lens",
             "Membrane Turnover",
+            "Chromatic Shear",
         }
     )
 
@@ -850,6 +856,12 @@ class TransitionsTab(QWidget):
             cfg = self._new_transition_section(transitions_config, 'surface_tension', canonical)
             self.surface_tension_pools_spin.setValue(self._new_transition_number(
                 cfg, 'pools', 'surface_tension', canonical['pools'], self.surface_tension_pools_spin, int,
+            ))
+        if hasattr(self, 'chromatic_shear_group'):
+            canonical = canonical_transitions['chromatic_shear']
+            cfg = self._new_transition_section(transitions_config, 'chromatic_shear', canonical)
+            self.chromatic_shear_slices_spin.setValue(self._new_transition_number(
+                cfg, 'slices', 'chromatic_shear', canonical['slices'], self.chromatic_shear_slices_spin, int,
             ))
         if hasattr(self, 'edge_bloom_group'):
             canonical = canonical_transitions['edge_bloom']
@@ -1109,6 +1121,9 @@ class TransitionsTab(QWidget):
         ),
         "surface_tension": (
             ("gloss", "Gloss:", 0.0, 1.0, "Light on the liquid where the two pictures meet: highlights and sheen along every edge."),
+        ),
+        "chromatic_shear": (
+            ("spread", "Spread:", 0.0, 1.0, "How far the slices shear apart and the colours fan out."),
         ),
         "vhs": (
             ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
@@ -1438,6 +1453,22 @@ class TransitionsTab(QWidget):
         pools_row.addStretch()
         self._build_surface_controls(layout, "surface_tension")
         self._specific_group_host_layout.addWidget(self.surface_tension_group)
+
+    def _build_chromatic_shear_group(self) -> None:
+        self.chromatic_shear_group = QGroupBox("Chromatic Shear Settings")
+        self._style_group_box(self.chromatic_shear_group)
+        layout = QVBoxLayout(self.chromatic_shear_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        slices_row = self._aligned_row(layout, "Slices:")
+        self.chromatic_shear_slices_spin = QSpinBox()
+        self.chromatic_shear_slices_spin.setRange(*SHEAR_SLICES_RANGE)
+        self.chromatic_shear_slices_spin.setValue(int(_transition_default("chromatic_shear.slices")))
+        self.chromatic_shear_slices_spin.setToolTip("How many broad slices the picture shears into.")
+        self.chromatic_shear_slices_spin.valueChanged.connect(self._save_settings)
+        slices_row.addWidget(self.chromatic_shear_slices_spin)
+        slices_row.addStretch()
+        self._build_surface_controls(layout, "chromatic_shear")
+        self._specific_group_host_layout.addWidget(self.chromatic_shear_group)
 
     def _build_vhs_group(self) -> None:
         self.vhs_group = QGroupBox("VHS Distortion Settings")
@@ -2224,6 +2255,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'jigsaw_pieces_spin', None),
             getattr(self, 'volumetric_dissolve_size_spin', None),
             getattr(self, 'beam_sparks_check', None),
+            getattr(self, 'chromatic_shear_slices_spin', None),
             getattr(self, 'surface_tension_pools_spin', None),
             getattr(self, 'liquid_lens_droplets_check', None),
             # Ripple widgets
@@ -2350,7 +2382,7 @@ class TransitionsTab(QWidget):
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
                             "disintegrate", "cube_turn", "beam", "jigsaw", "volumetric_dissolve", "vhs",
-                            "liquid_lens", "membrane"):
+                            "liquid_lens", "membrane", "chromatic_shear"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2522,6 +2554,12 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Chromatic Shear":
+                    self.direction_combo.addItems(list(SHEAR_DIRECTION_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["chromatic_shear"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "VHS Distortion":
                     # The way the picture rolls: where the new picture comes in.
                     self.direction_combo.addItems(list(VHS_DIRECTION_CHOICES))
@@ -2664,6 +2702,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["volumetric_dissolve"] = cur_dir
         elif cur_type == "VHS Distortion":
             self._direction_by_type["vhs"] = cur_dir
+        elif cur_type == "Chromatic Shear":
+            self._direction_by_type["chromatic_shear"] = cur_dir
         elif cur_type == "Membrane Turnover":
             self._direction_by_type["membrane"] = cur_dir
         elif cur_type == "Liquid Lens":
@@ -2835,6 +2875,10 @@ class TransitionsTab(QWidget):
             surface_tension = {'pools': self.surface_tension_pools_spin.value()}
         else:
             surface_tension = _existing_subdict('surface_tension')
+        if hasattr(self, 'chromatic_shear_group'):
+            chromatic_shear = {'direction': self._direction_by_type['chromatic_shear'], 'slices': self.chromatic_shear_slices_spin.value()}
+        else:
+            chromatic_shear = {**_existing_subdict('chromatic_shear'), 'direction': self._direction_by_type['chromatic_shear']}
         if hasattr(self, 'vhs_group'):
             vhs = {'direction': self._direction_by_type['vhs']}
         else:
@@ -2849,7 +2893,7 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
                                 ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
-                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension)):
+                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension), ("chromatic_shear", chromatic_shear)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2891,6 +2935,7 @@ class TransitionsTab(QWidget):
             'volumetric_dissolve': volumetric_dissolve,
             'vhs': vhs,
             'edge_bloom': edge_bloom,
+            'chromatic_shear': chromatic_shear,
             'surface_tension': surface_tension,
             'membrane': membrane,
             'liquid_lens': liquid_lens,

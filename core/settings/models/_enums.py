@@ -39,6 +39,7 @@ class TransitionType(Enum):
     LIQUID_LENS = "Liquid Lens"
     MEMBRANE_TURNOVER = "Membrane Turnover"
     SURFACE_TENSION = "Surface Tension Merge"
+    CHROMATIC_SHEAR = "Chromatic Shear"
 
 
 class WidgetPosition(Enum):

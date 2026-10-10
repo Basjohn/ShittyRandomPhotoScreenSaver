@@ -23,6 +23,8 @@ from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGINS
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
 from rendering.gl_programs.surface_tension_program import TENSION_POOLS_RANGE
+from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
+from rendering.gl_programs.chromatic_shear_program import SHEAR_SLICES_RANGE
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -970,6 +972,23 @@ def _resolve_surface_tension(
     })
 
 
+def _resolve_chromatic_shear(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "chromatic_shear")
+    defaults = _canonical("chromatic_shear")
+    axis = SHEAR_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if axis is None:
+        axis = str(rng.choice(tuple(SHEAR_DIRECTIONS.values())))
+    low, high = SHEAR_SLICES_RANGE
+    return _finish(axis, {
+        "seed": _seed(rng),
+        "slices": max(low, min(high, _integer(_value(cfg, defaults, "slices"), int(defaults["slices"])))),
+        **_surface_values(cfg, defaults, ("spread",)),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -991,6 +1010,7 @@ _RESOLVERS = {
     "liquid_lens": _resolve_liquid_lens,
     "membrane": _resolve_membrane,
     "surface_tension": _resolve_surface_tension,
+    "chromatic_shear": _resolve_chromatic_shear,
 }
 
 

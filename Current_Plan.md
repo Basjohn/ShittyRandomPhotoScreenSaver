@@ -79,10 +79,7 @@ The local mocks are design references, not fidelity prisons. They establish the 
 - [ ] **T5. Liquid Lens** — implemented 2026-10-10 on the new shared refraction helpers and the preserved vortex flow (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
 - [ ] **T6. Membrane Turnover** — implemented 2026-10-10 on the shared sheet module (new `sheetTwist`, preserved two-sided helpers) and refraction's Fresnel (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_membrane_default.webp`). Deactivated by default.
 - [ ] **T7. Surface Tension Merge** — implemented 2026-10-10 on the new shared meniscus field and the refraction helpers (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_surface_tension_default.webp`). Deactivated by default.
-- [ ] **T8. Chromatic Shear.** A clean prismatic transition where the source image splits into offset spectral layers and broad
-  shear slices before reconverging as the destination. Useful existing architecture: fullscreen post/material passes and timing
-  plumbing. New useful architecture: shared chromatic-channel displacement/spectral-slice helpers so the effect stays elegant
-  rather than duplicating ad-hoc RGB math.
+- [ ] **T8. Chromatic Shear** — implemented 2026-10-11 on the new shared spectral layers (`Docs/Reference/Transitions.md`); awaiting operator judgement with the batch (showcase `assets/webp/transition_chromatic_shear_default.webp`). Deactivated by default.
 - [ ] **T9. Depth Card Cascade.** The outgoing image separates into a small number of large shallow-Z cards that tilt/slide past
   the viewer, exposing the destination behind them. Useful existing architecture: retained presentation authority, Scene3D
   lifecycle, per-display gating, and any shared flip/card primitive introduced by Jigsaw Piece Flip. New useful architecture: a
