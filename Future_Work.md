@@ -50,7 +50,7 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
 - **Usu Moonscape Visualizer** — long-horizon character/world vertical: Usu walks, runs, Naruto-runs, skids/falls/gets up
   and lies down across a round moon under a starscape, with orbit framing and optional fuzz-tip bloom. Plan, behaviour,
   reactivity contract, required architecture and gates: `Docs/Future_Work/Usu_Moonscape.md` (supersedes the 2026-10-02
-  snapshot). Its missing shared foundations (asset pipeline, skinning, animation graph, secondary motion, felt/fuzz material,
+  snapshot); its remaining Blender authoring work is in `Docs/Future_Work/Usu_Blender_Work.md`. Its missing shared foundations (asset pipeline, skinning, animation graph, secondary motion, felt/fuzz material,
   shadow maps, sphere world/starscape, orbit camera) are listed as S19–S27 in `Current_Plan.md` §4 and are to be side-built by
   transitions/Visualizer consumers first; the mode itself stays deferred until they are accepted.
 
