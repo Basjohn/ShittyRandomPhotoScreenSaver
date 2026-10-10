@@ -41,6 +41,7 @@ class TransitionType(Enum):
     SURFACE_TENSION = "Surface Tension Merge"
     CHROMATIC_SHEAR = "Chromatic Shear"
     DEPTH_CASCADE = "Depth Card Cascade"
+    CAPILLARY_BLOOM = "Capillary Bloom"
 
 
 class WidgetPosition(Enum):

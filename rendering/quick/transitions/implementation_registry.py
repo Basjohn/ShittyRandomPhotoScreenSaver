@@ -129,6 +129,10 @@ _IMPLEMENTATIONS = (
         transition_id="depth_cascade",
         module_name="rendering.quick.transitions.implementations.depth_cascade",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="capillary_bloom",
+        module_name="rendering.quick.transitions.implementations.capillary_bloom",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
