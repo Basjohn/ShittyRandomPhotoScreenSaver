@@ -1,5 +1,5 @@
 # ShittyRandomPhotoScreenSaver (SRPSS)
-<img width="40%" alt="SRPSS_logo_blue_purple_slow_smooth" src="https://github.com/user-attachments/assets/c9917e3d-44f9-41b3-ab76-d308908d9c95" />
+<img width="50%" alt="SRPSS_logo_blue_purple_slow_smooth" src="https://github.com/user-attachments/assets/c9917e3d-44f9-41b3-ab76-d308908d9c95" />
 
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
