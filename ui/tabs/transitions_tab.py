@@ -25,7 +25,6 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
-from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGE_CHOICES, ACCORDION_PLEATS_RANGE
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
@@ -113,8 +112,6 @@ class TransitionsTab(QWidget):
                 "melt_drip",
                 "page_curl",
                 "disintegrate",
-                "accordion_fold",
-                "relief_rise",
                 "cube_turn",
                 "beam",
                 "jigsaw",
@@ -563,10 +560,8 @@ class TransitionsTab(QWidget):
 
     _TRANSITION_PAGE_BUILDERS = {
         "Slide": "_build_slide_group",
-        "Block Puzzle Flip": "_build_flip_group",
         "3D Block Spins": "_build_blockspin_group",
         "Blinds": "_build_blinds_group",
-        "Diffuse": "_build_diffuse_group",
         "Ripple": "_build_ripple_group",
         "Crumble": "_build_crumble_group",
         "Particle": "_build_particle_group",
@@ -574,12 +569,9 @@ class TransitionsTab(QWidget):
         "Glass Shatter": "_build_glass_shatter_group",
         "Exploding Tiles": "_build_exploding_tiles_group",
         "Directional Pixel Accretion": "_build_pixel_accretion_group",
-        "Ink Bloom": "_build_ink_bloom_group",
         "Melt Drip": "_build_melt_drip_group",
         "Page Curl": "_build_page_curl_group",
         "Disintegrate": "_build_disintegrate_group",
-        "Accordion Fold": "_build_accordion_fold_group",
-        "Relief Rise": "_build_relief_rise_group",
         "Cube Turn": "_build_cube_turn_group",
         "Beam": "_build_beam_group",
         "Jigsaw Piece Flip": "_build_jigsaw_group",
@@ -590,10 +582,8 @@ class TransitionsTab(QWidget):
 
     _SPECIFIC_GROUP_ATTRS = {
         "Slide": "slide_group",
-        "Block Puzzle Flip": "flip_group",
         "3D Block Spins": "blockspin_group",
         "Blinds": "blinds_group",
-        "Diffuse": "diffuse_group",
         "Ripple": "ripple_group",
         "Crumble": "crumble_group",
         "Particle": "particle_group",
@@ -601,12 +591,9 @@ class TransitionsTab(QWidget):
         "Glass Shatter": "glass_shatter_group",
         "Exploding Tiles": "exploding_tiles_group",
         "Directional Pixel Accretion": "pixel_accretion_group",
-        "Ink Bloom": "ink_bloom_group",
         "Melt Drip": "melt_drip_group",
         "Page Curl": "page_curl_group",
         "Disintegrate": "disintegrate_group",
-        "Accordion Fold": "accordion_fold_group",
-        "Relief Rise": "relief_rise_group",
         "Cube Turn": "cube_turn_group",
         "Beam": "beam_group",
         "Jigsaw Piece Flip": "jigsaw_group",
@@ -625,8 +612,6 @@ class TransitionsTab(QWidget):
             "Melt Drip",
             "Page Curl",
             "Disintegrate",
-            "Accordion Fold",
-            "Relief Rise",
             "Cube Turn",
             "Beam",
             "Jigsaw Piece Flip",
@@ -826,13 +811,6 @@ class TransitionsTab(QWidget):
                 cfg, 'travel', 'pixel_accretion', canonical['travel'], self.pixel_travel_spin, float,
             ))
 
-        if hasattr(self, 'ink_bloom_group'):
-            canonical = canonical_transitions['ink_bloom']
-            cfg = self._new_transition_section(transitions_config, 'ink_bloom', canonical)
-            self.ink_bloom_detail_spin.setValue(self._new_transition_number(
-                cfg, 'detail', 'ink_bloom', canonical['detail'], self.ink_bloom_detail_spin, float,
-            ))
-
         if hasattr(self, 'melt_drip_group'):
             canonical = canonical_transitions['melt_drip']
             cfg = self._new_transition_section(transitions_config, 'melt_drip', canonical)
@@ -840,12 +818,6 @@ class TransitionsTab(QWidget):
                 cfg, 'detail', 'melt_drip', canonical['detail'], self.melt_drip_detail_spin, float,
             ))
 
-        if hasattr(self, 'accordion_fold_group'):
-            canonical = canonical_transitions['accordion_fold']
-            cfg = self._new_transition_section(transitions_config, 'accordion_fold', canonical)
-            self.accordion_pleats_spin.setValue(self._new_transition_number(
-                cfg, 'pleats', 'accordion_fold', canonical['pleats'], self.accordion_pleats_spin, int,
-            ))
         if hasattr(self, 'beam_group'):
             canonical = canonical_transitions['beam']
             cfg = self._new_transition_section(transitions_config, 'beam', canonical)
@@ -909,20 +881,6 @@ class TransitionsTab(QWidget):
                     getattr(self, f"{section}_{field}_combo").setCurrentText(
                         str(value if value in choices else canonical[field]))
 
-        if hasattr(self, 'flip_group'):
-            canonical_block_flip = canonical_transitions['block_flip']
-            block_flip = transitions_config.get('block_flip', canonical_block_flip)
-            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip['rows']))
-            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip['cols']))
-            blockflip_dir = block_flip.get('direction', canonical_block_flip['direction']) or str(canonical_block_flip['direction'])
-            try:
-                idx = self.blockflip_direction_combo.findText(blockflip_dir)
-                if idx < 0:
-                    idx = self.blockflip_direction_combo.findText("Random")
-                self.blockflip_direction_combo.setCurrentIndex(max(0, idx))
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
         if hasattr(self, 'blockspin_group'):
             try:
                 idx = self.blockspin_direction_combo.findText(self._dir_blockspin)
@@ -931,15 +889,6 @@ class TransitionsTab(QWidget):
                 self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
             except Exception as e:
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
-        if hasattr(self, 'diffuse_group'):
-            canonical_diffuse = canonical_transitions['diffuse']
-            diffuse = transitions_config.get('diffuse', canonical_diffuse)
-            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse['block_size']))
-            shape = diffuse.get('shape', canonical_diffuse['shape'])
-            index = self.diffuse_shape_combo.findText(shape)
-            if index >= 0:
-                self.diffuse_shape_combo.setCurrentIndex(index)
 
         if hasattr(self, 'blinds_group'):
             canonical_blinds = canonical_transitions['blinds']
@@ -1063,48 +1012,6 @@ class TransitionsTab(QWidget):
             self.burn_flames_check.setChecked(bool(burn.get('flames', canonical_burn['flames'])))
             self.burn_veins_check.setChecked(bool(burn.get('ember_veins', canonical_burn['ember_veins'])))
 
-    def _build_flip_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.flip_group = QGroupBox("Block Flip Settings")
-        self._style_group_box(self.flip_group)
-        flip_layout = QVBoxLayout(self.flip_group)
-        flip_layout.setContentsMargins(0, 12, 0, 0)
-
-        grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
-        self.grid_rows_spin = QSpinBox()
-        self.grid_rows_spin.setRange(2, 25)
-        self.grid_rows_spin.setValue(int(_transition_default("block_flip.rows")))
-        self.grid_rows_spin.setAccelerated(True)
-        self.grid_rows_spin.valueChanged.connect(self._save_settings)
-        grid_rows_row.addWidget(self.grid_rows_spin)
-        grid_rows_row.addStretch()
-
-        grid_cols_row = _aligned_row(flip_layout, "Grid Columns:")
-        self.grid_cols_spin = QSpinBox()
-        self.grid_cols_spin.setRange(2, 25)
-        self.grid_cols_spin.setValue(int(_transition_default("block_flip.cols")))
-        self.grid_cols_spin.setAccelerated(True)
-        self.grid_cols_spin.valueChanged.connect(self._save_settings)
-        grid_cols_row.addWidget(self.grid_cols_spin)
-        grid_cols_row.addStretch()
-
-        flip_dir_row = _aligned_row(flip_layout, "Direction:")
-        self.blockflip_direction_combo = StyledComboBox()
-        self.blockflip_direction_combo.addItems([
-            "Left to Right",
-            "Right to Left",
-            "Top to Bottom",
-            "Bottom to Top",
-            "Diagonal TL to BR",
-            "Diagonal TR to BL",
-            "Random",
-        ])
-        self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
-        flip_dir_row.addWidget(self.blockflip_direction_combo)
-        flip_dir_row.addStretch()
-
-        self._specific_group_host_layout.addWidget(self.flip_group)
-
     def _build_slide_group(self) -> None:
         self.slide_group = QGroupBox("Slide Motion")
         self._style_group_box(self.slide_group)
@@ -1141,10 +1048,6 @@ class TransitionsTab(QWidget):
             ("bloom_strength", "Bloom Strength:", 0., 1., "How strongly sparks, hot edges and glowing cracks glow "
              "when Bloom is on."),
         ),
-        "ink_bloom": (
-            ("depth", "Liquid Depth:", 0., 1., "Height and surface relief of the spreading pigment."),
-            ("gloss", "Wet Gloss:", 0., 1., "Wet reflections on the ink surface."),
-        ),
         "blinds": (
             ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
         ),
@@ -1161,13 +1064,6 @@ class TransitionsTab(QWidget):
             ("scorch", "Scorch:", 0., 1., "How strongly the beam scorches the new picture before it cures clean."),
             ("cure", "Cure Time:", 0., 1., "How long the scorch takes to cure clean. A longer cure has the beam "
              "cross sooner, so the run still ends on the clean picture."),
-        ),
-        "relief_rise": (
-            ("depth", "Relief Depth:", 0., 1., "How high the pictures rise as the wave passes."),
-            ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the relief."),
-        ),
-        "accordion_fold": (
-            ("gloss", "Gloss:", 0., 1., "Sheen of the folded sheet and reflections of the next image on it."),
         ),
         "disintegrate": (
             ("wind", "Wind:", .5, 2., "How hard the wind blows the grains away: their speed and how far they fly."),
@@ -1218,8 +1114,6 @@ class TransitionsTab(QWidget):
         "blinds": (_ANTIALIASING_CONTROL,),
         "page_curl": (_ANTIALIASING_CONTROL,),
         "disintegrate": (_ANTIALIASING_CONTROL,),
-        "accordion_fold": (_ANTIALIASING_CONTROL,),
-        "relief_rise": (_ANTIALIASING_CONTROL,),
         "cube_turn": (_ANTIALIASING_CONTROL,),
         "jigsaw": (_ANTIALIASING_CONTROL,),
         "volumetric_dissolve": (_ANTIALIASING_CONTROL,),
@@ -1373,30 +1267,6 @@ class TransitionsTab(QWidget):
         self._build_scene3d_choices(layout, "pixel_accretion")
         self._specific_group_host_layout.addWidget(self.pixel_accretion_group)
 
-    def _build_organic_detail_group(self, *, attr: str, title: str, section: str) -> None:
-        group = QGroupBox(title)
-        self._style_group_box(group)
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        detail_row = self._aligned_row(layout, "Detail:")
-        spin = QDoubleSpinBox()
-        spin.setDecimals(2)
-        spin.setRange(0.5, 2.0)
-        spin.setSingleStep(0.05)
-        spin.setValue(float(_transition_default(f"{section}.detail")))
-        spin.valueChanged.connect(self._save_settings)
-        detail_row.addWidget(spin)
-        detail_row.addStretch()
-        self._build_surface_controls(layout, section)
-        setattr(self, attr, group)
-        setattr(self, f"{section}_detail_spin", spin)
-        self._specific_group_host_layout.addWidget(group)
-
-    def _build_ink_bloom_group(self) -> None:
-        self._build_organic_detail_group(
-            attr="ink_bloom_group", title="Ink Bloom Settings", section="ink_bloom"
-        )
-
     def _build_melt_drip_group(self) -> None:
         self.melt_drip_group = QGroupBox("Melt Drip Settings")
         self._style_group_box(self.melt_drip_group)
@@ -1454,32 +1324,6 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "cube_turn")
         self._build_scene3d_choices(layout, "cube_turn")
         self._specific_group_host_layout.addWidget(self.cube_turn_group)
-
-    def _build_relief_rise_group(self) -> None:
-        self.relief_rise_group = QGroupBox("Relief Rise Settings")
-        self._style_group_box(self.relief_rise_group)
-        layout = QVBoxLayout(self.relief_rise_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        self._build_surface_controls(layout, "relief_rise")
-        self._build_scene3d_choices(layout, "relief_rise")
-        self._specific_group_host_layout.addWidget(self.relief_rise_group)
-
-    def _build_accordion_fold_group(self) -> None:
-        self.accordion_fold_group = QGroupBox("Accordion Fold Settings")
-        self._style_group_box(self.accordion_fold_group)
-        layout = QVBoxLayout(self.accordion_fold_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        pleats_row = self._aligned_row(layout, "Pleats:")
-        self.accordion_pleats_spin = QSpinBox()
-        self.accordion_pleats_spin.setRange(*ACCORDION_PLEATS_RANGE)
-        self.accordion_pleats_spin.setValue(int(_transition_default("accordion_fold.pleats")))
-        self.accordion_pleats_spin.setToolTip("How many folds the picture makes.")
-        self.accordion_pleats_spin.valueChanged.connect(self._save_settings)
-        pleats_row.addWidget(self.accordion_pleats_spin)
-        pleats_row.addStretch()
-        self._build_surface_controls(layout, "accordion_fold")
-        self._build_scene3d_choices(layout, "accordion_fold")
-        self._specific_group_host_layout.addWidget(self.accordion_fold_group)
 
     def _build_edge_bloom_group(self) -> None:
         self.edge_bloom_group = QGroupBox("Edge Bloom Reveal Settings")
@@ -1683,36 +1527,6 @@ class TransitionsTab(QWidget):
         self._sync_blinds_style()
 
         self._specific_group_host_layout.addWidget(self.blinds_group)
-
-    def _build_diffuse_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.diffuse_group = QGroupBox("Diffuse Settings")
-        self._style_group_box(self.diffuse_group)
-        diffuse_layout = QVBoxLayout(self.diffuse_group)
-        diffuse_layout.setContentsMargins(0, 12, 0, 0)
-
-        block_size_row = _aligned_row(diffuse_layout, "Block Size (px):")
-        self.block_size_spin = QSpinBox()
-        self.block_size_spin.setRange(4, 256)
-        self.block_size_spin.setValue(int(_transition_default("diffuse.block_size")))
-        self.block_size_spin.valueChanged.connect(self._save_settings)
-        block_size_row.addWidget(self.block_size_spin)
-        block_size_row.addStretch()
-
-        shape_row = _aligned_row(diffuse_layout, "Shape:")
-        self.diffuse_shape_combo = StyledComboBox(size_variant="compact")
-        self.diffuse_shape_combo.addItems([
-            "Rectangle",
-            "Membrane",
-            "Lines",
-            "Diamonds",
-            "Amorph",
-        ])
-        self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
-        shape_row.addWidget(self.diffuse_shape_combo)
-        shape_row.addStretch()
-
-        self._specific_group_host_layout.addWidget(self.diffuse_group)
 
     def _build_ripple_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -2324,12 +2138,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
             getattr(self, 'slide_motion_style_combo', None),
-            getattr(self, 'grid_rows_spin', None),
-            getattr(self, 'grid_cols_spin', None),
-            getattr(self, 'blockflip_direction_combo', None),
             getattr(self, 'blockspin_direction_combo', None),
-            getattr(self, 'block_size_spin', None),
-            getattr(self, 'diffuse_shape_combo', None),
             # Blinds widgets
             getattr(self, 'blinds_direction_combo', None),
             getattr(self, 'blinds_feather_slider', None),
@@ -2340,7 +2149,6 @@ class TransitionsTab(QWidget):
             getattr(self, 'jigsaw_pieces_spin', None),
             getattr(self, 'volumetric_dissolve_size_spin', None),
             getattr(self, 'beam_sparks_check', None),
-            getattr(self, 'accordion_pleats_spin', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
@@ -2380,7 +2188,6 @@ class TransitionsTab(QWidget):
             getattr(self, 'exploding_tiles_depth_spin', None),
             getattr(self, 'pixel_tile_size_spin', None),
             getattr(self, 'pixel_travel_spin', None),
-            getattr(self, 'ink_bloom_detail_spin', None),
             getattr(self, 'melt_drip_detail_spin', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
@@ -2465,8 +2272,7 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam", "jigsaw",
-                            "volumetric_dissolve", "vhs"):
+                            "disintegrate", "cube_turn", "beam", "jigsaw", "volumetric_dissolve", "vhs"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2580,7 +2386,7 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition in {"Directional Pixel Accretion", "Disintegrate", "Relief Rise", "Beam"}:
+                elif transition in {"Directional Pixel Accretion", "Disintegrate", "Beam"}:
                     self.direction_combo.addItems([
                         "Left to Right", "Right to Left", "Top to Bottom",
                         "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
@@ -2588,7 +2394,6 @@ class TransitionsTab(QWidget):
                     ])
                     current = self._direction_by_type[{"Directional Pixel Accretion": "pixel_accretion",
                                                        "Disintegrate": "disintegrate",
-                                                       "Relief Rise": "relief_rise",
                                                        "Beam": "beam"}[transition]]
                     idx = self.direction_combo.findText(current)
                     if idx < 0:
@@ -2610,13 +2415,6 @@ class TransitionsTab(QWidget):
                     # The way the box turns: its front moves toward this side.
                     self.direction_combo.addItems(list(CUBE_TURN_DIRECTION_CHOICES))
                     idx = self.direction_combo.findText(self._direction_by_type["cube_turn"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Accordion Fold":
-                    # The edge the picture folds up against.
-                    self.direction_combo.addItems(list(ACCORDION_EDGE_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["accordion_fold"])
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
@@ -2766,10 +2564,6 @@ class TransitionsTab(QWidget):
             self._direction_by_type["page_curl"] = cur_dir
         elif cur_type == "Disintegrate":
             self._direction_by_type["disintegrate"] = cur_dir
-        elif cur_type == "Accordion Fold":
-            self._direction_by_type["accordion_fold"] = cur_dir
-        elif cur_type == "Relief Rise":
-            self._direction_by_type["relief_rise"] = cur_dir
         elif cur_type == "Cube Turn":
             self._direction_by_type["cube_turn"] = cur_dir
         elif cur_type == "Beam":
@@ -2800,14 +2594,6 @@ class TransitionsTab(QWidget):
         # Build the section fresh (dropping retired/stale keys), preserving only
         # the transient random-choice bookkeeping and any UNBUILT transition's
         # detail subdict from the existing persisted state.
-        if hasattr(self, 'flip_group'):
-            block_flip = {
-                'rows': self.grid_rows_spin.value(),
-                'cols': self.grid_cols_spin.value(),
-                'direction': self.blockflip_direction_combo.currentText(),
-            }
-        else:
-            block_flip = _existing_subdict('block_flip')
         if hasattr(self, 'blinds_group'):
             self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
             blinds = {
@@ -2818,13 +2604,6 @@ class TransitionsTab(QWidget):
             }
         else:
             blinds = _existing_subdict('blinds')
-        if hasattr(self, 'diffuse_group'):
-            diffuse = {
-                'block_size': self.block_size_spin.value(),
-                'shape': self.diffuse_shape_combo.currentText(),
-            }
-        else:
-            diffuse = _existing_subdict('diffuse')
         if hasattr(self, 'ripple_group'):
             ripple = {'ripple_count': self.ripple_count_spin.value()}
         else:
@@ -2911,10 +2690,6 @@ class TransitionsTab(QWidget):
             }
         else:
             pixel_accretion = _existing_subdict('pixel_accretion')
-        if hasattr(self, 'ink_bloom_group'):
-            ink_bloom = {'detail': float(self.ink_bloom_detail_spin.value()), 'direction': None}
-        else:
-            ink_bloom = _existing_subdict('ink_bloom')
         if hasattr(self, 'melt_drip_group'):
             melt_drip = {
                 'detail': float(self.melt_drip_detail_spin.value()),
@@ -2933,16 +2708,6 @@ class TransitionsTab(QWidget):
             cube_turn = {'direction': self._direction_by_type['cube_turn']}
         else:
             cube_turn = {**_existing_subdict('cube_turn'), 'direction': self._direction_by_type['cube_turn']}
-        if hasattr(self, 'relief_rise_group'):
-            relief_rise = {'direction': self._direction_by_type['relief_rise']}
-        else:
-            relief_rise = {**_existing_subdict('relief_rise'), 'direction': self._direction_by_type['relief_rise']}
-        if hasattr(self, 'accordion_fold_group'):
-            accordion_fold = {'direction': self._direction_by_type['accordion_fold'],
-                              'pleats': self.accordion_pleats_spin.value()}
-        else:
-            accordion_fold = {**_existing_subdict('accordion_fold'),
-                              'direction': self._direction_by_type['accordion_fold']}
         if hasattr(self, 'disintegrate_group'):
             disintegrate = {'direction': self._direction_by_type['disintegrate'],
                             'grain_size': self.disintegrate_grain_spin.value()}
@@ -2975,10 +2740,8 @@ class TransitionsTab(QWidget):
 
         for section, values in (("blinds", blinds), ("crumble", crumble), ("glass_shatter", glass_shatter),
                                 ("exploding_tiles", exploding_tiles),
-                                ("ink_bloom", ink_bloom),
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
-                                ("disintegrate", disintegrate), ("accordion_fold", accordion_fold),
-                                ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam),
+                                ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
                                 ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
                                 ("edge_bloom", edge_bloom)):
             if hasattr(self, f"{section}_group"):
@@ -3005,9 +2768,7 @@ class TransitionsTab(QWidget):
             ),
             'wipe': {'direction': self._dir_wipe},
             'blockspin': {**_existing_subdict('blockspin'), 'direction': self._dir_blockspin},
-            'block_flip': block_flip,
             'blinds': blinds,
-            'diffuse': diffuse,
             'ripple': ripple,
             'crumble': crumble,
             'particle': particle,
@@ -3015,12 +2776,9 @@ class TransitionsTab(QWidget):
             'glass_shatter': glass_shatter,
             'exploding_tiles': exploding_tiles,
             'pixel_accretion': pixel_accretion,
-            'ink_bloom': ink_bloom,
             'melt_drip': melt_drip,
             'page_curl': page_curl,
             'disintegrate': disintegrate,
-            'accordion_fold': accordion_fold,
-            'relief_rise': relief_rise,
             'cube_turn': cube_turn,
             'beam': beam,
             'jigsaw': jigsaw,

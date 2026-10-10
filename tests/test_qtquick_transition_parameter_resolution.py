@@ -84,37 +84,6 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
         assert params["detail"] == pytest.approx(2.0)
 
 
-def test_ink_bloom_parameters_have_no_direction_authority():
-    transition_id = "ink_bloom"
-    rng = _Rng()
-    rng.randint_values = [4321]
-    resolved = resolve_parameterized_phase_c_inputs(
-        transition_id,
-        {transition_id: {"detail": 0.5, "direction": "ignored"}},
-        random_source=rng,
-    )
-    assert resolved.direction is None
-    params = resolved.parameter_dict()
-    assert params["detail"] == pytest.approx(0.5)
-    assert params["seed"] == 4321
-    assert params["depth"] == pytest.approx(
-        float(require_canonical_default("transitions.ink_bloom.depth"))
-    )
-    assert params["gloss"] == pytest.approx(
-        float(require_canonical_default("transitions.ink_bloom.gloss"))
-    )
-
-
-def test_diffuse_resolves_shape_name_and_block_size():
-    resolved = resolve_parameterized_phase_c_inputs(
-        "diffuse",
-        {"diffuse": {"block_size": 15, "shape": "Membrane"}},
-        random_source=_Rng(),
-    )
-    assert resolved.direction is None
-    assert resolved.parameter_dict() == {"block_size": 15, "shape_mode": 1}
-
-
 def test_ripple_generates_seed_once_before_render_ownership():
     resolved = resolve_parameterized_phase_c_inputs(
         "ripple",

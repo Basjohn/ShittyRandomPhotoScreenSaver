@@ -12,11 +12,9 @@ from typing import Iterable, Optional
 from core.animation.types import EasingCurve
 from rendering.gl_programs.keys import (
     BLINDS,
-    BLOCK_FLIP,
     BURN,
     CROSSFADE,
     CRUMBLE,
-    DIFFUSE,
     PARTICLE,
     RAINDROPS,
     SLIDE,
@@ -76,15 +74,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
-        setting_name="Diffuse",
-        stable_id="diffuse",
-        easing_curve=EasingCurve.LINEAR,
-        gl_program_key=DIFFUSE,
-        program_attr="diffuse_program",
-        uniforms_attr="diffuse_uniforms",
-        compositor_transition_class="GLCompositorDiffuseTransition",
-    ),
-    TransitionDescriptor(
         setting_name="Slide",
         stable_id="slide",
         easing_curve=EasingCurve.SINE_IN_OUT,
@@ -108,12 +97,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Directional Pixel Accretion",
         stable_id="pixel_accretion",
-        easing_curve=EasingCurve.LINEAR,
-        requires_hw_accel=True,
-    ),
-    TransitionDescriptor(
-        setting_name="Ink Bloom",
-        stable_id="ink_bloom",
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -160,18 +143,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
-        setting_name="Relief Rise",
-        stable_id="relief_rise",
-        easing_curve=EasingCurve.LINEAR,
-        requires_hw_accel=True,
-    ),
-    TransitionDescriptor(
-        setting_name="Accordion Fold",
-        stable_id="accordion_fold",
-        easing_curve=EasingCurve.LINEAR,
-        requires_hw_accel=True,
-    ),
-    TransitionDescriptor(
         setting_name="Disintegrate",
         stable_id="disintegrate",
         easing_curve=EasingCurve.LINEAR,
@@ -192,15 +163,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         uniforms_attr="crossfade_uniforms",
         compositor_transition_class="GLCompositorCrossfadeTransition",
         startup_compile=True,
-    ),
-    TransitionDescriptor(
-        setting_name="Block Puzzle Flip",
-        stable_id="block_flip",
-        easing_curve=EasingCurve.LINEAR,
-        gl_program_key=BLOCK_FLIP,
-        program_attr="blockflip_program",
-        uniforms_attr="blockflip_uniforms",
-        compositor_transition_class="GLCompositorBlockFlipTransition",
     ),
     TransitionDescriptor(
         setting_name="Warp Dissolve",
@@ -328,7 +290,6 @@ _RUNTIME_LABEL_TO_STABLE_ID = {
     "crossfade": "crossfade",
     "slide": "slide",
     "wipe": "wipe",
-    "diffuse": "diffuse",
     "blinds": "blinds",
     "crumble": "crumble",
     "particle": "particle",
@@ -336,8 +297,6 @@ _RUNTIME_LABEL_TO_STABLE_ID = {
     "warp": "warp_dissolve",
     "raindrops": "ripple",
     "ripple": "ripple",
-    "blockflip": "block_flip",
-    "block_flip": "block_flip",
     "blockspin": "block_spins",
     "block_spin": "block_spins",
 }

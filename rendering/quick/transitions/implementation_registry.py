@@ -38,20 +38,12 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.warp",
     ),
     QuickTransitionImplementationDescriptor(
-        transition_id="block_flip",
-        module_name="rendering.quick.transitions.implementations.block_flip",
-    ),
-    QuickTransitionImplementationDescriptor(
         transition_id="block_spins",
         module_name="rendering.quick.transitions.implementations.block_spins",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="blinds",
         module_name="rendering.quick.transitions.implementations.blinds",
-    ),
-    QuickTransitionImplementationDescriptor(
-        transition_id="diffuse",
-        module_name="rendering.quick.transitions.implementations.diffuse",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="ripple",
@@ -82,10 +74,6 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.pixel_accretion",
     ),
     QuickTransitionImplementationDescriptor(
-        transition_id="ink_bloom",
-        module_name="rendering.quick.transitions.implementations.ink_bloom",
-    ),
-    QuickTransitionImplementationDescriptor(
         transition_id="melt_drip",
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),
@@ -96,14 +84,6 @@ _IMPLEMENTATIONS = (
     QuickTransitionImplementationDescriptor(
         transition_id="cube_turn",
         module_name="rendering.quick.transitions.implementations.cube_turn",
-    ),
-    QuickTransitionImplementationDescriptor(
-        transition_id="relief_rise",
-        module_name="rendering.quick.transitions.implementations.relief_rise",
-    ),
-    QuickTransitionImplementationDescriptor(
-        transition_id="accordion_fold",
-        module_name="rendering.quick.transitions.implementations.accordion_fold",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="disintegrate",

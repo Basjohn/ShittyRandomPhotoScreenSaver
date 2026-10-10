@@ -113,6 +113,15 @@ without the safe path below.
   *Blocked:* mapping old edges onto origins (they carry no origin meaning) or
   letting the renderer admit an edge direction as a fallback.
 
+- **Retired transitions** (`core/settings/transition_retired.py`, run by
+  `SettingsManager._ensure_transitions_defaults` before the defaults merge).
+  Diffuse, Block Puzzle Flip, Ink Bloom, Relief Rise and Accordion Fold (retired
+  2026-10-10) leave the activation, pool and duration maps and lose their own
+  sections; a retired current type becomes Crossfade. It replaced the Block
+  Puzzle Flip `columns` → `cols` rename, which retired with its transition.
+  *Blocked:* resurrecting a retired transition's settings to satisfy an old
+  profile, or keeping its section "just in case".
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry

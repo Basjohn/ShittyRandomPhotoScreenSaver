@@ -74,8 +74,6 @@ and should be preserved for implementation review:
 
 The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
 
-- [ ] **Block Puzzle Flip retirement.** Its clean-room successor Jigsaw Piece Flip is accepted (2026-10-10, with smooth
-  adaptive cut curves and a per-piece outline wave). Retire the legacy transition when the operator chooses the timing.
 - [ ] **T4. Edge Bloom Reveal** — implemented 2026-10-10 on the shared edge field and photo-colour helpers (`Docs/Reference/Transitions.md`, `Docs/Reference/Scene3D_Resources.md`); awaiting operator acceptance. Deactivated by default.
 - [ ] **T5. Liquid Lens.** The destination image is seen first through a moving/refractive lens that expands and distorts until
   it consumes the frame. Useful existing architecture: current transition timing/identity plumbing, fullscreen distortion passes,

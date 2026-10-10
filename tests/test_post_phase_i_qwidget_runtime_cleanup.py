@@ -125,7 +125,6 @@ def test_quick_transition_shader_modules_remain_after_compositor_cleanup() -> No
         "rendering/gl_programs/wipe_program.py",
         "rendering/gl_programs/warp_program.py",
         "rendering/gl_programs/blinds_program.py",
-        "rendering/gl_programs/diffuse_program.py",
         "rendering/gl_programs/raindrops_program.py",
         "rendering/gl_programs/crumble_program.py",
         "rendering/gl_programs/particle_program.py",

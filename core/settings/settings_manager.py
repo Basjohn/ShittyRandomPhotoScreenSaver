@@ -45,6 +45,7 @@ from core.settings.visualizer_settings_snapshot import (
     migrate_legacy_visualizer_mode_activation_schema,
     normalize_visualizer_section_mapping,
 )
+from core.settings.transition_retired import strip_retired_transition_settings
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
@@ -725,15 +726,7 @@ class SettingsManager(QObject):
             else:
                 transitions = {}
 
-            changed = False
-            block_flip = transitions.get('block_flip')
-            if isinstance(block_flip, Mapping) and 'columns' in block_flip:
-                normalized_block_flip = dict(block_flip)
-                normalized_block_flip['cols'] = normalized_block_flip.pop(
-                    'columns'
-                )
-                transitions['block_flip'] = normalized_block_flip
-                changed = True
+            transitions, changed = strip_retired_transition_settings(transitions)
 
             def merge(existing: Dict[str, Any], defaults_map: Mapping[str, Any]) -> bool:
                 changed = False

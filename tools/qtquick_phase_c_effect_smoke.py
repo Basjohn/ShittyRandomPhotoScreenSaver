@@ -1,7 +1,7 @@
 """Focused real-GL wrapper for the remaining parameterized Phase-C effects.
 
 The preserved qtquick_render_node_smoke lifecycle harness stays generic. This
-wrapper admits Diffuse, Ripple, Crumble, Particle, and Burn with deterministic
+wrapper admits Ripple, Crumble, Particle, and Burn with deterministic
 resolved request parameters plus effect-shaped midpoint pixel gates.
 """
 
@@ -38,14 +38,6 @@ _BURN_DIRECTIONS = {
 }
 
 _CASES = {
-    "diffuse": (
-        "rectangle",
-        "membrane",
-        "lines",
-        "diamonds",
-        "amorph",
-        "random",
-    ),
     "ripple": ("count1", "count3", "count8"),
     "crumble": (
         "top",
@@ -65,9 +57,6 @@ _CASES = {
 
 
 def _parameters(effect: str, case: str) -> dict[str, object]:
-    if effect == "diffuse":
-        shape_mode = _CASES["diffuse"].index(case)
-        return {"block_size": 48, "shape_mode": shape_mode}
     if effect == "ripple":
         count = {"count1": 1, "count3": 3, "count8": 8}[case]
         return {"ripple_count": count, "ripple_seed": 123.5}
@@ -183,8 +172,8 @@ def _looks_like_plain_wipe(midpoint: object) -> bool:
     """True when ownership is a monotonic single-axis reveal of pure domains.
 
     A plain wipe/slide shows only pure source and destination, separable by one
-    of the canonical wipe axes. Effects that scatter ownership (Diffuse) or add
-    effect-colored pixels (Ripple/Crumble/Particle/Burn) must not satisfy this,
+    of the canonical wipe axes. Effects that add effect-colored pixels
+    (Ripple/Crumble/Particle/Burn) must not satisfy this,
     so the effect oracles can reject a generic wipe-style fallback.
     """
 
@@ -242,27 +231,6 @@ def _basic_effect_midpoint(
     # Both endpoints must be present at midpoint (so it is neither pure source
     # nor pure destination) with margin appropriate to the dense grid.
     return bool(counts["source"] >= 2 and counts["destination"] >= 2)
-
-
-def _matches_diffuse(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    case: object,
-) -> bool:
-    if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
-        return False
-    if _looks_like_crossfade(midpoint):
-        return False
-    # Diffuse must be spatial rather than a uniform crossfade. A 5x5 sample
-    # set must contain more than one ownership/effect domain at midpoint.
-    if len({_domain(color) for color in midpoint}) < 2:
-        return False
-    # And it must not reduce to a monotonic single-axis wipe: a scattered block
-    # dissolve is either spatially non-separable or carries feathered edge
-    # pixels a plain wipe never produces.
-    return (not _looks_like_plain_wipe(midpoint)) or _has_effect_pixels(midpoint)
 
 
 def _matches_ripple(
@@ -365,7 +333,6 @@ def _matches_burn(
 
 
 _ORACLES = {
-    "diffuse": _matches_diffuse,
     "ripple": _matches_ripple,
     "crumble": _matches_crumble,
     "particle": _matches_particle,

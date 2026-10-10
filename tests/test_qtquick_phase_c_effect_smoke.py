@@ -94,13 +94,11 @@ def _run(effect: str, midpoint, case: str) -> bool:
 
 def test_phase_c_smoke_exposes_all_remaining_parameterized_effects():
     assert tuple(phase_c_smoke._CASES) == (
-        "diffuse",
         "ripple",
         "crumble",
         "particle",
         "burn",
     )
-    assert len(phase_c_smoke._CASES["diffuse"]) == 6
     assert len(phase_c_smoke._PARTICLE_DIRECTIONS) == 10
     assert len(phase_c_smoke._CASES["particle"]) == 12
     assert len(phase_c_smoke._BURN_DIRECTIONS) == 6
@@ -109,10 +107,6 @@ def test_phase_c_smoke_exposes_all_remaining_parameterized_effects():
 
 
 def test_phase_c_smoke_parameters_are_fully_resolved_and_deterministic():
-    assert phase_c_smoke._parameters("diffuse", "membrane") == {
-        "block_size": 48,
-        "shape_mode": 1,
-    }
     assert phase_c_smoke._parameters("ripple", "count8") == {
         "ripple_count": 8,
         "ripple_seed": 123.5,
@@ -173,7 +167,6 @@ _ALL_WIPE_AXES = tuple(smoke._WIPE_AXES)
 @pytest.mark.parametrize(
     ("effect", "case"),
     (
-        ("diffuse", "rectangle"),
         ("ripple", "count3"),
         ("crumble", "top"),
         ("particle", "converge"),
@@ -190,7 +183,6 @@ def test_effect_oracles_reject_a_plain_wipe_fallback(effect, case, axis_name):
 @pytest.mark.parametrize(
     ("effect", "case"),
     (
-        ("diffuse", "rectangle"),
         ("ripple", "count3"),
         ("crumble", "top"),
         ("particle", "converge"),
@@ -199,11 +191,6 @@ def test_effect_oracles_reject_a_plain_wipe_fallback(effect, case, axis_name):
 )
 def test_effect_oracles_reject_a_uniform_crossfade_fallback(effect, case):
     assert _run(effect, _crossfade_midpoint(), case) is False
-
-
-def test_diffuse_oracle_accepts_scattered_block_ownership():
-    # A scattered, non-separable block dissolve is the Diffuse signature.
-    assert _run("diffuse", _scattered_blocks(), "rectangle") is True
 
 
 def test_ripple_oracle_accepts_radial_centre_arrival_only():

@@ -15,7 +15,6 @@ import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
-from rendering.gl_programs.accordion_fold_options import ACCORDION_EDGES, ACCORDION_PLEATS_RANGE
 from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
@@ -179,33 +178,6 @@ def _resolve_blinds(
         **_surface_values(cfg, defaults, ("gloss",)),
         **resolve_scene_quality(settings, cfg, defaults),
     })
-
-
-def _resolve_diffuse(
-    settings: Mapping[str, object],
-    _rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "diffuse")
-    defaults = _canonical("diffuse")
-    default_block_size = max(1, int(defaults["block_size"]))
-    block_size = max(
-        1,
-        _integer(
-            _value(cfg, defaults, "block_size"),
-            default_block_size,
-        ),
-    )
-    default_shape = str(defaults["shape"])
-    shape = str(_value(cfg, defaults, "shape") or default_shape).strip().lower()
-    shape_mode = {
-        "rectangle": 0,
-        "membrane": 1,
-        "lines": 2,
-        "diamonds": 3,
-        "amorph": 4,
-        "random": 5,
-    }.get(shape, 0)
-    return _finish(None, {"block_size": block_size, "shape_mode": shape_mode})
 
 
 def _resolve_ripple(
@@ -777,20 +749,6 @@ def _resolve_pixel_accretion(
     )
 
 
-def _resolve_organic(
-    transition_id: str,
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, transition_id)
-    defaults = _canonical(transition_id)
-    return _finish(
-        None,
-        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults),
-         **_surface_values(cfg, defaults, ("depth", "gloss"))},
-    )
-
-
 # Melt starts at an origin rather than sweeping from an edge (operator rework
 # 2026-09-23). The Settings label maps to the resolved origin code.
 MELT_ORIGIN_LABELS = {
@@ -842,39 +800,6 @@ def _resolve_disintegrate(
         "wind": max(0.5, min(2.0, _number(_value(cfg, defaults, "wind"), float(defaults["wind"])))),
         **resolve_scene_quality(settings, cfg, defaults),
     })
-
-
-def _resolve_accordion_fold(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "accordion_fold")
-    defaults = _canonical("accordion_fold")
-    edge = ACCORDION_EDGES.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if edge is None:
-        edge = str(rng.choice(tuple(ACCORDION_EDGES.values())))
-    low, high = ACCORDION_PLEATS_RANGE
-    return _finish(edge, {
-        "pleats": max(low, min(high, _integer(_value(cfg, defaults, "pleats"), int(defaults["pleats"])))),
-        **_surface_values(cfg, defaults, ("gloss",)),
-        **resolve_scene_quality(settings, cfg, defaults),
-    })
-
-
-def _resolve_relief_rise(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "relief_rise")
-    defaults = _canonical("relief_rise")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_PIXEL_DIRECTIONS,
-        mapping=_PIXEL_DIRECTION_MAP,
-        rng=rng,
-    )
-    return _finish(direction, {**_surface_values(cfg, defaults, ("depth", "gloss")),
-                               **resolve_scene_quality(settings, cfg, defaults)})
 
 
 def _resolve_beam(
@@ -998,7 +923,6 @@ def _resolve_edge_bloom(
 
 _RESOLVERS = {
     "blinds": _resolve_blinds,
-    "diffuse": _resolve_diffuse,
     "ripple": _resolve_ripple,
     "crumble": _resolve_crumble,
     "particle": _resolve_particle,
@@ -1006,12 +930,9 @@ _RESOLVERS = {
     "glass_shatter": _resolve_glass_shatter,
     "exploding_tiles": _resolve_exploding_tiles,
     "pixel_accretion": _resolve_pixel_accretion,
-    "ink_bloom": lambda settings, rng: _resolve_organic("ink_bloom", settings, rng),
     "melt_drip": _resolve_melt_drip,
     "page_curl": _resolve_page_curl,
     "disintegrate": _resolve_disintegrate,
-    "accordion_fold": _resolve_accordion_fold,
-    "relief_rise": _resolve_relief_rise,
     "cube_turn": _resolve_cube_turn,
     "beam": _resolve_beam,
     "jigsaw": _resolve_jigsaw,

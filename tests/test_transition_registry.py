@@ -60,7 +60,6 @@ def test_transition_registry_program_map_covers_runtime_classes() -> None:
 def test_transition_registry_runtime_identity_resolves_internal_labels_and_classes() -> None:
     assert get_transition_descriptor_for_runtime_identity("warp").stable_id == "warp_dissolve"
     assert get_transition_descriptor_for_runtime_identity("raindrops").stable_id == "ripple"
-    assert get_transition_descriptor_for_runtime_identity("blockflip").stable_id == "block_flip"
     assert (
         get_transition_descriptor_for_runtime_identity("GLCompositorBurnTransition").stable_id
         == "burn"
@@ -77,10 +76,8 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "ripple": EasingCurve.LINEAR,
         "wipe": EasingCurve.QUAD_IN_OUT,
         "block_spins": EasingCurve.LINEAR,
-        "diffuse": EasingCurve.LINEAR,
         "slide": EasingCurve.SINE_IN_OUT,
         "crossfade": EasingCurve.QUAD_IN_OUT,
-        "block_flip": EasingCurve.LINEAR,
         "warp_dissolve": EasingCurve.LINEAR,
         "blinds": EasingCurve.LINEAR,
         "crumble": EasingCurve.LINEAR,
@@ -89,12 +86,9 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "glass_shatter": EasingCurve.LINEAR,
         "exploding_tiles": EasingCurve.LINEAR,
         "pixel_accretion": EasingCurve.LINEAR,
-        "ink_bloom": EasingCurve.LINEAR,
         "melt_drip": EasingCurve.LINEAR,
         "page_curl": EasingCurve.LINEAR,   # eases its own curl line
         "disintegrate": EasingCurve.LINEAR,
-        "accordion_fold": EasingCurve.LINEAR,
-        "relief_rise": EasingCurve.LINEAR,
         "cube_turn": EasingCurve.LINEAR,
         "beam": EasingCurve.LINEAR,
         "jigsaw": EasingCurve.LINEAR,

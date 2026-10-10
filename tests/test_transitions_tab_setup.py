@@ -134,8 +134,8 @@ def test_pool_membership_toggle_persists_and_only_activated_rows_shown(qapp, set
     assert settings_manager.get("transitions", {}).get("pool", {}).get("Wipe") is False
 
     # Deactivating a transition hides it from the pool list.
-    tab._activation_checkboxes["Diffuse"].setChecked(False)
-    assert tab._pool_checkboxes["Diffuse"].isHidden() is True
+    tab._activation_checkboxes["Crossfade"].setChecked(False)
+    assert tab._pool_checkboxes["Crossfade"].isHidden() is True
 
 
 def test_selecting_transition_pill_sets_manual_type(qapp, settings_manager, qtbot):

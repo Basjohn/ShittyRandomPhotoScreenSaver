@@ -278,7 +278,6 @@ python tools\qtquick_phase_c_effect_smoke.py --effect <effect> --case <case> --w
 
 Canonical case families include:
 
-- Diffuse: rectangle, membrane, lines, diamonds, amorph, random;
 - Ripple: count1, count3, count8;
 - Crumble: top, bottom, random-weighted, random-choice, age-weighted;
 - Particle: authored modes/directions including directional variants, swirl and converge;
@@ -305,7 +304,6 @@ and vary only the parameter being tested.
 
 Effect-specific midpoint/contrast oracles supplement exact endpoints:
 
-- Diffuse: shape-specific spatial properties must reject a plain wipe/crossfade substitute;
 - Ripple: count1/count3/count8 produce distinct radial/ring structure;
 - Crumble: release weighting changes deterministic closed-prism departure, rough broken sides and parent-bound chip debris;
 - Particle: direction/mode changes centroid/angular/radial structure;

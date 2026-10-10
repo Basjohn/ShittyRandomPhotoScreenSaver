@@ -125,10 +125,6 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 
 
-#### Ink Bloom
-<img width="480" height="270" alt="transition_ink_bloom_default" src="https://github.com/user-attachments/assets/8edbf372-c04b-447c-b276-c16a32724505" />
-
-
 #### Melt Drip
 <img width="480" height="270" alt="transition_melt_drip_default" src="https://github.com/user-attachments/assets/2dc2a0ed-fb1b-4964-a2f3-a26bf19db201" />
 
@@ -140,7 +136,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 </details>
 
 <details>
-<summary><b>Classic, patterned and screen-space effects · 7 transitions</b></summary>
+<summary><b>Classic, patterned and screen-space effects · 6 transitions</b></summary>
 
 
 #### Slide
@@ -151,10 +147,6 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 #### Ripple
 <img width="480" height="270" alt="transition_ripple_default" src="https://github.com/user-attachments/assets/e5dbe298-3e01-4b5b-8d2a-3b4838e4216e" />
-
-#### Diffuse
-<img width="480" height="270" alt="transition_diffuse_default" src="https://github.com/user-attachments/assets/fe90f3f2-b4b0-44bd-a86e-91b89033826d" />
-
 
 #### 3D Block Spins
 <img width="480" height="270" alt="transition_block_spins_reflection" src="https://github.com/user-attachments/assets/fdb486df-ca50-4943-a54d-11655183c471" />
