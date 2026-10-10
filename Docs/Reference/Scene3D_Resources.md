@@ -185,6 +185,17 @@ expensive. It costs a fixed ~0.1 ms of CPU submit (about 20 calls: three dispatc
 GPU the two paths are close in total; the decision rests on the GPU side scaling with hardware and population while
 the CPU side stays constant. A future consumer with a smaller pool should be measured the same way before using it.
 
+## Edge fields (contour distance)
+
+`rendering/quick/scene3d/edge_field.py` derives, once per run and photograph, a field of the distance to the
+picture's nearest structural contour and that contour's strength (RG16F, linear) from the lent presentation texture:
+luma copy, two binomial blurs, Sobel ridges after non-maximum suppression, jump flooding, resolve. Seven dispatches
+plus one per flood step, on the render thread in the frame that first needs it; image units are scoped by
+`bound_image`. Six textures at 768 px on the longer side (about 4.6 MB at 16:9), allocated by the consumer's warm-up
+for the render size and dropped at its `park()`; nothing exists otherwise. `edge_field_reference` is the CPU mirror
+(tests compare ridges and flooded distances). First consumer: Edge Bloom Reveal. Seeded differently it can serve
+organic fills (Capillary Bloom, Surface Tension Merge).
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the

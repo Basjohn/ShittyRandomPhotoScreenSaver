@@ -283,32 +283,6 @@ def exploding_tiles_blast(progress: float) -> tuple[float, float]:
     return flash * fade, fire * math.exp(-age * 7.5) * fade
 
 
-def exploding_tiles_dominant_colour(
-    rgba8: bytes, pixel_size: tuple[int, int], row_stride: int
-) -> tuple[float, float, float]:
-    """The photograph's most used colour, as 0..1 RGB.
-
-    The fullest bin of a coarse (3 bits per channel) histogram over a sparse
-    64 x 36 sample grid, averaged within that bin: cheap enough to run once per
-    run, and a real majority colour rather than a muddy mean.
-    """
-    width, height = int(pixel_size[0]), int(pixel_size[1])
-    data = memoryview(rgba8)
-    bins: dict[int, list[int]] = {}
-    for row in range(36):
-        base = ((2 * row + 1) * height // 72) * row_stride
-        for column in range(64):
-            index = base + 4 * ((2 * column + 1) * width // 128)
-            red, green, blue = data[index], data[index + 1], data[index + 2]
-            entry = bins.setdefault((red >> 5) << 6 | (green >> 5) << 3 | blue >> 5, [0, 0, 0, 0])
-            entry[0] += 1
-            entry[1] += red
-            entry[2] += green
-            entry[3] += blue
-    count, red, green, blue = max(bins.values(), key=lambda entry: entry[0])
-    return red / (255.0 * count), green / (255.0 * count), blue / (255.0 * count)
-
-
 def exploding_tile_release(reach: float, force: float, center_out: bool, jitter: float = 0.0) -> float:
     """CPU mirror of ``tileRelease``: when the shock front frees a tile."""
     span = _FRONT_SPAN[bool(center_out)] / math.sqrt(force)

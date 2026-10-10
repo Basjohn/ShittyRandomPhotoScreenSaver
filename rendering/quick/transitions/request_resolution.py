@@ -271,6 +271,7 @@ def resolve_quick_transition_spec(
         "jigsaw",
         "volumetric_dissolve",
         "vhs",
+        "edge_bloom",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

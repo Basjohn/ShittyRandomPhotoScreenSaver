@@ -52,7 +52,7 @@ def test_onboarding_preview_assets_match_declared_formats_and_dimensions() -> No
         assert row["size"] == [frame_width * len(row["progress"]), frame_height]
     generated = [*ASSETS.glob("widget_*.png"), *ASSETS.glob("transition_*.png"), *ASSETS.glob("visualizer_*.png")]
     total = sum(path.stat().st_size for path in generated)
-    assert total <= 24 * 1024 * 1024
+    assert total <= 32 * 1024 * 1024
     assert manifest["total_bytes"] == total
     # Lossless only: no stale lossy files are left to ship.
     assert not list(ASSETS.glob("*.jpg"))

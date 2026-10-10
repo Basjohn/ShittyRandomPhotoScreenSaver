@@ -20,6 +20,7 @@ from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYL
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
+from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -978,6 +979,23 @@ def _resolve_vhs(
     })
 
 
+def _resolve_edge_bloom(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "edge_bloom")
+    defaults = _canonical("edge_bloom")
+    color = _normalized_glow_color(_value(cfg, defaults, "color"), defaults["color"], field_name="color")
+    source = EDGE_BLOOM_COLOUR_SOURCES.get(str(_value(cfg, defaults, "color_source")),
+                                           EDGE_BLOOM_COLOUR_SOURCES[str(defaults["color_source"])])
+    return _finish(None, {
+        "seed": _seed(rng),
+        "color": tuple(min(1.0, channel) for channel in color[:3]),
+        "color_source": source,
+        **_surface_values(cfg, defaults, ("glow", "detail")),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -999,6 +1017,7 @@ _RESOLVERS = {
     "jigsaw": _resolve_jigsaw,
     "volumetric_dissolve": _resolve_volumetric_dissolve,
     "vhs": _resolve_vhs,
+    "edge_bloom": _resolve_edge_bloom,
 }
 
 

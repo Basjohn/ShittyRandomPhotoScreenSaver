@@ -47,7 +47,7 @@ _SHADOW_KEEP: Final = 30
 _PREVIEW_DPR: Final = 2.0
 # Everything is lossless PNG (Qt's built-in codec).  Transition strips are
 # flat-colour artwork, which PNG compresses well and lossy codecs smear.
-_ASSET_BUDGET_BYTES: Final = 24 * 1024 * 1024
+_ASSET_BUDGET_BYTES: Final = 32 * 1024 * 1024
 _SCENE_SIZE: Final = (1400, 1000)
 _WIDGET_ORIGIN: Final = (60.0, 60.0)
 

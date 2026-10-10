@@ -577,6 +577,22 @@ def test_jigsaw_page_offers_orders_and_round_trips(qapp, settings_manager, qtbot
     assert persisted == {"direction": order, "pieces": pieces, "antialiasing": "Off"}
 
 
+def test_edge_bloom_page_round_trips(qapp, settings_manager, qtbot):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "edge_bloom_group")
+    tab._activation_checkboxes["Edge Bloom Reveal"].setChecked(True)
+    tab._on_nav_selected("Edge Bloom Reveal")
+    assert not tab.direction_combo.isVisibleTo(tab)
+    tab.edge_bloom_glow_spin.setValue(0.3)
+    tab.edge_bloom_detail_spin.setValue(0.8)
+    tab.edge_bloom_colour_source_combo.setCurrentText("Next Picture")
+    assert not tab.edge_bloom_color_btn.isEnabled()          # the custom colour applies only to Custom
+    persisted = settings_manager.get("transitions", {})["edge_bloom"]
+    assert persisted["glow"] == 0.3 and persisted["detail"] == 0.8 and len(persisted["color"]) == 4
+    assert persisted["color_source"] == "Next Picture"
+
+
 def test_vhs_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
     from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
 
