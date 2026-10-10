@@ -121,6 +121,10 @@ _IMPLEMENTATIONS = (
         transition_id="surface_tension",
         module_name="rendering.quick.transitions.implementations.surface_tension",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="chromatic_shear",
+        module_name="rendering.quick.transitions.implementations.chromatic_shear",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

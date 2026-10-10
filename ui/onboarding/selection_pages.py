@@ -262,6 +262,7 @@ TRANSITION_COPY = {
     "volumetric_dissolve": "The picture bursts into glowing particles and mist as the next one appears.",
     "vhs": "The tape loses tracking and the picture rolls over to the next one.",
     "edge_bloom": "The next picture grows out of its own glowing edges.",
+    "chromatic_shear": "The picture shears into slices that split into rainbow layers, then slide back together as the next one.",
     "surface_tension": "Pools of the next picture swell, reach for each other and merge until they cover the old one.",
     "membrane": "The picture, a glossy membrane, twists over like a ribbon and melts away to the next one.",
     "liquid_lens": "A lens of water grows across the picture, showing the next one through it.",
