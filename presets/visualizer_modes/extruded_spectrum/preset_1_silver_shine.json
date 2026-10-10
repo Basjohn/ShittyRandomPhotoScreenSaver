@@ -14,6 +14,7 @@
         "extruded_spectrum_hue_drift": 0.03,
         "extruded_spectrum_shadow_strength": 0.78,
         "extruded_spectrum_colouring": "Bar Colours",
+        "extruded_spectrum_rainbow_ghost": false,
         "extruded_spectrum_allow_overflow": true,
         "extruded_spectrum_smooth_edges": true,
         "extruded_spectrum_shadow_reach": "Distant",
