@@ -41,7 +41,7 @@ EEVEE from the 3/4 camera, are in `assets/usu/review/clips_webp/` (open them in 
 | Static model | approved 2026-10-08 (`Usu.blend`) |
 | Materials | felt v4: procedural fibre/stain/relief group on rest-pose coordinates, charcoal felt mittens, darker iris, tan thread, sheen fuzz; rebuilt by `assets/usu/source/usu_felt_materials.py` in either file |
 | Rig | rough, `Usu_Rig.blend` (copy): 30 bones (root, spine chain, 4-bone ears, limbs, eye-state bones), procedural per-part weights, Blink_L/Blink_R/Blink drivers, pose library and pose tests |
-| Clips | 19 rough actions at 30 fps (`USU_CLIPS.py` rebuilds them); moving previews reviewed 2026-10-10 |
+| Clips | 19 rough actions at 30 fps (`USU_CLIPS.py` then `USU_GROUND.py` rebuild them); grounded, in place, ear-cleared for gaits and prone poses (2026-10-10) |
 | Export | nothing yet; blocked on S19 (format decided there) |
 
 ---
@@ -53,28 +53,49 @@ operator; the operator accepts milestones.
 
 ### B1 — Rig refinement
 
-- Replace procedural weights at shoulders, hips and neck with painted/smoothed weights; remove the shoulder pinch seen when
-  arms trail (NarutoRun) and the **ear-root "horn"** that pokes up at the crown when an ear swings back (Run, NarutoRun):
-  give the head↔ear.01 transition a softer weight falloff, or a corrective shape keyed on ear.01 rotation.
+Done 2026-10-10: the ear root blends from `head` to `ear.01` over the ear's first ~0.65 units (it was a hinge within
+4% of the ear), and the clips bend swings along the ear instead of folding it at the root. The crown "horn" is smaller
+but not gone. Remaining:
+
+- **Ear-root knuckle:** at the largest swings (NarutoRun, Run) the front edge of the far ear's root still lifts above
+  the skull outline. Fix with a corrective shape key driven by `ear.01` X rotation (or a deeper ear socket); weights alone
+  cannot hide it.
+- Painted/smoothed weights at shoulders, hips and neck (still procedural there).
 - Authoring-only **IK** for hands and feet (foot roll pivots, hand plant targets) so contacts can be locked; clips are baked
-  back to FK for export.
+  back to FK for export. The ground pass (B2) already puts the lowest point on the floor; IK adds per-limb locks.
 - Confirm every stitch stays on its owner under extreme poses; keep ≤4 influences per vertex.
-- **Check:** pose tests re-rendered (`USU_POSE_TESTS.json` plus arms-trailing and ears-back), no pinch, horn, seam drift or
+- **Check:** pose tests re-rendered (`USU_POSE_TESTS.json` plus arms-trailing and ears-back), no pinch, seam drift or
   stitch lift.
 
-### B2 — Clip fixes from the 2026-10-10 moving review
+### B2 — Clip fixes
+
+Done 2026-10-10 (`USU_CLIPS.py` + new text `USU_GROUND.py`, always run in that order; source copies in
+`assets/usu/source/`):
+
+- **Ground pass** re-keys only the root per frame from the evaluated meshes: contact clips put their lowest point exactly
+  on the floor (worst sink was 1.87 units in RollOver, 0.83 in Fall; floats up to 0.38 at the PushUp/Stand hand-off), gait
+  flight phases only lift; every contact clip now measures 0.000 sink and float.
+- **In place:** clips that rotate the root keep the pelvis horizontally at rest (the plan's in-place rule; the engine owns
+  travel), so falls no longer slide ~2 units out of frame and every chained hand-off (Skid→Fall→GetUp,
+  SitDown→LieDown→IdleLie→RollOver→PushUpFacingCamera→StandFacingCamera, PushUp→Stand) matches bone for bone.
+- **Ear clearance:** a BVH scan of every frame found the lower ears passing through the upper arms in nearly every gait
+  and prone pose (they hang just outside the arms). Ears now flare outward as they swing, prone poses no longer press them
+  inward, and the fall's lurch sweeps them back: Walk, Jog, Run, Skid, GetUp, PushUp, Stand, TurnToTravel and EarRecoil
+  scan clean.
+- NarutoRun arms trail lower and wider; Walk swings its arms more; TurnToTravel's ear swing turns with the body; ear
+  swings bend along the ear (root 0.3, each further segment 0.27 of the swing) instead of folding at the root.
+
+Remaining (from the same scan; counts are intersecting face pairs above the rest pose):
 
 | Clip(s) | Problem | Fix |
 | --- | --- | --- |
-| Fall, GetUp, RollOver, PushUp, PushUpFacingCamera | head, mittens and belly sink through the floor | automated **ground clamp** pass (per frame, lift the root so the lowest evaluated vertex sits on the floor, then re-key) plus planted-hand IK |
-| PushUp / PushUpFacingCamera end, Stand / StandFacingCamera start | Usu floats, feet off the floor, and the hand-off poses do not match | end and start poses shared exactly between chained clips; feet planted |
-| NarutoRun | trailing mittens pass through the streaming ears | lower/wider arm trail or ears higher; check from Behind, Side and Oncoming |
-| Run, NarutoRun | ear-root horn (see B1) | B1 |
-| Fall | the slide carries Usu out of frame | decide the root-motion owner (`Usu_Moonscape.md` §3.1): author in place, or export the slide as root delta |
-| Walk | arms barely swing | a little more swing and counter-rotation |
+| Fall (around frame 12) | lower ears still cross the arms between the lurch and the face-down landing (~300 pairs, was 692) | an extra key holding the ear sweep until the arms have passed |
+| IdleLie, LieDown end, RollOver | "chin on mittens" presses the forearms into the head (298); the roll drags ears through the body and arms (~530-670) | hand-author the roll with the ears splayed and the arms tucked; decide whether the chin-on-mittens squash is intended (plush squash) or should part |
+| LieDown (frame ~10) | legs cross each other and an arm while turning to lie down | re-time the turn so the legs part before the body rotates |
+| Prone poses, NarutoRun, Stand | upper arms brush the side of the head (26-130) | shoulder weights (B1) or a little arm abduction |
 
-- **Check:** clip previews re-rendered from the 3/4 camera and from the Moonscape's Behind and Side framing; no floor
-  penetration, floating, or limb/ear interpenetration in any frame.
+- **Check:** the BVH scan (arms vs ears/head/feet, ears vs body) reports no pairs above the rest pose, and the clip previews
+  (3/4 and Side) show no interpenetration.
 
 ### B3 — Missing clips (from `Usu_Moonscape.md` §3.1)
 
