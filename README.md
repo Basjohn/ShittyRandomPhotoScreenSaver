@@ -1,15 +1,14 @@
-
 # ShittyRandomPhotoScreenSaver (SRPSS)
+<img width="40%" alt="SRPSS_logo_blue_purple_slow_smooth" src="https://github.com/user-attachments/assets/c9917e3d-44f9-41b3-ab76-d308908d9c95" />
 
-<img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
-<img width="100%" alt="SRPSS running with the Bubble visualizer across a wide desktop" src="https://github.com/user-attachments/assets/2f7273e4-3e91-4491-88c2-a00d31cc514f" />
+<img width="90%" alt="SRPSS running with the Bubble visualizer across a wide desktop" src="https://github.com/user-attachments/assets/7041843a-7370-4ee4-bd8d-de1ab7eee667" />
 
 **It's a random wallpaper screensaver, a multi-monitor display, a widget dashboard, a media controller, gmail notifier, reddit aggrigator, news reader with images, custom rss feed dashboard and a disturbingly configurable audio visualizer.** You can use as much or as little of that as you want. AlsoisbasicallyafuckingcustomopenglengineatthispointtoobecauseIhaveboundaryissuesorsomething.
 
-[**Download the latest release**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/latest) · [**All releases**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases) · [**Installation**](#installation--usage-windows-10--11) · [**Controls**](#keyboard--mouse-controls)
+[**Download the latest release**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases/latest) · [**All releases**](https://github.com/Basjohn/ShittyRandomPhotoScreenSaver/releases) · [**Transitions**](#transition-gallery) · [**Controls**](#mouse--keyboard-controls)
 
 ### At a glance
 
@@ -71,6 +70,8 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 - **Interaction Mode:** Keep the saver open while interacting with widgets. Normal cursor movement needn't exit it; `Ctrl` can temporarily expose the interaction halo when needed.
 - **Media Center (MC) builds:** Designed especially for keeping the display running as an interactive, always-on dashboard.
 
+<img width="40%" alt="GuidedWidgets" src="https://github.com/user-attachments/assets/7ab76f65-2b6e-456f-88d5-6147a9d02776" />
+
 ---
 
 ## Transition gallery
@@ -78,8 +79,6 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 Some fancy ass transition effects are below, expand each group to see its fancy-ass-ness and hopefully not make your browser memory eat dirt. 
 
 **Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:**
-<details>
-
 
 <details>
 <summary><b>Fracture, particles and destruction · 9 transitions</b></summary>
@@ -139,7 +138,8 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 </details>
 
-<summary><b>Classic, patterned and screen-space effects · 9 transitions</b></summary>
+<details>
+<summary><b>Classic, patterned and screen-space effects · 7 transitions</b></summary>
 
 #### Crossfade
 <!-- WebP: Crossfade -->
@@ -169,7 +169,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 ### This Sunvabitch Has No Business Being As Pretty As It Took Me Days To Get It Because UI Is The One Thing I Enjoy More Than Abusing Title Case.
 
-<img width="100%" alt="SRPSS settings dialog showing its custom theme and controls" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
+<img width="50%" alt="SRPSS settings dialog showing its custom theme and controls" src="https://github.com/user-attachments/assets/cd84d3ca-b538-4044-9d80-602568a84df8" />
 
 It's a dark, fully themeable, frameless interface that even simulates DWM transparency from the Vista era.
 
@@ -222,16 +222,35 @@ While seeming strange at first, if you have multiple monitors you can pick one o
 
 ---
 
-## Keyboard & mouse controls
+## Mouse & keyboard controls
+
+<details>
+<summary><b>Mouse controls, interaction halo and 3D visualizer gestures</b></summary>
+
+- **Normal mode:** Moving the mouse beyond a small threshold, or clicking a mouse button, exits the screensaver unless the temporary `Ctrl` interaction halo is active.
+- **Interaction Mode ON:** Mouse movement and regular clicks do not exit. Double-clicking advances to the next image.
+- **Hold `Ctrl`:** Reveal the interaction halo/cursor proxy for admitted widget actions.
+
+| Mouse gesture | Action |
+| --- | --- |
+| `Ctrl` + right-click | Open the context menu |
+| Double right-click empty space | Enter Edit Mode |
+| Double left-click empty space (in Edit Mode) | Save and leave Edit Mode |
+| `Alt` + left-drag on a 3D visualizer | Orbit the applicable 3D view, including Voxel Sphere |
+| `Alt` + right-drag on a 3D visualizer | Move its stage without entering Edit Mode (Interaction Mode) |
+| `Alt` + mouse wheel on a 3D visualizer | Resize its stage without entering Edit Mode (Interaction Mode) |
+
+Right Click while holding Ctrl and a glorious context menu is born.
+
+Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
+
+</details>
 
 <details>
 <summary><b>Keyboard shortcuts while the screensaver is running</b></summary>
 
 | Key | Action |
 | --- | --- |
-| `Cntrl + Right Click` | Open Context Menu
-| `Double Right Click Empty Space` | Enter Edit Mode
-| `Double Left Click Empty Space` | Save and Leave Edit Mode
 | `Z` / `X` | Previous / next image |
 | `C` | Cycle transition type |
 | `Shift+0`–`Shift+9` | Save a layout slot |
@@ -242,24 +261,6 @@ While seeming strange at first, if you have multiple monitors you can pick one o
 | `Home` | Global media play/pause |
 | `End` | Global system mute toggle |
 | `Esc` / `Q` | Exit the screensaver |
-
-
-</details>
-
-<details>
-<summary><b>Mouse, interaction halo and 3D visualizer gestures</b></summary>
-
-- **Normal mode:** Moving the mouse beyond a small threshold, or clicking a mouse button, exits the screensaver unless the temporary `Ctrl` interaction halo is active.
-- **Interaction Mode ON:** Mouse movement and regular clicks do not exit. Double-clicking advances to the next image.
-- **Hold `Ctrl`:** Reveal the interaction halo/cursor proxy for admitted widget actions.
-- **`Ctrl` + right-click:** Open the glorious context menu.
-- **Alt + left-drag on a 3D visualizer:** Orbit the applicable 3D view, including Voxel Sphere.
-- **Alt + right-drag on a 3D visualizer:** Move its stage without entering Edit Mode (Interaction Mode).
-- **Alt + mouse wheel on a 3D visualizer:** Resize its stage without entering Edit Mode (Interaction Mode).
-
-Right Click while holding Ctrl and a glorious context menu is born.
-
-Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
 
 </details>
 
@@ -273,10 +274,8 @@ Useful documentation for completely acceptable stealing of any code:
 - [`Docs/Reference/Transitions.md`](Docs/Reference/Transitions.md): transition catalogue behaviour and controls.
 - [`Docs/Reference/Visualizer_Reference.md`](Docs/Reference/Visualizer_Reference.md): Visualizer modes and presentation.
 - [`Docs/Reference/Feeds.md`](Docs/Reference/Feeds.md): feed card capabilities.
-- [`Docs/Reference/Release_Media.md`](Docs/Reference/Release_Media.md): animated WebP showcase generation.
-- [`Current_Plan.md`](Current_Plan.md): work currently in progress and outstanding acceptance.
-
-</details>
+- [`Docs/Historical_Bugs.md`](Docs/Historical_Bugs.md): **PEER INTO HELL ITSELF FOR THE STRIFE I HAVE OVERCOME TO BRING YOU THIS TAINTED BLESSING.**
+- [`Current_Plan.md`](Current_Plan.md): work currently being fucked up by me, agent or both. 
 
 ---
 
