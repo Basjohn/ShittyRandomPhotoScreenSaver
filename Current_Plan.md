@@ -182,6 +182,22 @@ After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in 
   Measure each primitive independently before combinations.
 - [ ] **Visualizer vertical sequence:** Reactive Particle Field -> Spectrum Terrain/Skyline/Tunnel -> Waveform Ribbon ->
   Deformable Blob Sphere -> Bubble Depth Field under Bubble Temporal Fidelity.
+- [ ] **S19–S27 character and world foundations** (needed by the deferred Usu Moonscape vertical; contracts and candidate
+  consumers in `Docs/Future_Work/Usu_Moonscape.md` §5). Admit one at a time through a transition or Visualizer consumer,
+  each lazy, dormant when unused, measured, warmed and tier-gated:
+  - [ ] **S19 asset import + bake pipeline:** Blender → validated glTF 2.0 → packed SRPSS binary (meshes, skins, morphs,
+    clips, baked materials), provenance-stamped; runtime reads only the packed form.
+  - [ ] **S20 static mesh renderer** for imported meshes with shared materials/instancing (candidate: Paper Lantern/Origami
+    transition).
+  - [ ] **S21 GPU skinning** (linear blend; joint palette streamed; stitches bound to surface owners).
+  - [ ] **S22 animation clips + graph** on logical time: hysteretic cross-fades, additive/masked layers (blink, ears,
+    accents), root-motion contract, eye-state tracks (candidate: Usu cameo transition / test harness).
+  - [ ] **S23 deterministic secondary motion** (critically damped springs per logical step; no physics engine).
+  - [ ] **S24 felt/plush sheen lobe + fuzz shells** with emitted-light tips feeding the shared bloom, tinted by lighting or
+    rainbow progress.
+  - [ ] **S25 real shadow maps** (S17's "reusable real 3D shadows": one fitted directional map, soft PCF).
+  - [ ] **S26 sphere world + seeded crater field + instanced starscape** (candidate: Moon Turn transition with S25/S27).
+  - [ ] **S27 perspective orbit camera** independent of the photo-plane camera.
 - [ ] Only after primitives are accepted: electrical storm terrain, smoke-lit voxel fracture, ember/dust destruction,
   refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL combinations.
 
