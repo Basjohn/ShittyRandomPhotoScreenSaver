@@ -1106,6 +1106,9 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     from widgets.spotify_visualizer.presentation_state import (
         install_default_presentation_state,
     )
+    from widgets.spotify_visualizer.quick_technical_config import apply_controller_technical_config
+    from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
+    from tools.visualizer_replay.engine import ReplayBeatEngine
     from widgets.spotify_visualizer.render_state import (
         compose_visualizer_render_snapshot,
     )
@@ -1133,12 +1136,21 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         runtime_generation=1,
         bar_count=model.resolve_bar_count(get_technical_profile_mode(mode)),
         initial_mode=mode,
+        # The audio-free replay engine takes the technical settings the real engine would.
+        engine_factory=ReplayBeatEngine,
     )
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=controller.bar_count)
     install_default_presentation_state(controller.presentation_state)
     apply_logical_vis_mode_kwargs(state, resolved)
     apply_presentation_vis_mode_kwargs(controller.presentation_state, resolved)
+    # The mode's resolved technical config, as the display owner applies it (bar count, transient
+    # widths, floors): without it Oscilloscope, Sine Wave and Dev Curve frames miss parameters.
+    controller.technical_config_cache = build_technical_cache(None, model)
+    apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, mode),
+                                      reason="onboarding_preview")
+    # Only the settings were wanted: the fixture bars below stand in for the engine's output.
+    controller.engine = None
     controller.enabled = True
     controller.playing = True
 
@@ -1198,6 +1210,12 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         for time, kind, magnitude, presence in onsets:
             engine.publish(time, kind, magnitude, presence)
             capture_visualizer_logical_frame(state, now_ts=time + 0.01, changed=True, mode_reveal_ready=True)
+    # Dev Curve's frame comes from its frame runtime, which production advances on each logical
+    # tick: step it the same way before each capture.
+    advance = None
+    if mode == "devcurve":
+        from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field as advance
+        advance(state, 1.0)
     first = capture_visualizer_logical_frame(
         state,
         now_ts=1.0,
@@ -1208,6 +1226,8 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         raise RuntimeError("canonical Spectrum preview capture rejected its first fixture frame")
     state._has_pushed_first_frame = True
     state._display_bars = list(current_bars)
+    if advance is not None:
+        advance(state, 1.12)
     logical = capture_visualizer_logical_frame(
         state,
         now_ts=1.12,

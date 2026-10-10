@@ -121,12 +121,13 @@ The capture/encode/manifest tool and its focused smoke proof are implemented in 
 full catalogue output. Release/readme media stays outside runtime QRCs and normal GODZIPs. `Docs/Reference/Release_Media.md`
 owns the tool's registry, source-attribution, capture and encoding contract.
 
-- [ ] **Preview-builder fixture gap (found 2026-10-10).** `tools/onboarding_preview_foundry._build_spectrum_preview_snapshot`
-  never applies the mode's technical config (production's `apply_controller_technical_config`), so Oscilloscope and Sine
-  Wave fail on missing `_osc_transient_width_mix` / `_sine_wave_transient_width_mix`, and Dev Curve on a missing
-  `devcurve_sample_count` frame parameter. `tools/visualizer_cost_probe.py` and `tools/overhead_baseline.py` cannot measure
-  those three modes until it is fixed: apply the resolved technical config as `tools/visualizer_replay/driver.py` does, then
-  check whether regenerated onboarding previews change.
+- [ ] **Preview/baseline findings (2026-10-10).** The offline preview snapshot now applies each mode's technical
+  config and steps Dev Curve's frame runtime, so the overhead baseline measures all eight Visualizer modes (Spectrum and
+  Extruded onboarding previews unchanged). Open: (1) Oscilloscope's default costs ~0.73 ms GPU median, ~1.75 ms p90 at
+  1080p, about seven times the other modes: find the pass responsible without changing the authored look; (2) the
+  Shockwave Grid preview differs between two runs of the same tree (max 14/255), so it is not reproducible: find the
+  time or state input; (3) GPU timings of the heaviest transitions swing with clock state between runs (Particle
+  0.73 → 1.27 ms on identical code), so `overhead_baseline.py` GPU flags on untouched effects need a rerun before they count.
 
 - [ ] **RM1. Land the tool and generate transition media.** Review/checkpoint `tools/release_media.py` and its focused tests,
   then capture every admitted canonical registry identity plus meaningful curated appearance variants on a stable source tree.
