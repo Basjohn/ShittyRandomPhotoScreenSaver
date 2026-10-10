@@ -20,6 +20,7 @@ from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICE
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
+from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGINS
 from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
@@ -921,6 +922,22 @@ def _resolve_edge_bloom(
     })
 
 
+def _resolve_liquid_lens(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "liquid_lens")
+    defaults = _canonical("liquid_lens")
+    origin = LIQUID_LENS_ORIGINS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if origin is None:
+        origin = str(rng.choice(tuple(LIQUID_LENS_ORIGINS.values())))
+    return _finish(origin, {
+        "seed": _seed(rng),
+        "droplets": _bool(_value(cfg, defaults, "droplets"), bool(defaults["droplets"])),
+        **_surface_values(cfg, defaults, ("refraction", "dispersion")),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "ripple": _resolve_ripple,
@@ -939,6 +956,7 @@ _RESOLVERS = {
     "volumetric_dissolve": _resolve_volumetric_dissolve,
     "vhs": _resolve_vhs,
     "edge_bloom": _resolve_edge_bloom,
+    "liquid_lens": _resolve_liquid_lens,
 }
 
 

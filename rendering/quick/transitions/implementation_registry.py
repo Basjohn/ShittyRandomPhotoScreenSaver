@@ -109,6 +109,10 @@ _IMPLEMENTATIONS = (
         transition_id="edge_bloom",
         module_name="rendering.quick.transitions.implementations.edge_bloom",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="liquid_lens",
+        module_name="rendering.quick.transitions.implementations.liquid_lens",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

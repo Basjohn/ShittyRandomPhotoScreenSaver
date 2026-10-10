@@ -262,6 +262,7 @@ TRANSITION_COPY = {
     "volumetric_dissolve": "The picture bursts into glowing particles and mist as the next one appears.",
     "vhs": "The tape loses tracking and the picture rolls over to the next one.",
     "edge_bloom": "The next picture grows out of its own glowing edges.",
+    "liquid_lens": "A lens of water grows across the picture, showing the next one through it.",
 }
 
 

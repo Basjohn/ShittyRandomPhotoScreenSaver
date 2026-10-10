@@ -36,6 +36,7 @@ class TransitionType(Enum):
     VOLUMETRIC_DISSOLVE = "Volumetric Dissolve"
     VHS_DISTORTION = "VHS Distortion"
     EDGE_BLOOM = "Edge Bloom Reveal"
+    LIQUID_LENS = "Liquid Lens"
 
 
 class WidgetPosition(Enum):
