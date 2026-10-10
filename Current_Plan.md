@@ -157,7 +157,10 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   Reflection only; scene pair and seeds picked at random per generation; the run back always
   changes direction/order; method 4 with keyframes every 150 frames (method 6 was 11x slower for 2% smaller).
   **Every new or visually changed transition gets its WebP generated and reviewed by the agent before it is called
-  done** (Jigsaw first). Remaining: the full catalogue at a stable checkpoint.
+  done** (Jigsaw first). **Parity catalogue 2026-10-10: 24 of 27 generated.** Open: Warp Dissolve and Particle
+  exceed 10 MB even at q80 (10.1 / 10.3 MB; whole-frame noise every frame) — need an operator-accepted parity-wide
+  lever (e.g. a q75 floor) or a per-transition exception; Blinds Flat fails the endpoint guard (its production end
+  frame differs from the photograph: investigate like the Ripple start pop). Remaining: the full catalogue at a stable checkpoint.
 - [ ] **M2. Generate Visualizer media.** After the authoring/geometry source checkpoints are stable, capture every registered
   mode's curated presets with the canonical schema-2 recorded-music clip through the production replay/capture/render path.
 - [ ] **M3. Inspect the generated catalogue.** Confirm motion/endpoints, photograph-backed Visualizers, loop/metadata/dimensions
