@@ -31,6 +31,7 @@ from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICE
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
+from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
 from rendering.gl_programs.volumetric_dissolve_options import (
     VOLUMETRIC_DIRECTION_CHOICES,
     VOLUMETRIC_PARTICLE_SIZE_RANGE,
@@ -117,6 +118,7 @@ class TransitionsTab(QWidget):
                 "beam",
                 "jigsaw",
                 "volumetric_dissolve",
+                "vhs",
             )
         }
         # Per-transition pool membership for random/switch behaviour.
@@ -581,6 +583,7 @@ class TransitionsTab(QWidget):
         "Beam": "_build_beam_group",
         "Jigsaw Piece Flip": "_build_jigsaw_group",
         "Volumetric Dissolve": "_build_volumetric_dissolve_group",
+        "VHS Distortion": "_build_vhs_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -606,6 +609,7 @@ class TransitionsTab(QWidget):
         "Beam": "beam_group",
         "Jigsaw Piece Flip": "jigsaw_group",
         "Volumetric Dissolve": "volumetric_dissolve_group",
+        "VHS Distortion": "vhs_group",
     }
 
     _DIRECTIONAL_TRANSITIONS = frozenset(
@@ -624,6 +628,7 @@ class TransitionsTab(QWidget):
             "Beam",
             "Jigsaw Piece Flip",
             "Volumetric Dissolve",
+            "VHS Distortion",
         }
     )
 
@@ -1155,6 +1160,13 @@ class TransitionsTab(QWidget):
             ("mist", "Mist:", 0., 1., "How much luminous mist, coloured by the old picture, rises as it dissolves."),
             ("depth", "Depth:", 0., 1., "How far the particles fly toward you, growing and blurring as they near."),
         ),
+        "vhs": (
+            ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
+             "and the bent top of each frame as the picture rolls."),
+            ("bleed", "Colour Bleed:", 0., 1., "How far colour smears and lags behind the picture, with ringing "
+             "edges, as on worn tape."),
+            ("noise", "Noise:", 0., 1., "Snow, dropout streaks, scanlines and a drifting interference band."),
+        ),
         "melt_drip": (
             ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
@@ -1447,6 +1459,14 @@ class TransitionsTab(QWidget):
         self._build_surface_controls(layout, "accordion_fold")
         self._build_scene3d_choices(layout, "accordion_fold")
         self._specific_group_host_layout.addWidget(self.accordion_fold_group)
+
+    def _build_vhs_group(self) -> None:
+        self.vhs_group = QGroupBox("VHS Distortion Settings")
+        self._style_group_box(self.vhs_group)
+        layout = QVBoxLayout(self.vhs_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        self._build_surface_controls(layout, "vhs")
+        self._specific_group_host_layout.addWidget(self.vhs_group)
 
     def _build_volumetric_dissolve_group(self) -> None:
         self.volumetric_dissolve_group = QGroupBox("Volumetric Dissolve Settings")
@@ -2385,7 +2405,7 @@ class TransitionsTab(QWidget):
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
                             "disintegrate", "accordion_fold", "relief_rise", "cube_turn", "beam", "jigsaw",
-                            "volumetric_dissolve"):
+                            "volumetric_dissolve", "vhs"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2553,6 +2573,13 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "VHS Distortion":
+                    # The way the picture rolls: where the new picture comes in.
+                    self.direction_combo.addItems(list(VHS_DIRECTION_CHOICES))
+                    idx = self.direction_combo.findText(self._direction_by_type["vhs"])
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "Jigsaw Piece Flip":
                     # The order the pieces flip in: from a corner, from a random piece, or shuffled.
                     self.direction_combo.addItems(list(JIGSAW_ORDER_CHOICES))
@@ -2690,6 +2717,8 @@ class TransitionsTab(QWidget):
             self._direction_by_type["jigsaw"] = cur_dir
         elif cur_type == "Volumetric Dissolve":
             self._direction_by_type["volumetric_dissolve"] = cur_dir
+        elif cur_type == "VHS Distortion":
+            self._direction_by_type["vhs"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2868,6 +2897,10 @@ class TransitionsTab(QWidget):
         else:
             volumetric_dissolve = {**_existing_subdict('volumetric_dissolve'),
                                    'direction': self._direction_by_type['volumetric_dissolve']}
+        if hasattr(self, 'vhs_group'):
+            vhs = {'direction': self._direction_by_type['vhs']}
+        else:
+            vhs = {**_existing_subdict('vhs'), 'direction': self._direction_by_type['vhs']}
         if hasattr(self, 'jigsaw_group'):
             jigsaw = {'direction': self._direction_by_type['jigsaw'], 'pieces': self.jigsaw_pieces_spin.value()}
         else:
@@ -2879,7 +2912,7 @@ class TransitionsTab(QWidget):
                                 ("melt_drip", melt_drip), ("page_curl", page_curl),
                                 ("disintegrate", disintegrate), ("accordion_fold", accordion_fold),
                                 ("relief_rise", relief_rise), ("cube_turn", cube_turn), ("beam", beam),
-                                ("volumetric_dissolve", volumetric_dissolve)):
+                                ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
                     values[field] = float(getattr(self, f"{section}_{field}_spin").value())
@@ -2924,6 +2957,7 @@ class TransitionsTab(QWidget):
             'beam': beam,
             'jigsaw': jigsaw,
             'volumetric_dissolve': volumetric_dissolve,
+            'vhs': vhs,
         }
         for section, controls in self._SCENE3D_CHOICES.items():
             if hasattr(self, f"{section}_group"):

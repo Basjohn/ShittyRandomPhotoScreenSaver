@@ -20,6 +20,7 @@ from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYL
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
+from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
@@ -962,6 +963,21 @@ def _resolve_volumetric_dissolve(
     })
 
 
+def _resolve_vhs(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "vhs")
+    defaults = _canonical("vhs")
+    direction = VHS_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
+    if direction is None:
+        direction = str(rng.choice(tuple(VHS_DIRECTIONS.values())))
+    return _finish(direction, {
+        "seed": _seed(rng),
+        **_surface_values(cfg, defaults, ("tracking", "bleed", "noise")),
+    })
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -982,6 +998,7 @@ _RESOLVERS = {
     "beam": _resolve_beam,
     "jigsaw": _resolve_jigsaw,
     "volumetric_dissolve": _resolve_volumetric_dissolve,
+    "vhs": _resolve_vhs,
 }
 
 

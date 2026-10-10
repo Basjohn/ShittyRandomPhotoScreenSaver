@@ -577,6 +577,24 @@ def test_jigsaw_page_offers_orders_and_round_trips(qapp, settings_manager, qtbot
     assert persisted == {"direction": order, "pieces": pieces, "antialiasing": "Off"}
 
 
+def test_vhs_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "vhs_group")
+    tab._activation_checkboxes["VHS Distortion"].setChecked(True)
+    tab._on_nav_selected("VHS Distortion")
+    assert [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())] == list(VHS_DIRECTION_CHOICES)
+    label = VHS_DIRECTION_CHOICES[0]
+    tab.direction_combo.setCurrentText(label)
+    tab.vhs_tracking_spin.setValue(0.2)
+    tab.vhs_bleed_spin.setValue(0.9)
+    tab.vhs_noise_spin.setValue(0.35)
+    persisted = settings_manager.get("transitions", {})["vhs"]
+    assert persisted == {"direction": label, "tracking": 0.2, "bleed": 0.9, "noise": 0.35}
+
+
 def test_volumetric_dissolve_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
     from rendering.gl_programs.volumetric_dissolve_options import (
         VOLUMETRIC_DIRECTION_CHOICES,

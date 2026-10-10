@@ -121,6 +121,10 @@ _IMPLEMENTATIONS = (
         transition_id="volumetric_dissolve",
         module_name="rendering.quick.transitions.implementations.volumetric_dissolve",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="vhs",
+        module_name="rendering.quick.transitions.implementations.vhs",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
