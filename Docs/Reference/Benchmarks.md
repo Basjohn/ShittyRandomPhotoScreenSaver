@@ -91,6 +91,10 @@ Measured 2026-10-11 on an RTX 4090 at 2560x1440 (`tools/baselines/overhead/2026-
 - **Same code, two runs: "no regressions".** Between a run under full CPU load at a 540 MHz GPU
   clock and a quiet one, relative GPU figures agreed within 8% for 90% of cases (absolute ones moved
   by up to half); between two quiet runs whose GPU clocks were 1410 and 1785 MHz, nothing was flagged.
+  The latest reference, `2026-10-11_ffa71024.json`, was recorded with other processes using 42% of
+  the CPU and the GPU 73% busy; compared with the quiet `fea39fd6` run it flagged only the intended
+  call-count changes (the shared one-program renderer's +2 Python calls, the Liquid Lens redesign) and
+  no timing on any untouched transition or Visualizer mode.
 - **Relative CPU** still moves up to about 30% between busy and quiet runs (CPU power states and
   SMT siblings slow the thread itself), so CPU flags are hints; call counts are the proof.
 - **Admission**: 60-100% of passes on a working desktop; much lower means something was competing
