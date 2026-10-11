@@ -70,6 +70,7 @@ from ui.tabs.widgets_tab_media import (
     save_visualizer_settings,
 )
 from ui.tabs.shared_styles import NoWheelSlider, add_section_label, style_group_box
+from ui.widget_display_routes import DisplayRouteLeaveGuard
 
 logger = get_logger(__name__)
 
@@ -103,6 +104,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         if visualizers_descriptor is None:
             raise RuntimeError("Canonical visualizers Settings descriptor is missing")
         self._widget_section_descriptors = (visualizers_descriptor,)
+        self._display_route_guard = DisplayRouteLeaveGuard(settings)
 
         self._loading = True
         self._writing_settings = False
@@ -804,6 +806,15 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             )
         finally:
             self._writing_settings = False
+
+    def resolve_leave_display_routes(self, on_switched=None) -> bool:
+        """Leaving Visualizers: settle a Visualizer only a disabled display would show
+        (``ui/widget_display_routes``). False means stay."""
+
+        return self._display_route_guard.resolve(
+            self, self._widget_section_descriptors[0].persisted_widget_keys,
+            flush=self.flush_pending_changes,
+            on_switched=on_switched if on_switched is not None else self.load_from_settings)
 
     def flush_pending_changes(self) -> None:
         """Commit this tab's coalesced UI edits before a Settings durability boundary."""

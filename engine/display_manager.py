@@ -705,7 +705,8 @@ class DisplayManager(QObject):
         only; it does not carry a second product-default route.
         """
 
-        indices: set[int] = set(range(screen_count))
+        from core.settings.display_selection import enabled_monitor_numbers, selected_monitor_numbers
+
         canonical_raw = require_canonical_default("display.show_on_monitors")
         if self.settings_manager is None:
             raw = canonical_raw
@@ -716,45 +717,16 @@ class DisplayManager(QObject):
                 logger.debug("[DISPLAY_MANAGER] show_on_monitors read failed: %s", exc)
                 raw = canonical_raw
 
-        def _resolve(candidate: object) -> set[int] | None:
-            if isinstance(candidate, str):
-                normalized = candidate.strip().upper()
-                if normalized == "ALL":
-                    return indices
-                if normalized == "NONE":
-                    return set()
-                try:
-                    import ast
-                    parsed = ast.literal_eval(candidate)
-                except Exception:
-                    return None
-                if not isinstance(parsed, (list, tuple, set)):
-                    return None
-                candidate = parsed
-            if not isinstance(candidate, (list, tuple, set)):
-                return None
-            try:
-                values = {int(value) for value in candidate}
-            except (TypeError, ValueError):
-                return None
-            allowed = {monitor - 1 for monitor in values if 1 <= monitor <= screen_count}
-            # A configured route whose selected displays are all currently
-            # unavailable is repaired through canonical routing rather than an
-            # implicit local "show everything" policy.
-            return allowed if allowed else None
-
-        allowed = _resolve(raw)
-        if allowed is None:
+        # A configured route whose selected displays are all currently
+        # unavailable is repaired through canonical routing rather than an
+        # implicit local "show everything" policy.
+        if selected_monitor_numbers(raw, screen_count) is None:
             logger.debug(
                 "[DISPLAY] Invalid/unavailable show_on_monitors=%r; repairing through canonical value %r",
                 raw,
                 canonical_raw,
             )
-            allowed = _resolve(canonical_raw)
-            if allowed is None:
-                raise ValueError(
-                    f"canonical display.show_on_monitors is invalid for topology: {canonical_raw!r}"
-                )
+        allowed = {number - 1 for number in enabled_monitor_numbers(raw, screen_count)}
         logger.info("[DISPLAY] show_on_monitors=%r → allowed screen indices=%s", raw, sorted(allowed))
         return allowed
     
