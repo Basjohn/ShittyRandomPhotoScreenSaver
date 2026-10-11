@@ -93,11 +93,12 @@ def test_release_recording_admission_rejects_fixture_and_archived_take(tmp_path:
 
 
 def test_extruded_replay_uses_registered_production_logical_and_snapshot_path() -> None:
-    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
     from widgets.spotify_visualizer.feature_frame import FeatureClip
     from tools.visualizer_replay.driver import load_clips, replay_clip
 
-    app = QCoreApplication.instance() or QCoreApplication([])
+    # A GUI application: a plain QCoreApplication left behind makes later offscreen GL contexts fail.
+    app = QGuiApplication.instance() or QGuiApplication([])
     original = next(iter(load_clips().values()))
     clip = FeatureClip(original.name, original.frames[:6])
     result = replay_clip(clip, "extruded_spectrum", snapshots_at=(5,))

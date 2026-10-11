@@ -184,43 +184,10 @@ def sample_indices(clip, start_seconds: float, duration_seconds: float, fps: int
 
 
 def transition_spec(identity: str, duration_ms: int, settings: dict | None = None, seed: int = 713):
-    """Use the complete production resolver, including non-Phase-C identities."""
-    from core.settings.default_contract import require_canonical_default
-    from rendering.transition_registry import get_transition_descriptor
-    from rendering.quick.transitions.request_resolution import resolve_quick_transition_spec
+    """Use the complete production resolver, including non-Phase-C identities (High 3D Detail)."""
+    from tools.transition_contact_sheet import production_transition_spec
 
-    descriptor = get_transition_descriptor(identity)
-    if descriptor is None or not descriptor.available:
-        raise ValueError(f"unavailable transition {identity}")
-    defaults = require_canonical_default("transitions")
-    values = {**defaults, **(settings or {}), "type": descriptor.setting_name, "random_always": False,
-              "activation": {**defaults["activation"], descriptor.setting_name: True},
-              "durations": {**defaults["durations"], descriptor.setting_name: duration_ms}}
-
-    class CaptureInput:
-        def get(self, key, default=None):
-            if key == "transitions":
-                return values
-            if key == "scene3d.detail":
-                return "High"
-            return require_canonical_default(key)
-
-    spec = resolve_quick_transition_spec(CaptureInput(), random_source=random.Random(seed))
-    if spec is None or spec.transition_id != identity:
-        raise ValueError(f"production resolver did not admit selected transition {identity}")
-    return spec
-
-
-def _transition_run(capture, identity: str, duration_ms: int, settings=None, seed: int = 713, run_id: int = 1):
-    from rendering.quick.image_state import PresentationImage
-    from rendering.quick.transitions.state import TransitionRun
-
-    images = [PresentationImage(str(index), "release_capture", (capture.width, capture.height), 1.,
-                                (capture.width, capture.height), capture.width * 4, image.tobytes())
-              for index, image in enumerate(capture.images)]
-    request = transition_spec(identity, duration_ms, settings, seed).build_request(
-        runtime_generation=0, source_image=images[0], destination_image=images[1])
-    return TransitionRun.start(run_id=run_id, request=request, start_ns=0)
+    return production_transition_spec(identity, duration_ms, settings, seed)
 
 
 def _look(spec) -> tuple:
@@ -277,7 +244,7 @@ def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[i
     for leg, (source, destination, seed) in enumerate(legs):
         capture = TransitionCapture(size[0], size[1], source=source, destination=destination)
         try:
-            run = _transition_run(capture, case.identity, duration_ms, case.settings, seed)
+            run = capture.production_run(case.identity, duration_ms, case.settings, seed)
             for index in range(run_frames):
                 if leg and index == 0:
                     continue                      # the second run starts on the rest's last frame
@@ -312,7 +279,7 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
     host = None
     try:
         if case.kind == "transition":
-            run = _transition_run(capture, case.identity, duration_ms, case.settings)
+            run = capture.production_run(case.identity, duration_ms, case.settings)
             count = max(2, round(duration_ms * fps / 1000) + 1)
             for index in range(count):
                 image, _ = capture.render(run, index / (count - 1))
@@ -337,7 +304,7 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
             indices = sample_indices(clip, start_seconds, duration_ms / 1000, fps)
             result = replay_clip(clip, case.identity, preset=case.preset, snapshots_at=indices)
             host = QuickVisualizerRenderHost()
-            photo = _transition_run(capture, "crossfade", duration_ms)
+            photo = capture.production_run("crossfade", duration_ms)
             descriptor = get_visualizer_mode_descriptor(case.identity)
             backdrop = VisualizerBackdrop(identity="release_transition_fixture", size=size,
                                           rgba=capture.images[0].tobytes())

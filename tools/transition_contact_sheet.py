@@ -3,6 +3,12 @@
 No runtime timers or settings writes. This diagnostic creates one offscreen
 context, checks exact endpoints/retirement and writes optional contact sheets.
 Physical Quick multi-display/load acceptance remains a separate gate.
+
+``TransitionCapture`` is the one owner of building a run for the offscreen tools, in two modes:
+``run()`` resolves a transition's own parameters with test overrides (direction, parameters) for
+tests that need exact control; ``production_run()`` resolves through the complete production
+resolver (``resolve_quick_transition_spec``) as the runtime does, for release media, onboarding
+previews, benchmarks and the lifecycle contract.
 """
 from __future__ import annotations
 
@@ -55,6 +61,47 @@ def fixture_images(width: int, height: int):
     return tuple(images)
 
 
+def production_transition_spec(identity: str, duration_ms: int | None = None, settings: dict | None = None,
+                               seed: int = 713, detail: str | None = "High"):
+    """Resolve ``identity`` through the complete production resolver: the canonical transitions
+    settings with ``settings`` laid over them, the transition selected and activated, its duration
+    ``duration_ms`` (canonical when None) and the 3D Detail tier ``detail`` (canonical when None)."""
+    import copy
+
+    from core.settings.default_contract import require_canonical_default
+    from rendering.quick.transitions.request_resolution import resolve_quick_transition_spec
+    from rendering.transition_registry import get_transition_descriptor, get_transition_descriptor_for_runtime_identity
+
+    descriptor = get_transition_descriptor(identity) or get_transition_descriptor_for_runtime_identity(identity)
+    if descriptor is None or not descriptor.available:
+        raise ValueError(f"unavailable transition {identity}")
+    defaults = copy.deepcopy(require_canonical_default("transitions"))
+    values = {**defaults, **(settings or {}), "type": descriptor.setting_name, "random_always": False,
+              "activation": {**defaults["activation"], descriptor.setting_name: True},
+              "pool": {**defaults["pool"], descriptor.setting_name: True}}
+    if duration_ms is not None:
+        values["durations"] = {**defaults["durations"], descriptor.setting_name: int(duration_ms)}
+
+    class _CaptureSettings:
+        def get(self, key, default=None):
+            if key == "transitions":
+                return values
+            if key == "scene3d.detail" and detail is not None:
+                return detail
+            try:
+                return require_canonical_default(key)
+            except KeyError:
+                return default
+
+        def get_bool(self, _key):            # read only for Random selection, which is off here
+            return True
+
+    spec = resolve_quick_transition_spec(_CaptureSettings(), random_source=random.Random(seed))
+    if spec is None or spec.transition_id != descriptor.stable_id:
+        raise ValueError(f"production resolver did not admit selected transition {identity}")
+    return spec
+
+
 class TransitionCapture:
     def __init__(self, width: int, height: int, source=None, destination=None):
         import numpy as np
@@ -65,7 +112,13 @@ class TransitionCapture:
         from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
         self.width, self.height = width, height
-        self.app = QGuiApplication.instance() or QGuiApplication([])
+        from PySide6.QtCore import QCoreApplication
+
+        existing = QCoreApplication.instance()
+        if existing is not None and not isinstance(existing, QGuiApplication):
+            # Creating a GL context under a plain QCoreApplication is an access violation, not an error.
+            raise RuntimeError("TransitionCapture needs a QGuiApplication, but a QCoreApplication already exists")
+        self.app = existing or QGuiApplication([])
         fmt = QSurfaceFormat()
         fmt.setRenderableType(QSurfaceFormat.OpenGL)
         fmt.setProfile(QSurfaceFormat.CoreProfile)
@@ -110,7 +163,6 @@ class TransitionCapture:
         """Resolve one run as production does from ``settings`` (the transitions section;
         empty means canonical defaults), then apply any ``parameters`` overrides.
         Effects with real-time motion (Exploding Tiles' rumble) need the authored duration."""
-        from rendering.quick.image_state import PresentationImage
         from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
         from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 
@@ -128,12 +180,34 @@ class TransitionCapture:
             resolved = resolve_parameterized_phase_c_inputs(effect, settings or {}, random_source=random.Random(seed))
             resolved_direction, resolved_params = resolved.direction, resolved.parameter_dict()
         resolved_params.update(parameters or {})
-        images = [PresentationImage(str(index), "diagnostic", (self.width, self.height), 1.,
-                                    (self.width, self.height), self.width*4, image.tobytes())
-                  for index, image in enumerate(self.images)]
+        images = self._presentation_images("diagnostic")
         request = TransitionRequest(0, effect, effect, False, int(duration_ms), direction or resolved_direction,
                                     resolved_params, *images)
         return TransitionRun.start(run_id=1, request=request, start_ns=0)
+
+    def production_run(self, identity: str, duration_ms: int | None = None, settings=None, seed: int = 713,
+                       run_id: int = 1, *, detail: str | None = "High", timeline_ms: int | None = None,
+                       label: str = "release_capture"):
+        """A run resolved exactly as the runtime resolves it (``production_transition_spec``). Its
+        timeline is the resolved duration, or ``timeline_ms`` when given (the onboarding previews
+        sample fractions of a 1000 ms timeline)."""
+        from rendering.quick.transitions.state import TransitionRequest, TransitionRun
+
+        spec = production_transition_spec(identity, duration_ms, settings, seed, detail)
+        images = self._presentation_images(label)
+        if timeline_ms is None:
+            request = spec.build_request(runtime_generation=0, source_image=images[0], destination_image=images[1])
+        else:
+            request = TransitionRequest(0, spec.transition_id, spec.requested_name, spec.selected_from_random,
+                                        int(timeline_ms), spec.direction, spec.parameters, *images)
+        return TransitionRun.start(run_id=run_id, request=request, start_ns=0)
+
+    def _presentation_images(self, label: str):
+        from rendering.quick.image_state import PresentationImage
+
+        return [PresentationImage(str(index), label, (self.width, self.height), 1.,
+                                  (self.width, self.height), self.width * 4, image.tobytes())
+                for index, image in enumerate(self.images)]
 
     def frame(self, run, progress: float):
         from rendering.quick.transitions.render_contract import QuickTransitionRenderFrame

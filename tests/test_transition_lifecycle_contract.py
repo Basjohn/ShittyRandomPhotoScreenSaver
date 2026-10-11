@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from tools.gl_object_ledger import GLObjectLedger
-from tools.release_media import _transition_run, catalogue
+from tools.release_media import catalogue
 
 pytestmark = pytest.mark.qt
 
@@ -34,7 +34,7 @@ def test_warmed_runs_create_nothing_park_holds_steady_and_release_frees_everythi
         with GLObjectLedger() as ledger:
             parked = []
             for cycle, seed in enumerate((713, 99, 4242)):
-                run = _transition_run(capture, case.identity, case.duration_ms, case.settings, seed=seed,
+                run = capture.production_run(case.identity, case.duration_ms, case.settings, seed=seed,
                                       run_id=cycle + 1)
                 request = run.request
                 prepare_run_geometry(request.transition_id, request.parameter_dict(), (W / H,), request.direction)
@@ -132,7 +132,7 @@ def test_rounds_of_every_transition_leave_no_python_objects_behind(qt_app):
 
     def one_round(index):
         for number, case in enumerate(_CASES):
-            run = _transition_run(capture, case.identity, case.duration_ms, case.settings,
+            run = capture.production_run(case.identity, case.duration_ms, case.settings,
                                   seed=1000 * index + number, run_id=100 * index + number + 1)
             request = run.request
             prepare_run_geometry(request.transition_id, request.parameter_dict(), (width / height,), request.direction)

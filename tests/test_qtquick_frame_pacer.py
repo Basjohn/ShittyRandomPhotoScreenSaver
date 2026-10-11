@@ -237,10 +237,10 @@ def _qml_transition_gate():
     module; only JSON text crosses it, so no JS value outlives it)."""
     import json
 
-    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QJSEngine
 
-    QCoreApplication.instance() or QCoreApplication([])
+    QGuiApplication.instance() or QGuiApplication([])  # GUI app: a plain QCoreApplication breaks later GL tests
     if not _GATE_ENGINE:
         qml = (ROOT / "rendering" / "quick" / "qml" / "DisplayScene.qml").read_text(encoding="utf-8")
         start = qml.index("function transitionFrameGate(")
@@ -303,11 +303,11 @@ def test_transition_gate_without_a_visualizer_keeps_its_display_rate() -> None:
 def test_scene_counts_visualizer_frames_into_the_gate_only_while_a_transition_runs() -> None:
     """Dormant cost is zero: Visualizer frames touch the QML gate only while this display's
     transition driver runs."""
-    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
 
     from rendering.quick.scene_controller import QuickSceneController
 
-    QCoreApplication.instance() or QCoreApplication([])
+    QGuiApplication.instance() or QGuiApplication([])  # GUI app: a plain QCoreApplication breaks later GL tests
 
     class _Item:
         updates = 0
