@@ -198,3 +198,26 @@ def test_spectrum_preview_uses_canonical_preset_and_logical_capture(monkeypatch)
     assert snapshot.logical.mode_state.parameters["rainbow_per_bar"] is True
     assert snapshot.logical.mode_state.parameters["spectrum_rainbow_fill"] is False
     assert snapshot.logical.mode_state.parameters["spectrum_rainbow_border"] is True
+
+
+def test_regeneration_keeps_an_asset_whose_pixels_only_drift(tmp_path: Path) -> None:
+    """Multisampling jitter (a level everywhere, or a few speckled pixels on thin lines) and PNG byte
+    differences for identical pixels keep the committed file; a real change rewrites it."""
+    import numpy
+    from PIL import Image
+
+    from tools.onboarding_preview_foundry import PIXEL_DRIFT_SHARE, PIXEL_DRIFT_TOLERANCE, save_png_stable
+
+    path = tmp_path / "strip.png"
+    base = numpy.full((100, 100, 3), 100, dtype=numpy.uint8)
+    assert save_png_stable(Image.fromarray(base), path)
+    written = path.read_bytes()
+    allowed = int(PIXEL_DRIFT_SHARE * 100 * 100)
+    jitter = base + PIXEL_DRIFT_TOLERANCE                       # every pixel off by the tolerance
+    jitter.reshape(-1, 3)[:allowed] = 140                       # plus a few strongly speckled pixels
+    assert not save_png_stable(Image.fromarray(jitter), path)
+    assert path.read_bytes() == written
+    changed = base.copy()
+    changed.reshape(-1, 3)[:allowed + 1] = 140                  # one speckle more than allowed
+    assert save_png_stable(Image.fromarray(changed), path)
+    assert save_png_stable(Image.fromarray(numpy.zeros((100, 101, 3), dtype=numpy.uint8)), path)  # resized

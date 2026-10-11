@@ -88,10 +88,10 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 
 - [ ] **Preview/baseline findings (2026-10-10).** The offline preview snapshot now applies each mode's technical
   config and steps Dev Curve's frame runtime, so the overhead baseline measures all eight Visualizer modes (Spectrum and
-  Extruded onboarding previews unchanged). Open: (1) Oscilloscope's default costs ~0.73 ms GPU median, ~1.75 ms p90 at
-  1080p, about seven times the other modes: find the pass responsible without changing the authored look; (2) the
-  Shockwave Grid preview differs between two runs of the same tree (max 14/255), so it is not reproducible: find the
-  time or state input; (3) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
+  Extruded onboarding previews unchanged). Open: (1) Oscilloscope: the operator approved a complete rework (2026-10-11): its
+  Settings UX is very bad and its output unreliable and visually disappointing, the worst mode. Its default also costs
+  144 Crossfade frames of GPU at 1440p (`Docs/Reference/Benchmarks.md`), the heaviest mode by far; the rework may change
+  the look and must bring the cost in line with the others; (2) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
   direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
   forward-only strip (operator's defaults file, so on the operator's call).
 
