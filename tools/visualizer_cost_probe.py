@@ -2,9 +2,12 @@
 
 No window and no runtime: one offscreen GL 4.6 context, the Guided Setup preview snapshot of
 the mode (its curated defaults plus fixture music), parameter overrides from the command line,
-and ``--frames`` timed frames after a warm-up. Each frame records CPU submit (the render
-thread's Python + GL call time, which holds the GIL) and GPU time (``GL_TIME_ELAPSED``),
-flushing per frame as presentation does; the report gives median and p90 of both.
+and ``--frames`` timed frames after a warm-up, measured the way ``tools/overhead_baseline.py``
+measures (``tools/bench_stability.PairedBench``): each frame rendered three times right after a
+fixed Crossfade control with the fastest repeat kept, passes gated on that control, and the
+figures also given relative to it (``gpu_rel`` / ``cpu_rel``, in Crossfade frames), which hold
+steady while GPU clocks and outside load move the milliseconds. The system conditions of the run
+are printed with it. See ``Docs/Reference/Benchmarks.md``.
 
     python tools/visualizer_cost_probe.py extruded_spectrum --size 2560x1440
     python tools/visualizer_cost_probe.py shockwave_grid shockwave_grid_glow=0.8 --size 2560x1440
@@ -16,13 +19,11 @@ Parameter values parse as JSON when they can (``true``, ``0.5``), else stay stri
 from __future__ import annotations
 
 import argparse
-import ctypes
 import dataclasses
 import json
 import statistics
 import sys
 from pathlib import Path
-from time import perf_counter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -50,66 +51,83 @@ def _p90(values: list[float]) -> float:
     return ordered[min(len(ordered) - 1, int(round(0.9 * (len(ordered) - 1))))]
 
 
+def visualizer_case(gl, capture, host, snapshot, *, count_calls: bool = True):
+    """A ``BenchCase`` drawing ``snapshot`` through ``host`` on ``capture``'s context: its warm-up,
+    one render per sampled frame, and its deterministic per-frame GL and Python call counts."""
+    import sys as _sys
+
+    from tools.bench_stability import BenchCase
+
+    width, height = capture.width, capture.height
+    matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
+
+    def render():
+        gl.glViewport(0, 0, width, height)
+        gl.glClearColor(0.1, 0.12, 0.16, 1.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        host.render(snapshot=snapshot, viewport=(0, 0, width, height),
+                    logical_size=(float(width), float(height)), matrix_values=matrix)
+
+    def warm():
+        for _ in range(10):
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            render()
+
+    def counts():
+        if not count_calls:
+            return {}
+        counter, gl_counts, py_counts = _CallCounter(gl), [], []
+        for _ in range(8):
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            calls = [0]
+
+            def profile(_frame, event, _arg, calls=calls):
+                if event in ("call", "c_call"):
+                    calls[0] += 1
+
+            counter.count = 0
+            counter.install()
+            _sys.setprofile(profile)
+            try:
+                render()
+            finally:
+                _sys.setprofile(None)
+                counter.uninstall()
+            gl_counts.append(counter.count)
+            py_counts.append(calls[0])
+        gl.glFinish()
+        return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
+
+    return BenchCase(lambda _index: render, warm, counts)
+
+
 def measure(mode: str, parameters: dict[str, object], size: tuple[int, int], frames: int = 60,
-            warm: int = 10, calls: bool = False) -> dict[str, float]:
-    """Median/p90 CPU submit and GPU ms of ``mode`` drawing a card filling ``size``."""
+            calls: bool = False, passes: int = 3, max_rounds: int = 8) -> dict[str, object]:
+    """``mode`` drawing a card filling ``size``: median/p90 CPU submit (wall and thread) and GPU ms,
+    the same relative to the Crossfade control, and with ``calls`` its per-frame GL and Python call
+    counts; ``load`` holds the run's admission and system conditions."""
     from PySide6.QtGui import QGuiApplication
 
     QGuiApplication.instance() or QGuiApplication(sys.argv)
     from OpenGL import GL as gl
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tools.bench_stability import PairedBench, crossfade_control
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
     from tools.transition_contact_sheet import TransitionCapture
 
     width, height = size
     capture = TransitionCapture(width, height)
-    snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)
-    state = snapshot.logical.mode_state
-    state = dataclasses.replace(state, parameters={**dict(state.parameters), **parameters})
-    snapshot = dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
-    matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
     host = QuickVisualizerRenderHost()
-    counter = _CallCounter(gl) if calls else None
-
-    def draw() -> float:
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        gl.glViewport(0, 0, width, height)
-        gl.glClearColor(0.1, 0.12, 0.16, 1.0)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        start = perf_counter()
-        host.render(snapshot=snapshot, viewport=(0, 0, width, height),
-                    logical_size=(float(width), float(height)), matrix_values=matrix)
-        return (perf_counter() - start) * 1e3
-
     try:
-        for _ in range(warm):
-            draw()
-            gl.glFinish()
-        cpu, queries, counts = [], [], []
-        for _ in range(frames):
-            query = int(gl.glGenQueries(1)[0])
-            queries.append(query)
-            gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
-            if counter is not None:
-                counter.count = 0
-                counter.install()
-            cpu.append(draw())
-            if counter is not None:
-                counter.uninstall()
-                counts.append(counter.count)
-            gl.glEndQuery(gl.GL_TIME_ELAPSED)
-            gl.glFlush()
-        gpu = []
-        for query in queries:
-            value = ctypes.c_uint64()
-            gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
-            gpu.append(value.value / 1e6)
-        gl.glDeleteQueries(len(queries), queries)
-        result = {"cpu_median": statistics.median(cpu), "cpu_p90": _p90(cpu),
-                  "gpu_median": statistics.median(gpu), "gpu_p90": _p90(gpu)}
-        if counts:
-            result["gl_calls"] = statistics.median(counts)
+        snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)
+        state = snapshot.logical.mode_state
+        state = dataclasses.replace(state, parameters={**dict(state.parameters), **parameters})
+        snapshot = dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
+        bench = PairedBench(gl, capture, crossfade_control(capture))
+        case = visualizer_case(gl, capture, host, snapshot, count_calls=calls)
+        result = dict(bench.measure("visualizer", {mode: case}, frames, passes, max_rounds)[mode])
+        result["load"] = bench.load()
         return result
     finally:
         host.release_resources()
@@ -179,12 +197,19 @@ def main() -> int:
     parser.add_argument("mode")
     parser.add_argument("parameters", nargs="*", help="key=value parameter overrides")
     parser.add_argument("--size", default="2560x1440")
-    parser.add_argument("--frames", type=int, default=60)
-    parser.add_argument("--calls", action="store_true", help="count GL calls per frame (separate run)")
+    parser.add_argument("--frames", type=int, default=48)
+    parser.add_argument("--passes", type=int, default=3, help="admitted passes to keep the best of")
+    parser.add_argument("--calls", action="store_true", help="also count GL and Python calls per frame")
     args = parser.parse_args()
     width, height = (int(value) for value in args.size.lower().split("x"))
-    result = measure(args.mode, _parameters(args.parameters), (width, height), args.frames, calls=args.calls)
-    print(" ".join(f"{key}={value:.3f}" for key, value in result.items()))
+    result = measure(args.mode, _parameters(args.parameters), (width, height), args.frames, calls=args.calls,
+                     passes=args.passes)
+    load = result.pop("load")
+    result.pop("env", None)
+    print(" ".join(f"{key}={value:.3f}" for key, value in result.items() if isinstance(value, (int, float))))
+    print(f"conditions: other processes' CPU {load.get('cpu_others_median', '?')}%, GPU busy "
+          f"{load.get('gpu_util_median', '?')}%, GPU clock {load.get('gpu_clock_mhz_median', '?')} MHz, "
+          f"{load.get('admitted', '?')}/{load.get('controls', '?')} passes admitted")
     return 0
 
 
