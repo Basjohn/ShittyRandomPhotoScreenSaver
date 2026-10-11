@@ -9,12 +9,24 @@ Two execution modes intentionally differ:
   queued QQuick/QObject teardown from one target contaminating unrelated tests in
   another file.
 
-* Whole-tree or explicit-target runs retain pytest-chunk's test-level chunking.
-  They are broad reconciliation diagnostics during I/J, not the maintained
-  destination authority.
+* ``--isolated`` runs every selected test file in its own fresh pytest process,
+  ``--jobs`` at a time, and runs each failed file again alone afterwards: a file
+  that passes alone failed under the parallel load (reported as load-sensitive),
+  one that fails again is a real failure. This is the whole-suite gate: run it
+  rather than a hand-picked glob of files. ``--changed`` selects the files a
+  change can affect (``tools/impacted_tests.py``: every test importing a changed
+  module through any chain of project imports, changed tests, and tests naming
+  a changed non-Python file).
+
+* Whole-tree or explicit-target runs without ``--isolated`` retain pytest-chunk's
+  test-level chunking. They are broad reconciliation diagnostics during I/J, not
+  the maintained destination authority.
 
 Examples::
 
+    python tests/run_chunked.py --isolated                    # the whole suite, file-isolated
+    python tests/run_chunked.py --isolated --changed          # files the working-tree change can affect
+    python tests/run_chunked.py --isolated --changed --base main~2
     python tests/run_chunked.py --profile destination --chunks 4 --log
     python tests/run_chunked.py --chunks 4 --log
     python tests/run_chunked.py --chunks 4 tests/test_widgets_tab_current.py
@@ -22,6 +34,9 @@ Examples::
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import os
 import subprocess
 import sys
 import time
@@ -379,6 +394,93 @@ def _run_profile(
     return 1 if any_fail else 0
 
 
+def _summary_line(output: str) -> str:
+    """pytest's final count line (or the last line when a file crashed before it)."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if any(word in line for word in ("passed", "failed", "error", "no tests ran", "skipped")):
+            return line.strip("= ")
+    return lines[-1] if lines else "(no output)"
+
+
+def _run_isolated_file(target: Path, *, timeout_seconds: float | None, extra: list[str],
+                       log_dir: Path) -> tuple[Path, int, float, str]:
+    cmd = [sys.executable, "-m", "pytest", str(target), "--tb=short", "-q", "-p", "no:cacheprovider", *extra]
+    t0 = time.time()
+    try:
+        proc = subprocess.run(cmd, cwd=str(TESTS_DIR.parent), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout_seconds)
+        rc, output = proc.returncode, proc.stdout + proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        rc = 124
+        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        output += f"\nTIMEOUT after {timeout_seconds}s\n"
+    elapsed = time.time() - t0
+    (log_dir / f"{target.stem}.log").write_text(output, encoding="utf-8")
+    # 5 = no tests collected (a file whose tests are all deselected or skipped by marker).
+    return target, (0 if rc == 5 else rc), elapsed, _summary_line(output)
+
+
+_DURATIONS = LOG_DIR / "pytest_isolated_durations.json"
+
+
+def _load_durations() -> dict[str, float]:
+    try:
+        return json.loads(_DURATIONS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | None, extra: list[str]) -> int:
+    """Every target in a fresh pytest process, ``jobs`` at a time; failures rerun alone."""
+
+    log_dir = LOG_DIR / "pytest_isolated"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    for stale in log_dir.glob("*.log"):
+        stale.unlink()
+    durations = _load_durations()
+    print(f"=== Isolated: {len(targets)} files, {jobs} at a time; logs in {log_dir} ===", flush=True)
+    t0 = time.time()
+    failed: list[tuple[Path, str]] = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [pool.submit(_run_isolated_file, target, timeout_seconds=timeout_seconds, extra=extra,
+                               log_dir=log_dir) for target in targets]
+        for future in as_completed(futures):
+            target, rc, elapsed, summary = future.result()
+            done += 1
+            durations[target.name] = round(elapsed, 2)
+            if rc != 0:
+                failed.append((target, summary))
+                print(f"  [{done}/{len(targets)}] FAIL {target.name} [{elapsed:.1f}s] {summary}", flush=True)
+    wall = time.time() - t0
+    _DURATIONS.write_text(json.dumps(durations, indent=0, sort_keys=True), encoding="utf-8")
+
+    real: list[tuple[Path, str]] = []
+    load_sensitive: list[tuple[Path, str]] = []
+    if failed:
+        print(f"\n=== Rerunning {len(failed)} failed files alone ===", flush=True)
+        for target, first in sorted(failed):
+            _target, rc, elapsed, summary = _run_isolated_file(target, timeout_seconds=timeout_seconds,
+                                                               extra=extra, log_dir=log_dir)
+            (load_sensitive if rc == 0 else real).append((target, first if rc == 0 else summary))
+            print(f"  {'passes alone' if rc == 0 else 'FAILS again'}: {target.name} [{elapsed:.1f}s] {summary}",
+                  flush=True)
+
+    print("\n" + "=" * 64)
+    print("ISOLATED SUMMARY")
+    print("=" * 64)
+    print(f"  Files: {len(targets)}   passed: {len(targets) - len(real) - len(load_sensitive)}   "
+          f"load-sensitive: {len(load_sensitive)}   failed: {len(real)}   wall {wall:.0f}s")
+    for target, summary in load_sensitive:
+        print(f"    load-sensitive (passed alone): {target.name}: {summary}")
+    for target, summary in real:
+        print(f"    FAILED: {target.name}: {summary}   (log: {log_dir / (target.stem + '.log')})")
+    print(f"  Result: {'ALL PASSED' if not real else 'FAILURES'}"
+          f"{' (load-sensitive files listed above)' if load_sensitive else ''}")
+    return 1 if real else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run pytest suite in bounded chunks")
     parser.add_argument(
@@ -419,6 +521,23 @@ def main() -> int:
         help="Skip the one-time collection preflight (normally keep it enabled)",
     )
     parser.add_argument(
+        "--isolated",
+        action="store_true",
+        help="Run every selected test file in its own pytest process, --jobs at a time, rerunning failures alone",
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=max(1, min(8, (os.cpu_count() or 2) // 2)),
+        help="Parallel file processes for --isolated (default: half the cores, at most 8)",
+    )
+    parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="With --isolated: only the test files the change against --base can affect",
+    )
+    parser.add_argument("--base", default="HEAD", help="Revision --changed diffs against (default: HEAD)")
+    parser.add_argument(
         "--extra",
         nargs=argparse.REMAINDER,
         default=[],
@@ -433,6 +552,30 @@ def main() -> int:
 
     if args.profile and args.targets:
         parser.error("--profile cannot be combined with explicit pytest targets")
+    if args.changed and not args.isolated:
+        parser.error("--changed needs --isolated")
+
+    if args.isolated:
+        sys.path.insert(0, str(TESTS_DIR.parent))
+        from tools.impacted_tests import all_test_files, changed_files, impacted_tests
+
+        if args.changed:
+            selected = impacted_tests(changed_files(args.base))
+            for target, reason in selected.items():
+                print(f"  {target.name}: {reason}")
+            files = list(selected)
+        elif args.targets:
+            files = [Path(target).resolve() for target in args.targets]
+        else:
+            files = all_test_files()
+        if not files:
+            print("No test files selected.")
+            return 0
+        timeout_seconds = args.timeout_seconds if args.timeout_seconds > 0 else None
+        # Longest files first keeps the parallel tail short (unknown ones first of all).
+        durations = _load_durations()
+        files.sort(key=lambda f: -durations.get(f.name, 1e9))
+        return _run_isolated(files, jobs=max(1, args.jobs), timeout_seconds=timeout_seconds, extra=args.extra)
 
     if args.profile:
         targets = [str(TESTS_DIR / name) for name in PROFILES[args.profile]]

@@ -66,7 +66,15 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 Maintained profiles isolate selected targets in fresh pytest subprocesses so queued Qt/QQuick teardown from one target cannot
 poison an unrelated result. `--chunks` groups/logs those isolated targets; it is not four giant shared Qt processes.
 
-The whole-tree wrapper is a broad **reconciliation/regression diagnostic**, not the primary product gate:
+The whole suite, every file in its own process and failures rerun alone (`Docs/TestSuite.md` §3.2); `--changed`
+runs only the files a change can affect (`tools/impacted_tests.py`):
+
+```powershell
+python tests/run_chunked.py --isolated
+python tests/run_chunked.py --isolated --changed
+```
+
+The test-level chunked wrapper is a broad **reconciliation/regression diagnostic**, not the primary product gate:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log

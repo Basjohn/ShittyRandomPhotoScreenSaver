@@ -312,16 +312,8 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
         owner,
     )
     assert calls == []
-
-    diagnostic = build_runner.Job(
-        "diagnostic", "Diagnostic", "powershell", tmp_path / "diagnostic.ps1",
-        tmp_path, tmp_path / "Diagnostic.scr",
-    )
-    build_runner.BuildRunnerApp._pipeline_worker(
-        _Harness(), "normal", (diagnostic,), {diagnostic.key},
-        build_runner.PreflightResult(), owner,
-    )
-    assert calls == [("venv", owner)]
+    # The Diagnostic build is a companion of the Standard compile, not a job of its own.
+    assert "diagnostic" not in build_runner.QRC_RUNTIME_JOB_KEYS
 
 
 def test_foundry_does_not_launch_product_jobs_after_qrc_prerequisite_failure(monkeypatch, tmp_path: Path) -> None:
