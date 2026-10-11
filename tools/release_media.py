@@ -211,7 +211,7 @@ def transition_spec(identity: str, duration_ms: int, settings: dict | None = Non
     return spec
 
 
-def _transition_run(capture, identity: str, duration_ms: int, settings=None, seed: int = 713):
+def _transition_run(capture, identity: str, duration_ms: int, settings=None, seed: int = 713, run_id: int = 1):
     from rendering.quick.image_state import PresentationImage
     from rendering.quick.transitions.state import TransitionRun
 
@@ -220,7 +220,7 @@ def _transition_run(capture, identity: str, duration_ms: int, settings=None, see
               for index, image in enumerate(capture.images)]
     request = transition_spec(identity, duration_ms, settings, seed).build_request(
         runtime_generation=0, source_image=images[0], destination_image=images[1])
-    return TransitionRun.start(run_id=1, request=request, start_ns=0)
+    return TransitionRun.start(run_id=run_id, request=request, start_ns=0)
 
 
 def _look(spec) -> tuple:

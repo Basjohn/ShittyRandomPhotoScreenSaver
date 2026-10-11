@@ -6,10 +6,26 @@ unchanged. Each case renders through the production render host on one offscreen
 context (no window, no runtime): transitions as their release-showcase cases (canonical
 settings at High detail, fixture photographs), Visualizer modes as their Guided Setup preview
 snapshots (``tools/visualizer_cost_probe.measure``). Per frame it records CPU submit (render
-thread Python + GL calls) and GPU time (``GL_TIME_ELAPSED``), flushing per frame as presentation
-does. Each case runs ``--passes`` passes after a warm-up and keeps the pass with the lowest median
-(the best of several medians is far steadier than one: single passes of sub-millisecond work
-moved up to 30% between identical runs).
+thread Python + GL calls) as wall time and as the thread's own CPU time, and GPU time
+(``GL_TIME_ELAPSED``), flushing per frame as presentation does.
+
+It is built to stay trustworthy while the machine is busy (``tools/bench_stability.py``):
+transitions share one host and are measured **round-robin** (a burst of outside load spoils one
+pass of many cases, not every pass of one case); every sampled frame is rendered ``REPEATS`` times, each
+right after a **control** (one Crossfade frame drawn ``CONTROL_DRAWS`` times), and only the fastest repeat
+of each counts. Each case is also recorded **relative to that control** (``gpu_rel``, ``cpu_rel``: the
+case in Crossfade frames measured beside it): GPU clock state (an idle GPU downclocks between flushes;
+Particle read 0.80 ms quiet and 0.38 ms with the GPU busy elsewhere), contention and a busy core's SMT
+slowdown move case and control alike and cancel, so comparisons use the relative figures. Passes
+whose control GPU time ran more than 35% over the controls' lower quartile are rejected and
+re-measured in later rounds, up to ``--max-rounds``;
+System usage (other processes' CPU, memory, GPU utilisation, clock and temperature) is sampled after
+every pass and recorded per case and per run; a comparison prints both runs' conditions and warns
+when they differ enough to mislead. CPU submit is also recorded as **thread CPU time**
+(``QueryThreadCycleTime``), which other processes'
+load does not inflate. Each case keeps its best admitted pass and its noise (the spread of its
+admitted pass medians); a comparison flags a GPU or CPU rise only beyond its band **and** twice the
+noise of either run.
 
     python tools/overhead_baseline.py                       # writes tools/baselines/overhead/<date>_<sha>.json
     python tools/overhead_baseline.py --compare OLD.json    # also compares against an older baseline
@@ -19,8 +35,8 @@ Each case also records two deterministic per-frame counts: OpenGL calls (every `
 function, counted by wrapping the module) and Python function calls (``sys.setprofile``). They do
 not drift between runs, so **any** rise is real added per-frame work (an extra pass, state change,
 upload or Python step) and is flagged. GPU medians are flagged above ``max(20%, 0.05 ms)``. CPU
-submit of sub-millisecond Python drifts ~0.1 ms between identical runs (power states, scheduler),
-so it is flagged only above ``max(50%, 0.15 ms)`` and is a hint, not proof. Takes about a minute.
+submit (thread CPU time when both runs have it) is flagged only above ``max(50%, 0.15 ms)`` and is a
+hint, not proof. Takes about two minutes on a quiet machine, longer on a busy one.
 Visualizer modes record GL calls through the probe's counter (its renderer modules) but no Python
 count.
 """
@@ -42,68 +58,141 @@ sys.path.insert(0, str(ROOT))
 # Importing the Visualizer probe first matches production GL error checking (it switches per-call
 # checking off before OpenGL.GL is first imported, as main.py does, and refuses otherwise).
 from tools.visualizer_cost_probe import measure as measure_visualizer  # noqa: E402
+from tools.bench_stability import (  # noqa: E402
+    LoadGate, SystemSampler, ThreadCpuClock, environment_differs, min_of_repeats, p90 as _p90, spread,
+    summarise_environment,
+)
 
 OUT = ROOT / "tools" / "baselines" / "overhead"
 GPU_FLAG = (0.20, 0.05)     # ratio, ms
 CPU_FLAG = (0.50, 0.15)
 COUNT_FRAMES = 8
+REPEATS = 3                # renders per sampled frame; the fastest counts
+CONTROL_DRAWS = 8          # Crossfade draws per control frame: enough GPU work to show contention
+CONTROL = ("crossfade", 1000, {})
 
 
-def _p90(values: list[float]) -> float:
-    ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, int(round(0.9 * (len(ordered) - 1))))]
-
-
-def measure_transitions(size: tuple[int, int], frames: int, passes: int) -> dict[str, dict[str, float]]:
+def measure_transitions(size: tuple[int, int], frames: int, passes: int,
+                        max_rounds: int) -> tuple[dict[str, dict[str, float]], dict[str, float]]:
+    """Every showcase transition case, round-robin with interleaved controls; returns (rows, load)."""
     from OpenGL import GL as gl
 
     from tools.release_media import _transition_run, catalogue
     from tools.transition_contact_sheet import TransitionCapture
 
-    results = {}
-    for case in (c for c in catalogue() if c.kind == "transition"):
-        capture = TransitionCapture(*size)
-        try:
-            run = _transition_run(capture, case.identity, case.duration_ms, case.settings)
-            for progress in (0.2, 0.5, 0.8):                     # compile and allocate first
-                capture.render(run, progress)
-            gl.glFinish()
-            best = None
-            for _pass in range(passes):
-                stats = _transition_pass(gl, capture, run, frames)
-                if best is None or stats["cpu_median"] + stats["gpu_median"] < best["cpu_median"] + best["gpu_median"]:
-                    best = stats
-            best.update(_transition_counts(gl, capture, run))
-        finally:
-            capture.close()
-        key = f"{case.identity}/{case.variant}"
-        results[key] = best
-        print(f"  transition {key:34s} cpu {best['cpu_median']:6.3f} ms  gpu {best['gpu_median']:6.3f} ms  "
-              f"gl {best['gl_calls']:5g}  py {best['py_calls']:6g}", flush=True)
-    return results
+    capture = TransitionCapture(*size)
+    clock, gate, sampler = ThreadCpuClock(), LoadGate(), SystemSampler()
+    environment: list[dict[str, float]] = []
+    results: dict[str, dict[str, float]] = {}
+    try:
+        cases = {}
+        for run_id, case in enumerate((c for c in catalogue() if c.kind == "transition"), start=2):
+            cases[f"{case.identity}/{case.variant}"] = _transition_run(
+                capture, case.identity, case.duration_ms, case.settings, run_id=run_id)
+        control = capture.frame(_transition_run(capture, CONTROL[0], CONTROL[1], CONTROL[2], run_id=1), 0.5)
+        admitted: dict[str, list[dict[str, float]]] = {key: [] for key in cases}
+        pending: dict[str, list[tuple[int, dict[str, float]]]] = {key: [] for key in cases}
+        keys = list(cases)
+        for round_index in range(max_rounds):
+            # Judge every pass so far against the controls' quiet reference so far.
+            for key in keys:
+                admitted[key] = [stats for index, stats in pending[key] if gate.admits(index)]
+            short = [key for key in keys if len(admitted[key]) < passes]
+            if not short:
+                break
+            # Rotate the order so no case always follows the same neighbour.
+            offset = round_index % len(short)
+            for key in short[offset:] + short[:offset]:
+                _warm(gl, capture, cases[key], control)
+                stats = _transition_pass(gl, capture, cases[key], control, frames, clock)
+                index = gate.record(stats["control_gpu_median"], stats["control_cpu_median"])
+                stats["env"] = sampler.sample()     # what else ran during this pass
+                environment.append(stats["env"])
+                pending[key].append((index, stats))
+        for key in keys:
+            admitted[key] = [stats for index, stats in pending[key] if gate.admits(index)]
+            chosen = admitted[key] or [stats for _index, stats in pending[key]]
+            best = dict(min(chosen, key=lambda s: s["gpu_rel"] + s["cpu_rel"]))
+            best["passes"] = len(pending[key])
+            best["admitted"] = len(admitted[key])
+            best["gpu_noise"] = spread([s["gpu_rel"] for s in chosen])
+            best["cpu_noise"] = spread([s["cpu_rel"] for s in chosen])
+            best["env"] = summarise_environment([s["env"] for s in chosen])
+            best.update(_transition_counts(gl, capture, cases[key]))
+            results[key] = best
+            print(f"  transition {key:34s} gpu {best['gpu_median']:6.3f} ms = {best['gpu_rel']:6.2f} cf  "
+                  f"cpu {best['cpu_thread_median']:6.3f} ms = {best['cpu_rel']:5.2f} cf  noise {best['gpu_noise']:4.0%}  "
+                  f"admitted {best['admitted']}/{best['passes']}  gl {best['gl_calls']:5g}  py {best['py_calls']:6g}",
+                  flush=True)
+    finally:
+        capture.close()
+    return results, {**gate.summary(), **summarise_environment(environment)}
 
 
-def _transition_pass(gl, capture, run, frames: int) -> dict[str, float]:
-    cpu, queries = [], []
-    for index in range(frames):
-        progress = 0.05 + 0.9 * index / max(1, frames - 1)
-        query = int(gl.glGenQueries(1)[0])
-        queries.append(query)
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
-        start = perf_counter()
-        capture.host.render(capture.frame(run, progress))
-        cpu.append((perf_counter() - start) * 1e3)
-        gl.glEndQuery(gl.GL_TIME_ELAPSED)
-        gl.glFlush()
-    gpu = []
+def _warm(gl, capture, run, control) -> None:
+    """Untimed frames first: a renderer switching runs on the shared host rebuilds per-run state."""
+    for progress in (0.2, 0.5, 0.8):
+        capture.render(run, progress)
+    capture.host.render(control)
+    gl.glFinish()
+
+
+def _timed(gl, capture, frame, draws: int, clock: ThreadCpuClock, cpu: list, thread: list, queries: list) -> None:
+    """One timed frame of ``draws`` renders: GPU over all of them (per draw), CPU over the first
+    alone, so a control's CPU figure is structured exactly like a case's single render (back-to-back
+    repeats run hotter and faster on the CPU than any real frame)."""
+    query = int(gl.glGenQueries(1)[0])
+    queries.append(query)
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+    gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+    start, start_thread = perf_counter(), clock.now()
+    capture.host.render(frame)
+    thread.append(clock.now() - start_thread)
+    cpu.append((perf_counter() - start) * 1e3)
+    for _draw in range(draws - 1):
+        capture.host.render(frame)
+    gl.glEndQuery(gl.GL_TIME_ELAPSED)
+    gl.glFlush()
+
+
+def _gpu_ms(gl, queries: list, draws: int) -> list[float]:
+    values = []
     for query in queries:
         value = ctypes.c_uint64()
         gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
-        gpu.append(value.value / 1e6)
+        values.append(value.value / 1e6 / draws)
     gl.glDeleteQueries(len(queries), queries)
-    return {"cpu_median": statistics.median(cpu), "cpu_p90": _p90(cpu),
-            "gpu_median": statistics.median(gpu), "gpu_p90": _p90(gpu)}
+    return values
+
+
+def _transition_pass(gl, capture, run, control, frames: int, clock: ThreadCpuClock) -> dict[str, float]:
+    """``frames`` progress points, each rendered ``REPEATS`` times, every repeat right after the
+    control (one Crossfade frame drawn ``CONTROL_DRAWS`` times: GPU per draw, CPU of the first); per point the
+    fastest repeat of each, then medians over points. ``gpu_rel`` / ``cpu_rel`` are the case in
+    Crossfade frames measured beside it, which cancels GPU clock state, contention and a busy
+    core's slowdown (they move both alike)."""
+    samples = {name: [] for name in ("cpu", "thread", "gpu", "control_cpu", "control_thread", "control_gpu")}
+    for index in range(frames):
+        frame = capture.frame(run, 0.05 + 0.9 * index / max(1, frames - 1))
+        point = {name: [] for name in ("cpu", "thread", "queries", "control_cpu", "control_thread", "control_queries")}
+        for _repeat in range(REPEATS):
+            _timed(gl, capture, control, CONTROL_DRAWS, clock,
+                   point["control_cpu"], point["control_thread"], point["control_queries"])
+            _timed(gl, capture, frame, 1, clock, point["cpu"], point["thread"], point["queries"])
+        samples["gpu"].append(point["queries"])
+        samples["control_gpu"].append(point["control_queries"])
+        for name in ("cpu", "thread", "control_cpu", "control_thread"):
+            samples[name].append(point[name])
+    samples["gpu"] = [_gpu_ms(gl, queries, 1) for queries in samples["gpu"]]
+    samples["control_gpu"] = [_gpu_ms(gl, queries, CONTROL_DRAWS) for queries in samples["control_gpu"]]
+    fastest = {name: min_of_repeats(values) for name, values in samples.items()}
+    ratio = lambda a, b: statistics.median(x / y for x, y in zip(fastest[a], fastest[b]) if y > 0)  # noqa: E731
+    return {"cpu_median": statistics.median(fastest["cpu"]), "cpu_p90": _p90(fastest["cpu"]),
+            "cpu_thread_median": statistics.median(fastest["thread"]), "cpu_thread_p90": _p90(fastest["thread"]),
+            "gpu_median": statistics.median(fastest["gpu"]), "gpu_p90": _p90(fastest["gpu"]),
+            "control_gpu_median": statistics.median(fastest["control_gpu"]),
+            "control_cpu_median": statistics.median(fastest["control_cpu"]),
+            "gpu_rel": ratio("gpu", "control_gpu"), "cpu_rel": ratio("thread", "control_thread")}
 
 
 class _GLCounter:
@@ -192,6 +281,17 @@ def compare(old: dict, new: dict) -> int:
           f"{new.get('size')}, {new.get('renderer')}")
     if old.get("size") != new.get("size") or old.get("renderer") != new.get("renderer"):
         print("  WARNING: different size or GPU; deltas are not comparable")
+    for label, run in (("old", old), ("new", new)):
+        load = run.get("load", {})
+        if load:
+            print(f"  {label} conditions: other processes' CPU {load.get('cpu_others_median', '?')}% (max "
+                  f"{load.get('cpu_others_max', '?')}%), GPU busy {load.get('gpu_util_median', '?')}%, GPU clock "
+                  f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('admitted', '?')}/{load.get('controls', '?')} "
+                  f"passes admitted")
+    differs = environment_differs(old.get("load", {}), new.get("load", {}))
+    if differs:
+        print(f"  WARNING: the runs were measured under different conditions ({', '.join(differs)}); "
+              f"treat GPU and wall-time deltas with care (thread CPU and call counts are unaffected)")
     for section in ("transitions", "visualizers"):
         rows_old, rows_new = old.get(section, {}), new.get(section, {})
         for key in sorted(set(rows_old) | set(rows_new)):
@@ -202,17 +302,28 @@ def compare(old: dict, new: dict) -> int:
                 print(f"  {section[:-1]:10s} {key:34s} not measured: {rows_new[key].get('error') or rows_old[key].get('error')}")
                 continue
             notes = []
-            for metric, (ratio, floor) in (("gpu_median", GPU_FLAG), ("cpu_median", CPU_FLAG)):
-                a, b = rows_old[key][metric], rows_new[key][metric]
-                if b - a > max(floor, ratio * a):
-                    notes.append(f"{metric.split('_')[0].upper()} {a:.3f}->{b:.3f} ms")
+            old_row, new_row = rows_old[key], rows_new[key]
+            relative = "gpu_rel" in old_row and "gpu_rel" in new_row
+            for label, absolute, rel, noise, (ratio, floor) in (
+                    ("GPU", "gpu_median", "gpu_rel", "gpu_noise", GPU_FLAG),
+                    ("CPU", "cpu_thread_median" if relative else "cpu_median", "cpu_rel", "cpu_noise", CPU_FLAG)):
+                a, b = old_row[absolute], new_row[absolute]
+                if relative:
+                    # In Crossfade frames measured beside each case; the floor in today's milliseconds.
+                    unit = new_row[absolute] / new_row[rel] if new_row[rel] > 0 else 0.0
+                    a, b = old_row[rel] * unit, new_row[rel] * unit
+                noisy = 2.0 * max(old_row.get(noise, 0.0), new_row.get(noise, 0.0)) * a
+                if b - a > max(floor, ratio * a, noisy):
+                    notes.append(f"{label} {a:.3f}->{b:.3f} ms" + (" (relative)" if relative else ""))
             for metric in ("gl_calls", "py_calls"):
                 a, b = rows_old[key].get(metric), rows_new[key].get(metric)
                 if a is not None and b is not None and b > a:
                     notes.append(f"{metric} {a:g}->{b:g}")
             if notes:
                 flagged += 1
-                print(f"  {section[:-1]:10s} {key:34s} SLOWER: {', '.join(notes)}")
+                conditions = environment_differs(old_row.get("env", {}), new_row.get("env", {}))
+                print(f"  {section[:-1]:10s} {key:34s} SLOWER: {', '.join(notes)}"
+                      + (f"  (conditions differed: {', '.join(conditions)})" if conditions else ""))
     print(f"  {flagged} flagged row(s)" if flagged else "  no regressions (counts unchanged or lower; GPU and CPU within their bands)")
     return flagged
 
@@ -221,7 +332,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--size", default="1920x1080")
     parser.add_argument("--frames", type=int, default=48)
-    parser.add_argument("--passes", type=int, default=3)
+    parser.add_argument("--passes", type=int, default=3, help="admitted passes each transition needs")
+    parser.add_argument("--max-rounds", type=int, default=12,
+                        help="round-robin rounds before giving up on a quiet pass (busy machine)")
     parser.add_argument("--only", choices=("transitions", "visualizers"))
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
     parser.add_argument("--compare-only", nargs=2, type=Path, metavar=("OLD", "NEW"))
@@ -239,7 +352,16 @@ def main() -> int:
             "frames": args.frames, "passes": args.passes}
     if args.only != "visualizers":
         print("Transitions")
-        data["transitions"] = measure_transitions(size, args.frames, args.passes)
+        data["transitions"], data["load"] = measure_transitions(size, args.frames, args.passes, args.max_rounds)
+        load = data["load"]
+        print(f"  load: {load.get('admitted')}/{load.get('controls')} passes admitted; control GPU quiet "
+              f"{load.get('control_gpu_quiet', 0):.3f} ms, range "
+              f"{load.get('control_gpu_min', 0):.3f}-{load.get('control_gpu_max', 0):.3f} ms, wall CPU "
+              f"{load.get('control_cpu_min', 0):.3f}-{load.get('control_cpu_max', 0):.3f} ms")
+        print(f"  conditions: other processes' CPU median {load.get('cpu_others_median', '?')}% (max "
+              f"{load.get('cpu_others_max', '?')}%), memory {load.get('memory_used_median', '?')}%, GPU busy "
+              f"{load.get('gpu_util_median', '?')}% (max {load.get('gpu_util_max', '?')}%), GPU clock "
+              f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('gpu_temp_c_median', '?')} C")
     if args.only != "transitions":
         print("Visualizers")
         data["visualizers"] = measure_visualizers(size, args.frames, args.passes)
