@@ -122,6 +122,15 @@ in the shared styled popup: Apply Changes, Discard Changes or Stay In Arrange (c
 Setup's Arrange step asks the same on Back and Next (Apply there applies to the wizard's draft, saved at Finish); Skip
 or closing Settings keeps the wizard's own Keep/Discard/Stay prompt.
 
+**Widgets on a disabled display.** Leaving a widget's Settings page (another Widgets page, another tab, Guided Setup,
+or closing Settings) while one of its widgets is on (family activated and enabled) but routed only to displays that
+`display.show_on_monitors` does not enable asks, in the shared styled popup (`ui/widget_display_routes.py`):
+**Switch For Me** moves it to the lowest enabled display (its effective route, Media's for a following Visualizer, and
+its custom-layout restore entry, through `route_widgets_to_single_monitor`), reloads the built tabs and leaves;
+**Trust Me Bro** leaves and stops asking about that exact widget, route and display set for the rest of the Settings
+session; closing the popup stays, as Arrange does. Widgets set to ALL never ask. The saver and Settings read
+`show_on_monitors` through the one parser `core/settings/display_selection.py`.
+
 **Finish and Finish & Run.** The last step offers both; both save. Finish & Run then closes Settings asking to run
 (`SettingsDialog.request_run_after_close`): a running saver, or a RUN launch waiting on Settings for image sources,
 resumes on close with the saved settings; a Settings-only (CONFIG) launch continues into RUN in the same process

@@ -305,6 +305,7 @@ Protect:
 - lazy Settings hydration cannot masquerade as user edits;
 - Settings warms only hidden Display/Transitions; dormant tabs construct on first visit. Only SettingsManager repairs the OpenGL-only backend and hardware acceleration, without DisplayTab load/save writes; retain `test_settings_dialog.py`, `test_display_tab.py`, and `test_settings_manager.py` as targeted acceptance;
 - descriptor/load/save/default keys remain mutually complete;
+- leaving a widget page (Widgets page, tab, Guided Setup, close) with a widget routed only to disabled displays asks Switch For Me / Trust Me Bro, closing the popup stays, Switch reloads the page so no stale combo saves the old route back, and the saver reads `show_on_monitors` through the same parser (`test_widget_display_route_prompt.py`, real SettingsDialog, patched popup exec and display count);
 - compatibility normalization happens at explicit input boundaries and retired aliases do not become current output;
 - read-oriented defaults/manifest validation and runtime preset catalogue loading must not rewrite shipped Visualizer preset artifacts; explicit regeneration is the source-tree write authority and no-op manifest writes must remain byte-stable across host newline conventions;
 - Theme Foundry and Defaults tooling consume canonical schema rather than inventing parallel fields;

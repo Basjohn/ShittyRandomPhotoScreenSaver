@@ -73,6 +73,7 @@ from ui.tabs.shared_styles import (
     NoWheelSlider,  # noqa: F401 — re-exported
 )
 from ui.flow_layout import FlowContainer
+from ui.widget_display_routes import DisplayRouteLeaveGuard
 from core.settings.ui_bucket_state import (
     flat_bucket_scope,
     normalize_single_open_bucket_states,
@@ -193,6 +194,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self._lazy_sections = bool(lazy_sections)
         self._initial_view_state = dict(initial_view_state) if isinstance(initial_view_state, dict) else {}
         self._widget_section_descriptors = get_widgets_tab_settings_section_descriptors()
+        self._display_route_guard = DisplayRouteLeaveGuard(settings)
         self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = get_default_widget_section_index(self._widget_section_descriptors)
         self._scroll_area: Optional[QScrollArea] = None
@@ -820,7 +822,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
         layout.addWidget(subtab_container)
 
-        self._subtab_group.idClicked.connect(self._on_subtab_changed)
+        self._subtab_group.idClicked.connect(self._on_subtab_clicked)
         default_subtab = get_default_widget_section_index(self._widget_section_descriptors)
         if 0 <= default_subtab < len(buttons):
             buttons[default_subtab].setChecked(True)
@@ -1193,6 +1195,27 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         for family_id, checkbox in checkboxes.items():
             set_widget_family_activated(widgets_config, family_id, bool(checkbox.isChecked()))
         normalize_widget_capability_state(widgets_config)
+
+    def resolve_leave_display_routes(self, on_switched=None) -> bool:
+        """Leaving the current widget page: settle its widgets that only a disabled display
+        would show (``ui/widget_display_routes``). False means stay on the page."""
+
+        index = int(getattr(self, "_current_subtab", -1))
+        if not 0 <= index < len(self._widget_section_descriptors):
+            return True
+        return self._display_route_guard.resolve(
+            self, self._widget_section_descriptors[index].persisted_widget_keys,
+            flush=self.flush_pending_changes,
+            on_switched=on_switched if on_switched is not None else self.load_from_settings)
+
+    def _on_subtab_clicked(self, subtab_id: int) -> None:
+        if int(subtab_id) != self._current_subtab and not self.resolve_leave_display_routes():
+            # Stay: keep the current page's button the checked one.
+            button = self._subtab_group.button(self._current_subtab)
+            if button is not None:
+                button.setChecked(True)
+            return
+        self._on_subtab_changed(subtab_id)
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""

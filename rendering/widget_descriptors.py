@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import import_module
 import os
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, Iterable, Mapping
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
 
@@ -1528,9 +1528,46 @@ def widget_route_admits_screen(
     )
 
 
+def widgets_routed_off_monitors(
+    widgets_config: Mapping[str, Any] | None,
+    widget_ids: Iterable[str],
+    enabled_monitors: Iterable[int],
+) -> tuple[str, ...]:
+    """The widgets among ``widget_ids`` the saver would never show for their route alone.
+
+    A widget counts when it is on (its family activated and its section enabled) and its
+    effective monitor route (Media's for a following Visualizer) admits none of the
+    ``enabled_monitors`` (1-based display numbers). ``ALL`` and malformed historical routes
+    admit every display, so they never count; ids without a monitor route are skipped.
+    """
+
+    from core.settings.capability_activation import is_widget_activated
+
+    widgets = widgets_config if isinstance(widgets_config, Mapping) else {}
+    monitors = tuple(int(number) for number in enabled_monitors)
+    stranded: list[str] = []
+    for widget_id in widget_ids:
+        if get_widget_runtime_descriptor(widget_id) is None:
+            continue
+        section = widgets.get(widget_id)
+        if not (isinstance(section, Mapping) and section.get("enabled", False)):
+            continue
+        if not is_widget_activated(widgets, widget_id):
+            continue
+        try:
+            route = get_effective_monitor_value_for_widget(widget_id, widgets)
+        except (KeyError, ValueError):
+            continue
+        if any(monitor_route_admits_screen(route, number - 1) for number in monitors):
+            continue
+        stranded.append(widget_id)
+    return tuple(stranded)
+
+
 def route_widgets_to_single_monitor(
     widgets_config: Dict[str, Any],
     monitor: int | str,
+    widget_ids: Iterable[str] | None = None,
 ) -> tuple[str, ...]:
     """Route every widget the saver could not show onto the one shown display.
 
@@ -1538,15 +1575,19 @@ def route_widgets_to_single_monitor(
     invisible in the saver and in Arrange. Each widget's effective monitor
     setting (Media's for a following Visualizer) moves to ``monitor`` unless it
     already admits it (``ALL`` stays ``ALL``); an authored restore route gets the
-    same treatment so Reset Widget Layouts cannot send it back. Returns the
+    same treatment so Reset Widget Layouts cannot send it back. ``widget_ids``
+    limits both to those widgets (Settings' "Switch For Me"). Returns the
     changed settings keys.
     """
 
     target = str(int(str(monitor).strip()))
     screen_index = int(target) - 1
+    only = None if widget_ids is None else frozenset(widget_ids)
     changed: list[str] = []
     for descriptor in get_widget_runtime_descriptors():
         widget_id = descriptor.widget_id
+        if only is not None and widget_id not in only:
+            continue
         try:
             current = get_effective_monitor_value_for_widget(widget_id, widgets_config)
         except (KeyError, ValueError):
@@ -1564,6 +1605,8 @@ def route_widgets_to_single_monitor(
     restore_map = load_custom_layout_restore_map(widgets_config)
     restore_changed = False
     for widget_id in tuple(restore_map.get("widgets", {})):
+        if only is not None and widget_id not in only:
+            continue
         entry = get_custom_layout_restore_entry(restore_map, widget_id)
         if entry is None or monitor_route_admits_screen(entry["monitor"], screen_index):
             continue

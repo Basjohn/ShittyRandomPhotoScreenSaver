@@ -1111,7 +1111,7 @@ class SettingsDialog(QDialog):
         """Show Guided Setup in place of the sidebar and tabs (never a second window)."""
         if self._guided_setup_panel is not None or self._closing:
             return
-        if not self._resolve_pending_arrange():
+        if not self._resolve_pending_arrange() or not self._resolve_leaving_widget_page():
             return
         from ui.onboarding.wizard import GuidedSetupPanel
         host = QWidget()
@@ -1146,6 +1146,16 @@ class SettingsDialog(QDialog):
         quick_start = self.__dict__.get("quick_start_tab")
         resolve = getattr(quick_start, "resolve_pending_arrange", None)
         return resolve() if callable(resolve) else True
+
+    def _resolve_leaving_widget_page(self) -> bool:
+        """Leaving a widget's page (tab, Guided Setup, closing Settings): Switch For Me or Trust
+        Me Bro for its widgets only a disabled display would show; False = stay."""
+        index = self.content_stack.currentIndex()
+        key = self._tab_keys[index] if 0 <= index < len(self._tab_keys) else None
+        # The built tab, never its construction placeholder in _tab_widgets.
+        tab = self.__dict__.get(f"{key}_tab") if key in ("widgets", "visualizers") else None
+        resolve = getattr(tab, "resolve_leave_display_routes", None)
+        return resolve(on_switched=self._reload_all_tab_settings) if callable(resolve) else True
 
     def _end_guided_setup(self, _completed: bool = False) -> None:
         host = self._guided_setup_host
@@ -1381,6 +1391,12 @@ class SettingsDialog(QDialog):
             # Stay in Arrange: keep Quick Start's button the checked one.
             for position, button in enumerate(self.tab_buttons):
                 button.setChecked(position == quick_start_index)
+            return
+        current_index = self.content_stack.currentIndex()
+        if index != current_index and self.isVisible() and not self._resolve_leaving_widget_page():
+            # Stay on the widget page: keep its button the checked one.
+            for position, button in enumerate(self.tab_buttons):
+                button.setChecked(position == current_index)
             return
         self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
@@ -1637,6 +1653,11 @@ class SettingsDialog(QDialog):
                 return
         if self.isVisible() and not self._resolve_pending_arrange():
             # An unapplied Arrange draft: "Stay In Arrange" cancels the close.
+            self._closing = False
+            event.ignore()
+            return
+        if self.isVisible() and not self._resolve_leaving_widget_page():
+            # A widget only a disabled display would show: closing the popup stays.
             self._closing = False
             event.ignore()
             return
