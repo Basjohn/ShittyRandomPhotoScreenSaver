@@ -5,7 +5,8 @@
   create no GL object: no compile, texture, buffer or target on a visible frame;
 * what ``park()`` keeps does not depend on the run: three runs leave the same objects alive;
 * ``release_resources()`` deletes every object the renderer ever created;
-* Visualizer modes: cycling every mode holds only the current mode's objects and release frees all.
+* Visualizer modes: cycling every mode holds only the current mode's objects and release frees all;
+* rounds of every transition retain no Python objects (no type rises in every round).
 
 A new transition joins automatically through the release-media catalogue. Counts, not timings:
 the result is the same on a busy machine.
@@ -111,3 +112,52 @@ def test_visualizer_modes_hold_only_the_current_mode_and_release_frees_everythin
             assert not ledger.live(), ledger.describe()
     finally:
         capture.close()
+
+
+def test_rounds_of_every_transition_leave_no_python_objects_behind(qt_app):
+    """Python-side retention (a per-run cache entry, ctypes type or closure kept forever) is
+    invisible to the GL ledger. After two rounds fill the legitimate caches, four more rounds of
+    every transition with fresh seeds run; a type whose live count rises in **every** round is
+    retaining something per run (one leaked ctypes type per Crossfade run alone is caught),
+    while incidental churn never rises four times running."""
+    import gc
+    import json
+    from collections import Counter
+
+    from rendering.quick.transitions.run_geometry import prepare_run_geometry
+    from tools.transition_contact_sheet import TransitionCapture
+
+    width, height = 128, 72
+    capture = TransitionCapture(width, height)
+
+    def one_round(index):
+        for number, case in enumerate(_CASES):
+            run = _transition_run(capture, case.identity, case.duration_ms, case.settings,
+                                  seed=1000 * index + number, run_id=100 * index + number + 1)
+            request = run.request
+            prepare_run_geometry(request.transition_id, request.parameter_dict(), (width / height,), request.direction)
+            while not capture.host.warm_step(request.transition_id, request.parameter_dict(), (width, height)):
+                pass
+            for progress in (0.0, 0.4, 1.0):
+                capture.host.render(capture.frame(run, progress))
+            capture.host.park()
+
+    def census() -> str:
+        gc.collect()
+        # Kept as a string, which the collector does not track, so the census never counts itself.
+        return json.dumps(Counter(type(item).__name__ for item in gc.get_objects()))
+
+    try:
+        one_round(0)
+        one_round(1)
+        snapshots = [census()]
+        for index in (2, 3, 4, 5):
+            one_round(index)
+            snapshots.append(census())
+    finally:
+        capture.close()
+    counts = [json.loads(snapshot) for snapshot in snapshots]
+    names = set().union(*counts)
+    rising = {name: [c.get(name, 0) for c in counts] for name in names
+              if all(b.get(name, 0) > a.get(name, 0) for a, b in zip(counts, counts[1:]))}
+    assert not rising, f"types retained per round of transitions: {rising}"
