@@ -344,7 +344,10 @@ Each foundation slice adds what it learned here.
   two cannot drift.
 - No program is too small to warm: the one-program 2D transitions (Ripple, Wipe, Slide, Melt / Drip, Crossfade,
   Warp Dissolve, flat Blinds, Particle, Burn) used to compile on first use, which cost 3-18 ms on that first frame
-  at 1440p even with the driver's shader cache warm (2026-10-11); each now compiles in its one warm step. Geometry
+  at 1440p even with the driver's shader cache warm (2026-10-11); each now compiles in its one warm step. Ripple, Wipe,
+  Slide, Crossfade, Warp Dissolve, Particle and Burn now share one renderer (`rendering/quick/transitions/fullscreen_pass.py`:
+  per-instance program, warm-up compile, required uniforms checked, parameters validated before any GL state), so the
+  lifecycle is written once; their GL calls per frame are unchanged. Geometry
   COMPUTE prepared uploads in a warm step too (Jigsaw, Crumble), keyed by geometry alone so the run reuses it.
 - `test_transition_lifecycle_contract.py` holds every showcase transition to this with the GL object ledger
   (`tools/gl_object_ledger.py`): warmed frames create no GL object, park keeps the same objects whatever the run,

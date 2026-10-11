@@ -6,11 +6,8 @@ import math
 
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
-from ..render_contract import (
-    QUICK_TRANSITION_VERTEX_SOURCE,
-    QuickTransitionRenderFrame,
-)
+from ..fullscreen_pass import FullscreenPassRenderer
+from ..render_contract import QuickTransitionRenderFrame
 
 
 _DIRECTION_VECTORS = {
@@ -301,100 +298,21 @@ def _slide_partition_sample(
     return ("destination" if destination_owns else "source"), local_uv
 
 
-class QuickSlideRenderer:
+class QuickSlideRenderer(FullscreenPassRenderer):
     transition_id = "slide"
+    label = "Quick Slide"
+    fragment_source = _SLIDE_FRAGMENT_SOURCE
+    uniform_names = ("u_direction", "u_motionStyle")
 
-    def __init__(self) -> None:
-        self._program = 0
-        self._uniforms: dict[str, int] = {}
-
-    @property
-    def has_resources(self) -> bool:
-        return bool(self._program)
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        if not self._program:
-            self._initialize()
-        uniforms = self._uniforms
-        progress = float(frame.sample.eased_progress)
+    def resolve(self, frame: QuickTransitionRenderFrame) -> tuple[tuple[float, float], int]:
         direction = _slide_direction_vector(frame.run.request.direction)
-        motion_style = _slide_motion_style(
-            frame.run.request.parameter_dict()["motion_style"]
-        )
+        motion_style = _slide_motion_style(frame.run.request.parameter_dict()["motion_style"])
+        return direction, _MOTION_STYLE_CODES[motion_style]
 
-        gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(uniforms["u_progress"], progress)
+    def apply(self, values, uniforms, frame: QuickTransitionRenderFrame) -> None:
+        direction, style = values
         gl.glUniform2f(uniforms["u_direction"], *direction)
-        gl.glUniform1i(uniforms["u_motionStyle"], _MOTION_STYLE_CODES[motion_style])
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTex"], 0)
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTex"], 1)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's one step (render thread, between runs): compile the program so
-        the run's first frame compiles nothing (a first-use compile cost 3-18 ms at 1440p)."""
-        if not self._program:
-            self._initialize()
-        return True
-
-    def release_resources(self) -> None:
-        if not self._program:
-            return
-        gl.glDeleteProgram(self._program)
-        self._program = 0
-        self._uniforms.clear()
-
-    def _initialize(self) -> None:
-        program = compile_program(
-            QUICK_TRANSITION_VERTEX_SOURCE,
-            _SLIDE_FRAGMENT_SOURCE,
-            label="Quick Slide",
-        )
-        self._program = program
-        try:
-            uniform_names = (
-                "uMatrix",
-                "uItemSize",
-                "u_progress",
-                "u_direction",
-                "u_motionStyle",
-                "uOldTex",
-                "uNewTex",
-            )
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in uniform_names
-            }
-            required = (
-                "uMatrix",
-                "uItemSize",
-                "u_progress",
-                "u_direction",
-                "u_motionStyle",
-                "uOldTex",
-                "uNewTex",
-            )
-            missing = [name for name in required if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Slide uniforms are incomplete: " + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
+        gl.glUniform1i(uniforms["u_motionStyle"], style)
 
 
 def create_transition_renderer() -> QuickSlideRenderer:

@@ -119,8 +119,13 @@ class _RecordingGL:
 
 
 def _install(monkeypatch, module, recorder: _RecordingGL) -> None:
-    monkeypatch.setattr(module, "gl", recorder)
-    monkeypatch.setattr(module, "compile_program", lambda *a, **k: _FAKE_PROGRAM)
+    # One-program renderers draw through the shared base (``fullscreen_pass``); their own module
+    # sets only their extra uniforms.
+    import rendering.quick.transitions.fullscreen_pass as fullscreen_pass
+
+    for target in (module, fullscreen_pass):
+        monkeypatch.setattr(target, "gl", recorder, raising=False)
+        monkeypatch.setattr(target, "compile_program", lambda *a, **k: _FAKE_PROGRAM, raising=False)
 
 
 def _image(identity: str) -> PresentationImage:

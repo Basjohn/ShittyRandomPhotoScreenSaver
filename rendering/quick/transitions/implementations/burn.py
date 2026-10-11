@@ -9,11 +9,8 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.burn_program import burn_program
-from rendering.quick.render.gl_resources import compile_program
-from ..render_contract import (
-    QUICK_TRANSITION_VERTEX_SOURCE,
-    QuickTransitionRenderFrame,
-)
+from ..fullscreen_pass import FullscreenPassRenderer
+from ..render_contract import QuickTransitionRenderFrame
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,29 +117,22 @@ def _burn_effect_time_seconds(frame: QuickTransitionRenderFrame) -> float:
     )
 
 
-class QuickBurnRenderer:
+class QuickBurnRenderer(FullscreenPassRenderer):
     transition_id = "burn"
+    label = "Quick Burn"
+    fragment_source = burn_program.fragment_source
+    uniform_names = (
+        "u_direction", "u_jaggedness", "u_glow_intensity",
+        "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
+        "u_smoke_density", "u_ash_enabled", "u_ash_density",
+        "u_flames", "u_ember_veins",
+        "u_time", "u_seed",
+    )
 
-    def __init__(self) -> None:
-        self._program = 0
-        self._uniforms: dict[str, int] = {}
+    def resolve(self, frame: QuickTransitionRenderFrame):
+        return _burn_parameters(frame.run.request.parameter_dict())
 
-    @property
-    def has_resources(self) -> bool:
-        return bool(self._program)
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        if not self._program:
-            self._initialize()
-        params = _burn_parameters(frame.run.request.parameter_dict())
-        uniforms = self._uniforms
-
-        gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(uniforms["u_progress"], float(frame.sample.eased_progress))
+    def apply(self, params, uniforms, frame: QuickTransitionRenderFrame) -> None:
         gl.glUniform1i(uniforms["u_direction"], params.direction)
         gl.glUniform1f(uniforms["u_jaggedness"], params.jaggedness)
         gl.glUniform1f(uniforms["u_glow_intensity"], params.glow_intensity)
@@ -157,59 +147,6 @@ class QuickBurnRenderer:
         gl.glUniform1i(uniforms["u_ember_veins"], 1 if params.ember_veins else 0)
         gl.glUniform1f(uniforms["u_time"], _burn_effect_time_seconds(frame))
         gl.glUniform1f(uniforms["u_seed"], params.seed)
-
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTex"], 0)
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTex"], 1)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's one step (render thread, between runs): compile the program so
-        the run's first frame compiles nothing (a first-use compile cost 3-18 ms at 1440p)."""
-        if not self._program:
-            self._initialize()
-        return True
-
-    def release_resources(self) -> None:
-        if not self._program:
-            return
-        gl.glDeleteProgram(self._program)
-        self._program = 0
-        self._uniforms.clear()
-
-    def _initialize(self) -> None:
-        program = compile_program(
-            QUICK_TRANSITION_VERTEX_SOURCE,
-            burn_program.fragment_source,
-            label="Quick Burn",
-        )
-        self._program = program
-        try:
-            required = (
-                "uMatrix", "uItemSize", "u_progress", "uOldTex", "uNewTex",
-                "u_direction", "u_jaggedness", "u_glow_intensity",
-                "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
-                "u_smoke_density", "u_ash_enabled", "u_ash_density",
-                "u_flames", "u_ember_veins",
-                "u_time", "u_seed",
-            )
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in required
-            }
-            missing = [name for name in required if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Burn uniforms are incomplete: " + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
 
 
 def create_transition_renderer() -> QuickBurnRenderer:

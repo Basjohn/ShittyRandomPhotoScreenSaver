@@ -5,7 +5,8 @@ pass, a host change) and compare: an addition should leave everything that does 
 unchanged. Each case renders through the production render host on one offscreen GL 4.6
 context (no window, no runtime): transitions as their release-showcase cases (canonical
 settings at High detail, fixture photographs), Visualizer modes as their Guided Setup preview
-snapshots (``tools/visualizer_cost_probe.measure``). Per frame it records CPU submit (render
+snapshots (``tools/visualizer_cost_probe.visualizer_case``); how to run it, read it and what to expect:
+``Docs/Reference/Benchmarks.md``. Per frame it records CPU submit (render
 thread Python + GL calls) as wall time and as the thread's own CPU time, and GPU time
 (``GL_TIME_ELAPSED``), flushing per frame as presentation does.
 
