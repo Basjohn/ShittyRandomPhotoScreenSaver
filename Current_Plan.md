@@ -75,7 +75,7 @@ and should be preserved for implementation review:
 
 The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
 
-- [ ] **T5. Liquid Lens** — T6–T10 accepted (operator, 2026-10-11); the lens was too large and not volumetric, so it was reworked 2026-10-11 into a small, thick spherical-cap lens with window and glint reflections, a dark glass edge, gathered light and an offset shadow that spreads only at the end (`Docs/Reference/Transitions.md`); awaiting operator judgement (showcase `assets/webp/transition_liquid_lens_default.webp`); measured about 13% above the original lens on the GPU (`Docs/Reference/Transitions.md`). Deactivated by default.
+- [ ] **T5. Liquid Lens** — reworked again 2026-10-11 on the operator's direction: a small lens starting in the middle, hopping between seeded pitstops and growing at each, with a twist of the view and ripples around it, flooding from the chosen stop (Stops 1-8, default 4; droplets and the origin choice retired; default duration 8000 ms) (`Docs/Reference/Transitions.md`); awaiting operator judgement (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
 
 Implementation order inside this tranche is deliberate: **Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom
 Reveal first; then Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth Card Cascade and Capillary

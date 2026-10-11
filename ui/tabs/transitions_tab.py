@@ -39,7 +39,7 @@ from rendering.gl_programs.chromatic_shear_options import SHEAR_SLICES_RANGE
 from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTION_CHOICES
 from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_CHOICES
-from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGIN_CHOICES
+from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_STOPS_RANGE
 from rendering.gl_programs.volumetric_dissolve_options import (
     VOLUMETRIC_DIRECTION_CHOICES,
     VOLUMETRIC_PARTICLE_SIZE_RANGE,
@@ -125,7 +125,6 @@ class TransitionsTab(QWidget):
                 "jigsaw",
                 "volumetric_dissolve",
                 "vhs",
-                "liquid_lens",
                 "membrane",
                 "chromatic_shear",
                 "depth_cascade",
@@ -641,7 +640,6 @@ class TransitionsTab(QWidget):
             "Jigsaw Piece Flip",
             "Volumetric Dissolve",
             "VHS Distortion",
-            "Liquid Lens",
             "Membrane Turnover",
             "Chromatic Shear",
             "Depth Card Cascade",
@@ -859,7 +857,9 @@ class TransitionsTab(QWidget):
         if hasattr(self, 'liquid_lens_group'):
             canonical = canonical_transitions['liquid_lens']
             cfg = self._new_transition_section(transitions_config, 'liquid_lens', canonical)
-            self.liquid_lens_droplets_check.setChecked(bool(cfg.get('droplets', canonical['droplets'])))
+            self.liquid_lens_stops_spin.setValue(self._new_transition_number(
+                cfg, 'stops', 'liquid_lens', canonical['stops'], self.liquid_lens_stops_spin, int,
+            ))
         if hasattr(self, 'surface_tension_group'):
             canonical = canonical_transitions['surface_tension']
             cfg = self._new_transition_section(transitions_config, 'surface_tension', canonical)
@@ -1447,15 +1447,16 @@ class TransitionsTab(QWidget):
         self._style_group_box(self.liquid_lens_group)
         layout = QVBoxLayout(self.liquid_lens_group)
         layout.setContentsMargins(0, 12, 0, 0)
+        stops_row = self._aligned_row(layout, "Stops:")
+        self.liquid_lens_stops_spin = QSpinBox()
+        self.liquid_lens_stops_spin.setRange(*LIQUID_LENS_STOPS_RANGE)
+        self.liquid_lens_stops_spin.setValue(int(_transition_default("liquid_lens.stops")))
+        self.liquid_lens_stops_spin.setToolTip(
+            "Which stop the lens floods the picture from: it starts in the middle and grows at each stop "
+            "before it. 1 floods from the middle.")
+        self.liquid_lens_stops_spin.valueChanged.connect(self._save_settings)
+        stops_row.addWidget(self.liquid_lens_stops_spin)
         self._build_surface_controls(layout, "liquid_lens")
-        droplets_row = self._aligned_row(layout, "", wrap=False)
-        self.liquid_lens_droplets_check = QCheckBox("Droplets")
-        self.liquid_lens_droplets_check.setProperty("circleIndicator", True)
-        self.liquid_lens_droplets_check.setChecked(bool(_transition_default("liquid_lens.droplets")))
-        self.liquid_lens_droplets_check.setToolTip("Drops of water flung from the lens's leading edge.")
-        self.liquid_lens_droplets_check.stateChanged.connect(self._save_settings)
-        droplets_row.addWidget(self.liquid_lens_droplets_check)
-        droplets_row.addStretch()
         self._specific_group_host_layout.addWidget(self.liquid_lens_group)
 
     def _build_membrane_group(self) -> None:
@@ -2330,7 +2331,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'depth_cascade_cards_spin', None),
             getattr(self, 'chromatic_shear_slices_spin', None),
             getattr(self, 'surface_tension_pools_spin', None),
-            getattr(self, 'liquid_lens_droplets_check', None),
+            getattr(self, 'liquid_lens_stops_spin', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
@@ -2455,7 +2456,7 @@ class TransitionsTab(QWidget):
             self._dir_blockspin = blockspin_dir
             for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
                             "disintegrate", "cube_turn", "beam", "jigsaw", "volumetric_dissolve", "vhs",
-                            "liquid_lens", "membrane", "chromatic_shear", "depth_cascade"):
+                            "membrane", "chromatic_shear", "depth_cascade"):
                 canonical_section = canonical_transitions.get(section, {})
                 persisted_section = transitions_config.get(section, {})
                 if not isinstance(canonical_section, dict):
@@ -2612,12 +2613,6 @@ class TransitionsTab(QWidget):
                     # Where the dissolve starts and the way it sweeps, or from the centre out.
                     self.direction_combo.addItems(list(VOLUMETRIC_DIRECTION_CHOICES))
                     idx = self.direction_combo.findText(self._direction_by_type["volumetric_dissolve"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Liquid Lens":
-                    self.direction_combo.addItems(list(LIQUID_LENS_ORIGIN_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["liquid_lens"])
                     if idx < 0:
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
@@ -2787,8 +2782,6 @@ class TransitionsTab(QWidget):
             self._direction_by_type["chromatic_shear"] = cur_dir
         elif cur_type == "Membrane Turnover":
             self._direction_by_type["membrane"] = cur_dir
-        elif cur_type == "Liquid Lens":
-            self._direction_by_type["liquid_lens"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -2945,9 +2938,9 @@ class TransitionsTab(QWidget):
         else:
             edge_bloom = _existing_subdict('edge_bloom')
         if hasattr(self, 'liquid_lens_group'):
-            liquid_lens = {'direction': self._direction_by_type['liquid_lens'], 'droplets': self.liquid_lens_droplets_check.isChecked()}
+            liquid_lens = {'stops': self.liquid_lens_stops_spin.value()}
         else:
-            liquid_lens = {**_existing_subdict('liquid_lens'), 'direction': self._direction_by_type['liquid_lens']}
+            liquid_lens = _existing_subdict('liquid_lens')
         if hasattr(self, 'membrane_group'):
             membrane = {'direction': self._direction_by_type['membrane']}
         else:
