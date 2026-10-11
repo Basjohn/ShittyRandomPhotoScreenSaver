@@ -30,6 +30,7 @@ noise of either run.
     python tools/overhead_baseline.py                       # writes tools/baselines/overhead/<date>_<sha>.json
     python tools/overhead_baseline.py --compare OLD.json    # also compares against an older baseline
     python tools/overhead_baseline.py --compare-only OLD.json NEW.json
+    python tools/overhead_baseline.py --match liquid_lens --compare OLD.json   # one effect, quickly
 
 Each case also records two deterministic per-frame counts: OpenGL calls (every ``OpenGL.GL``
 function, counted by wrapping the module) and Python function calls (``sys.setprofile``). They do
@@ -89,8 +90,8 @@ class _Bench:
     """Round-robin passes with an interleaved control, a load gate and system conditions, shared by
     transitions and Visualizer modes on one offscreen context (``capture``)."""
 
-    def __init__(self, gl, capture, control: Callable[[], None]) -> None:
-        self.gl, self.capture, self.control = gl, capture, control
+    def __init__(self, gl, capture, control: Callable[[], None], match: str | None = None) -> None:
+        self.gl, self.capture, self.control, self.match = gl, capture, control, match
         self.clock, self.gate, self.sampler = ThreadCpuClock(), LoadGate(), SystemSampler()
         self.environment: list[dict[str, float]] = []
 
@@ -98,7 +99,7 @@ class _Bench:
                 max_rounds: int) -> dict[str, dict[str, float]]:
         pending: dict[str, list[tuple[int, dict[str, float]]]] = {key: [] for key in cases}
         admitted = lambda key: [stats for index, stats in pending[key] if self.gate.admits(index)]  # noqa: E731
-        keys = list(cases)
+        keys = [key for key in cases if not self.match or self.match in key]
         for round_index in range(max_rounds):
             # Judge every pass so far against the controls' quiet reference so far.
             short = [key for key in keys if len(admitted(key)) < passes]
@@ -362,6 +363,8 @@ def compare(old: dict, new: dict) -> int:
               f"treat GPU and wall-time deltas with care (thread CPU and call counts are unaffected)")
     for section in ("transitions", "visualizers"):
         rows_old, rows_new = old.get(section, {}), new.get(section, {})
+        if new.get("match"):        # a partial run: only the cases it measured
+            rows_old = {key: row for key, row in rows_old.items() if key in rows_new}
         for key in sorted(set(rows_old) | set(rows_new)):
             if key not in rows_old or key not in rows_new:
                 print(f"  {section[:-1]:10s} {key:34s} {'added' if key in rows_new else 'removed'}")
@@ -404,6 +407,8 @@ def main() -> int:
     parser.add_argument("--max-rounds", type=int, default=12,
                         help="round-robin rounds before giving up on a quiet pass (busy machine)")
     parser.add_argument("--only", choices=("transitions", "visualizers"))
+    parser.add_argument("--match", help="measure only cases whose key contains this text (e.g. liquid_lens); "
+                                        "the file is named after it and comparisons cover only those cases")
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
     parser.add_argument("--compare-only", nargs=2, type=Path, metavar=("OLD", "NEW"))
     args = parser.parse_args()
@@ -417,7 +422,7 @@ def main() -> int:
     width, height = (int(v) for v in args.size.lower().split("x"))
     size = (width, height)
     data = {"commit": _commit(), "date": _dt.datetime.now().isoformat(timespec="seconds"), "size": args.size,
-            "frames": args.frames, "passes": args.passes}
+            "frames": args.frames, "passes": args.passes, "match": args.match}
     from OpenGL import GL as gl
     from tools.release_media import _transition_run
     from tools.transition_contact_sheet import TransitionCapture
@@ -425,7 +430,7 @@ def main() -> int:
     capture = TransitionCapture(*size)
     try:
         control_frame = capture.frame(_transition_run(capture, CONTROL[0], CONTROL[1], CONTROL[2], run_id=1), 0.5)
-        bench = _Bench(gl, capture, lambda: capture.host.render(control_frame))
+        bench = _Bench(gl, capture, lambda: capture.host.render(control_frame), args.match)
         if args.only != "visualizers":
             print("Transitions")
             data["transitions"] = measure_transitions(bench, args.frames, args.passes, args.max_rounds)
@@ -445,7 +450,8 @@ def main() -> int:
           f"{load.get('gpu_util_median', '?')}% (max {load.get('gpu_util_max', '?')}%), GPU clock "
           f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('gpu_temp_c_median', '?')} C")
     OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"{_dt.date.today().isoformat()}_{data['commit']}.json"
+    suffix = f"_{''.join(c if c.isalnum() else '-' for c in args.match)}" if args.match else ""
+    path = OUT / f"{_dt.date.today().isoformat()}_{data['commit']}{suffix}.json"
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
     print(f"\nwrote {path.relative_to(ROOT)}")
     if args.compare:
