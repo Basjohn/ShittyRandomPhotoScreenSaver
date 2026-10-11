@@ -136,8 +136,9 @@ def test_old_clip_missing_history_warns_once_without_inventing_history(qt_app, m
         assert engine.get_waveform_history() is None
         assert engine.get_waveform_history() is None
         assert len(warnings) == 1 and "cannot validate full Oscilloscope fidelity" in warnings[0]
-        with pytest.raises(ValueError, match="44100"):
-            engine.accept_feature_frame(_frame(CaptureHistory.from_samples((0.1,), capture_serial=0,
-                                                                           sample_rate=44100)))
+        # A device's own rate replays as recorded: the Oscilloscope converts its spans at it.
+        assert engine.accept_feature_frame(_frame(CaptureHistory.from_samples((0.1,), capture_serial=0,
+                                                                              sample_rate=44100)))
+        assert engine.get_waveform_history_rate() == 44100
     finally:
         engine.force_stop()

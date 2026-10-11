@@ -303,7 +303,11 @@ def restore_visualizer_snapshot(
 ) -> bool:
     if not isinstance(payload, Mapping):
         return False
-    payload = _filter_snapshot_payload_ownership(mode_key, payload)
+    from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
+
+    # A snapshot saved before a key was retired (the pre-rework Oscilloscope's) must not bring it
+    # back; migrations have already read it by the time a snapshot is restored.
+    payload = _filter_snapshot_payload_ownership(mode_key, strip_retired_visualizer_settings(payload))
     sanitized = strip_legacy_global_technical_keys(spotify_vis_config)
     if dict(sanitized) != dict(spotify_vis_config):
         spotify_vis_config.clear()
@@ -764,15 +768,6 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
                 )
         settings.pop("spectrum_bass_emphasis", None)
         settings.pop("spectrum_mid_suppression", None)
-    if mode == "oscilloscope":
-        if "osc_line_amplitude" not in settings and "osc_sensitivity" in settings:
-            settings["osc_line_amplitude"] = settings["osc_sensitivity"]
-        settings.pop("osc_sensitivity", None)
-        for _key in ("osc_ghost_line2_enabled", "osc_ghost_line3_enabled"):
-            if _key not in settings:
-                settings[_key] = require_canonical_default(
-                    f"widgets.spotify_visualizer.{_key}"
-                )
     if mode == "sine_wave":
         for _key in ("sine_ghost_line2_enabled", "sine_ghost_line3_enabled"):
             if _key not in settings:

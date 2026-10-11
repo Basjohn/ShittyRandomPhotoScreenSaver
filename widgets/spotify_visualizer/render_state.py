@@ -441,34 +441,51 @@ class SphereFrame:
 
 @dataclass(frozen=True, slots=True)
 class OscilloscopeFrame:
-    previous_waveform: tuple[float, ...] = ()
-    ghost_waveforms: tuple[tuple[float, ...], ...] = ()
+    """The Oscilloscope's traces and beam state (``oscilloscope_frame_runtime``).
+
+    ``points`` holds every trace's points (float32 x, y in the content's unit square, y up) back
+    to back, oldest first; ``trace_alphas`` one brightness per trace, the live trace last.
+    ``flare``, ``drive`` and ``tone`` are the beam's reactions; the renderer only draws them.
+    """
+
+    points: bytes = b""
+    trace_alphas: tuple[float, ...] = ()
+    flare: float = 0.0
+    drive: float = 0.0
+    tone: float = 0.5
     animation_time: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "previous_waveform",
-            _float_tuple(self.previous_waveform, name="previous waveform sample"),
-        )
-        object.__setattr__(
-            self,
-            "ghost_waveforms",
-            _float_tuple_rows(self.ghost_waveforms, name="ghost waveform sample"),
-        )
-        object.__setattr__(
-            self,
-            "animation_time",
-            _finite(self.animation_time, name="oscilloscope animation time"),
-        )
-        if self.animation_time < 0.0:
-            raise ValueError("oscilloscope animation time must be non-negative")
+        if not isinstance(self.points, bytes):
+            raise TypeError("oscilloscope points must be bytes")
+        alphas = _float_tuple(self.trace_alphas, name="oscilloscope trace alpha")
+        if len(alphas) > 16:
+            raise ValueError("oscilloscope frames carry at most 16 traces")
+        if any(alpha < 0.0 or alpha > 1.0 for alpha in alphas):
+            raise ValueError("oscilloscope trace alphas must be within 0..1")
+        if bool(alphas) != bool(self.points):
+            raise ValueError("oscilloscope points and trace alphas go together")
+        if alphas and len(self.points) % (8 * len(alphas)):
+            raise ValueError("oscilloscope points must split evenly into its traces")
+        if alphas and not 2 <= len(self.points) // (8 * len(alphas)) <= 384:
+            raise ValueError("oscilloscope traces hold 2..384 points")
+        object.__setattr__(self, "trace_alphas", alphas)
+        for name in ("flare", "drive", "tone", "animation_time"):
+            value = _finite(getattr(self, name), name=f"oscilloscope {name}")
+            if value < 0.0:
+                raise ValueError(f"oscilloscope {name} must be non-negative")
+            object.__setattr__(self, name, value)
         object.__setattr__(
             self,
             "parameters",
             _coerce_frozen_fields(self.parameters, name="oscilloscope parameters"),
         )
+
+    @property
+    def trace_points(self) -> int:
+        """Points per trace."""
+        return len(self.points) // (8 * len(self.trace_alphas)) if self.trace_alphas else 0
 
     @property
     def mode_id(self) -> str:

@@ -26,6 +26,22 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     # then guarantees no old authority survives in canonical state.
     "sphere_deformation",
     "sphere_bump_reactivity",
+    # The Oscilloscope before its 2026-10-11 rework (six fixed lines, line ghosting, the shared
+    # Rainbow and bar colours it never drew, the old width reaction and the analysis controls it no
+    # longer consumes). The rework's keys are all new names, so nothing of the old look survives.
+    "osc_ghost_decay", "osc_ghost_intensity", "osc_ghosting_enabled",
+    "osc_ghost_line2_enabled", "osc_ghost_line3_enabled", "osc_ghost_line4_enabled",
+    "osc_ghost_line5_enabled", "osc_ghost_line6_enabled",
+    "osc_glow_color", "osc_glow_enabled", "osc_glow_intensity", "osc_glow_reactivity", "osc_reactive_glow",
+    "osc_line_color", "osc_line2_color", "osc_line3_color", "osc_line4_color", "osc_line5_color",
+    "osc_line6_color", "osc_line2_glow_color", "osc_line3_glow_color", "osc_line4_glow_color",
+    "osc_line5_glow_color", "osc_line6_glow_color",
+    "osc_line_amplitude", "osc_line_count", "osc_line_dim", "osc_line_offset_bias", "osc_smoothing",
+    "osc_speed", "osc_vertical_shift",
+    "oscilloscope_agc_strength", "oscilloscope_bar_border_color", "oscilloscope_bar_border_opacity",
+    "oscilloscope_bar_fill_color", "oscilloscope_dynamic_range_enabled", "oscilloscope_kick_lane_gain",
+    "oscilloscope_rainbow_enabled", "oscilloscope_rainbow_speed", "oscilloscope_transient_pulse_gain",
+    "oscilloscope_transient_width_mix", "osc_sensitivity", "oscilloscope_transient_clamp",
 })
 _RETIRED_VISUALIZER_PREFIXES = ("blob_",)
 

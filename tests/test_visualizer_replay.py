@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import struct
+from types import SimpleNamespace
 
 import pytest
 
-from tools.visualizer_replay.driver import FIXTURES, MODES, load_clips, replay_clip
+from tools.visualizer_replay.driver import FIXTURES, MODES, load_clips, mode_output, replay_clip
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from tools.visualizer_replay.engine import ReplayBeatEngine
 from tools.visualizer_replay.floors import REFERENCE, check_floors
@@ -69,6 +71,40 @@ def test_frozen_devcurve_runtime_fails_own_output_floor(clips, monkeypatch):
     assert result["metrics"]["bar_peak"] > 0.5
     with pytest.raises(AssertionError, match="output_flux=.*below floor"):
         check_floors(result, "beats_120_bpm__devcurve")
+
+
+def test_oscilloscope_output_reads_live_trace_and_beam_reactions():
+    from widgets.spotify_visualizer.render_state import OscilloscopeFrame
+
+    # Test-owned traces: the first is afterglow, the last is the live beam.
+    state = OscilloscopeFrame(
+        points=struct.pack("<12f", -1.0, 9.0, 0.0, 8.0, 1.0, 7.0,
+                           -1.0, -0.25, 0.0, 0.5, 1.0, 0.75),
+        trace_alphas=(0.4, 1.0), flare=0.3, drive=0.6, tone=0.9,
+        animation_time=12.0,
+    )
+    frame = SimpleNamespace(mode_id="oscilloscope", mode_state=state)
+    assert mode_output(frame) == (-0.25, 0.5, 0.75, 0.6, 0.3)
+
+
+def test_frozen_oscilloscope_runtime_fails_own_output_floor(clips, monkeypatch):
+    from widgets.spotify_visualizer.oscilloscope_frame_runtime import OscilloscopeFrameRuntime
+
+    resolve = OscilloscopeFrameRuntime.resolve
+    first = None
+
+    def freeze_after_first(self, **kwargs):
+        nonlocal first
+        if first is None:
+            first = resolve(self, **kwargs)
+        return first
+
+    monkeypatch.setattr(OscilloscopeFrameRuntime, "resolve", freeze_after_first)
+    result = replay_clip(clips["beats_120_bpm"], "oscilloscope", settings=frozen_visualizer_settings)
+    assert result["metrics"]["bar_peak"] > 0.5
+    assert all(not frame.common.waveform for frame in result["logical_series"])
+    with pytest.raises(AssertionError, match="output_flux=.*below floor"):
+        check_floors(result, "beats_120_bpm__oscilloscope")
 
 
 def test_control_fixture_keeps_mode_and_visibility_events(clips):

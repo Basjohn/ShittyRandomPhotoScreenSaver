@@ -107,8 +107,24 @@ class TestSettingsModelPlumbing:
         "sine_heartbeat": 0.33,
         "rainbow_enabled": True,
         "rainbow_speed": 0.8,
-        "osc_ghosting_enabled": True,
-        "osc_ghost_intensity": 0.6,
+        # Oscilloscope owns the spec-driven display/beam/reaction controls;
+        # the retired six-line/ghost settings are deliberately absent.
+        "osc_display": "Ring",
+        "osc_span": 31.0,
+        "osc_detail": 0.62,
+        "osc_gain": 1.7,
+        "osc_delay": 2.4,
+        "osc_beam_color": [10, 20, 30, 255],
+        "osc_beam_glow_color": [40, 50, 60, 255],
+        "osc_beam_width": 2.1,
+        "osc_glow": 0.72,
+        "osc_afterglow": 0.38,
+        "osc_analog": 0.44,
+        "osc_spectral": 0.27,
+        "osc_flare": 0.81,
+        "osc_pulse": 0.53,
+        "osc_graticule": "Crosshair",
+        "osc_graticule_color": [70, 80, 90, 46],
         "bubble_big_bass_pulse": 0.65,
         "bubble_small_freq_pulse": 0.35,
         "bubble_stream_direction": "left",
@@ -565,7 +581,7 @@ class TestPresetOverlayRuntimeOverrides:
         assert model.spectrum_glow_intensity == pytest.approx(baseline.spectrum_glow_intensity)
         assert model.spectrum_glow_color == baseline.spectrum_glow_color
 
-    def test_from_mapping_curated_ignores_explicit_secondary_ghost_toggles(self):
+    def test_from_mapping_curated_ignores_retired_oscilloscope_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
 
         osc_baseline = SpotifyVisualizerSettings.from_mapping(
@@ -579,13 +595,14 @@ class TestPresetOverlayRuntimeOverrides:
                 "mode": "oscilloscope",
                 "preset_oscilloscope": 0,
                 "oscilloscope_bar_count": 35,
-                "osc_ghost_line2_enabled": False,
-                "osc_ghost_line3_enabled": True,
+                "osc_line_count": 3,
+                "osc_sensitivity": 0.8,
             }
         )
         assert osc_model.resolve_bar_count("oscilloscope") == osc_baseline.resolve_bar_count("oscilloscope")
-        assert osc_model.osc_ghost_line2_enabled == osc_baseline.osc_ghost_line2_enabled
-        assert osc_model.osc_ghost_line3_enabled == osc_baseline.osc_ghost_line3_enabled
+        serialized = osc_model.to_dict()
+        assert "widgets.spotify_visualizer.osc_line_count" not in serialized
+        assert "widgets.spotify_visualizer.osc_sensitivity" not in serialized
 
         sine_baseline = SpotifyVisualizerSettings.from_mapping(
             {
@@ -1081,16 +1098,15 @@ class TestPerModeTechnicalControlPresentation:
         assert "Recommended for Extruded Spectrum: 128 samples." in tc._audio_block_tooltip("extruded_spectrum")
 
     @pytest.mark.parametrize(
-        ("mode_key", "expected_percent"),
+        "mode_key",
         [
-            ("spectrum", 42),
-            ("extruded_spectrum", 34),
-            ("bubble", 50),
-            ("sine_wave", 18),
-            ("oscilloscope", 15),
+            "spectrum",
+            "extruded_spectrum",
+            "bubble",
+            "sine_wave",
         ],
     )
-    def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key, expected_percent):
+    def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key):
         from PySide6.QtWidgets import QVBoxLayout, QWidget
         from ui.tabs.media import technical_controls as tc
         from ui.tabs.shared_styles import RecommendedMarkSlider
@@ -1119,7 +1135,7 @@ class TestPerModeTechnicalControlPresentation:
         slider = controls["agc_strength_slider"]
 
         assert isinstance(slider, RecommendedMarkSlider)
-        assert slider.recommended_value() == expected_percent
+        assert slider.recommended_value() == round(tc._recommended_agc_value(mode_key) * 100)
 
     def test_load_per_mode_controls_reads_direct_transient_keys(self):
         from ui.tabs.media import technical_controls as tc
@@ -1263,6 +1279,29 @@ class TestVisualizerModeRegistryContract:
 
         descriptor = get_visualizer_mode_descriptor("devcurve")
         assert descriptor.display_name == "Spline Curve"
+
+    def test_oscilloscope_and_sphere_registry_capabilities_match_consumers(self):
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+        oscilloscope = get_visualizer_mode_descriptor("oscilloscope")
+        assert oscilloscope.rainbow_controls is False
+        assert oscilloscope.shared_bar_appearance is False
+        assert oscilloscope.prepared_reveal is True
+
+        sphere = get_visualizer_mode_descriptor("sphere")
+        assert sphere.rainbow_controls is False
+        assert sphere.shared_bar_appearance is False
+        assert sphere.prepared_reveal is True
+        assert set(sphere.technical_setting_suffixes or ()) == {
+            "bar_count",
+            "audio_block_size",
+            "adaptive_sensitivity",
+            "sensitivity",
+            "dynamic_floor",
+            "manual_floor",
+            "input_gain",
+            "transient_clamp",
+        }
 
     def test_missing_preset_fallback_uses_canonical_per_mode_default(self):
         from core.settings.default_contract import require_canonical_default
@@ -1424,11 +1463,6 @@ class TestVisualizerSettingsContract:
         assert kwargs["sine_wave_transient_width_mix"] == pytest.approx(
             require_canonical_default(
                 "widgets.spotify_visualizer.sine_wave_transient_width_mix"
-            )
-        )
-        assert kwargs["oscilloscope_transient_width_mix"] == pytest.approx(
-            require_canonical_default(
-                "widgets.spotify_visualizer.oscilloscope_transient_width_mix"
             )
         )
         assert kwargs["oscilloscope_audio_block_size"] == 384
@@ -1601,7 +1635,6 @@ class TestVisualizerModeBinding:
         assert tab.rainbow_updates == 1
 
     def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
-        from core.settings.default_contract import require_canonical_default
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_rainbow_state,
         )
@@ -1639,16 +1672,10 @@ class TestVisualizerModeBinding:
         assert payload["bubble_rainbow_speed"] == pytest.approx(0.63)
         assert payload["spectrum_rainbow_enabled"] is False
         assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
-        assert payload["oscilloscope_rainbow_enabled"] is bool(
-            require_canonical_default(
-                "widgets.spotify_visualizer.oscilloscope_rainbow_enabled"
-            )
-        )
-        assert payload["oscilloscope_rainbow_speed"] == pytest.approx(
-            require_canonical_default(
-                "widgets.spotify_visualizer.oscilloscope_rainbow_speed"
-            )
-        )
+        # Oscilloscope does not own the shared Rainbow controls; its beam tone
+        # is driven by the mode's authored spectral reaction instead.
+        assert "oscilloscope_rainbow_enabled" not in payload
+        assert "oscilloscope_rainbow_speed" not in payload
 
     def test_rainbow_controls_are_hidden_outside_custom_preset(self):
         from ui.tabs.widgets_tab import WidgetsTab
@@ -1778,24 +1805,32 @@ class TestVisualizerModeBinding:
 class TestOscilloscopeSettingsBinding:
     def test_load_oscilloscope_mode_settings_updates_osc_owned_controls(self):
         from ui.tabs.media.oscilloscope_settings_binding import load_oscilloscope_mode_settings
+        from core.settings.visualizer_mode_settings import Choice, Colour, Slider, require_mode_settings
 
-        class _Check:
+        class _Widget:
             def __init__(self):
+                self._value = None
+                self.text = ""
                 self.checked = None
 
-            def setChecked(self, checked):
-                self.checked = checked
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
+            def blockSignals(self, _blocked):
+                return None
 
             def setValue(self, value):
-                self.value = value
+                self._value = value
+
+            def value(self):
+                return self._value
+
+            def setCurrentText(self, value):
+                self.text = value
+
+            def setChecked(self, value):
+                self.checked = value
 
         class _Label:
             def __init__(self):
-                self.text = None
+                self.text = ""
 
             def setText(self, text):
                 self.text = text
@@ -1803,120 +1838,41 @@ class TestOscilloscopeSettingsBinding:
         class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
                 super().__init__()
-                self.osc_glow_enabled = _Check()
-                self.osc_glow_intensity = _Slider()
-                self.osc_glow_intensity_label = _Label()
-                self.osc_glow_reactivity = _Slider()
-                self.osc_glow_reactivity_label = _Label()
-                self.osc_reactive_glow = _Check()
-                self.osc_line_amplitude = _Slider()
-                self.osc_line_amplitude_label = _Label()
-                self.osc_smoothing = _Slider()
-                self.osc_smoothing_label = _Label()
-                self.osc_speed = _Slider()
-                self.osc_speed_label = _Label()
-                self.osc_line_dim = _Check()
-                self.osc_line_offset_bias = _Slider()
-                self.osc_line_offset_bias_label = _Label()
-                self.osc_vertical_shift = _Slider()
-                self.osc_vertical_shift_label = _Label()
-                self.osc_multi_line = _Check()
-                self.osc_line_count = _Slider()
-                self.osc_line_count_label = _Label()
-                self.osc_ghost_enabled = _Check()
-                self.osc_ghost_intensity = _Slider()
-                self.osc_ghost_intensity_label = _Label()
-                self.osc_ghost_decay = _Slider()
-                self.osc_ghost_decay_label = _Label()
-                self.osc_ghost_line2_enabled = _Check()
-                self.osc_ghost_line3_enabled = _Check()
+                self._widgets = {}
 
+            def _widget_default(self, section, key):
+                return super()._widget_default(section, key)
+
+        spec = require_mode_settings("oscilloscope")
         tab = _Tab()
-        synced = []
-        visibility_calls = []
+        config = {}
+        for entry in spec.controls:
+            if isinstance(entry, Colour):
+                config[entry.key] = [11, 22, 33, 44]
+                setattr(tab, f"{entry.key}_btn", None)
+            elif isinstance(entry, Slider):
+                config[entry.key] = (entry.low + entry.high) / 2.0
+                setattr(tab, f"{entry.key}_label", _Label())
+            elif isinstance(entry, Choice):
+                config[entry.key] = entry.choices[-1]
+            widget = _Widget()
+            setattr(tab, entry.key, widget)
+            tab._widgets[entry.key] = widget
 
-        def _load_extra(tab_obj, config):
-            tab_obj._osc_line2_color = QColor(*config["osc_line2_color"])
-            tab_obj._osc_line2_glow_color = QColor(*config["osc_line2_glow_color"])
-            tab_obj._osc_line3_color = QColor(*config["osc_line3_color"])
-            tab_obj._osc_line3_glow_color = QColor(*config["osc_line3_glow_color"])
+        load_oscilloscope_mode_settings(tab, config)
 
-        load_oscilloscope_mode_settings(
-            tab,
-            {
-                "osc_glow_enabled": False,
-                "osc_glow_intensity": 0.62,
-                "osc_glow_reactivity": 1.44,
-                "osc_reactive_glow": False,
-                "osc_line_amplitude": 4.7,
-                "osc_smoothing": 0.58,
-                "osc_speed": 0.72,
-                "osc_line_dim": True,
-                "osc_line_offset_bias": 0.23,
-                "osc_vertical_shift": 32,
-                "osc_line_color": [1, 2, 3, 4],
-                "osc_glow_color": [5, 6, 7, 8],
-                "osc_line_count": 3,
-                "osc_line2_color": [9, 10, 11, 12],
-                "osc_line2_glow_color": [13, 14, 15, 16],
-                "osc_line3_color": [17, 18, 19, 20],
-                "osc_line3_glow_color": [21, 22, 23, 24],
-                "osc_ghosting_enabled": True,
-                "osc_ghost_intensity": 0.41,
-                "osc_ghost_decay": 0.57,
-                "osc_ghost_line2_enabled": False,
-                "osc_ghost_line3_enabled": True,
-            },
-            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
-            load_extra_color_bindings=_load_extra,
-            update_multi_line_visibility=lambda tab_obj: visibility_calls.append(tab_obj),
-        )
-
-        assert tab.osc_glow_enabled.checked is False
-        assert tab.osc_glow_intensity.value == 62
-        assert tab.osc_glow_intensity_label.text == "62%"
-        assert tab.osc_glow_reactivity.value == 144
-        assert tab.osc_line_amplitude.value == 47
-        assert tab.osc_line_amplitude_label.text == "4.7x"
-        assert tab.osc_speed.value == 72
-        assert tab.osc_line_dim.checked is True
-        assert tab.osc_line_offset_bias.value == 23
-        assert tab.osc_vertical_shift.value == 32
-        assert tab.osc_multi_line.checked is True
-        assert tab.osc_line_count.value == 3
-        assert tab.osc_ghost_enabled.checked is True
-        assert tab.osc_ghost_intensity.value == 41
-        assert tab.osc_ghost_decay.value == 57
-        assert tab.osc_ghost_decay_label.text == "0.57x"
-        assert tab.osc_ghost_line2_enabled.checked is False
-        assert tab.osc_ghost_line3_enabled.checked is True
-        assert (tab._osc_line_color.red(), tab._osc_line_color.green(), tab._osc_line_color.blue(), tab._osc_line_color.alpha()) == (1, 2, 3, 4)
-        assert (tab._osc_line3_glow_color.red(), tab._osc_line3_glow_color.green(), tab._osc_line3_glow_color.blue(), tab._osc_line3_glow_color.alpha()) == (21, 22, 23, 24)
-        assert synced == [
-            ("osc_line_color_btn", "_osc_line_color"),
-            ("osc_glow_color_btn", "_osc_glow_color"),
-            ("osc_line2_color_btn", "_osc_line2_color"),
-            ("osc_line2_glow_btn", "_osc_line2_glow_color"),
-            ("osc_line3_color_btn", "_osc_line3_color"),
-            ("osc_line3_glow_btn", "_osc_line3_glow_color"),
-            ("osc_line4_color_btn", "_osc_line4_color"),
-            ("osc_line4_glow_btn", "_osc_line4_glow_color"),
-            ("osc_line5_color_btn", "_osc_line5_color"),
-            ("osc_line5_glow_btn", "_osc_line5_glow_color"),
-            ("osc_line6_color_btn", "_osc_line6_color"),
-            ("osc_line6_glow_btn", "_osc_line6_glow_color"),
-        ]
-        assert visibility_calls == [tab]
+        for entry in spec.controls:
+            if isinstance(entry, Colour):
+                colour = getattr(tab, f"_{entry.key}")
+                assert (colour.red(), colour.green(), colour.blue(), colour.alpha()) == (11, 22, 33, 44)
+            elif isinstance(entry, Slider):
+                assert tab._widgets[entry.key].value() == round(config[entry.key] * entry.scale)
+            elif isinstance(entry, Choice):
+                assert tab._widgets[entry.key].text == config[entry.key]
 
     def test_collect_oscilloscope_mode_settings_serializes_osc_owned_state(self):
         from ui.tabs.media.oscilloscope_settings_binding import collect_oscilloscope_mode_settings
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
+        from core.settings.visualizer_mode_settings import Choice, Colour, Slider, require_mode_settings
 
         class _Slider:
             def __init__(self, value):
@@ -1925,56 +1881,36 @@ class TestOscilloscopeSettingsBinding:
             def value(self):
                 return self._value
 
+        class _Choice:
+            def __init__(self, value):
+                self._value = value
+
+            def currentText(self):
+                return self._value
+
         class _Tab(CanonicalWidgetDefaultsStub):
-            osc_glow_enabled = _Check(True)
-            osc_glow_intensity = _Slider(66)
-            osc_glow_reactivity = _Slider(135)
-            osc_reactive_glow = _Check(False)
-            osc_line_amplitude = _Slider(42)
-            osc_smoothing = _Slider(77)
-            osc_speed = _Slider(81)
-            osc_line_dim = _Check(True)
-            osc_line_offset_bias = _Slider(18)
-            osc_vertical_shift = _Slider(27)
-            osc_multi_line = _Check(True)
-            osc_line_count = _Slider(3)
-            osc_ghost_enabled = _Check(True)
-            osc_ghost_intensity = _Slider(52)
-            osc_ghost_decay = _Slider(61)
-            osc_ghost_line2_enabled = _Check(False)
-            osc_ghost_line3_enabled = _Check(True)
-            _osc_line_color = QColor(1, 2, 3, 4)
-            _osc_glow_color = QColor(5, 6, 7, 8)
+            def __init__(self):
+                super().__init__()
 
-        payload = collect_oscilloscope_mode_settings(
-            _Tab(),
-            collect_extra_color_bindings=lambda _tab: {
-                "osc_line2_color": [9, 10, 11, 12],
-                "osc_line2_glow_color": [13, 14, 15, 16],
-                "osc_line3_color": [17, 18, 19, 20],
-                "osc_line3_glow_color": [21, 22, 23, 24],
-            },
-        )
+        spec = require_mode_settings("oscilloscope")
+        tab = _Tab()
+        expected = {}
+        for entry in spec.controls:
+            if isinstance(entry, Colour):
+                colour = QColor(11, 22, 33, 44)
+                setattr(tab, f"_{entry.key}", colour)
+                expected[entry.key] = [11, 22, 33, 44]
+            elif isinstance(entry, Slider):
+                value = (entry.low + entry.high) / 2.0
+                setattr(tab, entry.key, _Slider(round(value * entry.scale)))
+                expected[entry.key] = round(value * entry.scale) / entry.scale
+            elif isinstance(entry, Choice):
+                value = entry.choices[-1]
+                setattr(tab, entry.key, _Choice(value))
+                expected[entry.key] = value
 
-        assert payload["osc_glow_enabled"] is True
-        assert payload["osc_glow_intensity"] == pytest.approx(0.66)
-        assert payload["osc_glow_reactivity"] == pytest.approx(1.35)
-        assert payload["osc_reactive_glow"] is False
-        assert payload["osc_line_amplitude"] == pytest.approx(4.2)
-        assert payload["osc_smoothing"] == pytest.approx(0.77)
-        assert payload["osc_line_color"] == [1, 2, 3, 4]
-        assert payload["osc_glow_color"] == [5, 6, 7, 8]
-        assert payload["osc_line_count"] == 3
-        assert payload["osc_speed"] == pytest.approx(0.81)
-        assert payload["osc_line_dim"] is True
-        assert payload["osc_line_offset_bias"] == pytest.approx(0.18)
-        assert payload["osc_vertical_shift"] == 27
-        assert payload["osc_ghosting_enabled"] is True
-        assert payload["osc_ghost_intensity"] == pytest.approx(0.52)
-        assert payload["osc_ghost_decay"] == pytest.approx(0.61)
-        assert payload["osc_ghost_line2_enabled"] is False
-        assert payload["osc_ghost_line3_enabled"] is True
-        assert payload["osc_line3_glow_color"] == [21, 22, 23, 24]
+        payload = collect_oscilloscope_mode_settings(tab)
+        assert payload == expected
 
 
 class TestSineWaveSettingsBinding:

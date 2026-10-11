@@ -67,10 +67,6 @@ def build_technical_cache(
             mode_config["sine_wave_transient_width_mix"] = (
                 model.resolve_sine_wave_transient_width_mix()
             )
-        elif mode_key == "oscilloscope":
-            mode_config["oscilloscope_transient_width_mix"] = (
-                model.resolve_oscilloscope_transient_width_mix()
-            )
         cache[mode_key] = mode_config
     return cache
 

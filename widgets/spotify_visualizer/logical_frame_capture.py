@@ -240,7 +240,7 @@ def _base_extras(widget: Any, mode_id: str, engine: Any) -> dict[str, Any]:
     if floor_snapshot is not None:
         extra["floor_snapshot"] = floor_snapshot
 
-    if mode_id in {"sine_wave", "oscilloscope"}:
+    if mode_id == "sine_wave":
         scheduler = _safe_call("get_event_scheduler")
         peek = getattr(scheduler, "peek_latest", None)
         for event_name, field_name, max_age_s in (
@@ -483,9 +483,9 @@ def _capture_oscilloscope(
     engine: Any,
     context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
+    """The newest audio as the live trace and its afterglow, the beam's reactions to onsets and
+    loudness, and the body's renderer values (``visualizer_mode_settings``)."""
     extra = _base_extras(widget, "oscilloscope", engine)
-    config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
-    extra["osc_transient_width_mix"] = widget._osc_transient_width_mix
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError(
@@ -501,11 +501,15 @@ def _capture_oscilloscope(
         return None
     if not isinstance(runtime, OscilloscopeFrameRuntime):
         raise TypeError("Oscilloscope logical mode state has the wrong type")
-    raw_energy = _energy_state(extra.get("energy_bands"))
-    raw_kick = float(extra.get("line_kick_event_strength", 0.0) or 0.0)
-    raw_snare = float(extra.get("line_snare_event_strength", 0.0) or 0.0)
+
+    def engine_value(name: str, default: Any, *args: Any) -> Any:
+        getter = getattr(engine, name, None) if engine is not None else None
+        return getter(*args) if callable(getter) else default
+
+    loudness, presence = engine_value("get_musical_level", (0.0, 0.0))
     resolved = runtime.resolve(
-        tuple(extra.get("waveform", ()) or ()),
+        history=engine_value("get_waveform_history", None),
+        waveform=tuple(extra.get("waveform", ()) or ()),
         waveform_count=int(extra.get("waveform_count", 0) or 0),
         now_ts=context.now_ts,
         runtime_generation=context.runtime_generation,
@@ -515,20 +519,18 @@ def _capture_oscilloscope(
         source_activation_id=context.source_activation_id,
         source_timestamp=context.source_timestamp,
         playing=context.playing,
-        line_speed=float(extra["line_speed"]),
-        ghosting_enabled=bool(
-            extra["osc_ghosting_enabled"]
-            and float(extra["osc_ghost_intensity"]) > 0.001
-        ),
-        ghost_decay=float(extra["osc_ghost_decay"]),
-        energy=raw_energy,
-        kick_event=raw_kick,
-        snare_event=raw_snare,
-        transient_width_mix=float(
-            extra["osc_transient_width_mix"]
-        ),
-        base_sensitivity=float(extra["line_sensitivity"]),
-        animation_enabled=bool(extra["rainbow_enabled"]),
+        display=str(widget._osc_display),
+        span_ms=float(widget._osc_span),
+        gain=float(widget._osc_gain),
+        delay_ms=float(widget._osc_delay),
+        afterglow=float(widget._osc_afterglow),
+        detail=float(widget._osc_detail),
+        onsets=engine_value("get_onset_events", (), runtime.onset_serial),
+        loudness=float(loudness),
+        presence=float(presence),
+        intensity=float(engine_value("get_musical_intensity", 0.0)),
+        spectrum=engine_value("get_pre_agc_analysis_spectrum", ()),
+        sample_rate=int(engine_value("get_waveform_history_rate", 48000)),
     )
     if resolved is None:
         if controller.peek_logical_mode_state("oscilloscope") is not runtime:
@@ -536,6 +538,7 @@ def _capture_oscilloscope(
         raise RuntimeError("Oscilloscope logical state retired during capture")
     if controller.peek_logical_mode_state("oscilloscope") is not runtime:
         return None
+    raw_energy = _energy_state(extra.get("energy_bands"))
     if is_viz_diagnostics_enabled():
         maybe_log_reactivity_boundary(
             widget,
@@ -551,29 +554,25 @@ def _capture_oscilloscope(
             source_activation=context.source_activation_id,
             source_timestamp=context.source_timestamp,
             input_energy=raw_energy,
-            resolved_energy=resolved.energy,
-            event_summary=f"kick={raw_kick:.3f},snare={raw_snare:.3f}",
+            resolved_energy=raw_energy,
+            event_summary=f"flare={resolved.flare:.3f},drive={resolved.drive:.3f},tone={resolved.tone:.3f}",
         )
-    extra["_quick_resolved_waveform"] = resolved.waveform
-    extra["_quick_resolved_waveform_count"] = resolved.waveform_count
-    extra["_quick_resolved_energy"] = resolved.energy
+    # The traces travel in the mode frame; the shared waveform stays empty.
+    extra["_quick_resolved_waveform"] = ()
+    extra["_quick_resolved_waveform_count"] = 0
+    extra["_quick_resolved_energy"] = raw_energy
     extra["_quick_mode_changed"] = resolved.changed
-    parameter_values = {
-        name: value
-        for name, value in extra.items()
-        if not name.startswith("_quick_")
-    }
-    parameter_values["resolved_sensitivity"] = resolved.resolved_sensitivity
+    parameters = config_applier.spec_mode_parameters(config_applier._presentation_source(widget), "oscilloscope")
+    parameters["osc_display"] = str(widget._osc_display)
     return (
         OscilloscopeFrame(
-            previous_waveform=resolved.previous_waveform,
-            ghost_waveforms=(
-                (resolved.previous_waveform,)
-                if resolved.previous_waveform
-                else ()
-            ),
+            points=resolved.points,
+            trace_alphas=resolved.trace_alphas,
+            flare=resolved.flare,
+            drive=resolved.drive,
+            tone=resolved.tone,
             animation_time=resolved.animation_time,
-            parameters=_render_parameters(parameter_values),
+            parameters=_render_parameters(parameters),
         ),
         extra,
     )
@@ -585,7 +584,7 @@ def _capture_sine(
     context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "sine_wave", engine)
-    config_applier._append_line_mode_visual_extras(extra, widget, is_sine=True)
+    config_applier._append_line_mode_visual_extras(extra, widget)
     extra["sine_wave_transient_width_mix"] = widget._sine_wave_transient_width_mix
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
@@ -866,15 +865,20 @@ def _mode_capture(mode_id: str) -> ModeCapture | None:
 def _common_style(widget: Any) -> dict[str, object]:
     # Renderer styling from the presentation owner; single_piece is authored-logical.
     pres = config_applier._presentation_source(widget)
-    return {
-        "fill_color": pres._bar_fill_color,
-        "border_color": pres._bar_border_color,
+    style: dict[str, object] = {
         "ghosting_enabled": bool(widget._spectrum_ghosting_enabled),
         "ghost_alpha": float(pres._spectrum_ghost_alpha),
         "ghost_decay": float(widget._spectrum_ghost_decay),
         "single_piece": bool(widget._spectrum_single_piece),
         "border_radius": float(pres._spectrum_border_radius),
     }
+    # Shared bar colours exist only for a mode that owns or borrows them (the descriptor's
+    # shared_bar_appearance / shared_bar_profile_mode); Oscilloscope draws none.
+    for key, attr in (("fill_color", "_bar_fill_color"), ("border_color", "_bar_border_color")):
+        value = getattr(pres, attr, None)
+        if value is not None:
+            style[key] = value
+    return style
 
 
 def capture_visualizer_logical_frame(

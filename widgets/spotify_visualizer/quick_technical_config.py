@@ -33,7 +33,6 @@ _REQUIRED_SHARED_KEYS = frozenset(
 _MODE_REQUIRED_KEYS = {
     "bubble": frozenset({"bubble_transient_mix_bass", "bubble_transient_mix_vocal"}),
     "sine_wave": frozenset({"sine_wave_transient_width_mix"}),
-    "oscilloscope": frozenset({"oscilloscope_transient_width_mix"}),
 }
 
 
@@ -208,10 +207,6 @@ def apply_controller_technical_config(
     elif mode_id == "sine_wave":
         state._sine_wave_transient_width_mix = _clamp(
             config["sine_wave_transient_width_mix"], 0.0, 1.0
-        )
-    elif mode_id == "oscilloscope":
-        state._osc_transient_width_mix = _clamp(
-            config["oscilloscope_transient_width_mix"], 0.0, 1.0
         )
 
 

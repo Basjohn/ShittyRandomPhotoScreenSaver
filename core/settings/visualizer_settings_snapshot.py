@@ -129,9 +129,8 @@ def _forward_migrate_alias_keys(
     """
     migrated = dict(data)
 
-    alias_pairs = (
-        ("osc_sensitivity", "osc_line_amplitude"),
-    )
+    # The last alias (osc_sensitivity) went with the Oscilloscope rework: retired, not renamed.
+    alias_pairs: tuple[tuple[str, str], ...] = ()
 
     for alias_key, canonical_key in alias_pairs:
         plain_alias_present = alias_key in migrated

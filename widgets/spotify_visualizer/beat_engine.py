@@ -206,6 +206,11 @@ class _SpotifyBeatEngine(QObject):
         # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
         self._waveform: List[float] = [0.0] * 256
         self._waveform_count: int = 256
+        # The capture history of the latest consumed frame while a mode demands it (Oscilloscope),
+        # and the rate the device delivers it at.
+        self._waveform_history = None
+        self._waveform_history_rate = 48000
+        self._history_demanded = False
 
         self._energy_bands: EnergyBands = EnergyBands()
 
@@ -472,6 +477,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts = 0.0
         self._waveform = [0.0] * 256
         self._waveform_count = 0
+        self._waveform_history = None
         self._idle_wave_phase = 0.0
         self._energy_bands = EnergyBands()
         self._pre_agc_analysis_spectrum = ()
@@ -494,6 +500,7 @@ class _SpotifyBeatEngine(QObject):
         self._pre_agc_analysis_spectrum_requested = False
         self._waveform = [0.0] * 256
         self._waveform_count = 0
+        self._waveform_history = None
         self._idle_wave_phase = 0.0
         self._latest_bars = [0.0] * self._bar_count
         self._last_audio_ts = 0.0
@@ -577,6 +584,23 @@ class _SpotifyBeatEngine(QObject):
     def set_energy_boost(self, boost: float) -> None:
         self._audio_worker.set_energy_boost(boost)
         self._invalidate_analysis_compute_state()
+
+    def set_waveform_history_demand(self, demanded: bool) -> None:
+        """Declare whether the active mode draws the captured audio itself (a contiguous history
+        across capture callbacks). Without demand capture keeps none and this returns None."""
+        self._history_demanded = bool(demanded)
+        self._audio_worker.set_waveform_history_demand(demanded)
+        if not demanded:
+            self._waveform_history = None
+
+    def get_waveform_history(self):
+        """The newest contiguous capture samples (a read-only float32 array, at most
+        ``WAVEFORM_HISTORY_SAMPLES``), or None without demand or before capture delivers any."""
+        return self._waveform_history
+
+    def get_waveform_history_rate(self) -> int:
+        """The capture history's sample rate (the device's actual rate, 48 kHz until known)."""
+        return self._waveform_history_rate
 
     def set_input_gain(self, gain: float) -> None:
         self._audio_worker.set_input_gain(gain)
@@ -693,6 +717,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts = 0.0
         self._waveform = [0.0] * 256
         self._waveform_count = 0
+        self._waveform_history = None
         self._idle_wave_phase = 0.0
         self._ref_count = 0
         self._capture_keepalive_deadline = 0.0
@@ -1286,6 +1311,9 @@ class _SpotifyBeatEngine(QObject):
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
+                # A frame queued before demand ended still carries history: drop it.
+                self._waveform_history = getattr(frame, "history", None) if self._history_demanded else None
+                self._waveform_history_rate = int(getattr(frame, "history_rate", 48000) or 48000)
                 # Extract waveform for oscilloscope (last 256 samples)
                 try:
                     if np is not None and hasattr(samples, '__len__'):

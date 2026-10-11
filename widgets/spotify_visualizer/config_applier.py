@@ -323,18 +323,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     if 'spectrum_ghost_decay' in kwargs:
         host._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
 
-    # --- Oscilloscope authored logical inputs (OscilloscopeFrameRuntime.resolve)
-    if 'osc_speed' in kwargs:
-        host._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
-    if 'osc_line_amplitude' in kwargs:
-        host._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_line_amplitude'])))
-    if 'osc_ghosting_enabled' in kwargs:
-        host._osc_ghosting_enabled = bool(kwargs['osc_ghosting_enabled'])
-    if 'osc_ghost_intensity' in kwargs:
-        host._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
-    if 'osc_ghost_decay' in kwargs:
-        host._osc_ghost_decay = max(0.1, min(1.0, float(kwargs['osc_ghost_decay'])))
-
     # --- Sine authored logical inputs (SineFrameRuntime.resolve) -----------
     if 'sine_speed' in kwargs:
         host._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
@@ -464,49 +452,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
     ``host`` is normally the controller-owned ``VisualizerPresentationState``.
     """
-
-    # --- Oscilloscope styling ----------------------------------------
-    if 'osc_glow_enabled' in kwargs:
-        host._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
-    if 'osc_glow_intensity' in kwargs:
-        host._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
-    if 'osc_glow_reactivity' in kwargs:
-        host._osc_glow_reactivity = max(0.0, min(2.0, float(kwargs['osc_glow_reactivity'])))
-    if 'osc_glow_color' in kwargs:
-        c = _color_or_none(kwargs['osc_glow_color'])
-        if c is not None:
-            host._osc_glow_color = c
-    if 'osc_reactive_glow' in kwargs:
-        host._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
-    if 'osc_smoothing' in kwargs:
-        host._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
-    if 'osc_line_color' in kwargs:
-        c = _color_or_none(kwargs['osc_line_color'])
-        if c is not None:
-            host._osc_line_color = c
-    if 'osc_line_count' in kwargs:
-        host._osc_line_count = max(1, min(6, int(kwargs['osc_line_count'])))
-    for _idx in range(2, 7):
-        _ck = f'osc_line{_idx}_color'
-        _gk = f'osc_line{_idx}_glow_color'
-        if _ck in kwargs:
-            c = _color_or_none(kwargs[_ck])
-            if c is not None:
-                setattr(host, f'_osc_line{_idx}_color', c)
-        if _gk in kwargs:
-            c = _color_or_none(kwargs[_gk])
-            if c is not None:
-                setattr(host, f'_osc_line{_idx}_glow_color', c)
-    for _idx in range(2, 7):
-        _ek = f'osc_ghost_line{_idx}_enabled'
-        if _ek in kwargs:
-            setattr(host, f'_osc_ghost_line{_idx}_enabled', bool(kwargs[_ek]))
-    if 'osc_line_dim' in kwargs:
-        host._osc_line_dim = bool(kwargs['osc_line_dim'])
-    if 'osc_line_offset_bias' in kwargs:
-        host._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
-    if 'osc_vertical_shift' in kwargs:
-        host._osc_vertical_shift = int(kwargs['osc_vertical_shift'])
 
     # --- Card + bar styling (global across modes) --------------------
     if 'bar_fill_color' in kwargs:
@@ -797,11 +742,6 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['spectrum_ghosting_enabled'] = widget._spectrum_ghosting_enabled
     extra['spectrum_ghost_alpha'] = pres._spectrum_ghost_alpha
     extra['spectrum_ghost_decay'] = widget._spectrum_ghost_decay
-    extra['osc_ghosting_enabled'] = widget._osc_ghosting_enabled
-    extra['osc_ghost_intensity'] = widget._osc_ghost_intensity
-    extra['osc_ghost_decay'] = widget._osc_ghost_decay
-    extra['osc_ghost_line2_enabled'] = pres._osc_ghost_line2_enabled
-    extra['osc_ghost_line3_enabled'] = pres._osc_ghost_line3_enabled
     extra['sine_ghosting_enabled'] = widget._sine_ghosting_enabled
     extra['sine_ghost_alpha'] = widget._sine_ghost_alpha
     extra['sine_ghost_decay'] = widget._sine_ghost_decay
@@ -819,32 +759,27 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
 
 
 
-def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_sine: bool) -> None:
-    """Attach the shared Sine/Osc visual parameters.
+def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach Sine's line-mode visual parameters.
 
     Authored-logical inputs (sensitivity/speed/travel/shift/width-reaction/
     sine line-count) read from the logical host; pure renderer styling (glow,
     colours, per-line styling, ghost-line toggles) from the presentation owner.
     """
     pres = _presentation_source(widget)
-    extra['glow_enabled'] = getattr(pres, '_sine_glow_enabled' if is_sine else '_osc_glow_enabled')
-    extra['glow_intensity'] = getattr(pres, '_sine_glow_intensity' if is_sine else '_osc_glow_intensity')
+    extra['glow_enabled'] = pres._sine_glow_enabled
+    extra['glow_intensity'] = pres._sine_glow_intensity
     extra['glow_size'] = 1.0  # fixed shader-space expansion; no longer a product setting
-    extra['glow_reactivity'] = (
-        pres._sine_glow_reactivity
-        if is_sine
-        else pres._osc_glow_reactivity
-    )
-    extra['glow_color'] = getattr(pres, '_sine_glow_color' if is_sine else '_osc_glow_color')
-    extra['reactive_glow'] = getattr(pres, '_sine_reactive_glow' if is_sine else '_osc_reactive_glow')
+    extra['glow_reactivity'] = pres._sine_glow_reactivity
+    extra['glow_color'] = pres._sine_glow_color
+    extra['reactive_glow'] = pres._sine_reactive_glow
     # Authored-logical.
-    extra['line_sensitivity'] = getattr(widget, '_sine_sensitivity' if is_sine else '_osc_line_amplitude')
-    extra['line_speed'] = getattr(widget, '_sine_speed' if is_sine else '_osc_speed')
+    extra['line_sensitivity'] = widget._sine_sensitivity
+    extra['line_speed'] = widget._sine_speed
     # Renderer styling.
-    extra['line_smoothing'] = getattr(pres, '_sine_smoothing' if is_sine else '_osc_smoothing')
-    extra['line_dim'] = getattr(pres, '_sine_line_dim' if is_sine else '_osc_line_dim')
-    extra['line_offset_bias'] = getattr(pres, '_sine_line_offset_bias' if is_sine else '_osc_line_offset_bias')
-    extra['osc_vertical_shift'] = pres._osc_vertical_shift
+    extra['line_smoothing'] = pres._sine_smoothing
+    extra['line_dim'] = pres._sine_line_dim
+    extra['line_offset_bias'] = pres._sine_line_offset_bias
     extra['sine_card_adaptation'] = pres._sine_card_adaptation
     extra['sine_wave_effect'] = pres._sine_wave_effect
     extra['sine_micro_wobble'] = pres._sine_micro_wobble
@@ -864,14 +799,10 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['sine_line5_shift'] = widget._sine_line5_shift
     extra['sine_line6_shift'] = widget._sine_line6_shift
     extra['sine_width_reaction'] = widget._sine_width_reaction
-    # Line colours / count (sine line-count is authored-logical; osc is styling).
-    extra['line_color'] = getattr(pres, '_sine_line_color' if is_sine else '_osc_line_color')
-    extra['line_count'] = (
-        widget._sine_line_count
-        if is_sine
-        else pres._osc_line_count
-    )
-    _side = 'sine' if is_sine else 'osc'
+    # Line colours / count (Sine's line count is authored-logical).
+    extra['line_color'] = pres._sine_line_color
+    extra['line_count'] = widget._sine_line_count
+    _side = 'sine'
     for _i in range(2, 7):
         extra[f'line{_i}_color'] = getattr(pres, f'_{_side}_line{_i}_color')
         extra[f'line{_i}_glow_color'] = getattr(pres, f'_{_side}_line{_i}_glow_color')
@@ -881,12 +812,11 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
         )
     # Legacy ghost enabled keys (for shader compatibility)
     for _i in range(2, 7):
-        extra[f'osc_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_osc_ghost_line{_i}_enabled'))
         extra[f'sine_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_sine_ghost_line{_i}_enabled'))
 
     # Preset guardrail: when paused, ensure Sine has minimum travel so it
     # remains visibly alive even if a preset stores travel as NONE.
-    if is_sine and not bool(getattr(widget, "_spotify_playing", False)):
+    if not bool(getattr(widget, "_spotify_playing", False)):
         t1 = int(extra['sine_wave_travel'])
         t2 = int(extra['sine_travel_line2'])
         t3 = int(extra['sine_travel_line3'])

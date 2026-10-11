@@ -145,6 +145,11 @@ class VisualizerMode(Enum):
     DEVCURVE = auto()            # Reactive liquid pool (dev-gated)
 
 
+# Contiguous capture history kept while a mode draws the audio itself (Oscilloscope): the newest
+# samples across callbacks, so a trace can be triggered and span more than one callback's block.
+WAVEFORM_HISTORY_SAMPLES = 4096
+
+
 @dataclass
 class _AudioFrame:
     samples: object
@@ -153,6 +158,10 @@ class _AudioFrame:
     # from when the audio actually arrived, not from the tick that happened
     # to consume it.
     capture_ts: float = 0.0
+    # The newest WAVEFORM_HISTORY_SAMPLES (fewer just after it starts), only while demanded;
+    # analysis never reads it. ``history_rate`` is the rate the device actually delivers.
+    history: object = None
+    history_rate: int = 48000
 
 
 class SpotifyVisualizerAudioWorker(QObject):
@@ -213,6 +222,14 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._base_output_scale: float = 0.5
         self._energy_boost: Optional[float] = None
         self._input_gain: Optional[float] = None
+        # Capture history for a mode that draws the audio (set_waveform_history_demand); owned by
+        # the capture callback, None while nothing demands it.
+        self._history_demanded: bool = False
+        self._history = None
+        # The history continues only within one (capture generation, activation, demand epoch):
+        # a restart, a new activation or a demand change starts it afresh.
+        self._history_key: tuple | None = None
+        self._history_epoch = 0
         # Floor control configuration (dynamic/manual)
         self._use_dynamic_floor: Optional[bool] = None
         self._manual_floor: Optional[float] = None
@@ -458,6 +475,14 @@ class SpotifyVisualizerAudioWorker(QObject):
     def set_agc_strength(self, strength: float) -> None:
         self._agc_strength = max(0.0, min(1.0, float(strength)))
 
+    def set_waveform_history_demand(self, demanded: bool) -> None:
+        """Whether capture keeps its contiguous history (``_AudioFrame.history``). Only a mode
+        that draws the audio demands it; otherwise capture does no history work at all."""
+        demanded = bool(demanded)
+        if demanded != self._history_demanded:
+            self._history_epoch += 1
+        self._history_demanded = demanded
+
     def set_input_gain(self, gain: float) -> None:
         self._input_gain = max(0.05, min(2.0, float(gain)))
 
@@ -651,8 +676,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._capture_owner_scheduled = False
         return accepted
 
-    def _on_audio_samples(self, generation: int, samples) -> None:
-        """Process a backend callback only while its owner generation is live."""
+    def _on_audio_samples(self, generation: int, samples, source=None) -> None:
+        """Process a backend callback only while its owner generation is live. ``source`` is the
+        backend that delivered it (its rate is known before the worker adopts it)."""
         try:
             with self._capture_lock:
                 if generation != self._capture_generation or not (
@@ -685,13 +711,24 @@ class SpotifyVisualizerAudioWorker(QObject):
 
             # Both selected native backends deliver normalized float32 PCM.
             # Integer conversion is not a second supported capture format.
+            # The history takes the whole block first: trimming an oversized callback before it
+            # would leave a gap in the drawn audio.
+            history = None
+            history_key = (generation, activation_id, self._history_epoch)
+            if self._history_demanded:
+                previous = self._history if self._history_key == history_key else None
+                joined = mono if previous is None else np_mod.concatenate((previous, mono))
+                history = joined[-WAVEFORM_HISTORY_SAMPLES:].copy()
+                history.flags.writeable = False
             if mono.size > 2048:
                 mono = mono[-2048:]
-
             frame = _AudioFrame(
                 samples=mono.copy(),
                 activation_id=activation_id,
                 capture_ts=capture_ts,
+                history=history,
+                history_rate=int(getattr(source if source is not None else self._backend,
+                                         "sample_rate", 48000) or 48000),
             )
             with self._capture_lock:
                 if generation != self._capture_generation or not (
@@ -701,8 +738,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                 if activation_id != getattr(self, "_activation_id", None) or buffer is not self._buffer:
                     return
                 # Only the tiny final publication is atomic with stop admission;
-                # channel selection/conversion/copy must not block the GUI lock.
+                # channel selection/conversion/copy must not block the GUI lock. The history is
+                # kept only with a published frame, so a rejected callback leaves nothing behind.
                 buffer.publish(frame)
+                self._history, self._history_key = history, (history_key if history is not None else None)
                 self._capture_last_callback_monotonic = callback_ts
             if self._capture_callback_failures:
                 self._note_capture_callback_recovered()
@@ -798,7 +837,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     else:
                         self._capture_lane.set_resource_held(True)
                         succeeded = bool(backend.start(
-                            lambda samples, epoch=generation: self._on_audio_samples(epoch, samples)
+                            lambda samples, epoch=generation, source=backend: self._on_audio_samples(
+                                epoch, samples, source)
                         ))
                         if not succeeded:
                             logger.error("[SPOTIFY_VIS] Audio capture backend rejected start")

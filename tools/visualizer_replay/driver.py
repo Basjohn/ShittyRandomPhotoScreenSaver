@@ -73,6 +73,14 @@ def mode_output(frame):
         energy = frame.common.energy
         return (energy.bass * sensitivity, energy.mid * sensitivity, energy.high * sensitivity,
                 float(state.heartbeat_intensity))
+    if frame.mode_id == "oscilloscope":
+        # The live trace's vertical swing (its points' y, the drawn audio), then the beam's
+        # reactions: its drive and flare.
+        import struct
+
+        count = state.trace_points
+        live = struct.unpack(f"<{2 * count}f", state.points[-8 * count:]) if count else ()
+        return (*live[1::2], float(state.drive), float(state.flare))
     sensitivity = float(state.parameters["resolved_sensitivity"])
     drawn = frame.common.waveform[:frame.common.waveform_count]     # the samples the line draws
     return tuple(value * sensitivity for value in drawn)
