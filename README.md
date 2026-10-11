@@ -1,3 +1,4 @@
+
 # ShittyRandomPhotoScreenSaver (SRPSS)
 <img width="50%" alt="SRPSS_logo_blue_purple_slow_smooth" src="https://github.com/user-attachments/assets/c9917e3d-44f9-41b3-ab76-d308908d9c95" />
 
@@ -75,6 +76,7 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 
 ---
 
+
 ## Transition gallery
 
 Some fancy ass transition effects are below, expand each group to see its fancy-ass-ness and hopefully not make your browser memory eat dirt. 
@@ -82,7 +84,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 **Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:**
 
 <details>
-<summary><b>Fracture, particles and destruction.</b></summary>
+<summary><b><ins>Fracture, particles and destruction.</ins></b></summary>
 
 #### Volumetric Dissolve
 <img width="480" height="270" alt="transition_volumetric_dissolve_default" src="https://github.com/user-attachments/assets/5ce467ab-452e-4a0a-a676-5471bde2368e" />
@@ -118,7 +120,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 </details>
 
 <details>
-<summary><b>3D surfaces, materials and reveals</b></summary>
+<summary><b><ins>3D surfaces, materials and reveals</ins></b></summary>
 
 #### Page Curl
 <img width="480" height="270" alt="transition_page_curl_default" src="https://github.com/user-attachments/assets/d8501e5e-1028-4bc1-b31c-401221ccf20b" />
@@ -136,7 +138,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 </details>
 
 <details>
-<summary><b>Classic, patterned and screen-space effects · 6 transitions</b></summary>
+<summary><b><ins>Classic, patterned and screen-space effects · 6 transitions</ins></b></summary>
 
 
 #### Slide
@@ -154,6 +156,7 @@ Some fancy ass transition effects are below, expand each group to see its fancy-
 
 </details>
 ---
+
 
 ## Settings dialog
 
@@ -174,7 +177,7 @@ The settings dialog lets you:
 - **BECOME ONE**.
 
 <details>
-<summary><b>Settings pages and what lives in them</b></summary>
+<summary><b><ins>Settings pages and what lives in them</ins></b></summary>
 
 - **Sources:** Local folders and online wallpaper feeds, plus **Just Make It Work**.
 - **Display:** Screen selection, slideshow mode and interval, sharpening, pan & scan and interaction/display options.
@@ -189,7 +192,7 @@ The settings dialog lets you:
 </details>
 
 <details>
-<summary><b>Settings persistence and preset ownership</b></summary>
+<summary><b><ins>Settings persistence and preset ownership</ins></b></summary>
 
 Settings persist between runs. Continuous controls save on their normal completion/release path rather than writing to disk for every pointer movement. Edit-mode layouts have an explicit Save/Cancel workflow.
 
@@ -216,7 +219,7 @@ While seeming strange at first, if you have multiple monitors you can pick one o
 ## Mouse & keyboard controls
 
 <details>
-<summary><b>Mouse controls, interaction halo and 3D visualizer gestures</b></summary>
+<summary><b><ins>Mouse controls, interaction halo and 3D visualizer gestures</ins></b></summary>
 
 - **Normal mode:** Moving the mouse beyond a small threshold, or clicking a mouse button, exits the screensaver unless the temporary `Ctrl` interaction halo is active.
 - **Interaction Mode ON:** Mouse movement and regular clicks do not exit. Double-clicking advances to the next image.
@@ -238,7 +241,7 @@ Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. 
 </details>
 
 <details>
-<summary><b>Keyboard shortcuts while the screensaver is running</b></summary>
+<summary><b><ins>Keyboard shortcuts while the screensaver is running</ins></b></summary>
 
 | Key | Action |
 | --- | --- |
