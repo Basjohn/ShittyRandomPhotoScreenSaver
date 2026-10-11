@@ -20,6 +20,7 @@ from rendering.quick.image_state import PresentationImage
 from rendering.quick.transitions.request_resolution import resolve_quick_transition_spec
 from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 from rendering.transition_registry import get_transition_descriptor_for_runtime_identity
+from rendering.transition_settings import BLOCK_SPIN_DIRECTIONS, transition_settings
 from tools.transition_contact_sheet import TransitionCapture
 
 pytestmark = pytest.mark.qt
@@ -36,22 +37,29 @@ _START = {"Left to Right": "L", "Right to Left": "R", "Top to Bottom": "T", "Bot
           "Bottom-Left to Top-Right": "BL", "Bottom-Right to Top-Left": "BR"}
 _CARDINAL = ("Left to Right", "Right to Left", "Top to Bottom", "Bottom to Top")
 _DIAGONAL = ("Diagonal TL-BR", "Diagonal TR-BL")
-_ALL_DIAGONALS = _DIAGONAL + ("Diagonal BL-TR", "Diagonal BR-TL")
+
+
+def _sided(section):
+    """The labels a transition's Settings page offers that start from a side or corner (its spec is
+    what the page shows, so a label added there is checked here)."""
+    return tuple(label for label in transition_settings(section).directions.codes if label in _START)
+
+
 # (transition, its Settings section, labels the Settings page offers, extra section values, duration)
 _REVEALS = (
-    ("glass_shatter", "glass_shatter", _CARDINAL + _DIAGONAL, {}, 6000),
-    ("exploding_tiles", "exploding_tiles", _CARDINAL + _DIAGONAL, {}, 6000),
-    ("pixel_accretion", "pixel_accretion", _CARDINAL + _ALL_DIAGONALS, {}, 3000),
-    ("disintegrate", "disintegrate", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
-    ("volumetric_dissolve", "volumetric_dissolve", _CARDINAL + _ALL_DIAGONALS, {}, 4000),
-    ("beam", "beam", _CARDINAL + _ALL_DIAGONALS, {}, 3500),
-    ("vhs", "vhs", ("Top to Bottom", "Bottom to Top"), {}, 3000),
+    ("glass_shatter", "glass_shatter", _sided("glass_shatter"), {}, 6000),
+    ("exploding_tiles", "exploding_tiles", _sided("exploding_tiles"), {}, 6000),
+    ("pixel_accretion", "pixel_accretion", _sided("pixel_accretion"), {}, 3000),
+    ("disintegrate", "disintegrate", _sided("disintegrate"), {}, 4000),
+    ("volumetric_dissolve", "volumetric_dissolve", _sided("volumetric_dissolve"), {}, 4000),
+    ("beam", "beam", _sided("beam"), {}, 3500),
+    ("vhs", "vhs", _sided("vhs"), {}, 3000),
     ("burn", "burn", _CARDINAL + _DIAGONAL, {}, 3000),
     ("particle", "particle", _CARDINAL + ("Top-Left to Bottom-Right", "Top-Right to Bottom-Left",
                                           "Bottom-Left to Top-Right", "Bottom-Right to Top-Left"),
      {"mode": "Directional"}, 3000),
-    ("slide", "slide", _CARDINAL, {"motion_style": "Linear"}, 3000),
-    ("wipe", "wipe", _CARDINAL + _DIAGONAL, {}, 3000),
+    ("slide", "slide", _sided("slide"), {"motion_style": "Linear"}, 3000),
+    ("wipe", "wipe", _sided("wipe"), {}, 3000),
 )
 
 
@@ -113,7 +121,7 @@ def plain_capture(qt_app):
     capture.close()
 
 
-@pytest.mark.parametrize("label", _CARDINAL + _DIAGONAL)
+@pytest.mark.parametrize("label", [label for label in BLOCK_SPIN_DIRECTIONS.codes if label in _START])
 def test_block_spins_turns_its_start_side_toward_the_viewer(plain_capture, label):
     run = _run(plain_capture, "block_spins", "blockspin", {"direction": label}, 3000)
     frame = np.asarray(plain_capture.render(run, 0.4)[0].convert("RGB"), dtype=np.int16)

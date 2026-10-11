@@ -21,7 +21,10 @@ from rendering.transition_registry import (
 )
 
 from ..image_state import PresentationImage
+from rendering.transition_settings import BLOCK_SPIN_DIRECTIONS, require_transition_settings
+
 from .parameter_resolution import (
+    PARAMETERIZED_TRANSITION_IDS,
     SCENE_DETAIL_FIELD,
     resolve_block_spins_parameters,
     resolve_parameterized_phase_c_inputs,
@@ -83,31 +86,6 @@ class ResolvedQuickTransitionSpec:
         )
 
 
-# A Settings label names the way the motion travels, and so does the resolved code:
-# "Left to Right" is ``right``.
-_DIRECTION_MAP = {
-    "Left to Right": "right",
-    "Right to Left": "left",
-    "Top to Bottom": "down",
-    "Bottom to Top": "up",
-    "Diagonal TL-BR": "diag_tl_br",
-    "Diagonal TR-BL": "diag_tr_bl",
-    "Diagonal TL to BR": "diag_tl_br",
-    "Diagonal TR to BL": "diag_tr_bl",
-}
-_WIPE_DIRECTION_MAP = {
-    "Left to Right": "left_to_right",
-    "Right to Left": "right_to_left",
-    "Top to Bottom": "top_to_bottom",
-    "Bottom to Top": "bottom_to_top",
-    "Diagonal TL-BR": "diag_tl_br",
-    "Diagonal TR-BL": "diag_tr_bl",
-}
-_SLIDE_MOTION_STYLES = frozenset(
-    {"Linear", "Elastic", "Wobble", "Flex", "Perspective Push"}
-)
-
-
 def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -132,22 +110,6 @@ def _section(
     if isinstance(persisted, Mapping):
         merged.update({key: value for key, value in persisted.items() if value is not None})
     return merged
-
-
-def _resolve_direction(
-    raw: object,
-    *,
-    choices: tuple[str, ...],
-    mapping: Mapping[str, str],
-    rng: _RandomSource,
-) -> str:
-    text = str(raw or "Random")
-    if text == "Random":
-        return str(rng.choice(choices))
-    resolved = mapping.get(text)
-    if resolved is None:
-        raise ValueError(f"unknown transition direction: {raw!r}")
-    return resolved
 
 
 def resolve_quick_transition_spec(
@@ -250,31 +212,7 @@ def resolve_quick_transition_spec(
     transition_id = descriptor.stable_id
     direction: object = None
     parameters: Mapping[str, object] = {}
-    if transition_id in {
-        "blinds",
-        "ripple",
-        "crumble",
-        "particle",
-        "burn",
-        "glass_shatter",
-        "exploding_tiles",
-        "pixel_accretion",
-        "melt_drip",
-        "page_curl",
-        "disintegrate",
-        "cube_turn",
-        "beam",
-        "jigsaw",
-        "volumetric_dissolve",
-        "vhs",
-        "edge_bloom",
-        "liquid_lens",
-        "membrane",
-        "surface_tension",
-        "chromatic_shear",
-        "depth_cascade",
-        "capillary_bloom",
-    }:
+    if transition_id in PARAMETERIZED_TRANSITION_IDS:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,
             transitions,
@@ -283,44 +221,26 @@ def resolve_quick_transition_spec(
         direction = resolved.direction
         parameters = resolved.parameter_dict()
     elif transition_id == "slide":
+        spec = require_transition_settings("slide")
         cfg = _section(transitions, defaults, "slide")
-        direction = _resolve_direction(
-            random_direction if random_direction is not None else cfg.get("direction"),
-            choices=("left", "right", "down", "up"),
-            mapping=_DIRECTION_MAP,
-            rng=rng,
-        )
+        direction = spec.directions.resolve(
+            random_direction if random_direction is not None else cfg.get("direction"), rng)
         motion_style = cfg["motion_style"]
-        if not isinstance(motion_style, str) or motion_style not in _SLIDE_MOTION_STYLES:
+        styles = spec.control("motion_style").choices
+        if not isinstance(motion_style, str) or motion_style not in styles:
             canonical_slide = _section({}, defaults, "slide")
             motion_style = canonical_slide["motion_style"]
-        if not isinstance(motion_style, str) or motion_style not in _SLIDE_MOTION_STYLES:
+        if not isinstance(motion_style, str) or motion_style not in styles:
             raise ValueError(f"invalid canonical Slide motion style: {motion_style!r}")
         parameters = {"motion_style": motion_style}
     elif transition_id == "wipe":
         cfg = _section(transitions, defaults, "wipe")
-        direction = _resolve_direction(
-            random_direction if random_direction is not None else cfg.get("direction"),
-            choices=tuple(_WIPE_DIRECTION_MAP.values()),
-            mapping=_WIPE_DIRECTION_MAP,
-            rng=rng,
-        )
+        direction = require_transition_settings("wipe").directions.resolve(
+            random_direction if random_direction is not None else cfg.get("direction"), rng)
     elif transition_id == "block_spins":
         section_name = descriptor.settings_section
         cfg = _section(transitions, defaults, section_name)
-        direction = _resolve_direction(
-            cfg.get("direction"),
-            choices=(
-                "left",
-                "right",
-                "down",
-                "up",
-                "diag_tl_br",
-                "diag_tr_bl",
-            ),
-            mapping=_DIRECTION_MAP,
-            rng=rng,
-        )
+        direction = BLOCK_SPIN_DIRECTIONS.resolve(cfg.get("direction"), rng)
         parameters = resolve_block_spins_parameters(transitions, cfg, _section({}, defaults, section_name))
 
     return ResolvedQuickTransitionSpec(
