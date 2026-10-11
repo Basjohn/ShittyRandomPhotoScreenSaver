@@ -82,7 +82,8 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
 
 ## 2A. Music recorder | Awaiting Validation
 
-- [ ] **Operator capture/UI validation:** Run `.venv\Scripts\python.exe tools\music_recorder.py`, record a named
+- [ ] **Operator capture/UI validation:** Open GODZIP Foundry → FOUNDRIES → TOOLS → MUSIC CLIP RECORDER
+  (or run `.venv\Scripts\python.exe tools\music_recorder.py`), record a named
   60-second real-music clip, and check the live signal, save result, cancellation and mixed-DPR window use.
   Replay the new full-history clip during the Oscilloscope rework; existing 64-sample recordings cannot validate
   waveform detail. The format, CLI and capture ownership contract live in `Docs/Reference/Harness_Index.md`.
@@ -91,6 +92,14 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
   `AudioWorker._on_audio_samples` also trims native blocks above 2,048 samples before building its history,
   introducing gaps for oversized callbacks. Resolve these at the capture/timebase owner with focused proof;
   recorder work deliberately leaves the parallel production rework untouched.
+
+## 2B. Tool maintenance
+
+- [ ] **Awaiting Validation:** Reopen GODZIP Foundry, check the TOOLS divider and both quick-launch buttons
+  (Music Clip Recorder / Visualizer Preset Repair), including scrolling on a small or scaled display.
+  Button routing and native Qt renders are checked; operator window/focus acceptance remains separate.
+- [ ] **Retire obsolete utility:** `tools/material_rollback_cleanup_gui.py` is obsolete (operator, 2026-10-11).
+  Audit remaining references and retire the old experiment-specific cleanup utility; keep it out of quick launch.
 
 ## 3. Release / README media production
 
