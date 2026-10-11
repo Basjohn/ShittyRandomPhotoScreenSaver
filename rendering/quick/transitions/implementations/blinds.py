@@ -155,8 +155,10 @@ class QuickBlindsRenderer:
 
     def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs). The flat style is one small program compiled on first use."""
+        between runs). The flat style is one program, compiled in this one step."""
         if not _slats_style(parameters):
+            if not self._program:
+                self._initialize()
             return True
         samples = scene3d_request_samples(parameters)
         r, shaders = self._resources, _slats_program()

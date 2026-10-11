@@ -48,6 +48,13 @@ class QuickCrossfadeRenderer:
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
+        """The gradual warm-up's one step (render thread, between runs): compile the program so
+        the run's first frame compiles nothing (a first-use compile cost 3-18 ms at 1440p)."""
+        if not self._program:
+            self._initialize()
+        return True
+
     def release_resources(self) -> None:
         if not self._program:
             return

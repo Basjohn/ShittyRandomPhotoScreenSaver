@@ -219,7 +219,7 @@ class QuickTransitionRenderHost:
         """One bounded step of the gradual warm-up for the next run (render thread, between
         runs, context current): True once that run's first frame will compile nothing and,
         given the render ``size``, allocate nothing; or when the transition has nothing to
-        warm (small 2D programs compile on first use)."""
+        warm."""
         implementation = self._implementation(transition_id)
         warm = getattr(implementation, "warm", None)
         if warm is None:

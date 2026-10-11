@@ -65,12 +65,13 @@ class QuickCrumbleRenderer:
             )
             aspect = frame.logical_size[0] / frame.logical_size[1]
             geometry_key = crumble_geometry_key(parameters, aspect)
-            key = (frame.run.run_id, geometry_key)
-            if key != self._geometry_key:
+            if geometry_key != self._geometry_key:
+                # Identical keys are identical bytes: a run whose geometry the warm-up uploaded
+                # (or a previous run had) draws it as it is.
                 self._rebuild_geometry(
                     PREPARED_GEOMETRY.get_or_build(geometry_key, build_crumble_geometry)
                 )
-                self._geometry_key = key
+                self._geometry_key = geometry_key
             motion = bool(parameters.get("motion_blur", False))
             trails = bool(parameters.get("motion_trails", False))
             samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
@@ -88,7 +89,9 @@ class QuickCrumbleRenderer:
     def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
         between runs): True once that run's first frame will compile nothing and, given the
-        render ``size`` in device pixels, allocate nothing."""
+        render ``size`` in device pixels, allocate nothing. The chunks, motion table and debris
+        upload once COMPUTE has prepared them (``prepare_run_geometry``); the render thread
+        never builds them here."""
         debris = crumble_parameters(parameters)[6]
         motion = bool(parameters.get("motion_blur", False))
         trails = bool(parameters.get("motion_trails", False))
@@ -108,6 +111,14 @@ class QuickCrumbleRenderer:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
         if not warm_programs(entries):
             return False
+        if size and size[0] > 0 and size[1] > 0:
+            key = crumble_geometry_key(parameters, size[0] / size[1])
+            if key != self._geometry_key:
+                geometry = PREPARED_GEOMETRY.get(key)
+                if geometry is not None:
+                    self._rebuild_geometry(geometry)
+                    self._geometry_key = key
+                    return False
         return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
                                   bloom=False, with_trails=trails)
 

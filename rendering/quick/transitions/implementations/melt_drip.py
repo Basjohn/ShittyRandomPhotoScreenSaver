@@ -83,6 +83,12 @@ class QuickMeltDripRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources
 
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
+        """The gradual warm-up's one step (render thread, between runs): compile the liquid
+        program so the run's first frame compiles nothing."""
+        self._resources.program("liquid", QUICK_TRANSITION_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)
+        return True
+
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         try:
             params = melt_drip_parameters(
