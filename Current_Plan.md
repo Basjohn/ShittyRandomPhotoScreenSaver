@@ -149,7 +149,18 @@ After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in 
   then bounded reduced-resolution smoke/fog/fire volumes with advection/vorticity/depth raymarch/temporal reprojection.
   Measure each primitive independently before combinations.
 - [ ] **Visualizer vertical sequence:** Reactive Particle Field -> Spectrum Terrain/Skyline/Tunnel -> Waveform Ribbon ->
-  Deformable Blob Sphere -> Bubble Depth Field under Bubble Temporal Fidelity.
+  Deformable Blob Sphere -> Extruded Bubble. New modes are declared in `core/settings/visualizer_mode_settings.py` (their
+  Settings body, model fields, appliers and renderer parameters follow from the spec).
+- [ ] **Extruded Bubble (operator direction 2026-10-11; after the migration and side work).** Bubble's own simulation in 3D:
+  the existing Bubble logical runtime and reactions, rendered as lit 3D bubbles with everything the shared 3D foundation
+  offers as it grows (materials, gloss and reflections, shadows, glow, quality tiers, orbit) and the full customisability of
+  the spec layer. Aims: high fidelity, cutting waste, and room to experiment; reactivity at least as good as Bubble's and
+  better where Bubble is weakest, drift and speed through sustained loud passages, without dynamic floors or other unreliable
+  parts (read loudness on the fixed real-music scale, `Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A). It is the first
+  **bordered** 3D mode: a carded shell whose camera orbits *inside* its border (Extruded Spectrum, Shockwave Grid and Sphere
+  are frameless), which sets the pattern for later bordered 3D modes. Bubble itself stays as it is under Bubble Temporal
+  Fidelity; before and after any change that could reach it, compare `python -m tools.visualizer_replay.mode_audit --modes
+  bubble --compare <saved run>` on the recorded clips (frozen settings, never a curated preset).
 - [ ] **S19–S27 character and world foundations** (needed by the deferred Usu Moonscape vertical; contracts and effect
   ideas in `Docs/Future_Work/Usu_Moonscape.md` §5). Build and prove one at a time (own tests, offscreen harness, measurements),
   each lazy, dormant when unused, measured, warmed and tier-gated:
