@@ -77,7 +77,7 @@ logger = get_logger(__name__)
 _MODE_NORMAL_ATTR = {
     "spectrum": "_spectrum_normal",
     "oscilloscope": "_osc_normal",
-    "sine_wave": "_sine_normal",
+    "sine_wave": "_sine_wave_normal",
     "bubble": "_bubble_normal",
     "devcurve": "_devcurve_normal",
     "sphere": "_sphere_normal",

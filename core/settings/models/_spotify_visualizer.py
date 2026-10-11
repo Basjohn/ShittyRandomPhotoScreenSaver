@@ -173,28 +173,12 @@ _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "sine_wave_travel": int,
-    "sine_density": float,
-    "sine_displacement": float,
-    "sine_glow_enabled": bool,
-    "sine_glow_intensity": float,
-    "sine_glow_reactivity": float,
-    "sine_glow_color": list,
-    "sine_line_color": list,
-    "sine_reactive_glow": bool,
-    "sine_ghosting_enabled": bool,
-    "sine_ghost_alpha": float,
-    "sine_ghost_decay": float,
     "sine_ghost_line2_enabled": bool,
     "sine_ghost_line3_enabled": bool,
     "sine_ghost_line4_enabled": bool,
     "sine_ghost_line5_enabled": bool,
     "sine_ghost_line6_enabled": bool,
-    "sine_sensitivity": float,
-    "sine_smoothing": float,
-    "sine_speed": float,
     "sine_line_count": int,
-    "sine_line_offset_bias": float,
     "sine_line2_color": list,
     "sine_line2_glow_color": list,
     "sine_line3_color": list,
@@ -210,19 +194,11 @@ _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "sine_travel_line4": int,
     "sine_travel_line5": int,
     "sine_travel_line6": int,
-    "sine_line1_shift": float,
     "sine_line2_shift": float,
     "sine_line3_shift": float,
     "sine_line4_shift": float,
     "sine_line5_shift": float,
     "sine_line6_shift": float,
-    "sine_wave_effect": float,
-    "sine_vertical_shift": int,
-    "sine_card_adaptation": float,
-    "sine_micro_wobble": float,
-    "sine_crawl_amount": float,
-    "sine_width_reaction": float,
-    "sine_heartbeat": float,
 }
 
 _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -335,27 +311,12 @@ _BUBBLE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    'sine_wave_travel': int,
-    'sine_density': float,
-    'sine_displacement': float,
-    'sine_glow_enabled': bool,
-    'sine_glow_intensity': float,
-    'sine_glow_color': list,
-    'sine_line_color': list,
-    'sine_reactive_glow': bool,
-    'sine_ghosting_enabled': bool,
-    'sine_ghost_alpha': float,
-    'sine_ghost_decay': float,
     'sine_ghost_line2_enabled': bool,
     'sine_ghost_line3_enabled': bool,
     'sine_ghost_line4_enabled': bool,
     'sine_ghost_line5_enabled': bool,
     'sine_ghost_line6_enabled': bool,
-    'sine_sensitivity': float,
-    'sine_smoothing': float,
-    'sine_speed': float,
     'sine_line_count': int,
-    'sine_line_offset_bias': float,
     'sine_line2_color': list,
     'sine_line2_glow_color': list,
     'sine_line3_color': list,
@@ -371,18 +332,11 @@ _SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sine_travel_line4': int,
     'sine_travel_line5': int,
     'sine_travel_line6': int,
-    'sine_line1_shift': float,
     'sine_line2_shift': float,
     'sine_line3_shift': float,
     'sine_line4_shift': float,
     'sine_line5_shift': float,
     'sine_line6_shift': float,
-    'sine_vertical_shift': int,
-    'sine_card_adaptation': float,
-    'sine_micro_wobble': float,
-    'sine_crawl_amount': float,
-    'sine_width_reaction': float,
-    'sine_heartbeat': float,
 }
 
 _DEVCURVE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
@@ -784,14 +738,7 @@ def _build_visualizer_spectrum_kwargs(
 def _build_visualizer_sine_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
-    data = _build_read_value_map(read_value, _SINE_BUILD_SPECS)
-    data["sine_glow_reactivity"] = float(
-        read_value("sine_glow_reactivity", _visualizer_default("sine_glow_reactivity"))
-    )
-    data["sine_wave_effect"] = float(
-        read_value("sine_wave_effect", _visualizer_default("sine_wave_effect"))
-    )
-    return data
+    return _build_read_value_map(read_value, _SINE_BUILD_SPECS)
 
 
 def _build_visualizer_bubble_kwargs(
@@ -1233,28 +1180,12 @@ class SpotifyVisualizerSettings:
     shockwave_grid_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing_enabled'))
     shockwave_grid_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing'))
     shockwave_grid_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_solid_bar_hysteresis_enabled'))
-    sine_wave_travel: int = field(default_factory=lambda: _visualizer_default('sine_wave_travel'))
-    sine_density: float = field(default_factory=lambda: _visualizer_default('sine_density'))
-    sine_displacement: float = field(default_factory=lambda: _visualizer_default('sine_displacement'))
-    sine_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_glow_enabled'))
-    sine_glow_intensity: float = field(default_factory=lambda: _visualizer_default('sine_glow_intensity'))
-    sine_glow_reactivity: float = field(default_factory=lambda: _visualizer_default('sine_glow_reactivity'))
-    sine_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_glow_color'))
-    sine_line_color: list = field(default_factory=lambda: _visualizer_default('sine_line_color'))
-    sine_reactive_glow: bool = field(default_factory=lambda: _visualizer_default('sine_reactive_glow'))
-    sine_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghosting_enabled'))
-    sine_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('sine_ghost_alpha'))
-    sine_ghost_decay: float = field(default_factory=lambda: _visualizer_default('sine_ghost_decay'))
     sine_ghost_line2_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line2_enabled'))
     sine_ghost_line3_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line3_enabled'))
     sine_ghost_line4_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line4_enabled'))
     sine_ghost_line5_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line5_enabled'))
     sine_ghost_line6_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line6_enabled'))
-    sine_sensitivity: float = field(default_factory=lambda: _visualizer_default('sine_sensitivity'))
-    sine_smoothing: float = field(default_factory=lambda: _visualizer_default('sine_smoothing'))
-    sine_speed: float = field(default_factory=lambda: _visualizer_default('sine_speed'))
     sine_line_count: int = field(default_factory=lambda: _visualizer_default('sine_line_count'))
-    sine_line_offset_bias: float = field(default_factory=lambda: _visualizer_default('sine_line_offset_bias'))
     sine_line2_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_color'))
     sine_line2_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_glow_color'))
     sine_line3_color: list = field(default_factory=lambda: _visualizer_default('sine_line3_color'))
@@ -1270,21 +1201,13 @@ class SpotifyVisualizerSettings:
     sine_travel_line4: int = field(default_factory=lambda: _visualizer_default('sine_travel_line4'))
     sine_travel_line5: int = field(default_factory=lambda: _visualizer_default('sine_travel_line5'))
     sine_travel_line6: int = field(default_factory=lambda: _visualizer_default('sine_travel_line6'))
-    sine_line1_shift: float = field(default_factory=lambda: _visualizer_default('sine_line1_shift'))
     sine_line2_shift: float = field(default_factory=lambda: _visualizer_default('sine_line2_shift'))
     sine_line3_shift: float = field(default_factory=lambda: _visualizer_default('sine_line3_shift'))
     sine_line4_shift: float = field(default_factory=lambda: _visualizer_default('sine_line4_shift'))
     sine_line5_shift: float = field(default_factory=lambda: _visualizer_default('sine_line5_shift'))
-    sine_line6_shift: float = field(default_factory=lambda: _visualizer_default('sine_line6_shift'))
-    sine_wave_effect: float = field(default_factory=lambda: _visualizer_default('sine_wave_effect'))
-    sine_vertical_shift: int = field(default_factory=lambda: _visualizer_default('sine_vertical_shift'))
-    sine_micro_wobble: float = field(default_factory=lambda: _visualizer_default('sine_micro_wobble'))  # legacy, hidden
-    sine_crawl_amount: float = field(default_factory=lambda: _visualizer_default('sine_crawl_amount'))
-    sine_width_reaction: float = field(default_factory=lambda: _visualizer_default('sine_width_reaction'))
-    sine_card_adaptation: float = field(default_factory=lambda: _visualizer_default('sine_card_adaptation'))
+    sine_line6_shift: float = field(default_factory=lambda: _visualizer_default('sine_line6_shift'))  # legacy, hidden
     rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('rainbow_enabled'))
     rainbow_speed: float = field(default_factory=lambda: _visualizer_default('rainbow_speed'))
-    sine_heartbeat: float = field(default_factory=lambda: _visualizer_default('sine_heartbeat'))
     # Bubble visualizer
     bubble_big_bass_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_big_bass_pulse'))
     bubble_small_freq_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_small_freq_pulse'))

@@ -18,6 +18,8 @@ part no control type describes (Spectrum's shape editor, smoothing controls) is 
 naming its own build/load/collect functions by import path, so this module stays free of Qt.
 
 Adding a setting to a spec'd mode is its default plus one control here; the renderer reads it by key.
+A control may also be shown only while another control holds a value (``when``), so a group that only
+matters while its toggle is on hides with it.
 """
 from __future__ import annotations
 
@@ -46,9 +48,15 @@ class Bucket:
     advanced: bool = False
 
 
+When = tuple   # (key, value): shown only while that control of the same mode holds that value
+
+
 @dataclass(frozen=True)
 class Slider:
-    """A float shown on a slider of ``scale`` positions per unit (0.01 steps by default)."""
+    """A float shown on a slider of ``scale`` positions per unit (0.01 steps by default).
+
+    Its value reads as ``decimals`` places plus ``suffix``, or as a whole percent (``percent``);
+    ``integer`` keeps it a whole number; ``tick`` marks every that many positions under it."""
 
     key: str
     label: str
@@ -60,19 +68,32 @@ class Slider:
     scale: int = 100
     decimals: int = 2
     suffix: str = ""
+    percent: bool = False
+    integer: bool = False
+    tick: int = 0
+    when: When = ()
 
-    def admit(self, value: object, default: object) -> float:
+    def admit(self, value: object, default: object) -> float | int:
         number = _finite(value)
         if number is None:
             number = float(default)
-        return max(float(self.low), min(float(self.high), number))
+        number = max(float(self.low), min(float(self.high), number))
+        return int(round(number)) if self.integer else number
 
-    coerce = staticmethod(float)
+    def coerce(self, value: object) -> float | int:
+        return int(value) if self.integer else float(value)
+
+    def text(self, position: int) -> str:
+        """The value label for a slider position."""
+        if self.percent:
+            return f"{round(position * 100 / self.scale)}%"
+        return f"{position / self.scale:.{self.decimals}f}{self.suffix}"
 
 
 @dataclass(frozen=True)
 class Toggle:
-    """A checkbox; ``text`` is the checkbox's own words, ``label`` its row label."""
+    """A checkbox; ``text`` is the checkbox's own words, ``label`` its row label (none: the checkbox
+    stands alone across the bucket)."""
 
     key: str
     label: str
@@ -80,6 +101,7 @@ class Toggle:
     tooltip: str = ""
     bucket: str = ""
     logical: bool = False
+    when: When = ()
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -92,12 +114,14 @@ class Toggle:
             return False
         return bool(default)
 
-    coerce = staticmethod(bool)
+    def coerce(self, value: object) -> bool:
+        return bool(value)
 
 
 @dataclass(frozen=True)
 class Choice:
-    """A drop-down of fixed labels; an unknown stored label becomes the default."""
+    """A drop-down of fixed labels; an unknown stored value becomes the default. It persists the
+    label, or its position among ``choices`` when ``indexed`` (a number outside them is clamped in)."""
 
     key: str
     label: str
@@ -105,11 +129,19 @@ class Choice:
     tooltip: str = ""
     bucket: str = ""
     logical: bool = False
+    indexed: bool = False
+    when: When = ()
 
-    def admit(self, value: object, default: object) -> str:
+    def admit(self, value: object, default: object) -> str | int:
+        if self.indexed:
+            number = None if isinstance(value, bool) else _finite(value)
+            if number is None or number != int(number):
+                return int(default)
+            return max(0, min(len(self.choices) - 1, int(number)))
         return value if isinstance(value, str) and value in self.choices else str(default)
 
-    coerce = staticmethod(str)
+    def coerce(self, value: object) -> str | int:
+        return int(value) if self.indexed else str(value)
 
 
 @dataclass(frozen=True)
@@ -123,6 +155,7 @@ class Colour:
     bucket: str = ""
     logical: bool = False
     alpha: bool = True
+    when: When = ()
 
     def admit(self, value: object, default: object) -> list[int]:
         channels = list(value) if isinstance(value, (list, tuple)) else []
@@ -133,7 +166,8 @@ class Colour:
             numbers.append(255.0)
         return [max(0, min(255, int(round(number)))) for number in numbers]
 
-    coerce = staticmethod(list)
+    def coerce(self, value: object) -> list:
+        return list(value)
 
 
 @dataclass(frozen=True)
@@ -252,6 +286,104 @@ _SHOCKWAVE_GRID = ModeSettings(
 )
 
 
+# ---- Sine Waves --------------------------------------------------------------------------------
+
+_LINE_KEYS = tuple(
+    f"sine_{name}"
+    for line in range(2, 7)
+    for name in (f"line{line}_color", f"line{line}_glow_color", f"travel_line{line}", f"ghost_line{line}_enabled",
+                 f"line{line}_shift")
+)
+_GLOW = ("sine_glow_enabled", True)
+_GHOST = ("sine_ghosting_enabled", True)
+
+_SINE_WAVE = ModeSettings(
+    "sine_wave",
+    buckets=(
+        Bucket("appearance", "Appearance", "Line color, glow, and ghosting controls still apply when hidden."),
+        Bucket("motion", "Motion", "Speed, travel, crawl, and wave-motion controls still apply when hidden."),
+        Bucket("response", "Response", "Energy response and width behavior still apply when hidden."),
+        Bucket("multi_line", "Multi-Line",
+               "Extra line colors, travel, ghosting, displacement, and line offsets still apply when hidden.",
+               advanced=True),
+        Bucket("layout", "Layout", "Density, spacing, and card-height controls still apply when hidden.",
+               advanced=True),
+    ),
+    entries=(
+        Toggle("sine_glow_enabled", "", "Enable Glow", bucket="appearance"),
+        Slider("sine_glow_intensity", "Glow Intensity:", 0.0, 1.0, bucket="appearance", percent=True, tick=10,
+               when=_GLOW),
+        Slider("sine_glow_reactivity", "Glow Reactivity:", 0.0, 2.0, bucket="appearance", percent=True, tick=20,
+               when=_GLOW),
+        Colour("sine_line_color", "Line Color:", "Choose Sine Wave Line Color", bucket="appearance"),
+        Colour("sine_glow_color", "Glow Color:", "Choose Sine Wave Glow Color", bucket="appearance", when=_GLOW),
+        Toggle("sine_reactive_glow", "", "Reactive Glow (Energy-Driven)", bucket="appearance", when=_GLOW),
+        Toggle("sine_ghosting_enabled", "", "Enable Ghosting",
+               "When enabled, a faded afterimage of the previous waveform trails behind the current one.",
+               bucket="appearance", logical=True),
+        Slider("sine_ghost_alpha", "Ghost Opacity:", 0.0, 1.0, bucket="appearance", logical=True, percent=True,
+               tick=5, when=_GHOST),
+        Slider("sine_ghost_decay", "Ghost Decay:", 0.1, 1.0, bucket="appearance", logical=True, suffix="x", tick=5,
+               when=_GHOST),
+        Slider("sine_speed", "Speed:", 0.1, 1.0, "Wave animation speed multiplier.", bucket="motion",
+               logical=True, suffix="x", tick=10),
+        Choice("sine_wave_travel", "Travel:", ("None", "Scroll Left", "Scroll Right"),
+               "Direction the sine wave scrolls.", bucket="motion", logical=True, indexed=True),
+        Slider("sine_wave_effect", "Wave Effect:", 0.0, 1.0,
+               "Adds a wave-like positional undulation along the sine lines. Higher = more movement.",
+               bucket="motion", percent=True, tick=10),
+        Slider("sine_micro_wobble", "Micro Wobble:", 0.0, 1.0,
+               "Legacy jagged wobble effect (energy-reactive dents). Leave at 0% if using Crawl.",
+               bucket="motion", percent=True, tick=10),
+        Slider("sine_crawl_amount", "Crawl:", 0.0, 1.0,
+               "Gentle horizontal dents that crawl across the lines in response to vocals. Higher = more visible "
+               "crawl.", bucket="motion", percent=True, tick=10),
+        Slider("sine_sensitivity", "Line Response:", 0.1, 5.0,
+               "Renderer-side sine line response multiplier.\n"
+               "Lower = calmer amplitude reaction after the shared FFT signal is already computed.\n"
+               "Higher = larger visible swings. This is separate from Technical sensitivity.",
+               bucket="response", logical=True, suffix="x", tick=50),
+        Slider("sine_smoothing", "Smoothing:", 0.0, 1.0,
+               "Temporal smoothing for sine-line motion. Higher = steadier, slower response.",
+               bucket="response", percent=True, tick=10),
+        Slider("sine_width_reaction", "Width Reaction:", 0.0, 1.0,
+               "Bass-driven line width stretching. All lines stretch wider in reaction to bass. "
+               "0 = off (2px lines), higher = thicker lines on bass hits (up to ~8px). "
+               "Lines still resemble a sine wave at maximum.", bucket="response", logical=True, percent=True,
+               tick=10),
+        Slider("sine_heartbeat", "Heartbeat:", 0.0, 1.0,
+               "Bass-transient amplitude swell. Higher = more sensitive triggers, "
+               "bigger swells. CPU detects bass transients and the shader briefly "
+               "amplifies all sine lines.", bucket="response", logical=True, percent=True, tick=10),
+        Slider("sine_displacement", "Displacement:", 0.0, 1.0,
+               "Bass-reactive XY displacement of multi-line sine waves. "
+               "Higher = larger transient shoves when bass hits. "
+               "Most visible with 2-3 lines enabled.", bucket="multi_line", percent=True, tick=10),
+        # Lines 2-6 sit side by side (colour, glow, travel) and appear with the line count.
+        Custom("lines", "multi_line", build="ui.tabs.media.sine_wave_builder:build_lines_section",
+               load="ui.tabs.media.sine_wave_settings_binding:load_lines_section",
+               collect="ui.tabs.media.sine_wave_settings_binding:collect_lines_section",
+               keys=("sine_line_count", *_LINE_KEYS)),
+        Slider("sine_density", "Density:", 0.25, 3.0,
+               "Number of sine cycles across the card. Low = wide gentle waves, "
+               "high = tightly packed oscillation. Default 1.0× ≈ 3 cycles.",
+               bucket="layout", suffix="×", tick=25),
+        Slider("sine_vertical_shift", "Vertical Shift:", -50, 200,
+               "Controls vertical spread between lines. 0 = all aligned, 100 = default spread, 200 = max spread, "
+               "negative = lines cross. Multi-line only.", bucket="layout", scale=1, decimals=0, integer=True,
+               tick=25),
+        Slider("sine_line1_shift", "Line 1 Horizontal Shift:", -1.0, 1.0,
+               "Phase offset for the primary sine line. Negative values lead, positive values lag.",
+               bucket="layout", logical=True, suffix=" cycles", tick=10),
+        Slider("sine_line_offset_bias", "Line Offset Bias:", 0.0, 1.0,
+               "Vertical spread between lines in multi-line mode.", bucket="layout", percent=True, tick=10),
+        Slider("sine_card_adaptation", "Card Adaptation:", 0.05, 1.0,
+               "How much of the card height the wave uses. Higher = taller waves.", bucket="layout",
+               percent=True, tick=10),
+    ),
+)
+
+
 # ---- Oscilloscope ------------------------------------------------------------------------------
 
 def _oscilloscope() -> ModeSettings:
@@ -315,7 +447,7 @@ def _oscilloscope() -> ModeSettings:
     )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_oscilloscope(), _SHOCKWAVE_GRID)
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 
 
