@@ -2,20 +2,25 @@
 
 Play the music first. A private BeatEngine (not the application's shared one) captures the live
 loopback audio with the analysis configuration Voxel Sphere activates with on this profile (its
-Spectrum-borrowed technical profile and source shaping, read from Settings, never written), is
+Spectrum-borrowed technical profile and analysis-only source, read from Settings, never written), is
 ticked at the 90 Hz logical cadence with no window, and every tick becomes one ``FeatureFrame``
-carrying the normalised lanes plus ``RealScaleLanes`` in production units (uncapped: real music
+carrying full native capture history, the normalised lanes and ``RealScaleLanes`` in production units (uncapped: real music
 reads 3-17 on the bus loudness). Typed scheduler events are taken once each, as Sphere takes them.
-The clip goes to ``logs/visualizer_recordings/NAME.jsonl`` (refusing to overwrite) with a summary
-of the real ranges seen. Recordings are the operator's music: they stay local (``logs/``).
+The clip goes to ``logs/visualizer_recordings/NAME.jsonl`` (refusing to overwrite) with frame/event
+counts. For the friendly UI, run ``python tools/music_recorder.py``. Recordings are the operator's
+music: they stay local (``logs/``).
 """
 from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+import math
+import os
 from pathlib import Path
-import statistics
+import re
+import tempfile
 import time
+import unicodedata
 
 from PySide6.QtCore import QCoreApplication, QTimer, Qt
 
@@ -29,8 +34,6 @@ _TYPED_EVENT_AGE_S = 0.25
 def recorded_clips():
     """The current recordings, oldest name first: archived takes (``*_noevents``, ``*_v1``, ...) are
     kept on disk for reference but skipped."""
-    import re
-
     from widgets.spotify_visualizer.feature_frame import load_jsonl
 
     return [load_jsonl(path) for path in sorted(OUTPUT.glob("*.jsonl"))
@@ -88,6 +91,8 @@ def _configured_engine():
                                           reason="replay_recording")
         engine = controller.ensure_engine()
         apply_engine_vis_mode_kwargs(engine, resolve_mode_source_config("sphere", asdict(model)))
+        engine.set_waveform_history_demand(True)
+        engine.get_pre_agc_analysis_spectrum()  # Request publication before the first analysis.
         return controller, engine
     except Exception:
         if controller is not None and controller.engine is not None:
@@ -115,7 +120,7 @@ def _close_configured_engine(controller, engine) -> None:
                         raise RuntimeError("recorder audio capture or analysis ownership did not drain")
 
 
-def _frame(engine, timestamp_us: int, bars, scheduler, onsets=()):
+def _frame(engine, timestamp_us: int, bars, scheduler, onsets=(), *, capture_history=None):
     from widgets.spotify_visualizer.feature_frame import (
         RAW_BAR_COUNT, REAL_SCALE_SCHEMA_VERSION, TYPED_EVENT_KINDS, WAVEFORM_COUNT, BandEnergy, EnergyLanes,
         FeatureFrame, RealScaleLanes, RecordedOnset, TransientEnergy, TypedEvent,
@@ -150,13 +155,15 @@ def _frame(engine, timestamp_us: int, bars, scheduler, onsets=()):
     if spectrum and len(spectrum) < 8:
         spectrum = ()
     # Only the first ``get_waveform_count`` samples are the latest block; the rest is zero padding.
-    count = max(0, min(len(engine.get_waveform()), int(engine.get_waveform_count())))
-    waveform = engine.get_waveform()[:count] or [0.0]
+    waveform = engine.get_waveform()
+    count = max(0, min(len(waveform), int(engine.get_waveform_count())))
+    waveform = waveform[:count] or [0.0]
     return FeatureFrame(
         timestamp_us=timestamp_us, energy=lanes,
         raw_bars=tuple(_unit(v) for v in _resample(bars, RAW_BAR_COUNT)),
         waveform=tuple(max(-1.0, min(1.0, float(v))) for v in _resample(waveform, WAVEFORM_COUNT)),
         playing=True, visible=True, mode="sphere", schema_version=REAL_SCALE_SCHEMA_VERSION,
+        capture_history=capture_history,
         real=RealScaleLanes(live=(live.bass, live.mid, live.high, live.overall),
                             musical_level=tuple(engine.get_musical_level()), analysis_spectrum=spectrum,
                             events=tuple(events),
@@ -165,96 +172,190 @@ def _frame(engine, timestamp_us: int, bars, scheduler, onsets=()):
     )
 
 
-def _summary(frames) -> str:
-    def spread(values):
-        values = sorted(values)
-        if not values:
-            return "n/a"
-        pick = lambda q: values[min(len(values) - 1, int(q * len(values)))]
-        return f"p10 {pick(0.1):.2f}  median {statistics.median(values):.2f}  p90 {pick(0.9):.2f}  max {values[-1]:.2f}"
+def clip_name(text: str) -> str:
+    """Turn a friendly title into a safe, discoverable local clip filename."""
+    name = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    name = re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+    if not name or len(name) > 100:
+        raise ValueError("Use a clip name with 1–100 letters, numbers or spaces.")
+    if name.upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)),
+                        *(f"LPT{i}" for i in range(10))}:
+        raise ValueError("That name is reserved by Windows; please choose another.")
+    if re.search(r"_(noevents|v\d+)$", name):
+        raise ValueError("Names ending in _noevents or _vNUMBER are reserved for archived clips.")
+    return name
 
-    loud = [f.real.musical_level[0] for f in frames]
-    presence = [f.real.musical_level[1] for f in frames if f.real.musical_level[0] > 0]
-    pinned = sum(1 for f in frames if f.real.live[0] >= 2.5) / max(1, len(frames))
-    events = {}
-    for frame in frames:
-        for event in frame.real.events:
-            events[event.kind] = events.get(event.kind, 0) + 1
-    onsets = sum(len(frame.real.onsets) for frame in frames)
-    return (f"frames {len(frames)} ({len(frames) * TICK_MS / 1000:.1f} s)\n"
-            f"loudness  {spread(loud)}\npresence  {spread(presence)}\n"
-            f"live bass pinned at 2.5: {pinned:.0%} of frames\ntyped events {events}\nmusical onsets {onsets}")
+
+class RecorderSession:
+    """One bounded recording; no timer, engine or worker remains active after completion.
+
+    JSONL streams to a private partial file instead of retaining a minute of PCM in RAM.
+    Only a complete, successfully retired recording is published under its final name.
+    CLI and GUI share this capture/cleanup owner.
+    """
+
+    def __init__(self, name, *, seconds=60.0, on_progress=None, on_finished=None):
+        self.name = clip_name(name)
+        self.seconds = float(seconds)
+        if not math.isfinite(self.seconds) or not 0 < self.seconds <= 600:
+            raise ValueError("Recording length must be greater than 0 and at most 600 seconds.")
+        self.path = OUTPUT / f"{self.name}.jsonl"
+        self.on_progress = on_progress
+        self.on_finished = on_finished
+        self.timer = QTimer()
+        self.timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.timer.timeout.connect(self._tick)
+        self.controller = self.engine = None
+        self.error = None
+        self.saved = False
+        self.active = False
+        self._used = False
+        self._file = self._partial = None
+        self._started = None
+        self._history_source = self._history = None
+        self._capture_serial = self._last_onset = 0
+        self._last_us = 999_999
+        self._last_progress = -1.0
+        self.frame_count = self.event_count = self.onset_count = 0
+        self.max_gap_s = 0.0
+        self._last_elapsed = 0.0
+
+    def start(self):
+        if self._used:
+            raise RuntimeError("RecorderSession is single-use; create a new session for another clip")
+        if self.path.exists():
+            raise FileExistsError(f"A clip named {self.path.name} already exists. Choose a new name.")
+        self._used = True
+        self.active = True
+        self._opening = time.perf_counter()
+        try:
+            self.controller, self.engine = _configured_engine()
+            self.engine.acquire()
+            self.engine.set_playback_state(True)
+            self.engine.ensure_started()
+            self.timer.start(TICK_MS)
+        except Exception as exc:
+            self._finish(error=exc)
+            raise
+
+    def _tick(self):
+        if not self.active:
+            return
+        try:
+            self._capture_tick()
+        except Exception as exc:
+            self._finish(error=exc)
+
+    def _capture_tick(self):
+        from widgets.spotify_visualizer.feature_frame import CaptureHistory, canonical_json
+
+        now = time.perf_counter()
+        worker = self.engine._audio_worker
+        healthy = worker.is_capture_healthy()
+        if not healthy:
+            if self._started is not None or not worker.is_capture_starting() or now - self._opening >= 5.0:
+                raise RuntimeError("recording rejected: audio capture failed or stopped delivering samples")
+            return
+        bars = self.engine.tick() or []
+        source = self.engine.get_waveform_history()
+        if source is None or len(source) == 0:
+            if now - self._opening >= 5.0:
+                raise RuntimeError("recording rejected: capture did not publish waveform history")
+            return
+        if source is not self._history_source:
+            self._capture_serial += 1
+            self._history_source = source
+            self._history = CaptureHistory.from_samples(
+                source, capture_serial=self._capture_serial, sample_rate=worker._backend.sample_rate)
+        if self._started is None:
+            self._started = now  # A full minute AFTER native capture is ready.
+            OUTPUT.mkdir(parents=True, exist_ok=True)
+            descriptor, filename = tempfile.mkstemp(prefix=f".{self.name}_", suffix=".partial", dir=OUTPUT)
+            self._partial = Path(filename)
+            self._file = os.fdopen(descriptor, "wb", buffering=1024 * 1024)
+        elapsed = now - self._started
+        timestamp_us = max(self._last_us + 1, 1_000_000 + int(elapsed * 1_000_000))
+        onsets = self.engine.get_onset_events(self._last_onset)
+        if onsets:
+            self._last_onset = onsets[-1].serial
+        frame = _frame(self.engine, timestamp_us, bars, self.engine.get_event_scheduler(), onsets,
+                       capture_history=self._history)
+        self._file.write(canonical_json(frame.to_dict()) + b"\n")
+        self._last_us = timestamp_us
+        self.frame_count += 1
+        self.event_count += len(frame.real.events)
+        self.onset_count += len(frame.real.onsets)
+        self.max_gap_s = max(self.max_gap_s, elapsed - self._last_elapsed)
+        self._last_elapsed = elapsed
+        if self.on_progress and elapsed - self._last_progress >= 0.1:
+            self._last_progress = elapsed
+            self.on_progress(elapsed, source, self)
+        if elapsed >= self.seconds:
+            self._finish(save=True)
+
+    def cancel(self):
+        if self.active:
+            self._finish()
+
+    def _finish(self, *, save=False, error=None):
+        self.timer.stop()
+        self.error = error
+        try:
+            if self.engine is not None:
+                _close_configured_engine(self.controller, self.engine)
+        except Exception as exc:
+            self.error = exc
+        finally:
+            self.engine = self.controller = None
+        try:
+            if self._file is not None:
+                self._file.close()
+                self._file = None
+            if save and self.error is None:
+                # Windows rename refuses an existing destination; POSIX link provides that
+                # same atomic no-clobber contract (POSIX rename would overwrite it).
+                if os.name == "nt":
+                    self._partial.rename(self.path)
+                else:
+                    os.link(self._partial, self.path)
+                self.saved = True
+        except Exception as exc:
+            self.error = exc
+        finally:
+            if self._partial is not None:
+                try:
+                    self._partial.unlink(missing_ok=True)
+                except OSError as exc:
+                    self.error = exc
+                self._partial = None
+            self._history_source = self._history = None
+            self.active = False
+        if self.on_finished:
+            self.on_finished(self)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("name", help="clip name (snake_case)")
+    parser.add_argument("name", help="clip name (spaces are converted to underscores)")
     parser.add_argument("--seconds", type=float, default=60.0)
     args = parser.parse_args()
-    from widgets.spotify_visualizer.feature_frame import FeatureClip
-
-    path = OUTPUT / f"{args.name}.jsonl"
-    if path.exists():
-        parser.error(f"refusing to overwrite {path}")
     app = QCoreApplication.instance() or QCoreApplication([])
-    controller, engine = _configured_engine()
-    frames = []
-    last_serial = [0]
-    capture_admitted = [False]
-    capture_failure = []
-    start = time.perf_counter()
-
-    def tick():
-        elapsed = time.perf_counter() - start
-        if not capture_admitted[0]:
-            worker = engine._audio_worker
-            if worker.is_capture_healthy():
-                capture_admitted[0] = True
-            else:
-                reason = None
-                if not worker.is_capture_starting():
-                    reason = "native capture failed or its first-callback grace expired"
-                elif elapsed >= args.seconds:
-                    reason = "recording deadline reached before the first valid audio callback"
-                if reason is not None:
-                    capture_failure.append(RuntimeError(f"recording rejected: {reason}"))
-                    timer.stop()
-                    app.quit()
-                return
-        bars = engine.tick() or []
-        # The persistent analysis lane publishes the latest detached DSP state.
-        # Take its current scheduler events once on the recorder's existing tick.
-        onsets = engine.get_onset_events(last_serial[0])
-        if onsets:
-            last_serial[0] = onsets[-1].serial
-        frames.append(_frame(engine, 1_000_000 + int(elapsed * 1_000_000), bars, engine.get_event_scheduler(),
-                             onsets))
-        if elapsed >= args.seconds:
-            timer.stop()
-            app.quit()
-
-    timer = QTimer()
     try:
-        engine.acquire()
-        engine.set_playback_state(True)
-        engine.ensure_started()
-        timer.setTimerType(Qt.TimerType.PreciseTimer)
-        timer.timeout.connect(tick)
-        timer.start(TICK_MS)
-        print(f"recording {args.seconds:.0f} s of live audio ...", flush=True)
+        session = RecorderSession(args.name, seconds=args.seconds, on_finished=lambda _: app.quit())
+    except ValueError as exc:
+        parser.error(str(exc))
+    try:
+        session.start()
+        print(f"recording {args.seconds:g} s of live audio with full capture history ...", flush=True)
         app.exec()
     finally:
-        timer.stop()
-        _close_configured_engine(controller, engine)
-    if capture_failure:
-        raise capture_failure[0]
-    if not capture_admitted[0]:
-        raise RuntimeError("recording rejected: capture never delivered a valid audio callback")
-    clip = FeatureClip(name=args.name, frames=tuple(frames))
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    with path.open("xb") as out:
-        out.write(clip.to_jsonl_bytes())
-    print(f"wrote {path}\n{_summary(frames)}")
+        session.cancel()
+    if session.error:
+        raise session.error
+    if not session.saved:
+        raise RuntimeError("recording cancelled; no clip saved")
+    print(f"wrote {session.path}\n{session.frame_count} frames; {session.event_count} typed events; "
+          f"{session.onset_count} musical onsets; longest frame gap {session.max_gap_s * 1000:.1f} ms")
 
 
 if __name__ == "__main__":

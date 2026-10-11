@@ -196,7 +196,7 @@ def test_recorder_main_requires_first_valid_native_callback_before_writing_clip(
     monkeypatch.setattr(record, "_configured_engine", lambda: (controller, engine))
     monkeypatch.setattr(record, "OUTPUT", tmp_path)
     monkeypatch.setattr(sys, "argv", ["record", "first_pcm", "--seconds", "1"])
-    clock = iter([0.0, 2.0])
+    clock = iter([0.0, 2.0, 3.0] if outcome == "silent_valid" else [0.0, 6.0])
     monkeypatch.setattr(record, "time", SimpleNamespace(perf_counter=lambda: next(clock)))
     timers = []
 
@@ -224,6 +224,8 @@ def test_recorder_main_requires_first_valid_native_callback_before_writing_clip(
             if outcome != "pending":
                 engine._capture_lane.call(lambda: None, timeout=1.0)
             timers[0].callback()
+            if outcome == "silent_valid":
+                timers[0].callback()
 
     monkeypatch.setattr(record, "QTimer", Timer)
     monkeypatch.setattr(record, "QCoreApplication", SimpleNamespace(instance=lambda: Application()))

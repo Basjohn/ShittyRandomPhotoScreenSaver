@@ -1,6 +1,7 @@
 """Immutable fixture input at the real BeatEngine post-DSP seam."""
 from __future__ import annotations
 from typing import Any
+from core.logging.logger import get_logger
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.feature_frame import FeatureFrame
@@ -17,6 +18,7 @@ PRODUCTION_WAVEFORM_BLOCK = 256
 # ordinary music in a full passage (how every schema 1 floor was measured), silence as silence.
 # Real-scale behaviour is judged on schema 2 recordings, which carry the measured level.
 SCHEMA_1_MUSIC = (9.0, 1.2)
+logger = get_logger(__name__)
 
 
 def _waveform_block(samples) -> list[float]:
@@ -61,12 +63,36 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         self._replay_onsets: tuple = ()
         self._replay_onset_serial = 0
         self._replay_audible = False
+        self._replay_capture_history = None
+        self._replay_history_array = None
+        self._replay_history_demanded = False
+        self._replay_missing_history_warned = False
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
         return None
 
     def accept_feature_frame(self, frame: FeatureFrame) -> bool:
+        history = frame.capture_history
+        if history is not None:
+            # The current authored scope uses a fixed 48 kHz timebase. Do not silently
+            # reinterpret another native rate or resample a supposedly faithful capture.
+            if history.sample_rate != 48000:
+                raise ValueError(f"capture history rate {history.sample_rate} Hz cannot replay against the 48000 Hz Oscilloscope timebase")
+            previous = self._replay_capture_history
+            if previous is not None and history.capture_serial <= previous.capture_serial:
+                if history.capture_serial < previous.capture_serial or history != previous:
+                    raise ValueError("capture history serial must advance for each changed native source")
+            if previous is None or history.capture_serial != previous.capture_serial:
+                import numpy as np
+
+                # Bytes-backed array is immutable. Repeated source serials keep this exact
+                # object, as production held logical ticks keep the native history array.
+                self._replay_history_array = np.frombuffer(history.pcm_f32le, dtype="<f4")
+            self._replay_capture_history = history
+        else:
+            self._replay_capture_history = None
+            self._replay_history_array = None
         lanes = frame.energy
         self._replay_pre_agc = _bands(lanes.pre_agc)
         self._replay_bubble = _bands(lanes.bubble)
@@ -100,7 +126,10 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             for event in frame.real.events:
                 self._replay_scheduler.feed(OnsetEvent(
                     timestamp=frame.timestamp_us / 1_000_000.0, event_type=event.kind, strength=event.strength))
-        waveform = _waveform_block(frame.waveform)
+        if history is not None:
+            waveform = self._replay_history_array[-PRODUCTION_WAVEFORM_BLOCK:].tolist()
+        else:
+            waveform = _waveform_block(frame.waveform)
         raw_bars = list(frame.raw_bars)
         if len(raw_bars) != self._bar_count:
             source_last = len(raw_bars) - 1
@@ -142,6 +171,18 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
 
     def get_pre_agc_energy_bands(self) -> EnergyBands:
         return self._replay_pre_agc
+
+    def set_waveform_history_demand(self, demanded: bool) -> None:
+        """Replay reads only recorded history; its external capture worker stays dormant."""
+        self._replay_history_demanded = bool(demanded)
+
+    def get_waveform_history(self):
+        if not self._replay_history_demanded:
+            return None
+        if self._replay_history_array is None and not self._replay_missing_history_warned:
+            logger.warning("[VISUALIZER_REPLAY] Clip has no native capture history; waveform replay is limited to its recorded 64-point preview and cannot validate full Oscilloscope fidelity. Re-record the clip.")
+            self._replay_missing_history_warned = True
+        return self._replay_history_array
 
     def get_bubble_energy_bands(self) -> EnergyBands:
         return self._replay_bubble
