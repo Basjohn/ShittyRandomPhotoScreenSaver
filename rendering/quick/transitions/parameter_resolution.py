@@ -20,7 +20,7 @@ from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICE
 from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
-from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_ORIGINS
+from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_STOPS_RANGE
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
 from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE
 from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
@@ -935,12 +935,11 @@ def _resolve_liquid_lens(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "liquid_lens")
     defaults = _canonical("liquid_lens")
-    origin = LIQUID_LENS_ORIGINS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if origin is None:
-        origin = str(rng.choice(tuple(LIQUID_LENS_ORIGINS.values())))
-    return _finish(origin, {
+    low, high = LIQUID_LENS_STOPS_RANGE
+    # The lens always starts in the middle; its seeded path replaces an origin choice.
+    return _finish(None, {
         "seed": _seed(rng),
-        "droplets": _bool(_value(cfg, defaults, "droplets"), bool(defaults["droplets"])),
+        "stops": max(low, min(high, _integer(_value(cfg, defaults, "stops"), int(defaults["stops"])))),
         **_surface_values(cfg, defaults, ("refraction", "dispersion")),
     })
 
