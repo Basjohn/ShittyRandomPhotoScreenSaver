@@ -393,7 +393,7 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   and GL proof for direct alpha plus Rainbow speed/extent;
 - `tests/test_gl_error_policy.py` — per-call PyOpenGL error checking off at every entry, one check per node frame.
 
-Cost: `tools/visualizer_cost_probe.py` (offscreen, production host; median/p90 CPU submit and GPU, GL-call counts).
+Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 
 ### 6.5 Visualizer performance/trace authority
 
