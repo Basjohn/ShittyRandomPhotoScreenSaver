@@ -148,7 +148,7 @@ attachment or pass (e.g. S24's sheen in `SceneMaterial`) is a separate function,
 that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change. Record
 `tools/overhead_baseline.py` before and after any shared-primitive or host edit and `--compare` them: per-frame GL and
 Python call counts are deterministic, so any rise on an unrelated transition or mode is real added work; baselines live in
-`tools/baselines/overhead/`. **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. Runtime allocation stays demand-driven: building a facility is fine, allocating or executing it while nothing is active is not.
+`tools/baselines/overhead/` (how to run and read them, expected results: `Docs/Reference/Benchmarks.md`). **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. Runtime allocation stays demand-driven: building a facility is fine, allocating or executing it while nothing is active is not.
 
 After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
 
