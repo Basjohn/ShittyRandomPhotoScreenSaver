@@ -95,8 +95,12 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   Extruded onboarding previews unchanged). Open: (1) Oscilloscope's default costs ~0.73 ms GPU median, ~1.75 ms p90 at
   1080p, about seven times the other modes: find the pass responsible without changing the authored look; (2) the
   Shockwave Grid preview differs between two runs of the same tree (max 14/255), so it is not reproducible: find the
-  time or state input; (3) GPU timings of the heaviest transitions swing with clock state between runs (Particle
-  0.73 → 1.27 ms on identical code), so `overhead_baseline.py` GPU flags on untouched effects need a rerun before they count; the 2026-10-11 1440p run measured Particle at 7.3 ms GPU (untouched code), an outlier to rerun before it counts.
+  time or state input; (3) GPU timings swing with clock state between runs (Particle 0.73 → 1.27 ms on identical code, 7.3 ms
+  once at 1440p): resolved 2026-10-11 in `overhead_baseline.py` by control-relative timing, fastest-of-three sampling,
+  round-robin passes and recorded system conditions (`Docs/Reference/Harness_Index.md`): between a run under full
+  CPU load at 540 MHz GPU clock and a quiet one, relative GPU figures agreed within 8% at p90 (absolute ones up to
+  halved); relative CPU still moved up to 30% (CPU power states), so CPU flags stay hints. Older baselines compare
+  only on absolute figures.
   (4) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
   direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
   forward-only strip (operator's defaults file, so on the operator's call).

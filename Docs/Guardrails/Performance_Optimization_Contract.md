@@ -164,6 +164,8 @@ or retain effect-specific runtime resources.
 a separate function, shader variant or demand-created resource only its consumer pays for. Before and after any
 shared-primitive or render-host change, record `tools/overhead_baseline.py` and `--compare` the two; per-frame GL/Python call
 counts are deterministic, so any rise on an unrelated transition or mode is real added work (procedure: `Current_Plan.md` §4).
+Judge timing deltas by the relative-to-control figures and only between runs whose recorded conditions agree; a
+baseline taken while the machine was busy says so in its own `load` block.
 
 The speculative image process remains an approved isolation boundary, not a second presentation owner: foreground image
 work cannot queue behind it; parent-owned generation/byte/backlog bounds admit at most one speculative request at a time;
