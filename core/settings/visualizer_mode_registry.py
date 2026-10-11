@@ -189,6 +189,16 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.oscilloscope",
         settings_builder_module="ui.tabs.media.oscilloscope_builder",
         settings_builder_factory="build_oscilloscope_ui",
+        # It draws the captured audio and reacts to musical onsets and loudness: it owns only the
+        # analysis controls those depend on (Voxel Sphere's, without the transient clamp, which
+        # touches only the transient lanes it no longer reads; its body: visualizer_mode_settings).
+        technical_setting_suffixes=(
+            "bar_count", "audio_block_size", "adaptive_sensitivity", "sensitivity",
+            "dynamic_floor", "manual_floor", "input_gain",
+        ),
+        rainbow_controls=False,
+        shared_bar_appearance=False,
+        prepared_reveal=True,
     ),
     VisualizerModeDescriptor(
         "sine_wave",

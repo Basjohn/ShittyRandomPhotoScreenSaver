@@ -87,11 +87,6 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
   60-second real-music clip, and check the live signal, save result, cancellation and mixed-DPR window use.
   Replay the new full-history clip during the Oscilloscope rework; existing 64-sample recordings cannot validate
   waveform detail. The format, CLI and capture ownership contract live in `Docs/Reference/Harness_Index.md`.
-- [ ] **Capture owner follow-up alongside Oscilloscope rework:** Native backends may negotiate a non-48-kHz rate
-  while Oscilloscope uses a fixed 48-kHz timebase (the recorder retains the true rate and replay rejects mismatch).
-  `AudioWorker._on_audio_samples` also trims native blocks above 2,048 samples before building its history,
-  introducing gaps for oversized callbacks. Resolve these at the capture/timebase owner with focused proof;
-  recorder work deliberately leaves the parallel production rework untouched.
 
 ## 2B. Tool maintenance
 
@@ -101,6 +96,28 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
 - [ ] **Retire obsolete utility:** `tools/material_rollback_cleanup_gui.py` is obsolete (operator, 2026-10-11).
   Audit remaining references and retire the old experiment-specific cleanup utility; keep it out of quick launch.
 
+## 2C. Visualizers | Oscilloscope rework and the spec layer
+
+- [ ] **Oscilloscope rework | Awaiting Validation (operator approved a complete rework 2026-10-11: very bad Settings UX,
+  unreliable and visually disappointing output, the heaviest mode at 144 cf GPU).** Rebuilt as an analog phosphor scope on
+  the Visualizer spec layer: Trace / Ring / Phase displays from the capture's contiguous history (triggered, envelope-
+  decimated, Detail low-pass), afterglow as authored state, beam drive / onset flare / spectral tone on the shared musical
+  rule, one instanced beam pass with bloom glow; four new curated presets. GPU 8.9 cf at 1440p (16x cheaper), 0.37 ms CPU.
+  Reference: `Docs/Reference/Visualizer_Reference.md` 16C. Operator checks there (look and presets on both displays with
+  live music, trigger steadiness, afterglow, flare and loudness glow, Settings UX). Capture follow-ups resolved: the
+  history takes each whole block before the 2,048-sample analysis trim and carries the device's true rate, which the mode
+  converts its spans at; replay accepts any recorded rate.
+- [ ] **Move the remaining modes onto the spec layer (operator 2026-10-11: "if this means that adding new visualizers,
+  settings/features to them and editing will be easier and lower risk in the future absolutely do it").** One mode per
+  slice, renderer and response unchanged, Settings body and saved values identical, `test_visualizer_mode_settings_spec`
+  covering it: Sine Waves, Spline Curve (Dev Curve), Extruded Spectrum, Spectrum, Voxel Sphere. Shape editors and other
+  bespoke parts stay `Custom` entries. **Bubble last, and only with readings:** before and after any change that could
+  reach Bubble, `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>` on the recorded clips
+  (frozen settings, never a curated preset; all readings must stay x1.00 unless the change is meant to move them). A
+  baseline is saved locally (`logs/bubble_readings_before_specs.json`).
+- [ ] **New Visualizers** are declared in `core/settings/visualizer_mode_settings.py` from the start (the §4 Visualizer
+  sequence and Extruded Bubble).
+
 ## 3. Release / README media production
 
 The capture/encode/manifest tool and its focused smoke proof are implemented in the working tree, awaiting checkpoint and
@@ -109,10 +126,7 @@ owns the tool's registry, source-attribution, capture and encoding contract.
 
 - [ ] **Preview/baseline findings (2026-10-10).** The offline preview snapshot now applies each mode's technical
   config and steps Dev Curve's frame runtime, so the overhead baseline measures all eight Visualizer modes (Spectrum and
-  Extruded onboarding previews unchanged). Open: (1) Oscilloscope: the operator approved a complete rework (2026-10-11): its
-  Settings UX is very bad and its output unreliable and visually disappointing, the worst mode. Its default also costs
-  144 Crossfade frames of GPU at 1440p (`Docs/Reference/Benchmarks.md`), the heaviest mode by far; the rework may change
-  the look and must bring the cost in line with the others; (2) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
+  Extruded onboarding previews unchanged). Open: (1) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
   direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
   forward-only strip (operator's defaults file, so on the operator's call).
 

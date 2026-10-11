@@ -109,44 +109,6 @@ def _run_visualizer_settings_step(label: str, func) -> None:
         logger.info("[PERF][SETTINGS][VisualizersTab] %s in %.1f ms", label, elapsed_ms)
 
 
-_OSC_MULTI_LINE_COLOR_BINDINGS = (
-    ("osc_line2_color", "_osc_line2_color"),
-    ("osc_line2_glow_color", "_osc_line2_glow_color"),
-    ("osc_line3_color", "_osc_line3_color"),
-    ("osc_line3_glow_color", "_osc_line3_glow_color"),
-    ("osc_line4_color", "_osc_line4_color"),
-    ("osc_line4_glow_color", "_osc_line4_glow_color"),
-    ("osc_line5_color", "_osc_line5_color"),
-    ("osc_line5_glow_color", "_osc_line5_glow_color"),
-    ("osc_line6_color", "_osc_line6_color"),
-    ("osc_line6_glow_color", "_osc_line6_glow_color"),
-)
-
-
-
-def _load_osc_multi_line_color_bindings(tab, spotify_vis_config) -> None:
-    """Load secondary Oscilloscope colors from config with canonical repair defaults."""
-    config = spotify_vis_config if isinstance(spotify_vis_config, dict) else {}
-    for key, attr in _OSC_MULTI_LINE_COLOR_BINDINGS:
-        default = tab._widget_default("spotify_visualizer", key)
-        value = config.get(key, default)
-        try:
-            setattr(tab, attr, QColor(*value))
-        except Exception:
-            setattr(tab, attr, QColor(*default))
-
-
-def _collect_osc_multi_line_color_bindings(tab) -> dict:
-    """Collect secondary Oscilloscope colors without save-side shadow defaults."""
-    return {
-        key: _qcolor_to_list(
-            getattr(tab, attr, None),
-            tab._widget_default("spotify_visualizer", key),
-        )
-        for key, attr in _OSC_MULTI_LINE_COLOR_BINDINGS
-    }
-
-
 def _update_media_enabled_visibility(tab) -> None:
     """Show/hide all media controls based on media_enabled checkbox."""
     enabled = getattr(tab, 'media_enabled', None) and tab.media_enabled.isChecked()
@@ -216,20 +178,6 @@ def _update_media_progress_controls(tab) -> None:
             and glow_toggle is not None
             and glow_toggle.isChecked()
         )
-
-
-def _update_osc_multi_line_visibility(tab) -> None:
-    """Show/hide multi-line sub-controls based on checkbox and line count."""
-    enabled = getattr(tab, 'osc_multi_line', None) and tab.osc_multi_line.isChecked()
-    container = getattr(tab, '_osc_multi_container', None)
-    if container is not None:
-        container.setVisible(bool(enabled))
-    # Line 3 controls only visible when count == 3
-    line_count = getattr(tab, 'osc_line_count', None)
-    show_l3 = enabled and line_count is not None and line_count.value() >= 3
-    for w in (getattr(tab, '_osc_line3_label', None), getattr(tab, '_osc_l3_row_widget', None)):
-        if w is not None:
-            w.setVisible(bool(show_l3))
 
 
 def _update_sine_multi_line_visibility(tab) -> None:
@@ -898,13 +846,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
             update_ghost_visibility=_update_ghost_visibility,
         )
     elif mode_id == "oscilloscope":
-        load_oscilloscope_mode_settings(
-            tab,
-            cfg,
-            sync_color_button=_sync,
-            load_extra_color_bindings=_load_osc_multi_line_color_bindings,
-            update_multi_line_visibility=_update_osc_multi_line_visibility,
-        )
+        load_oscilloscope_mode_settings(tab, cfg)
     elif mode_id == "sine_wave":
         load_sine_wave_mode_settings(
             tab,
@@ -1507,12 +1449,7 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
         if _cur_mode == 'spectrum':
             spotify_vis_config.update(collect_spectrum_mode_settings(tab))
         elif _cur_mode == 'oscilloscope':
-            spotify_vis_config.update(
-                collect_oscilloscope_mode_settings(
-                    tab,
-                    collect_extra_color_bindings=_collect_osc_multi_line_color_bindings,
-                )
-            )
+            spotify_vis_config.update(collect_oscilloscope_mode_settings(tab))
         elif _cur_mode == 'sine_wave':
             spotify_vis_config.update(collect_sine_wave_mode_settings(tab))
         elif _cur_mode == 'bubble':

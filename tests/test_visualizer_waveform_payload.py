@@ -1,9 +1,9 @@
-"""VZ-04: only waveform-sample consumers carry the 256 samples.
+"""VZ-04: only waveform-sample producers carry the 256 samples.
 
-`mode_capabilities.consumes_waveform_samples` is the one declaration of which
-modes read `common.waveform`. Every other mode carries an empty sample payload,
-while the waveform count and generation stay live for every mode (line-mode
-readiness keys on the generation, R-87 CHK12).
+`mode_capabilities.consumes_waveform_samples` declares which logical capture
+needs the source samples. Oscilloscope resolves those samples into its packed
+`OscilloscopeFrame`; the shared `common.waveform` crossing stays empty for all
+renderers. Counts and generations remain live for every mode.
 """
 
 from __future__ import annotations
@@ -58,23 +58,18 @@ def _state():
     return state
 
 
-def test_declared_waveform_sample_consumers_are_real_renderer_consumers() -> None:
+def test_declared_waveform_sample_consumers_feed_oscilloscope_frame_runtime() -> None:
     consumers = {
         mode for mode in _ALL_MODES if mode_capabilities.consumes_waveform_samples(mode)
     }
-    # Oscilloscope's identity is waveform rendering, so losing its declaration
-    # is a semantic regression. Future waveform-driven modes may join without
-    # requiring this test to be rewritten.
+    # Oscilloscope is the only logical capture that needs source samples.
     assert "oscilloscope" in consumers
-    for mode in consumers:
-        descriptor = get_visualizer_mode_descriptor(mode)
-        renderer_path = ROOT / (descriptor.renderer_module.replace(".", "/") + ".py")
-        source = renderer_path.read_text(encoding="utf-8").replace(
-            "common.waveform_count", ""
-        )
-        assert "common.waveform" in source, (
-            f"{mode} declares waveform-sample consumption but its renderer does not read it"
-        )
+    assert consumers == {"oscilloscope"}
+    renderer = (ROOT / "rendering/quick/visualizer/implementations/oscilloscope.py").read_text(
+        encoding="utf-8"
+    )
+    assert "OscilloscopeFrame" in renderer
+    assert "common.waveform" not in renderer
 
 
 def test_only_declared_consumers_read_common_waveform_in_their_renderer() -> None:
@@ -93,7 +88,10 @@ def test_only_declared_consumers_read_common_waveform_in_their_renderer() -> Non
                 f"{mode} renderer reads common.waveform but the mode is not declared "
                 "as a waveform-sample consumer"
             )
-    assert "oscilloscope" in readers
+    # All modes now render immutable mode state. Oscilloscope's points are
+    # resolved before the render boundary, so no renderer may read the shared
+    # waveform transport directly.
+    assert readers == set()
 
 
 @pytest.mark.parametrize("mode", _ALL_MODES)

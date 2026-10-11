@@ -1025,15 +1025,35 @@ _WIDGET_PREVIEWS: Final = {
 }
 
 
-# Modes the operator's Visualizer screenshot sheet does not cover, rendered through their
-# production capture and renderer (Spectrum-runtime modes only). They are frameless, so like
-# the sheet's Sphere they sit on a dark backdrop inside a drawn frame.
-_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid")
+# Modes the operator's Visualizer screenshot sheet does not cover (or shows retired looks of),
+# rendered through their production capture and renderer. They sit on a dark backdrop inside a
+# drawn frame like the sheet's Sphere; a mode whose glow is added light renders straight onto it
+# (``_GLOW_ON_BACKDROP``), since added light shows only over something.
+_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid", "oscilloscope")
 # Modes whose picture comes from musical onsets get a few fixture onsets (time, type, magnitude,
 # presence: a big hit, then two ordinary ones) through a minimal transient-bus stand-in before the
 # settled captures at 1.0 and 1.12 s.
 _PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 3.0, 1.5), (0.55, "snare", 2.0, 1.0),
-                                             (0.8, "kick", 2.4, 1.0))}
+                                             (0.8, "kick", 2.4, 1.0)),
+                           # Oscilloscope: a hit just before the settled capture, so its flare shows.
+                           "oscilloscope": ((0.95, "kick", 2.4, 1.1),)}
+
+
+def preview_audio(count: int = 4096) -> "numpy.ndarray":
+    """Fixed fixture audio for the Oscilloscope preview: an A minor chord with its overtones over a
+    decaying kick and a little noise (seeded), at capture's 48 kHz, read-only."""
+    import numpy
+
+    t = numpy.arange(count, dtype=numpy.float64) / 48000.0
+    signal = numpy.zeros(count)
+    for frequency, level in ((220.0, 0.32), (261.63, 0.22), (329.63, 0.2), (440.0, 0.12), (659.26, 0.06)):
+        signal += level * numpy.sin(2.0 * numpy.pi * frequency * t + frequency * 0.013)
+    kick_t = numpy.clip(t - t[-1] + 0.06, 0.0, None)
+    signal += 0.45 * numpy.sin(2.0 * numpy.pi * 58.0 * kick_t) * numpy.exp(-kick_t / 0.05) * (kick_t > 0.0)
+    signal += 0.025 * numpy.random.default_rng(713).standard_normal(count)
+    audio = signal.astype(numpy.float32)
+    audio.flags.writeable = False
+    return audio
 
 
 class _PreviewOnsets:
@@ -1056,7 +1076,34 @@ class _PreviewOnsets:
     def get_musical_intensity(self) -> float:
         """The preview shows the mode in a full, loud passage."""
         return 1.0
+
+    # A drawn-audio capture (Oscilloscope) also reads the audio, the level and the spectrum,
+    # and takes the stand-in's frame as current live source.
+    def get_musical_level(self) -> tuple[float, float]:
+        from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS
+
+        return MUSICAL_USUAL_LOUDNESS * 1.2, 1.0
+
+    def get_waveform_history(self):
+        return preview_audio()
+
+    def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
+        return tuple(1.0 / (1.0 + 0.35 * index) for index in range(32))
+
+    def get_generation_id(self) -> int:
+        return 1
+
+    def get_activation_id(self) -> int:
+        return 1
+
+    def get_latest_generation_with_waveform(self) -> int:
+        return 1
+
+    def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
+        return 1.0, 1, 1
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
+_GLOW_ON_BACKDROP: Final = frozenset({"oscilloscope"})
+_PREVIEW_BACKDROP: Final = (24, 26, 34)       # the gradient backdrop's middle shade
 
 
 def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, output: Path) -> None:
@@ -1067,13 +1114,18 @@ def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, o
     width, height = _RENDERED_PREVIEW_SIZE
     for mode in _RENDERED_VISUALIZER_PREVIEWS:
         bars_path = art.parent / f"{mode}_bars.png"
-        _render_spectrum_preview(bars_path, width=width, height=height, mode=mode)
-        backdrop = Image.new("RGBA", (width, height))
-        for row in range(height):
-            shade = int(16 + 20 * row / max(1, height - 1))
-            backdrop.paste((shade, shade + 2, shade + 8, 255), (0, row, width, row + 1))
-        with Image.open(bars_path) as bars:
-            backdrop.alpha_composite(bars.convert("RGBA"))
+        if mode in _GLOW_ON_BACKDROP:
+            _render_spectrum_preview(bars_path, width=width, height=height, mode=mode, backdrop=_PREVIEW_BACKDROP)
+            with Image.open(bars_path) as bars:
+                backdrop = bars.convert("RGBA")
+        else:
+            _render_spectrum_preview(bars_path, width=width, height=height, mode=mode)
+            backdrop = Image.new("RGBA", (width, height))
+            for row in range(height):
+                shade = int(16 + 20 * row / max(1, height - 1))
+                backdrop.paste((shade, shade + 2, shade + 8, 255), (0, row, width, row + 1))
+            with Image.open(bars_path) as bars:
+                backdrop.alpha_composite(bars.convert("RGBA"))
         framed = onboarding_sheet_previews._framed(backdrop, (255, 255, 255))
         save_png_stable(onboarding_sheet_previews._with_shadow(framed), output / f"visualizer_{mode}.png")
 
@@ -1283,11 +1335,14 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     )
 
 
-def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str = "spectrum"):
+def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str = "spectrum",
+                             backdrop: tuple[int, int, int] | None = None):
     """Render canonical Spectrum bars on transparency through the production GL host.
 
     The Visualizer card shell is QML (``VisualizerPresentation.qml``); the caller
-    composites these bars into the real card.  Returns the render snapshot.
+    composites these bars into the real card.  Returns the render snapshot. With ``backdrop`` the
+    mode draws over that opaque colour instead (a glow is added light with no coverage of its own,
+    so it shows only over something).
     """
 
     from OpenGL import GL as gl
@@ -1319,7 +1374,8 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str =
         gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER, depth)
         if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE: raise RuntimeError("Spectrum FBO incomplete")
         snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)
-        gl.glViewport(0, 0, width, height); gl.glClearColor(0., 0., 0., 0.); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        clear = (0.0, 0.0, 0.0, 0.0) if backdrop is None else (*(channel / 255.0 for channel in backdrop), 1.0)
+        gl.glViewport(0, 0, width, height); gl.glClearColor(*clear); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         # Quick's item coordinates are top-left based; match the production
         # render-frame transform before readback flips OpenGL's framebuffer.
         matrix = (2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
@@ -1327,7 +1383,10 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str =
         import numpy
         pixels = numpy.frombuffer(bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)),
                                   dtype=numpy.uint8).reshape(height, width, 4)
-        _straight_alpha(numpy.flipud(pixels)).save(path, "PNG")
+        if backdrop is None:
+            _straight_alpha(numpy.flipud(pixels)).save(path, "PNG")
+        else:
+            Image.fromarray(numpy.ascontiguousarray(numpy.flipud(pixels))[:, :, :3], "RGB").save(path, "PNG")
         return snapshot
     finally:
         host.release_resources()

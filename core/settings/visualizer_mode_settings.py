@@ -252,7 +252,70 @@ _SHOCKWAVE_GRID = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SHOCKWAVE_GRID,)
+# ---- Oscilloscope ------------------------------------------------------------------------------
+
+def _oscilloscope() -> ModeSettings:
+    from rendering.gl_programs.oscilloscope_options import OSC_DISPLAYS, OSC_GRATICULES
+
+    return ModeSettings(
+        "oscilloscope",
+        attr_prefix="osc",
+        buckets=(
+            Bucket("display", "Display",
+                   "How the audio is drawn: the triggered trace, the trace around a ring, or the signal against "
+                   "itself as an X/Y figure."),
+            Bucket("beam", "Beam", "The beam's colours, width and glow, and how long its afterglow lasts."),
+            Bucket("reaction", "Reaction", "How the beam answers the music beyond the waveform itself."),
+            Bucket("screen", "Screen", "The scope's faint scale behind the beam.", advanced=True),
+        ),
+        entries=(
+            Choice("osc_display", "Display:", OSC_DISPLAYS,
+                   "Trace: the waveform across the screen, held steady by a trigger. Ring: the same trace around a "
+                   "circle. Phase: the signal against itself a moment later, the swirling figures of an X/Y scope.",
+                   bucket="display", logical=True),
+            Slider("osc_span", "Time Span:", 5.0, 60.0,
+                   "How much audio the trace shows: a few cycles of a note at 5 ms, a dense sweep at 60 ms.",
+                   bucket="display", logical=True, scale=1, decimals=0, suffix=" ms"),
+            Slider("osc_detail", "Detail:", 0.0, 1.0,
+                   "How much of the music's fine detail the trace draws: smooth flowing waves at 0, every "
+                   "cymbal and breath at 1.", bucket="display", logical=True),
+            Slider("osc_gain", "Gain:", 0.25, 4.0,
+                   "How tall the waveform is drawn. High gain squeezes loud passages softly at the edges.",
+                   bucket="display", logical=True),
+            Slider("osc_delay", "Phase Delay:", 0.1, 6.0,
+                   "Phase display only: how far apart the two moments it compares are. Short delays draw tight "
+                   "loops, long ones wide knots.",
+                   bucket="display", logical=True, scale=10, decimals=1, suffix=" ms"),
+            Colour("osc_beam_color", "Beam Colour:", "Choose Beam Colour",
+                   "The beam's colour; its centre burns toward white.", bucket="beam", alpha=False),
+            Colour("osc_beam_glow_color", "Glow Colour:", "Choose Glow Colour",
+                   "The colour of the light around the beam.", bucket="beam", alpha=False),
+            Slider("osc_beam_width", "Beam Width:", 0.5, 4.0, "The beam's thickness in pixels at normal size.",
+                   bucket="beam", scale=10, decimals=1, suffix=" px"),
+            Slider("osc_glow", "Glow:", 0.0, 1.0, "How much light spreads around the beam; zero turns it off.",
+                   bucket="beam"),
+            Slider("osc_afterglow", "Afterglow:", 0.0, 1.0,
+                   "How long earlier traces linger and fade, like a scope's phosphor. Zero shows only the live trace.",
+                   bucket="beam", logical=True),
+            Slider("osc_analog", "Analog Beam:", 0.0, 1.0,
+                   "Dims the beam where it moves fast, as a real scope's beam does, so steep strokes read fainter "
+                   "than slow ones.", bucket="beam"),
+            Slider("osc_spectral", "Spectral Colour:", 0.0, 1.0,
+                   "Tints the beam by how bright the music sounds: warm for bass, cool for treble.",
+                   bucket="reaction"),
+            Slider("osc_flare", "Hit Flare:", 0.0, 1.0,
+                   "How much the beam thickens and flares on each beat; big hits flare most.", bucket="reaction"),
+            Slider("osc_pulse", "Loudness Glow:", 0.0, 1.0,
+                   "How much louder passages make the beam burn and glow brighter.", bucket="reaction"),
+            Choice("osc_graticule", "Graticule:", OSC_GRATICULES,
+                   "The scale behind the beam: the classic grid, only the centre axes, or none.", bucket="screen"),
+            Colour("osc_graticule_color", "Graticule Colour:", "Choose Graticule Colour",
+                   "The scale's colour; its alpha sets how faint it is.", bucket="screen"),
+        ),
+    )
+
+
+_SPECS: tuple[ModeSettings, ...] = (_oscilloscope(), _SHOCKWAVE_GRID)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 
 

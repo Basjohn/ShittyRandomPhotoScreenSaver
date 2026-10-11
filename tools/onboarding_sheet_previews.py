@@ -253,11 +253,11 @@ def build(sheet_path: Path, output: Path) -> list[str]:
     return written
 
 
-# Visualizer mode -> frame-line box in VISUALIZER_SHEET (cards with a white frame).
+# Visualizer mode -> frame-line box in VISUALIZER_SHEET (cards with a white frame). The sheet's
+# Oscilloscope shows the look retired on 2026-10-11; the foundry renders the current one.
 VISUALIZER_CARDS: Final = {
     "devcurve": (218, 10, 902, 428),
     "spectrum": (957, 17, 1641, 434),
-    "oscilloscope": (26, 480, 710, 897),
     "sine_wave": (834, 510, 1518, 927),
     "bubble": (1569, 587, 2253, 1004),
 }

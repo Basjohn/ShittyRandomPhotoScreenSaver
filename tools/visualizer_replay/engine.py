@@ -75,10 +75,8 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def accept_feature_frame(self, frame: FeatureFrame) -> bool:
         history = frame.capture_history
         if history is not None:
-            # The current authored scope uses a fixed 48 kHz timebase. Do not silently
-            # reinterpret another native rate or resample a supposedly faithful capture.
-            if history.sample_rate != 48000:
-                raise ValueError(f"capture history rate {history.sample_rate} Hz cannot replay against the 48000 Hz Oscilloscope timebase")
+            # The recording keeps the device's true rate and the Oscilloscope converts its time
+            # spans at that rate (get_waveform_history_rate), so any rate replays faithfully.
             previous = self._replay_capture_history
             if previous is not None and history.capture_serial <= previous.capture_serial:
                 if history.capture_serial < previous.capture_serial or history != previous:
@@ -175,6 +173,10 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def set_waveform_history_demand(self, demanded: bool) -> None:
         """Replay reads only recorded history; its external capture worker stays dormant."""
         self._replay_history_demanded = bool(demanded)
+
+    def get_waveform_history_rate(self) -> int:
+        history = self._replay_capture_history
+        return history.sample_rate if history is not None else 48000
 
     def get_waveform_history(self):
         if not self._replay_history_demanded:

@@ -40,10 +40,15 @@ def test_each_mode_renderer_feeds_u_fade_from_the_shared_content_fade(mode_id):
     source = _MODE_FILES[mode_id].read_text(encoding="utf-8")
     # u_fade must be present and fed only from the single presentation contract
     # value, never a per-renderer constant or a separately animated scalar.
-    assert '"u_fade"' in source, f"{mode_id} renderer no longer sets u_fade"
-    assert "presentation.content_fade" in source, (
-        f"{mode_id} renderer must feed u_fade from presentation.content_fade"
-    )
+    if mode_id == "oscilloscope":
+        # Oscilloscope renders into a SceneTarget overlay; that target applies
+        # the same content fade to the complete beam/graticule pass.
+        assert "overlay=presentation.content_fade" in source
+    else:
+        assert '"u_fade"' in source, f"{mode_id} renderer no longer sets u_fade"
+        assert "presentation.content_fade" in source, (
+            f"{mode_id} renderer must feed u_fade from presentation.content_fade"
+        )
     # No renderer may own a fade clock.
     for banned in ("QVariantAnimation", "QPropertyAnimation", "QTimer"):
         assert banned not in source, (

@@ -1045,12 +1045,13 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     # samples; declare the demand before this tick so a paused switch into
     # Oscilloscope is current at once.
     declare_idle_waveform = getattr(engine, "set_idle_waveform_demand", None)
+    draws_samples = mode_capabilities.consumes_waveform_samples(getattr(widget, "_vis_mode_str", ""))
     if declare_idle_waveform is not None:
-        declare_idle_waveform(
-            mode_capabilities.consumes_waveform_samples(
-                getattr(widget, "_vis_mode_str", "")
-            )
-        )
+        declare_idle_waveform(draws_samples)
+    # The same modes draw live audio from capture's contiguous history; nothing else pays for it.
+    declare_history = getattr(engine, "set_waveform_history_demand", None)
+    if declare_history is not None:
+        declare_history(draws_samples)
 
     # Trigger engine tick (schedules audio processing + smoothing on COMPUTE pool)
     _engine_tick_start = time.time()

@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.settings.default_contract import get_raw_default_settings
+from core.settings.visualizer_mode_settings import require_mode_settings
 from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
 from widgets.spotify_visualizer.logical_tick_state import (
     install_default_logical_tick_state,
@@ -126,6 +128,21 @@ def test_visualizer_owner_stop_exception_is_not_swallowed() -> None:
 # SpectrumFrameRuntime, OscilloscopeFrameRuntime, SineFrameRuntime or
 # DevCurveFrameRuntime. They therefore belong to the presentation-neutral current
 # logical owner rather than any presentation widget.
+def _oscilloscope_logical_case() -> tuple[str, dict[str, object], dict[str, object]]:
+    defaults = get_raw_default_settings()["widgets"]["spotify_visualizer"]
+    kwargs: dict[str, object] = {}
+    expected: dict[str, object] = {}
+    for control in require_mode_settings("oscilloscope").logical_controls():
+        default = defaults[control.key]
+        if hasattr(control, "choices"):
+            value = next(choice for choice in reversed(control.choices) if choice != default)
+        else:
+            value = float(control.low) + 0.37 * (float(control.high) - float(control.low))
+        kwargs[control.key] = value
+        expected[f"_{control.key}"] = control.admit(value, default)
+    return "oscilloscope", kwargs, expected
+
+
 _LOGICAL_CONFIG_CASES = (
     (
         "spectrum",
@@ -142,21 +159,7 @@ _LOGICAL_CONFIG_CASES = (
             "_spectrum_ghost_decay": 0.73,
         },
     ),
-    (
-        "oscilloscope",
-        {
-            "osc_speed": 0.33,
-            "osc_line_amplitude": 2.4,
-            "osc_ghosting_enabled": True,
-            "osc_ghost_decay": 0.61,
-        },
-        {
-            "_osc_speed": 0.33,
-            "_osc_line_amplitude": 2.4,
-            "_osc_ghosting_enabled": True,
-            "_osc_ghost_decay": 0.61,
-        },
-    ),
+    _oscilloscope_logical_case(),
     (
         "sine_wave",
         {
@@ -257,10 +260,10 @@ def test_neutral_logical_config_does_not_absorb_presentation_only_style() -> Non
         {
             "bar_fill_color": [1, 2, 3, 255],
             "bar_border_color": [4, 5, 6, 255],
-            "osc_glow_color": [7, 8, 9, 255],
+            "osc_beam_glow_color": [7, 8, 9, 255],
         },
     )
 
     assert not hasattr(state, "_bar_fill_color")
     assert not hasattr(state, "_bar_border_color")
-    assert not hasattr(state, "_osc_glow_color")
+    assert not hasattr(state, "_osc_beam_glow_color")

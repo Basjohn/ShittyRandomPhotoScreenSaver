@@ -120,10 +120,11 @@ def _bubble_technical_model() -> SpotifyVisualizerSettings:
 def _mode_technical_model(mode: str) -> SpotifyVisualizerSettings:
     payload: dict[str, object] = {
         "mode": mode,
-        f"{mode}_bar_count": 16,
-        f"{mode}_transient_pulse_gain": 1.41,
         f"{mode}_transient_clamp": 1.66,
     }
+    if mode != "oscilloscope":
+        payload[f"{mode}_bar_count"] = 16
+        payload[f"{mode}_transient_pulse_gain"] = 1.41
     if mode == "bubble":
         payload.update(
             bubble_transient_mix_bass=0.58,
@@ -131,8 +132,6 @@ def _mode_technical_model(mode: str) -> SpotifyVisualizerSettings:
         )
     elif mode == "sine_wave":
         payload["sine_wave_transient_width_mix"] = 0.73
-    elif mode == "oscilloscope":
-        payload["oscilloscope_transient_width_mix"] = 0.68
     return SpotifyVisualizerSettings.from_mapping(
         payload,
         apply_preset_overlay=False,
@@ -217,14 +216,6 @@ def test_quick_owner_applies_cached_technical_config_to_shared_engine() -> None:
                 "_transient_pulse_gain": 1.41,
                 "_transient_clamp": 1.66,
                 "_sine_wave_transient_width_mix": 0.73,
-            },
-        ),
-        (
-            "oscilloscope",
-            {
-                "_transient_pulse_gain": 1.41,
-                "_transient_clamp": 1.66,
-                "_osc_transient_width_mix": 0.68,
             },
         ),
     ),

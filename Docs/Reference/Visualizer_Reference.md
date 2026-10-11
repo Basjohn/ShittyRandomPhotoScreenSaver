@@ -699,3 +699,50 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   becoming Custom after an orbit; Allow Overflow near screen edges.
 - **Guided Setup preview:** rendered by the foundry through the production capture and renderer
   (`_RENDERED_VISUALIZER_PREVIEWS`); legacy screenshot sheets are not catalog authority.
+
+## 16C. Oscilloscope
+
+Rebuilt from scratch on 2026-10-11 (operator: the old mode had very bad Settings UX and unreliable, disappointing
+output). An analog scope's phosphor beam drawing the music itself. Settings: its spec in
+`core/settings/visualizer_mode_settings.py`; trace math and reaction rules with GLSL in
+`rendering/gl_programs/oscilloscope_program.py`; state in `widgets/spotify_visualizer/oscilloscope_frame_runtime.py`;
+renderer `rendering/quick/visualizer/implementations/oscilloscope.py`.
+
+- **Audio:** while Oscilloscope is the mode (and only then: `set_waveform_history_demand`, declared per tick from
+  `mode_capabilities.consumes_waveform_samples`), the capture callback keeps a contiguous history of the newest 4096
+  samples across callbacks, taken from each whole block before analysis trims it, with the device's actual rate
+  (`get_waveform_history` / `get_waveform_history_rate`). Spans and delays convert at that rate. Paused, the engine's
+  idle waveform is drawn; replay serves a recording's full capture history (`tools/music_recorder.py` clips).
+- **Picture:** Trace (a triggered sweep: a rising zero crossing of the smoothed signal chosen among the recent ones
+  as the one that best continues the previous trace, so a steady tone stands still; spans longer than the trace's 384
+  points draw each bin's low and high in time order, never an aliased subsample), Ring (the trace clockwise around a
+  circle, ends eased to the circle) or Phase (the signal against itself Phase Delay later, turned 45 degrees, its
+  narrow axis widened toward the other's spread: shape only). Detail low-passes the drawn audio (about 1.5 kHz at 0,
+  every sample at 1); Gain scales the DC-free signal on a fixed scale with a tanh soft limit (nothing learned from
+  the track).
+- **Afterglow:** earlier traces (one per 1/45 s, at most 15) kept by the frame runtime and fading on the logical
+  clock; the renderer keeps no history and no clock. A display change clears them.
+- **Reactions** (the shared musical rule, `transient_bus`): the beam's drive is `musical_weight` x `passage_ramp`
+  (quietest passage 0.3), eased up in 0.08 s and down in 0.7 s; each musical onset, taken once by serial, flares the
+  beam (`flare_strength`: weight x emphasis on the fixed loudness scale x hit size x the passage's share), decaying
+  over 0.3 s; the tone is the pre-AGC analysis spectrum's centroid, eased (Spectral Colour tints the beam warm for bass,
+  cool for treble). Hit Flare scales the flare's thickening and light; Loudness Glow how much the drive brightens.
+- **Rendering:** every trace's points (float32, back to back) go to one std430 array on a stream ring (binding 3) and
+  one instanced draw: each segment a quad whose fragment measures its distance to the segment (anti-aliased at any
+  width, with a white-hot centre), dimmer where the beam moves fast with Analog Beam up (a CRT's writing speed), faded
+  near the centre in Phase. Segments and traces combine by their maximum in a single-sample overlay `SceneTarget`
+  (joints never bead, the picture is bit-repeatable), with the optional graticule (Grid 10 x 8 with ticks, or
+  Crosshair) drawn first. The beam's light goes to the emission attachment and the target's bloom adds the glow;
+  Glow 0 allocates no emission attachment or bloom; the light combines by its maximum too, so overlaps and afterglow
+  never stack glow. `prepare_step` compiles, allocates the ring and the target on hidden frames before the reveal
+  (`prepared_reveal`). CUSTOM quarter turns: everything is laid out in the rotated content (the logical content rect)
+  and only each vertex turns into the item's physical space, a rigid quarter turn, so widths and anti-aliasing stay
+  exact.
+- **Owned analysis controls:** Voxel Sphere's subset (bar count, block size, sensitivity, floors, input gain,
+  transient clamp), since the onsets and loudness it reacts to come from that analysis. It owns no Rainbow or shared bar
+  colours. Every pre-rework key is retired (`core/settings/visualizer_retired_modes.py`).
+- **Curated presets:** Phosphor (green Trace on a grid), Neon Halo (Ring, spectral tint), Lissajous (Phase, gold, long
+  afterglow), Amber Terminal (dense amber Trace, analog beam). Authored content: never test fixtures.
+- **Physical checks (open):** the look and the presets on real music on both displays (card and wallpaper behind it),
+  trigger steadiness on sustained notes, afterglow pace, flare and loudness-glow feel through quiet and loud passages,
+  Settings body UX, and cost against the other modes (`tools/overhead_baseline.py --match oscilloscope`).

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 from pathlib import Path
+from struct import pack
 
 import pytest
 from PySide6.QtGui import QColor
@@ -30,6 +31,35 @@ _DPR = 1.5
 _PHYSICAL_SIZE = tuple(round(value * _DPR) for value in _LOGICAL_SIZE)
 
 
+def _osc_frame(*, with_glow: bool) -> OscilloscopeFrame:
+    points = []
+    for index in range(128):
+        x = -1.0 + 2.0 * index / 127.0
+        points.extend((x, 0.72 * math.sin(index * math.tau * 3.0 / 127.0)))
+    return OscilloscopeFrame(
+        points=pack("<" + "f" * len(points), *points),
+        trace_alphas=(1.0,),
+        flare=0.2,
+        drive=0.8,
+        tone=0.65,
+        parameters=freeze_render_fields({
+            "osc_display": "Trace",
+            "osc_beam_color": (120, 255, 170, 255),
+            "osc_beam_glow_color": (40, 255, 120, 255),
+            "osc_beam_width": 1.6,
+            "osc_glow": 0.65 if with_glow else 0.0,
+            "osc_afterglow": 0.45,
+            "osc_analog": 0.55,
+            "osc_spectral": 0.0,
+            "osc_flare": 0.6,
+            "osc_pulse": 0.6,
+            # The grid must not fill gaps in the beam-coverage oracle.
+            "osc_graticule": "Off",
+            "osc_graticule_color": (120, 255, 170, 46),
+        }),
+    )
+
+
 def _presentation(mode_id: str, *, fractional_x: float):
     """The rejected 8240x1579 source extent at its observed 0.17x scale."""
     base = resolve_visualizer_presentation(
@@ -53,8 +83,8 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
     common = VisualizerCommonState(
         bars=(),
         bar_count=0,
-        waveform=waveform,
-        waveform_count=len(waveform),
+        waveform=() if mode_id == "oscilloscope" else waveform,
+        waveform_count=0 if mode_id == "oscilloscope" else len(waveform),
         energy=VisualizerEnergyState(bass=0.8, mid=0.6, high=0.4, overall=0.8),
     )
     if mode_id == "sine_wave":
@@ -120,41 +150,7 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
             }),
         )
     elif mode_id == "oscilloscope":
-        preset = frozen_visualizer_settings("oscilloscope")
-        state = OscilloscopeFrame(
-            animation_time=0.37,
-            parameters=freeze_render_fields({
-                "line_smoothing": preset["osc_smoothing"],
-                "resolved_sensitivity": preset["osc_line_amplitude"],
-                "line_color": QColor(*preset["osc_line_color"]),
-                "line_count": preset["osc_line_count"],
-                "glow_enabled": with_glow and preset["osc_glow_enabled"],
-                "glow_intensity": preset["osc_glow_intensity"],
-                "glow_reactivity": preset["osc_glow_reactivity"],
-                "glow_color": QColor(*preset["osc_glow_color"]),
-                "reactive_glow": preset["osc_reactive_glow"],
-                "glow_size": 1.0,
-                "line_dim": preset["osc_line_dim"],
-                "line_offset_bias": preset["osc_line_offset_bias"],
-                "osc_vertical_shift": preset["osc_vertical_shift"],
-                "osc_ghost_intensity": preset["osc_ghost_intensity"],
-                "osc_ghosting_enabled": preset["osc_ghosting_enabled"],
-                "rainbow_enabled": preset["rainbow_enabled"],
-                "rainbow_speed": preset["rainbow_speed"],
-                **{
-                    f"line{index}_color": QColor(*preset[f"osc_line{index}_color"])
-                    for index in range(2, 7)
-                },
-                **{
-                    f"line{index}_glow_color": QColor(*preset[f"osc_line{index}_glow_color"])
-                    for index in range(2, 7)
-                },
-                **{
-                    f"ghost_line{index}_enabled": preset[f"osc_ghost_line{index}_enabled"]
-                    for index in range(2, 7)
-                },
-            }),
-        )
+        state = _osc_frame(with_glow=with_glow)
     elif mode_id == "devcurve":
         curve = tuple(0.50 + 0.32 * math.sin(index * math.tau * 3.0 / 95.0) for index in range(96))
         state = DevCurveFrame(
@@ -240,7 +236,11 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
         # The coverage oracle deliberately renders the line modes' core only:
         # glow could populate a column whose stroke coverage has regressed.
         if mode_id in ("sine_wave", "oscilloscope"):
-            assert _snapshot(mode_id, fractional_x=0.0).logical.mode_state.parameters["glow_enabled"] is False
+            parameters = _snapshot(mode_id, fractional_x=0.0).logical.mode_state.parameters
+            if mode_id == "sine_wave":
+                assert parameters["glow_enabled"] is False
+            else:
+                assert parameters["osc_glow"] == 0.0
         color = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
@@ -271,10 +271,7 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
         assert aligned_energy > 18_000
         assert translated_energy > 18_000
         assert translated_energy / aligned_energy == pytest.approx(1.0, rel=0.22)
-        # Wobble Groove's six travelling pulse lines must leave coverage in
-        # every x column at the rejected extreme/DPR geometry.  This catches
-        # a real raster gap, rather than accepting a healthy total alpha that
-        # happens to be concentrated in neighbouring columns.
+        # Require a continuous trace across its drawable horizontal range.
         translated_column_energy = [
             sum(translated_alpha[row * width + column] for row in range(height))
             for column in range(width)
@@ -282,7 +279,17 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
         # Exclude the render-node/card clip's first and last four framebuffer
         # columns. Those are outside the fractional content rect, not waveform
         # gaps; the assertion covers every drawable Wobble Groove column.
-        assert min(translated_column_energy[4:-4]) > 0
+        if mode_id == "oscilloscope":
+            from rendering.quick.visualizer.implementations.oscilloscope import oscilloscope_layout
+
+            field = _snapshot(mode_id, fractional_x=0.37).presentation.content_rect
+            scale, _length = oscilloscope_layout(field, "Trace")
+            centre = field[0] + field[2] * 0.5
+            first_column = math.ceil((centre - scale[0]) * _DPR) + 4
+            last_column = math.floor((centre + scale[0]) * _DPR) - 4
+            assert min(translated_column_energy[first_column:last_column]) > 0
+        else:
+            assert min(translated_column_energy[4:-4]) > 0
         # A device-pixel coverage ramp must retain fractional alpha, rather
         # than collapsing the tiny authored stroke to binary sample hits.
         assert any(8 < alpha < 247 for alpha in translated_alpha)
@@ -299,7 +306,7 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
 @pytest.mark.qt
 @pytest.mark.parametrize(
     ("mode_id", "expected_glow_color"),
-    (("sine_wave", (206, 92, 255, 255)), ("oscilloscope", (130, 160, 255, 255))),
+    (("sine_wave", (206, 92, 255, 255)), ("oscilloscope", (40, 255, 120, 255))),
 )
 def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: str, expected_glow_color: tuple[int, int, int, int]):
     """Curated glow survives frozen capture and visibly reaches past the core."""
@@ -326,8 +333,12 @@ def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: st
     try:
         frozen = _snapshot(mode_id, fractional_x=0.0, with_glow=True)
         parameters = frozen.logical.mode_state.parameters
-        assert parameters["glow_enabled"] is True
-        assert parameters["glow_color"] == expected_glow_color
+        if mode_id == "sine_wave":
+            assert parameters["glow_enabled"] is True
+            assert parameters["glow_color"] == expected_glow_color
+        else:
+            assert parameters["osc_glow"] > 0.0
+            assert parameters["osc_beam_glow_color"] == expected_glow_color
         color = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)

@@ -143,41 +143,6 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_transient_mix_bass": float,
     "bubble_transient_mix_vocal": float,
     "sine_wave_transient_width_mix": float,
-    "oscilloscope_transient_width_mix": float,
-}
-
-_OSC_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "osc_glow_enabled": bool,
-    "osc_glow_intensity": float,
-    "osc_glow_reactivity": float,
-    "osc_glow_color": list,
-    "osc_reactive_glow": bool,
-    "osc_line_amplitude": float,
-    "osc_smoothing": float,
-    "osc_line_color": list,
-    "osc_line_count": int,
-    "osc_line2_color": list,
-    "osc_line2_glow_color": list,
-    "osc_line3_color": list,
-    "osc_line3_glow_color": list,
-    "osc_line4_color": list,
-    "osc_line4_glow_color": list,
-    "osc_line5_color": list,
-    "osc_line5_glow_color": list,
-    "osc_line6_color": list,
-    "osc_line6_glow_color": list,
-    "osc_speed": float,
-    "osc_line_dim": bool,
-    "osc_line_offset_bias": float,
-    "osc_vertical_shift": int,
-    "osc_ghosting_enabled": bool,
-    "osc_ghost_intensity": float,
-    "osc_ghost_decay": float,
-    "osc_ghost_line2_enabled": bool,
-    "osc_ghost_line3_enabled": bool,
-    "osc_ghost_line4_enabled": bool,
-    "osc_ghost_line5_enabled": bool,
-    "osc_ghost_line6_enabled": bool,
 }
 
 _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -257,14 +222,6 @@ _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "sine_micro_wobble": float,
     "sine_crawl_amount": float,
     "sine_width_reaction": float,
-    "osc_ghosting_enabled": bool,
-    "osc_ghost_intensity": float,
-    "osc_ghost_decay": float,
-    "osc_ghost_line2_enabled": bool,
-    "osc_ghost_line3_enabled": bool,
-    "osc_ghost_line4_enabled": bool,
-    "osc_ghost_line5_enabled": bool,
-    "osc_ghost_line6_enabled": bool,
     "sine_heartbeat": float,
 }
 
@@ -377,32 +334,6 @@ _BUBBLE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'bubble_ghost_decay': float,
 }
 
-_OSC_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    'osc_glow_enabled': bool,
-    'osc_glow_intensity': float,
-    'osc_glow_reactivity': float,
-    'osc_glow_color': list,
-    'osc_reactive_glow': bool,
-    'osc_line_amplitude': float,
-    'osc_smoothing': float,
-    'osc_line_color': list,
-    'osc_line_count': int,
-    'osc_line2_color': list,
-    'osc_line2_glow_color': list,
-    'osc_line3_color': list,
-    'osc_line3_glow_color': list,
-    'osc_line4_color': list,
-    'osc_line4_glow_color': list,
-    'osc_line5_color': list,
-    'osc_line5_glow_color': list,
-    'osc_line6_color': list,
-    'osc_line6_glow_color': list,
-    'osc_speed': float,
-    'osc_line_dim': bool,
-    'osc_line_offset_bias': float,
-    'osc_vertical_shift': int,
-}
-
 _SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sine_wave_travel': int,
     'sine_density': float,
@@ -451,14 +382,6 @@ _SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sine_micro_wobble': float,
     'sine_crawl_amount': float,
     'sine_width_reaction': float,
-    'osc_ghosting_enabled': bool,
-    'osc_ghost_intensity': float,
-    'osc_ghost_decay': float,
-    'osc_ghost_line2_enabled': bool,
-    'osc_ghost_line3_enabled': bool,
-    'osc_ghost_line4_enabled': bool,
-    'osc_ghost_line5_enabled': bool,
-    'osc_ghost_line6_enabled': bool,
     'sine_heartbeat': float,
 }
 
@@ -779,7 +702,6 @@ def _build_visualizer_model_kwargs(
     )
     return _extend_visualizer_kwargs(
         data,
-        _build_visualizer_osc_kwargs(read_value),
         _build_visualizer_spectrum_kwargs(read_value),
         _build_visualizer_sine_kwargs(read_value),
         _build_visualizer_bubble_kwargs(
@@ -830,16 +752,6 @@ def _build_visualizer_core_kwargs(
                 "bar_border_opacity": float(active_visuals["bar_border_opacity"]),
             }
         )
-    return data
-
-
-def _build_visualizer_osc_kwargs(
-    read_value: Callable[[str, Any], Any],
-) -> Dict[str, Any]:
-    data = _build_read_value_map(read_value, _OSC_BUILD_SPECS)
-    data["osc_glow_reactivity"] = float(
-        read_value("osc_glow_reactivity", _visualizer_default("osc_glow_reactivity"))
-    )
     return data
 
 
@@ -1158,9 +1070,6 @@ class SpotifyVisualizerSettings:
     sine_wave_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_fill_color'))
     sine_wave_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_color'))
     sine_wave_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_opacity'))
-    oscilloscope_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_fill_color'))
-    oscilloscope_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_border_color'))
-    oscilloscope_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_border_opacity'))
     devcurve_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_fill_color'))
     devcurve_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_color'))
     devcurve_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_opacity'))
@@ -1217,13 +1126,7 @@ class SpotifyVisualizerSettings:
     sine_wave_bar_count: int = field(default_factory=lambda: _visualizer_default('sine_wave_bar_count'))
     oscilloscope_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_dynamic_floor'))
     oscilloscope_manual_floor: float = field(default_factory=lambda: _visualizer_default('oscilloscope_manual_floor'))
-    oscilloscope_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_dynamic_range_enabled'))
-    oscilloscope_agc_strength: float = field(default_factory=lambda: _visualizer_default('oscilloscope_agc_strength'))
     oscilloscope_input_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_input_gain'))
-    oscilloscope_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_kick_lane_gain'))
-    oscilloscope_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_pulse_gain'))
-    oscilloscope_transient_clamp: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_clamp'))
-    oscilloscope_transient_width_mix: float = field(default_factory=lambda: _visualizer_default('oscilloscope_transient_width_mix'))
     oscilloscope_audio_block_size: int = field(default_factory=lambda: _visualizer_default('oscilloscope_audio_block_size'))
     oscilloscope_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_adaptive_sensitivity'))
     oscilloscope_sensitivity: float = field(default_factory=lambda: _visualizer_default('oscilloscope_sensitivity'))
@@ -1275,29 +1178,6 @@ class SpotifyVisualizerSettings:
             _visualizer_default('mode_activation')
         )
     )
-    osc_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_glow_enabled'))
-    osc_glow_intensity: float = field(default_factory=lambda: _visualizer_default('osc_glow_intensity'))
-    osc_glow_reactivity: float = field(default_factory=lambda: _visualizer_default('osc_glow_reactivity'))
-    osc_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_glow_color'))
-    osc_reactive_glow: bool = field(default_factory=lambda: _visualizer_default('osc_reactive_glow'))
-    osc_line_amplitude: float = field(default_factory=lambda: _visualizer_default('osc_line_amplitude'))
-    osc_smoothing: float = field(default_factory=lambda: _visualizer_default('osc_smoothing'))
-    osc_line_color: list = field(default_factory=lambda: _visualizer_default('osc_line_color'))
-    osc_line_count: int = field(default_factory=lambda: _visualizer_default('osc_line_count'))
-    osc_line2_color: list = field(default_factory=lambda: _visualizer_default('osc_line2_color'))
-    osc_line2_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line2_glow_color'))
-    osc_line3_color: list = field(default_factory=lambda: _visualizer_default('osc_line3_color'))
-    osc_line3_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line3_glow_color'))
-    osc_line4_color: list = field(default_factory=lambda: _visualizer_default('osc_line4_color'))
-    osc_line4_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line4_glow_color'))
-    osc_line5_color: list = field(default_factory=lambda: _visualizer_default('osc_line5_color'))
-    osc_line5_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line5_glow_color'))
-    osc_line6_color: list = field(default_factory=lambda: _visualizer_default('osc_line6_color'))
-    osc_line6_glow_color: list = field(default_factory=lambda: _visualizer_default('osc_line6_glow_color'))
-    osc_speed: float = field(default_factory=lambda: _visualizer_default('osc_speed'))
-    osc_line_dim: bool = field(default_factory=lambda: _visualizer_default('osc_line_dim'))
-    osc_line_offset_bias: float = field(default_factory=lambda: _visualizer_default('osc_line_offset_bias'))
-    osc_vertical_shift: int = field(default_factory=lambda: _visualizer_default('osc_vertical_shift'))
     spectrum_render_mode: str = field(default_factory=lambda: _visualizer_default('spectrum_render_mode'))
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
@@ -1404,14 +1284,6 @@ class SpotifyVisualizerSettings:
     sine_card_adaptation: float = field(default_factory=lambda: _visualizer_default('sine_card_adaptation'))
     rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('rainbow_enabled'))
     rainbow_speed: float = field(default_factory=lambda: _visualizer_default('rainbow_speed'))
-    osc_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghosting_enabled'))
-    osc_ghost_intensity: float = field(default_factory=lambda: _visualizer_default('osc_ghost_intensity'))
-    osc_ghost_decay: float = field(default_factory=lambda: _visualizer_default('osc_ghost_decay'))
-    osc_ghost_line2_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line2_enabled'))
-    osc_ghost_line3_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line3_enabled'))
-    osc_ghost_line4_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line4_enabled'))
-    osc_ghost_line5_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line5_enabled'))
-    osc_ghost_line6_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_ghost_line6_enabled'))
     sine_heartbeat: float = field(default_factory=lambda: _visualizer_default('sine_heartbeat'))
     # Bubble visualizer
     bubble_big_bass_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_big_bass_pulse'))
@@ -1587,7 +1459,6 @@ class SpotifyVisualizerSettings:
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
-        self._apply_oscilloscope_defaults()
         self._apply_sine_defaults()
         self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
@@ -1620,8 +1491,6 @@ class SpotifyVisualizerSettings:
     def _apply_core_visual_defaults(self) -> None:
         from core.settings.visualizer_mode_registry import mode_has_shared_bar_appearance
 
-        if self.osc_glow_color is None:
-            self.osc_glow_color = deepcopy(_visualizer_default("osc_glow_color"))
         if self.bar_fill_color is None:
             self.bar_fill_color = deepcopy(_active_visualizer_default("bar_fill_color"))
         if self.bar_border_color is None:
@@ -1642,9 +1511,6 @@ class SpotifyVisualizerSettings:
                 mode_opacity = float(_visualizer_default(opacity_attr))
             setattr(self, opacity_attr, mode_opacity)
  
-    def _apply_oscilloscope_defaults(self) -> None:
-        _apply_canonical_list_defaults(self, _OSC_SERIALIZERS)
-
     def _apply_sine_defaults(self) -> None:
         _apply_canonical_list_defaults(self, _SINE_SERIALIZERS)
 
@@ -1876,7 +1742,6 @@ class SpotifyVisualizerSettings:
         """Convert to dictionary for saving."""
         return _merge_serialized_sections(
             self._serialize_core_settings(prefix),
-            self._serialize_osc_settings(prefix),
             self._serialize_spectrum_settings(prefix),
             self._serialize_sine_settings(prefix),
             self._serialize_bubble_settings(prefix),
@@ -1892,9 +1757,6 @@ class SpotifyVisualizerSettings:
 
     def _serialize_core_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _CORE_SETTINGS_SERIALIZERS)
-
-    def _serialize_osc_settings(self, prefix: str) -> Dict[str, Any]:
-        return _serialize_prefixed_fields(self, prefix, _OSC_SERIALIZERS)
 
     def _serialize_spectrum_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _SPECTRUM_SERIALIZERS)
@@ -2043,6 +1905,3 @@ class SpotifyVisualizerSettings:
 
     def resolve_sine_wave_transient_width_mix(self) -> float:
         return float(self.sine_wave_transient_width_mix)
-
-    def resolve_oscilloscope_transient_width_mix(self) -> float:
-        return float(self.oscilloscope_transient_width_mix)

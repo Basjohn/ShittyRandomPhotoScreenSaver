@@ -1,94 +1,126 @@
-"""Authored Oscilloscope state advanced by the sole logical clock."""
+"""Authored Oscilloscope state advanced by the sole logical clock.
+
+Each capture turns the newest audio into the live trace (``rendering/gl_programs/oscilloscope_program.py``:
+trigger, envelope, display), keeps the afterglow traces that fade on the logical clock, takes the new
+musical onsets once each into the beam's flare, and eases the beam's drive and the music's tone. The
+frame carries everything the renderer needs as plain data (the traces' points as packed float32
+bytes), so the renderer keeps no history and no clock. Nothing here touches Qt or GL.
+"""
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
+import math
 from typing import Sequence
 
+import numpy as np
+
+from rendering.gl_programs.oscilloscope_program import (
+    DRIVE_FALL,
+    DRIVE_RISE,
+    FLARE_DECAY,
+    FLARE_MAX_AGE,
+    FLARE_RISE,
+    GHOST_CAPACITY,
+    GHOST_INTERVAL,
+    SAMPLE_RATE,
+    TONE_EASE,
+    beam_drive_target,
+    condition,
+    flare_strength,
+    flat_points,
+    ghost_alpha,
+    ghost_lifetime,
+    phase_points,
+    smoothing_samples,
+    spectral_tone,
+    trace_points,
+    trace_template,
+    trigger_start,
+)
 from widgets.spotify_visualizer.frame_runtime_lifecycle import (
     RetirableFrameRuntime,
     retirement_fenced,
 )
-from widgets.spotify_visualizer.oscilloscope_contract import (
-    advance_ghost_ring,
-    blend_waveform,
-    condition_live_waveform,
-    resolve_transient_sensitivity_modulation,
-)
-from widgets.spotify_visualizer.render_state import VisualizerEnergyState
 
-
-_MAX_WAVEFORM_SAMPLES = 256
-_SETTLED_EPSILON = 1.0e-5
-
-
-def _clamp(value: object, minimum: float, maximum: float) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return minimum
-    if not math.isfinite(number):
-        return minimum
-    return max(minimum, min(maximum, number))
-
-
-def _waveform(values: Sequence[object]) -> list[float]:
-    return [
-        _clamp(value, -1.0, 1.0)
-        for value in values[:_MAX_WAVEFORM_SAMPLES]
-    ]
-
-
-def _sequence_changed(
-    previous: Sequence[float],
-    current: Sequence[float],
-) -> bool:
-    return len(previous) != len(current) or any(
-        abs(float(before) - float(after)) > _SETTLED_EPSILON
-        for before, after in zip(previous, current)
-    )
+_SETTLED = 1.0e-4
+_MIN_HISTORY = 256       # fewer captured samples than this: draw the engine's waveform instead
 
 
 @dataclass(frozen=True, slots=True)
 class OscilloscopeResolvedFrame:
-    waveform: tuple[float, ...]
-    waveform_count: int
-    previous_waveform: tuple[float, ...]
-    energy: VisualizerEnergyState
-    resolved_sensitivity: float
+    points: bytes                        # float32 x, y: every trace back to back, oldest first
+    trace_alphas: tuple[float, ...]      # one per trace; the last is the live trace
+    flare: float
+    drive: float
+    tone: float
     animation_time: float
     changed: bool
     reactive_source_ready: bool
 
 
+def _ease(current: float, target: float, dt: float, rise: float, fall: float) -> float:
+    if dt <= 0.0:
+        return current
+    tau = rise if target > current else fall
+    return current + (target - current) * (1.0 - math.exp(-dt / tau))
+
+
 class OscilloscopeFrameRuntime(RetirableFrameRuntime):
-    """Small Oscilloscope-only state owner with no Qt/render authority."""
+    """Oscilloscope-only state owner with no Qt/render authority."""
 
     def __init__(self) -> None:
         super().__init__()
         self.reset()
 
     def reset(self) -> None:
-        self._waveform: list[float] = []
-        self._waveform_count = 0
-        self._previous_waveform: list[float] = []
-        self._ghost_waveform_ring: list[list[float]] = []
-        self._ghost_ring_index = 0
-        self._smoothed_energy = VisualizerEnergyState()
-        self._kick_envelope = 0.0
-        self._snare_envelope = 0.0
-        self._resolved_sensitivity = 0.0
+        self._live: bytes = b""
+        self._live_display = ""
+        self._live_ts = 0.0
+        self._template: np.ndarray | None = None
+        self._source_key: object = None
+        self._trace_inputs: tuple | None = None
+        self._live_ready = False
+        self._ghosts: list[tuple[float, bytes]] = []     # (birth, points), oldest first
+        self._last_ghost_ts = float("-inf")
+        self._flare = 0.0
+        self._flare_target = 0.0
+        self._drive = 0.0
+        self._tone = 0.5
+        self._onset_serial = 0
         self._animation_time = 0.0
         self._last_timestamp = 0.0
-        self._last_playing: bool | None = None
         self._activation_identity: tuple[int, int, int] | None = None
+
+    @property
+    def onset_serial(self) -> int:
+        """The last onset serial taken: ask the engine only for the onsets after it."""
+        return self._onset_serial
+
+    def _signal(self, history, waveform: Sequence[float], count: int, use_history: bool) -> tuple[object, np.ndarray]:
+        if use_history and history is not None and len(history) >= _MIN_HISTORY:
+            return history, np.asarray(history)
+        samples = tuple(float(v) for v in waveform[:max(0, int(count))])
+        return samples, np.asarray(samples, dtype=np.float32)
+
+    def _trace(self, display: str, signal: np.ndarray, span_ms: float, delay_ms: float, rate: int) -> bytes:
+        if signal.size < 4 or not np.any(signal):
+            self._template = None
+            return flat_points(display).tobytes()
+        window = min(signal.size, max(16, int(round(span_ms * rate / 1000.0))))
+        if display == "Phase":
+            self._template = None
+            return phase_points(signal, window, int(round(delay_ms * rate / 1000.0))).tobytes()
+        start = trigger_start(signal, window, self._template)
+        self._template = trace_template(signal, start, window)
+        return trace_points(display, signal, start, window).tobytes()
 
     @retirement_fenced
     def resolve(
         self,
-        source_waveform: Sequence[object],
         *,
+        history,
+        waveform: Sequence[float],
         waveform_count: int,
         now_ts: float,
         runtime_generation: int,
@@ -98,167 +130,108 @@ class OscilloscopeFrameRuntime(RetirableFrameRuntime):
         source_activation_id: int,
         source_timestamp: float | None,
         playing: bool,
-        line_speed: float,
-        ghosting_enabled: bool,
-        ghost_decay: float,
-        energy: VisualizerEnergyState,
-        kick_event: float,
-        snare_event: float,
-        transient_width_mix: float,
-        base_sensitivity: float,
-        animation_enabled: bool,
+        display: str,
+        span_ms: float,
+        gain: float,
+        delay_ms: float,
+        afterglow: float,
+        detail: float = 1.0,
+        onsets: Sequence[object] = (),
+        loudness: float = 0.0,
+        presence: float = 0.0,
+        intensity: float = 0.0,
+        spectrum: Sequence[float] = (),
+        sample_rate: int = SAMPLE_RATE,
     ) -> OscilloscopeResolvedFrame | None:
         timestamp = float(now_ts)
-        activation_identity = (
-            int(runtime_generation),
-            int(engine_generation),
-            int(activation_id),
-        )
-        if activation_identity != self._activation_identity:
+        identity = (int(runtime_generation), int(engine_generation), int(activation_id))
+        if identity != self._activation_identity:
             self.reset()
-            self._activation_identity = activation_identity
-
-        # While playing, identity alone is insufficient.  Oscilloscope/Sine
-        # waveform generation can advance from a raw capture packet before the
-        # authoritative FFT/energy frame commits.  Treat that packet as live
-        # source only once the matching authoritative timestamp exists.  Paused
-        # idle presentation intentionally remains allowed without live audio.
-        authoritative_live = (
-            not bool(playing)
-            or (source_timestamp is not None and float(source_timestamp) > 0.0)
-        )
+            self._activation_identity = identity
+        # While playing, a raw capture packet may run ahead of the authoritative analysis frame:
+        # it is live source only once the matching authoritative timestamp exists. Paused idle
+        # presentation needs no live audio.
+        authoritative = not playing or (source_timestamp is not None and float(source_timestamp) > 0.0)
         source_ready = bool(
-            int(source_generation) >= 0
-            and int(source_activation_id) >= 0
-            and int(source_generation) == int(engine_generation)
-            and int(source_activation_id) == int(activation_id)
-            and authoritative_live
+            0 <= int(source_generation) == int(engine_generation)
+            and 0 <= int(source_activation_id) == int(activation_id)
+            and authoritative
         )
-        previous_body = list(self._waveform)
-        previous_ghost = list(self._previous_waveform)
-        previous_energy = self._smoothed_energy
-        previous_sensitivity = self._resolved_sensitivity
-
         dt = 0.0
-        if self._last_timestamp > 0.0:
-            candidate = timestamp - self._last_timestamp
-            if 0.0 < candidate < 1.0:
-                dt = candidate
-
-        is_playing = bool(playing)
-        playback_changed = (
-            self._last_playing is not None
-            and is_playing != self._last_playing
-        )
-        ghost_enabled = bool(ghosting_enabled)
-        if playback_changed:
-            old_body = list(self._waveform)
-            self._waveform = []
-            self._waveform_count = 0
-            if not is_playing and old_body and ghost_enabled:
-                self._previous_waveform = old_body
-                self._ghost_waveform_ring = [old_body]
-            else:
-                self._previous_waveform = []
-                self._ghost_waveform_ring = []
-            self._ghost_ring_index = 0
-            self._kick_envelope = 0.0
-            self._snare_envelope = 0.0
-
-        if not ghost_enabled:
-            self._previous_waveform = []
-            self._ghost_waveform_ring = []
-            self._ghost_ring_index = 0
-
-        incoming = _waveform(source_waveform)
-        requested_count = max(0, int(waveform_count))
-        if source_ready:
-            delay_frames = max(
-                2,
-                min(18, int(round(2.0 + _clamp(ghost_decay, 0.1, 1.0) * 16.0))),
-            )
-            if self._waveform and ghost_enabled:
-                (
-                    self._previous_waveform,
-                    self._ghost_ring_index,
-                ) = advance_ghost_ring(
-                    self._ghost_waveform_ring,
-                    self._ghost_ring_index,
-                    self._waveform,
-                    delay_frames,
-                )
-            conditioned = (
-                condition_live_waveform(self._waveform, incoming)
-                if is_playing
-                else incoming
-            )
-            self._waveform = blend_waveform(
-                self._waveform,
-                conditioned,
-                _clamp(line_speed, 0.01, 1.0),
-            )
-            self._waveform_count = min(
-                requested_count,
-                len(self._waveform),
-                _MAX_WAVEFORM_SAMPLES,
-            )
-
-        target_energy = energy if source_ready else VisualizerEnergyState()
-        smoothed: dict[str, float] = {}
-        for name in ("bass", "mid", "high"):
-            prior = _clamp(getattr(self._smoothed_energy, name), 0.0, 1.0)
-            target = _clamp(getattr(target_energy, name), 0.0, 1.0)
-            if dt > 0.0:
-                time_constant = 0.06 if target > prior else 0.12
-                alpha = min(1.0, dt / time_constant)
-                prior += (target - prior) * alpha
-            smoothed[name] = prior
-        smoothed["overall"] = _clamp(target_energy.overall, 0.0, 1.0)
-        self._smoothed_energy = VisualizerEnergyState(**smoothed)
-
-        kick_target = _clamp(kick_event, 0.0, 1.0) if source_ready else 0.0
-        snare_target = _clamp(snare_event, 0.0, 1.0) if source_ready else 0.0
-        if dt > 0.0:
-            kick_tau = 0.14 if kick_target < self._kick_envelope else 0.04
-            snare_tau = 0.16 if snare_target < self._snare_envelope else 0.05
-            self._kick_envelope += (
-                kick_target - self._kick_envelope
-            ) * min(1.0, dt / kick_tau)
-            self._snare_envelope += (
-                snare_target - self._snare_envelope
-            ) * min(1.0, dt / snare_tau)
-        else:
-            self._kick_envelope = kick_target
-            self._snare_envelope = snare_target
-
-        sensitivity, _drive = resolve_transient_sensitivity_modulation(
-            base_sensitivity=base_sensitivity,
-            smoothed_bass=self._smoothed_energy.bass,
-            kick_event=self._kick_envelope,
-            snare_event=self._snare_envelope,
-            width_mix=transient_width_mix,
-        )
-        self._resolved_sensitivity = float(sensitivity)
-        if dt > 0.0:
-            self._animation_time += dt
-
-        body = tuple(self._waveform)
-        ghost = tuple(self._previous_waveform) if ghost_enabled else ()
-        changed = bool(
-            _sequence_changed(previous_body, body)
-            or _sequence_changed(previous_ghost, ghost)
-            or previous_energy != self._smoothed_energy
-            or abs(previous_sensitivity - sensitivity) > _SETTLED_EPSILON
-            or (animation_enabled and dt > 0.0)
-        )
+        if self._last_timestamp > 0.0 and 0.0 < timestamp - self._last_timestamp < 1.0:
+            dt = timestamp - self._last_timestamp
         self._last_timestamp = timestamp
-        self._last_playing = is_playing
+        self._animation_time += dt
+
+        previous = (self._live, self._flare, self._drive, self._tone, len(self._ghosts))
+        changed = False
+        rate = max(8000, int(sample_rate))
+        inputs = (display, float(span_ms), float(gain), float(delay_ms), float(detail), rate)
+        # A ready source rebuilds the trace when the source, the inputs, or the readiness it was
+        # built under change; a stale one keeps the last good trace (only a changed shape, or no
+        # trace yet, rebuilds it, flat).
+        if source_ready or not self._live or inputs != self._trace_inputs:
+            key, signal = self._signal(history, waveform, waveform_count, bool(playing))
+            # A new capture history is a new array; the engine's waveform is compared by value.
+            same_source = key is self._source_key or (
+                isinstance(key, tuple) and isinstance(self._source_key, tuple) and key == self._source_key)
+            if (not same_source or inputs != self._trace_inputs or not self._live
+                    or source_ready != self._live_ready):
+                gained = (condition(signal, gain, smoothing_samples(detail, rate)) if source_ready
+                          else np.zeros(0, dtype=np.float32))
+                live = self._trace(display, gained, span_ms, delay_ms, rate)
+                if live != self._live:
+                    if self._live and display == self._live_display and afterglow > 0.0 \
+                            and timestamp - self._last_ghost_ts >= GHOST_INTERVAL:
+                        self._ghosts.append((self._live_ts, self._live))
+                        self._last_ghost_ts = timestamp
+                    if display != self._live_display:
+                        self._ghosts = []
+                    self._live, self._live_display, self._live_ts = live, display, timestamp
+                    changed = True
+                self._source_key, self._trace_inputs, self._live_ready = key, inputs, source_ready
+        lifetime = ghost_lifetime(afterglow)
+        self._ghosts = [ghost for ghost in self._ghosts if timestamp - ghost[0] < lifetime] if afterglow > 0.0 else []
+        del self._ghosts[:-GHOST_CAPACITY]
+
+        # Reactions: only while playing; silence and pause relax them.
+        live_music = bool(playing) and source_ready
+        drive_target = beam_drive_target(loudness, presence, intensity) if live_music else 0.0
+        self._drive = _ease(self._drive, drive_target, dt, DRIVE_RISE, DRIVE_FALL) if dt > 0.0 else self._drive
+        if dt > 0.0:
+            self._flare_target *= math.exp(-dt / FLARE_DECAY)
+        for onset in onsets:
+            serial = int(getattr(onset, "serial", 0))
+            if serial <= self._onset_serial:
+                continue
+            self._onset_serial = serial
+            age = max(0.0, timestamp - float(getattr(onset, "timestamp", timestamp)))
+            if live_music and age < FLARE_MAX_AGE:
+                strength = flare_strength(onset.magnitude, onset.loudness, onset.presence, intensity)
+                self._flare_target = max(self._flare_target, strength * math.exp(-age / FLARE_DECAY))
+        # Rise quickly toward the hit, then follow its decay.
+        if self._flare_target > self._flare:
+            if dt > 0.0:          # no time passed (a first frame): no rise yet
+                self._flare += (self._flare_target - self._flare) * (1.0 - math.exp(-dt / FLARE_RISE))
+        else:
+            self._flare = self._flare_target
+        if self._flare < 1e-3 and self._flare_target < 1e-3:
+            self._flare = self._flare_target = 0.0
+        tone = spectral_tone(spectrum) if live_music else None
+        if tone is not None and dt > 0.0:
+            self._tone = _ease(self._tone, tone, dt, TONE_EASE, TONE_EASE)
+
+        alphas = tuple(ghost_alpha(timestamp - birth, afterglow) for birth, _points in self._ghosts) + (1.0,)
+        points = b"".join(points for _birth, points in self._ghosts) + self._live
+        changed = changed or bool(self._ghosts) or (
+            abs(previous[1] - self._flare) > _SETTLED or abs(previous[2] - self._drive) > _SETTLED
+            or abs(previous[3] - self._tone) > _SETTLED or previous[4] != len(self._ghosts))
         return OscilloscopeResolvedFrame(
-            waveform=body,
-            waveform_count=self._waveform_count,
-            previous_waveform=ghost,
-            energy=self._smoothed_energy,
-            resolved_sensitivity=float(sensitivity),
+            points=points,
+            trace_alphas=alphas,
+            flare=float(self._flare),
+            drive=float(self._drive),
+            tone=float(self._tone),
             animation_time=float(self._animation_time),
             changed=changed,
             reactive_source_ready=source_ready,

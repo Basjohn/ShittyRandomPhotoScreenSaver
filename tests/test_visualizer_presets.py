@@ -468,17 +468,6 @@ def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     assert slot.settings["spectrum_profile_floor"] == 0.3
 
 
-def test_double_prefixed_alt_mode_keys_are_normalized():
-    migrated = vp._migrate_preset_settings(
-        "oscilloscope",
-        {
-            "oscilloscope_oscilloscope_transient_width_mix": 0.35,
-        },
-    )
-    assert "oscilloscope_oscilloscope_transient_width_mix" not in migrated
-    assert migrated["oscilloscope_transient_width_mix"] == 0.35
-
-
 def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
     def _make_manager(suffix: str) -> SettingsManager:
         base = tmp_path / suffix
@@ -770,7 +759,7 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
         ("spectrum", "_spectrum_preset_slider", "spectrum_drop_speed", 1.9),
         ("bubble", "_bubble_preset_slider", "bubble_big_bass_pulse", 0.61),
         ("sine_wave", "_sine_preset_slider", "sine_micro_wobble", 0.15),
-        ("oscilloscope", "_osc_preset_slider", "osc_line_amplitude", 4.7),
+        ("oscilloscope", "_osc_preset_slider", "osc_gain", 3.1),
     ],
 )
 def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
@@ -938,15 +927,13 @@ def test_repair_tool_keeps_missing_optional_spectrum_and_osc_keys_missing_in_sou
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "oscilloscope",
-                    "osc_line_count": 3,
                 }
             }
         }
     }
     osc_cleaned, _ = repair._sanitize_settings("oscilloscope", osc_payload)
-    assert osc_cleaned["osc_line_count"] == 3
-    assert "osc_ghost_line2_enabled" not in osc_cleaned
-    assert "osc_ghost_line3_enabled" not in osc_cleaned
+    assert "osc_display" not in osc_cleaned
+    assert "osc_line_count" not in osc_cleaned
 
 
 def test_restore_visualizer_snapshot_clears_mode_technical_keys_absent_from_payload():
@@ -1200,21 +1187,16 @@ def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload
         (
             "oscilloscope",
             {
-                "osc_ghost_line4_enabled": True,
-                "osc_ghost_line5_enabled": False,
-                "osc_ghost_line6_enabled": True,
-                "osc_line4_color": [1, 2, 3, 4],
-                "osc_line4_glow_color": [5, 6, 7, 8],
-                "osc_line5_color": [9, 10, 11, 12],
-                "osc_line5_glow_color": [13, 14, 15, 16],
-                "osc_line6_color": [17, 18, 19, 20],
-                "osc_line6_glow_color": [21, 22, 23, 24],
+                "osc_display": "Ring",
+                "osc_span": 37.0,
+                "osc_graticule": "Crosshair",
+                "osc_afterglow": 0.68,
             },
         ),
     ),
 )
 def test_multiline_preset_parser_preserves_authored_optional_line_settings(mode, owned_settings):
-    """Optional line-4..6 fields are parser capability, not required shipped content."""
+    """Mode-owned optional fields survive parser filtering without default pinning."""
     payload = {
         "mode": mode,
         "name": "Fixture",

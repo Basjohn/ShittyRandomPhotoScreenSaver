@@ -7,8 +7,20 @@ ensuring significant CPU savings while maintaining visual fidelity.
 
 import pytest
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+
+
+def _audio_frame(samples):
+    """Build a production-shaped capture frame for the persistent analysis lane."""
+    return SimpleNamespace(
+        samples=samples,
+        history=tuple(samples),
+        history_rate=48000,
+        capture_ts=time.time(),
+        activation_id=0,
+    )
 
 
 class _GatingLane:
@@ -85,8 +97,7 @@ class TestVisualizerPlaybackGating:
         
         # Mock the audio buffer to return some samples
         mock_samples = [0.1, 0.2, 0.3] * 100  # Some dummy audio data
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
+        mock_frame = _audio_frame(mock_samples)
         
         # Mock the audio buffer to return our frame
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
@@ -111,8 +122,7 @@ class TestVisualizerPlaybackGating:
         
         # Mock the audio buffer to return some samples
         mock_samples = [0.1, 0.2, 0.3] * 100  # Some dummy audio data
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
+        mock_frame = _audio_frame(mock_samples)
         
         # Mock the audio buffer to return our frame
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
@@ -135,8 +145,7 @@ class TestVisualizerPlaybackGating:
         
         # Mock some audio data
         mock_samples = [0.1, 0.2, 0.3] * 100
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
+        mock_frame = _audio_frame(mock_samples)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
         manager = beat_engine._test_thread_manager
@@ -163,8 +172,7 @@ class TestVisualizerPlaybackGating:
         
         # Mock audio data
         mock_samples = [0.1, 0.2, 0.3] * 100
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
+        mock_frame = _audio_frame(mock_samples)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
         # Call tick multiple times
@@ -207,8 +215,7 @@ class TestVisualizerPlaybackGating:
     def test_paused_warm_audio_frame_does_not_overwrite_idle_waveform(self, beat_engine):
         """Warm capture frames after pause must not poison the idle waveform."""
         beat_engine.set_playback_state(False)
-        mock_frame = Mock()
-        mock_frame.samples = [1.0] * 300
+        mock_frame = _audio_frame([1.0] * 300)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
 
         result = beat_engine.tick()
@@ -225,8 +232,7 @@ class TestVisualizerPlaybackGating:
         assert manager.lane is not None
 
         mock_samples = [0.1, 0.2, 0.3] * 100
-        mock_frame = Mock()
-        mock_frame.samples = mock_samples
+        mock_frame = _audio_frame(mock_samples)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
 
         beat_engine.set_playback_state(True)

@@ -448,7 +448,6 @@ class TestTransientMixSettingsModel:
         'bubble_transient_mix_bass',
         'bubble_transient_mix_vocal',
         'sine_wave_transient_width_mix',
-        'oscilloscope_transient_width_mix',
     )
 
     def test_defaults_present_on_model_follow_canonical_authority(self):
@@ -476,7 +475,6 @@ class TestTransientMixSettingsModel:
             'bubble_transient_mix_bass': 0.1,
             'bubble_transient_mix_vocal': 0.8,
             'sine_wave_transient_width_mix': 0.15,
-            'oscilloscope_transient_width_mix': 0.95,
         }
         model = SpotifyVisualizerSettings.from_mapping(custom)
         exported = model.to_dict()
@@ -498,7 +496,6 @@ class TestTransientMixSettingsModel:
             "bubble_transient_mix_bass": model.resolve_bubble_transient_mix_bass,
             "bubble_transient_mix_vocal": model.resolve_bubble_transient_mix_vocal,
             "sine_wave_transient_width_mix": model.resolve_sine_wave_transient_width_mix,
-            "oscilloscope_transient_width_mix": model.resolve_oscilloscope_transient_width_mix,
         }
         for key, resolver in resolver_by_key.items():
             assert resolver() == pytest.approx(
@@ -581,100 +578,8 @@ class TestBubbleTransientMixWeights:
 # 11. Sine/Osc Scheduler Event Wiring (§2.4)
 # ===========================================================================
 
-class _ModeKwargsWidget:
-    def __init__(self):
-        self._rainbow_enabled = False
-        self._rainbow_speed = 0.5
-        self._rainbow_per_bar = False
-        self._spectrum_ghosting_enabled = True
-        self._spectrum_ghost_alpha = 0.4
-        self._spectrum_ghost_decay = 0.4
-        self._osc_ghosting_enabled = False
-        self._osc_ghost_intensity = 0.4
-        self._osc_ghost_line2_enabled = True
-        self._osc_ghost_line3_enabled = True
-        self._osc_ghost_line4_enabled = True
-        self._osc_ghost_line5_enabled = True
-        self._osc_ghost_line6_enabled = True
-        self._sine_ghosting_enabled = True
-        self._sine_ghost_alpha = 0.45
-        self._sine_ghost_decay = 0.3
-        self._sine_ghost_line2_enabled = True
-        self._sine_ghost_line3_enabled = True
-        self._sine_ghost_line4_enabled = True
-        self._sine_ghost_line5_enabled = True
-        self._sine_ghost_line6_enabled = True
-        self._bubble_ghosting_enabled = False
-        self._bubble_ghost_alpha = 0.0
-        self._bubble_ghost_decay = 0.4
-        self._sine_heartbeat = 0.0
-        self._heartbeat_intensity = 0.0
-        self._sine_density = 1.0
-        self._sine_displacement = 0.0
-        self._use_raw_energy = False
-        self._sine_glow_enabled = True
-        self._sine_glow_intensity = 0.5
-        self._sine_glow_size = 1.0
-        self._sine_glow_reactivity = 1.0
-        self._sine_glow_color = None
-        self._sine_reactive_glow = True
-        self._sine_sensitivity = 1.0
-        self._sine_smoothing = 0.7
-        self._osc_glow_enabled = True
-        self._osc_glow_intensity = 0.5
-        self._osc_glow_size = 1.0
-        self._osc_glow_reactivity = 1.0
-        self._osc_glow_color = None
-        self._osc_reactive_glow = True
-        self._osc_line_amplitude = 3.0
-        self._osc_smoothing = 0.7
-        self._sine_speed = 1.0
-        self._sine_line_dim = False
-        self._sine_line_offset_bias = 0.0
-        self._osc_speed = 1.0
-        self._osc_line_dim = False
-        self._osc_line_offset_bias = 0.0
-        self._osc_vertical_shift = 0
-        self._sine_wave_travel = 0
-        self._sine_card_adaptation = 0.30
-        self._sine_travel_line2 = 0
-        self._sine_travel_line3 = 0
-        self._sine_line1_shift = 0.0
-        self._sine_line2_shift = 0.0
-        self._sine_line3_shift = 0.0
-        self._sine_wave_effect = 0.0
-        self._sine_micro_wobble = 0.0
-        self._sine_crawl_amount = 0.0
-        self._sine_width_reaction = 0.0
-        self._sine_vertical_shift = 0
-        self._sine_line_color = None
-        self._osc_line_color = None
-        self._sine_line_count = 1
-        self._osc_line_count = 1
-        self._sine_line2_color = None
-        self._osc_line2_color = None
-        self._sine_line2_glow_color = None
-        self._osc_line2_glow_color = None
-        self._sine_line3_color = None
-        self._osc_line3_color = None
-        self._sine_line3_glow_color = None
-        self._osc_line3_glow_color = None
-        self._sine_line4_color = None
-        self._osc_line4_color = None
-        self._sine_line4_glow_color = None
-        self._osc_line4_glow_color = None
-        self._sine_line5_color = None
-        self._osc_line5_color = None
-        self._sine_line5_glow_color = None
-        self._osc_line5_glow_color = None
-        self._sine_line6_color = None
-        self._osc_line6_color = None
-        self._sine_line6_glow_color = None
-        self._osc_line6_glow_color = None
-
-
-class TestSineOscTransientWidthMix:
-    """Verify sine_wave and osc transient width mix modulate rendered output."""
+class TestSineTransientWidthMix:
+    """Verify Sine's authored transient width mix modulates rendered output."""
 
     def test_sine_width_reaction_modulated(self):
         """Sine width reaction should be amplified by bass * mix."""
@@ -690,21 +595,6 @@ class TestSineOscTransientWidthMix:
         base_wr = 0.6
         modulated = min(1.0, base_wr * (1.0 + 0.8 * 0.0))
         assert modulated == base_wr
-
-    def test_osc_sensitivity_modulated(self):
-        """Osc sensitivity should be amplified by bass * mix."""
-        base_sens = 3.0
-        bass = 0.5
-        mix = 0.35
-        modulated = base_sens * (1.0 + bass * mix)
-        expected = 3.0 * (1.0 + 0.5 * 0.35)
-        assert abs(modulated - expected) < 1e-9
-
-    def test_osc_mix_zero_no_modulation(self):
-        """Mix of 0 should leave osc sensitivity unchanged."""
-        base_sens = 3.0
-        modulated = base_sens * (1.0 + 0.6 * 0.0)
-        assert modulated == base_sens
 
     def test_sine_width_clamped_to_1(self):
         """Modulated width reaction should not exceed 1.0."""

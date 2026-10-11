@@ -64,7 +64,6 @@ SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Callable[[Any], Any]], ...] = 
     ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", float),
     ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", float),
     ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", float),
-    ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", float),
 )
 
 

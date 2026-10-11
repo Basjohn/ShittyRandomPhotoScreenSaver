@@ -12,6 +12,7 @@ import pytest
 from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
 )
+from core.settings.default_contract import get_raw_default_settings
 from rendering.quick.visualizer import render_host as render_host_module
 from rendering.quick.visualizer.implementation_registry import (
     iter_quick_visualizer_implementations,
@@ -84,6 +85,14 @@ _MODE_IDS = tuple(
 )
 
 
+def _mode_frame(mode_id: str):
+    if mode_id == "oscilloscope":
+        # Exercise the current immutable trace payload, rather than the retired
+        # waveform/ghost fields that the old frame carried.
+        return OscilloscopeFrame(points=b"\x00" * 16, trace_alphas=(1.0,))   # one two-point trace
+    return _MODE_STATES[mode_id]()
+
+
 class _BubbleSimulation:
     count = 0
 
@@ -116,6 +125,16 @@ def _runtime(mode_id: str):
     if mode_id == "sphere":
         return SphereFrameRuntime()
     raise AssertionError(f"unhandled test mode: {mode_id}")
+
+
+def _oscilloscope_runtime_settings() -> dict[str, object]:
+    """Resolve the editable Oscilloscope controls from canonical defaults."""
+
+    defaults = get_raw_default_settings()["widgets"]["spotify_visualizer"]
+    return {
+        key: defaults[key]
+        for key in ("osc_display", "osc_span", "osc_gain", "osc_delay", "osc_afterglow", "osc_detail")
+    }
 
 
 def _drive_runtime(
@@ -156,21 +175,30 @@ def _drive_runtime(
             **identity,
         )
     if mode_id == "oscilloscope":
+        settings = _oscilloscope_runtime_settings()
         return runtime.resolve(
-            (0.1, -0.1),
+            history=None,
+            waveform=(0.1, -0.1),
             waveform_count=2,
             now_ts=now_ts,
-            line_speed=1.0,
-            ghosting_enabled=False,
-            ghost_decay=0.4,
-            energy=VisualizerEnergyState(bass=0.5, overall=0.5),
-            kick_event=0.0,
-            snare_event=0.0,
-            transient_width_mix=0.35,
-            base_sensitivity=3.0,
-            animation_enabled=False,
+            runtime_generation=identity["runtime_generation"],
+            engine_generation=identity["engine_generation"],
+            activation_id=identity["activation_id"],
+            source_generation=identity["source_generation"],
+            source_activation_id=identity["source_activation_id"],
             source_timestamp=(now_ts if playing else None),
-            **identity,
+            playing=playing,
+            display=str(settings["osc_display"]),
+            span_ms=float(settings["osc_span"]),
+            gain=float(settings["osc_gain"]),
+            delay_ms=float(settings["osc_delay"]),
+            afterglow=float(settings["osc_afterglow"]),
+            detail=float(settings["osc_detail"]),
+            onsets=(),
+            loudness=0.0,
+            presence=0.0,
+            intensity=0.0,
+            spectrum=(),
         )
     if mode_id == "sine_wave":
         return runtime.resolve(
@@ -335,7 +363,7 @@ def _snapshot(
         present_frame=True,
         mode_reveal_ready=True,
         common=VisualizerCommonState(bars=(), bar_count=0),
-        mode_state=_MODE_STATES[mode_id](),
+        mode_state=_mode_frame(mode_id),
     )
     presentation = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy(mode_id),
