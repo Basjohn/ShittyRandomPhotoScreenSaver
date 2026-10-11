@@ -39,9 +39,8 @@ The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/
 
 ## 1. Frozen-product validation | operator execution only
 
-- [ ] **BUILD-1 | OPERATOR ONLY:** Operator runs Build Runner / Nuitka / installer compilation for **Standard (+ its Diagnostic file, one compile), Media Center, and Reddit Helper** under Python 3.14 + MSVC, then supplies build logs, Nuitka reports and packaging/footprint results. **Agents must not execute builds themselves**, including trial, smoke, quick or background builds. Inspect source, improve build scripts and analyze supplied reports without launching compilation.
+- [ ] **BUILD-1 | OPERATOR ONLY:** Operator runs Build Runner / Nuitka / installer compilation for **Standard (+ its Diagnostic file, one compile; Diagnostic accepted by the operator 2026-10-11), Media Center, and Reddit Helper** under Python 3.14 + MSVC, then supplies build logs, Nuitka reports and packaging/footprint results. **Agents must not execute builds themselves**, including trial, smoke, quick or background builds. Inspect source, improve build scripts and analyze supplied reports without launching compilation.
 - [ ] **BUILD-2 | OPERATOR ONLY:** Operator launches frozen products, validates two-monitor startup/exit, transitions, real audio (Sphere + Shockwave already physically accepted on source), widgets, image cache/prefetch, handles/threads, and installer behavior. Provide exact operator-run steps if requested; agents do not launch long runtime acceptance or take physical acceptance on the operator's behalf.
-- [ ] **BUILD-DIAG | OPERATOR CHECK (new 2026-10-10):** the Standard job now also publishes `release/diagnostic/SRPSS_Diagnostic.scr` from the same compile (no Diagnostic job). Check once on the first such build: right-click Install of `SRPSS_Diagnostic.scr` opens no console; the screensaver it runs logs as Diagnostic (`build_flavour=diagnostic` in its log, Windows stores it by 8.3 path); `SRPSS_Diagnostic.scr --debug` opens a terminal with the log stream; `SRPSS.scr` stays a release run.
 - [ ] **BUILD-3 | REPORT-DRIVEN:** Fix only failures in the operator's submitted logs. Use **relevant focused tests** for changed code; do not run or request another four-chunk suite or product build without explicit operator direction. When the operator chooses to perform a final complete gate and accepts the frozen products, promote Python 3.14 as release authority and checkpoint/commit the baseline.
 
 **Frozen-product update (operator accepted):** The fresh Standard and Media Center evidence bundles showed Ban Image compiled and consistent frozen Python/data/native inventories. Operator subsequently confirmed **Ban Image now works in the Standard SCR**, as it already did in Media Center and source. Close the missing-action investigation; preserve R153's build evidence receipts as release infrastructure. No speculative rebuild or runtime menu diagnostics.
@@ -75,11 +74,8 @@ and should be preserved for implementation review:
 
 The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
 
-- [ ] **T5. Liquid Lens** — reworked again 2026-10-11 on the operator's direction: a small lens starting in the middle, hopping between seeded pitstops and growing at each, with a twist of the view and ripples around it, flooding from the chosen stop (Stops 1-8, default 4; droplets and the origin choice retired; default duration 8000 ms) (`Docs/Reference/Transitions.md`); awaiting operator judgement (showcase `assets/webp/transition_liquid_lens_default.webp`). Deactivated by default.
 
-Implementation order inside this tranche is deliberate: **Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom
-Reveal first; then Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth Card Cascade and Capillary
-Bloom.**
+All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/11); new transition concepts join this section as they are promoted.
 
 ---
 
@@ -95,13 +91,7 @@ owns the tool's registry, source-attribution, capture and encoding contract.
   Extruded onboarding previews unchanged). Open: (1) Oscilloscope's default costs ~0.73 ms GPU median, ~1.75 ms p90 at
   1080p, about seven times the other modes: find the pass responsible without changing the authored look; (2) the
   Shockwave Grid preview differs between two runs of the same tree (max 14/255), so it is not reproducible: find the
-  time or state input; (3) GPU timings swing with clock state between runs (Particle 0.73 → 1.27 ms on identical code, 7.3 ms
-  once at 1440p): resolved 2026-10-11 in `overhead_baseline.py` by control-relative timing, fastest-of-three sampling,
-  round-robin passes and recorded system conditions (`Docs/Reference/Harness_Index.md`): between a run under full
-  CPU load at 540 MHz GPU clock and a quiet one, relative GPU figures agreed within 8% at p90 (absolute ones up to
-  halved); relative CPU still moved up to 30% (CPU power states), so CPU flags stay hints. Older baselines compare
-  only on absolute figures.
-  (4) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
+  time or state input; (3) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
   direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
   forward-only strip (operator's defaults file, so on the operator's call).
 
