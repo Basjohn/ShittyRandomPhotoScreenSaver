@@ -1,0 +1,138 @@
+{
+  "mode": "spectrum",
+  "name": "Preset 5 (Noir)",
+  "preset_index": 4,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "spectrum",
+  "description": "Many slim black bars outlined in white with silver peak trails: crisp and quiet on any picture.",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "spectrum_render_mode": "bars",
+        "spectrum_visual_smoothing_enabled": true,
+        "spectrum_visual_smoothing": 0.7,
+        "spectrum_unique_colors": false,
+        "spectrum_rainbow_fill": false,
+        "spectrum_rainbow_border": false,
+        "spectrum_border_radius": 0.0,
+        "spectrum_link_fill_border": false,
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.08,
+        "spectrum_glow_color": [
+          255,
+          255,
+          255,
+          235
+        ],
+        "spectrum_ghosting_enabled": true,
+        "spectrum_ghost_alpha": 0.55,
+        "spectrum_ghost_decay": 0.2,
+        "spectrum_mirrored": true,
+        "spectrum_shape_nodes": [
+          [
+            0.0,
+            0.9
+          ],
+          [
+            0.5,
+            0.85
+          ],
+          [
+            0.85,
+            0.75
+          ],
+          [
+            1.0,
+            0.35
+          ]
+        ],
+        "spectrum_notch_positions_mirrored": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.2859915611814348,
+            "Mid"
+          ],
+          [
+            0.6861603375527427,
+            "Low-Mid"
+          ],
+          [
+            0.8144303797468355,
+            "Vocal"
+          ]
+        ],
+        "spectrum_notch_positions_linear": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.25,
+            "Low-Mid"
+          ],
+          [
+            0.5022879267863428,
+            "Vocal"
+          ],
+          [
+            0.6261879619852164,
+            "Hi-Mid"
+          ],
+          [
+            1.0,
+            "Treble"
+          ]
+        ],
+        "spectrum_lane_strengths_mirrored": {
+          "Bass": 0.1794871794871802,
+          "Low-Mid": 0.2868,
+          "Mid": 0.344,
+          "Vocal": 0.4096
+        },
+        "spectrum_lane_strengths_linear": {
+          "Bass": 0.24,
+          "Hi-Mid": 0.672,
+          "Low-Mid": 0.2868,
+          "Treble": 1.0,
+          "Vocal": 0.4096
+        },
+        "spectrum_wave_amplitude": 0.15,
+        "spectrum_profile_floor": 0.2,
+        "spectrum_drop_speed": 0.72,
+        "spectrum_dynamic_floor": true,
+        "spectrum_manual_floor": 0.42,
+        "spectrum_dynamic_range_enabled": true,
+        "spectrum_agc_strength": 0.15,
+        "spectrum_input_gain": 1.1,
+        "spectrum_kick_lane_gain": 1.75,
+        "spectrum_transient_pulse_gain": 1.0,
+        "spectrum_transient_clamp": 1.85,
+        "spectrum_audio_block_size": 128,
+        "spectrum_adaptive_sensitivity": false,
+        "spectrum_sensitivity": 1.15,
+        "spectrum_bar_count": 64,
+        "spectrum_bar_fill_color": [
+          8,
+          8,
+          12,
+          235
+        ],
+        "spectrum_bar_border_color": [
+          245,
+          245,
+          250,
+          255
+        ],
+        "spectrum_bar_border_opacity": 0.9,
+        "spectrum_lane_transient_mix": 0.94,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_speed": 0.6,
+        "mode": "spectrum",
+        "spectrum_rainbow_ghost": false
+      }
+    }
+  }
+}
