@@ -193,12 +193,12 @@ class _Bench:
 
 def measure_transitions(bench: _Bench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
     """Every showcase transition case (release-showcase settings, fixture photographs)."""
-    from tools.release_media import _transition_run, catalogue
+    from tools.release_media import catalogue
 
     gl, capture = bench.gl, bench.capture
     cases = {}
     for run_id, case in enumerate((c for c in catalogue() if c.kind == "transition"), start=2):
-        run = _transition_run(capture, case.identity, case.duration_ms, case.settings, run_id=run_id)
+        run = capture.production_run(case.identity, case.duration_ms, case.settings, run_id=run_id)
 
         def point(index, run=run):
             frame = capture.frame(run, 0.05 + 0.9 * index / max(1, frames - 1))
@@ -424,12 +424,11 @@ def main() -> int:
     data = {"commit": _commit(), "date": _dt.datetime.now().isoformat(timespec="seconds"), "size": args.size,
             "frames": args.frames, "passes": args.passes, "match": args.match}
     from OpenGL import GL as gl
-    from tools.release_media import _transition_run
     from tools.transition_contact_sheet import TransitionCapture
 
     capture = TransitionCapture(*size)
     try:
-        control_frame = capture.frame(_transition_run(capture, CONTROL[0], CONTROL[1], CONTROL[2], run_id=1), 0.5)
+        control_frame = capture.frame(capture.production_run(CONTROL[0], CONTROL[1], CONTROL[2], run_id=1), 0.5)
         bench = _Bench(gl, capture, lambda: capture.host.render(control_frame), args.match)
         if args.only != "visualizers":
             print("Transitions")

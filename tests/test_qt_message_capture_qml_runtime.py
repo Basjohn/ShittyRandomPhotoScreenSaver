@@ -8,6 +8,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QTimer, QUrl
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 
 from core.logging.qt_message_capture import (
@@ -20,7 +21,7 @@ from core.logging.qt_message_capture import (
 def test_real_qml_warning_reaches_always_on_sidecar(tmp_path):
     """Exercise real Qt/QML message delivery without retiring foreign test objects."""
 
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QGuiApplication.instance() or QGuiApplication([])  # GUI app: a plain QCoreApplication breaks later GL tests
     del app  # lifetime remains process-owned by Qt/PySide
 
     uninstall_qt_message_capture()

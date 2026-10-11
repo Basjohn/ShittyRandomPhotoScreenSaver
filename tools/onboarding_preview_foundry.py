@@ -1348,40 +1348,10 @@ def _prepare_transition_artwork(output: Path) -> tuple[Path, Path]:
 
 
 def _resolved_transition_run(capture: object, transition_id: str):
-    """Use the same default/parameter resolver that admits runtime requests."""
+    """Use the same default/parameter resolver that admits runtime requests: canonical settings and
+    3D Detail, on the capture's diagnostic 1000 ms timeline so 25/50/75 are real fractional samples."""
 
-    import copy
-    import random
-    from core.settings.default_contract import require_canonical_default
-    from rendering.quick.image_state import PresentationImage
-    from rendering.quick.transitions.request_resolution import resolve_quick_transition_spec
-    from rendering.quick.transitions.state import TransitionRequest, TransitionRun
-    from rendering.transition_registry import get_transition_descriptor_for_runtime_identity
-
-    descriptor = get_transition_descriptor_for_runtime_identity(transition_id)
-    if descriptor is None:
-        raise RuntimeError(f"unknown transition identity {transition_id!r}")
-    transitions = copy.deepcopy(require_canonical_default("transitions"))
-    transitions["type"] = descriptor.setting_name
-    transitions["random_always"] = False
-    transitions.setdefault("activation", {})[descriptor.setting_name] = True
-    transitions.setdefault("pool", {})[descriptor.setting_name] = True
-    class DefaultsOnlySettings:
-        # Other sections (the 3D tier) read their canonical defaults through ``default``.
-        def get(self, key: str, default=None): return transitions if key == "transitions" else default
-        def get_bool(self, _key: str): return True
-    spec = resolve_quick_transition_spec(DefaultsOnlySettings(), random_source=random.Random(713))
-    if spec is None or spec.transition_id != transition_id:
-        raise RuntimeError(f"production resolver did not admit {transition_id}")
-    images = [PresentationImage(str(index), "onboarding", (capture.width, capture.height), 1.,
-        (capture.width, capture.height), capture.width * 4, image.tobytes())
-        for index, image in enumerate(capture.images)]
-    # TransitionCapture.frame maps a supplied fraction to nanoseconds in one
-    # second.  Keep the production-resolved direction/parameters but use its
-    # diagnostic 1000ms timeline so 25/50/75 are real fractional samples.
-    request = TransitionRequest(0, spec.transition_id, spec.requested_name, spec.selected_from_random,
-        1000, spec.direction, spec.parameters, *images)
-    return TransitionRun.start(run_id=1, request=request, start_ns=0)
+    return capture.production_run(transition_id, detail=None, timeline_ms=1000, label="onboarding")
 
 
 def _guard_attempts(audit_log: Path) -> list[dict[str, str]]:
