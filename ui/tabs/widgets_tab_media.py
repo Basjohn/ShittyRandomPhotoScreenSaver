@@ -180,20 +180,6 @@ def _update_media_progress_controls(tab) -> None:
         )
 
 
-def _update_sine_multi_line_visibility(tab) -> None:
-    """Show/hide sine wave multi-line sub-controls based on checkbox and line count."""
-    enabled = getattr(tab, 'sine_multi_line', None) and tab.sine_multi_line.isChecked()
-    container = getattr(tab, '_sine_multi_container', None)
-    if container is not None:
-        container.setVisible(bool(enabled))
-    # Line 3 controls only visible when count == 3
-    line_count = getattr(tab, 'sine_line_count_slider', None)
-    show_l3 = enabled and line_count is not None and line_count.value() >= 3
-    for w in (getattr(tab, '_sine_line3_label', None), getattr(tab, '_sine_l3_row_widget', None)):
-        if w is not None:
-            w.setVisible(bool(show_l3))
-
-
 def _update_media_provider_controls(tab) -> None:
     """Apply provider-owned conditional controls without changing preferences."""
 
@@ -848,12 +834,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     elif mode_id == "oscilloscope":
         load_oscilloscope_mode_settings(tab, cfg)
     elif mode_id == "sine_wave":
-        load_sine_wave_mode_settings(
-            tab,
-            cfg,
-            sync_color_button=_sync,
-            update_multi_line_visibility=_update_sine_multi_line_visibility,
-        )
+        load_sine_wave_mode_settings(tab, cfg)
     elif mode_id == "bubble":
         load_bubble_mode_settings(tab, cfg, sync_color_button=_sync)
     elif mode_id == "devcurve":

@@ -108,7 +108,9 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
 - [ ] **Move the remaining modes onto the spec layer (operator 2026-10-11: "if this means that adding new visualizers,
   settings/features to them and editing will be easier and lower risk in the future absolutely do it").** One mode per
   slice, renderer and response unchanged, Settings body and saved values identical, `test_visualizer_mode_settings_spec`
-  covering it: Sine Waves, Spline Curve (Dev Curve), Extruded Spectrum, Spectrum, Voxel Sphere. Shape editors and other
+  covering it: Spline Curve (Dev Curve), Extruded Spectrum, Spectrum, Voxel Sphere (Sine Waves done 2026-10-12: its
+  lines 2-6 are the one Custom section; the layer gained percent/whole-number/ticked sliders, indexed choices and
+  `when` conditions). Shape editors and other
   bespoke parts stay `Custom` entries. **Bubble last, and only with readings:** before and after any change that could
   reach Bubble, `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>` on the recorded clips
   (frozen settings, never a curated preset; all readings must stay x1.00 unless the change is meant to move them). A

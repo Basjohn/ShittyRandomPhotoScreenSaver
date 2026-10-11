@@ -1924,12 +1924,24 @@ class TestSineWaveSettingsBinding:
             def setChecked(self, checked):
                 self.checked = checked
 
+            def isChecked(self):
+                return self.checked
+
+            def blockSignals(self, _blocked):
+                return None
+
         class _Slider:
             def __init__(self):
-                self.value = None
+                self._value = None
 
             def setValue(self, value):
-                self.value = value
+                self._value = value
+
+            def value(self):
+                return self._value
+
+            def blockSignals(self, _blocked):
+                return None
 
         class _Label:
             def __init__(self):
@@ -1940,10 +1952,23 @@ class TestSineWaveSettingsBinding:
 
         class _Combo:
             def __init__(self):
-                self.index = None
+                self._index = None
 
             def setCurrentIndex(self, index):
-                self.index = index
+                self._index = index
+
+            def currentIndex(self):
+                return self._index
+
+            def blockSignals(self, _blocked):
+                return None
+
+        class _ColorButton:
+            def __init__(self):
+                self.color = None
+
+            def set_color(self, color):
+                self.color = color
 
         class _Tab(CanonicalWidgetDefaultsStub):
             def __init__(self):
@@ -1964,8 +1989,8 @@ class TestSineWaveSettingsBinding:
                 self.sine_wave_effect_label = _Label()
                 self.sine_micro_wobble = _Slider()
                 self.sine_micro_wobble_label = _Label()
-                self.sine_crawl_slider = _Slider()
-                self.sine_crawl_label = _Label()
+                self.sine_crawl_amount = _Slider()
+                self.sine_crawl_amount_label = _Label()
                 self.sine_width_reaction = _Slider()
                 self.sine_width_reaction_label = _Label()
                 self.sine_density = _Slider()
@@ -1978,32 +2003,30 @@ class TestSineWaveSettingsBinding:
                 self.sine_vertical_shift_label = _Label()
                 self.sine_line1_shift = _Slider()
                 self.sine_line1_shift_label = _Label()
-                self.sine_travel = _Combo()
-                self.sine_travel_line2 = _Combo()
-                self.sine_travel_line3 = _Combo()
+                self.sine_wave_travel = _Combo()
                 self.sine_multi_line = _Check()
                 self.sine_line_count_slider = _Slider()
                 self.sine_line_count_label = _Label()
-                self.sine_line2_shift = _Slider()
-                self.sine_line2_shift_label = _Label()
-                self.sine_line3_shift = _Slider()
-                self.sine_line3_shift_label = _Label()
-                self.sine_line_dim = _Check()
                 self.sine_line_offset_bias = _Slider()
                 self.sine_line_offset_bias_label = _Label()
                 self.sine_card_adaptation = _Slider()
                 self.sine_card_adaptation_label = _Label()
-                self.sine_ghost_enabled = _Check()
-                self.sine_ghost_opacity = _Slider()
-                self.sine_ghost_opacity_label = _Label()
-                self.sine_ghost_decay_slider = _Slider()
+                self.sine_ghosting_enabled = _Check()
+                self.sine_ghost_alpha = _Slider()
+                self.sine_ghost_alpha_label = _Label()
+                self.sine_ghost_decay = _Slider()
                 self.sine_ghost_decay_label = _Label()
-                self.sine_ghost_line2_enabled = _Check()
-                self.sine_ghost_line3_enabled = _Check()
+                for line in range(2, 7):
+                    setattr(self, f"sine_travel_line{line}", _Combo())
+                    setattr(self, f"sine_ghost_line{line}_enabled", _Check())
+                    setattr(self, f"sine_line{line}_shift", _Slider())
+                    setattr(self, f"sine_line{line}_shift_label", _Label())
+                    setattr(self, f"sine_line{line}_color_btn", _ColorButton())
+                    setattr(self, f"sine_line{line}_glow_btn", _ColorButton())
+                self.sine_glow_color_btn = _ColorButton()
+                self.sine_line_color_btn = _ColorButton()
 
         tab = _Tab()
-        synced = []
-        visibility_calls = []
 
         load_sine_wave_mode_settings(
             tab,
@@ -2036,7 +2059,6 @@ class TestSineWaveSettingsBinding:
                 "sine_line3_glow_color": [21, 22, 23, 24],
                 "sine_line2_shift": -0.34,
                 "sine_line3_shift": 0.42,
-                "sine_line_dim": True,
                 "sine_line_offset_bias": 0.29,
                 "sine_card_adaptation": 0.41,
                 "sine_ghosting_enabled": False,
@@ -2045,61 +2067,54 @@ class TestSineWaveSettingsBinding:
                 "sine_ghost_line2_enabled": True,
                 "sine_ghost_line3_enabled": False,
             },
-            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
-            update_multi_line_visibility=lambda tab_obj: visibility_calls.append(tab_obj),
         )
 
         assert tab.sine_glow_enabled.checked is False
-        assert tab.sine_glow_intensity.value == 61
-        assert tab.sine_glow_reactivity.value == 132
+        assert tab.sine_glow_intensity.value() == 61
+        assert tab.sine_glow_reactivity.value() == 132
         assert tab.sine_reactive_glow.checked is False
-        assert tab.sine_sensitivity.value == 180
-        assert tab.sine_sensitivity_label.text == "1.80x"
-        assert tab.sine_smoothing.value == 64
-        assert tab.sine_smoothing_label.text == "64%"
-        assert tab.sine_speed.value == 73
-        assert tab.sine_wave_effect.value == 22
-        assert tab.sine_micro_wobble.value == 16
-        assert tab.sine_crawl_slider.value == 44
-        assert tab.sine_width_reaction.value == 31
-        assert tab.sine_density.value == 125
-        assert tab.sine_density_label.text == "1.25×"
-        assert tab.sine_heartbeat.value == 53
-        assert tab.sine_displacement.value == 19
-        assert tab.sine_vertical_shift.value == 14
-        assert tab.sine_line1_shift.value == 25
-        assert tab.sine_travel.index == 2
-        assert tab.sine_travel_line2.index == 1
-        assert tab.sine_travel_line3.index == 2
+        assert tab.sine_sensitivity.value() == 180
+        assert tab.sine_smoothing.value() == 64
+        assert tab.sine_speed.value() == 73
+        assert tab.sine_wave_effect.value() == 22
+        assert tab.sine_micro_wobble.value() == 16
+        assert tab.sine_crawl_amount.value() == 44
+        assert tab.sine_width_reaction.value() == 31
+        assert tab.sine_density.value() == 125
+        assert tab.sine_heartbeat.value() == 53
+        assert tab.sine_displacement.value() == 19
+        assert tab.sine_vertical_shift.value() == 14
+        assert tab.sine_line1_shift.value() == 25
+        assert tab.sine_wave_travel.currentIndex() == 2
+        assert tab.sine_travel_line2.currentIndex() == 1
+        assert tab.sine_travel_line3.currentIndex() == 2
         assert tab.sine_multi_line.checked is True
-        assert tab.sine_line_count_slider.value == 3
-        assert tab.sine_line2_shift.value == -34
-        assert tab.sine_line3_shift.value == 42
-        assert tab.sine_line_dim.checked is True
-        assert tab.sine_line_offset_bias.value == 28
-        assert tab.sine_card_adaptation.value == 41
-        assert tab.sine_ghost_enabled.checked is False
-        assert tab.sine_ghost_opacity.value == 36
-        assert tab.sine_ghost_decay_slider.value == 47
+        assert tab.sine_line_count_slider.value() == 3
+        assert tab.sine_line2_shift.value() == -34
+        assert tab.sine_line3_shift.value() == 42
+        assert tab.sine_line_offset_bias.value() == 29
+        assert tab.sine_card_adaptation.value() == 41
+        assert tab.sine_ghosting_enabled.checked is False
+        assert tab.sine_ghost_alpha.value() == 36
+        assert tab.sine_ghost_decay.value() == 47
         assert tab.sine_ghost_line2_enabled.checked is True
         assert tab.sine_ghost_line3_enabled.checked is False
+        from core.settings.visualizer_mode_settings import require_mode_settings
+
+        spec = require_mode_settings("sine_wave")
+        assert tab.sine_sensitivity_label.text == spec.control("sine_sensitivity").text(
+            tab.sine_sensitivity.value()
+        )
+        assert tab.sine_smoothing_label.text == spec.control("sine_smoothing").text(
+            tab.sine_smoothing.value()
+        )
+        assert tab.sine_density_label.text == spec.control("sine_density").text(
+            tab.sine_density.value()
+        )
         assert (tab._sine_glow_color.red(), tab._sine_glow_color.green(), tab._sine_glow_color.blue(), tab._sine_glow_color.alpha()) == (1, 2, 3, 4)
         assert (tab._sine_line3_glow_color.red(), tab._sine_line3_glow_color.green(), tab._sine_line3_glow_color.blue(), tab._sine_line3_glow_color.alpha()) == (21, 22, 23, 24)
-        assert synced == [
-            ("sine_glow_color_btn", "_sine_glow_color"),
-            ("sine_line_color_btn", "_sine_line_color"),
-            ("sine_line2_color_btn", "_sine_line2_color"),
-            ("sine_line2_glow_btn", "_sine_line2_glow_color"),
-            ("sine_line3_color_btn", "_sine_line3_color"),
-            ("sine_line3_glow_btn", "_sine_line3_glow_color"),
-            ("sine_line4_color_btn", "_sine_line4_color"),
-            ("sine_line4_glow_btn", "_sine_line4_glow_color"),
-            ("sine_line5_color_btn", "_sine_line5_color"),
-            ("sine_line5_glow_btn", "_sine_line5_glow_color"),
-            ("sine_line6_color_btn", "_sine_line6_color"),
-            ("sine_line6_glow_btn", "_sine_line6_glow_color"),
-        ]
-        assert visibility_calls == [tab]
+        assert tab.sine_line4_color_btn.color.getRgb() == tab._sine_line4_color.getRgb()
+        assert tab.sine_line4_glow_btn.color.getRgb() == tab._sine_line4_glow_color.getRgb()
 
     def test_collect_sine_wave_mode_settings_serializes_sine_owned_state(self):
         from ui.tabs.media.sine_wave_settings_binding import collect_sine_wave_mode_settings
@@ -2126,6 +2141,40 @@ class TestSineWaveSettingsBinding:
                 return self._index
 
         class _Tab(CanonicalWidgetDefaultsStub):
+            def __init__(self):
+                super().__init__()
+                for line in range(2, 7):
+                    for kind in ("color", "glow_color"):
+                        key = f"_sine_line{line}_{kind}"
+                        if not hasattr(self, key):
+                            setting_key = key[1:]
+                            setattr(
+                                self,
+                                key,
+                                QColor(*self._widget_default("spotify_visualizer", setting_key)),
+                            )
+                    travel_key = f"sine_travel_line{line}"
+                    if not hasattr(self, travel_key):
+                        setattr(
+                            self,
+                            travel_key,
+                            _Combo(self._widget_default("spotify_visualizer", travel_key)),
+                        )
+                    ghost_key = f"sine_ghost_line{line}_enabled"
+                    if not hasattr(self, ghost_key):
+                        setattr(
+                            self,
+                            ghost_key,
+                            _Check(self._widget_default("spotify_visualizer", ghost_key)),
+                        )
+                    shift_key = f"sine_line{line}_shift"
+                    if not hasattr(self, shift_key):
+                        setattr(
+                            self,
+                            shift_key,
+                            _Slider(round(float(self._widget_default("spotify_visualizer", shift_key)) * 100)),
+                        )
+
             sine_glow_enabled = _Check(True)
             sine_glow_intensity = _Slider(64)
             sine_glow_reactivity = _Slider(145)
@@ -2136,7 +2185,7 @@ class TestSineWaveSettingsBinding:
             sine_smoothing = _Slider(63)
             sine_speed = _Slider(82)
             sine_wave_effect = _Slider(17)
-            sine_crawl_slider = _Slider(46)
+            sine_crawl_amount = _Slider(46)
             sine_micro_wobble = _Slider(23)
             sine_width_reaction = _Slider(31)
             sine_density = _Slider(135)
@@ -2144,12 +2193,11 @@ class TestSineWaveSettingsBinding:
             sine_displacement = _Slider(19)
             sine_vertical_shift = _Slider(22)
             sine_line1_shift = _Slider(-14)
-            sine_travel = _Combo(2)
+            sine_wave_travel = _Combo(2)
             sine_travel_line2 = _Combo(1)
             sine_travel_line3 = _Combo(0)
             sine_multi_line = _Check(True)
             sine_line_count_slider = _Slider(3)
-            sine_line_dim = _Check(True)
             sine_line_offset_bias = _Slider(26)
             sine_card_adaptation = _Slider(37)
             _sine_line2_color = QColor(9, 10, 11, 12)
@@ -2158,9 +2206,9 @@ class TestSineWaveSettingsBinding:
             _sine_line3_glow_color = QColor(21, 22, 23, 24)
             sine_line2_shift = _Slider(18)
             sine_line3_shift = _Slider(-27)
-            sine_ghost_enabled = _Check(False)
-            sine_ghost_opacity = _Slider(42)
-            sine_ghost_decay_slider = _Slider(39)
+            sine_ghosting_enabled = _Check(False)
+            sine_ghost_alpha = _Slider(42)
+            sine_ghost_decay = _Slider(39)
             sine_ghost_line2_enabled = _Check(True)
             sine_ghost_line3_enabled = _Check(False)
 
@@ -2188,7 +2236,6 @@ class TestSineWaveSettingsBinding:
         assert payload["sine_travel_line2"] == 1
         assert payload["sine_travel_line3"] == 0
         assert payload["sine_line_count"] == 3
-        assert payload["sine_line_dim"] is True
         assert payload["sine_line_offset_bias"] == pytest.approx(0.26)
         assert payload["sine_card_adaptation"] == pytest.approx(0.37)
         assert payload["sine_line2_color"] == [9, 10, 11, 12]

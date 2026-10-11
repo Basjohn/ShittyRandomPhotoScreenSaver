@@ -30,6 +30,8 @@ def _different(control, value):
     if isinstance(control, Toggle):
         return not value
     if isinstance(control, Choice):
+        if control.indexed:
+            return (value + 1) % len(control.choices)
         return next(choice for choice in control.choices if choice != value)
     return [255 - value[0], 255 - value[1], 255 - value[2], 200 if control.alpha else 255]
 
@@ -133,6 +135,10 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
             elif isinstance(control, Toggle):
                 wanted[control.key] = _different(control, widget.isChecked())
                 widget.setChecked(wanted[control.key])
+            elif control.indexed:
+                assert [widget.itemText(i) for i in range(widget.count())] == list(control.choices)
+                wanted[control.key] = _different(control, widget.currentIndex())
+                widget.setCurrentIndex(wanted[control.key])
             else:
                 assert [widget.itemText(i) for i in range(widget.count())] == list(control.choices)
                 wanted[control.key] = _different(control, widget.currentText())
@@ -158,8 +164,68 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
                 shown = getattr(reloaded, control.key).value() / control.scale
             elif isinstance(control, Toggle):
                 shown = getattr(reloaded, control.key).isChecked()
+            elif control.indexed:
+                shown = getattr(reloaded, control.key).currentIndex()
             else:
                 shown = getattr(reloaded, control.key).currentText()
             assert shown == pytest.approx(wanted[control.key]), control.key
     finally:
         reloaded.deleteLater()
+
+
+def test_controls_read_and_persist_as_declared():
+    percent = Slider("x_glow", "", 0.0, 2.0, percent=True)
+    assert percent.text(150) == "150%"
+    assert Slider("x_speed", "", 0.1, 1.0, suffix="x").text(42) == "0.42x"
+    whole = Slider("x_shift", "", -50, 200, scale=1, decimals=0, integer=True)
+    assert whole.admit(44.6, 0) == 45 and isinstance(whole.admit("12", 0), int)
+    assert whole.admit(900, 0) == 200 and whole.coerce(7.0) == 7 and isinstance(whole.coerce(7.0), int)
+    travel = Choice("x_travel", "", ("None", "Left", "Right"), indexed=True)
+    assert travel.admit(2, 0) == 2
+    # Positions written as numbers of any kind keep their meaning; others fall back to the default.
+    assert travel.admit(1.0, 0) == 1 and travel.admit("1", 0) == 1 and travel.admit(5, 1) == 2
+    assert travel.admit(-1, 1) == 0
+    assert travel.admit("Left", 1) == 1 and travel.admit(True, 0) == 0 and travel.admit(1.5, 0) == 0
+    assert travel.coerce(2.0) == 2
+
+
+CONDITIONAL = [spec for spec in SPECS if any(control.when for control in spec.controls)]
+
+
+@pytest.mark.parametrize("spec", CONDITIONAL, ids=lambda spec: spec.mode_id)
+def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, settings_manager, spec):
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    mode = spec.mode_id
+    settings_manager.set("widgets", {"spotify_visualizer": {
+        "enabled": True, "visualizers_enabled": True, "mode": mode,
+        "mode_activation": build_visualizer_mode_activation([mode]),
+        f"preset_{mode}": get_custom_preset_index(mode)}})
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page(mode)
+        rows = getattr(tab, f"_{spec.prefix}_rows")
+        for control in (control for control in spec.controls if control.when):
+            key, value = control.when
+            condition = spec.control(key)
+            assert isinstance(condition, Toggle), "conditions name a toggle of the same mode"
+            switch = getattr(tab, key)
+            switch.setChecked(value)
+            assert not rows[control.key].isHidden(), control.key
+            switch.setChecked(not value)
+            assert rows[control.key].isHidden(), control.key
+            # A load blocks the switch's signals; the condition still follows the loaded value.
+            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: value})
+            assert not rows[control.key].isHidden(), control.key
+            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: not value})
+            assert rows[control.key].isHidden(), control.key
+        for control in spec.controls:
+            if isinstance(control, Toggle) and control.bucket and not control.label:
+                assert rows[control.key] is getattr(tab, control.key), "a label-less toggle stands alone"
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+

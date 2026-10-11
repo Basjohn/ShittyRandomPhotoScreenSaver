@@ -200,8 +200,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             key: getattr(host, f"_{key}")
             for key in _SPHERE_PARAMETER_KEYS
         })
-    if 'sine_heartbeat' in kwargs:
-        host._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
     if 'bubble_big_bass_pulse' in kwargs:
         host._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
     if 'bubble_small_freq_pulse' in kwargs:
@@ -324,12 +322,8 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
 
     # --- Sine authored logical inputs (SineFrameRuntime.resolve) -----------
-    if 'sine_speed' in kwargs:
-        host._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
     if 'sine_line_count' in kwargs:
         host._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
-    if 'sine_wave_travel' in kwargs:
-        host._sine_wave_travel = max(0, min(2, int(kwargs['sine_wave_travel'])))
     if 'sine_travel_line2' in kwargs:
         host._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
     if 'sine_travel_line3' in kwargs:
@@ -340,8 +334,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sine_travel_line5 = max(0, min(2, int(kwargs['sine_travel_line5'])))
     if 'sine_travel_line6' in kwargs:
         host._sine_travel_line6 = max(0, min(2, int(kwargs['sine_travel_line6'])))
-    if 'sine_line1_shift' in kwargs:
-        host._sine_line1_shift = max(-1.0, min(1.0, float(kwargs['sine_line1_shift'])))
     if 'sine_line2_shift' in kwargs:
         host._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
     if 'sine_line3_shift' in kwargs:
@@ -352,16 +344,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sine_line5_shift = max(-1.0, min(1.0, float(kwargs['sine_line5_shift'])))
     if 'sine_line6_shift' in kwargs:
         host._sine_line6_shift = max(-1.0, min(1.0, float(kwargs['sine_line6_shift'])))
-    if 'sine_width_reaction' in kwargs:
-        host._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
-    if 'sine_sensitivity' in kwargs:
-        host._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
-    if 'sine_ghosting_enabled' in kwargs:
-        host._sine_ghosting_enabled = bool(kwargs['sine_ghosting_enabled'])
-    if 'sine_ghost_alpha' in kwargs:
-        host._sine_ghost_alpha = max(0.0, min(1.0, float(kwargs['sine_ghost_alpha'])))
-    if 'sine_ghost_decay' in kwargs:
-        host._sine_ghost_decay = max(0.1, min(1.0, float(kwargs['sine_ghost_decay'])))
 
     # --- DevCurve authored logical inputs (_devcurve_parameter_snapshot) ---
     # The DevCurve field solve runs on the authored logical clock and consumes
@@ -496,40 +478,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
 
     # --- Sine styling ------------------------------------------------
-    if 'sine_vertical_shift' in kwargs:
-        host._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
-    if 'sine_card_adaptation' in kwargs:
-        host._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
-    if 'sine_wave_effect' in kwargs:
-        host._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
-    if 'sine_micro_wobble' in kwargs:
-        host._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
-    if 'sine_crawl_amount' in kwargs:
-        host._sine_crawl_amount = max(0.0, min(1.0, float(kwargs['sine_crawl_amount'])))
-    if 'sine_density' in kwargs:
-        host._sine_density = max(0.25, min(3.0, float(kwargs['sine_density'])))
-    if 'sine_displacement' in kwargs:
-        host._sine_displacement = max(0.0, min(1.0, float(kwargs['sine_displacement'])))
-    if 'sine_glow_enabled' in kwargs:
-        host._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
-    if 'sine_glow_intensity' in kwargs:
-        host._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
-    if 'sine_glow_reactivity' in kwargs:
-        host._sine_glow_reactivity = max(0.0, min(2.0, float(kwargs['sine_glow_reactivity'])))
-    if 'sine_glow_color' in kwargs:
-        c = _color_or_none(kwargs['sine_glow_color'])
-        if c is not None:
-            host._sine_glow_color = c
-    if 'sine_line_color' in kwargs:
-        c = _color_or_none(kwargs['sine_line_color'])
-        if c is not None:
-            host._sine_line_color = c
-    if 'sine_reactive_glow' in kwargs:
-        host._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
-    if 'sine_smoothing' in kwargs:
-        host._sine_smoothing = max(0.0, min(1.0, float(kwargs['sine_smoothing'])))
-    if 'sine_line_offset_bias' in kwargs:
-        host._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
     if 'sine_line_dim' in kwargs:
         host._sine_line_dim = bool(kwargs['sine_line_dim'])
     for _idx in range(2, 7):
@@ -771,7 +719,7 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['glow_intensity'] = pres._sine_glow_intensity
     extra['glow_size'] = 1.0  # fixed shader-space expansion; no longer a product setting
     extra['glow_reactivity'] = pres._sine_glow_reactivity
-    extra['glow_color'] = pres._sine_glow_color
+    extra['glow_color'] = QColor(*pres._sine_glow_color)
     extra['reactive_glow'] = pres._sine_reactive_glow
     # Authored-logical.
     extra['line_sensitivity'] = widget._sine_sensitivity
@@ -800,7 +748,7 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['sine_line6_shift'] = widget._sine_line6_shift
     extra['sine_width_reaction'] = widget._sine_width_reaction
     # Line colours / count (Sine's line count is authored-logical).
-    extra['line_color'] = pres._sine_line_color
+    extra['line_color'] = QColor(*pres._sine_line_color)
     extra['line_count'] = widget._sine_line_count
     _side = 'sine'
     for _i in range(2, 7):
