@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rendering.transition_registry import get_transition_setting_names
 from tools.test_durability_audit import audit_test_file, audit_tests
 
 
@@ -26,9 +27,12 @@ def test_audit_detects_copied_canonical_default_literal(tmp_path: Path) -> None:
 
 
 def test_audit_detects_large_extensible_catalog_copies(tmp_path: Path) -> None:
+    # Eight current transition names copied into a literal, as a hand-copied catalog would be.
+    copied = ", ".join(repr(name) for name in get_transition_setting_names()[:8])
     rules = _rules(
         tmp_path,
-        '''\ndef test_bad_catalogs():\n    modes = {\n        "spectrum": 1, "oscilloscope": 2, "sine_wave": 3,\n        "bubble": 4, "devcurve": 5,\n    }\n    transitions = [\n        "Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip",\n        "Blinds", "Ripple", "Burn",\n    ]\n    assert modes and transitions\n''',
+        '''\ndef test_bad_catalogs():\n    modes = {\n        "spectrum": 1, "oscilloscope": 2, "sine_wave": 3,\n        "bubble": 4, "devcurve": 5,\n    }\n'''
+        f"    transitions = [{copied}]\n    assert modes and transitions\n",
     )
     assert "visualizer-catalog-literal" in rules
     assert "transition-catalog-literal" in rules

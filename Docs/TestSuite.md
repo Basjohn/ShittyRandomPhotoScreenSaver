@@ -153,15 +153,41 @@ A green static/source test is never a substitute for a required Qt/QML, real-GL 
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-### 3.2 Broad reconciliation diagnostic
+### 3.2 Whole suite, file-isolated
+
+```powershell
+python tests/run_chunked.py --isolated
+python tests/run_chunked.py --isolated --changed            # the files a working-tree change can affect
+python tests/run_chunked.py --isolated --changed --base HEAD~3
+```
+
+Every `tests/**/test_*.py` runs in its own fresh pytest process, `--jobs` at a time (default: half
+the cores, at most 8; about 4.5 minutes for the whole tree on the reference machine), longest first
+by the previous run's durations. Each failed file then runs again alone: passing alone marks it
+load-sensitive (reported, not a failure), failing again is a real failure. Logs are in
+`logs/pytest_isolated/`. `--changed` uses `tools/impacted_tests.py`: every test file that imports a
+changed module through any chain of project imports (at most one lazy, in-function import on the
+way; lazy registries count), changed tests, and tests naming a changed non-Python file. The product's
+import graph is dense, so a core render or Settings change still selects most files; it is a correct
+superset, never a guess. Use this rather than a hand-picked set of files: a pattern-matched sweep
+once missed `test_qt611_shader_admission.py`. `python tools/impacted_tests.py --why <test file>`
+explains a selection.
+
+A conftest guard stops the session at any test that leaves a plain (non-GUI) `QCoreApplication` as the
+process's application: Qt cannot replace it, and the next OpenGL context creation in that process
+crashes the interpreter far from the cause.
+
+### 3.3 Broad reconciliation diagnostic
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-A whole-tree run is useful for discovering stale tests, optional-dependency gaps and hidden regressions. It is **not** permission to resurrect retired production architecture merely to make an old test green.
+A test-level chunked run (several files share each process) is useful for discovering stale tests,
+optional-dependency gaps and hidden regressions. It is **not** permission to resurrect retired
+production architecture merely to make an old test green.
 
-### 3.3 Defaults authority
+### 3.4 Defaults authority
 
 ```powershell
 python tools/check_defaults_authority.py
@@ -169,7 +195,7 @@ python tools/check_defaults_authority.py
 
 Run this whenever canonical defaults, Settings normalization or Defaults-Foundry-facing keys change. Nothing is generated from the defaults: readers use the canonical source (or an in-memory projection).
 
-### 3.4 Focused tests first
+### 3.5 Focused tests first
 
 Prefer the smallest set capable of falsifying the current change:
 
@@ -179,7 +205,7 @@ pytest path\to\test_file.py -q --tb=short
 
 Then widen to the maintained profile and installed/physical gates only when the change actually requires them.
 
-### 3.5 Test-authority hygiene
+### 3.6 Test-authority hygiene
 
 ```powershell
 python tools/test_durability_audit.py

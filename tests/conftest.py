@@ -147,6 +147,31 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def _no_plain_qcoreapplication(request):
+    """Fail the test that leaves a non-GUI QCoreApplication as the process's application.
+
+    Qt allows one application per process and it cannot be replaced. Once a plain
+    QCoreApplication exists, every later QGuiApplication/QApplication request returns
+    it, and creating an OpenGL context (offscreen captures, Quick windows) crashes the
+    interpreter with an access violation in whichever later test tries first, far from
+    the cause (it happened with ``test_release_media``). Tests and the tools they drive
+    use QGuiApplication (or the ``qt_app`` fixture) instead.
+    """
+    yield
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
+
+    app = QCoreApplication.instance()
+    if app is not None and not isinstance(app, QGuiApplication):
+        pytest.exit(
+            f"{request.node.nodeid} left a plain QCoreApplication as this process's Qt "
+            "application. Later OpenGL context creation in this process would crash. Create a "
+            "QGuiApplication (or use the qt_app fixture) before the code under test needs one.",
+            returncode=3,
+        )
+
+
+@pytest.fixture(autouse=True)
 def _forget_idle_generation_cancellations():
     """Tests reuse generation numbers; a cancellation must not outlive its test.
 
