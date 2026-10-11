@@ -340,6 +340,13 @@ Each foundation slice adds what it learned here.
   `warm_run_resources`; a new program, variant or per-run texture goes there too, or `test_transition_warmup.py`
   fails. Allocate with the same method the run's first use calls (`SceneTarget.warm`, the chains' `warm`), so the
   two cannot drift.
+- No program is too small to warm: the one-program 2D transitions (Ripple, Wipe, Slide, Melt / Drip, Crossfade,
+  Warp Dissolve, flat Blinds, Particle, Burn) used to compile on first use, which cost 3-18 ms on that first frame
+  at 1440p even with the driver's shader cache warm (2026-10-11); each now compiles in its one warm step. Geometry
+  COMPUTE prepared uploads in a warm step too (Jigsaw, Crumble), keyed by geometry alone so the run reuses it.
+- `test_transition_lifecycle_contract.py` holds every showcase transition to this with the GL object ledger
+  (`tools/gl_object_ledger.py`): warmed frames create no GL object, park keeps the same objects whatever the run,
+  release deletes everything. A new transition joins it through the release-media catalogue.
 - Only the next transition's textures are held, from its warm-up until `park()` after its run: never keep
   textures for transitions that are not next (they add up as transitions are added).
 - Prepare while the displays are idle, never at the image change: that resolves its transition ~14 ms before the
