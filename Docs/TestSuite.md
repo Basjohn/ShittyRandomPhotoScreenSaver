@@ -534,6 +534,11 @@ These tests do not authorize deletion: cleanup likelihood remains advisory and o
 
 Do not regenerate goldens merely because architecture changed. If an approved product decision changes protected behavior, state the behavioral change explicitly and update the golden deliberately.
 
+`tests/test_music_recorder.py`, `tests/test_visualizer_record_capture_lifetime.py` and
+`tests/test_visualizer_replay_capture_history.py` cover full-duration admission, stream publication/cancel/failure,
+private-worker retirement, UI state, exact float32 history round-trip and source identity through replay. These do
+not replace an operator real-music recording or physical mixed-DPR check.
+
 **Distinguish the retired physical-host replay executable from the current deterministic offline replay.** The old physical host is retired and must not be restored. `tests/test_visualizer_replay.py`, `tools/visualizer_replay/driver.py`, `tools/visualizer_replay/floors.py` and `python -m tools.visualizer_replay` are **active**, test-owned post-DSP replay authorities. The maintained `destination` profile includes the replay test. Its offline logical/Quick-snapshot result is not real GPU pixels, live capture or scheduler evidence. Current temporal/BTF/viewport tests provide complementary coverage; Bubble's specific protection follows `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
 The deterministic replay uses committed synthetic feature clips under `tests/fixtures/visualizer_replay/v1/`, **independent frozen settings** under `tests/fixtures/visualizer_frozen_settings/` and the reviewed reference at `tests/goldens/visualizer_replay/reactivity_floor.json`. Test input and reference provenance must be checked together. An old reference description such as *current authored preset zero* does not override the current test's explicit `frozen_visualizer_settings` injection or license resetting an operator-editable curated preset. Normal Godzips may omit the fixture/golden payloads; missing artifacts prevent independent recalibration from that handoff, not the operator's installed-tree test run.

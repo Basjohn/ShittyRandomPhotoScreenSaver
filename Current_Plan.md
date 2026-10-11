@@ -80,6 +80,18 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
 ---
 
 
+## 2A. Music recorder | Awaiting Validation
+
+- [ ] **Operator capture/UI validation:** Run `.venv\Scripts\python.exe tools\music_recorder.py`, record a named
+  60-second real-music clip, and check the live signal, save result, cancellation and mixed-DPR window use.
+  Replay the new full-history clip during the Oscilloscope rework; existing 64-sample recordings cannot validate
+  waveform detail. The format, CLI and capture ownership contract live in `Docs/Reference/Harness_Index.md`.
+- [ ] **Capture owner follow-up alongside Oscilloscope rework:** Native backends may negotiate a non-48-kHz rate
+  while Oscilloscope uses a fixed 48-kHz timebase (the recorder retains the true rate and replay rejects mismatch).
+  `AudioWorker._on_audio_samples` also trims native blocks above 2,048 samples before building its history,
+  introducing gaps for oversized callbacks. Resolve these at the capture/timebase owner with focused proof;
+  recorder work deliberately leaves the parallel production rework untouched.
+
 ## 3. Release / README media production
 
 The capture/encode/manifest tool and its focused smoke proof are implemented in the working tree, awaiting checkpoint and

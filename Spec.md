@@ -8,6 +8,10 @@ Gmail's retained family adapter carries the display generation into its shared
 runtime lease, including generation 0; final lease retirement removes the shared
 owner without shutting down the process-wide backend.
 
+Operator music capture and replay format are documented in `Docs/Reference/Harness_Index.md`;
+`tools/music_recorder.py` is the standalone DPR-aware 60-second clip UI. Capture remains private to the tool,
+with no added runtime owner or idle recorder timer.
+
 ## Product priorities
 
 1. visualizer fidelity/reactivity;
