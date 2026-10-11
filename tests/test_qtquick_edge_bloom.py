@@ -31,6 +31,8 @@ from rendering.quick.scene3d.edge_field import (
     edge_field_jumps,
     edge_seed_reference,
 )
+from core.settings.default_settings import DEFAULT_SETTINGS
+from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
 from tools.transition_contact_sheet import TransitionCapture
 
@@ -211,8 +213,9 @@ def test_the_resolver_repairs_values():
     assert resolved.direction is None
     assert parameters["glow"] == 1.0 and parameters["detail"] == 0.0
     assert len(parameters["color"]) == 3 and all(0.0 <= c <= 1.0 for c in parameters["color"])
-    assert parameters["color_source"] == "custom"
-    for label, code in (("Next Picture", "next"), ("Each Picture", "each"), ("bogus", "custom")):
+    default_code = EDGE_BLOOM_COLOUR_SOURCES[DEFAULT_SETTINGS["transitions"]["edge_bloom"]["color_source"]]
+    assert parameters["color_source"] == default_code
+    for label, code in (*EDGE_BLOOM_COLOUR_SOURCES.items(), ("bogus", default_code)):
         resolved = resolve_parameterized_phase_c_inputs("edge_bloom", {"edge_bloom": {"color_source": label}},
                                                         random_source=random.Random(2))
         assert resolved.parameter_dict()["color_source"] == code
