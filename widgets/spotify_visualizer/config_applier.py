@@ -121,6 +121,9 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     in ``apply_presentation_vis_mode_kwargs``.
     """
 
+    # Spec'd modes' controls their logical evolution reads (visualizer_mode_settings).
+    _apply_spec_controls(host, kwargs, logical=True)
+
     # Sphere keeps one configure-owned immutable parameter bundle. The voxel
     for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_depth_shading_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
         if key in kwargs:
@@ -693,21 +696,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if 'sphere_mirror' in kwargs:
         host._sphere_mirror = _sphere_bounded(kwargs['sphere_mirror'], 0.0, 1.0, 'sphere_mirror')
 
-    # --- Shockwave Grid presentation ----------------------------------
-    for key, (low, high) in _SHOCKWAVE_GRID_KEYS.items():
-        if key in kwargs:
-            setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
-    for key in _SHOCKWAVE_GRID_COLOURS:
-        if key in kwargs:
-            raw = kwargs[key]
-            if not isinstance(raw, (list, tuple)) or len(raw) < 3:
-                raise ValueError(f"{key} must be an RGB/RGBA sequence")
-            values = [max(0, min(255, int(round(float(channel))))) for channel in list(raw[:4])]
-            while len(values) < 4:
-                values.append(255)
-            setattr(host, f"_{key}", values)
-    if 'shockwave_grid_allow_overflow' in kwargs:
-        host._shockwave_grid_allow_overflow = bool(kwargs['shockwave_grid_allow_overflow'])
+    # --- Spec'd modes' renderer-only controls (core/settings/visualizer_mode_settings.py) ---
+    _apply_spec_controls(host, kwargs, logical=False)
 
 
 
@@ -724,35 +714,45 @@ _EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
 }
 
 
-_SHOCKWAVE_GRID_KEYS: Dict[str, tuple[float, float]] = {
-    "shockwave_grid_density": (0.0, 1.0),
-    "shockwave_grid_floor": (0.0, 1.0),
-    "shockwave_grid_idle": (0.0, 1.0),
-    "shockwave_grid_glow": (0.0, 1.0),
-    "shockwave_grid_horizon": (0.0, 1.0),
-    "shockwave_grid_scroll": (0.0, 1.0),
-    "shockwave_grid_tilt": (0.0, 1.0),
-    "shockwave_grid_turn": (-1.0, 1.0),
-    "shockwave_grid_wave_height": (0.0, 1.0),
-    "shockwave_grid_wave_speed": (0.0, 1.0),
-}
-_SHOCKWAVE_GRID_COLOURS = ("shockwave_grid_line_color", "shockwave_grid_crest_color")
+def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) -> None:
+    """Store each spec'd control present in ``kwargs`` on its owner as ``_<key>``, admitted by
+    its control (clamped; a malformed value becomes the canonical default)."""
+    from core.settings.visualizer_mode_settings import iter_mode_settings
+
+    for spec in iter_mode_settings():
+        for control in (spec.logical_controls() if logical else spec.presentation_controls()):
+            if control.key in kwargs:
+                setattr(host, f"_{control.key}",
+                        control.admit(kwargs[control.key], _visualizer_default(control.key)))
+
+
+def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:
+    """A spec'd mode's renderer parameters: every presentation control, under its own key
+    (colours as tuples)."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    values: Dict[str, object] = {}
+    for control in require_mode_settings(mode_id).presentation_controls():
+        value = getattr(owner, f"_{control.key}")
+        values[control.key] = tuple(value) if isinstance(value, list) else value
+    return values
 
 
 def presentation_setting_range(key: str) -> tuple[float, float]:
     """The canonical (low, high) of a ranged presentation-only setting (for live orbiting)."""
-    return {**_EXTRUDED_SPECTRUM_KEYS, **_SHOCKWAVE_GRID_KEYS,
-            "sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
+    from core.settings.visualizer_mode_settings import Slider, spec_control
+
+    control = spec_control(key)
+    if isinstance(control, Slider):
+        return control.low, control.high
+    return {**_EXTRUDED_SPECTRUM_KEYS, "sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
 
 
 def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
     """Shockwave Grid's renderer-only parameters from the presentation owner, with any
     held-key view orbit evaluated at the capture's ``now_ts``."""
     pres = _presentation_source(widget)
-    values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _SHOCKWAVE_GRID_KEYS}
-    for key in _SHOCKWAVE_GRID_COLOURS:
-        values[key] = tuple(getattr(pres, f"_{key}"))
-    values["shockwave_grid_allow_overflow"] = bool(pres._shockwave_grid_allow_overflow)
+    values = spec_mode_parameters(pres, "shockwave_grid")
     values["scene3d_detail"] = str(pres._scene3d_detail)
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
