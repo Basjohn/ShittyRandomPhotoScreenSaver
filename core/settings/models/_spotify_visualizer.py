@@ -21,6 +21,7 @@ from core.settings.visualizer_mode_registry import (
     resolve_effective_enabled_modes,
     VISUALIZER_MODE_IDS,
 )
+from core.settings.visualizer_mode_settings import spec_controls
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
@@ -695,25 +696,19 @@ _SPECTRUM_SOURCE_MODE_SERIALIZERS.update(
         }.items()
     }
 )
-_SHOCKWAVE_GRID_LIMITS: Dict[str, Tuple[float, float]] = {
-    'shockwave_grid_density': (0.0, 1.0),
-    'shockwave_grid_floor': (0.0, 1.0),
-    'shockwave_grid_idle': (0.0, 1.0),
-    'shockwave_grid_glow': (0.0, 1.0),
-    'shockwave_grid_horizon': (0.0, 1.0),
-    'shockwave_grid_scroll': (0.0, 1.0),
-    'shockwave_grid_tilt': (0.0, 1.0),
-    'shockwave_grid_turn': (-1.0, 1.0),
-    'shockwave_grid_wave_height': (0.0, 1.0),
-    'shockwave_grid_wave_speed': (0.0, 1.0),
-}
-_SHOCKWAVE_GRID_COLOURS = ('shockwave_grid_line_color', 'shockwave_grid_crest_color')
-_SHOCKWAVE_GRID_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    **{key: float for key in _SHOCKWAVE_GRID_LIMITS},
-    **{key: list for key in _SHOCKWAVE_GRID_COLOURS},
-    'shockwave_grid_allow_overflow': bool,
-}
-_SHOCKWAVE_GRID_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SHOCKWAVE_GRID_BUILD_SPECS)
+# Spec'd modes (``core/settings/visualizer_mode_settings.py``): every control is a model field, read
+# through its control's admission (canonical default for a missing or malformed value) and serialized
+# by its type.
+_SPEC_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {control.key: control.coerce for control in spec_controls()}
+
+
+def _build_spec_kwargs(read_value: Callable[[str, Any], Any]) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {}
+    for control in spec_controls():
+        default = _visualizer_default(control.key)
+        kwargs[control.key] = control.admit(read_value(control.key, default), default)
+    return kwargs
+
 
 _DEVCURVE_ACTIVE_LAYERS = {"bass", "vocals", "mids", "transients"}
 _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
@@ -795,7 +790,7 @@ def _build_visualizer_model_kwargs(
         _build_visualizer_sphere_kwargs(read_value),
         _build_read_value_map(read_value, _EXTRUDED_SPECTRUM_BUILD_SPECS),
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
-        _build_read_value_map(read_value, _SHOCKWAVE_GRID_BUILD_SPECS),
+        _build_spec_kwargs(read_value),
         preset_kwargs,
     )
 
@@ -1128,7 +1123,21 @@ def _normalize_ranked_attrs(target: Any, attrs: Tuple[str, ...]) -> None:
 
 
 
+def _with_spec_fields(cls):
+    """Declare one field per spec'd control (``visualizer_mode_settings``), defaulting to its
+    canonical default, as if written in the class body."""
+    annotations = cls.__dict__.get("__annotations__", {})
+    for control in spec_controls():
+        if control.key in annotations:
+            raise TypeError(f"{control.key} is declared both in the model and in a mode spec")
+        annotations[control.key] = "Any"
+        setattr(cls, control.key, field(default_factory=lambda key=control.key: deepcopy(_visualizer_default(key))))
+    cls.__annotations__ = annotations
+    return cls
+
+
 @dataclass
+@_with_spec_fields
 class SpotifyVisualizerSettings:
     """Spotify visualizer widget settings."""
 
@@ -1574,20 +1583,6 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_smooth_edges: bool = field(
         default_factory=lambda: _visualizer_default('extruded_spectrum_smooth_edges'))
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
-    shockwave_grid_density: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_density'))
-    shockwave_grid_floor: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_floor'))
-    shockwave_grid_idle: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_idle'))
-    shockwave_grid_glow: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_glow'))
-    shockwave_grid_horizon: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_horizon'))
-    shockwave_grid_scroll: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_scroll'))
-    shockwave_grid_tilt: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_tilt'))
-    shockwave_grid_turn: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_turn'))
-    shockwave_grid_wave_height: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_wave_height'))
-    shockwave_grid_wave_speed: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_wave_speed'))
-    shockwave_grid_crest_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('shockwave_grid_crest_color')))
-    shockwave_grid_line_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('shockwave_grid_line_color')))
-    shockwave_grid_allow_overflow: bool = field(
-        default_factory=lambda: _visualizer_default('shockwave_grid_allow_overflow'))
     preset_shockwave_grid: int = field(default_factory=lambda: _visualizer_default('preset_shockwave_grid'))
 
     def __post_init__(self):
@@ -1608,17 +1603,10 @@ class SpotifyVisualizerSettings:
         if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
             self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')
         self._apply_spectrum_source_profile_defaults('extruded_spectrum')
-        for attr, (low, high) in _SHOCKWAVE_GRID_LIMITS.items():
-            _clamp_attr_range(self, attr, low, high)
         self._apply_spectrum_source_profile_defaults('shockwave_grid')
-        self.shockwave_grid_allow_overflow = bool(self.shockwave_grid_allow_overflow)
-        for attr in _SHOCKWAVE_GRID_COLOURS:
-            value = list(getattr(self, attr) or ())
-            if len(value) < 3:
-                value = list(_visualizer_default(attr))
-            while len(value) < 4:
-                value.append(255)
-            setattr(self, attr, [max(0, min(255, int(round(float(channel))))) for channel in value[:4]])
+        for control in spec_controls():
+            default = _visualizer_default(control.key)
+            setattr(self, control.key, control.admit(getattr(self, control.key), default))
 
     def _apply_list_default(self, attr: str, value: list[int]) -> None:
         if getattr(self, attr) is None:
@@ -1896,7 +1884,7 @@ class SpotifyVisualizerSettings:
             self._serialize_sphere_settings(prefix),
             _serialize_prefixed_fields(self, prefix, _EXTRUDED_SPECTRUM_SERIALIZERS),
             _serialize_prefixed_fields(self, prefix, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
-            _serialize_prefixed_fields(self, prefix, _SHOCKWAVE_GRID_SERIALIZERS),
+            _serialize_prefixed_fields(self, prefix, _SPEC_SERIALIZERS),
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),

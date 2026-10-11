@@ -37,6 +37,8 @@ def test_collapsible_builder_bucket_keys_are_registered_in_canonical_ui_defaults
     discovered: set[str] = set()
     builders_root = ROOT / "ui" / "tabs" / "media"
     for path in builders_root.glob("*_builder.py"):
+        if path.name == "spec_mode_builder.py":
+            continue          # builds the buckets the mode specs declare (below)
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -50,6 +52,9 @@ def test_collapsible_builder_bucket_keys_are_registered_in_canonical_ui_defaults
             assert isinstance(bucket_node, ast.Constant) and isinstance(bucket_node.value, str), path
             discovered.add(f"{mode_node.value}:{bucket_node.value}")
 
+    from core.settings.visualizer_mode_settings import iter_mode_settings
+
+    discovered |= {f"{spec.mode_id}:{bucket.key}" for spec in iter_mode_settings() for bucket in spec.buckets}
     missing = discovered - expected
     assert not missing, f"Visualizer builder bucket(s) missing canonical UI defaults: {sorted(missing)}"
 
