@@ -38,7 +38,8 @@ upload or Python step) and is flagged. GPU medians are flagged above ``max(20%, 
 submit (thread CPU time when both runs have it) is flagged only above ``max(50%, 0.15 ms)`` and is a
 hint, not proof. Takes about two minutes on a quiet machine, longer on a busy one.
 Visualizer modes record GL calls through the probe's counter (its renderer modules) but no Python
-count.
+count, and their timings are absolute (best of ``--passes``, each pass with its system conditions):
+the control-relative method covers transitions only so far.
 """
 from __future__ import annotations
 
@@ -251,11 +252,17 @@ def measure_visualizers(size: tuple[int, int], frames: int, passes: int) -> dict
     from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
 
     results = {}
+    sampler = SystemSampler()
     for descriptor in iter_visualizer_mode_descriptors():
         mode = descriptor.mode_id
         try:
-            runs = [measure_visualizer(mode, {}, size, frames=frames) for _ in range(passes)]
+            runs = []
+            for _pass in range(passes):
+                runs.append(measure_visualizer(mode, {}, size, frames=frames))
+                runs[-1]["env"] = sampler.sample()
+            env = summarise_environment([run.pop("env") for run in runs])
             results[mode] = min(runs, key=lambda r: r["cpu_median"] + r["gpu_median"])
+            results[mode]["env"] = env       # absolute figures only: read them with these conditions
             results[mode]["gl_calls"] = measure_visualizer(mode, {}, size, frames=COUNT_FRAMES, calls=True)["gl_calls"]
         except Exception as exc:          # a broken preview fixture must not hide every other mode
             results[mode] = {"error": f"{type(exc).__name__}: {exc}"}
@@ -288,6 +295,11 @@ def compare(old: dict, new: dict) -> int:
                   f"{load.get('cpu_others_max', '?')}%), GPU busy {load.get('gpu_util_median', '?')}%, GPU clock "
                   f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('admitted', '?')}/{load.get('controls', '?')} "
                   f"passes admitted")
+    if any("gpu_rel" in row for row in new.get("transitions", {}).values()) and not any(
+            "gpu_rel" in row for row in old.get("transitions", {}).values()):
+        print("  WARNING: the old baseline predates control-relative timing (2026-10-11); its absolute GPU figures were "
+              "taken with the GPU held at higher clocks, so judge transitions by how a case moved against the untouched "
+              "ones, or re-record the old commit")
     differs = environment_differs(old.get("load", {}), new.get("load", {}))
     if differs:
         print(f"  WARNING: the runs were measured under different conditions ({', '.join(differs)}); "
