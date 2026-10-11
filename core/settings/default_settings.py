@@ -152,7 +152,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                'Volumetric Dissolve': 7000,
                                'Warp Dissolve': 7000,
                                'Wipe': 4500},
-                 'edge_bloom': {'color': [70, 150, 255, 255], 'color_source': 'Custom', 'detail': 0.5, 'glow': 0.7},
+                 'edge_bloom': {'color': [70, 150, 255, 255], 'color_source': 'Next Picture', 'detail': 0.5, 'glow': 0.7},
                  'exploding_tiles': {'antialiasing': 'Auto',
                                      'bloom': 'Auto',
                                      'bloom_strength': 0.7,

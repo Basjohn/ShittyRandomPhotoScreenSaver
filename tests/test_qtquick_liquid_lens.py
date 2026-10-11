@@ -1,5 +1,5 @@
-"""Liquid Lens: the lens grows to cover the picture even at its narrowest wobble before its water
-flattens, the water's timeline matches its GLSL on the GPU, and through the production host on a
+"""Liquid Lens: a small thick lens glides in, then spreads to cover the picture even at its narrowest
+wobble before its water flattens (the dome a true spherical cap thinning as it spreads); the water's timeline matches its GLSL on the GPU, and through the production host on a
 real offscreen context (no window): exact and continuous ends from every origin, the lens comes in
 from the side it names, the new picture shows inside it and the old one outside, Refraction and
 droplets change only what they own, warm-up leaves the first frames nothing to compile, and the
@@ -17,16 +17,20 @@ from rendering.gl_programs.liquid_lens_program import (
     LENS_BULGE,
     LENS_FLATTEN,
     LENS_GROW_END,
+    LENS_SIZE,
+    LENS_SPREAD,
     LENS_WOBBLE,
     LIQUID_LENS_GLSL,
     lens_centre,
     lens_cover,
+    lens_cap,
+    lens_envelope,
     lens_glide,
-    lens_growth,
     lens_height,
     lens_meniscus,
     lens_path,
     lens_radius,
+    lens_thickness,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
 from tools.transition_contact_sheet import TransitionCapture
@@ -48,8 +52,23 @@ def test_the_lens_covers_the_picture_before_its_water_flattens():
                 assert math.hypot(cx - centre[0], cy - centre[1]) < narrowest
     assert lens_height(0.0) == 0.0 and lens_height(LENS_FLATTEN[1]) == 0.0 and lens_height(0.999) == 0.0
     assert lens_height(0.4) > 0.0 and lens_meniscus(0.0) == 0.0 and lens_meniscus(1.0) == 1.0
-    growth = [lens_growth(p) for p in np.linspace(0.0, 1.0, 200)]
-    assert all(b >= a for a, b in zip(growth, growth[1:]))
+    cover = lens_cover(lens_path("left", ASPECT)[1], ASPECT)
+    radii = [lens_radius(cover, p) for p in np.linspace(0.0, 1.0, 200)]
+    assert all(b >= a for a, b in zip(radii, radii[1:]))
+    # A small lens while it glides, as thick as half its radius, thinning once it spreads.
+    assert lens_radius(cover, LENS_SPREAD) == pytest.approx(LENS_SIZE) and LENS_SIZE < 0.25
+    assert lens_thickness(cover, LENS_SPREAD) == pytest.approx(0.5 * LENS_SIZE)
+    assert lens_thickness(cover, LENS_GROW_END) < 0.05 * lens_thickness(cover, LENS_SPREAD)
+
+
+def test_the_dome_is_a_spherical_cap_that_stays_exact_as_it_flattens():
+    reach, thick = 0.2, 0.1
+    big = (reach * reach + thick * thick) / (2 * thick)
+    for u in (0.0, 0.3, 0.7, 0.99):
+        assert lens_cap(reach, thick, u) == pytest.approx(math.sqrt(big * big - (u * reach) ** 2) - (big - thick))
+    assert lens_cap(reach, thick, 1.0) == 0.0 and lens_cap(reach, 0.0, 0.5) == 0.0
+    # Nearly flat it is the parabola it tends to, with no cancellation.
+    assert lens_cap(1.5, 1e-6, 0.4) == pytest.approx(1e-6 * (1 - 0.16), rel=1e-4)
 
 
 @pytest.mark.qt
@@ -59,9 +78,11 @@ def test_the_timeline_matches_its_mirror_on_the_gpu(qt_app):
     probe = _GlslProbe()
     try:
         progress = list(np.linspace(0.0, 1.0, 64))
-        gpu = probe.run("float t = arg(0).x; FragColor = vec4(lensGrowth(t), lensGlide(t), lensHeight(t) * 20.0, "
-                        "lensMeniscus(t));", [[(p,)] for p in progress], declarations=LIQUID_LENS_GLSL)
-        _check(gpu, [(lens_growth(p), lens_glide(p), lens_height(p) * 20.0, lens_meniscus(p)) for p in progress])
+        gpu = probe.run("float t = arg(0).x; FragColor = vec4(lensRadius(1.6, t), lensGlide(t), lensEnvelope(t), "
+                        "lensThickness(1.6, t) * 10.0 + lensCap(0.2, 0.1, t) + lensMeniscus(t));",
+                        [[(p,)] for p in progress], declarations=LIQUID_LENS_GLSL)
+        _check(gpu, [(lens_radius(1.6, p), lens_glide(p), lens_envelope(p),
+                      lens_thickness(1.6, p) * 10.0 + lens_cap(0.2, 0.1, p) + lens_meniscus(p)) for p in progress])
     finally:
         probe.close()
 
@@ -108,10 +129,10 @@ def test_the_lens_comes_in_from_its_side_showing_the_new_picture(capture, origin
 
 @pytest.mark.qt
 def test_refraction_and_droplets_change_only_what_they_own(capture):
-    def frame(**section):
+    def frame(progress=0.35, **section):
         run = capture.run("liquid_lens", direction="left", settings={"liquid_lens": {"droplets": False, **section}},
                           duration_ms=5000)
-        return _pixels(capture.render(run, 0.35)[0])
+        return _pixels(capture.render(run, progress)[0])
 
     flat, strong = frame(refraction=0.0), frame(refraction=1.0)
     source = _pixels(capture.images[0])

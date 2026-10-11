@@ -530,6 +530,8 @@ def test_edge_bloom_page_round_trips(qapp, settings_manager, qtbot):
     assert not tab.direction_combo.isVisibleTo(tab)
     tab.edge_bloom_glow_spin.setValue(0.3)
     tab.edge_bloom_detail_spin.setValue(0.8)
+    tab.edge_bloom_colour_source_combo.setCurrentText("Custom")
+    assert tab.edge_bloom_color_btn.isEnabled()
     tab.edge_bloom_colour_source_combo.setCurrentText("Next Picture")
     assert not tab.edge_bloom_color_btn.isEnabled()          # the custom colour applies only to Custom
     persisted = settings_manager.get("transitions", {})["edge_bloom"]
