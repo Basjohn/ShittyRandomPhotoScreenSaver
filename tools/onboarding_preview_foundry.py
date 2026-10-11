@@ -444,11 +444,52 @@ def _place_preferred(scene: _HiddenQuickScene, presentation, *, scale: float = 1
         _WIDGET_ORIGIN[0], _WIDGET_ORIGIN[1], round(width * scale), round(height * scale)))
 
 
+# A regenerated asset that shows the same picture as the one already there keeps the existing file.
+# Multisampled scenes are not bit-repeatable on NVIDIA: Membrane and Volumetric Dissolve differ by one
+# level between renders of the same frame, and Shockwave Grid's one-pixel lines by up to ~40 levels on
+# a few dozen pixels (with multisampling off every preview is exact). PNG bytes can also differ for
+# identical pixels. The operator accepts that render variation (it is not a defect); rewriting such
+# files would only churn the manifest, the QRC pack and its hash fixture. "Same picture": the same
+# size and mode, and at most PIXEL_DRIFT_SHARE of the pixels differing by more than
+# PIXEL_DRIFT_TOLERANCE levels. A real change to a preview moves far more of it.
+PIXEL_DRIFT_TOLERANCE: Final = 2
+PIXEL_DRIFT_SHARE: Final = 0.001
+
+
+def same_picture(old, new) -> bool:
+    """Whether two PIL images show the same picture within the multisampling jitter."""
+    import numpy
+
+    if old.size != new.size or old.mode != new.mode:
+        return False
+    difference = numpy.abs(numpy.asarray(old, dtype=numpy.int16) - numpy.asarray(new, dtype=numpy.int16))
+    if difference.ndim == 3:
+        difference = difference.max(axis=-1)
+    return int((difference > PIXEL_DRIFT_TOLERANCE).sum()) <= PIXEL_DRIFT_SHARE * difference.size
+
+
+def save_png_stable(image, destination: Path) -> bool:
+    """Save ``image`` as PNG unless ``destination`` already holds the same picture
+    (``same_picture``). Returns whether the file was written."""
+    from PIL import Image
+
+    if destination.is_file():
+        try:
+            with Image.open(destination) as existing:
+                existing.load()
+                if same_picture(existing, image):
+                    return False
+        except OSError:
+            pass
+    image.save(destination, "PNG", optimize=True)
+    return True
+
+
 def _frame_preview(image, destination: Path) -> tuple[int, int]:
     from PIL import Image
 
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
-    image.save(destination, "PNG", optimize=True)
+    save_png_stable(image, destination)
     return image.width, image.height
 
 
@@ -1034,7 +1075,7 @@ def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, o
         with Image.open(bars_path) as bars:
             backdrop.alpha_composite(bars.convert("RGBA"))
         framed = onboarding_sheet_previews._framed(backdrop, (255, 255, 255))
-        onboarding_sheet_previews._with_shadow(framed).save(output / f"visualizer_{mode}.png", "PNG", optimize=True)
+        save_png_stable(onboarding_sheet_previews._with_shadow(framed), output / f"visualizer_{mode}.png")
 
 
 def _build_widget_previews(output: Path, scratch: Path, *,
@@ -1325,7 +1366,7 @@ def _build_transition_previews(output: Path) -> list[dict[str, object]]:
             for index, frame in enumerate(frames):
                 strip.paste(frame.convert("RGB"), (index * frame_width, 0))
             name = f"transition_{implementation.transition_id}.png"
-            strip.save(output / name, "PNG", optimize=True)
+            save_png_stable(strip, output / name)
             rows.append({"transition_id": implementation.transition_id, "path": name,
                          "size": list(strip.size), "progress": list(samples)})
         finally:
@@ -1343,7 +1384,7 @@ def _prepare_transition_artwork(output: Path) -> tuple[Path, Path]:
         with Image.open(source) as original:
             fitted = ImageOps.fit(original.convert("RGB"), TRANSITION_FRAME_SIZE,
                                   Image.Resampling.LANCZOS, centering=(0.5, centre))
-            fitted.save(target, "PNG", optimize=True)
+            save_png_stable(fitted, target)
     return targets
 
 
