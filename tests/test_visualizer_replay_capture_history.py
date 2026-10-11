@@ -142,3 +142,41 @@ def test_old_clip_missing_history_warns_once_without_inventing_history(qt_app, m
         assert engine.get_waveform_history_rate() == 44100
     finally:
         engine.force_stop()
+
+
+def _music_clip(seconds=3.0):
+    """A pulsing two-tone passage whose recorded bars are the recorder's own: all zero (R160 gives
+    every non-Spectrum-family analysis zero bars, and the recorder is configured as Sphere)."""
+    rate, step = 48000, 528                     # ~91 frames per second, as the recorder writes
+    count = int(seconds * rate / step)
+    time = np.arange(count * step + 4096, dtype=np.float64) / rate
+    pulse = 0.25 + 0.75 * (0.5 + 0.5 * np.sin(time * np.pi * 4.0)) ** 4
+    audio = (pulse * (0.6 * np.sin(time * 2 * np.pi * 70.0) + 0.3 * np.sin(time * 2 * np.pi * 900.0))
+             ).astype(np.float32)
+    frames = []
+    for index in range(count):
+        end = 4096 + index * step
+        history = CaptureHistory.from_samples(audio[end - 4096:end], capture_serial=index + 1,
+                                              sample_rate=rate)
+        frames.append(replace(_frame(history), timestamp_us=1_000_000 + round(index * step * 1e6 / rate),
+                              raw_bars=(0.0,) * 32, mode="sphere", real=replace(_frame().real, onsets=())))
+    return FeatureClip("shaped_bars", tuple(frames))
+
+
+def test_full_history_clip_replays_spectrum_bars_from_its_audio_not_the_recorders(qt_app, monkeypatch):
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from tools.visualizer_replay.driver import replay_clip
+
+    def bars(clip, mode):
+        result = replay_clip(clip, mode, settings=frozen_visualizer_settings(mode))
+        return np.array([frame["display_bars"] for frame in result["frames"]][30:])
+
+    clip = _music_clip()
+    shaped = bars(clip, "spectrum")
+    # The mode's own DSP draws the music: bars rise and follow the pulse.
+    assert shaped.max() > 0.2
+    assert np.abs(np.diff(shaped, axis=0)).mean() > 1e-3
+    # Negative control: replaying the recorded bars (the old seam) leaves Spectrum flat.
+    monkeypatch.setattr(ReplayBeatEngine, "_replay_shaped_bars", lambda self, rate: None)
+    assert bars(clip, "spectrum").max() == 0.0
+

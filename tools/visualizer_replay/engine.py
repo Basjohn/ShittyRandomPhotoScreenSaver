@@ -67,6 +67,10 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         self._replay_history_array = None
         self._replay_history_demanded = False
         self._replay_missing_history_warned = False
+        # Spectrum-shaped bars computed from a recorded capture history (see _replay_shaped_bars).
+        self._replay_compute_state = None
+        self._replay_compute_epoch: int | None = None
+        self._replay_shaped: list[float] | None = None
 
     def ensure_started(self) -> None:
         """Keep the external audio producer inert during feature replay."""
@@ -81,16 +85,20 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             if previous is not None and history.capture_serial <= previous.capture_serial:
                 if history.capture_serial < previous.capture_serial or history != previous:
                     raise ValueError("capture history serial must advance for each changed native source")
-            if previous is None or history.capture_serial != previous.capture_serial:
+            new_audio = previous is None or history.capture_serial != previous.capture_serial
+            if new_audio:
                 import numpy as np
 
                 # Bytes-backed array is immutable. Repeated source serials keep this exact
                 # object, as production held logical ticks keep the native history array.
                 self._replay_history_array = np.frombuffer(history.pcm_f32le, dtype="<f4")
             self._replay_capture_history = history
+            if new_audio:
+                self._replay_shaped = self._replay_shaped_bars(history.sample_rate)
         else:
             self._replay_capture_history = None
             self._replay_history_array = None
+            self._replay_shaped = None
         lanes = frame.energy
         self._replay_pre_agc = _bands(lanes.pre_agc)
         self._replay_bubble = _bands(lanes.bubble)
@@ -128,7 +136,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             waveform = self._replay_history_array[-PRODUCTION_WAVEFORM_BLOCK:].tolist()
         else:
             waveform = _waveform_block(frame.waveform)
-        raw_bars = list(frame.raw_bars)
+        raw_bars = list(frame.raw_bars) if self._replay_shaped is None else list(self._replay_shaped)
         if len(raw_bars) != self._bar_count:
             source_last = len(raw_bars) - 1
             target_last = self._bar_count - 1
@@ -166,6 +174,34 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
             # author the lane directly.
             energy_override=None if frame.real is not None else _bands(lanes.continuous),
         )
+
+    def _replay_shaped_bars(self, sample_rate: int) -> list[float] | None:
+        """The replayed mode's own Spectrum-shaped bars from the recorded audio, or None.
+
+        Shaped bars belong to the mode that draws them (R160: only the Spectrum family shapes;
+        every other mode's analysis publishes zero bars), so a recording's bars are only the
+        recorder's own. A clip that carries the capture history replays the real audio
+        instead: the newest capture block, the input production analyzes on a tick, through
+        this mode's configured DSP state (rebuilt at each configuration boundary, as the
+        production analysis lane rebuilds it). The capture block is the mode's configured
+        size; an unspecified size is the host's usual 10 ms period.
+        """
+        from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
+
+        worker = self._audio_worker
+        if not worker._spectrum_shaping_enabled:
+            return None
+        epoch = self._analysis_compute_state_epoch
+        if self._replay_compute_state is None or self._replay_compute_epoch != epoch:
+            import numpy as np
+
+            self._replay_compute_state = worker.make_compute_snapshot()
+            # Production imports NumPy into the worker when native capture starts; replay starts none.
+            self._replay_compute_state._np = np
+            self._replay_compute_epoch = epoch
+        block = int(worker._preferred_block_size or 0) or max(1, int(sample_rate) // 100)
+        bars = compute_bars_from_samples(self._replay_compute_state, self._replay_history_array[-block:])
+        return list(bars) if isinstance(bars, list) else None
 
     def get_pre_agc_energy_bands(self) -> EnergyBands:
         return self._replay_pre_agc
