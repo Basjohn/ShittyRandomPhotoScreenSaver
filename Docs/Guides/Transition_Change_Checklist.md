@@ -21,6 +21,28 @@ canonical transition registry/settings
 
 No new transition may depend on `GLCompositorWidget`, QWidget pixels or a compatibility presenter.
 
+## Settings: one spec per transition
+
+A transition's Settings page is declared once, in `rendering/transition_settings.py`: its Direction
+choices with the codes they resolve to (and the order Random draws from), its page controls in
+order (`Number`, `Toggle`, `Choice`, `Colour`) and its closed Advanced bucket. From that spec:
+
+- the Transitions tab builds, hydrates, saves and signal-blocks the page and fills the shared
+  Direction box; widgets are named `<section>_<field>_<spin|check|combo|btn>`;
+- request admission (`parameter_resolution.py`) clamps numbers to the same ranges, admits choices
+  and their retired spellings (`aliases`) the same way and resolves directions through the same codes;
+  `spec.page_values()` hands every page number and toggle to the renderer under its own name;
+- `tests/test_transition_settings_spec.py` checks the spec owns exactly its defaults section, the
+  registry and spec agree, admission clamps to the page's ranges, and the real tab builds, saves and
+  reloads every control; `test_transition_direction_labels.py` renders every offered side label.
+
+Adding a transition's Settings therefore touches the registry descriptor, the canonical defaults
+(its section, activation, duration and pool entries), its spec, and its resolver (usually three lines:
+`_spec_inputs`, `page_values`, any colour or code mapping). Values never go in the spec. A page whose
+controls no spec type describes (sliders with value labels, colours with alpha, controls that show or
+hide each other: Blinds, Particle, Burn) sets `custom` and provides `_build_<section>_group`,
+`_hydrate_<section>_page` and `_save_<section>_page`, listing its own fields in `custom_fields`.
+
 ## Retired transition presentation
 
 All canonical transitions have Quick implementations. The old `transition_factory`/GL-compositor pixel stack and its presentation helpers are retired and absent from current source. They are not visual-reference authority and must not be reconstructed to satisfy stale tests or old documentation. Historical failure mechanisms belong in `Docs/Historical_Bugs/`.

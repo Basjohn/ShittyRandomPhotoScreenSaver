@@ -117,7 +117,7 @@ def test_crumble_retires_misleading_weight_labels_without_changing_order(
     tab = TransitionsTab(settings)
     qtbot.addWidget(tab)
     tab._on_nav_selected("Crumble")
-    assert tab.crumble_weight_combo.currentText() == "Top Weighted"
+    assert tab.crumble_weighting_combo.currentText() == "Top Weighted"
     tab._save_settings()
     assert settings.get("transitions", {})["crumble"]["weighting"] == "Top Weighted"
     assert (

@@ -106,8 +106,8 @@ without the safe path below.
 
 - **Melt retired edge directions** (`transitions.melt_drip.direction` values
   such as `Top to Bottom` from before the origin-driven Melt contract;
-  `rendering/quick/transitions/parameter_resolution.py::_resolve_melt_drip`
-  and the Melt origin combo in `ui/tabs/transitions_tab.py`). Any value that
+  Melt's spec in `rendering/transition_settings.py`, which both
+  `parameter_resolution.py::_resolve_melt_drip` and the Settings page's Direction box read). Any value that
   is not an origin label resolves as Random per run and shows as Random in
   Settings; saving writes an origin label.
   *Blocked:* mapping old edges onto origins (they carry no origin meaning) or

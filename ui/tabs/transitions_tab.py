@@ -8,7 +8,6 @@ Allows users to configure transition settings:
 - Easing curves
 """
 from collections.abc import Mapping
-import math
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -25,29 +24,15 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
-from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES
-from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
-from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTION_CHOICES
-from rendering.gl_programs.jigsaw_options import JIGSAW_ORDER_CHOICES, JIGSAW_PIECES_RANGE
-from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGIN_CHOICES
-from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCE_CHOICES
-from rendering.gl_programs.vhs_options import VHS_DIRECTION_CHOICES
-from rendering.gl_programs.capillary_bloom_options import CAPILLARY_SOURCES_RANGE
-from rendering.gl_programs.depth_cascade_options import CASCADE_CARDS_RANGE
-from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEP_CHOICES
-from rendering.gl_programs.chromatic_shear_options import SHEAR_SLICES_RANGE
-from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTION_CHOICES
-from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE
-from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_CHOICES
-from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_STOPS_RANGE
-from rendering.gl_programs.volumetric_dissolve_options import (
-    VOLUMETRIC_DIRECTION_CHOICES,
-    VOLUMETRIC_PARTICLE_SIZE_RANGE,
-)
-from rendering.gl_programs.scene3d import (
-    SCENE3D_ANTIALIASING_CHOICES,
-    SCENE3D_EFFECT_CHOICES,
-    SCENE3D_TRAIL_CHOICES,
+from rendering.transition_settings import (
+    Choice,
+    Colour,
+    Number,
+    Toggle,
+    TransitionSettings,
+    iter_transition_settings,
+    transition_settings,
+    widget_attr,
 )
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -106,29 +91,13 @@ class TransitionsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        # Maintain per-transition direction selections in-memory from the one
-        # canonical defaults authority until persisted state is hydrated.
-        self._dir_slide: str = str(_transition_default("slide.direction"))
-        self._dir_wipe: str = str(_transition_default("wipe.direction"))
-        self._dir_blockspin: str = str(_transition_default("blockspin.direction"))
+        # Each transition's Direction selection, by section, from the one canonical defaults
+        # authority until persisted state is hydrated. The shared Direction box edits the current
+        # transition's entry, so a transition whose page is not built still keeps its direction.
         self._direction_by_type = {
-            name: str(_transition_default(f"{name}.direction"))
-            for name in (
-                "glass_shatter",
-                "exploding_tiles",
-                "pixel_accretion",
-                "melt_drip",
-                "page_curl",
-                "disintegrate",
-                "cube_turn",
-                "beam",
-                "jigsaw",
-                "volumetric_dissolve",
-                "vhs",
-                "membrane",
-                "chromatic_shear",
-                "depth_cascade",
-            )
+            spec.section: str(_transition_default(f"{spec.section}.direction"))
+            for spec in iter_transition_settings()
+            if spec.directions is not None
         }
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
@@ -260,15 +229,9 @@ class TransitionsTab(QWidget):
             section = transitions_config.get(name, canonical[name])
             return section if isinstance(section, dict) else dict(canonical[name])
 
-        self._dir_slide = str(_section("slide").get("direction", canonical["slide"]["direction"]))
-        self._dir_wipe = str(_section("wipe").get("direction", canonical["wipe"]["direction"]))
-        self._dir_blockspin = str(
-            _section("blockspin").get("direction", canonical["blockspin"]["direction"])
-        )
         for name in self._direction_by_type:
-            section = _section(name)
             self._direction_by_type[name] = str(
-                section.get("direction", canonical[name]["direction"])
+                _section(name).get("direction", canonical[name]["direction"])
             )
 
         current = self._current_transition or self.transition_combo.currentText()
@@ -566,100 +529,35 @@ class TransitionsTab(QWidget):
     # its pill is selected (doc 07 E2), not eagerly at tab construction. A
     # deactivated transition's page is never built; deactivating a built page
     # retires it; reactivation restores the pill without rebuilding until it is
-    # selected again. Crossfade and Warp Dissolve have no specific page; Wipe
-    # uses only the shared Direction group, while Slide has a lazy motion page.
+    # selected again. A page is described by its spec in
+    # ``rendering/transition_settings.py``; Crossfade and Warp Dissolve have none
+    # and Wipe has only the shared Direction box.
 
-    _TRANSITION_PAGE_BUILDERS = {
-        "Slide": "_build_slide_group",
-        "3D Block Spins": "_build_blockspin_group",
-        "Blinds": "_build_blinds_group",
-        "Ripple": "_build_ripple_group",
-        "Crumble": "_build_crumble_group",
-        "Particle": "_build_particle_group",
-        "Burn": "_build_burn_group",
-        "Glass Shatter": "_build_glass_shatter_group",
-        "Exploding Tiles": "_build_exploding_tiles_group",
-        "Directional Pixel Accretion": "_build_pixel_accretion_group",
-        "Melt Drip": "_build_melt_drip_group",
-        "Page Curl": "_build_page_curl_group",
-        "Disintegrate": "_build_disintegrate_group",
-        "Cube Turn": "_build_cube_turn_group",
-        "Beam": "_build_beam_group",
-        "Jigsaw Piece Flip": "_build_jigsaw_group",
-        "Volumetric Dissolve": "_build_volumetric_dissolve_group",
-        "VHS Distortion": "_build_vhs_group",
-        "Capillary Bloom": "_build_capillary_bloom_group",
-        "Depth Card Cascade": "_build_depth_cascade_group",
-        "Chromatic Shear": "_build_chromatic_shear_group",
-        "Surface Tension Merge": "_build_surface_tension_group",
-        "Membrane Turnover": "_build_membrane_group",
-        "Liquid Lens": "_build_liquid_lens_group",
-        "Edge Bloom Reveal": "_build_edge_bloom_group",
-    }
+    @staticmethod
+    def _page_spec(name: str) -> TransitionSettings | None:
+        spec = transition_settings(name)
+        return spec if spec is not None and spec.has_page else None
 
-    _SPECIFIC_GROUP_ATTRS = {
-        "Slide": "slide_group",
-        "3D Block Spins": "blockspin_group",
-        "Blinds": "blinds_group",
-        "Ripple": "ripple_group",
-        "Crumble": "crumble_group",
-        "Particle": "particle_group",
-        "Burn": "burn_group",
-        "Glass Shatter": "glass_shatter_group",
-        "Exploding Tiles": "exploding_tiles_group",
-        "Directional Pixel Accretion": "pixel_accretion_group",
-        "Melt Drip": "melt_drip_group",
-        "Page Curl": "page_curl_group",
-        "Disintegrate": "disintegrate_group",
-        "Cube Turn": "cube_turn_group",
-        "Beam": "beam_group",
-        "Jigsaw Piece Flip": "jigsaw_group",
-        "Volumetric Dissolve": "volumetric_dissolve_group",
-        "VHS Distortion": "vhs_group",
-        "Capillary Bloom": "capillary_bloom_group",
-        "Depth Card Cascade": "depth_cascade_group",
-        "Chromatic Shear": "chromatic_shear_group",
-        "Surface Tension Merge": "surface_tension_group",
-        "Membrane Turnover": "membrane_group",
-        "Liquid Lens": "liquid_lens_group",
-        "Edge Bloom Reveal": "edge_bloom_group",
-    }
-
-    _DIRECTIONAL_TRANSITIONS = frozenset(
-        {
-            "Slide",
-            "Wipe",
-            "Glass Shatter",
-            "Exploding Tiles",
-            "Directional Pixel Accretion",
-            "Melt Drip",
-            "Page Curl",
-            "Disintegrate",
-            "Cube Turn",
-            "Beam",
-            "Jigsaw Piece Flip",
-            "Volumetric Dissolve",
-            "VHS Distortion",
-            "Membrane Turnover",
-            "Chromatic Shear",
-            "Depth Card Cascade",
-        }
-    )
+    def _page_group_attr(self, name: str) -> str | None:
+        spec = self._page_spec(name)
+        return f"{spec.section}_group" if spec is not None else None
 
     def _ensure_transition_page(self, name: str) -> None:
         """Lazily build one transition's specific settings group + hydrate it."""
-        builder_name = self._TRANSITION_PAGE_BUILDERS.get(name)
-        if builder_name is None:
+        spec = self._page_spec(name)
+        if spec is None:
             return
         # A deactivated transition page is never built/hydrated.
         if not self._transition_activated(name):
             return
-        group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
-        if group_attr and hasattr(self, group_attr):
+        if hasattr(self, f"{spec.section}_group"):
             return  # already built
         attrs_before_build = set(vars(self))
         try:
-            getattr(self, builder_name)()
+            if spec.custom:
+                getattr(self, f"_build_{spec.section}_group")()
+            else:
+                self._build_spec_page(spec)
             self._transition_page_attr_names[name] = set(vars(self)) - attrs_before_build
             self._hydrate_transition_page(name)
         except Exception:
@@ -700,7 +598,7 @@ class TransitionsTab(QWidget):
 
     def _retire_transition_page(self, name: str) -> None:
         """Destroy a built transition page cleanly (on deactivation)."""
-        group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
+        group_attr = self._page_group_attr(name)
         if not group_attr or not hasattr(self, group_attr):
             self._transition_page_attr_names.pop(name, None)
             return
@@ -754,40 +652,6 @@ class TransitionsTab(QWidget):
         )
         return canonical
 
-    @staticmethod
-    def _new_transition_number(
-        section: Mapping[str, object],
-        field_name: str,
-        section_name: str,
-        canonical_value: object,
-        widget: object,
-        converter,
-    ):
-        raw = section.get(field_name, canonical_value)
-        try:
-            value = converter(raw)
-            if isinstance(value, float) and not math.isfinite(value):
-                raise ValueError
-        except (TypeError, ValueError, OverflowError):
-            logger.warning(
-                "[TRANSITIONS_TAB] Repaired malformed transition field %s.%s",
-                section_name,
-                field_name,
-            )
-            value = converter(canonical_value)
-
-        # The controls own the same ranges used by request admission.  Clamp
-        # through those ranges so hydration adds no second numeric contract.
-        lower = widget.minimum()
-        upper = widget.maximum()
-        clamped = max(lower, min(upper, value))
-        if clamped != value:
-            logger.warning(
-                "[TRANSITIONS_TAB] Repaired out-of-range transition field %s",
-                f"{section_name}.{field_name}",
-            )
-        return clamped
-
     def _hydrate_built_transition_groups(self, transitions_config: dict, canonical_transitions: dict) -> None:
         """Hydrate only the transition-specific groups that are currently built.
 
@@ -796,847 +660,266 @@ class TransitionsTab(QWidget):
         an unbuilt page never touches non-existent controls. Callers set
         ``self._loading`` so control signals do not trigger saves during hydration.
         """
-        if hasattr(self, 'slide_group'):
-            canonical_slide = canonical_transitions['slide']
-            slide = transitions_config.get('slide', canonical_slide)
-            style = slide.get('motion_style', canonical_slide['motion_style'])
-            index = self.slide_motion_style_combo.findText(str(style))
-            self.slide_motion_style_combo.setCurrentIndex(max(0, index))
+        for spec in iter_transition_settings():
+            if not spec.has_page or not hasattr(self, f"{spec.section}_group"):
+                continue
+            canonical = canonical_transitions[spec.section]
+            section = self._new_transition_section(transitions_config, spec.section, canonical)
+            for control in spec.all_controls:
+                self._hydrate_control(spec, control, section, canonical)
+            self._sync_enabled_controls(spec)
+            if spec.custom:
+                getattr(self, f"_hydrate_{spec.section}_page")(section, canonical)
 
-        if hasattr(self, 'glass_shatter_group'):
-            canonical = canonical_transitions['glass_shatter']
-            cfg = self._new_transition_section(transitions_config, 'glass_shatter', canonical)
-            self.glass_shards_spin.setValue(self._new_transition_number(
-                cfg, 'shards', 'glass_shatter', canonical['shards'], self.glass_shards_spin, int,
-            ))
-            self.glass_depth_spin.setValue(self._new_transition_number(
-                cfg, 'depth', 'glass_shatter', canonical['depth'], self.glass_depth_spin, float,
-            ))
-            for field, check in (("collisions", self.glass_collisions_check),
-                                 ("reshatter", self.glass_reshatter_check)):
-                check.setChecked(bool(SettingsManager.to_bool(
-                    cfg.get(field, canonical[field]), bool(canonical[field]))))
+    def _hydrate_control(self, spec: TransitionSettings, control, section: Mapping[str, object],
+                         canonical: Mapping[str, object]) -> None:
+        """Show one persisted value, repaired exactly as request admission repairs it."""
+        widget = getattr(self, widget_attr(spec.section, control))
+        raw = section.get(control.field, canonical[control.field])
+        value = control.admit(raw, canonical[control.field])
+        if isinstance(control, Number):
+            if raw != value:
+                logger.warning("[TRANSITIONS_TAB] Repaired transition field %s.%s", spec.section, control.field)
+            widget.setValue(value)
+        elif isinstance(control, Toggle):
+            widget.setChecked(value)
+        elif isinstance(control, Choice):
+            widget.setCurrentText(value)
+        else:
+            widget.set_color(QColor(*value))
 
-        if hasattr(self, 'exploding_tiles_group'):
-            canonical = canonical_transitions['exploding_tiles']
-            cfg = self._new_transition_section(transitions_config, 'exploding_tiles', canonical)
-            self.exploding_tiles_columns_spin.setValue(self._new_transition_number(
-                cfg, 'columns', 'exploding_tiles', canonical['columns'], self.exploding_tiles_columns_spin, int,
-            ))
-            self.exploding_tiles_depth_spin.setValue(self._new_transition_number(
-                cfg, 'depth', 'exploding_tiles', canonical['depth'], self.exploding_tiles_depth_spin, float,
-            ))
+    def _control_value(self, spec: TransitionSettings, control) -> object:
+        """One built control's value, as it is persisted."""
+        widget = getattr(self, widget_attr(spec.section, control))
+        if isinstance(control, Number):
+            return int(widget.value()) if control.integer else float(widget.value())
+        if isinstance(control, Toggle):
+            return widget.isChecked()
+        if isinstance(control, Choice):
+            return widget.currentText()
+        color = widget.color()
+        return [color.red(), color.green(), color.blue(), 255]
 
-        if hasattr(self, 'pixel_accretion_group'):
-            canonical = canonical_transitions['pixel_accretion']
-            cfg = self._new_transition_section(transitions_config, 'pixel_accretion', canonical)
-            self.pixel_tile_size_spin.setValue(self._new_transition_number(
-                cfg, 'tile_size', 'pixel_accretion', canonical['tile_size'], self.pixel_tile_size_spin, int,
-            ))
-            self.pixel_travel_spin.setValue(self._new_transition_number(
-                cfg, 'travel', 'pixel_accretion', canonical['travel'], self.pixel_travel_spin, float,
-            ))
+    def _page_widgets(self) -> list[QWidget]:
+        """Every built transition page control declared by a spec (for signal blocking)."""
+        widgets = []
+        for spec in iter_transition_settings():
+            if hasattr(self, f"{spec.section}_group"):
+                widgets.extend(getattr(self, widget_attr(spec.section, control)) for control in spec.all_controls)
+        return widgets
 
-        if hasattr(self, 'melt_drip_group'):
-            canonical = canonical_transitions['melt_drip']
-            cfg = self._new_transition_section(transitions_config, 'melt_drip', canonical)
-            self.melt_drip_detail_spin.setValue(self._new_transition_number(
-                cfg, 'detail', 'melt_drip', canonical['detail'], self.melt_drip_detail_spin, float,
-            ))
+    def _build_spec_page(self, spec: TransitionSettings) -> None:
+        """Build a transition's page from its spec: its controls, then its closed Advanced bucket."""
+        group = QGroupBox(spec.page_title)
+        self._style_group_box(group)
+        setattr(self, f"{spec.section}_group", group)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        for control in spec.controls:
+            self._build_control(layout, spec, control)
+        self._build_advanced(layout, spec)
+        self._sync_enabled_controls(spec)
+        self._specific_group_host_layout.addWidget(group)
 
-        if hasattr(self, 'beam_group'):
-            canonical = canonical_transitions['beam']
-            cfg = self._new_transition_section(transitions_config, 'beam', canonical)
-            color = cfg.get('color', canonical['color'])
-            if not (isinstance(color, (list, tuple)) and len(color) >= 3
-                    and all(isinstance(c, (int, float)) for c in color[:3])):
-                color = canonical['color']
-            self._beam_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
-            self.beam_color_btn.set_color(self._beam_color)
-            self.beam_sparks_check.setChecked(bool(cfg.get('sparks', canonical['sparks'])))
-        if hasattr(self, 'liquid_lens_group'):
-            canonical = canonical_transitions['liquid_lens']
-            cfg = self._new_transition_section(transitions_config, 'liquid_lens', canonical)
-            self.liquid_lens_stops_spin.setValue(self._new_transition_number(
-                cfg, 'stops', 'liquid_lens', canonical['stops'], self.liquid_lens_stops_spin, int,
-            ))
-        if hasattr(self, 'surface_tension_group'):
-            canonical = canonical_transitions['surface_tension']
-            cfg = self._new_transition_section(transitions_config, 'surface_tension', canonical)
-            self.surface_tension_pools_spin.setValue(self._new_transition_number(
-                cfg, 'pools', 'surface_tension', canonical['pools'], self.surface_tension_pools_spin, int,
-            ))
-        if hasattr(self, 'chromatic_shear_group'):
-            canonical = canonical_transitions['chromatic_shear']
-            cfg = self._new_transition_section(transitions_config, 'chromatic_shear', canonical)
-            self.chromatic_shear_slices_spin.setValue(self._new_transition_number(
-                cfg, 'slices', 'chromatic_shear', canonical['slices'], self.chromatic_shear_slices_spin, int,
-            ))
-        if hasattr(self, 'depth_cascade_group'):
-            canonical = canonical_transitions['depth_cascade']
-            cfg = self._new_transition_section(transitions_config, 'depth_cascade', canonical)
-            self.depth_cascade_shadows_check.setChecked(bool(cfg.get('shadows', canonical['shadows'])))
-            self.depth_cascade_cards_spin.setValue(self._new_transition_number(
-                cfg, 'cards', 'depth_cascade', canonical['cards'], self.depth_cascade_cards_spin, int,
-            ))
-        if hasattr(self, 'capillary_bloom_group'):
-            canonical = canonical_transitions['capillary_bloom']
-            cfg = self._new_transition_section(transitions_config, 'capillary_bloom', canonical)
-            self.capillary_bloom_sources_spin.setValue(self._new_transition_number(
-                cfg, 'sources', 'capillary_bloom', canonical['sources'], self.capillary_bloom_sources_spin, int,
-            ))
-        if hasattr(self, 'edge_bloom_group'):
-            canonical = canonical_transitions['edge_bloom']
-            cfg = self._new_transition_section(transitions_config, 'edge_bloom', canonical)
-            color = cfg.get('color', canonical['color'])
-            if not (isinstance(color, (list, tuple)) and len(color) >= 3
-                    and all(isinstance(c, (int, float)) for c in color[:3])):
-                color = canonical['color']
-            self._edge_bloom_color = QColor(*(max(0, min(255, int(c))) for c in color[:3]))
-            self.edge_bloom_color_btn.set_color(self._edge_bloom_color)
-            source = cfg.get('color_source', canonical['color_source'])
-            self.edge_bloom_colour_source_combo.setCurrentText(
-                str(source if source in EDGE_BLOOM_COLOUR_SOURCE_CHOICES else canonical['color_source']))
-            self._sync_edge_bloom_colour_source()
-        if hasattr(self, 'volumetric_dissolve_group'):
-            canonical = canonical_transitions['volumetric_dissolve']
-            cfg = self._new_transition_section(transitions_config, 'volumetric_dissolve', canonical)
-            self.volumetric_dissolve_size_spin.setValue(self._new_transition_number(
-                cfg, 'particle_size', 'volumetric_dissolve', canonical['particle_size'],
-                self.volumetric_dissolve_size_spin, int,
-            ))
-        if hasattr(self, 'jigsaw_group'):
-            canonical = canonical_transitions['jigsaw']
-            cfg = self._new_transition_section(transitions_config, 'jigsaw', canonical)
-            self.jigsaw_pieces_spin.setValue(self._new_transition_number(
-                cfg, 'pieces', 'jigsaw', canonical['pieces'], self.jigsaw_pieces_spin, int,
-            ))
-        if hasattr(self, 'disintegrate_group'):
-            canonical = canonical_transitions['disintegrate']
-            cfg = self._new_transition_section(transitions_config, 'disintegrate', canonical)
-            self.disintegrate_grain_spin.setValue(self._new_transition_number(
-                cfg, 'grain_size', 'disintegrate', canonical['grain_size'], self.disintegrate_grain_spin, int,
-            ))
-
-        for section, controls in self._SURFACE_CONTROLS.items():
-            if hasattr(self, f"{section}_group"):
-                canonical = canonical_transitions[section]
-                cfg = self._new_transition_section(transitions_config, section, canonical)
-                for field, *_ in controls:
-                    spin = getattr(self, f"{section}_{field}_spin")
-                    spin.setValue(self._new_transition_number(
-                        cfg, field, section, canonical[field], spin, float,
-                    ))
-
-        for section, controls in self._SCENE3D_CHOICES.items():
-            if hasattr(self, f"{section}_group"):
-                canonical = canonical_transitions[section]
-                cfg = transitions_config.get(section, canonical)
-                cfg = cfg if isinstance(cfg, dict) else canonical
-                for field, _label, choices, _tip in controls:
-                    value = cfg.get(field, canonical[field])
-                    getattr(self, f"{section}_{field}_combo").setCurrentText(
-                        str(value if value in choices else canonical[field]))
-
-        if hasattr(self, 'blockspin_group'):
-            try:
-                idx = self.blockspin_direction_combo.findText(self._dir_blockspin)
-                if idx < 0:
-                    idx = 0
-                self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
-        if hasattr(self, 'blinds_group'):
-            canonical_blinds = canonical_transitions['blinds']
-            blinds = transitions_config.get('blinds', canonical_blinds)
-            if not isinstance(blinds, dict):
-                blinds = {}
-            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds['feather'])))
-            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
-            style = blinds.get('style', canonical_blinds['style'])
-            self.blinds_style_combo.setCurrentText(
-                str(style if style in BLINDS_STYLE_CHOICES else canonical_blinds['style']))
-            self._sync_blinds_style()
-            self.blinds_slats_spin.setValue(self._new_transition_number(
-                blinds, 'slats', 'blinds', canonical_blinds['slats'], self.blinds_slats_spin, int,
-            ))
-            blinds_dir = blinds.get('direction', canonical_blinds['direction'])
-            try:
-                idx = self.blinds_direction_combo.findText(str(blinds_dir))
-                if idx < 0:
-                    idx = 0
-                self.blinds_direction_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
-        if hasattr(self, 'ripple_group'):
-            canonical_ripple = canonical_transitions['ripple']
-            ripple = transitions_config.get('ripple', canonical_ripple)
-            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple['ripple_count'])))
-
-        if hasattr(self, 'crumble_group'):
-            canonical_crumble = canonical_transitions['crumble']
-            crumble = transitions_config.get('crumble', canonical_crumble)
-            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble['piece_count']))
-            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble['crack_complexity']))
-            weight = crumble.get('weighting', canonical_crumble['weighting'])
-            # These former labels both executed Top Weighted; preserve the
-            # behavior while retiring the misleading spelling on the next save.
-            if weight in ("Bias Old Image", "Bias New Image"):
-                weight = "Top Weighted"
-            try:
-                idx = self.crumble_weight_combo.findText(weight)
-                if idx < 0:
-                    idx = 0
-                self.crumble_weight_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            self.crumble_collisions_check.setChecked(bool(SettingsManager.to_bool(
-                crumble.get('collisions', canonical_crumble['collisions']),
-                bool(canonical_crumble['collisions']))))
-
-        if hasattr(self, 'particle_group'):
-            canonical_particle = canonical_transitions['particle']
-            particle = transitions_config.get('particle', canonical_particle)
-            mode = particle.get('mode', canonical_particle['mode'])
-            idx = self.particle_mode_combo.findText(mode)
-            if idx >= 0:
-                self.particle_mode_combo.setCurrentIndex(idx)
-            direction = particle.get('direction', canonical_particle['direction'])
-            idx = self.particle_direction_combo.findText(direction)
-            if idx >= 0:
-                self.particle_direction_combo.setCurrentIndex(idx)
-            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle['particle_radius'])))
-            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle['trail_strength']) > 0.01)
-            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle['use_3d_shading']))
-            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle['texture_mapping']))
-            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle['wobble']))
-            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle['gloss_size'])))
-            light_idx = particle.get('light_direction', canonical_particle['light_direction'])
-            if 0 <= light_idx < self.particle_light_combo.count():
-                self.particle_light_combo.setCurrentIndex(light_idx)
-            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle['swirl_turns']))
-            swirl_order_idx = particle.get('swirl_order', canonical_particle['swirl_order'])
-            if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
-                self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
-            self._update_particle_mode_visibility()
-
-        if hasattr(self, 'burn_group'):
-            canonical_burn = canonical_transitions['burn']
-            burn = transitions_config.get('burn', canonical_burn)
-            if not isinstance(burn, dict):
-                burn = {}
-            canonical_burn_dir = str(canonical_burn['direction']).strip()
-            if not canonical_burn_dir:
-                raise ValueError("Canonical transitions.burn.direction is empty")
-            burn_dir = str(burn.get('direction', canonical_burn_dir) or '').strip()
-            idx = self.burn_direction_combo.findText(burn_dir)
-            if idx < 0:
-                idx = self.burn_direction_combo.findText(canonical_burn_dir)
-            if idx < 0:
-                raise ValueError(
-                    f"Canonical burn direction is not represented by the UI: {canonical_burn_dir!r}"
-                )
-            self.burn_direction_combo.setCurrentIndex(idx)
-            jag = int(round(burn.get('jaggedness', canonical_burn['jaggedness']) * 100))
-            self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
-            self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
-            glow_i = int(round(burn.get('glow_intensity', canonical_burn['glow_intensity']) * 100))
-            self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
-            self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
-            char_w = int(round(burn.get('char_width', canonical_burn['char_width']) * 100))
-            self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
-            self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
-            glow_col = burn.get('glow_color', canonical_burn['glow_color'])
-            if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
-                self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
-                                               int(glow_col[3]) if len(glow_col) > 3 else 255)
-                self._apply_burn_glow_color_btn()
-            ember_col = burn.get('ember_color', canonical_burn['ember_color'])
-            if isinstance(ember_col, (list, tuple)) and len(ember_col) >= 3:
-                self._burn_ember_color = QColor(int(ember_col[0]), int(ember_col[1]), int(ember_col[2]),
-                                                int(ember_col[3]) if len(ember_col) > 3 else 255)
-                self._apply_burn_ember_color_btn()
-            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn['smoke_enabled'])))
-            smoke_d = int(round(burn.get('smoke_density', canonical_burn['smoke_density']) * 100))
-            self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
-            self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
-            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn['ash_enabled'])))
-            ash_d = int(round(burn.get('ash_density', canonical_burn['ash_density']) * 100))
-            self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
-            self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
-            self.burn_flames_check.setChecked(bool(burn.get('flames', canonical_burn['flames'])))
-            self.burn_veins_check.setChecked(bool(burn.get('ember_veins', canonical_burn['ember_veins'])))
-
-    def _build_slide_group(self) -> None:
-        self.slide_group = QGroupBox("Slide Motion")
-        self._style_group_box(self.slide_group)
-        slide_layout = QVBoxLayout(self.slide_group)
-        slide_layout.setContentsMargins(0, 12, 0, 0)
-        motion_row = self._aligned_row(slide_layout, "Motion Style:")
-        self.slide_motion_style_combo = StyledComboBox(size_variant="compact")
-        self.slide_motion_style_combo.addItems(
-            ["Linear", "Elastic", "Wobble", "Flex", "Perspective Push"]
-        )
-        self.slide_motion_style_combo.currentTextChanged.connect(self._save_settings)
-        motion_row.addWidget(self.slide_motion_style_combo)
-        motion_row.addStretch()
-        self._specific_group_host_layout.addWidget(self.slide_group)
-
-    # Presentation only: ranges/labels live here; values always come from the
-    # canonical defaults, never from this control description.
-    _SURFACE_CONTROLS = {
-        "crumble": (
-            ("depth", "Collapse Depth:", .2, 1.5, "Out-of-plane movement and tumble of falling wall chunks."),
-            ("thickness", "Wall Thickness:", 0., 1., "Thickness of the solid wall and its broken edges."),
-            ("debris", "Crumbling Debris:", 0., 1., "Small solid fragments released around falling chunks. Zero disables debris geometry and drawing."),
-        ),
-        "glass_shatter": (
-            ("thickness", "Glass Thickness:", 0., 1., "Thickness of the solid shards and their beveled edges. Zero makes a thin pane."),
-            ("transparency", "Transparency:", 0., 1., "How much of the next image is visible through moving glass. Zero keeps opaque image faces."),
-            ("refraction", "Refraction:", 0., 1., "Bending of the next image through the glass. Visible with transparency; zero disables distortion."),
-            ("dispersion", "Color Dispersion:", 0., 1., "Prismatic color separation in refraction. Zero disables it."),
-            ("sheen", "Reflections / Sheen:", 0., 1., "Reflections, rim glints and bevel highlights. Zero removes the optical highlights."),
-        ),
-        "exploding_tiles": (
-            ("thickness", "Tile Thickness:", 0., 1., "Solid tile thickness relative to tile size, with beveled edges."),
-            ("force", "Explosion Force:", .5, 2., "Strength of the outward launch and tumble. Tiles travel beyond the screen edge."),
-            ("bloom_strength", "Bloom Strength:", 0., 1., "How strongly sparks, hot edges and glowing cracks glow "
-             "when Bloom is on."),
-        ),
-        "blinds": (
-            ("gloss", "Slat Gloss:", 0., 1., "Shine and reflections of the next image on the turning slats."),
-        ),
-        "page_curl": (
-            ("size", "Curl Size:", 0., 1., "How large the peeled sheet's roll grows: thin and tight up to a "
-             "loose, wide curl."),
-            ("gloss", "Gloss:", 0., 1., "Shine of the laminated sheet and reflections of the next image on it."),
-        ),
-        "cube_turn": (
-            ("gloss", "Gloss:", 0., 1., "Shine and reflections of the next image on the turning box."),
-        ),
-        "beam": (
-            ("glow", "Glow:", 0., 1., "How far the beam's light reaches and how strongly it lights the picture."),
-            ("scorch", "Scorch:", 0., 1., "How strongly the beam scorches the new picture before it cures clean."),
-            ("cure", "Cure Time:", 0., 1., "How long the scorch takes to cure clean. A longer cure has the beam "
-             "cross sooner, so the run still ends on the clean picture."),
-        ),
-        "disintegrate": (
-            ("wind", "Wind:", .5, 2., "How hard the wind blows the grains away: their speed and how far they fly."),
-        ),
-        "volumetric_dissolve": (
-            ("mist", "Mist:", 0., 1., "How much luminous mist, coloured by the old picture, rises as it dissolves."),
-            ("depth", "Depth:", 0., 1., "How far the particles fly toward you, growing and blurring as they near."),
-        ),
-        "edge_bloom": (
-            ("glow", "Glow:", 0., 1., "How brightly the edges and the growing fill glow."),
-            ("detail", "Detail:", 0., 1., "How many edges light up: only the strongest outlines at 0, fine "
-             "detail at 1."),
-        ),
-        "liquid_lens": (
-            ("refraction", "Refraction:", 0.0, 1.0, "How strongly the water bends the next picture: thin and clear at 0, a thick, magnifying lens at 1."),
-            ("dispersion", "Colour Fringes:", 0.0, 1.0, "Rainbow fringes where the water's rim bends the light most. Zero keeps the colours together."),
-        ),
-        "membrane": (
-            ("gloss", "Gloss:", 0.0, 1.0, "Shine of the membrane and reflections of the next picture on it as it twists."),
-        ),
-        "surface_tension": (
-            ("gloss", "Gloss:", 0.0, 1.0, "Light on the liquid where the two pictures meet: highlights and sheen along every edge."),
-        ),
-        "chromatic_shear": (
-            ("spread", "Spread:", 0.0, 1.0, "How far the slices shear apart and the colours fan out."),
-        ),
-        "depth_cascade": (
-            ("gloss", "Gloss:", 0.0, 1.0, "Shine of the cards and reflections of the next picture on them as they tilt."),
-        ),
-        "capillary_bloom": (
-            ("fibres", "Fibres:", 0.0, 1.0, "How strongly the dye races along the paper's fibres: a smooth, round bloom at 0, branching tendrils at 1."),
-        ),
-        "vhs": (
-            ("tracking", "Tracking:", 0., 1., "How badly tracking is lost: jittering, swaying and tearing lines, "
-             "and the bent top of each frame as the picture rolls."),
-            ("bleed", "Colour Bleed:", 0., 1., "How far colour smears and lags behind the picture, with ringing "
-             "edges, as on worn tape."),
-            ("noise", "Noise:", 0., 1., "Snow, dropout streaks, scanlines and a drifting interference band."),
-        ),
-        "melt_drip": (
-            ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
-            ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
-        ),
-    }
-
-    # Each 3D transition's own choices. For quality, "Auto" follows the 3D Transitions tier on
-    # the 3D tab; anything else is authoritative for that transition (one resolver combines them).
-    _AUTO_TIP = " Auto follows 3D Transitions on the 3D tab."
-    _ANTIALIASING_CONTROL = ("antialiasing", "Anti-aliasing:", SCENE3D_ANTIALIASING_CHOICES,
-                             "Multisampling that smooths the 3D edges; 4x and 8x cost the most GPU time." + _AUTO_TIP)
-    _MOTION_BLUR_CONTROL = ("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,
-                            "Blurs fast pieces along their motion, as a camera would; still parts stay sharp."
-                            + _AUTO_TIP)
-    _MOTION_TRAILS_CONTROL = ("motion_trails", "Motion Trails:", SCENE3D_TRAIL_CHOICES,
-                              "Faint, fading outlines of where fast pieces just were.")
-    _SCENE3D_CHOICES = {
-        "exploding_tiles": (
-            _ANTIALIASING_CONTROL,
-            ("bloom", "Bloom:", SCENE3D_EFFECT_CHOICES,
-             "Glow around sparks, hot edges and glowing cracks; the photographs never glow." + _AUTO_TIP),
-            _MOTION_BLUR_CONTROL,
-            _MOTION_TRAILS_CONTROL,
-        ),
-        "glass_shatter": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
-        "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
-        "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
-        "blinds": (_ANTIALIASING_CONTROL,),
-        "page_curl": (_ANTIALIASING_CONTROL,),
-        "disintegrate": (_ANTIALIASING_CONTROL,),
-        "cube_turn": (_ANTIALIASING_CONTROL,),
-        "jigsaw": (_ANTIALIASING_CONTROL,),
-        "volumetric_dissolve": (_ANTIALIASING_CONTROL,),
-        "depth_cascade": (_ANTIALIASING_CONTROL,),
-        "membrane": (_ANTIALIASING_CONTROL,),
-        "blockspin": (
-            ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
-             "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
-             "The sheen and gloss stay."),
-            _ANTIALIASING_CONTROL,
-            _MOTION_BLUR_CONTROL,
-            _MOTION_TRAILS_CONTROL,
-        ),
-    }
-
-    # Operator direction (2026-09-29): a page's optional quality and look choices, which will
-    # grow, live in one closed "Advanced" bucket; the controls that shape the effect itself
-    # stay on the page. A surface value that belongs to a choice sits right under it.
-    _ADVANCED_SURFACE_FIELDS = {"exploding_tiles": {"bloom": ("bloom_strength",)}}
-
-    def _build_scene3d_choices(self, layout, section: str) -> None:
+    def _build_advanced(self, layout, spec: TransitionSettings) -> None:
+        # Operator direction (2026-09-29): a page's optional quality and look choices, which will
+        # grow, live in one closed "Advanced" bucket; the controls that shape the effect itself
+        # stay on the page.
+        if not spec.advanced:
+            return
         toggle, body, advanced = shared_styles.build_bucket_toggle(layout, "Advanced", expanded=False)
         toggle.setToolTip("Quality and optional effects for this transition.")
-        setattr(self, f"{section}_advanced_toggle", toggle)
-        setattr(self, f"{section}_advanced_body", body)
-        attached = self._ADVANCED_SURFACE_FIELDS.get(section, {})
-        surface = {control[0]: control for control in self._SURFACE_CONTROLS.get(section, ())}
-        for field, label, choices, tooltip in self._SCENE3D_CHOICES[section]:
-            row = self._aligned_row(advanced, label)
-            combo = StyledComboBox(size_variant="compact")
-            combo.addItems(list(choices))
-            combo.setCurrentText(str(_transition_default(f"{section}.{field}")))
-            combo.setToolTip(tooltip)
-            combo.currentTextChanged.connect(self._save_settings)
-            row.addWidget(combo)
-            row.addStretch()
-            setattr(self, f"{section}_{field}_combo", combo)
-            for extra in attached.get(field, ()):
-                self._build_surface_control(advanced, section, *surface[extra])
+        setattr(self, f"{spec.section}_advanced_toggle", toggle)
+        setattr(self, f"{spec.section}_advanced_body", body)
+        for control in spec.advanced:
+            self._build_control(advanced, spec, control)
 
-    def _build_surface_controls(self, layout, section: str) -> None:
-        advanced = {field for fields in self._ADVANCED_SURFACE_FIELDS.get(section, {}).values() for field in fields}
-        for control in self._SURFACE_CONTROLS[section]:
-            if control[0] not in advanced:
-                self._build_surface_control(layout, section, *control)
-
-    def _build_surface_control(self, layout, section: str, field: str, label: str, low: float, high: float,
-                               tooltip: str) -> None:
-        row = self._aligned_row(layout, label)
-        spin = QDoubleSpinBox()
-        spin.setDecimals(2)
-        spin.setRange(low, high)
-        spin.setSingleStep(.05)
-        spin.setValue(float(_transition_default(f"{section}.{field}")))
-        spin.setToolTip(tooltip)
-        spin.valueChanged.connect(self._save_settings)
-        row.addWidget(spin)
+    def _build_control(self, layout, spec: TransitionSettings, control) -> QWidget:
+        """Build one declared control in its own row, showing the canonical default until hydrated."""
+        default = _transition_default(f"{spec.section}.{control.field}")
+        if isinstance(control, Number):
+            row = self._aligned_row(layout, control.label)
+            widget = QSpinBox() if control.integer else QDoubleSpinBox()
+            if control.integer:
+                widget.setRange(int(control.low), int(control.high))
+            else:
+                widget.setDecimals(control.decimals)
+                widget.setRange(float(control.low), float(control.high))
+                widget.setSingleStep(control.step)
+            if control.suffix:
+                widget.setSuffix(control.suffix)
+            widget.setValue(control.admit(default, default))
+            widget.valueChanged.connect(self._save_settings)
+        elif isinstance(control, Toggle):
+            row = self._aligned_row(layout, "", wrap=False)
+            widget = QCheckBox(control.label)
+            widget.setProperty("circleIndicator", True)
+            widget.setChecked(control.admit(default, default))
+            widget.stateChanged.connect(self._save_settings)
+        elif isinstance(control, Choice):
+            row = self._aligned_row(layout, control.label)
+            widget = StyledComboBox(size_variant="compact") if control.compact else StyledComboBox()
+            widget.addItems(list(control.choices))
+            widget.setCurrentText(control.admit(default, default))
+            if any(isinstance(other, Colour) and other.enabled_when and other.enabled_when[0] == control.field
+                   for other in spec.all_controls):
+                widget.currentTextChanged.connect(lambda _text, s=spec: self._sync_enabled_controls(s))
+            widget.currentTextChanged.connect(self._save_settings)
+        else:
+            row = self._swatch_row(layout, control.label)
+            widget = ColorSwatchButton(title=control.title, show_alpha=False, auto_picker=False)
+            widget.set_color(QColor(*control.admit(default, default)))
+            widget.setFixedSize(60, 24)
+            widget.clicked.connect(lambda _checked=False, s=spec, c=control: self._pick_control_colour(s, c))
+        if control.tooltip:
+            widget.setToolTip(control.tooltip)
+        row.addWidget(widget)
         row.addStretch()
-        setattr(self, f"{section}_{field}_spin", spin)
+        setattr(self, widget_attr(spec.section, control), widget)
+        return widget
 
-    def _build_glass_shatter_group(self) -> None:
-        self.glass_shatter_group = QGroupBox("Glass Shatter Settings")
-        self._style_group_box(self.glass_shatter_group)
-        layout = QVBoxLayout(self.glass_shatter_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        shards_row = self._aligned_row(layout, "Shard Count:")
-        self.glass_shards_spin = QSpinBox()
-        self.glass_shards_spin.setRange(24, 180)
-        self.glass_shards_spin.setValue(int(_transition_default("glass_shatter.shards")))
-        self.glass_shards_spin.valueChanged.connect(self._save_settings)
-        shards_row.addWidget(self.glass_shards_spin)
-        shards_row.addStretch()
-        depth_row = self._aligned_row(layout, "Depth:")
-        self.glass_depth_spin = QDoubleSpinBox()
-        self.glass_depth_spin.setDecimals(2)
-        self.glass_depth_spin.setRange(0.2, 1.5)
-        self.glass_depth_spin.setSingleStep(0.05)
-        self.glass_depth_spin.setValue(float(_transition_default("glass_shatter.depth")))
-        self.glass_depth_spin.valueChanged.connect(self._save_settings)
-        depth_row.addWidget(self.glass_depth_spin)
-        depth_row.addStretch()
-        collide_row = self._aligned_row(layout, "", wrap=False)
-        self.glass_collisions_check = QCheckBox("Shards Collide")
-        self.glass_collisions_check.setProperty("circleIndicator", True)
-        self.glass_collisions_check.setToolTip(
-            "Shards that meet in flight bounce off each other and spin away."
-        )
-        self.glass_collisions_check.setChecked(bool(_transition_default("glass_shatter.collisions")))
-        self.glass_collisions_check.stateChanged.connect(self._save_settings)
-        collide_row.addWidget(self.glass_collisions_check)
-        collide_row.addStretch()
-        reshatter_row = self._aligned_row(layout, "", wrap=False)
-        self.glass_reshatter_check = QCheckBox("Shards Break Again")
-        self.glass_reshatter_check.setProperty("circleIndicator", True)
-        self.glass_reshatter_check.setToolTip(
-            "Shards crack into smaller pieces in flight: when they collide if "
-            "Shards Collide is on, otherwise about 30% of shards crack at random."
-        )
-        self.glass_reshatter_check.setChecked(bool(_transition_default("glass_shatter.reshatter")))
-        self.glass_reshatter_check.stateChanged.connect(self._save_settings)
-        reshatter_row.addWidget(self.glass_reshatter_check)
-        reshatter_row.addStretch()
-        self._build_surface_controls(layout, "glass_shatter")
-        self._build_scene3d_choices(layout, "glass_shatter")
-        self._specific_group_host_layout.addWidget(self.glass_shatter_group)
+    def _sync_enabled_controls(self, spec: TransitionSettings) -> None:
+        """A colour that applies under one choice only is disabled under the others."""
+        for control in spec.all_controls:
+            if isinstance(control, Colour) and control.enabled_when is not None:
+                field, label = control.enabled_when
+                combo = getattr(self, widget_attr(spec.section, spec.control(field)), None)
+                button = getattr(self, widget_attr(spec.section, control), None)
+                if combo is not None and button is not None:
+                    button.setEnabled(combo.currentText() == label)
 
-    def _build_exploding_tiles_group(self) -> None:
-        self.exploding_tiles_group = QGroupBox("Exploding Tiles Settings")
-        self._style_group_box(self.exploding_tiles_group)
-        layout = QVBoxLayout(self.exploding_tiles_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        columns_row = self._aligned_row(layout, "Tile Columns:")
-        self.exploding_tiles_columns_spin = QSpinBox()
-        self.exploding_tiles_columns_spin.setRange(6, 48)
-        self.exploding_tiles_columns_spin.setValue(int(_transition_default("exploding_tiles.columns")))
-        self.exploding_tiles_columns_spin.valueChanged.connect(self._save_settings)
-        columns_row.addWidget(self.exploding_tiles_columns_spin)
-        columns_row.addStretch()
-        depth_row = self._aligned_row(layout, "Depth:")
-        self.exploding_tiles_depth_spin = QDoubleSpinBox()
-        self.exploding_tiles_depth_spin.setDecimals(2)
-        self.exploding_tiles_depth_spin.setRange(0.2, 1.5)
-        self.exploding_tiles_depth_spin.setSingleStep(0.05)
-        self.exploding_tiles_depth_spin.setValue(float(_transition_default("exploding_tiles.depth")))
-        self.exploding_tiles_depth_spin.valueChanged.connect(self._save_settings)
-        depth_row.addWidget(self.exploding_tiles_depth_spin)
-        depth_row.addStretch()
-        self._build_surface_controls(layout, "exploding_tiles")
-        self._build_scene3d_choices(layout, "exploding_tiles")
-        self._specific_group_host_layout.addWidget(self.exploding_tiles_group)
-
-    def _build_pixel_accretion_group(self) -> None:
-        self.pixel_accretion_group = QGroupBox("Directional Pixel Accretion Settings")
-        self._style_group_box(self.pixel_accretion_group)
-        layout = QVBoxLayout(self.pixel_accretion_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        tile_row = self._aligned_row(layout, "Tile Size:")
-        self.pixel_tile_size_spin = QSpinBox()
-        self.pixel_tile_size_spin.setRange(4, 32)
-        self.pixel_tile_size_spin.setValue(int(_transition_default("pixel_accretion.tile_size")))
-        self.pixel_tile_size_spin.valueChanged.connect(self._save_settings)
-        tile_row.addWidget(self.pixel_tile_size_spin)
-        tile_row.addStretch()
-        travel_row = self._aligned_row(layout, "Travel:")
-        self.pixel_travel_spin = QDoubleSpinBox()
-        self.pixel_travel_spin.setDecimals(2)
-        self.pixel_travel_spin.setRange(0.1, 1.0)
-        self.pixel_travel_spin.setSingleStep(0.05)
-        self.pixel_travel_spin.setValue(float(_transition_default("pixel_accretion.travel")))
-        self.pixel_travel_spin.valueChanged.connect(self._save_settings)
-        travel_row.addWidget(self.pixel_travel_spin)
-        travel_row.addStretch()
-        self._build_scene3d_choices(layout, "pixel_accretion")
-        self._specific_group_host_layout.addWidget(self.pixel_accretion_group)
-
-    def _build_melt_drip_group(self) -> None:
-        self.melt_drip_group = QGroupBox("Melt Drip Settings")
-        self._style_group_box(self.melt_drip_group)
-        layout = QVBoxLayout(self.melt_drip_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        detail_row = self._aligned_row(layout, "Detail:")
-        self.melt_drip_detail_spin = QDoubleSpinBox()
-        self.melt_drip_detail_spin.setDecimals(2)
-        self.melt_drip_detail_spin.setRange(0.5, 2.0)
-        self.melt_drip_detail_spin.setSingleStep(0.05)
-        self.melt_drip_detail_spin.setValue(float(_transition_default("melt_drip.detail")))
-        self.melt_drip_detail_spin.valueChanged.connect(self._save_settings)
-        detail_row.addWidget(self.melt_drip_detail_spin)
-        detail_row.addStretch()
-        self._build_surface_controls(layout, "melt_drip")
-        self._specific_group_host_layout.addWidget(self.melt_drip_group)
-
-    def _build_beam_group(self) -> None:
-        self.beam_group = QGroupBox("Beam Settings")
-        self._style_group_box(self.beam_group)
-        layout = QVBoxLayout(self.beam_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        color_row = self._swatch_row(layout, "Beam Colour:")
-        self.beam_color_btn = ColorSwatchButton(title="Choose Beam Colour", show_alpha=False, auto_picker=False)
-        self._beam_color = QColor(*_transition_default("beam.color"))
-        self.beam_color_btn.set_color(self._beam_color)
-        self.beam_color_btn.setFixedSize(60, 24)
-        self.beam_color_btn.setToolTip("The colour of the beam and its glow; its core always burns white.")
-        self.beam_color_btn.clicked.connect(self._pick_beam_color)
-        color_row.addWidget(self.beam_color_btn)
-        color_row.addStretch()
-        self._build_surface_controls(layout, "beam")
-        sparks_row = self._aligned_row(layout, "", wrap=False)
-        self.beam_sparks_check = QCheckBox("Sparks")
-        self.beam_sparks_check.setProperty("circleIndicator", True)
-        self.beam_sparks_check.setChecked(bool(_transition_default("beam.sparks")))
-        self.beam_sparks_check.setToolTip("Sparks spraying from where the beam cuts the picture.")
-        self.beam_sparks_check.stateChanged.connect(self._save_settings)
-        sparks_row.addWidget(self.beam_sparks_check)
-        sparks_row.addStretch()
-        self._specific_group_host_layout.addWidget(self.beam_group)
-
-    def _pick_beam_color(self) -> None:
-        color = StyledColorPicker.get_color(self._beam_color, self, "Beam Colour", show_alpha=False)
+    def _pick_control_colour(self, spec: TransitionSettings, control: Colour) -> None:
+        button = getattr(self, widget_attr(spec.section, control))
+        color = StyledColorPicker.get_color(button.color(), self, control.label.rstrip(":"), show_alpha=False)
         if color is not None:
-            self._beam_color = color
-            self.beam_color_btn.set_color(color)
+            button.set_color(color)
             self._save_settings()
 
-    def _build_cube_turn_group(self) -> None:
-        self.cube_turn_group = QGroupBox("Cube Turn Settings")
-        self._style_group_box(self.cube_turn_group)
-        layout = QVBoxLayout(self.cube_turn_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        self._build_surface_controls(layout, "cube_turn")
-        self._build_scene3d_choices(layout, "cube_turn")
-        self._specific_group_host_layout.addWidget(self.cube_turn_group)
+    # ---- Pages with their own controls (spec ``custom``) ------------------
 
-    def _build_edge_bloom_group(self) -> None:
-        self.edge_bloom_group = QGroupBox("Edge Bloom Reveal Settings")
-        self._style_group_box(self.edge_bloom_group)
-        layout = QVBoxLayout(self.edge_bloom_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        source_row = self._aligned_row(layout, "Glow Colour:")
-        self.edge_bloom_colour_source_combo = StyledComboBox(size_variant="compact")
-        self.edge_bloom_colour_source_combo.addItems(list(EDGE_BLOOM_COLOUR_SOURCE_CHOICES))
-        self.edge_bloom_colour_source_combo.setCurrentText(str(_transition_default("edge_bloom.color_source")))
-        self.edge_bloom_colour_source_combo.setToolTip(
-            "Custom: the colour you choose. Next Picture: every line glows in the next picture's most vivid "
-            "colour. Each Picture: each picture's lines glow in its own colour.")
-        self.edge_bloom_colour_source_combo.currentTextChanged.connect(self._sync_edge_bloom_colour_source)
-        self.edge_bloom_colour_source_combo.currentTextChanged.connect(self._save_settings)
-        source_row.addWidget(self.edge_bloom_colour_source_combo)
-        source_row.addStretch()
-        color_row = self._swatch_row(layout, "Custom Colour:")
-        self.edge_bloom_color_btn = ColorSwatchButton(title="Choose Glow Colour", show_alpha=False, auto_picker=False)
-        self._edge_bloom_color = QColor(*_transition_default("edge_bloom.color")[:3])
-        self.edge_bloom_color_btn.set_color(self._edge_bloom_color)
-        self.edge_bloom_color_btn.setFixedSize(60, 24)
-        self.edge_bloom_color_btn.setToolTip("The colour of the glowing edges; the strongest lines burn toward white.")
-        self.edge_bloom_color_btn.clicked.connect(self._pick_edge_bloom_color)
-        color_row.addWidget(self.edge_bloom_color_btn)
-        self._build_surface_controls(layout, "edge_bloom")
-        self._sync_edge_bloom_colour_source()
-        self._specific_group_host_layout.addWidget(self.edge_bloom_group)
+    def _hydrate_blinds_page(self, blinds: Mapping[str, object], canonical: Mapping[str, object]) -> None:
+        try:
+            value = int(blinds.get('feather', canonical['feather']))
+        except (TypeError, ValueError):
+            value = int(canonical['feather'])
+        self.blinds_feather_slider.setValue(value)
+        self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+        self._sync_blinds_style()
 
-    def _sync_edge_bloom_colour_source(self, *_args) -> None:
-        """The custom colour applies only to the Custom source."""
-        self.edge_bloom_color_btn.setEnabled(self.edge_bloom_colour_source_combo.currentText() == "Custom")
+    def _save_blinds_page(self, values: dict) -> None:
+        self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+        values['feather'] = self.blinds_feather_slider.value()
 
-    def _pick_edge_bloom_color(self) -> None:
-        color = StyledColorPicker.get_color(self._edge_bloom_color, self, "Glow Colour", show_alpha=False)
-        if color is not None:
-            self._edge_bloom_color = color
-            self.edge_bloom_color_btn.set_color(color)
-            self._save_settings()
+    def _hydrate_particle_page(self, particle: Mapping[str, object], canonical_particle: Mapping[str, object]) -> None:
+        mode = particle.get('mode', canonical_particle['mode'])
+        idx = self.particle_mode_combo.findText(mode)
+        if idx >= 0:
+            self.particle_mode_combo.setCurrentIndex(idx)
+        direction = particle.get('direction', canonical_particle['direction'])
+        idx = self.particle_direction_combo.findText(direction)
+        if idx >= 0:
+            self.particle_direction_combo.setCurrentIndex(idx)
+        self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle['particle_radius'])))
+        self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle['trail_strength']) > 0.01)
+        self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle['use_3d_shading']))
+        self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle['texture_mapping']))
+        self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle['wobble']))
+        self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle['gloss_size'])))
+        light_idx = particle.get('light_direction', canonical_particle['light_direction'])
+        if 0 <= light_idx < self.particle_light_combo.count():
+            self.particle_light_combo.setCurrentIndex(light_idx)
+        self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle['swirl_turns']))
+        swirl_order_idx = particle.get('swirl_order', canonical_particle['swirl_order'])
+        if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
+            self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
+        self._update_particle_mode_visibility()
+    def _save_particle_page(self, values: dict) -> None:
+        trail = self.particle_trail_check.isChecked()
+        values.update({
+            'mode': self.particle_mode_combo.currentText(),
+            'direction': self.particle_direction_combo.currentText(),
+            'particle_radius': float(self.particle_radius_spin.value()),
+            'overlap': 4.0,
+            'trail_length': 0.15 if trail else 0.0,
+            'trail_strength': 0.6 if trail else 0.0,
+            'swirl_strength': 1.0,
+            'swirl_turns': self.particle_swirl_turns_spin.value(),
+            'use_3d_shading': self.particle_3d_check.isChecked(),
+            'texture_mapping': self.particle_texture_check.isChecked(),
+            'wobble': self.particle_wobble_check.isChecked(),
+            'gloss_size': float(self.particle_gloss_spin.value()),
+            'light_direction': self.particle_light_combo.currentIndex(),
+            'swirl_order': self.particle_swirl_order_combo.currentIndex(),
+        })
 
-    def _build_liquid_lens_group(self) -> None:
-        self.liquid_lens_group = QGroupBox("Liquid Lens Settings")
-        self._style_group_box(self.liquid_lens_group)
-        layout = QVBoxLayout(self.liquid_lens_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        stops_row = self._aligned_row(layout, "Stops:")
-        self.liquid_lens_stops_spin = QSpinBox()
-        self.liquid_lens_stops_spin.setRange(*LIQUID_LENS_STOPS_RANGE)
-        self.liquid_lens_stops_spin.setValue(int(_transition_default("liquid_lens.stops")))
-        self.liquid_lens_stops_spin.setToolTip(
-            "Which stop the lens floods the picture from: it starts in the middle and grows at each stop "
-            "before it. 1 floods from the middle.")
-        self.liquid_lens_stops_spin.valueChanged.connect(self._save_settings)
-        stops_row.addWidget(self.liquid_lens_stops_spin)
-        self._build_surface_controls(layout, "liquid_lens")
-        self._specific_group_host_layout.addWidget(self.liquid_lens_group)
+    def _particle_widgets(self) -> list[QWidget]:
+        return [getattr(self, f"particle_{name}", None) for name in (
+            "mode_combo", "direction_combo", "radius_spin", "trail_check", "3d_check", "texture_check",
+            "wobble_check", "gloss_spin", "light_combo", "swirl_turns_spin", "swirl_order_combo")]
 
-    def _build_membrane_group(self) -> None:
-        self.membrane_group = QGroupBox("Membrane Turnover Settings")
-        self._style_group_box(self.membrane_group)
-        layout = QVBoxLayout(self.membrane_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        self._build_surface_controls(layout, "membrane")
-        self._build_scene3d_choices(layout, "membrane")
-        self._specific_group_host_layout.addWidget(self.membrane_group)
+    def _hydrate_burn_page(self, burn: Mapping[str, object], canonical_burn: Mapping[str, object]) -> None:
+        canonical_burn_dir = str(canonical_burn['direction']).strip()
+        if not canonical_burn_dir:
+            raise ValueError("Canonical transitions.burn.direction is empty")
+        burn_dir = str(burn.get('direction', canonical_burn_dir) or '').strip()
+        idx = self.burn_direction_combo.findText(burn_dir)
+        if idx < 0:
+            idx = self.burn_direction_combo.findText(canonical_burn_dir)
+        if idx < 0:
+            raise ValueError(
+                f"Canonical burn direction is not represented by the UI: {canonical_burn_dir!r}"
+            )
+        self.burn_direction_combo.setCurrentIndex(idx)
+        jag = int(round(burn.get('jaggedness', canonical_burn['jaggedness']) * 100))
+        self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
+        self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
+        glow_i = int(round(burn.get('glow_intensity', canonical_burn['glow_intensity']) * 100))
+        self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
+        self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
+        char_w = int(round(burn.get('char_width', canonical_burn['char_width']) * 100))
+        self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
+        self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
+        glow_col = burn.get('glow_color', canonical_burn['glow_color'])
+        if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
+            self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
+                                           int(glow_col[3]) if len(glow_col) > 3 else 255)
+            self._apply_burn_glow_color_btn()
+        ember_col = burn.get('ember_color', canonical_burn['ember_color'])
+        if isinstance(ember_col, (list, tuple)) and len(ember_col) >= 3:
+            self._burn_ember_color = QColor(int(ember_col[0]), int(ember_col[1]), int(ember_col[2]),
+                                            int(ember_col[3]) if len(ember_col) > 3 else 255)
+            self._apply_burn_ember_color_btn()
+        self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn['smoke_enabled'])))
+        smoke_d = int(round(burn.get('smoke_density', canonical_burn['smoke_density']) * 100))
+        self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
+        self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
+        self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn['ash_enabled'])))
+        ash_d = int(round(burn.get('ash_density', canonical_burn['ash_density']) * 100))
+        self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
+        self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
+        self.burn_flames_check.setChecked(bool(burn.get('flames', canonical_burn['flames'])))
+        self.burn_veins_check.setChecked(bool(burn.get('ember_veins', canonical_burn['ember_veins'])))
+    def _save_burn_page(self, values: dict) -> None:
+        glow, ember = self._burn_glow_color, self._burn_ember_color
+        values.update({
+            'direction': self.burn_direction_combo.currentText(),
+            'jaggedness': self.burn_jaggedness_slider.value() / 100.0,
+            'glow_intensity': self.burn_glow_intensity_slider.value() / 100.0,
+            'char_width': self.burn_char_width_slider.value() / 100.0,
+            'glow_color': [glow.red(), glow.green(), glow.blue(), glow.alpha()],
+            'ember_color': [ember.red(), ember.green(), ember.blue(), ember.alpha()],
+            'smoke_enabled': self.burn_smoke_check.isChecked(),
+            'smoke_density': self.burn_smoke_density_slider.value() / 100.0,
+            'ash_enabled': self.burn_ash_check.isChecked(),
+            'ash_density': self.burn_ash_density_slider.value() / 100.0,
+            'flames': self.burn_flames_check.isChecked(),
+            'ember_veins': self.burn_veins_check.isChecked(),
+        })
 
-    def _build_surface_tension_group(self) -> None:
-        self.surface_tension_group = QGroupBox("Surface Tension Merge Settings")
-        self._style_group_box(self.surface_tension_group)
-        layout = QVBoxLayout(self.surface_tension_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        pools_row = self._aligned_row(layout, "Pools:")
-        self.surface_tension_pools_spin = QSpinBox()
-        self.surface_tension_pools_spin.setRange(*TENSION_POOLS_RANGE)
-        self.surface_tension_pools_spin.setValue(int(_transition_default("surface_tension.pools")))
-        self.surface_tension_pools_spin.setToolTip("How many pools of the next picture appear: a few large ones up to many small ones.")
-        self.surface_tension_pools_spin.valueChanged.connect(self._save_settings)
-        pools_row.addWidget(self.surface_tension_pools_spin)
-        pools_row.addStretch()
-        self._build_surface_controls(layout, "surface_tension")
-        self._specific_group_host_layout.addWidget(self.surface_tension_group)
-
-    def _build_chromatic_shear_group(self) -> None:
-        self.chromatic_shear_group = QGroupBox("Chromatic Shear Settings")
-        self._style_group_box(self.chromatic_shear_group)
-        layout = QVBoxLayout(self.chromatic_shear_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        slices_row = self._aligned_row(layout, "Slices:")
-        self.chromatic_shear_slices_spin = QSpinBox()
-        self.chromatic_shear_slices_spin.setRange(*SHEAR_SLICES_RANGE)
-        self.chromatic_shear_slices_spin.setValue(int(_transition_default("chromatic_shear.slices")))
-        self.chromatic_shear_slices_spin.setToolTip("How many broad slices the picture shears into.")
-        self.chromatic_shear_slices_spin.valueChanged.connect(self._save_settings)
-        slices_row.addWidget(self.chromatic_shear_slices_spin)
-        slices_row.addStretch()
-        self._build_surface_controls(layout, "chromatic_shear")
-        self._specific_group_host_layout.addWidget(self.chromatic_shear_group)
-
-    def _build_depth_cascade_group(self) -> None:
-        self.depth_cascade_group = QGroupBox("Depth Card Cascade Settings")
-        self._style_group_box(self.depth_cascade_group)
-        layout = QVBoxLayout(self.depth_cascade_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        cards_row = self._aligned_row(layout, "Cards:")
-        self.depth_cascade_cards_spin = QSpinBox()
-        self.depth_cascade_cards_spin.setRange(*CASCADE_CARDS_RANGE)
-        self.depth_cascade_cards_spin.setValue(int(_transition_default("depth_cascade.cards")))
-        self.depth_cascade_cards_spin.setToolTip("How many cards the picture splits into.")
-        self.depth_cascade_cards_spin.valueChanged.connect(self._save_settings)
-        cards_row.addWidget(self.depth_cascade_cards_spin)
-        cards_row.addStretch()
-        self._build_surface_controls(layout, "depth_cascade")
-        shadows_row = self._aligned_row(layout, "", wrap=False)
-        self.depth_cascade_shadows_check = QCheckBox("Shadows")
-        self.depth_cascade_shadows_check.setProperty("circleIndicator", True)
-        self.depth_cascade_shadows_check.setChecked(bool(_transition_default("depth_cascade.shadows")))
-        self.depth_cascade_shadows_check.setToolTip("Soft shadows the lifting cards cast on the next picture.")
-        self.depth_cascade_shadows_check.stateChanged.connect(self._save_settings)
-        shadows_row.addWidget(self.depth_cascade_shadows_check)
-        shadows_row.addStretch()
-        self._build_scene3d_choices(layout, "depth_cascade")
-        self._specific_group_host_layout.addWidget(self.depth_cascade_group)
-
-    def _build_capillary_bloom_group(self) -> None:
-        self.capillary_bloom_group = QGroupBox("Capillary Bloom Settings")
-        self._style_group_box(self.capillary_bloom_group)
-        layout = QVBoxLayout(self.capillary_bloom_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        sources_row = self._aligned_row(layout, "Sources:")
-        self.capillary_bloom_sources_spin = QSpinBox()
-        self.capillary_bloom_sources_spin.setRange(*CAPILLARY_SOURCES_RANGE)
-        self.capillary_bloom_sources_spin.setValue(int(_transition_default("capillary_bloom.sources")))
-        self.capillary_bloom_sources_spin.setToolTip("How many drops of dye start the bloom.")
-        self.capillary_bloom_sources_spin.valueChanged.connect(self._save_settings)
-        sources_row.addWidget(self.capillary_bloom_sources_spin)
-        sources_row.addStretch()
-        self._build_surface_controls(layout, "capillary_bloom")
-        self._specific_group_host_layout.addWidget(self.capillary_bloom_group)
-
-    def _build_vhs_group(self) -> None:
-        self.vhs_group = QGroupBox("VHS Distortion Settings")
-        self._style_group_box(self.vhs_group)
-        layout = QVBoxLayout(self.vhs_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        self._build_surface_controls(layout, "vhs")
-        self._specific_group_host_layout.addWidget(self.vhs_group)
-
-    def _build_volumetric_dissolve_group(self) -> None:
-        self.volumetric_dissolve_group = QGroupBox("Volumetric Dissolve Settings")
-        self._style_group_box(self.volumetric_dissolve_group)
-        layout = QVBoxLayout(self.volumetric_dissolve_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        size_row = self._aligned_row(layout, "Particle Size:")
-        self.volumetric_dissolve_size_spin = QSpinBox()
-        self.volumetric_dissolve_size_spin.setRange(*VOLUMETRIC_PARTICLE_SIZE_RANGE)
-        self.volumetric_dissolve_size_spin.setSuffix(" px")
-        self.volumetric_dissolve_size_spin.setValue(int(_transition_default("volumetric_dissolve.particle_size")))
-        self.volumetric_dissolve_size_spin.setToolTip(
-            "Size of each particle in screen pixels. Very large screens use slightly bigger particles.")
-        self.volumetric_dissolve_size_spin.valueChanged.connect(self._save_settings)
-        size_row.addWidget(self.volumetric_dissolve_size_spin)
-        size_row.addStretch()
-        self._build_surface_controls(layout, "volumetric_dissolve")
-        self._build_scene3d_choices(layout, "volumetric_dissolve")
-        self._specific_group_host_layout.addWidget(self.volumetric_dissolve_group)
-
-    def _build_jigsaw_group(self) -> None:
-        self.jigsaw_group = QGroupBox("Jigsaw Piece Flip Settings")
-        self._style_group_box(self.jigsaw_group)
-        layout = QVBoxLayout(self.jigsaw_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        pieces_row = self._aligned_row(layout, "Pieces:")
-        self.jigsaw_pieces_spin = QSpinBox()
-        self.jigsaw_pieces_spin.setRange(*JIGSAW_PIECES_RANGE)
-        self.jigsaw_pieces_spin.setValue(int(_transition_default("jigsaw.pieces")))
-        self.jigsaw_pieces_spin.setToolTip(
-            "About how many pieces the picture is cut into. More pieces flip faster, more at once.")
-        self.jigsaw_pieces_spin.valueChanged.connect(self._save_settings)
-        pieces_row.addWidget(self.jigsaw_pieces_spin)
-        pieces_row.addStretch()
-        self._build_scene3d_choices(layout, "jigsaw")
-        self._specific_group_host_layout.addWidget(self.jigsaw_group)
-
-    def _build_disintegrate_group(self) -> None:
-        self.disintegrate_group = QGroupBox("Disintegrate Settings")
-        self._style_group_box(self.disintegrate_group)
-        layout = QVBoxLayout(self.disintegrate_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        grain_row = self._aligned_row(layout, "Grain Size:")
-        self.disintegrate_grain_spin = QSpinBox()
-        self.disintegrate_grain_spin.setRange(2, 8)
-        self.disintegrate_grain_spin.setSuffix(" px")
-        self.disintegrate_grain_spin.setValue(int(_transition_default("disintegrate.grain_size")))
-        self.disintegrate_grain_spin.setToolTip(
-            "Size of each grain in screen pixels. Very large screens use slightly bigger grains.")
-        self.disintegrate_grain_spin.valueChanged.connect(self._save_settings)
-        grain_row.addWidget(self.disintegrate_grain_spin)
-        grain_row.addStretch()
-        self._build_surface_controls(layout, "disintegrate")
-        self._build_scene3d_choices(layout, "disintegrate")
-        self._specific_group_host_layout.addWidget(self.disintegrate_group)
-
-    def _build_page_curl_group(self) -> None:
-        self.page_curl_group = QGroupBox("Page Curl Settings")
-        self._style_group_box(self.page_curl_group)
-        layout = QVBoxLayout(self.page_curl_group)
-        layout.setContentsMargins(0, 12, 0, 0)
-        self._build_surface_controls(layout, "page_curl")
-        self._build_scene3d_choices(layout, "page_curl")
-        self._specific_group_host_layout.addWidget(self.page_curl_group)
-
-    def _build_blockspin_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.blockspin_group = QGroupBox("3D Block Spins Settings")
-        self._style_group_box(self.blockspin_group)
-        blockspin_layout = QVBoxLayout(self.blockspin_group)
-        blockspin_layout.setContentsMargins(0, 12, 0, 0)
-
-        bs_row = _aligned_row(blockspin_layout, "Direction:")
-        self.blockspin_direction_combo = StyledComboBox()
-        self.blockspin_direction_combo.addItems([
-            "Left to Right",
-            "Right to Left",
-            "Top to Bottom",
-            "Bottom to Top",
-            "Diagonal TL-BR",
-            "Diagonal TR-BL",
-            "Random",
-        ])
-        self.blockspin_direction_combo.currentTextChanged.connect(self._save_settings)
-        bs_row.addWidget(self.blockspin_direction_combo)
-        bs_row.addStretch()
-        self._build_scene3d_choices(blockspin_layout, "blockspin")
-
-        self._specific_group_host_layout.addWidget(self.blockspin_group)
+    def _burn_widgets(self) -> list[QWidget]:
+        return [getattr(self, f"burn_{name}", None) for name in (
+            "direction_combo", "jaggedness_slider", "glow_intensity_slider", "char_width_slider", "smoke_check",
+            "smoke_density_slider", "ash_check", "flames_check", "veins_check", "ash_density_slider")]
 
     def _sync_blinds_style(self, *_args) -> None:
         """Show the controls of the chosen Blinds style only."""
@@ -1645,39 +928,20 @@ class TransitionsTab(QWidget):
         self.blinds_slats_box.setVisible(slats)
 
     def _build_blinds_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.blinds_group = QGroupBox("Blinds Settings")
+        spec = transition_settings("blinds")
+        self.blinds_group = QGroupBox(spec.page_title)
         self._style_group_box(self.blinds_group)
         blinds_layout = QVBoxLayout(self.blinds_group)
         blinds_layout.setContentsMargins(0, 12, 0, 0)
-
-        style_row = _aligned_row(blinds_layout, "Style:")
-        self.blinds_style_combo = StyledComboBox(size_variant="compact")
-        self.blinds_style_combo.addItems(list(BLINDS_STYLE_CHOICES))
-        self.blinds_style_combo.setCurrentText(str(_transition_default("blinds.style")))
-        self.blinds_style_combo.setToolTip(
-            "Flat: soft bands open over the picture. 3D Slats: solid slats turn over one after "
-            "another, the next image on their backs.")
+        self._build_control(blinds_layout, spec, spec.control("style"))
         self.blinds_style_combo.currentTextChanged.connect(self._sync_blinds_style)
-        self.blinds_style_combo.currentTextChanged.connect(self._save_settings)
-        style_row.addWidget(self.blinds_style_combo)
-        style_row.addStretch()
-
-        blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
-        self.blinds_direction_combo = StyledComboBox(size_variant="compact")
-        self.blinds_direction_combo.addItems(["Horizontal", "Vertical", "Diagonal", "Random"])
-        self.blinds_direction_combo.setToolTip(
-            "Horizontal: upright stripes. Vertical: lying stripes. 3D Slats turn only these two "
-            "ways; Diagonal or Random picks one of them per transition.")
-        self.blinds_direction_combo.currentTextChanged.connect(self._save_settings)
-        blinds_dir_row.addWidget(self.blinds_direction_combo)
-        blinds_dir_row.addStretch()
+        self._build_control(blinds_layout, spec, spec.control("direction"))
 
         self.blinds_flat_box = QWidget()
         flat_layout = QVBoxLayout(self.blinds_flat_box)
         flat_layout.setContentsMargins(0, 0, 0, 0)
         blinds_layout.addWidget(self.blinds_flat_box)
-        blinds_feather_row = _aligned_row(flat_layout, "Edge Softness:")
+        blinds_feather_row = self._aligned_row(flat_layout, "Edge Softness:")
         self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.blinds_feather_slider.setRange(0, 25)
         self.blinds_feather_slider.setSingleStep(1)
@@ -1691,90 +955,12 @@ class TransitionsTab(QWidget):
         slats_layout = QVBoxLayout(self.blinds_slats_box)
         slats_layout.setContentsMargins(0, 0, 0, 0)
         blinds_layout.addWidget(self.blinds_slats_box)
-        slats_row = _aligned_row(slats_layout, "Slats:")
-        self.blinds_slats_spin = QSpinBox()
-        self.blinds_slats_spin.setRange(*BLINDS_SLATS_RANGE)
-        self.blinds_slats_spin.setValue(int(_transition_default("blinds.slats")))
-        self.blinds_slats_spin.setToolTip("How many slats cover the picture.")
-        self.blinds_slats_spin.valueChanged.connect(self._save_settings)
-        slats_row.addWidget(self.blinds_slats_spin)
-        slats_row.addStretch()
-        self._build_surface_controls(slats_layout, "blinds")
-        self._build_scene3d_choices(slats_layout, "blinds")
+        self._build_control(slats_layout, spec, spec.control("slats"))
+        self._build_control(slats_layout, spec, spec.control("gloss"))
+        self._build_advanced(slats_layout, spec)
         self._sync_blinds_style()
 
         self._specific_group_host_layout.addWidget(self.blinds_group)
-
-    def _build_ripple_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.ripple_group = QGroupBox("Ripple Settings")
-        self._style_group_box(self.ripple_group)
-        ripple_layout = QVBoxLayout(self.ripple_group)
-        ripple_layout.setContentsMargins(0, 12, 0, 0)
-
-        ripple_count_row = _aligned_row(ripple_layout, "Ripple Count:")
-        self.ripple_count_spin = QSpinBox()
-        self.ripple_count_spin.setRange(1, 8)
-        self.ripple_count_spin.setValue(int(_transition_default("ripple.ripple_count")))
-        self.ripple_count_spin.valueChanged.connect(self._save_settings)
-        ripple_count_row.addWidget(self.ripple_count_spin)
-        ripple_count_row.addStretch()
-
-        self._specific_group_host_layout.addWidget(self.ripple_group)
-
-    def _build_crumble_group(self) -> None:
-        _aligned_row = self._aligned_row
-        self.crumble_group = QGroupBox("Crumble Settings")
-        self._style_group_box(self.crumble_group)
-        crumble_layout = QVBoxLayout(self.crumble_group)
-        crumble_layout.setContentsMargins(0, 12, 0, 0)
-
-        crumble_piece_row = _aligned_row(crumble_layout, "Piece Count:")
-        self.crumble_piece_count_spin = QSpinBox()
-        self.crumble_piece_count_spin.setRange(4, 128)
-        self.crumble_piece_count_spin.setValue(int(_transition_default("crumble.piece_count")))
-        self.crumble_piece_count_spin.valueChanged.connect(self._save_settings)
-        crumble_piece_row.addWidget(self.crumble_piece_count_spin)
-        crumble_piece_row.addStretch()
-
-        crumble_complexity_row = _aligned_row(crumble_layout, "Crack Complexity:")
-        self.crumble_complexity_spin = QDoubleSpinBox()
-        self.crumble_complexity_spin.setDecimals(2)
-        self.crumble_complexity_spin.setRange(0.5, 2.0)
-        self.crumble_complexity_spin.setSingleStep(0.1)
-        self.crumble_complexity_spin.setValue(float(_transition_default("crumble.crack_complexity")))
-        self.crumble_complexity_spin.valueChanged.connect(self._save_settings)
-        crumble_complexity_row.addWidget(self.crumble_complexity_spin)
-        crumble_complexity_row.addStretch()
-
-        crumble_weight_row = _aligned_row(crumble_layout, "Weighting:")
-        self.crumble_weight_combo = StyledComboBox(size_variant="compact")
-        self.crumble_weight_combo.addItems([
-            "Random Choice",
-            "Top Weighted",
-            "Bottom Weighted",
-            "Random Weighted",
-            "Age Weighted",
-        ])
-        self.crumble_weight_combo.currentTextChanged.connect(self._save_settings)
-        crumble_weight_row.addWidget(self.crumble_weight_combo)
-        crumble_weight_row.addStretch()
-
-        collide_row = self._aligned_row(crumble_layout, "", wrap=False)
-        self.crumble_collisions_check = QCheckBox("Slabs Collide")
-        self.crumble_collisions_check.setProperty("circleIndicator", True)
-        self.crumble_collisions_check.setToolTip(
-            "Falling slabs bounce off each other instead of passing through, and a "
-            "standing slab struck by a falling one is knocked loose."
-        )
-        self.crumble_collisions_check.setChecked(bool(_transition_default("crumble.collisions")))
-        self.crumble_collisions_check.stateChanged.connect(self._save_settings)
-        collide_row.addWidget(self.crumble_collisions_check)
-        collide_row.addStretch()
-
-        self._build_surface_controls(crumble_layout, "crumble")
-        self._build_scene3d_choices(crumble_layout, "crumble")
-        self._specific_group_host_layout.addWidget(self.crumble_group)
 
     def _build_particle_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -2314,81 +1500,14 @@ class TransitionsTab(QWidget):
             getattr(self, 'transition_combo', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
-            getattr(self, 'slide_motion_style_combo', None),
-            getattr(self, 'blockspin_direction_combo', None),
-            # Blinds widgets
-            getattr(self, 'blinds_direction_combo', None),
             getattr(self, 'blinds_feather_slider', None),
-            getattr(self, 'blinds_style_combo', None),
-            getattr(self, 'edge_bloom_colour_source_combo', None),
-            getattr(self, 'blinds_slats_spin', None),
-            getattr(self, 'disintegrate_grain_spin', None),
-            getattr(self, 'jigsaw_pieces_spin', None),
-            getattr(self, 'volumetric_dissolve_size_spin', None),
-            getattr(self, 'beam_sparks_check', None),
-            getattr(self, 'capillary_bloom_sources_spin', None),
-            getattr(self, 'depth_cascade_shadows_check', None),
-            getattr(self, 'depth_cascade_cards_spin', None),
-            getattr(self, 'chromatic_shear_slices_spin', None),
-            getattr(self, 'surface_tension_pools_spin', None),
-            getattr(self, 'liquid_lens_stops_spin', None),
-            # Ripple widgets
-            getattr(self, 'ripple_count_spin', None),
-            # Crumble widgets
-            getattr(self, 'crumble_piece_count_spin', None),
-            getattr(self, 'crumble_complexity_spin', None),
-            getattr(self, 'crumble_weight_combo', None),
-            getattr(self, 'crumble_collisions_check', None),
-            # Particle widgets
-            getattr(self, 'particle_mode_combo', None),
-            getattr(self, 'particle_direction_combo', None),
-            getattr(self, 'particle_radius_spin', None),
-            getattr(self, 'particle_trail_check', None),
-            getattr(self, 'particle_3d_check', None),
-            getattr(self, 'particle_texture_check', None),
-            getattr(self, 'particle_wobble_check', None),
-            getattr(self, 'particle_gloss_spin', None),
-            getattr(self, 'particle_light_combo', None),
-            getattr(self, 'particle_swirl_turns_spin', None),
-            getattr(self, 'particle_swirl_order_combo', None),
-            # Burn widgets
-            getattr(self, 'burn_direction_combo', None),
-            getattr(self, 'burn_jaggedness_slider', None),
-            getattr(self, 'burn_glow_intensity_slider', None),
-            getattr(self, 'burn_char_width_slider', None),
-            getattr(self, 'burn_smoke_check', None),
-            getattr(self, 'burn_smoke_density_slider', None),
-            getattr(self, 'burn_ash_check', None),
-            getattr(self, 'burn_flames_check', None),
-            getattr(self, 'burn_veins_check', None),
-            getattr(self, 'burn_ash_density_slider', None),
-            # Future transition pages (lazy; absent until selected)
-            getattr(self, 'glass_shards_spin', None),
-            getattr(self, 'glass_depth_spin', None),
-            getattr(self, 'glass_collisions_check', None),
-            getattr(self, 'glass_reshatter_check', None),
-            getattr(self, 'exploding_tiles_columns_spin', None),
-            getattr(self, 'exploding_tiles_depth_spin', None),
-            getattr(self, 'pixel_tile_size_spin', None),
-            getattr(self, 'pixel_travel_spin', None),
-            getattr(self, 'melt_drip_detail_spin', None),
+            *self._page_widgets(),
+            *self._particle_widgets(),
+            *self._burn_widgets(),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
                 blockers.append(w)
-
-        for section, controls in self._SURFACE_CONTROLS.items():
-            for field, *_ in controls:
-                spin = getattr(self, f"{section}_{field}_spin", None)
-                if spin is not None:
-                    spin.blockSignals(True)
-                    blockers.append(spin)
-        for section, controls in self._SCENE3D_CHOICES.items():
-            for field, *_ in controls:
-                combo = getattr(self, f"{section}_{field}_combo", None)
-                if combo is not None:
-                    combo.blockSignals(True)
-                    blockers.append(combo)
 
         # Also block the SETUP page controls while applying their state.
         for w in (
@@ -2437,39 +1556,16 @@ class TransitionsTab(QWidget):
                 self._use_random_checkbox.setChecked(bool(use_random))
 
             # Load per-transition directions (nested)
-            slide_cfg = transitions_config.get('slide', canonical_transitions['slide'])
-            if not isinstance(slide_cfg, dict):
-                slide_cfg = dict(canonical_transitions['slide'])
-            wipe_cfg = transitions_config.get('wipe', canonical_transitions['wipe'])
-            if not isinstance(wipe_cfg, dict):
-                wipe_cfg = dict(canonical_transitions['wipe'])
-            blockspin_cfg = transitions_config.get('blockspin', canonical_transitions['blockspin'])
-            if not isinstance(blockspin_cfg, dict):
-                blockspin_cfg = dict(canonical_transitions['blockspin'])
-
-            slide_dir = slide_cfg.get('direction', canonical_transitions['slide']['direction']) or str(canonical_transitions['slide']['direction'])
-            wipe_dir = wipe_cfg.get('direction', canonical_transitions['wipe']['direction']) or str(canonical_transitions['wipe']['direction'])
-            blockspin_dir = blockspin_cfg.get('direction', canonical_transitions['blockspin']['direction']) or str(canonical_transitions['blockspin']['direction'])
-
-            self._dir_slide = slide_dir
-            self._dir_wipe = wipe_dir
-            self._dir_blockspin = blockspin_dir
-            for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip", "page_curl",
-                            "disintegrate", "cube_turn", "beam", "jigsaw", "volumetric_dissolve", "vhs",
-                            "membrane", "chromatic_shear", "depth_cascade"):
-                canonical_section = canonical_transitions.get(section, {})
+            for section in self._direction_by_type:
+                canonical_section = canonical_transitions[section]
                 persisted_section = transitions_config.get(section, {})
-                if not isinstance(canonical_section, dict):
-                    canonical_section = {}
                 if not isinstance(persisted_section, dict):
                     persisted_section = {}
                 self._direction_by_type[section] = str(
-                    persisted_section.get(
-                        "direction", canonical_section["direction"]
-                    )
+                    persisted_section.get("direction", canonical_section["direction"])
                     or canonical_section["direction"]
                 )
-            
+
             # Note: GPU acceleration is controlled globally in Display tab
 
             # Remember the loaded config so a lazily-built transition page can be
@@ -2520,143 +1616,29 @@ class TransitionsTab(QWidget):
         """
         transition = self._current_transition or self.transition_combo.currentText()
 
-        # Show/hide direction for transitions that resolve one event vector.
-        show_direction = transition in self._DIRECTIONAL_TRANSITIONS
-        self.direction_group.setVisible(show_direction)
-
-        # Populate direction options per transition
-        if show_direction:
+        # The shared Direction box shows for transitions whose spec offers directions.
+        spec = transition_settings(transition)
+        directions = spec.directions if spec is not None else None
+        self.direction_group.setVisible(directions is not None)
+        if directions is not None:
             self.direction_combo.blockSignals(True)
             try:
                 self.direction_combo.clear()
-                if transition == "Slide":
-                    slide_items = [
-                        "Left to Right",
-                        "Right to Left",
-                        "Top to Bottom",
-                        "Bottom to Top",
-                        "Random",
-                    ]
-                    self.direction_combo.addItems(slide_items)
-                    # Set previously stored selection
-                    idx = self.direction_combo.findText(self._dir_slide)
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random") if self._dir_slide == "Random" else 0
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Wipe":
-                    # Wipe: include diagonals
-                    wipe_items = [
-                        "Left to Right",
-                        "Right to Left",
-                        "Top to Bottom",
-                        "Bottom to Top",
-                        "Diagonal TL-BR",
-                        "Diagonal TR-BL",
-                        "Random",
-                    ]
-                    self.direction_combo.addItems(wipe_items)
-                    idx = self.direction_combo.findText(self._dir_wipe)
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random") if self._dir_wipe == "Random" else 0
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition in {"Glass Shatter", "Exploding Tiles"}:
-                    self.direction_combo.addItems([
-                        "Left to Right", "Right to Left", "Top to Bottom",
-                        "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
-                        "Center Out", "Random",
-                    ])
-                    current = self._direction_by_type["glass_shatter" if transition == "Glass Shatter" else "exploding_tiles"]
-                    idx = self.direction_combo.findText(current)
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition in {"Directional Pixel Accretion", "Disintegrate", "Beam"}:
-                    self.direction_combo.addItems([
-                        "Left to Right", "Right to Left", "Top to Bottom",
-                        "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
-                        "Diagonal BL-TR", "Diagonal BR-TL", "Random",
-                    ])
-                    current = self._direction_by_type[{"Directional Pixel Accretion": "pixel_accretion",
-                                                       "Disintegrate": "disintegrate",
-                                                       "Beam": "beam"}[transition]]
-                    idx = self.direction_combo.findText(current)
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Melt Drip":
-                    # Melt starts at an origin, not an edge; retired edge
-                    # directions from older profiles show as Random.
-                    self.direction_combo.addItems([
-                        "Top Left", "Top Center", "Top Right",
-                        "Center Out", "Center In", "Random",
-                    ])
-                    current = self._direction_by_type["melt_drip"]
-                    idx = self.direction_combo.findText(current)
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Cube Turn":
-                    # The way the box turns: its front moves toward this side.
-                    self.direction_combo.addItems(list(CUBE_TURN_DIRECTION_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["cube_turn"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Page Curl":
-                    # Where the page starts to peel: a corner or an edge.
-                    self.direction_combo.addItems(list(PAGE_CURL_ORIGIN_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["page_curl"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Volumetric Dissolve":
-                    # Where the dissolve starts and the way it sweeps, or from the centre out.
-                    self.direction_combo.addItems(list(VOLUMETRIC_DIRECTION_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["volumetric_dissolve"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Membrane Turnover":
-                    self.direction_combo.addItems(list(MEMBRANE_SWEEP_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["membrane"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Chromatic Shear":
-                    self.direction_combo.addItems(list(SHEAR_DIRECTION_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["chromatic_shear"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Depth Card Cascade":
-                    self.direction_combo.addItems(list(CASCADE_SWEEP_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["depth_cascade"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "VHS Distortion":
-                    # The way the picture rolls: where the new picture comes in.
-                    self.direction_combo.addItems(list(VHS_DIRECTION_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["vhs"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
-                elif transition == "Jigsaw Piece Flip":
-                    # The order the pieces flip in: from a corner, from a random piece, or shuffled.
-                    self.direction_combo.addItems(list(JIGSAW_ORDER_CHOICES))
-                    idx = self.direction_combo.findText(self._direction_by_type["jigsaw"])
-                    if idx < 0:
-                        idx = self.direction_combo.findText("Random")
-                    self.direction_combo.setCurrentIndex(max(0, idx))
+                self.direction_combo.addItems(list(directions.choices))
+                # A retired or unknown stored direction shows as Random.
+                idx = self.direction_combo.findText(self._direction_by_type[spec.section])
+                if idx < 0:
+                    idx = self.direction_combo.findText("Random")
+                self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
 
         # Show only the built specific group matching the current transition.
         # Unbuilt groups (lazy) simply have nothing to show.
-        for group_transition, group_attr in self._SPECIFIC_GROUP_ATTRS.items():
-            group = getattr(self, group_attr, None)
+        for page in iter_transition_settings():
+            group = getattr(self, f"{page.section}_group", None)
             if group is not None:
-                group.setVisible(transition == group_transition)
+                group.setVisible(transition == page.name)
         if transition == "Particle" and hasattr(self, "particle_group"):
             self._update_particle_mode_visibility()
 
@@ -2749,44 +1731,9 @@ class TransitionsTab(QWidget):
         cur_type = self._current_transition or canonicalize_transition_name(
             existing.get('type', default_type), fallback=default_type
         )
-        cur_dir = self.direction_combo.currentText()
-        if cur_type == "Slide":
-            self._dir_slide = cur_dir
-        elif cur_type == "Wipe":
-            self._dir_wipe = cur_dir
-        elif cur_type == "Glass Shatter":
-            self._direction_by_type["glass_shatter"] = cur_dir
-        elif cur_type == "Exploding Tiles":
-            self._direction_by_type["exploding_tiles"] = cur_dir
-        elif cur_type == "Directional Pixel Accretion":
-            self._direction_by_type["pixel_accretion"] = cur_dir
-        elif cur_type == "Melt Drip":
-            self._direction_by_type["melt_drip"] = cur_dir
-        elif cur_type == "Page Curl":
-            self._direction_by_type["page_curl"] = cur_dir
-        elif cur_type == "Disintegrate":
-            self._direction_by_type["disintegrate"] = cur_dir
-        elif cur_type == "Cube Turn":
-            self._direction_by_type["cube_turn"] = cur_dir
-        elif cur_type == "Beam":
-            self._direction_by_type["beam"] = cur_dir
-        elif cur_type == "Jigsaw Piece Flip":
-            self._direction_by_type["jigsaw"] = cur_dir
-        elif cur_type == "Volumetric Dissolve":
-            self._direction_by_type["volumetric_dissolve"] = cur_dir
-        elif cur_type == "VHS Distortion":
-            self._direction_by_type["vhs"] = cur_dir
-        elif cur_type == "Depth Card Cascade":
-            self._direction_by_type["depth_cascade"] = cur_dir
-        elif cur_type == "Chromatic Shear":
-            self._direction_by_type["chromatic_shear"] = cur_dir
-        elif cur_type == "Membrane Turnover":
-            self._direction_by_type["membrane"] = cur_dir
-        if hasattr(self, 'blockspin_direction_combo'):
-            self._dir_blockspin = (
-                self.blockspin_direction_combo.currentText()
-                or str(_transition_default("blockspin.direction"))
-            )
+        spec = transition_settings(cur_type)
+        if spec is not None and spec.directions is not None:
+            self._direction_by_type[spec.section] = self.direction_combo.currentText()
 
         cur_duration = self.duration_slider.value()
         self._duration_by_type[cur_type] = cur_duration
@@ -2799,187 +1746,6 @@ class TransitionsTab(QWidget):
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             use_random = bool(_transition_default('random_always'))
 
-        # Build the section fresh (dropping retired/stale keys), preserving only
-        # the transient random-choice bookkeeping and any UNBUILT transition's
-        # detail subdict from the existing persisted state.
-        if hasattr(self, 'blinds_group'):
-            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
-            blinds = {
-                'feather': self.blinds_feather_slider.value(),
-                'direction': self.blinds_direction_combo.currentText(),
-                'style': self.blinds_style_combo.currentText(),
-                'slats': self.blinds_slats_spin.value(),
-            }
-        else:
-            blinds = _existing_subdict('blinds')
-        if hasattr(self, 'ripple_group'):
-            ripple = {'ripple_count': self.ripple_count_spin.value()}
-        else:
-            ripple = _existing_subdict('ripple')
-        if hasattr(self, 'crumble_group'):
-            crumble = {
-                'piece_count': self.crumble_piece_count_spin.value(),
-                'crack_complexity': self.crumble_complexity_spin.value(),
-                'weighting': self.crumble_weight_combo.currentText(),
-                'collisions': self.crumble_collisions_check.isChecked(),
-            }
-        else:
-            crumble = _existing_subdict('crumble')
-        if hasattr(self, 'particle_group'):
-            particle = {
-                'mode': self.particle_mode_combo.currentText(),
-                'direction': self.particle_direction_combo.currentText(),
-                'particle_radius': float(self.particle_radius_spin.value()),
-                'overlap': 4.0,
-                'trail_length': 0.15 if self.particle_trail_check.isChecked() else 0.0,
-                'trail_strength': 0.6 if self.particle_trail_check.isChecked() else 0.0,
-                'swirl_strength': 1.0,
-                'swirl_turns': self.particle_swirl_turns_spin.value(),
-                'use_3d_shading': self.particle_3d_check.isChecked(),
-                'texture_mapping': self.particle_texture_check.isChecked(),
-                'wobble': self.particle_wobble_check.isChecked(),
-                'gloss_size': float(self.particle_gloss_spin.value()),
-                'light_direction': self.particle_light_combo.currentIndex(),
-                'swirl_order': self.particle_swirl_order_combo.currentIndex(),
-            }
-        else:
-            particle = _existing_subdict('particle')
-        if hasattr(self, 'burn_group'):
-            burn = {
-                'direction': self.burn_direction_combo.currentText(),
-                'jaggedness': self.burn_jaggedness_slider.value() / 100.0,
-                'glow_intensity': self.burn_glow_intensity_slider.value() / 100.0,
-                'char_width': self.burn_char_width_slider.value() / 100.0,
-                'glow_color': [
-                    self._burn_glow_color.red(),
-                    self._burn_glow_color.green(),
-                    self._burn_glow_color.blue(),
-                    self._burn_glow_color.alpha(),
-                ],
-                'ember_color': [
-                    self._burn_ember_color.red(),
-                    self._burn_ember_color.green(),
-                    self._burn_ember_color.blue(),
-                    self._burn_ember_color.alpha(),
-                ],
-                'smoke_enabled': self.burn_smoke_check.isChecked(),
-                'smoke_density': self.burn_smoke_density_slider.value() / 100.0,
-                'ash_enabled': self.burn_ash_check.isChecked(),
-                'ash_density': self.burn_ash_density_slider.value() / 100.0,
-                'flames': self.burn_flames_check.isChecked(),
-                'ember_veins': self.burn_veins_check.isChecked(),
-            }
-        else:
-            burn = _existing_subdict('burn')
-
-        if hasattr(self, 'glass_shatter_group'):
-            glass_shatter = {
-                'shards': self.glass_shards_spin.value(),
-                'depth': float(self.glass_depth_spin.value()),
-                'direction': self._direction_by_type['glass_shatter'],
-                'collisions': self.glass_collisions_check.isChecked(),
-                'reshatter': self.glass_reshatter_check.isChecked(),
-            }
-        else:
-            glass_shatter = _existing_subdict('glass_shatter')
-        if hasattr(self, 'exploding_tiles_group'):
-            exploding_tiles = {
-                'columns': self.exploding_tiles_columns_spin.value(),
-                'depth': float(self.exploding_tiles_depth_spin.value()),
-                'direction': self._direction_by_type['exploding_tiles'],
-            }
-        else:
-            exploding_tiles = _existing_subdict('exploding_tiles')
-        if hasattr(self, 'pixel_accretion_group'):
-            pixel_accretion = {
-                'tile_size': self.pixel_tile_size_spin.value(),
-                'travel': float(self.pixel_travel_spin.value()),
-                'direction': self._direction_by_type['pixel_accretion'],
-            }
-        else:
-            pixel_accretion = _existing_subdict('pixel_accretion')
-        if hasattr(self, 'melt_drip_group'):
-            melt_drip = {
-                'detail': float(self.melt_drip_detail_spin.value()),
-                'direction': self._direction_by_type['melt_drip'],
-            }
-        else:
-            melt_drip = _existing_subdict('melt_drip')
-        if hasattr(self, 'beam_group'):
-            c = self._beam_color
-            beam = {'direction': self._direction_by_type['beam'],
-                    'color': [c.red(), c.green(), c.blue(), 255],
-                    'sparks': self.beam_sparks_check.isChecked()}
-        else:
-            beam = {**_existing_subdict('beam'), 'direction': self._direction_by_type['beam']}
-        if hasattr(self, 'cube_turn_group'):
-            cube_turn = {'direction': self._direction_by_type['cube_turn']}
-        else:
-            cube_turn = {**_existing_subdict('cube_turn'), 'direction': self._direction_by_type['cube_turn']}
-        if hasattr(self, 'disintegrate_group'):
-            disintegrate = {'direction': self._direction_by_type['disintegrate'],
-                            'grain_size': self.disintegrate_grain_spin.value()}
-        else:
-            disintegrate = {**_existing_subdict('disintegrate'), 'direction': self._direction_by_type['disintegrate']}
-        if hasattr(self, 'page_curl_group'):
-            page_curl = {'direction': self._direction_by_type['page_curl']}
-        else:
-            page_curl = {**_existing_subdict('page_curl'), 'direction': self._direction_by_type['page_curl']}
-        if hasattr(self, 'volumetric_dissolve_group'):
-            volumetric_dissolve = {'direction': self._direction_by_type['volumetric_dissolve'],
-                                   'particle_size': self.volumetric_dissolve_size_spin.value()}
-        else:
-            volumetric_dissolve = {**_existing_subdict('volumetric_dissolve'),
-                                   'direction': self._direction_by_type['volumetric_dissolve']}
-        if hasattr(self, 'edge_bloom_group'):
-            c = self._edge_bloom_color
-            edge_bloom = {'color': [c.red(), c.green(), c.blue(), 255],
-                          'color_source': self.edge_bloom_colour_source_combo.currentText()}
-        else:
-            edge_bloom = _existing_subdict('edge_bloom')
-        if hasattr(self, 'liquid_lens_group'):
-            liquid_lens = {'stops': self.liquid_lens_stops_spin.value()}
-        else:
-            liquid_lens = _existing_subdict('liquid_lens')
-        if hasattr(self, 'membrane_group'):
-            membrane = {'direction': self._direction_by_type['membrane']}
-        else:
-            membrane = {**_existing_subdict('membrane'), 'direction': self._direction_by_type['membrane']}
-        if hasattr(self, 'surface_tension_group'):
-            surface_tension = {'pools': self.surface_tension_pools_spin.value()}
-        else:
-            surface_tension = _existing_subdict('surface_tension')
-        if hasattr(self, 'chromatic_shear_group'):
-            chromatic_shear = {'direction': self._direction_by_type['chromatic_shear'], 'slices': self.chromatic_shear_slices_spin.value()}
-        else:
-            chromatic_shear = {**_existing_subdict('chromatic_shear'), 'direction': self._direction_by_type['chromatic_shear']}
-        if hasattr(self, 'depth_cascade_group'):
-            depth_cascade = {'direction': self._direction_by_type['depth_cascade'], 'shadows': self.depth_cascade_shadows_check.isChecked(), 'cards': self.depth_cascade_cards_spin.value()}
-        else:
-            depth_cascade = {**_existing_subdict('depth_cascade'), 'direction': self._direction_by_type['depth_cascade']}
-        if hasattr(self, 'capillary_bloom_group'):
-            capillary_bloom = {'sources': self.capillary_bloom_sources_spin.value()}
-        else:
-            capillary_bloom = _existing_subdict('capillary_bloom')
-        if hasattr(self, 'vhs_group'):
-            vhs = {'direction': self._direction_by_type['vhs']}
-        else:
-            vhs = {**_existing_subdict('vhs'), 'direction': self._direction_by_type['vhs']}
-        if hasattr(self, 'jigsaw_group'):
-            jigsaw = {'direction': self._direction_by_type['jigsaw'], 'pieces': self.jigsaw_pieces_spin.value()}
-        else:
-            jigsaw = {**_existing_subdict('jigsaw'), 'direction': self._direction_by_type['jigsaw']}
-
-        for section, values in (("blinds", blinds), ("crumble", crumble), ("glass_shatter", glass_shatter),
-                                ("exploding_tiles", exploding_tiles),
-                                ("melt_drip", melt_drip), ("page_curl", page_curl),
-                                ("disintegrate", disintegrate), ("cube_turn", cube_turn), ("beam", beam),
-                                ("volumetric_dissolve", volumetric_dissolve), ("vhs", vhs),
-                                ("edge_bloom", edge_bloom), ("liquid_lens", liquid_lens), ("membrane", membrane), ("surface_tension", surface_tension), ("chromatic_shear", chromatic_shear), ("depth_cascade", depth_cascade), ("capillary_bloom", capillary_bloom)):
-            if hasattr(self, f"{section}_group"):
-                for field, *_ in self._SURFACE_CONTROLS[section]:
-                    values[field] = float(getattr(self, f"{section}_{field}_spin").value())
-
         config = {
             'type': cur_type,
             'duration_ms': cur_duration,
@@ -2987,47 +1753,20 @@ class TransitionsTab(QWidget):
             'pool': dict(self._pool_by_type),
             'activation': dict(self._activation_by_type),
             'random_always': use_random,
-            'slide': (
-                {
-                    'direction': self._dir_slide,
-                    'motion_style': self.slide_motion_style_combo.currentText(),
-                }
-                if hasattr(self, 'slide_group')
-                else {
-                    **_existing_subdict('slide'),
-                    'direction': self._dir_slide,
-                }
-            ),
-            'wipe': {'direction': self._dir_wipe},
-            'blockspin': {**_existing_subdict('blockspin'), 'direction': self._dir_blockspin},
-            'blinds': blinds,
-            'ripple': ripple,
-            'crumble': crumble,
-            'particle': particle,
-            'burn': burn,
-            'glass_shatter': glass_shatter,
-            'exploding_tiles': exploding_tiles,
-            'pixel_accretion': pixel_accretion,
-            'melt_drip': melt_drip,
-            'page_curl': page_curl,
-            'disintegrate': disintegrate,
-            'cube_turn': cube_turn,
-            'beam': beam,
-            'jigsaw': jigsaw,
-            'volumetric_dissolve': volumetric_dissolve,
-            'vhs': vhs,
-            'edge_bloom': edge_bloom,
-            'capillary_bloom': capillary_bloom,
-            'depth_cascade': depth_cascade,
-            'chromatic_shear': chromatic_shear,
-            'surface_tension': surface_tension,
-            'membrane': membrane,
-            'liquid_lens': liquid_lens,
         }
-        for section, controls in self._SCENE3D_CHOICES.items():
-            if hasattr(self, f"{section}_group"):
-                for field, *_ in controls:
-                    config[section][field] = getattr(self, f"{section}_{field}_combo").currentText()
+        # A built page writes its section fresh (dropping retired/stale keys); an
+        # unbuilt page keeps its persisted section. The shared Direction box's
+        # selection is written either way.
+        for page in iter_transition_settings():
+            if page.has_page and hasattr(self, f"{page.section}_group"):
+                values = {control.field: self._control_value(page, control) for control in page.all_controls}
+                if page.custom:
+                    getattr(self, f"_save_{page.section}_page")(values)
+            else:
+                values = _existing_subdict(page.section)
+            if page.directions is not None:
+                values['direction'] = self._direction_by_type[page.section]
+            config[page.section] = values
 
         # Preserve engine-managed transient random-choice bookkeeping.
         for transient_key in ('random_choice', 'last_random_choice'):

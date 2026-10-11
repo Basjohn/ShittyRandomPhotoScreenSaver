@@ -8,6 +8,7 @@ from ui.tabs.transitions_tab import TransitionsTab
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from rendering.transition_registry import get_transition_setting_names
+from rendering.transition_settings import iter_transition_settings, transition_settings, widget_attr
 
 
 @pytest.fixture
@@ -129,8 +130,8 @@ def test_glass_shatter_page_is_lazy_and_round_trips_authored_controls(
     tab._activation_checkboxes["Glass Shatter"].setChecked(True)
     tab._on_nav_selected("Glass Shatter")
     assert hasattr(tab, "glass_shatter_group")
-    tab.glass_shards_spin.setValue(120)
-    tab.glass_depth_spin.setValue(1.1)
+    tab.glass_shatter_shards_spin.setValue(120)
+    tab.glass_shatter_depth_spin.setValue(1.1)
     tab.direction_combo.setCurrentText("Center Out")
     tab._save_settings()
 
@@ -155,8 +156,8 @@ def test_external_transition_edit_hydrates_built_page_before_duration_save(
     settings_manager.set("transitions", external)
     qapp.processEvents()
 
-    assert tab.glass_shards_spin.value() == 120
-    assert tab.glass_depth_spin.value() == pytest.approx(1.2)
+    assert tab.glass_shatter_shards_spin.value() == 120
+    assert tab.glass_shatter_depth_spin.value() == pytest.approx(1.2)
     assert tab._duration_by_type["Glass Shatter"] == 2345
 
     # A duration-only save must preserve the externally authored controls.
@@ -207,12 +208,12 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     qapp.processEvents()
 
     canonical = get_default_settings()["transitions"]
-    assert tab.glass_shards_spin.value() == canonical["glass_shatter"]["shards"]
-    assert tab.glass_depth_spin.value() == pytest.approx(canonical["glass_shatter"]["depth"])
+    assert tab.glass_shatter_shards_spin.value() == canonical["glass_shatter"]["shards"]
+    assert tab.glass_shatter_depth_spin.value() == pytest.approx(canonical["glass_shatter"]["depth"])
     assert tab.exploding_tiles_columns_spin.value() == canonical["exploding_tiles"]["columns"]
     assert tab.exploding_tiles_depth_spin.value() == pytest.approx(canonical["exploding_tiles"]["depth"])
-    assert tab.pixel_tile_size_spin.value() == canonical["pixel_accretion"]["tile_size"]
-    assert tab.pixel_travel_spin.value() == pytest.approx(canonical["pixel_accretion"]["travel"])
+    assert tab.pixel_accretion_tile_size_spin.value() == canonical["pixel_accretion"]["tile_size"]
+    assert tab.pixel_accretion_travel_spin.value() == pytest.approx(canonical["pixel_accretion"]["travel"])
     assert tab.melt_drip_detail_spin.value() == pytest.approx(canonical["melt_drip"]["detail"])
 
     # An unrelated duration write must serialize repaired controls rather than
@@ -242,13 +243,13 @@ def test_lazy_transition_page_rolls_back_failed_hydration_and_can_retry(
     with pytest.raises(RuntimeError, match="test hydration failure"):
         tab._ensure_transition_page("Glass Shatter")
     assert not hasattr(tab, "glass_shatter_group")
-    assert not hasattr(tab, "glass_shards_spin")
+    assert not hasattr(tab, "glass_shatter_shards_spin")
     assert "Glass Shatter" not in tab._built_transition_pages
 
     monkeypatch.setattr(tab, "_hydrate_transition_page", original_hydrate)
     tab._ensure_transition_page("Glass Shatter")
     assert hasattr(tab, "glass_shatter_group")
-    assert hasattr(tab, "glass_shards_spin")
+    assert hasattr(tab, "glass_shatter_shards_spin")
     assert "Glass Shatter" in tab._built_transition_pages
 
 
@@ -305,10 +306,10 @@ def test_glass_collision_and_reshatter_options_load_and_persist(qapp, settings_m
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
     tab._on_nav_selected("Glass Shatter")
-    assert tab.glass_collisions_check.isChecked()
-    assert not tab.glass_reshatter_check.isChecked()
+    assert tab.glass_shatter_collisions_check.isChecked()
+    assert not tab.glass_shatter_reshatter_check.isChecked()
 
-    tab.glass_reshatter_check.setChecked(True)
+    tab.glass_shatter_reshatter_check.setChecked(True)
     persisted = settings_manager.get("transitions", {})["glass_shatter"]
     assert persisted["collisions"] is True
     assert persisted["reshatter"] is True
@@ -352,8 +353,9 @@ def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, set
         trails.setCurrentText(next(value for value in SCENE3D_TRAIL_CHOICES if value != trails.currentText()))
         assert settings_manager.get("transitions", {})[section]["motion_trails"] == trails.currentText()
     # Motion Trails is offered only where it can help (operator direction, 2026-09-29).
-    assert {section for section, controls in tab._SCENE3D_CHOICES.items()
-            if any(control[0] == "motion_trails" for control in controls)} == {section for _name, section in pages}
+    assert {spec.section for spec in iter_transition_settings()
+            if any(control.field == "motion_trails" for control in spec.all_controls)} == {
+        section for _name, section in pages}
     bloom = tab.exploding_tiles_bloom_combo
     bloom.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != bloom.currentText()))
     tab.exploding_tiles_bloom_strength_spin.setValue(0.35)
@@ -381,13 +383,12 @@ def test_optional_3d_choices_live_in_a_closed_advanced_bucket(qapp, settings_man
         tab._on_nav_selected(name)
         toggle, body = getattr(tab, f"{section}_advanced_toggle"), getattr(tab, f"{section}_advanced_body")
         assert not toggle.isChecked() and body.isHidden()
-        for field, *_rest in tab._SCENE3D_CHOICES[section]:
-            assert body.isAncestorOf(getattr(tab, f"{section}_{field}_combo")), (section, field)
+        spec = transition_settings(section)
+        for control in spec.advanced:
+            assert body.isAncestorOf(getattr(tab, widget_attr(section, control))), (section, control.field)
         # Controls that shape the effect itself stay on the page.
-        for control in tab._SURFACE_CONTROLS.get(section, ()):
-            spin = getattr(tab, f"{section}_{control[0]}_spin")
-            attached = {f for fields in tab._ADVANCED_SURFACE_FIELDS.get(section, {}).values() for f in fields}
-            assert body.isAncestorOf(spin) is (control[0] in attached), (section, control[0])
+        for control in spec.controls:
+            assert not body.isAncestorOf(getattr(tab, widget_attr(section, control))), (section, control.field)
         toggle.setChecked(True)
         assert not body.isHidden()
     assert tab.exploding_tiles_advanced_body.isAncestorOf(tab.exploding_tiles_bloom_strength_spin)
@@ -475,7 +476,7 @@ def test_disintegrate_page_round_trips_its_controls(qapp, settings_manager, qtbo
     tab._on_nav_selected("Disintegrate")
     assert "Diagonal BR-TL" in [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())]
     tab.direction_combo.setCurrentText("Right to Left")
-    tab.disintegrate_grain_spin.setValue(6)
+    tab.disintegrate_grain_size_spin.setValue(6)
     tab.disintegrate_wind_spin.setValue(1.5)
     tab.disintegrate_antialiasing_combo.setCurrentText("Off")
     persisted = settings_manager.get("transitions", {})["disintegrate"]
@@ -485,7 +486,7 @@ def test_disintegrate_page_round_trips_its_controls(qapp, settings_manager, qtbo
     external["disintegrate"]["grain_size"] = 99
     settings_manager.set("transitions", external)
     qapp.processEvents()
-    assert tab.disintegrate_grain_spin.value() == tab.disintegrate_grain_spin.maximum()
+    assert tab.disintegrate_grain_size_spin.value() == tab.disintegrate_grain_size_spin.maximum()
 
 
 def test_cube_turn_page_offers_directions_and_round_trips(qapp, settings_manager, qtbot):
@@ -530,9 +531,9 @@ def test_edge_bloom_page_round_trips(qapp, settings_manager, qtbot):
     assert not tab.direction_combo.isVisibleTo(tab)
     tab.edge_bloom_glow_spin.setValue(0.3)
     tab.edge_bloom_detail_spin.setValue(0.8)
-    tab.edge_bloom_colour_source_combo.setCurrentText("Custom")
+    tab.edge_bloom_color_source_combo.setCurrentText("Custom")
     assert tab.edge_bloom_color_btn.isEnabled()
-    tab.edge_bloom_colour_source_combo.setCurrentText("Next Picture")
+    tab.edge_bloom_color_source_combo.setCurrentText("Next Picture")
     assert not tab.edge_bloom_color_btn.isEnabled()          # the custom colour applies only to Custom
     persisted = settings_manager.get("transitions", {})["edge_bloom"]
     assert persisted["glow"] == 0.3 and persisted["detail"] == 0.8 and len(persisted["color"]) == 4
@@ -572,7 +573,7 @@ def test_volumetric_dissolve_page_offers_directions_and_round_trips(qapp, settin
         VOLUMETRIC_DIRECTION_CHOICES)
     label, size = VOLUMETRIC_DIRECTION_CHOICES[-2], VOLUMETRIC_PARTICLE_SIZE_RANGE[0] + 1
     tab.direction_combo.setCurrentText(label)
-    tab.volumetric_dissolve_size_spin.setValue(size)
+    tab.volumetric_dissolve_particle_size_spin.setValue(size)
     tab.volumetric_dissolve_mist_spin.setValue(0.2)
     tab.volumetric_dissolve_depth_spin.setValue(0.9)
     tab.volumetric_dissolve_antialiasing_combo.setCurrentText("2x")
@@ -592,7 +593,7 @@ def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot)
     tab._on_nav_selected("Beam")
     assert hasattr(tab, "beam_group")
     tab.direction_combo.setCurrentIndex(tab.direction_combo.findText("Diagonal BR-TL"))
-    tab._beam_color = QColor(12, 200, 99)
+    tab.beam_color_btn.set_color(QColor(12, 200, 99))
     tab.beam_sparks_check.setChecked(not tab.beam_sparks_check.isChecked())
     sparks = tab.beam_sparks_check.isChecked()
     tab.beam_scorch_spin.setValue(0.15)
@@ -608,7 +609,7 @@ def test_beam_settings_round_trip_through_the_tab(qapp, settings_manager, qtbot)
     reloaded = TransitionsTab(settings_manager)
     qtbot.addWidget(reloaded)
     reloaded._on_nav_selected("Beam")
-    assert reloaded._beam_color.getRgb()[:3] == (12, 200, 99)
+    assert reloaded.beam_color_btn.color().getRgb()[:3] == (12, 200, 99)
     assert reloaded.beam_sparks_check.isChecked() is sparks
     assert reloaded.beam_scorch_spin.value() == pytest.approx(0.15)
     assert reloaded.direction_combo.currentText() == 'Diagonal BR-TL'

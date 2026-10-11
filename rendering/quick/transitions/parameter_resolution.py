@@ -10,27 +10,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-import math
 import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
-from rendering.gl_programs.blinds_options import BLINDS_SLATS_RANGE, BLINDS_STYLE_CHOICES, BLINDS_STYLE_CODES
-from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
-from rendering.gl_programs.cube_turn_options import CUBE_TURN_DIRECTIONS
-from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
+from rendering.gl_programs.blinds_options import BLINDS_STYLE_CODES
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
-from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_STOPS_RANGE
-from rendering.gl_programs.membrane_options import MEMBRANE_SWEEPS
-from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE
-from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
-from rendering.gl_programs.chromatic_shear_options import SHEAR_SLICES_RANGE
-from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEPS
-from rendering.gl_programs.depth_cascade_options import CASCADE_CARDS_RANGE
-from rendering.gl_programs.capillary_bloom_options import CAPILLARY_SOURCES_RANGE
-from rendering.gl_programs.vhs_options import VHS_DIRECTIONS
-from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
-from rendering.gl_programs.page_curl_options import PAGE_CURL_ORIGINS
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_TRAIL_CHOICES,
@@ -39,6 +24,13 @@ from rendering.gl_programs.scene3d import (
     scene3d_detail,
     scene3d_post_effect,
     scene3d_samples,
+)
+from rendering.transition_settings import (
+    TransitionSettings,
+    as_bool,
+    as_integer,
+    as_number,
+    require_transition_settings,
 )
 from .state import TransitionParameters, TransitionValue, freeze_transition_parameters
 
@@ -56,36 +48,6 @@ class ResolvedPhaseCInputs:
 
     def parameter_dict(self) -> dict[str, TransitionValue]:
         return dict(self.parameters)
-
-
-# A Settings label names the way the motion travels, and so does the resolved code:
-# "Left to Right" is ``right``.
-_DIRECTION_MAP = {
-    "Left to Right": "right",
-    "Right to Left": "left",
-    "Top to Bottom": "down",
-    "Bottom to Top": "up",
-    "Diagonal TL-BR": "diag_tl_br",
-    "Diagonal TR-BL": "diag_tr_bl",
-    "Diagonal TL to BR": "diag_tl_br",
-    "Diagonal TR to BL": "diag_tr_bl",
-}
-
-
-def _resolve_direction(
-    raw: object,
-    *,
-    choices: tuple[str, ...],
-    mapping: Mapping[str, str],
-    rng: _RandomSource,
-) -> str:
-    text = str(raw or "Random")
-    if text == "Random":
-        return str(rng.choice(choices))
-    resolved = mapping.get(text)
-    if resolved is None:
-        raise ValueError(f"unknown transition direction: {raw!r}")
-    return resolved
 
 
 def _mapping(settings: Mapping[str, object], name: str) -> Mapping[str, object]:
@@ -110,37 +72,10 @@ def _value(
     return config.get(name, defaults[name])
 
 
-def _number(value: object, default: float) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        result = float(default)
-    return result if math.isfinite(result) else float(default)
-
-
-def _integer(value: object, default: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(default)
-
-
-def _bool(value: object, default: bool) -> bool:
-    """Preserve the Settings layer's legacy bool coercion at request admission."""
-
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return bool(default)
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "yes", "1", "on", "enabled"}:
-            return True
-        if normalized in {"false", "no", "0", "off", "disabled"}:
-            return False
-    return bool(default)
+# The Settings layer's coercion, shared with the Settings page through the specs.
+_number = as_number
+_integer = as_integer
+_bool = as_bool
 
 
 def _finish(
@@ -159,7 +94,7 @@ def _resolve_blinds(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "blinds")
     defaults = _canonical("blinds")
-    style = BLINDS_STYLE_CODES[_scene_choice(cfg, defaults, "style", BLINDS_STYLE_CHOICES)]
+    style = BLINDS_STYLE_CODES[require_transition_settings("blinds").admit("style", cfg, defaults)]
     default_direction = str(defaults["direction"])
     raw_direction = str(_value(cfg, defaults, "direction") or default_direction)
     if style == "slats" and raw_direction not in ("Horizontal", "Vertical"):
@@ -179,11 +114,11 @@ def _resolve_blinds(
     feather = max(0.001, min(0.5, (ui_feather / 25.0) * 0.5))
     if style == "flat":
         return _finish(direction, {"feather": feather, "style": style})
-    low, high = BLINDS_SLATS_RANGE
+    spec = require_transition_settings("blinds")
     return _finish(direction, {
         "feather": feather, "style": style,
-        "slats": max(low, min(high, _integer(_value(cfg, defaults, "slats"), int(defaults["slats"])))),
-        **_surface_values(cfg, defaults, ("gloss",)),
+        "slats": spec.admit("slats", cfg, defaults),
+        "gloss": spec.admit("gloss", cfg, defaults),
         **resolve_scene_quality(settings, cfg, defaults),
     })
 
@@ -194,24 +129,20 @@ def _resolve_ripple(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "ripple")
     defaults = _canonical("ripple")
-    default_count = int(defaults["ripple_count"])
-    count = max(
-        1,
-        min(
-            8,
-            _integer(
-                _value(cfg, defaults, "ripple_count"),
-                default_count,
-            ),
-        ),
-    )
-    return _finish(
-        None,
-        {
-            "ripple_count": count,
-            "ripple_seed": float(rng.random()) * 1000.0,
-        },
-    )
+    return _finish(None, {
+        **require_transition_settings("ripple").page_values(cfg, defaults),
+        "ripple_seed": float(rng.random()) * 1000.0,
+    })
+
+
+# The release order each Weighting label selects in the shader.
+_CRUMBLE_WEIGHT_MODES = {
+    "Top Weighted": 0.0,
+    "Bottom Weighted": 1.0,
+    "Random Weighted": 2.0,
+    "Random Choice": 3.0,
+    "Age Weighted": 4.0,
+}
 
 
 def _resolve_crumble(
@@ -220,52 +151,14 @@ def _resolve_crumble(
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "crumble")
     defaults = _canonical("crumble")
-    default_pieces = max(4, int(defaults["piece_count"]))
-    piece_count = max(
-        4,
-        _integer(
-            _value(cfg, defaults, "piece_count"),
-            default_pieces,
-        ),
-    )
-    piece_count = min(128, piece_count)
-    default_complexity = float(defaults["crack_complexity"])
-    complexity = max(
-        0.5,
-        min(
-            2.0,
-            _number(
-                _value(cfg, defaults, "crack_complexity"),
-                default_complexity,
-            ),
-        ),
-    )
-    default_weighting = str(defaults["weighting"])
-    weighting = str(_value(cfg, defaults, "weighting") or default_weighting)
-    # Former Bias labels both executed Top Weighted. The Settings page writes
-    # the actual release-order label when it next saves an existing profile.
-    weight_mode = {
-        "Top Weighted": 0.0,
-        "Bottom Weighted": 1.0,
-        "Random Weighted": 2.0,
-        "Random Choice": 3.0,
-        "Age Weighted": 4.0,
-        "Bias Old Image": 0.0,
-        "Bias New Image": 0.0,
-    }.get(weighting, 0.0)
-    return _finish(
-        None,
-        {
-            "seed": float(rng.random()) * 1000.0,
-            "piece_count": piece_count,
-            "crack_complexity": complexity,
-            "depth": max(.2, min(1.5, _number(_value(cfg, defaults, "depth"), float(defaults["depth"])))),
-            **_surface_values(cfg, defaults, ("thickness", "debris")),
-            "weight_mode": weight_mode,
-            "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
-            **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True),
-        },
-    )
+    spec = require_transition_settings("crumble")
+    return _finish(None, {
+        "seed": float(rng.random()) * 1000.0,
+        **spec.page_values(cfg, defaults),
+        # Retired Bias labels admit as Top Weighted; the Settings page writes the label on its next save.
+        "weight_mode": _CRUMBLE_WEIGHT_MODES[spec.admit("weighting", cfg, defaults)],
+        **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True),
+    })
 
 
 def _resolve_particle(
@@ -563,58 +456,10 @@ def _resolve_burn(
     )
 
 
-_FRACTURE_DIRECTION_MAP = {
-    **_DIRECTION_MAP,
-    "Center Out": "center_out",
-    "center_out": "center_out",
-    "left": "left",
-    "right": "right",
-    "up": "up",
-    "down": "down",
-    "diag_tl_br": "diag_tl_br",
-    "diag_tr_bl": "diag_tr_bl",
-}
-_FRACTURE_DIRECTIONS = (
-    "left",
-    "right",
-    "up",
-    "down",
-    "diag_tl_br",
-    "diag_tr_bl",
-    "center_out",
-)
-_PIXEL_DIRECTION_MAP = {
-    **_FRACTURE_DIRECTION_MAP,
-    "Diagonal BL-TR": "diag_bl_tr",
-    "Diagonal BR-TL": "diag_br_tl",
-    "diag_bl_tr": "diag_bl_tr",
-    "diag_br_tl": "diag_br_tl",
-}
-_PIXEL_DIRECTIONS = (
-    "left",
-    "right",
-    "up",
-    "down",
-    "diag_tl_br",
-    "diag_tr_bl",
-    "diag_bl_tr",
-    "diag_br_tl",
-)
-
-
-
 def _seed(rng: _RandomSource) -> int:
     """Generate one deterministic per-request seed; it is never persisted."""
 
     return int(rng.randint(1, 65535))
-
-
-def _resolve_detail(
-    cfg: Mapping[str, object],
-    defaults: Mapping[str, object],
-) -> float:
-    default_detail = float(defaults["detail"])
-    return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
 
 
 # The request-time field carrying the run's resolved 3D Transitions tier. Never persisted:
@@ -676,352 +521,142 @@ def resolve_block_spins_parameters(settings: Mapping[str, object], cfg: Mapping[
                                    defaults: Mapping[str, object]) -> dict[str, object]:
     """3D Block Spins' request parameters: its quality plus its Edge Glass look."""
     parameters = resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)
-    parameters["edge_glass"] = _scene_choice(cfg, defaults, "edge_glass", BLOCK_SPIN_EDGE_GLASS_CHOICES)
+    parameters["edge_glass"] = require_transition_settings("blockspin").admit("edge_glass", cfg, defaults)
     return parameters
 
 
-def _surface_values(cfg: Mapping[str, object], defaults: Mapping[str, object],
-                    names: tuple[str, ...]) -> dict[str, float]:
-    return {name: max(0.0, min(1.0, _number(_value(cfg, defaults, name), float(defaults[name]))))
-            for name in names}
-
-
-def _resolve_glass_shatter(
+def _spec_inputs(
+    section: str,
     settings: Mapping[str, object],
     rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "glass_shatter")
-    defaults = _canonical("glass_shatter")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_FRACTURE_DIRECTIONS,
-        mapping=_FRACTURE_DIRECTION_MAP,
-        rng=rng,
-    )
-    default_shards = int(defaults["shards"])
-    default_depth = float(defaults["depth"])
-    shards = max(24, min(180, _integer(_value(cfg, defaults, "shards"), default_shards)))
-    depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
-    return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth,
-                               "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
-                               "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
-                               **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen")),
+) -> tuple[TransitionSettings, Mapping[str, object], Mapping[str, object], object]:
+    """A spec'd transition's spec, persisted section, canonical section and resolved direction
+    (None when the page offers no Direction)."""
+
+    spec = require_transition_settings(section)
+    cfg = _mapping(settings, section)
+    defaults = _canonical(section)
+    direction = None
+    if spec.directions is not None:
+        direction = spec.directions.resolve(_value(cfg, defaults, "direction"), rng)
+    return spec, cfg, defaults, direction
+
+
+def _colour(spec: TransitionSettings, cfg: Mapping[str, object], defaults: Mapping[str, object],
+            name: str = "color") -> tuple[float, float, float]:
+    color = _normalized_glow_color(_value(cfg, defaults, name), defaults[name], field_name=name)
+    return tuple(min(1.0, channel) for channel in color[:3])
+
+
+def _resolve_glass_shatter(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("glass_shatter", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
                                **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)})
 
 
-def _resolve_exploding_tiles(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "exploding_tiles")
-    defaults = _canonical("exploding_tiles")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_FRACTURE_DIRECTIONS,
-        mapping=_FRACTURE_DIRECTION_MAP,
-        rng=rng,
-    )
-    default_columns = int(defaults["columns"])
-    default_depth = float(defaults["depth"])
-    columns = max(6, min(48, _integer(_value(cfg, defaults, "columns"), default_columns)))
-    depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
-    return _finish(
-        direction,
-        {"seed": _seed(rng), "columns": columns, "depth": depth,
-         **_surface_values(cfg, defaults, ("thickness",)),
-         "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
-         **resolve_scene_quality(settings, cfg, defaults, bloom=True, motion_blur=True, motion_trails=True)},
-    )
-
-
-def _resolve_pixel_accretion(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "pixel_accretion")
-    defaults = _canonical("pixel_accretion")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_PIXEL_DIRECTIONS,
-        mapping=_PIXEL_DIRECTION_MAP,
-        rng=rng,
-    )
-    default_tile_size = int(defaults["tile_size"])
-    default_travel = float(defaults["travel"])
-    tile_size = max(4, min(32, _integer(_value(cfg, defaults, "tile_size"), default_tile_size)))
-    travel = max(0.1, min(1.0, _number(_value(cfg, defaults, "travel"), default_travel)))
-    return _finish(
-        direction,
-        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel,
-         **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)},
-    )
-
-
-# Melt starts at an origin rather than sweeping from an edge (operator rework
-# 2026-09-23). The Settings label maps to the resolved origin code.
-MELT_ORIGIN_LABELS = {
-    "Top Left": "top_left",
-    "Top Center": "top_center",
-    "Top Right": "top_right",
-    "Center Out": "center_out",
-    "Center In": "center_in",
-}
-_MELT_ORIGIN_CHOICES = tuple(MELT_ORIGIN_LABELS.values())
-
-
-def _resolve_melt_drip(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "melt_drip")
-    defaults = _canonical("melt_drip")
-    raw = str(_value(cfg, defaults, "direction") or "Random")
-    origin = MELT_ORIGIN_LABELS.get(raw)
-    if origin is None and raw in _MELT_ORIGIN_CHOICES:
-        origin = raw
-    if origin is None:
-        # "Random", and the retired edge directions ("Top to Bottom", ...) that
-        # older profiles may still hold, pick an origin per run.
-        origin = str(rng.choice(_MELT_ORIGIN_CHOICES))
-    return _finish(
-        origin,
-        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults),
-         **_surface_values(cfg, defaults, ("depth", "gloss"))},
-    )
-
-
-def _resolve_disintegrate(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "disintegrate")
-    defaults = _canonical("disintegrate")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_PIXEL_DIRECTIONS,
-        mapping=_PIXEL_DIRECTION_MAP,
-        rng=rng,
-    )
+def _resolve_exploding_tiles(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("exploding_tiles", settings, rng)
     return _finish(direction, {
-        "seed": _seed(rng),
-        "grain_size": max(2, min(8, _integer(_value(cfg, defaults, "grain_size"), int(defaults["grain_size"])))),
-        "wind": max(0.5, min(2.0, _number(_value(cfg, defaults, "wind"), float(defaults["wind"])))),
-        **resolve_scene_quality(settings, cfg, defaults),
-    })
+        "seed": _seed(rng), **spec.page_values(cfg, defaults),
+        **resolve_scene_quality(settings, cfg, defaults, bloom=True, motion_blur=True, motion_trails=True)})
 
 
-def _resolve_beam(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "beam")
-    defaults = _canonical("beam")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=_PIXEL_DIRECTIONS,
-        mapping=_PIXEL_DIRECTION_MAP,
-        rng=rng,
-    )
-    color = _normalized_glow_color(_value(cfg, defaults, "color"), defaults["color"], field_name="color")
-    return _finish(direction, {
-        "seed": _seed(rng),
-        "color": tuple(min(1.0, channel) for channel in color[:3]),
-        "sparks": _bool(_value(cfg, defaults, "sparks"), bool(defaults["sparks"])),
-        **_surface_values(cfg, defaults, ("glow", "scorch", "cure")),
-    })
+def _resolve_pixel_accretion(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("pixel_accretion", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
+                               **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)})
 
 
-def _resolve_cube_turn(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "cube_turn")
-    defaults = _canonical("cube_turn")
-    direction = CUBE_TURN_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if direction is None:
-        direction = str(rng.choice(tuple(CUBE_TURN_DIRECTIONS.values())))
-    return _finish(direction, {**_surface_values(cfg, defaults, ("gloss",)),
+def _resolve_melt_drip(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    # Melt starts at an origin rather than sweeping from an edge (operator rework 2026-09-23); the
+    # retired edge directions older profiles may hold pick an origin per run, as Random does.
+    spec, cfg, defaults, origin = _spec_inputs("melt_drip", settings, rng)
+    return _finish(origin, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
+
+
+def _resolve_disintegrate(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("disintegrate", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
                                **resolve_scene_quality(settings, cfg, defaults)})
 
 
-def _resolve_page_curl(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "page_curl")
-    defaults = _canonical("page_curl")
-    origin = PAGE_CURL_ORIGINS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if origin is None:
-        # "Random" (and anything unknown) picks a corner or edge per run.
-        origin = str(rng.choice(tuple(PAGE_CURL_ORIGINS.values())))
-    return _finish(origin, {**_surface_values(cfg, defaults, ("gloss", "size")),
-                            **resolve_scene_quality(settings, cfg, defaults)})
+def _resolve_beam(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("beam", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), "color": _colour(spec, cfg, defaults),
+                               **spec.page_values(cfg, defaults)})
 
 
-def _resolve_jigsaw(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "jigsaw")
-    defaults = _canonical("jigsaw")
+def _resolve_cube_turn(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("cube_turn", settings, rng)
+    return _finish(direction, {**spec.page_values(cfg, defaults), **resolve_scene_quality(settings, cfg, defaults)})
+
+
+def _resolve_page_curl(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    # The direction is where the page starts to peel: a corner or an edge.
+    spec, cfg, defaults, origin = _spec_inputs("page_curl", settings, rng)
+    return _finish(origin, {**spec.page_values(cfg, defaults), **resolve_scene_quality(settings, cfg, defaults)})
+
+
+def _resolve_jigsaw(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
     # The stored "direction" is the flip order. The run itself has no direction: the order
     # travels as a parameter, so the per-run layout can be keyed (and warmed) from parameters.
-    order = JIGSAW_ORDERS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if order is None:
-        order = str(rng.choice(tuple(JIGSAW_ORDERS.values())))
-    low, high = JIGSAW_PIECES_RANGE
+    spec, cfg, defaults, order = _spec_inputs("jigsaw", settings, rng)
+    return _finish(None, {"seed": _seed(rng), "order": order, **spec.page_values(cfg, defaults),
+                          **resolve_scene_quality(settings, cfg, defaults)})
+
+
+def _resolve_volumetric_dissolve(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("volumetric_dissolve", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
+                               **resolve_scene_quality(settings, cfg, defaults)})
+
+
+def _resolve_vhs(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, direction = _spec_inputs("vhs", settings, rng)
+    return _finish(direction, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
+
+
+def _resolve_edge_bloom(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, _direction = _spec_inputs("edge_bloom", settings, rng)
     return _finish(None, {
         "seed": _seed(rng),
-        "order": order,
-        "pieces": max(low, min(high, _integer(_value(cfg, defaults, "pieces"), int(defaults["pieces"])))),
-        **resolve_scene_quality(settings, cfg, defaults),
+        "color": _colour(spec, cfg, defaults),
+        "color_source": EDGE_BLOOM_COLOUR_SOURCES[spec.admit("color_source", cfg, defaults)],
+        **spec.page_values(cfg, defaults),
     })
 
 
-def _resolve_volumetric_dissolve(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "volumetric_dissolve")
-    defaults = _canonical("volumetric_dissolve")
-    direction = VOLUMETRIC_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if direction is None:
-        direction = str(rng.choice(tuple(VOLUMETRIC_DIRECTIONS.values())))
-    low, high = VOLUMETRIC_PARTICLE_SIZE_RANGE
-    size = max(low, min(high, _integer(_value(cfg, defaults, "particle_size"), int(defaults["particle_size"]))))
-    return _finish(direction, {
-        "seed": _seed(rng),
-        "particle_size": size,
-        **_surface_values(cfg, defaults, ("mist", "depth")),
-        **resolve_scene_quality(settings, cfg, defaults),
-    })
-
-
-def _resolve_vhs(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "vhs")
-    defaults = _canonical("vhs")
-    direction = VHS_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if direction is None:
-        direction = str(rng.choice(tuple(VHS_DIRECTIONS.values())))
-    return _finish(direction, {
-        "seed": _seed(rng),
-        **_surface_values(cfg, defaults, ("tracking", "bleed", "noise")),
-    })
-
-
-def _resolve_edge_bloom(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "edge_bloom")
-    defaults = _canonical("edge_bloom")
-    color = _normalized_glow_color(_value(cfg, defaults, "color"), defaults["color"], field_name="color")
-    source = EDGE_BLOOM_COLOUR_SOURCES.get(str(_value(cfg, defaults, "color_source")),
-                                           EDGE_BLOOM_COLOUR_SOURCES[str(defaults["color_source"])])
-    return _finish(None, {
-        "seed": _seed(rng),
-        "color": tuple(min(1.0, channel) for channel in color[:3]),
-        "color_source": source,
-        **_surface_values(cfg, defaults, ("glow", "detail")),
-    })
-
-
-def _resolve_liquid_lens(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "liquid_lens")
-    defaults = _canonical("liquid_lens")
-    low, high = LIQUID_LENS_STOPS_RANGE
+def _resolve_liquid_lens(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
     # The lens always starts in the middle; its seeded path replaces an origin choice.
-    return _finish(None, {
-        "seed": _seed(rng),
-        "stops": max(low, min(high, _integer(_value(cfg, defaults, "stops"), int(defaults["stops"])))),
-        **_surface_values(cfg, defaults, ("refraction", "dispersion")),
-    })
+    spec, cfg, defaults, _direction = _spec_inputs("liquid_lens", settings, rng)
+    return _finish(None, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
 
 
-def _resolve_membrane(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "membrane")
-    defaults = _canonical("membrane")
-    sweep = MEMBRANE_SWEEPS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if sweep is None:
-        sweep = str(rng.choice(tuple(MEMBRANE_SWEEPS.values())))
-    return _finish(sweep, {
-        "seed": _seed(rng),
-        **_surface_values(cfg, defaults, ("gloss",)),
-        **resolve_scene_quality(settings, cfg, defaults),
-    })
+def _resolve_membrane(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, sweep = _spec_inputs("membrane", settings, rng)
+    return _finish(sweep, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
+                           **resolve_scene_quality(settings, cfg, defaults)})
 
 
-def _resolve_surface_tension(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "surface_tension")
-    defaults = _canonical("surface_tension")
-    low, high = TENSION_POOLS_RANGE
-    return _finish(None, {
-        "seed": _seed(rng),
-        "pools": max(low, min(high, _integer(_value(cfg, defaults, "pools"), int(defaults["pools"])))),
-        **_surface_values(cfg, defaults, ("gloss",)),
-    })
+def _resolve_surface_tension(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, _direction = _spec_inputs("surface_tension", settings, rng)
+    return _finish(None, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
 
 
-def _resolve_chromatic_shear(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "chromatic_shear")
-    defaults = _canonical("chromatic_shear")
-    axis = SHEAR_DIRECTIONS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if axis is None:
-        axis = str(rng.choice(tuple(SHEAR_DIRECTIONS.values())))
-    low, high = SHEAR_SLICES_RANGE
-    return _finish(axis, {
-        "seed": _seed(rng),
-        "slices": max(low, min(high, _integer(_value(cfg, defaults, "slices"), int(defaults["slices"])))),
-        **_surface_values(cfg, defaults, ("spread",)),
-    })
+def _resolve_chromatic_shear(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, axis = _spec_inputs("chromatic_shear", settings, rng)
+    return _finish(axis, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
 
 
-def _resolve_depth_cascade(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "depth_cascade")
-    defaults = _canonical("depth_cascade")
-    sweep = CASCADE_SWEEPS.get(str(_value(cfg, defaults, "direction") or "Random"))
-    if sweep is None:
-        sweep = str(rng.choice(tuple(CASCADE_SWEEPS.values())))
-    low, high = CASCADE_CARDS_RANGE
-    return _finish(sweep, {
-        "seed": _seed(rng),
-        "cards": max(low, min(high, _integer(_value(cfg, defaults, "cards"), int(defaults["cards"])))),
-        "shadows": _bool(_value(cfg, defaults, "shadows"), bool(defaults["shadows"])),
-        **_surface_values(cfg, defaults, ("gloss",)),
-        **resolve_scene_quality(settings, cfg, defaults),
-    })
+def _resolve_depth_cascade(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, sweep = _spec_inputs("depth_cascade", settings, rng)
+    return _finish(sweep, {"seed": _seed(rng), **spec.page_values(cfg, defaults),
+                           **resolve_scene_quality(settings, cfg, defaults)})
 
 
-def _resolve_capillary_bloom(
-    settings: Mapping[str, object],
-    rng: _RandomSource,
-) -> ResolvedPhaseCInputs:
-    cfg = _mapping(settings, "capillary_bloom")
-    defaults = _canonical("capillary_bloom")
-    low, high = CAPILLARY_SOURCES_RANGE
-    return _finish(None, {
-        "seed": _seed(rng),
-        "sources": max(low, min(high, _integer(_value(cfg, defaults, "sources"), int(defaults["sources"])))),
-        **_surface_values(cfg, defaults, ("fibres",)),
-    })
+def _resolve_capillary_bloom(settings: Mapping[str, object], rng: _RandomSource) -> ResolvedPhaseCInputs:
+    spec, cfg, defaults, _direction = _spec_inputs("capillary_bloom", settings, rng)
+    return _finish(None, {"seed": _seed(rng), **spec.page_values(cfg, defaults)})
 
 
 _RESOLVERS = {
@@ -1049,6 +684,9 @@ _RESOLVERS = {
     "depth_cascade": _resolve_depth_cascade,
     "capillary_bloom": _resolve_capillary_bloom,
 }
+
+
+PARAMETERIZED_TRANSITION_IDS = frozenset(_RESOLVERS)
 
 
 def resolve_parameterized_phase_c_inputs(
