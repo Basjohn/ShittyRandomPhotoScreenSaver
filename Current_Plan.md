@@ -93,8 +93,6 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
 - [ ] **Awaiting Validation:** Reopen GODZIP Foundry, check the TOOLS divider and both quick-launch buttons
   (Music Clip Recorder / Visualizer Preset Repair), including scrolling on a small or scaled display.
   Button routing and native Qt renders are checked; operator window/focus acceptance remains separate.
-- [ ] **Retire obsolete utility:** `tools/material_rollback_cleanup_gui.py` is obsolete (operator, 2026-10-11).
-  Audit remaining references and retire the old experiment-specific cleanup utility; keep it out of quick launch.
 
 ## 2C. Visualizers | Oscilloscope rework and the spec layer
 
@@ -103,7 +101,7 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
   the Visualizer spec layer: Trace / Ring / Phase displays from the capture's contiguous history (triggered, envelope-
   decimated, Detail low-pass), afterglow as authored state, beam drive / onset flare / spectral tone on the shared musical
   rule, one instanced beam pass with bloom glow; four new curated presets. GPU 8.9 cf at 1440p (16x cheaper), 0.37 ms CPU.
-  Reference: `Docs/Reference/Visualizer_Reference.md` 16C. Operator checks there (look and presets on both displays with
+  Reference: `Docs/Reference/Visualizer_Reference.md` 16C. Operator first look 2026-10-12: "looks good so far". Operator checks there (look and presets on both displays with
   live music, trigger steadiness, afterglow, flare and loudness glow, Settings UX). Capture follow-ups resolved: the
   history takes each whole block before the 2,048-sample analysis trim and carries the device's true rate, which the mode
   converts its spans at; replay accepts any recorded rate.
@@ -114,7 +112,7 @@ All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/
   bespoke parts stay `Custom` entries. **Bubble last, and only with readings:** before and after any change that could
   reach Bubble, `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>` on the recorded clips
   (frozen settings, never a curated preset; all readings must stay x1.00 unless the change is meant to move them). A
-  baseline is saved locally (`logs/bubble_readings_before_specs.json`).
+  baseline is saved locally (`logs/bubble_readings_baseline.json`, recorded at 408ccf63).
 - [ ] **New Visualizers** are declared in `core/settings/visualizer_mode_settings.py` from the start (the §4 Visualizer
   sequence and Extruded Bubble).
 

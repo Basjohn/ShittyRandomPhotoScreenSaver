@@ -136,15 +136,6 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
         assert has_effects_import is uses_qtquick_effect_type, path.name
 
 
-def test_cleanup_gui_targets_stale_material_named_widget_mirrors_only() -> None:
-    helper = _text(ROOT / "tools" / "material_rollback_cleanup_gui.py")
-    assert '" [Glass].srwtheme"' in helper
-    assert '" [Acrylic].srwtheme"' in helper
-    assert 'path.name.endswith' in helper
-    assert 'root / "themes" / "widgets"' in helper
-    assert 'root / "themes"' not in helper.replace('root / "themes" / "widgets"', "")
-
-
 def test_settings_native_backdrops_remain_separate_and_supported() -> None:
     settings_spec = _text(ROOT / "ui" / "settings_theme_spec.py")
     settings_dialog = _text(ROOT / "ui" / "settings_dialog.py")
