@@ -346,7 +346,8 @@ Each foundation slice adds what it learned here.
   COMPUTE prepared uploads in a warm step too (Jigsaw, Crumble), keyed by geometry alone so the run reuses it.
 - `test_transition_lifecycle_contract.py` holds every showcase transition to this with the GL object ledger
   (`tools/gl_object_ledger.py`): warmed frames create no GL object, park keeps the same objects whatever the run,
-  release deletes everything. A new transition joins it through the release-media catalogue.
+  release deletes everything, and rounds of every transition retain no Python objects. A new transition joins it
+  through the release-media catalogue.
 - Only the next transition's textures are held, from its warm-up until `park()` after its run: never keep
   textures for transitions that are not next (they add up as transitions are added).
 - Prepare while the displays are idle, never at the image change: that resolves its transition ~14 ms before the
