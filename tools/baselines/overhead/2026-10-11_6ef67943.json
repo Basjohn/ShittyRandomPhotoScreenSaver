@@ -1,0 +1,250 @@
+{
+ "commit": "6ef67943",
+ "date": "2026-10-11T00:32:33",
+ "size": "2560x1440",
+ "frames": 48,
+ "passes": 3,
+ "transitions": {
+  "ripple/default": {
+   "cpu_median": 0.2275000006193295,
+   "cpu_p90": 0.2753000007942319,
+   "gpu_median": 0.026624,
+   "gpu_p90": 0.028672,
+   "gl_calls": 52.0,
+   "py_calls": 314.0
+  },
+  "wipe/default": {
+   "cpu_median": 0.21340000967029482,
+   "cpu_p90": 0.25409998488612473,
+   "gpu_median": 0.00512,
+   "gpu_p90": 0.011264,
+   "gl_calls": 50.0,
+   "py_calls": 306.0
+  },
+  "block_spins/off": {
+   "cpu_median": 0.3306500002508983,
+   "cpu_p90": 0.4034999874420464,
+   "gpu_median": 0.061952,
+   "gpu_p90": 0.079872,
+   "gl_calls": 95.0,
+   "py_calls": 572.0
+  },
+  "block_spins/reflection": {
+   "cpu_median": 0.32885000109672546,
+   "cpu_p90": 0.38079998921602964,
+   "gpu_median": 0.07168,
+   "gpu_p90": 0.088064,
+   "gl_calls": 95.0,
+   "py_calls": 582.0
+  },
+  "slide/default": {
+   "cpu_median": 0.20745000801980495,
+   "cpu_p90": 0.23319997126236558,
+   "gpu_median": 0.006144,
+   "gpu_p90": 0.011264,
+   "gl_calls": 51.0,
+   "py_calls": 310.0
+  },
+  "glass_shatter/default": {
+   "cpu_median": 0.4109500005142763,
+   "cpu_p90": 0.5110999918542802,
+   "gpu_median": 0.070656,
+   "gpu_p90": 0.093184,
+   "gl_calls": 103.0,
+   "py_calls": 649.0
+  },
+  "exploding_tiles/default": {
+   "cpu_median": 0.5790499999420717,
+   "cpu_p90": 0.7362000178545713,
+   "gpu_median": 0.11110400000000001,
+   "gpu_p90": 0.203776,
+   "gl_calls": 169.5,
+   "py_calls": 1054.0
+  },
+  "pixel_accretion/default": {
+   "cpu_median": 0.38484999095089734,
+   "cpu_p90": 0.4383999912533909,
+   "gpu_median": 0.074752,
+   "gpu_p90": 0.09216,
+   "gl_calls": 95.0,
+   "py_calls": 641.0
+  },
+  "melt_drip/default": {
+   "cpu_median": 0.22289999469649047,
+   "cpu_p90": 0.2567000046838075,
+   "gpu_median": 0.189952,
+   "gpu_p90": 0.462848,
+   "gl_calls": 50.0,
+   "py_calls": 369.0
+  },
+  "beam/default": {
+   "cpu_median": 0.2590999938547611,
+   "cpu_p90": 0.2921000123023987,
+   "gpu_median": 0.016384,
+   "gpu_p90": 0.022528,
+   "gl_calls": 78.0,
+   "py_calls": 503.0
+  },
+  "volumetric_dissolve/default": {
+   "cpu_median": 0.5384000105550513,
+   "cpu_p90": 0.6496999994851649,
+   "gpu_median": 0.1152,
+   "gpu_p90": 0.21504,
+   "gl_calls": 108.0,
+   "py_calls": 962.0
+  },
+  "vhs/default": {
+   "cpu_median": 0.22444999194703996,
+   "cpu_p90": 0.2730000123847276,
+   "gpu_median": 0.058368,
+   "gpu_p90": 0.06144,
+   "gl_calls": 53.0,
+   "py_calls": 382.0
+  },
+  "edge_bloom/default": {
+   "cpu_median": 0.2669500099727884,
+   "cpu_p90": 0.34149998100474477,
+   "gpu_median": 0.053248,
+   "gpu_p90": 0.059392,
+   "gl_calls": 60.0,
+   "py_calls": 454.0
+  },
+  "liquid_lens/default": {
+   "cpu_median": 0.22909999825060368,
+   "cpu_p90": 0.2547999902162701,
+   "gpu_median": 0.32768,
+   "gpu_p90": 0.677888,
+   "gl_calls": 57.0,
+   "py_calls": 391.0
+  },
+  "membrane/default": {
+   "cpu_median": 0.4203999851597473,
+   "cpu_p90": 0.6174000154715031,
+   "gpu_median": 0.083968,
+   "gpu_p90": 0.104448,
+   "gl_calls": 103.0,
+   "py_calls": 646.0
+  },
+  "surface_tension/default": {
+   "cpu_median": 0.2783000090857968,
+   "cpu_p90": 0.2972999936901033,
+   "gpu_median": 0.177152,
+   "gpu_p90": 0.1792,
+   "gl_calls": 50.0,
+   "py_calls": 765.0
+  },
+  "chromatic_shear/default": {
+   "cpu_median": 0.22995000472292304,
+   "cpu_p90": 0.28210002346895635,
+   "gpu_median": 0.04096,
+   "gpu_p90": 0.047104,
+   "gl_calls": 50.0,
+   "py_calls": 364.0
+  },
+  "depth_cascade/default": {
+   "cpu_median": 0.4387499939184636,
+   "cpu_p90": 0.6111000257078558,
+   "gpu_median": 0.057344,
+   "gpu_p90": 0.07168,
+   "gl_calls": 108.0,
+   "py_calls": 719.0
+  },
+  "capillary_bloom/default": {
+   "cpu_median": 0.25599999935366213,
+   "cpu_p90": 0.29379999614320695,
+   "gpu_median": 0.037888,
+   "gpu_p90": 0.043008,
+   "gl_calls": 57.0,
+   "py_calls": 423.0
+  },
+  "jigsaw/default": {
+   "cpu_median": 0.47339999582618475,
+   "cpu_p90": 0.770999991800636,
+   "gpu_median": 0.06144,
+   "gpu_p90": 0.067584,
+   "gl_calls": 119.0,
+   "py_calls": 863.0
+  },
+  "cube_turn/default": {
+   "cpu_median": 0.381949997972697,
+   "cpu_p90": 0.527600001078099,
+   "gpu_median": 0.06144,
+   "gpu_p90": 0.089088,
+   "gl_calls": 98.0,
+   "py_calls": 635.0
+  },
+  "disintegrate/default": {
+   "cpu_median": 0.5108000041218475,
+   "cpu_p90": 0.6777999806217849,
+   "gpu_median": 0.126976,
+   "gpu_p90": 0.24576,
+   "gl_calls": 98.0,
+   "py_calls": 916.0
+  },
+  "page_curl/default": {
+   "cpu_median": 0.42929998016916215,
+   "cpu_p90": 0.4803999909199774,
+   "gpu_median": 0.072192,
+   "gpu_p90": 0.096256,
+   "gl_calls": 101.0,
+   "py_calls": 709.0
+  },
+  "crossfade/default": {
+   "cpu_median": 0.20120000408496708,
+   "cpu_p90": 0.21169998217374086,
+   "gpu_median": 0.004096,
+   "gpu_p90": 0.011264,
+   "gl_calls": 49.0,
+   "py_calls": 301.0
+  },
+  "warp_dissolve/default": {
+   "cpu_median": 0.20670000230893493,
+   "cpu_p90": 0.25209999876096845,
+   "gpu_median": 0.01024,
+   "gpu_p90": 0.016384,
+   "gl_calls": 50.0,
+   "py_calls": 302.0
+  },
+  "blinds/flat": {
+   "cpu_median": 0.21145000937394798,
+   "cpu_p90": 0.26780000189319253,
+   "gpu_median": 0.00512,
+   "gpu_p90": 0.007168,
+   "gl_calls": 52.0,
+   "py_calls": 327.0
+  },
+  "blinds/3d_slats": {
+   "cpu_median": 0.4052499862154946,
+   "cpu_p90": 0.5498999962583184,
+   "gpu_median": 0.07168,
+   "gpu_p90": 0.328704,
+   "gl_calls": 99.0,
+   "py_calls": 689.0
+  },
+  "crumble/default": {
+   "cpu_median": 0.41229999624192715,
+   "cpu_p90": 0.48710001283325255,
+   "gpu_median": 0.086016,
+   "gpu_p90": 0.280576,
+   "gl_calls": 107.0,
+   "py_calls": 784.0
+  },
+  "particle/default": {
+   "cpu_median": 0.23899998632259667,
+   "cpu_p90": 0.3699999942909926,
+   "gpu_median": 7.333888,
+   "gpu_p90": 9.645056,
+   "gl_calls": 65.0,
+   "py_calls": 385.0
+  },
+  "burn/default": {
+   "cpu_median": 0.2204999909736216,
+   "cpu_p90": 0.23320000036619604,
+   "gpu_median": 0.197632,
+   "gpu_p90": 6.544384,
+   "gl_calls": 63.0,
+   "py_calls": 404.0
+  }
+ },
+ "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2"
+}

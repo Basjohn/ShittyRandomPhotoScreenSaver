@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.chromatic_shear_options import SHEAR_SLICES_RANGE  # noqa: F401 (re-exported)
 from rendering.gl_programs.spectral import SPECTRAL_GLSL, SPECTRAL_LAYERS, spectral_position
 
-SHEAR_SLICES_RANGE = (3, 14)
 SHEAR_AMOUNT = 0.16          # largest slice offset at full spread, picture heights
 SHEAR_FAN = 0.045            # spectral fan across the layers at full spread
 SHEAR_SWITCH = (0.44, 0.56)  # when the first (red) and last (violet) layer turn to the new picture

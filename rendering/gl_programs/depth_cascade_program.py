@@ -14,10 +14,10 @@ from __future__ import annotations
 import math
 import random
 
+from rendering.gl_programs.depth_cascade_options import CASCADE_CARDS_RANGE  # noqa: F401 (re-exported)
 from rendering.gl_programs.depth_cards import CARD_GLSL, card_partition, card_pose
 from rendering.gl_programs.scene3d import SCENE3D_CAMERA, SCENE3D_GLSL
 
-CASCADE_CARDS_RANGE = (4, 14)
 CASCADE_STAGGER = 0.5       # the run's share over which cards start, first to last along the sweep
 CASCADE_JITTER = 0.05
 CASCADE_FLIGHT = 0.4        # each card's flight, a share of the run
