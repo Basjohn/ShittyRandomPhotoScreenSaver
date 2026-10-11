@@ -31,7 +31,7 @@ try:
                 setups = ({}, {"scene3d_detail": "High", section: {"antialiasing": "4x", "motion_blur": "On",
                            "motion_trails": "On", "bloom": "On", "edge_glass": "Both"}})
                 for setup in setups:
-                    run = capture.run(descriptor.transition_id, settings=setup)
+                    run = capture.production_run(descriptor.transition_id, settings=setup)
                     for step in range(100):
                         if renderer.warm(run.request.parameter_dict()):
                             break

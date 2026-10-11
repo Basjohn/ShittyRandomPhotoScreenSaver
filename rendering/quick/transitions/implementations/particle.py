@@ -9,11 +9,8 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.particle_program import particle_program
-from rendering.quick.render.gl_resources import compile_program
-from ..render_contract import (
-    QUICK_TRANSITION_VERTEX_SOURCE,
-    QuickTransitionRenderFrame,
-)
+from ..fullscreen_pass import FullscreenPassRenderer
+from ..render_contract import QuickTransitionRenderFrame
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,34 +115,23 @@ def _particle_parameters(parameters: Mapping[str, object]) -> _ParticleParameter
     )
 
 
-class QuickParticleRenderer:
+class QuickParticleRenderer(FullscreenPassRenderer):
     transition_id = "particle"
+    label = "Quick Particle"
+    fragment_source = particle_program.fragment_source
+    uniform_names = (
+        "u_resolution", "u_seed", "u_mode", "u_direction",
+        "u_particle_radius", "u_overlap", "u_trail_length",
+        "u_trail_strength", "u_swirl_strength", "u_swirl_turns",
+        "u_use_3d", "u_texture_map", "u_wobble", "u_gloss_size",
+        "u_light_dir", "u_swirl_order",
+    )
 
-    def __init__(self) -> None:
-        self._program = 0
-        self._uniforms: dict[str, int] = {}
+    def resolve(self, frame: QuickTransitionRenderFrame) -> _ParticleParameters:
+        return _particle_parameters(frame.run.request.parameter_dict())
 
-    @property
-    def has_resources(self) -> bool:
-        return bool(self._program)
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        if not self._program:
-            self._initialize()
-        params = _particle_parameters(frame.run.request.parameter_dict())
-        uniforms = self._uniforms
-
-        gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(uniforms["u_progress"], float(frame.sample.eased_progress))
-        gl.glUniform2f(
-            uniforms["u_resolution"],
-            float(frame.viewport[2]),
-            float(frame.viewport[3]),
-        )
+    def apply(self, params: _ParticleParameters, uniforms, frame: QuickTransitionRenderFrame) -> None:
+        gl.glUniform2f(uniforms["u_resolution"], float(frame.viewport[2]), float(frame.viewport[3]))
         gl.glUniform1f(uniforms["u_seed"], params.seed)
         gl.glUniform1f(uniforms["u_mode"], float(params.mode))
         gl.glUniform1f(uniforms["u_direction"], float(params.direction))
@@ -161,59 +147,6 @@ class QuickParticleRenderer:
         gl.glUniform1f(uniforms["u_gloss_size"], params.gloss_size)
         gl.glUniform1f(uniforms["u_light_dir"], float(params.light_direction))
         gl.glUniform1f(uniforms["u_swirl_order"], float(params.swirl_order))
-
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTex"], 0)
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTex"], 1)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's one step (render thread, between runs): compile the program so
-        the run's first frame compiles nothing (a first-use compile cost 3-18 ms at 1440p)."""
-        if not self._program:
-            self._initialize()
-        return True
-
-    def release_resources(self) -> None:
-        if not self._program:
-            return
-        gl.glDeleteProgram(self._program)
-        self._program = 0
-        self._uniforms.clear()
-
-    def _initialize(self) -> None:
-        program = compile_program(
-            QUICK_TRANSITION_VERTEX_SOURCE,
-            particle_program.fragment_source,
-            label="Quick Particle",
-        )
-        self._program = program
-        try:
-            required = (
-                "uMatrix", "uItemSize", "uOldTex", "uNewTex", "u_progress",
-                "u_resolution", "u_seed", "u_mode", "u_direction",
-                "u_particle_radius", "u_overlap", "u_trail_length",
-                "u_trail_strength", "u_swirl_strength", "u_swirl_turns",
-                "u_use_3d", "u_texture_map", "u_wobble", "u_gloss_size",
-                "u_light_dir", "u_swirl_order",
-            )
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in required
-            }
-            missing = [name for name in required if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Particle uniforms are incomplete: " + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
 
 
 def create_transition_renderer() -> QuickParticleRenderer:
