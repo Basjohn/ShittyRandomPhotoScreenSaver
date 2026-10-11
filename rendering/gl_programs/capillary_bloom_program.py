@@ -21,12 +21,12 @@ from __future__ import annotations
 import math
 import random
 
+from rendering.gl_programs.capillary_bloom_options import CAPILLARY_SOURCES_RANGE  # noqa: F401 (re-exported)
 from rendering.gl_programs.capillary_field import CAPILLARY_COST, CAPILLARY_FIELD_GLSL
 from rendering.gl_programs.meniscus_field import MENISCUS_FIELD_GLSL
 from rendering.gl_programs.refraction import REFRACTION_GLSL, REFRACTION_IOR_WATER
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 
-CAPILLARY_SOURCES_RANGE = (1, 6)
 CAPILLARY_BIRTHS = (0.0, 0.18)
 CAPILLARY_FILL = 0.8
 CAPILLARY_GROWTH = 0.8           # reach grows as elapsed time to this power: a quick bloom that slows

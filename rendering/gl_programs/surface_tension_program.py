@@ -18,9 +18,9 @@ import random
 
 from rendering.gl_programs.meniscus_field import MENISCUS_FIELD_GLSL, pool_kernel
 from rendering.gl_programs.refraction import REFRACTION_GLSL, REFRACTION_IOR_WATER
+from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE  # noqa: F401 (re-exported)
 
 TENSION_MAX_POOLS = 20
-TENSION_POOLS_RANGE = (4, 20)
 TENSION_THRESHOLD = 0.3
 TENSION_GROW = 0.5           # the share of the run a pool takes to swell to its full radius
 TENSION_BIRTHS = (0.0, 0.45)

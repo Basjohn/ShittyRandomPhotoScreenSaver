@@ -10,5 +10,6 @@ CASCADE_SWEEPS = {
     "Bottom to Top": "up",
 }
 CASCADE_SWEEP_CHOICES = (*CASCADE_SWEEPS, "Random")
+CASCADE_CARDS_RANGE = (4, 14)
 # World (y up) unit vectors of each sweep.
 CASCADE_SWEEP_VECTORS = {"right": (1.0, 0.0), "left": (-1.0, 0.0), "down": (0.0, -1.0), "up": (0.0, 1.0)}

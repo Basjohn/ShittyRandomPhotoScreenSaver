@@ -5,3 +5,4 @@ from __future__ import annotations
 # The axis the slices shear along: Settings label -> resolved axis code.
 SHEAR_DIRECTIONS = {"Horizontal": "horizontal", "Vertical": "vertical", "Diagonal": "diagonal"}
 SHEAR_DIRECTION_CHOICES = (*SHEAR_DIRECTIONS, "Random")
+SHEAR_SLICES_RANGE = (3, 14)
