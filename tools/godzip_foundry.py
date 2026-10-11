@@ -4336,7 +4336,7 @@ class CommandTab(QWidget):
 
 
 class FoundriesTab(QWidget):
-    """One compact launcher for every SRPSS Foundry.
+    """One compact launcher for SRPSS Foundries and interactive tools.
 
     Build Foundry is intentionally only launched here; its legacy Tkinter UI is
     not pulled into the shared Qt theming/chrome architecture.
@@ -4349,37 +4349,62 @@ class FoundriesTab(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scrolling = QScrollArea(self)
+        scrolling.setWidgetResizable(True)
+        scrolling.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
+        scrolling.setWidget(content)
+        outer.addWidget(scrolling)
 
         intro = Panel()
         il = QVBoxLayout(intro)
         il.setContentsMargins(14, 12, 14, 12)
-        title = QLabel("SRPSS FOUNDRIES")
+        title = QLabel("SRPSS FOUNDRIES & TOOLS")
         title.setObjectName("sectionTitle")
         il.addWidget(title)
         desc = QLabel(
-            "Open the repo's maintenance and authoring Foundries from one place. "
-            "Each launches as its own process so a broken tool cannot take GODZIP down with it."
+            "Quick-launch authoring, recording and maintenance windows. "
+            "Each opens independently; choose what to do inside the tool."
         )
         desc.setObjectName("muted")
         desc.setWordWrap(True)
         il.addWidget(desc)
         layout.addWidget(intro)
 
+        self._add_launchers(layout, (
+            ("BUILD FOUNDRY\nBuild / package SRPSS · legacy Tkinter", "build_runner.py", False),
+            ("DEFAULTS FOUNDRY\nCanonical defaults + generated artifacts", "default_settings_editor.py", False),
+            ("THEME FOUNDRY\nSettings ThemeSpec authoring", "theme_foundry.py", True),
+            ("WIDGET THEME FOUNDRY\nRuntime Widget Theme palette authoring", "widget_theme_foundry.py", True),
+        ))
+
+        divider = QHBoxLayout()
+        divider.setContentsMargins(2, 8, 2, 0)
+        heading = QLabel("TOOLS")
+        heading.setObjectName("sectionTitle")
+        divider.addWidget(heading)
+        rule = QFrame()
+        rule.setObjectName("launcherSeparator")
+        rule.setFrameShape(QFrame.Shape.HLine)
+        divider.addWidget(rule, 1)
+        layout.addLayout(divider)
+        self._add_launchers(layout, (
+            ("MUSIC CLIP RECORDER\n60-second clips · full waveforms + events", "music_recorder.py", False),
+            ("VISUALIZER PRESET REPAIR\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
+        ))
+        layout.addStretch(1)
+
+    def _add_launchers(self, layout: QVBoxLayout, entries: tuple[tuple[str, str, bool], ...]) -> None:
         panel = Panel()
         grid = QGridLayout(panel)
         grid.setContentsMargins(14, 14, 14, 14)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
-
-        entries = (
-            ("BUILD FOUNDRY\nBuild / package SRPSS · legacy Tkinter", "build_runner.py", False),
-            ("DEFAULTS FOUNDRY\nCanonical defaults + generated artifacts", "default_settings_editor.py", False),
-            ("THEME FOUNDRY\nSettings ThemeSpec authoring", "theme_foundry.py", True),
-            ("WIDGET THEME FOUNDRY\nRuntime Widget Theme palette authoring", "widget_theme_foundry.py", True),
-        )
         for index, (label, script_name, needs_repo) in enumerate(entries):
             button = QPushButton(label)
             button.setObjectName("foundryLaunchButton")
@@ -4392,25 +4417,27 @@ class FoundriesTab(QWidget):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         layout.addWidget(panel)
-        layout.addStretch(1)
 
     def _launch(self, script_name: str, needs_repo: bool) -> None:
         script = self.repo_root / "tools" / script_name
         if not script.is_file():
             self.window.show_error(
-                "Cannot launch Foundry",
+                "Cannot launch tool",
                 GodzipError(f"Tool is missing: {script}"),
             )
             return
         python_exe = repo_venv_python(self.repo_root)
         if not python_exe.is_file():
-            self.window.show_error("Cannot launch Foundry", GodzipError(f"Repo Python 3.14 venv is missing: {python_exe}"))
+            self.window.show_error("Cannot launch tool", GodzipError(f"Repo Python 3.14 venv is missing: {python_exe}"))
             return
         command = [str(python_exe), str(script)]
         if needs_repo:
             command.extend(["--repo", str(self.repo_root)])
         try:
-            process = subprocess.Popen(command, cwd=str(self.repo_root))
+            process = subprocess.Popen(
+                command, cwd=str(self.repo_root),
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
         except Exception as exc:
             self.window.show_error(f"Launch {script.stem} failed", exc)
             return

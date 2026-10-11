@@ -87,6 +87,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | test inventory / acceptance authority | `Docs/TestSuite.md` |
 | durable test authoring / mutable-authority hygiene | `Docs/Guides/Test_Durability.md` |
 | harness commands | `Docs/Reference/Harness_Index.md` |
+| GODZIP Foundry quick-launch Foundries / GUI tools | `Docs/Reference/Harness_Index.md` → GODZIP Foundry operator commands |
 | friendly 60-second music capture / full waveform replay | `tools/music_recorder.py`; `Docs/Reference/Harness_Index.md` |
 | benchmarks: cost baselines, the lifecycle contract, reading results, expected results | `Docs/Reference/Benchmarks.md` |
 | bounded self-terminating RUN / repeated startup-teardown acceptance | `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions (`main_mc.py`, `tools/run_matrix.py`, `--exit-after`) |

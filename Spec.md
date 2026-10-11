@@ -10,7 +10,8 @@ owner without shutting down the process-wide backend.
 
 Operator music capture and replay format are documented in `Docs/Reference/Harness_Index.md`;
 `tools/music_recorder.py` is the standalone DPR-aware 60-second clip UI. Capture remains private to the tool,
-with no added runtime owner or idle recorder timer.
+with no added runtime owner or idle recorder timer. GODZIP Foundry's FOUNDRIES tab also provides a separate
+TOOLS quick-launch section; its maintained entries and launch contract live in that same Harness Index.
 
 ## Product priorities
 

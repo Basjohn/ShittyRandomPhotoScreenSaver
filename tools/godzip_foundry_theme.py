@@ -228,6 +228,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QPushButton#foundryLaunchButton {{ background: {button_surface}; color: {button_text}; border: 1.75px solid {button_border}; border-radius: 9px; padding: 11px 15px; min-height: 42px; font-size: 11pt; font-weight: 750; text-align: left; }}
         QPushButton#foundryLaunchButton:hover {{ background: {button_hover}; border-color: {action_border}; }}
         QPushButton#foundryLaunchButton:disabled {{ background: {tab_selected}; color: {secondary}; border-color: {border}; }}
+        QFrame#launcherSeparator {{ background: {border}; border: none; min-height: 1px; max-height: 1px; }}
 
         QWidget#themeFoundryPane, QFrame#widgetThemeFoundryPane, QFrame#widgetThemeFoundryMetaBox, QWidget#backdropBox {{ background: {panel}; border: 1.75px solid {border}; border-radius: 9px; }}
         QScrollArea#themeFoundryEditorPane, QScrollArea#widgetThemeFoundryEditorPane {{ background: {panel}; border: 1.75px solid {border}; border-radius: 9px; padding: 1px; }}
