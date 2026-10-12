@@ -23,37 +23,20 @@ preset catalogue. Canonical appearance is captured for every identity; Blinds' a
 options are additionally enumerated from their canonical option owners. This does not claim exhaustive surface-control
 combinations or physical appearance approval.
 
-**Operator transition showcase directive (future M1, not the deterministic test fixture):** use combinations
-of these four local source images, not the superseded `UsuScenePaper1/2` artwork:
+**Transition showcase contract:** the implemented tool loads the genuine four Windows-local originals
+`assets/usu/scenes/UsuScene1.png` through `UsuScene4.png`. Missing originals fail loudly; fixtures are never substituted
+for published artwork. Each regeneration picks and records a scene pair and seeds, crops to 16:9 without stretching,
+and captures A→B, a 700 ms rest, then B→A with a changed direction/order. Both loop ends hold A for 350 ms.
+Capture at twice publication size; publish at **480×270, 24 fps, authored speed**, quality 92, encoder method 4 with
+keyframes every 150 frames. About 10 MB is comfortable, not a cap; do not squeeze a good showcase to meet that number.
+An explicit `--max-bytes` request admits the tool's bounded quality reduction and loud failure below its quality floor.
+Scene pairs/seeds remain stable in the manifest for unchanged entries; random choice does not itself stale a capture.
 
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene1.png`
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene2.png`
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png` Every published transition
-animated WebP must be a high-quality loop 480 px wide (keeping the aspect ratio; "480p" means the width). About
-10 MB is a comfortable size, **not a cap**: 15-20 MB is fine (operator, 2026-10-10; the first catalogue's strict
-10,000,000-byte limit was a one-off). Keep the original artwork's aspect ratio when compositing. These four source PNGs are
-Windows-local and intentionally absent from handoff archives and Linux CI; the production transition-media
-capture should combine the genuine images when the operator runs M1, never substitute fixtures for publication.
-**Implemented (2026-10-10).** Transition cases ignore the Visualizer size flags: each loads the four scenes (missing
-originals fail loudly, never a substitute), picks an ordered scene pair and the first run's seed at random each generation (recorded in the
-manifest; a new pick never stales an entry), crops both to 16:9 without stretching, and captures first→second, a 700 ms rest on the second,
-then second→first in a different direction/order (the first seed after 713 that resolves one; the same direction
-twice in a row read as a mistake) at twice 480x270 and 24 fps; the encoder adds a 350 ms rest at both loop ends (both
-on the first picture, so the loop is seamless). Published at 480x270 in one encode at quality 92 (no byte cap
-unless `--max-bytes` gives one; then only the quality steps down, 92 to 80, failing loudly below that); frame
-rate has **parity**: every showcase plays at 24 fps, 480 px wide and its authored speed (operator direction:
-some moving faster than others unnerves a viewer). The first catalogue (2026-10-10) was encoded under the
-former strict 10,000,000-byte cap, starting at quality 95. Measured: Block Spins Reflection 9.80 MB at q90
-(11.8 MB at q92); Refraction needed q88 and, with Both, is not showcased (operator direction). Output frames map to source frames rounding halves up (a 350 ms rest is
-10.5 frames at 30 fps, and round-half-to-even showed every other motion frame twice: 15 fps motion until
-2026-10-10) (raised from 92 at operator request; measured, neither
-the Lanczos downscale nor q92 blurred: decoded frames keep 96-99% of the lossless frames' Laplacian sharpness, so
-the softness is the 480 px size of 4K art). Encoding uses method 4 with keyframes every 150 frames:
-method 6 cost 11x the time for 2% smaller files, and delta frames roughly halve the bytes of mostly-still transition
-frames (the 15.4 s Jigsaw loop: 4.8 MB at q95 and 30 fps; at 60 fps q92 it was 11.1 MB; the first draft at 854x480 needed ~22 fps). Output defaults to the ignored
-`assets/webp/` (a GODZIP never-transfer prefix); the manifest records the pair and both scene hashes. The agent reviews
-each new or changed transition's WebP itself. This paragraph does not change visualizer WebP rules.
+Transition outputs default to ignored `assets/webp/`, excluded from normal Godzips. The agent reviews every new or
+visually changed transition's WebP before closing that implementation. The accepted catalogue exclusions are Warp
+Dissolve, Particle and Blinds Flat until the operator changes them. Landed transitions are accepted; catalogue generation
+and capture endpoint proof do not reopen general product visual acceptance. Remaining execution lives in Current_Plan §3.
+These transition publication rules do not change Visualizer capture/encoding rules below.
 
 Visualizer identities come from the active canonical mode registry and each mode's actual curated preset catalogue;
 Custom is excluded. The filename-derived variant survives sparse authored slots. The tool accepts only non-archived,

@@ -52,5 +52,5 @@ The same capture exposes index-based widget reassignment after MSI removal and t
 relocation. The current assignment policy is in `Docs/Contracts.md` → Geometry / CUSTOM, not the historical fallback
 policy. All six recorded replacements completed barriers/reveal; explicit exit at 13:03:53 completed orderly at
 13:03:54. Captured Interaction Mode was enabled, so mouse-motion exit was intentionally disabled. These facts do not
-establish a general wake-exit defect. New physical acceptance remains in `Current_Plan.md` §1B; the earlier closure
+establish a general wake-exit defect. New physical acceptance remains in `Current_Plan.md` §5; the earlier closure
 above applies only to its September evidence.

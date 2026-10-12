@@ -42,7 +42,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | R151 Steam cache publication and Settings UTC: **106 focused Windows tests accepted**, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
 | R149 Python 3.14 full-test failures, Steam cache WinError 32, NumPy BLAS introspection and 35-minute runtime review | `Docs/Contracts.md` |
 | R134–R145 dual-display collapse, reboot-dependent recovery and pre/post performance/cache/handles investigation | `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md` |
-| Python 3.14 active MSVC/frozen-product gate (operator runs builds and returns logs) | `Current_Plan.md` §0; `Docs/Guides/Python314_Cutover.md` |
+| Python 3.14 active MSVC/frozen-product gate (operator runs builds and returns logs) | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
 | durable product / architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | project overview | `Docs/00_PROJECT_OVERVIEW.md` |
@@ -57,7 +57,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
-| operator-only build execution / canonical Python 3.14 workers | `Current_Plan.md` §0; `Docs/Guides/Python314_Cutover.md` |
+| operator-only build execution / canonical Python 3.14 workers | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
@@ -66,15 +66,15 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
 | R154 display-owner retirement callback; historical diagnostic preset collision, superseded by R155 unified runtime root | `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` |
-| R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md`; `Current_Plan.md` §1A |
+| R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md`; `Current_Plan.md` §5 |
 | R155 cross-display Media shortcuts and compiled Diagnostic shared preset authority | `Docs/Guardrails/Visualizer_Presentation.md`; `Spec.md` → Media transport / Visualizer preset catalogue |
-| physical widget assignments, monitor power/wake, saved CUSTOM replay and Clock face overrides | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §1B |
+| physical widget assignments, monitor power/wake, saved CUSTOM replay and Clock face overrides | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §1 / §5 |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer planar/freeform CUSTOM geometry split and hot-swap contract | `Docs/Contracts.md`; `Spec.md` → Visualizer geometry; `Docs/Guides/Visualizer_Change_Checklist.md` §7A |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| transitions and material surfaces (reference-owned acceptance conditions); active transition expansion order and local mock references | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §2 |
+| transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |

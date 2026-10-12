@@ -1,253 +1,232 @@
 # SRPSS | Current Plan
 
-This is a **live work checklist**, not a checkpoint chronicle. The current extracted Godzip is the working-tree authority for archive handoffs; product requirements belong in `Spec.md`, subsystem contracts in `Docs/Contracts.md`, and concluded investigations in `Docs/Historical_Bugs/`. Source changes do not silently change authored presets or golden reaction behavior.
+Live actionable work only. Exact current source is authority; `Spec.md` and `Docs/Contracts.md` own durable behavior,
+subsystem references own technical detail, and source control / `Docs/Historical_Bugs/` retain concluded investigations.
+Do not copy this checklist into another plan. Close landed slices here; retain only their genuinely open acceptance debt.
 
-## 0. CURRENT OWNER | R169 TEST AUTHORITY REVIEW / 3D + TRANSITIONS NEXT
+## 0. Execution order and accepted baseline
 
-**Operator acceptance, 2026-10-09:** R167's repaired Spectrum source-routing physically restores BOTH ordinary and Rainbow Ghost in Spectrum 2D. Extruded Rainbow Ghost was separately accepted in R166. R166's four focused Windows test files passed before the routing correction; R167 was then physically accepted. The manifest-fixed R167 archive is the superseded source base. Do not reopen these visuals absent a new symptom.
+**Current authorization:** documentation/decomposition checkpoint first; then §1 saver-wide physical display selection;
+then §2 FEEDS terminal-failure handling. Stop at the clean checkpoint after §2. Visualizer migration, graphics expansion,
+media production and operator builds are subsequent work, not part of that implementation run.
 
-**Latest four-chunk result bundle (2026-10-09):** 7,105 outcomes: 7,075 passed, 29 failed, one skipped. Chunk failures 9 / 1 / 15 / 4. R168 contains **test/fixture-only** updates addressing 28 failures attributable to newly introduced ghost parameters, optionally missing keys in operator-editable curated preset files, R160 mode-owned DSP, R163 transition claims, and R165 reveal ownership. No production source, renderer, presets, defaults, audio DSP or animation was changed. The operator subsequently ran R168's focused Windows selection: **187 passed in 169.78 seconds (2026-10-09)**. That confirms the selected test repairs on R168, not a full chunk or physical acceptance. `tools.test_durability_audit.audit_tests()` reported zero findings locally; Python compilation passed.
+**Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
+are accepted. Dev Curve currently has no observed issue; its earlier replay-floor investigation is closed. Do not reopen
+these as pending acceptance or tune their response. Existing Spectrum/Rainbow Ghost, Sphere and source-routing acceptance
+stands. Monitor power/wake is a detailed **nonblocking watchlist** (§5), not a reason to request a costly diagnostic build.
 
-**One genuinely open quality gate:** `tests/test_visualizer_replay.py::test_current_reactivity_passes_fixed_floors[gradual_ramp__devcurve]` reported `output_flux=18.61387083343637` against existing floor `19.269285559818062`. The versioned replay fixture/golden resources are *not included* in the Godzip. R168 intentionally does NOT reseed/recalibrate/relax this floor, claim a Dev Curve regression, or change runtime dynamics. Resolved 2026-10-10: the floor was stale after R160's intended pre-AGC routing and was re-seeded for that one case on the operator's call (checklist below). Do **not** restore unused Spectrum shaper dependencies.
+**Protected execution rules:** preserve canonical Settings, capability, CUSTOM, render and lifecycle owners; no dormant
+polling, new per-frame work, silent non-network fallback or duplicate runtime. Spectrum shaping remains descriptor-owned
+(Spectrum, Extruded Spectrum, Shockwave only); Bubble temporal fidelity is binding. Preserve existing startup/reveal and
+transition timings. Test the smallest production seam that can falsify the changed contract; no full suite or product
+build unless the operator requests it. After each green slice: inspect diff, narrow commit, push, refresh this checklist.
+Preserve unrelated local/user work. Agents do not run Nuitka, Build Runner or installers.
 
-**R160 DO-NOT-REVERT audio rule:** Exactly Spectrum, Extruded Spectrum and Shockwave Grid own Spectrum visual shaping (the shared descriptor is the authority). Bubble, Sphere, Sine, Oscilloscope and Dev Curve use the shared FFT/pre-AGC/transient analysis **without shaping**. Dev Curve's *independent layer shaper* is not the Spectrum shaper. Sphere's R150 `KeyError('Treble')` exposed the invalid historical dependency. R168 explicitly turns on shaping only in synthetic Spectrum-specific DSP fixtures, while Bubble/nonshaper fixtures assert it stays OFF. Retain the 176-frame quantified Bubble upstream temporal parity proof and the accepted musical response of all modes.
+## 1. Saver-wide physical display selection | Ready, first implementation slice
 
-**NEXT TRANCHE, with the independent Dev Curve replay investigation explicitly tracked, no full chunks or builds:** feature work is **shared 3D primitives plus transitions** (not another general cleanup). Sequence below: reusable inactive-cost-neutral 3D foundations, Jigsaw Piece Flip, Volumetric Dissolve, VHS Distortion and Edge Bloom Reveal; then subsequent transitions and broader shared 3D features. See §2 and §4.
+Widget physical assignments are already implemented. This slice extends the same physical identity policy to
+`display.show_on_monitors`; it must not substitute another display when a selected monitor disappears.
 
-- [x] **R168 focused regression:** operator's Windows `.venv` selection completed, **187 passed**; no affected runtime source files changed in R168/R169.
-- [x] **Dev Curve replay (2026-10-10):** the drop was entirely R160's protected pre-AGC routing (forcing the old routing restored 21.605556 exactly); on the operator's call `gradual_ramp__devcurve` alone was re-seeded via `tools.visualizer_replay.floors.calibrate` (output_flux floor 19.27 → 9.31, 50% of today's 18.61). Never route Dev Curve through Spectrum shaping.
-- [x] **Next graphics readiness (2026-10-09):** T1 reuses `scene3d.py` projection/hash/`SceneMaterial`, `PhotoEnvironment`, `SceneTarget`, `MeshResources` (per-run vertex bytes as a keyed mesh dropped at `park()`), `warm()`/`warm_run_resources` and the registry/resolver/Settings path exactly as Cube Turn/Beam do. Legacy Block Puzzle Flip is a flat 2D strip shader with no geometry or schedule worth reusing. `fracture_geometry` prisms fan from a centre and so only admit convex cells; jigsaw knobs are non-convex, so T1 owns a new pure **piece-layout generator** (`rendering/quick/transitions/piece_layout.py`: shared-edge jigsaw contours, per-piece ear-clip triangulation, extruded walls, bevel ring) plus the **order planner** (corner, random-start wavefront, unordered). T2 starts from `CompactedPopulation` (Disintegrate) but must not be a Disintegrate reskin; the S18 fog volume is its only new primitive. T3/T4 are 2D full-picture passes like Beam (no scene target); T4's edge field is a per-run renderer-owned derived texture.
-- [x] **T1–T4 as first transitions:** all four accepted (operator, 2026-10-10/11); Edge Bloom's default glow colour is Next Picture (operator, 2026-10-11).
+- [ ] **D1 — Resolve selection at its canonical owner.** Trace `core/settings/display_selection.py`, Settings persistence,
+  Display tab, onboarding/Arrange, route warnings and `DisplayManager._get_allowed_screen_indices`. Reuse the canonical
+  CUSTOM screen signature and existing Settings store. Preserve ALL (every present display), NONE (none), numbered
+  selection and Media Center's selected-display default. Distinguish malformed input from a valid absent selection:
+  absence must resolve empty, never repair to ALL or an unrelated display.
+- [ ] **D2 — Persist intent and explicit authoring.** Bind legacy numeric selection once, preserve physical identity across
+  renumbering and restart, and update only on explicit selection/reset/import. Loading or saving unrelated Settings must
+  not rebind an unplugged selection. Display UI, Arrange and warnings must agree on effective selected displays. Cover
+  explicit reassignment to today's same-number display and retain unavailable choices unless the user changes them.
+- [ ] **D3 — Zero selected live displays.** Trace engine startup, topology replacement and first-image admission when all
+  selected displays are off. Keep the existing event-driven monitor owner able to observe their return without a phantom
+  window, retry spin, duplicate generation, provider admission or premature process exit. Retire resources legally; no
+  polling or new lifecycle owner. Inspect rapid return during destruction before changing any barrier.
+- [ ] **D4 — Focused proof and checkpoint.** Exercise selected second display becoming index zero, either display missing,
+  reordered return, all selected displays absent, ALL/NONE, MC default, settings save/reload/import/reset and explicit
+  reassignment. Test production admission, not only parser output. Update Contracts/TestSuite, commit and push. Physical
+  Windows/frozen power-cycle observation belongs only to §5 and does not block this source checkpoint.
 
----
+## 2. FEEDS queued/busy and terminal failure | Ready after §1
 
-## 0. Accepted state and immediate gate
+Busy begins when refresh is accepted, including admission queue time. A queued refresh is not by itself a stranded one.
+`widgets/feed_runtime.py` owns source scheduling/leases; `core/feeds` owns neutral source data; the shared refresh gate owns
+cross-family admission. `Docs/Reference/Feeds.md` owns provider/startup behavior.
 
-**Accepted by the operator (2026-10-09):** R151 Steam-cache and Settings repairs (**106 focused Windows tests passed**); R150 Sphere analysis-only DSP isolation and Shockwave's intentionally authored Spectrum-shaped horizon (**96 focused tests passed**); both visualizer modes physically accepted. Earlier implemented/physically good visual and cache changes remain accepted unless an anomaly is reported. Ordinary transition desync **400 ms**, first-image startup **200 ms**. The earlier severe dual-display collapse recovered after a **Windows reboot**, not a proved SRPSS patch; its root cause remains unknown. Bubble's small-radius judder is **deferred watchlist-only**. Diagnostic frame-trace bins were confirmed restored by the operator; do not reopen R156 or request another diagnostic build on that basis.
+- [ ] **F1 — Trace every terminal path.** Follow accepted request through family/transition queue, worker submission,
+  result/error callbacks and GUI publication. Inspect thrown worker exceptions, cancellation, failed submission or GUI
+  dispatch, source removal, retirement and stale generation/epoch completions, especially paths without FeedRefreshResult.
+  Identify which existing owner must clear busy/in-flight, settle startup and release an admission claim exactly once.
+- [ ] **F2 — Fix proven gaps at that owner.** Preserve immediate busy, last-good stories/artwork, NEWS all-publisher cache
+  barrier, family startup settlement, source backoff and 2.5-second staggering. A terminal failure must neither leave busy
+  true nor finish a newer request. Surface failures loudly; do not add a timer, synthetic successful result, second source
+  queue or silent fallback. Keep unrelated services outside the gate until separately audited.
+- [ ] **F3 — Fault-injection proof and checkpoint.** Use controlled worker/GUI callbacks to prove queued busy, exception,
+  cancel, rejected dispatch, retirement and late-completion behavior, with claims and startup settlement observed through
+  production seams. Run only relevant FEEDS/gate tests; update contract, commit and push. Stop this authorized run here.
+  Real contention attribution/fairness remains a nonblocking Awaiting Logs item in §5.
 
-The repository runs on **standard-GIL CPython 3.14.8**, NumPy 2.x and **PySide6/Qt 6.11.2**. The operator's existing `.venv` and cutover are accepted; do **not** repeat destructive version migrations. R160's capability-owned DSP design remains active and protected (§0). The R166/R167 2D and Extruded Rainbow Ghost implementation has operator physical acceptance; the R168 test-only repair is operator-verified by its 187-test focused Windows selection. R169 updates test-authority documentation and this live plan only. The detailed defect and accepted architecture live in `Docs/Historical_Bugs/R-167_Spectrum_2D_Ghost_Control_Source_Projection.md`, not a second pending checklist.
+## 2A. Visualizer spec migration | Subsequent implementation
 
-**R165 startup reveal:** Relative to R164, hold the coordinated retained widget/Visualizer reveal for another **300 ms after the existing readiness milestone**, then run its existing InOutCubic fade for **2,500 ms (1,800 + 700)**. Desktop wallpaper staging remains 1,300 ms, and ordinary transitions are unchanged. One Qt unified sequential animation timeline; no new timer, poller or owner. FEEDS queued/busy UX explicitly unchanged.
+One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
+unchanged. `core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries.
+Oscilloscope, Sine Waves and Shockwave are already on the layer; no further Oscilloscope acceptance gate.
 
-## 0A. Refresh/transition contention | targeted gate
+- [ ] **V1 — Spline Curve / Dev Curve.** Inventory existing controls, model fields, appliers and renderer inputs; express
+  the same controls through the spec and retain bespoke layer/shape editors. Prove round-trip and conditional controls
+  using `test_visualizer_mode_settings_spec`; compare fixed recorded response if shared runtime code is touched.
+- [ ] **V2 — Extruded Spectrum.** Preserve mode-owned technical settings, preset/custom payload boundaries, 3D controls
+  and ordinary/Rainbow Ghost behavior. Migrate only Settings plumbing; keep geometry and render ownership unchanged.
+- [ ] **V3 — Spectrum.** Preserve accepted 2D ordinary/Rainbow Ghost source routing and shaping; prove every migrated
+  control reaches its current owner once without constructing hidden pages or adding observers.
+- [ ] **V4 — Voxel Sphere.** Preserve analysis-only DSP, accepted motion and CUSTOM orbit/geometry; exercise serialization,
+  conditional controls and same activation/config projection with mode-specific focused tests.
+- [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
+  `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
+  `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
+  authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
 
-- [ ] **R164 AUDIT / R163 REAL RUNTIME:** Operator's R163 log `logsbcd85cd4dd2.zip` is **19:53:39–19:58:42**, source head `bcd85cd4dd4348a08d28dd18501298479a8a56e1`; this is post-R163 evidence. The R163 focused Windows suite **112 passed**. FEEDS submitted 67 family jobs in the capture; the cross-family gate reported repeated waits/resumes, manual transitions delayed about 1–7 s, and one stale generation-0 UI callback was rejected at Settings retirement. Neither that rejected callback nor the existing source-anonymous gate messages proves a stranded FEEDS claim. R164 repairs the **proven code-level missing `False` GUI-dispatch result** in FEEDS, and adds event-only family-labeled queue/claim/transition durations without logging private source identities or adding timers. Focused Windows tests **green 2026-10-09** (`test_refresh_transition_gate` incl. `test_feeds_false_ui_dispatch_falls_back_once_and_releases_transition`, Gmail/Reddit/FEEDS/NEWS/durable/transition-distribution suites, per-file isolation). Remaining: attribution from the next operator trace. Historical R-65/R-75/R-83/R-110 are the relevant ownership/fairness precedents. No new Historical Bug entry.
-- [ ] **FEEDS QUEUED/BUSY CONTRACT / WORKER FAILURE:** The operator explicitly requires a refresh to show **busy as soon as the request is accepted, including queue time**. Never defer, suppress, or split the user-visible busy indicator merely because a job is waiting for family/transition admission. Independently audit worker-error paths that publish no normal `FeedRefreshResult` and may fail to clear busy after terminal failure; do not conflate queued work with a stranded claim. Preserve NEWS' startup-settlement barrier, 2.5-second source staggering, source backoff, retained cache content and event-driven dormancy.
+Each slice ends in focused proof, refreshed owner docs and a checkpoint before starting the next mode. New modes use the
+spec from their first implementation. Graphics implementation follows §4 after this migration and bounded side work.
 
-- [ ] **UNPROVEN SERVICES / NEXT EVIDENCE:** R163 shared admission (FEEDS + Gmail live fetch + Reddit provider fetch) passed its focused Windows gate 2026-10-09. Steam, Weather, Friend Pulse, other services and Gmail/Reddit startup-cache readers remain outside cross-family claims. Do not attach until their worker, GUI publication and retirement/cancel paths have been audited and focused gates written. No shared refresh timer or scheduler migration. Check transition fairness and verify no post-transition stampede with a fresh dual-display operator trace.
-- [x] **R160/R161 source-policy fixes preserved:** Descriptor-owned shaping and R161 focused fixture repairs are retained. R168 owns the newest 2026-10-09 chunk failures; do not reopen the former R160 gate or relax Bubble parity.
+## 3. Release media and bounded source cleanup | Subsequent work
 
-## 1. Frozen-product validation | operator execution only
+The release capture tool is already landed. `Docs/Reference/Release_Media.md` is the single source for input paths,
+encoding and manifest policy: genuine UsuScene1–4 originals, transition loops at 480 px wide / 24 fps / authored speed,
+high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and normal Godzips.
 
-- [ ] **BUILD-1 | OPERATOR ONLY:** Operator runs Build Runner / Nuitka / installer compilation for **Standard (+ its Diagnostic file, one compile; Diagnostic accepted by the operator 2026-10-11), Media Center, and Reddit Helper** under Python 3.14 + MSVC, then supplies build logs, Nuitka reports and packaging/footprint results. **Agents must not execute builds themselves**, including trial, smoke, quick or background builds. Inspect source, improve build scripts and analyze supplied reports without launching compilation.
-- [ ] **BUILD-2 | OPERATOR ONLY:** Operator launches frozen products, validates two-monitor startup/exit, transitions, real audio (Sphere + Shockwave already physically accepted on source), widgets, image cache/prefetch, handles/threads, and installer behavior. Provide exact operator-run steps if requested; agents do not launch long runtime acceptance or take physical acceptance on the operator's behalf.
-- [ ] **BUILD-3 | REPORT-DRIVEN:** Fix only failures in the operator's submitted logs. Use **relevant focused tests** for changed code; do not run or request another four-chunk suite or product build without explicit operator direction. When the operator chooses to perform a final complete gate and accepts the frozen products, promote Python 3.14 as release authority and checkpoint/commit the baseline.
+- [ ] **RM1 — Reconcile the catalogue at a stable checkpoint.** Enumerate the current registry/meaningful appearance
+  variants and compare existing manifest/source hashes. Generate missing or stale entries only; preserve the accepted
+  exclusions (Warp Dissolve, Particle, Blinds Flat) unless changed by the operator. Review each new/visually changed
+  transition WebP before closing its implementation. Do not fabricate missing local originals or recapture merely
+  because the Git revision changed when source inputs did not.
+- [ ] **RM2 — Visualizer showcases.** Once the migration/geometry source is stable, capture registered modes' curated
+  presets with canonical schema-2 real-music clips through production replay/capture/render ownership. Keep the authored
+  reaction, photograph backdrop and reflection inputs; fail loudly for unavailable inputs.
+- [ ] **RM3 — Catalogue proof.** Inspect motion/endpoints, loop seams, dimensions, metadata and quality; retain outputs
+  and manifests. Verify unchanged inputs skip regeneration, changed source/preset/clip inputs regenerate appropriately,
+  and mixed-revision captures are rejected. This is media proof, not another product visual acceptance gate.
+- [ ] **SC1 — Retire unused root transitions.direction.** Confirm current caller absence, then forward-strip the root key
+  without changing each transition's own direction setting. This changes the operator's defaults: undertake only with
+  explicit defaults-change authorization. Prove import/default merge/save cannot resurrect it.
+- [ ] **SC2 — Blinds Flat endpoint discrepancy, nonblocking.** Reproduce the prior capture endpoint mismatch at the exact
+  production endpoint before deciding whether the defect is in capture or rendering. Landed transitions are accepted;
+  do not reopen broad appearance work, change authored behavior or demand another build absent a reproduced defect.
 
-**Frozen-product update (operator accepted):** The fresh Standard and Media Center evidence bundles showed Ban Image compiled and consistent frozen Python/data/native inventories. Operator subsequently confirmed **Ban Image now works in the Standard SCR**, as it already did in Media Center and source. Close the missing-action investigation; preserve R153's build evidence receipts as release infrastructure. No speculative rebuild or runtime menu diagnostics.
+## 4. Graphics decomposition | After migration and bounded side work
 
-**Preservation:** OpenBLAS one-thread before-NumPy import and Qt GUI image-pool thread retention remain binding footprint/churn improvements (R-99/R-97). Retain R144/R145 prefetch priority and cache-lock containment, bounded RAM and zero prefetch side-timers. New work must not recreate the previous Windows/DWM regression through speculative pacing changes.
+Extruded Bubble is the next proposed mode after migration/side work, following the operator's explicit “after migration”
+direction. The other mode order is Particle Field → Terrain/Skyline/Tunnel → Waveform Ribbon → Deformable Blob Sphere.
+Build only required/proposed primitive slices in the order below; primitive proof does not require inventing a shipping
+consumer. Usu runtime remains deferred; its existing plan is `Docs/Future_Work/Usu_Moonscape.md`, not a second queue.
 
-## 1A. Targeted overnight diagnostic follow-up | operator physical check only
+### 4A. Shared facilities — inventory, dependencies and acceptance
 
-R154 lifecycle (`test_qtquick_display_unit`, `test_runtime_destruction`, `test_terminal_runtime_destruction`), R155 diagnostic preset root (`test_visualizer_presets`, `test_build_closeout_contract`), R158 Settings warm pages and the central OpenGL invariant (`test_settings_dialog`, `test_settings_manager`, `test_display_tab`, `test_settings_import_categories`) and R165 reveal passed their focused Windows gates 2026-10-09 (per-file isolation; the single skip is the known stale `release/media_center` Organs payload, a packaging-output check).
+`Docs/Reference/Scene3D_Resources.md` owns implemented resource contracts. Existing stream rings, compute/population,
+particle sprite/streak draw helpers, scene targets, bloom, trails, edge/propagation fields and planar directional shadow
+helpers must be reused, not rebuilt. Their presence does not prove general collision, ribbons, volumetric simulation,
+real shadow maps or order-independent transparency already exist.
 
-- [ ] **CROSS-DISPLAY MEDIA SHORTCUTS (R155):** focused test `test_media_shortcuts_cross_displays_once_and_ignore_retired_owners` is green. Only a quick physical check with the Media widget on the *other* display remains; do not start a new build solely for this gate.
-- [ ] **Scope restriction:** The 90 Hz versus 60 Hz observation remains expressly **off limits**. With R168 focused tests passed and the separate Dev Curve floor explicitly still open, proceed to the shared 3D/transition tranche of §0/§2/§4; do not revive old runtime-performance investigations to delay it.
+- [ ] **G0 — Establish exact delta and measurements.** Before each primitive, record current callers/resources and the
+  smallest missing contract. Run `tools/overhead_baseline.py` before/after shared edits and compare deterministic GL/Python
+  call counts plus control-relative CPU/GPU measures. Existing unrelated consumers must compile/pay for no added feature.
+  Extensions use opt-in shader variants/functions and demand-created resources; retire at park/context destruction.
+- [ ] **G1 / S17 — Attachments and temporal ownership.** Specify normal/material/depth/history formats, resolution,
+  allocation keys, clears, reuse and invalidation for resize/context/generation changes. Implement only demanded
+  attachments. Prove disabled paths allocate nothing and reactivation cannot sample stale history.
+- [ ] **G2 / S25 — Real shadow maps (the one shared shadow task).** Use one fitted directional depth map with bounded
+  soft PCF, bias and caster/receiver contracts; depend on G1 depth ownership. Test known occluder/receiver pixels,
+  light/camera changes, resize and retirement, with per-tier measurements. S17 and Usu S25 refer to this same owner;
+  it must not reactivate the rejected Extruded cast-shadow path implicitly.
+- [ ] **G3 / S17 — Transparency and optics.** Separate weighted blended OIT/depth-aware transparency from refraction.
+  Prove compositing/depth restoration first; then thickness/depth refraction, Fresnel, rough transmission and restrained
+  dispersion as independently selectable features. GTAO requires a justified visual target and its own measured slice.
+- [ ] **G4 / S18 — Particle extensions.** Extend existing CompactedPopulation and sprite/streak helpers with reusable
+  ribbons and bounded lifetime/capacity/indirect draw contracts. Add collision/OIT only after demonstrated need and G3
+  where applicable. Prove deterministic admission/retirement and zero work for inactive emitters.
+- [ ] **G5 / S18 — Lightning, then volumes.** Lightning first gets a bounded procedural geometry/lighting contract and
+  independent render/cost proof. Smoke/fog/fire follow as reduced-resolution volumes: separate allocation, advection,
+  vorticity, depth raymarch and temporal reprojection slices. Define history reset and quality ceilings before combining
+  them. No always-running simulation or permanent volume targets.
 
-## 1B. Monitor power/wake and physical widget assignment | Awaiting Validation
+### 4B. Extruded Bubble — bounded implementation slices
 
-- [ ] **Operator physical validation:** Repeat monitor-off/return and rapid toggles on the next operator-built product.
-  Check either display disappearing, a single-display interval longer than 30 seconds, reversed enumeration and return:
-  only widgets assigned to surviving displays remain; absent widgets return with their original CUSTOM geometry.
-  Check Settings explicit reassignment, Arrange/Edit transfer and Reset with one display absent. Source regressions
-  cover identity-bound admission, strict Visualizer admission and same-signature QScreen binding-loss replacement;
-  installed Windows/Qt power behavior remains unclaimed. Contract: `Docs/Contracts.md` → Geometry / CUSTOM.
-- [ ] **Awaiting Logs only if wake-exit persistence recurs:** Record whether Interaction Mode is enabled and the exact
-  input used to exit. `diagnosticmonitoroffonrapid.zip` shows Interaction Mode enabled, six completed replacements and
-  a clean explicit exit; it does not prove ordinary saver exit failure. The separate 13:02:16–13:02:30 displaced-runtime
-  stall is documented in R-79 and repaired at the existing topology reconciler.
-- [ ] **Separate display-selection follow-up:** `display.show_on_monitors` itself still uses current numeric indices
-  and canonical repair when all selected indices are unavailable (`core/settings/display_selection.py`). Extend
-  physical assignment to the saver-wide display selection and retire that unavailable-selection substitution,
-  with focused Display Settings/MC admission tests. Widget assignments are now independent of this selection.
+Reuse Bubble's logical simulation/reaction authority; the original Bubble remains unchanged under Bubble Temporal
+Fidelity. This is a bordered 3D mode whose camera moves inside the card, with spec-owned Settings and gradual use of
+shared materials, gloss/reflection, shadows, glow, quality tiers and orbit. Read fixed musical loudness, never add dynamic
+floors. Aim for sustained-loud-passage drift/speed and response at least as good as Bubble without changing Bubble itself.
 
-## 2. New transitions | implementation queue
+- [ ] **EB1 — Visual target and baseline.** Capture frozen-settings Bubble readings on representative recorded quiet,
+  transient and sustained-loud passages; define static/moving targets for depth, overlap, lighting and bordered framing.
+  Establish CPU/GPU/reference-resolution measurements and acceptance comparisons before renderer implementation.
+- [ ] **EB2 — Admission and logical frame contract.** Declare the mode/spec/capabilities; reuse existing logical state or
+  a mode-owned projection without a second clock/capture/DSP owner. Identify exactly which state remains shared and what
+  depth-only data is derived. Prove original Bubble readings unchanged and inactive mode import/allocation neutrality.
+- [ ] **EB3 — Minimal bordered 3D renderer.** Start with instanced lit bubble geometry, depth and card clipping in the
+  existing Quick scene. Define perspective camera, border-safe orbit, CUSTOM viewport versus visual-scale intent and
+  projection-derived Edit bounds. Test resizing, orbit, display transfer, clipping and context retirement; no second window.
+- [ ] **EB4 — Appearance and quality.** Add shared gloss/reflection/glow as opt-in measured increments; real shadows use
+  G2 when ready, and transparency uses G3 only if needed. Do not block the minimal renderer on all future facilities or
+  duplicate missing primitives locally. Each tier bounds instances/geometry/attachments and releases resources at park.
+- [ ] **EB5 — Reaction/customization and acceptance.** Expose spec-owned controls/presets after the frame contract is
+  stable. Validate sustained loud passages and onset/quiet behavior on fixed recordings, rerun Bubble parity, and review
+  real outputs on both displays before seeking targeted operator acceptance. Generate its release showcase when stable.
 
-These transition concepts are promoted into the active roadmap rather than left as distant-future backlog. **Every entry
-expands the product without taxing it:** zero recurring cost while inactive (Performance_Optimization_Contract "Effect
-dormancy and count invariance"), lazy resources released at `park()`, gradual warm-up, and its measured active cost (CPU
-submit + GPU, median/p90, per-frame flush) recorded in `Docs/Reference/Transitions.md` beside comparable transitions; new
-shared helpers are reused by later entries rather than duplicated. The current visual mocks are local-repo references only
-and should be preserved for implementation review:
+### 4C. Remaining modes and character/world substrate
 
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TBlockPuzzle.png` — clean-room jigsaw/puzzle-piece
-  flip replacement concept.
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TVolu.png` — Volumetric Dissolve concept.
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TVHS.png` — VHS Distortion concept.
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TLens.png` — Liquid Lens concept.
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TMemb.png` — Membrane Turnover concept.
-- `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tmp\mocks\TGroup.png` — grouped second-batch concepts in
-  this fixed order: Surface Tension Merge, Edge Bloom Reveal, Chromatic Shear, Depth Card Cascade, Capillary Bloom.
+- [ ] **Reactive Particle Field:** compose G4 with recorded musical controls; establish lifetime/capacity and response
+  target before adding collision. **Terrain/Skyline/Tunnel:** one bounded geometry/camera slice at a time, preserving
+  fixed loudness semantics. **Waveform Ribbon:** require G4 ribbon proof and real waveform history. **Deformable Blob
+  Sphere:** establish deformation/normal/geometry bounds and independent cost before layering materials/effects.
+- [ ] **S19 → S20:** deterministic validated Blender/glTF bake into provenance-stamped packed assets, then imported
+  static-mesh rendering on shared materials/instancing. Runtime reads packed data, not authoring node graphs.
+- [ ] **S21 → S22 → S23:** bounded GPU joint palettes/skinning, then logical-time clip sampling/cross-fades/masked
+  additive layers/root-motion/eye tracks, then deterministic secondary-motion springs. Prove each in its own offscreen
+  harness before combining; no physics engine or separate animation clock.
+- [ ] **S24:** opt-in felt/sheen and bounded fuzz shells with emitted-light tips; prove unchanged existing shader variants
+  and tier-specific cost. **S25:** reuse G2, never a duplicate shadow implementation.
+- [ ] **S27 → S26:** prove independent perspective/orbit camera, then seeded sphere/crater/star geometry and logical
+  travel. Preserve the existing photo-plane camera. Asset/rig/clip acceptance stays with the existing Usu plan and local
+  asset README; do not admit the deferred full Usu mode merely because a foundation is ready.
+- [ ] **Combinations only after component proof:** electrical terrain, smoke-lit fracture, ember/dust destruction,
+  refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL. Choose one promoted effect at a time.
 
-The local mocks are design references, not fidelity prisons. They establish the intended visual family and order of attack.
+## 5. Nonblocking watchlist and operator-owned evidence
 
+These items never hold source work waiting for a diagnostic build. Observe during normal use or an operator-chosen
+build/capture; reopen only from the listed symptom/evidence. Record Awaiting Logs/Validation without turning it into
+an instruction to rebuild, poll or repeat the full suite.
 
-All ten transitions of this tranche (T1-T10) are accepted (operator, 2026-10-10/11); new transition concepts join this section as they are promoted.
+- [ ] **Monitor power/wake — watchlist, Awaiting Validation when convenient.** During an existing/new operator build,
+  observe either display off, >30 seconds on one screen, rapid off/on, reordered return and both selected screens absent.
+  Widgets must stay on physical assignments and return with original CUSTOM geometry; no spillover, duplicate owner,
+  phantom window or frozen input. Include Settings reassignment and Arrange/Edit/Reset if those paths are exercised.
+  First upgraded legacy numeric routes need their intended displays connected unless a unique saved CUSTOM home supplies
+  identity. Capture timestamps, remaining physical screen, product flavor and Interaction Mode if an anomaly appears.
+  `diagnosticmonitoroffonrapid.zip` demonstrated renumbering/old Visualizer relocation plus a 13:02:16–13:02:30 binding-loss
+  stall; source fixes and focused proof are landed (R-79 contains evidence). It showed six completed replacements and
+  orderly explicit exit, not a general wake-exit failure. For recurrence, record exact wake/exit input; Interaction Mode
+  deliberately suppresses mouse-motion exit. Do not request a full diagnostic build solely for this watchlist.
+- [ ] **Refresh contention — Awaiting Logs on recurrence.** Use a naturally available dual-display trace to attribute
+  accepted/queued/claimed/published/retired FEEDS/Gmail/Reddit work and transition delays. Existing R163 capture reported
+  1–7 second manual delays, but no stranded FEEDS claim was proved. R164 fixed missing False dispatch handling and added
+  event-only family attribution. Check fairness/no post-transition stampede; never hide busy during queue time.
+  Steam/Weather/Friend Pulse and startup cache readers join no shared gate until their publication/retirement is audited.
+- [ ] **Cross-display Media shortcuts — Awaiting Validation when used.** Media on the other display should receive each
+  shortcut once; source regression is green. Do not build solely for this check.
+- [ ] **Music recorder — Awaiting Validation of capture, not its accepted launch buttons.** When recording is needed,
+  capture a named 60-second real-music clip; check signal, file/result, cancellation and mixed-DPR window behavior.
+  Use full-history/schema-2 recordings for waveform proof; format/commands live in `Docs/Reference/Harness_Index.md`.
+- [ ] **Frozen release gate — operator scheduled.** Operator chooses when to build Standard (+ Diagnostic from the same
+  compile), Media Center and Reddit Helper, then checks installed startup/exit, Settings/widgets/cache/audio and installer
+  behavior. Agents analyze supplied logs and fix concrete failures with focused tests; no speculative builds or automatic
+  four-chunk rerun. Python 3.14/Qt 6.11 cutover and accepted Ban Image behavior are not reopened absent a new defect.
+- [ ] **Bubble small-radius judder:** reopen only on new recorded musical/scale/DPR evidence; R-105 holds failed methods.
+  **Dual-display reboot incident:** capture DWM/driver/Qt swap evidence before reboot if it recurs; don't attribute prior
+  recovery to an unproved patch. **CUSTOM/Extruded or long-duration lifecycle:** reopen only from a concrete new symptom.
+  The unrelated 90 Hz versus 60 Hz investigation remains off limits.
 
----
+## Handoff rules
 
-
-## 2A. Music recorder | Awaiting Validation
-
-- [ ] **Operator capture/UI validation:** Open GODZIP Foundry → FOUNDRIES → TOOLS → MUSIC CLIP RECORDER
-  (or run `.venv\Scripts\python.exe tools\music_recorder.py`), record a named
-  60-second real-music clip, and check the live signal, save result, cancellation and mixed-DPR window use.
-  Replay the new full-history clip during the Oscilloscope rework; existing 64-sample recordings cannot validate
-  waveform detail. The format, CLI and capture ownership contract live in `Docs/Reference/Harness_Index.md`.
-
-## 2B. Tool maintenance
-
-- [ ] **Awaiting Validation:** Reopen GODZIP Foundry, check the TOOLS divider and both quick-launch buttons
-  (Music Clip Recorder / Visualizer Preset Repair), including scrolling on a small or scaled display.
-  Button routing and native Qt renders are checked; operator window/focus acceptance remains separate.
-
-## 2C. Visualizers | Oscilloscope rework and the spec layer
-
-- [ ] **Oscilloscope rework | Awaiting Validation (operator approved a complete rework 2026-10-11: very bad Settings UX,
-  unreliable and visually disappointing output, the heaviest mode at 144 cf GPU).** Rebuilt as an analog phosphor scope on
-  the Visualizer spec layer: Trace / Ring / Phase displays from the capture's contiguous history (triggered, envelope-
-  decimated, Detail low-pass), afterglow as authored state, beam drive / onset flare / spectral tone on the shared musical
-  rule, one instanced beam pass with bloom glow; four new curated presets. GPU 8.9 cf at 1440p (16x cheaper), 0.37 ms CPU.
-  Reference: `Docs/Reference/Visualizer_Reference.md` 16C. Operator first look 2026-10-12: "looks good so far". Operator checks there (look and presets on both displays with
-  live music, trigger steadiness, afterglow, flare and loudness glow, Settings UX). Capture follow-ups resolved: the
-  history takes each whole block before the 2,048-sample analysis trim and carries the device's true rate, which the mode
-  converts its spans at; replay accepts any recorded rate.
-- [ ] **Move the remaining modes onto the spec layer (operator 2026-10-11: "if this means that adding new visualizers,
-  settings/features to them and editing will be easier and lower risk in the future absolutely do it").** One mode per
-  slice, renderer and response unchanged, Settings body and saved values identical, `test_visualizer_mode_settings_spec`
-  covering it: Spline Curve (Dev Curve), Extruded Spectrum, Spectrum, Voxel Sphere (Sine Waves done 2026-10-12: its
-  lines 2-6 are the one Custom section; the layer gained percent/whole-number/ticked sliders, indexed choices and
-  `when` conditions). Shape editors and other
-  bespoke parts stay `Custom` entries. **Bubble last, and only with readings:** before and after any change that could
-  reach Bubble, `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>` on the recorded clips
-  (frozen settings, never a curated preset; all readings must stay x1.00 unless the change is meant to move them). A
-  baseline is saved locally (`logs/bubble_readings_baseline.json`, recorded at 408ccf63).
-- [ ] **New Visualizers** are declared in `core/settings/visualizer_mode_settings.py` from the start (the §4 Visualizer
-  sequence and Extruded Bubble).
-
-## 3. Release / README media production
-
-The capture/encode/manifest tool and its focused smoke proof are implemented in the working tree, awaiting checkpoint and
-full catalogue output. Release/readme media stays outside runtime QRCs and normal GODZIPs. `Docs/Reference/Release_Media.md`
-owns the tool's registry, source-attribution, capture and encoding contract.
-
-- [ ] **Preview/baseline findings (2026-10-10).** The offline preview snapshot now applies each mode's technical
-  config and steps Dev Curve's frame runtime, so the overhead baseline measures all eight Visualizer modes (Spectrum and
-  Extruded onboarding previews unchanged). Open: (1) `transitions.direction` at the root of the transitions defaults has no reader (each transition keeps its own
-  direction): the Transitions tab drops it on save and the defaults merge restores it at startup. Retire the key with a
-  forward-only strip (operator's defaults file, so on the operator's call).
-
-- [ ] **RM1. Land the tool and generate transition media.** Review/checkpoint `tools/release_media.py` and its focused tests,
-  then capture every admitted canonical registry identity plus meaningful curated appearance variants on a stable source tree.
-  **Current transition-WebP source/size directive (local paths, not bundled):** Every transition WebP must be composed
-  from combinations of the following FOUR operator-owned scene originals (supersedes the former Paper1/Paper2 pair):
-  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene1.png`,
-  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene2.png`,
-  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene3.png`,
-  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\assets\usu\scenes\UsuScene4.png`.
-  Keep a pleasant loop, **480 px wide** output keeping the aspect ratio (480x270 for the 16:9 scenes; operator
-  clarified 2026-10-10 that "480p" means the width, and 854x480 is far too large), smooth (60 fps first), high-quality WebP. About 10 MB per file is a comfortable size, **not a cap**: 15-20 MB is fine and no
-  showcase should be squeezed to fit (operator, 2026-10-10; the first catalogue's strict 10,000,000-byte cap was a
-  one-off).
-  These four paths exist **only on the operator's Windows tree** and must be loaded at capture time, never
-  invented, substituted, embedded in a normal Godzip, or assumed accessible in Linux/CI. Capture/encoding tool
-  defaults and release registry must be adapted to this exact source/size directive when M1 is executed.
-  Generate media only when the operator has supplied the four originals and selected a stable source tree. Do not fabricate or substitute unavailable local originals.
-  **Tool adapted 2026-10-10:** `--kind transition` writes to the ignored `assets/webp/` (also a GODZIP never-transfer
-  prefix): a per-transition ordered scene pair (stable from the case key), A→B, a rest on B, B→A with another seed
-  (a seamless loop), captured at 2x and published at 480x270 in one encode at quality 92 (no cap), with parity: 24 fps and authored speed for
-  every showcase; Block Spins shows Off and
-  Reflection only; scene pair and seeds picked at random per generation; the run back always
-  changes direction/order; method 4 with keyframes every 150 frames (method 6 was 11x slower for 2% smaller).
-  **Every new or visually changed transition gets its WebP generated and reviewed by the agent before it is called
-  done** (Jigsaw first). **Parity catalogue 2026-10-10: 24 of 27 generated; accepted as the showcase set** (operator: Warp Dissolve, Particle and Blinds Flat may stay out). Product follow-up only: Blinds Flat's production end frame differs from the photograph (endpoint guard) — investigate like the Ripple start pop. Remaining: the full catalogue at a stable checkpoint.
-- [ ] **M2. Generate Visualizer media.** After the authoring/geometry source checkpoints are stable, capture every registered
-  mode's curated presets with the canonical schema-2 recorded-music clip through the production replay/capture/render path.
-- [ ] **M3. Inspect the generated catalogue.** Confirm motion/endpoints, photograph-backed Visualizers, loop/metadata/dimensions
-  and release size limits; reduce dimensions/fps before lowering quality when needed. Retain the real outputs and manifest.
-- [ ] **M4. Verify incremental regeneration.** Re-run the stable catalogue to prove unchanged items stay current and changed
-  source/preset/clip inputs regenerate only affected/stale media. The source guard must refuse mixed-revision captures.
-
----
-
-
-## 4. Shared 3D primitives | immediate foundation for T1/T2, expand after first-wave acceptance
-
-Admit one measured, inactive-cost-neutral slice at a time. **A planned primitive needs no shipping consumer first:**
-it is proved by focused tests, offscreen renders and measurements and costs nothing until activated; never shape an
-effect around a primitive to give it one (`Spec.md`, 3D substrate). **Extending a shared primitive is opt-in:** a new lobe,
-attachment or pass (e.g. S24's sheen in `SceneMaterial`) is a separate function, shader variant or demand-created resource
-that only its consumer compiles and pays for; existing consumers' programs and measured costs must not change. Record
-`tools/overhead_baseline.py` before and after any shared-primitive or host edit and `--compare` them: per-frame GL and
-Python call counts are deterministic, so any rise on an unrelated transition or mode is real added work; baselines live in
-`tools/baselines/overhead/` (how to run and read them, expected results: `Docs/Reference/Benchmarks.md`). **Before T1/T2**, inspect and reuse existing Scene3D resource ownership, `CompactedPopulation` and tested 3D flip/particle facilities so Jigsaw Piece Flip and Volumetric Dissolve do not grow parallel engines. Runtime allocation stays demand-driven: building a facility is fine, allocating or executing it while nothing is active is not.
-
-After T1–T4 implementation and focused/physical acceptance, expand S17/S18 in independently measured slices. Bubble temporal fidelity remains binding. OpenGL 4.6 core remains the graphics API; no speculative Vulkan/QRhi backend migration or HDR.
-
-- [ ] **S17 remaining active-only scene facilities:** demand-created normal/material/depth/history attachments, reusable real
-  3D shadows, GTAO only if justified, weighted blended OIT/depth-aware transparency, thickness/depth refraction, Fresnel,
-  rough transmission and restrained dispersion.
-- [ ] **S18 primitives:** sprite/streak/ribbon particles over `CompactedPopulation`, collision/OIT where justified, lightning,
-  then bounded reduced-resolution smoke/fog/fire volumes with advection/vorticity/depth raymarch/temporal reprojection.
-  Measure each primitive independently before combinations.
-- [ ] **Visualizer vertical sequence:** Reactive Particle Field -> Spectrum Terrain/Skyline/Tunnel -> Waveform Ribbon ->
-  Deformable Blob Sphere -> Extruded Bubble. New modes are declared in `core/settings/visualizer_mode_settings.py` (their
-  Settings body, model fields, appliers and renderer parameters follow from the spec).
-- [ ] **Extruded Bubble (operator direction 2026-10-11; after the migration and side work).** Bubble's own simulation in 3D:
-  the existing Bubble logical runtime and reactions, rendered as lit 3D bubbles with everything the shared 3D foundation
-  offers as it grows (materials, gloss and reflections, shadows, glow, quality tiers, orbit) and the full customisability of
-  the spec layer. Aims: high fidelity, cutting waste, and room to experiment; reactivity at least as good as Bubble's and
-  better where Bubble is weakest, drift and speed through sustained loud passages, without dynamic floors or other unreliable
-  parts (read loudness on the fixed real-music scale, `Docs/Guides/Visualizer_Reactivity_Authoring.md` 2A). It is the first
-  **bordered** 3D mode: a carded shell whose camera orbits *inside* its border (Extruded Spectrum, Shockwave Grid and Sphere
-  are frameless), which sets the pattern for later bordered 3D modes. Bubble itself stays as it is under Bubble Temporal
-  Fidelity; before and after any change that could reach it, compare `python -m tools.visualizer_replay.mode_audit --modes
-  bubble --compare <saved run>` on the recorded clips (frozen settings, never a curated preset).
-- [ ] **S19–S27 character and world foundations** (needed by the deferred Usu Moonscape vertical; contracts and effect
-  ideas in `Docs/Future_Work/Usu_Moonscape.md` §5). Build and prove one at a time (own tests, offscreen harness, measurements),
-  each lazy, dormant when unused, measured, warmed and tier-gated:
-  - [ ] **S19 asset import + bake pipeline:** Blender → validated glTF 2.0 → packed SRPSS binary (meshes, skins, morphs,
-    clips, baked materials), provenance-stamped; runtime reads only the packed form.
-  - [ ] **S20 static mesh renderer** for imported meshes with shared materials/instancing (candidate: Paper Lantern/Origami
-    transition).
-  - [ ] **S21 GPU skinning** (linear blend; joint palette streamed; stitches bound to surface owners).
-  - [ ] **S22 animation clips + graph** on logical time: hysteretic cross-fades, additive/masked layers (blink, ears,
-    accents), root-motion contract, eye-state tracks (candidate: Usu cameo transition / test harness).
-  - [ ] **S23 deterministic secondary motion** (critically damped springs per logical step; no physics engine).
-  - [ ] **S24 felt/plush sheen lobe + fuzz shells** with emitted-light tips feeding the shared bloom, tinted by lighting or
-    rainbow progress.
-  - [ ] **S25 real shadow maps** (S17's "reusable real 3D shadows": one fitted directional map, soft PCF).
-  - [ ] **S26 sphere world + seeded crater field + instanced starscape** (candidate: Moon Turn transition with S25/S27).
-  - [ ] **S27 perspective orbit camera** independent of the photo-plane camera.
-- [ ] Only after primitives are accepted: electrical storm terrain, smoke-lit voxel fracture, ember/dust destruction,
-  refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL combinations.
-
----
-
-## 5. Optional acceptance and symptom-triggered watchlist
-
-These items **do not block** the accepted source implementation or the next feature tranche. Reopen only when the operator reports a relevant symptom or explicitly requests the corresponding investigation.
-
-- [ ] **Bubble small-radius judder (deferred):** Current physical reaction is good. No further filter, smoothing or cadence experiments without real-music, scale/DPR and renderer-radius evidence. Preserve Bubble's temporal golden. `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md` owns previous failed approaches.
-- [ ] **Dual-display reboot incident (historical):** If it returns, collect DWM/driver/Qt swap-state evidence **before reboot**, compare same workload, then investigate. Do not assert that R144/R145 patches caused the recovery. See R-134–R-145 history.
-- [ ] **3D CUSTOM / Extruded authoring:** Previously implemented profile isolation, projected cage, hot-swap and Edit gestures are accepted. If an actual anomaly appears, use `Docs/Guides/Visualizer_Change_Checklist.md` and R-111–R-113; do not rewrite the source or resurrect a separate CUSTOM store. Extruded shadow rendering remains disabled (R-125–R-128). Historical Organs resemblance must never make mutable Organs presets a golden.
-- [ ] **Other lifecycle/long-duration metrics:** Reopen only for new operator-observed regressions. The specific R154 teardown retention and authored-preset-local inspection are tracked under §1A; unrelated frame-rate efficiency work is off limits.
-
-## Execution and handoff guardrails
-
-- No build/installer execution by agents. The **operator runs expensive builds** and provides results; the agent may review scripts, run bounded non-build static/focused tests where available and supply exact commands when asked.
-- The operator also controls *when* to repeat the multi-thousand-test chunk suite. For a new change, return **only relevant focused tests**, never an automatic chonky rerun.
-- PowerShell commands given to the operator must be **single-line, semicolon-separated, direct-copy commands** (with correct quoting and explicit `.venv\Scripts\python.exe`); no multi-line RUN SCRIPT assumptions.
-- Preserve dormancy, Qt's presentation clock, latest-wins admission, no standby render loops, native GL ownership and exact per-mode authored musical reaction. No retired QWidget/QRhiWidget presenter or silent preset reseed.
-- Significant archive handoffs return a **whole-file superseding Godzip**, manifest regenerated from final bytes and checked for SHA-256, sizes, statuses, CRC and payload membership. No partial patches; no unrelated assets/bulk logs inserted into normal Godzips.
-- New transition/3D primitives remain event- or activation-owned, bounded and inert when unused. Targeted tests must use test-owned deterministic data, not operator-authored mutable presets as immutable expected values.
+Use single-line, direct-copy PowerShell commands with explicit `.venv\Scripts\python.exe` when providing operator
+commands. For an explicitly requested archive handoff, supply a whole-file superseding Godzip with final-byte manifest
+validation; ordinary commits do not require an archive. Keep user assets, bulk logs and release media out of normal
+Godzips. No memory updates without an explicit user request.

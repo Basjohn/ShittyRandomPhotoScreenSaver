@@ -2,7 +2,7 @@
 
 **Status:** deferred vertical. Not admitted for runtime implementation; `Future_Work.md` routes it and `Current_Plan.md` owns
 any promoted slice. The shared 3D foundations it needs are being **side-built by transitions and Visualizer modes first**
-(Current_Plan §4, "S19–S27 character and world foundations"). This document is the single plan for the vertical: the
+(Current_Plan §4C, "Remaining modes and character/world substrate"). This document is the single plan for the vertical: the
 2026-10-02 snapshot (`Usu_Moonscape_Visualizer_Future_Plan_f104a29eec.md`) is superseded and removed; its still-valid intent
 is carried here. The remaining **Blender** work (rig, clips, export preparation, how to preview Usu) is ordered in
 [`Usu_Blender_Work.md`](Usu_Blender_Work.md); asset-authoring history lives in the Windows-local `assets/usu/README.md`
