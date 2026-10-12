@@ -6,9 +6,10 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current authorization:** documentation/decomposition checkpoint first; then §1 saver-wide physical display selection;
-then §2 FEEDS terminal-failure handling. Stop at the clean checkpoint after §2. Visualizer migration, graphics expansion,
-media production and operator builds are subsequent work, not part of that implementation run.
+**Current checkpoint:** paused at documentation/decomposition by the operator, 2026-10-12. Resume only when requested:
+§1 saver-wide physical display selection, then §2 FEEDS terminal-failure handling, then stop at that clean checkpoint.
+Neither implementation slice has landed; incomplete selection edits were withdrawn before this pause. Visualizer migration,
+graphics expansion, media production and operator builds remain subsequent work.
 
 **Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
 are accepted. Dev Curve currently has no observed issue; its earlier replay-floor investigation is closed. Do not reopen
@@ -22,7 +23,7 @@ transition timings. Test the smallest production seam that can falsify the chang
 build unless the operator requests it. After each green slice: inspect diff, narrow commit, push, refresh this checklist.
 Preserve unrelated local/user work. Agents do not run Nuitka, Build Runner or installers.
 
-## 1. Saver-wide physical display selection | Ready, first implementation slice
+## 1. Saver-wide physical display selection | Next on resume
 
 Widget physical assignments are already implemented. This slice extends the same physical identity policy to
 `display.show_on_monitors`; it must not substitute another display when a selected monitor disappears.
@@ -32,14 +33,23 @@ Widget physical assignments are already implemented. This slice extends the same
   CUSTOM screen signature and existing Settings store. Preserve ALL (every present display), NONE (none), numbered
   selection and Media Center's selected-display default. Distinguish malformed input from a valid absent selection:
   absence must resolve empty, never repair to ALL or an unrelated display.
+  The current parser conflates valid absent numeric selection with malformed input; change resolution together with D3,
+  since the existing engine treats zero constructed windows as initialization failure.
 - [ ] **D2 — Persist intent and explicit authoring.** Bind legacy numeric selection once, preserve physical identity across
   renumbering and restart, and update only on explicit selection/reset/import. Loading or saving unrelated Settings must
   not rebind an unplugged selection. Display UI, Arrange and warnings must agree on effective selected displays. Cover
   explicit reassignment to today's same-number display and retain unavailable choices unless the user changes them.
+  Correct the Display tab's NONE round-trip (currently loaded/saved as ALL) and prevent checking all currently present
+  displays from silently converting fixed selection to ALL. Use one companion binding map in the existing Settings owner;
+  wire persistence/import/reset, Display tab, onboarding, Arrange and route warnings before exposing strict resolution.
 - [ ] **D3 — Zero selected live displays.** Trace engine startup, topology replacement and first-image admission when all
   selected displays are off. Keep the existing event-driven monitor owner able to observe their return without a phantom
   window, retry spin, duplicate generation, provider admission or premature process exit. Retire resources legally; no
   polling or new lifecycle owner. Inspect rapid return during destruction before changing any barrier.
+  Distinguish intentionally empty selection from failure to create a requested window. Resolve admission before constructing
+  Quick scene resources; keep DisplayManager's topology observation alive. Audit ScreensaverEngine initialization/start,
+  rotation and first-image retries, replay admission, RSS scheduling and the replacement watchdog. Returning selected screens
+  must use the normal destruction/replacement barrier and replay, without a second provider or topology owner.
 - [ ] **D4 — Focused proof and checkpoint.** Exercise selected second display becoming index zero, either display missing,
   reordered return, all selected displays absent, ALL/NONE, MC default, settings save/reload/import/reset and explicit
   reassignment. Test production admission, not only parser output. Update Contracts/TestSuite, commit and push. Physical
@@ -59,9 +69,21 @@ cross-family admission. `Docs/Reference/Feeds.md` owns provider/startup behavior
   barrier, family startup settlement, source backoff and 2.5-second staggering. A terminal failure must neither leave busy
   true nor finish a newer request. Surface failures loudly; do not add a timer, synthetic successful result, second source
   queue or silent fallback. Keep unrelated services outside the gate until separately audited.
+  Read-only production-seam reproduction identified four concrete cases to turn into retained regression tests:
+  initial-cache worker failure leaves startup loading/the NEWS barrier open; refresh worker failure clears in-flight but
+  leaves presentation busy; artwork worker failure leaves presentation unsettled; and NEWS manual refresh can publish
+  settled after one publisher finishes while another remains queued. Trace `_FeedFamilyOwner` worker delivery/finish,
+  `FeedRuntimeLease.presentation_settled` and NEWS aggregation in `widgets/feed_runtime.py`. Reopen settlement on accepted
+  manual intent and account for `force_refresh_pending`; terminal errors need explicit publication at the existing owner.
+  The reproduced refresh/artwork failures released their admission claims: do not describe them as proven stranded gates.
+  Submission rejection also clears admission without publishing a terminal outcome; include it in the same generation-fenced
+  completion path. Preserve cancellation semantics rather than inventing a provider failure. Separately verify the source
+  discrepancy where manual `force` clears/bypasses backoff (`FeedSource.refresh`); reconcile it with the documented backoff
+  floor before changing behavior. This last discrepancy is source evidence, not yet a runtime reproduction.
 - [ ] **F3 — Fault-injection proof and checkpoint.** Use controlled worker/GUI callbacks to prove queued busy, exception,
   cancel, rejected dispatch, retirement and late-completion behavior, with claims and startup settlement observed through
-  production seams. Run only relevant FEEDS/gate tests; update contract, commit and push. Stop this authorized run here.
+  production seams. The existing runtime/gate baseline passed 35 tests during inspection; fixes and retained fault-injection
+  regressions are still outstanding. Run only relevant FEEDS/gate tests; update contract, commit and push. Stop the resumed run here.
   Real contention attribution/fairness remains a nonblocking Awaiting Logs item in §5.
 
 ## 2A. Visualizer spec migration | Subsequent implementation
