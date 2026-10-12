@@ -413,6 +413,9 @@ def load_custom_layout_restore_map(widgets_config: Mapping[str, Any] | None) -> 
             "position": position,
             "monitor": monitor,
         }
+        screen = payload.get("screen")
+        if monitor.upper() != "ALL" and isinstance(screen, str) and screen.strip():
+            normalized_widgets[str(widget_id)]["screen"] = normalize_screen_signature(screen)
 
     return {
         "version": int(candidate.get("version", CUSTOM_LAYOUT_RESTORE_VERSION) or CUSTOM_LAYOUT_RESTORE_VERSION),
@@ -454,10 +457,14 @@ def get_custom_layout_restore_entry(
     monitor = str(payload.get("monitor", "") or "").strip()
     if not position or not monitor:
         return None
-    return {
+    entry = {
         "position": position,
         "monitor": monitor,
     }
+    screen = payload.get("screen")
+    if monitor.upper() != "ALL" and isinstance(screen, str) and screen.strip():
+        entry["screen"] = normalize_screen_signature(screen)
+    return entry
 
 
 def set_custom_layout_restore_entry(
@@ -466,6 +473,7 @@ def set_custom_layout_restore_entry(
     *,
     position: str,
     monitor: str,
+    screen: str | None = None,
 ) -> dict[str, Any]:
     widgets = restore_map.setdefault("widgets", {})
     if not isinstance(widgets, dict):
@@ -479,7 +487,39 @@ def set_custom_layout_restore_entry(
         "position": resolved_position,
         "monitor": resolved_monitor,
     }
+    if resolved_monitor.upper() != "ALL" and isinstance(screen, str) and screen.strip():
+        widgets[str(widget_id)]["screen"] = normalize_screen_signature(screen)
     return restore_map
+
+
+def restore_custom_monitor_binding(
+    widgets_config: dict[str, Any],
+    settings_key: str,
+    restore_entry: Mapping[str, str],
+) -> bool:
+    """Restore the authored physical assignment with its monitor route."""
+
+    from core.settings.monitor_routes import BINDINGS_KEY, numbered_route
+
+    bindings = widgets_config.get(BINDINGS_KEY, {})
+    bindings = dict(bindings) if isinstance(bindings, Mapping) else {}
+    number = numbered_route(restore_entry.get("monitor"))
+    screen = restore_entry.get("screen")
+    restored = (
+        {"monitor": number, "screen": normalize_screen_signature(screen)}
+        if number is not None and isinstance(screen, str) and screen.strip()
+        else None
+    )
+    if restored is None:
+        if settings_key not in bindings:
+            return False
+        del bindings[settings_key]
+    else:
+        if bindings.get(settings_key) == restored:
+            return False
+        bindings[settings_key] = restored
+    widgets_config[BINDINGS_KEY] = bindings
+    return True
 
 
 def get_screen_layout_entries(

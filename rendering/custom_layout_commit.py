@@ -13,6 +13,7 @@ from typing import Any
 
 from PySide6.QtCore import QRect
 
+from core.settings.monitor_routes import BINDINGS_KEY, numbered_route
 from rendering.custom_layout_contract import (
     CONTENT_SIZED_PAYLOAD_KEY,
     PLACEMENT_ANCHOR_PAYLOAD_KEY,
@@ -24,6 +25,7 @@ from rendering.custom_layout_contract import (
     get_screen_signature_aliases,
     load_custom_layout_map,
     normalize_local_rect,
+    normalize_screen_signature,
     remove_screen_layout_entry,
     set_screen_layout_entry,
     write_custom_layout_map,
@@ -214,10 +216,25 @@ def _write_item(
             section = {}; widgets[get_custom_persistence_position_settings_key_for_widget(item.model_identity)] = section
         section["position"] = "Custom"
     if widget_writes_custom_monitor_key(item.model_identity):
-        section = widgets.setdefault(get_custom_persistence_monitor_settings_key_for_widget(item.model_identity), {})
+        route_key = get_custom_persistence_monitor_settings_key_for_widget(item.model_identity)
+        section = widgets.setdefault(route_key, {})
         if not isinstance(section, dict):
-            section = {}; widgets[get_custom_persistence_monitor_settings_key_for_widget(item.model_identity)] = section
+            section = {}; widgets[route_key] = section
         section["monitor"] = str(monitor_route or "ALL")
+        # A deliberate transfer may land on a display whose current number is
+        # identical to the old assignment. Commit its physical identity here,
+        # where the selected display is known, instead of inferring a number change.
+        bindings = widgets.setdefault(BINDINGS_KEY, {})
+        if not isinstance(bindings, dict):
+            bindings = {}; widgets[BINDINGS_KEY] = bindings
+        numbered = numbered_route(monitor_route)
+        if numbered is None:
+            bindings.pop(route_key, None)
+        else:
+            bindings[route_key] = {
+                "monitor": numbered,
+                "screen": normalize_screen_signature(signature),
+            }
 
 
 def commit_custom_session(

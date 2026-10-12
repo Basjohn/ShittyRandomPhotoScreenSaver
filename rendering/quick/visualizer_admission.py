@@ -7,13 +7,9 @@ presentation-neutral Quick equivalent of the legacy
 ``rendering/spotify_display_participation.py`` selection, expressed over Quick
 participants instead of legacy ``_widget_manager`` probes.
 
-Preference order (identical product semantics):
-
-1. the requested display if it is participating;
-2. otherwise, if the requested display exists but is not participating yet, hold
-   ownership on it (cautious - do not freelance onto arbitrary geometry);
-3. otherwise fall back to the first participating unit in stable screen-index
-   order.
+An assigned display owns the visualizer only while it participates. An absent
+or unavailable assignment suppresses admission until that display returns.
+The unassigned ``ALL`` route chooses the first participating screen by index.
 
 The caller constructs a ``QuickDisplayVisualizerOwner`` only on the chosen unit;
 non-owning units construct no duplicate controller/logical runtime/source owner.
@@ -60,7 +56,6 @@ class QuickVisualizerAdmission:
     requested_screen_index: int
     chosen: Any | None
     requested: Any | None
-    fallback: Any | None
     requested_is_participating: bool
 
     @property
@@ -90,36 +85,15 @@ def resolve_quick_visualizer_admission(
         None,
     )
 
-    # 1. Requested display participating -> it owns.
-    for unit in live:
-        if _screen_index(unit) == requested_index:
-            return QuickVisualizerAdmission(
-                requested_screen_index=requested_index,
-                chosen=unit,
-                requested=unit,
-                fallback=None,
-                requested_is_participating=True,
-            )
-
-    fallback = live[0] if live else None
-
-    # 2. Requested display exists but is not participating yet -> hold on it.
-    if requested is not None:
-        return QuickVisualizerAdmission(
-            requested_screen_index=requested_index,
-            chosen=requested,
-            requested=requested,
-            fallback=fallback,
-            requested_is_participating=False,
-        )
-
-    # 3. Fall back to the first participating unit in stable screen-index order.
+    participating = requested is not None and _is_participating(requested)
+    chosen = (live[0] if live else None) if requested_index < 0 else (
+        requested if participating else None
+    )
     return QuickVisualizerAdmission(
         requested_screen_index=requested_index,
-        chosen=fallback,
-        requested=None,
-        fallback=fallback,
-        requested_is_participating=False,
+        chosen=chosen,
+        requested=requested,
+        requested_is_participating=participating,
     )
 
 

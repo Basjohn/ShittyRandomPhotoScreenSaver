@@ -646,9 +646,11 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
         widgets_cfg = self._settings.get_widgets_map()
         default_widgets_cfg = get_default_settings()["widgets"]
+        from core.settings.monitor_routes import current_screen_identities
         restored_any = restore_all_widget_positions_to_application_defaults(
             widgets_cfg,
             default_widgets_config=default_widgets_cfg if isinstance(default_widgets_cfg, Mapping) else {},
+            screen_identities=current_screen_identities(),
         )
         if not restored_any:
             return
@@ -887,7 +889,46 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         widget = builder(self, host_layout) if descriptor.builder_module else builder()
         setattr(self, descriptor.container_attr_name, widget)
         host_layout.addWidget(widget)
+        self._wire_monitor_assignment_controls()
         self._subtab_content_built.add(subtab_id)
+
+    def _wire_monitor_assignment_controls(self) -> None:
+        """An explicit combo selection may reassign even the same display number.
+
+        Windows can renumber a surviving display. Unrelated Settings saves keep
+        the physical binding; user activation deliberately selects today's screen.
+        Controls own their connections and retire with their lazy section.
+        """
+        from core.feeds.config import FEED_WIDGET_IDS
+        from rendering.widget_descriptors import get_widget_runtime_descriptors, feed_settings_attr_stem
+        for descriptor in get_widget_runtime_descriptors():
+            # Monitor controls use the widget identity (FEEDS uses its shared
+            # attribute stem). Include non-stacking widgets such as volume OSD.
+            stem = (feed_settings_attr_stem(descriptor.widget_id)
+                    if descriptor.widget_id in FEED_WIDGET_IDS else descriptor.widget_id)
+            combo = getattr(self, f"{stem}_monitor_combo", None)
+            if combo is None or combo.property("physicalAssignmentWidgetId"):
+                continue
+            combo.setProperty("physicalAssignmentWidgetId", descriptor.widget_id)
+            combo.activated.connect(self._assign_widget_monitor)
+
+    def _assign_widget_monitor(self, _index: int) -> None:
+        from copy import deepcopy
+        from core.settings.monitor_routes import current_screen_identities
+        from rendering.widget_descriptors import route_widgets_to_single_monitor
+
+        combo = self.sender()
+        widget_id = combo.property("physicalAssignmentWidgetId")
+        route = combo.currentText().strip()
+        if not route.isdigit():
+            return  # ALL was already saved by the ordinary currentTextChanged path.
+        widgets = self._settings.get_widgets_map()
+        before = deepcopy(widgets)
+        route_widgets_to_single_monitor(
+            widgets, route, (widget_id,), screen_identities=current_screen_identities(),
+        )
+        if widgets != before:
+            self._settings.set_widgets_map(widgets)
 
     # ---- E2 capability SETUP subtab ----------------------------------------
 

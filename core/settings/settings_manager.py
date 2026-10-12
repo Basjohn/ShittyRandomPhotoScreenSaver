@@ -537,6 +537,15 @@ class SettingsManager(QObject):
         """Persist the canonical widgets root under the current lock."""
         normalized = self._normalize_widgets_mapping(value)
         widgets_dict = dict(normalized) if isinstance(normalized, Mapping) else {}
+        from core.settings.monitor_routes import (
+            BINDINGS_KEY, current_screen_identities, reconcile_monitor_bindings,
+        )
+        previous = self._settings.value('widgets', {})
+        widgets_dict[BINDINGS_KEY] = reconcile_monitor_bindings(
+            widgets_dict,
+            previous if isinstance(previous, Mapping) else {},
+            current_screen_identities(),
+        )
         self._settings.setValue('widgets', widgets_dict)
         return widgets_dict
 
@@ -1869,6 +1878,29 @@ class SettingsManager(QObject):
 
         value = self.get_section('widgets', {})
         return dict(value) if isinstance(value, Mapping) else {}
+
+    def ensure_widget_monitor_bindings(self) -> None:
+        """Capture legacy numeric assignments before the first runtime can hotplug.
+
+        Only changed metadata is written, through the normal ordered Settings
+        store; subsequent topology rebuilds preserve the saved identities.
+        """
+        from core.settings.monitor_routes import (
+            BINDINGS_KEY, current_screen_identities, reconcile_monitor_bindings,
+        )
+        screens = current_screen_identities()
+        if not screens:
+            return
+        with self._lock:
+            widgets = self.get_widgets_map()
+            bindings = reconcile_monitor_bindings(widgets, widgets, screens)
+            if widgets.get(BINDINGS_KEY, {}) == bindings:
+                return
+            widgets[BINDINGS_KEY] = bindings
+            self._settings.setValue('widgets', widgets)
+            self._invalidate_cache_for_key_locked('widgets')
+            self._settings.sync()
+        logger.info('[MONITOR_ROUTES] Bound %d numbered widget assignments to physical displays', len(bindings))
 
     def set_widgets_map(self, widgets: Mapping[str, Any], *, emit_change: bool = True) -> None:
         """Replace the widgets map with the given mapping.

@@ -42,6 +42,7 @@ def route_widgets_to_single_display(settings) -> bool:
     """
 
     from rendering.widget_descriptors import route_widgets_to_single_monitor
+    from core.settings.monitor_routes import current_screen_identities
 
     selected = settings.get("display.show_on_monitors")
     if not isinstance(selected, (list, tuple)) or len(selected) != 1:
@@ -50,7 +51,7 @@ def route_widgets_to_single_display(settings) -> bool:
     if not isinstance(widgets, Mapping):
         return False
     routed = deepcopy(dict(widgets))
-    route_widgets_to_single_monitor(routed, selected[0])
+    route_widgets_to_single_monitor(routed, selected[0], screen_identities=current_screen_identities())
     if routed == widgets:
         return False
     settings.set("widgets", routed)

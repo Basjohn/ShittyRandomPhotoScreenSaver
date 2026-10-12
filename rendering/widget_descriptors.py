@@ -53,6 +53,7 @@ from rendering.custom_layout_contract import (
     load_custom_layout_restore_map,
     write_custom_layout_map,
     remove_screen_layout_entry,
+    restore_custom_monitor_binding,
     set_custom_layout_restore_entry,
     write_custom_layout_restore_map,
 )
@@ -1519,19 +1520,28 @@ def widget_route_admits_screen(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
     screen_index: int,
+    *,
+    display_identity: str | None = None,
 ) -> bool:
     """Resolve one widget's effective monitor route and admit its destination."""
 
-    return monitor_route_admits_screen(
-        get_effective_monitor_value_for_widget(widget_id, widgets_config),
-        screen_index,
-    )
+    route = get_effective_monitor_value_for_widget(widget_id, widgets_config)
+    if display_identity is not None and isinstance(widgets_config, Mapping):
+        from core.settings.monitor_routes import bound_monitor_identity
+        from rendering.custom_layout_contract import normalize_screen_signature
+        section = get_effective_monitor_settings_key_for_widget(widget_id, widgets_config)
+        identity = bound_monitor_identity(widgets_config, section, route)
+        if identity is not None:
+            return identity == normalize_screen_signature(display_identity)
+    return monitor_route_admits_screen(route, screen_index)
 
 
 def widgets_routed_off_monitors(
     widgets_config: Mapping[str, Any] | None,
     widget_ids: Iterable[str],
     enabled_monitors: Iterable[int],
+    *,
+    screen_identities: tuple[str, ...] | None = None,
 ) -> tuple[str, ...]:
     """The widgets among ``widget_ids`` the saver would never show for their route alone.
 
@@ -1558,7 +1568,15 @@ def widgets_routed_off_monitors(
             route = get_effective_monitor_value_for_widget(widget_id, widgets)
         except (KeyError, ValueError):
             continue
-        if any(monitor_route_admits_screen(route, number - 1) for number in monitors):
+        if any(
+            widget_route_admits_screen(
+                widget_id, widgets, number - 1,
+                display_identity=(screen_identities[number - 1]
+                                  if screen_identities is not None and 0 < number <= len(screen_identities)
+                                  else None),
+            )
+            for number in monitors
+        ):
             continue
         stranded.append(widget_id)
     return tuple(stranded)
@@ -1568,6 +1586,8 @@ def route_widgets_to_single_monitor(
     widgets_config: Dict[str, Any],
     monitor: int | str,
     widget_ids: Iterable[str] | None = None,
+    *,
+    screen_identities: tuple[str, ...] | None = None,
 ) -> tuple[str, ...]:
     """Route every widget the saver could not show onto the one shown display.
 
@@ -1582,6 +1602,9 @@ def route_widgets_to_single_monitor(
 
     target = str(int(str(monitor).strip()))
     screen_index = int(target) - 1
+    target_identity = (screen_identities[screen_index]
+                       if screen_identities is not None and 0 <= screen_index < len(screen_identities)
+                       else None)
     only = None if widget_ids is None else frozenset(widget_ids)
     changed: list[str] = []
     for descriptor in get_widget_runtime_descriptors():
@@ -1593,13 +1616,31 @@ def route_widgets_to_single_monitor(
         except (KeyError, ValueError):
             continue  # no monitor route (not a routed widget)
         settings_key = get_effective_monitor_settings_key_for_widget(widget_id, widgets_config)
-        if settings_key in changed or monitor_route_admits_screen(current, screen_index):
+        if settings_key in changed or str(current).upper() == "ALL":
             continue
+        if target_identity is None:
+            if monitor_route_admits_screen(current, screen_index):
+                continue
+        else:
+            from core.settings.monitor_routes import BINDINGS_KEY, bound_monitor_identity
+            from rendering.custom_layout_contract import normalize_screen_signature
+            if (monitor_route_admits_screen(current, screen_index)
+                    and bound_monitor_identity(widgets_config, settings_key, current)
+                    == normalize_screen_signature(target_identity)):
+                continue
         section = widgets_config.get(settings_key)
         if not isinstance(section, dict):
             section = {}
             widgets_config[settings_key] = section
         section["monitor"] = target
+        if target_identity is not None:
+            bindings = widgets_config.get(BINDINGS_KEY, {})
+            bindings = dict(bindings) if isinstance(bindings, Mapping) else {}
+            bindings[settings_key] = {
+                "monitor": target,
+                "screen": normalize_screen_signature(target_identity),
+            }
+            widgets_config[BINDINGS_KEY] = bindings
         changed.append(settings_key)
 
     restore_map = load_custom_layout_restore_map(widgets_config)
@@ -1608,9 +1649,20 @@ def route_widgets_to_single_monitor(
         if only is not None and widget_id not in only:
             continue
         entry = get_custom_layout_restore_entry(restore_map, widget_id)
-        if entry is None or monitor_route_admits_screen(entry["monitor"], screen_index):
+        if entry is None or str(entry["monitor"]).upper() == "ALL":
             continue
-        set_custom_layout_restore_entry(restore_map, widget_id, position=entry["position"], monitor=target)
+        if target_identity is None:
+            if monitor_route_admits_screen(entry["monitor"], screen_index):
+                continue
+            set_custom_layout_restore_entry(restore_map, widget_id, position=entry["position"], monitor=target)
+        else:
+            if (monitor_route_admits_screen(entry["monitor"], screen_index)
+                    and entry.get("screen") == normalize_screen_signature(target_identity)):
+                continue
+            set_custom_layout_restore_entry(
+                restore_map, widget_id, position=entry["position"], monitor=target,
+                screen=target_identity,
+            )
         restore_changed = True
     if restore_changed:
         write_custom_layout_restore_map(widgets_config, restore_map)
@@ -2560,6 +2612,8 @@ def sync_custom_layout_restore_routes(
     a non-CUSTOM authored state, so CUSTOM saves preserve the last good route.
     """
 
+    from core.settings.monitor_routes import bound_monitor_identity
+
     restore_map = load_custom_layout_restore_map(widgets_config)
     for descriptor in get_layout_edit_runtime_descriptors():
         if not descriptor.supports_custom_position_slot:
@@ -2590,6 +2644,11 @@ def sync_custom_layout_restore_routes(
             descriptor.widget_id,
             position=current_position,
             monitor=current_monitor,
+            screen=bound_monitor_identity(
+                widgets_config,
+                get_effective_monitor_settings_key_for_widget(descriptor.widget_id, widgets_config),
+                current_monitor,
+            ),
         )
 
     write_custom_layout_restore_map(widgets_config, restore_map)
@@ -2660,6 +2719,8 @@ def restore_widget_family_to_authored_layout(
                 if monitor_section.get("monitor") != restore_entry["monitor"]:
                     restored_any = True
                 monitor_section["monitor"] = restore_entry["monitor"]
+                if restore_custom_monitor_binding(widgets_config, monitor_settings_key, restore_entry):
+                    restored_any = True
 
         for screen_signature, layouts in list(displays.items()):
             if not isinstance(layouts, dict):
@@ -2704,6 +2765,8 @@ def restore_widget_family_to_application_default_layout(
     widgets_config: Dict[str, Any],
     widget_id: str,
     default_widgets_config: Mapping[str, Any] | None = None,
+    *,
+    screen_identities: tuple[str, ...] | None = None,
 ) -> bool:
     """Restore one widget family to the current profile's canonical default route."""
 
@@ -2776,6 +2839,29 @@ def restore_widget_family_to_application_default_layout(
                 restored_any = True
                 monitor_section["monitor"] = default_monitor
 
+            # This is an explicit reset to today's numbered default, rather
+            # than a restore of a previous physical assignment. Rebind even
+            # when its numeric label happens to be unchanged after hotplug.
+            from core.settings.monitor_routes import BINDINGS_KEY, numbered_route
+            from rendering.custom_layout_contract import normalize_screen_signature
+            bindings = widgets_config.get(BINDINGS_KEY, {})
+            bindings = dict(bindings) if isinstance(bindings, Mapping) else {}
+            route = numbered_route(default_monitor)
+            replacement_binding = None
+            if (route is not None and screen_identities is not None
+                    and int(route) <= len(screen_identities)):
+                replacement_binding = {
+                    "monitor": route,
+                    "screen": normalize_screen_signature(screen_identities[int(route) - 1]),
+                }
+            if bindings.get(monitor_settings_key) != replacement_binding:
+                restored_any = True
+                if replacement_binding is None:
+                    bindings.pop(monitor_settings_key, None)
+                else:
+                    bindings[monitor_settings_key] = replacement_binding
+                widgets_config[BINDINGS_KEY] = bindings
+
         for screen_signature, layouts in list(displays.items()):
             if not isinstance(layouts, dict):
                 continue
@@ -2791,6 +2877,8 @@ def restore_widget_family_to_application_default_layout(
 def restore_all_widget_positions_to_application_defaults(
     widgets_config: Dict[str, Any],
     default_widgets_config: Mapping[str, Any] | None = None,
+    *,
+    screen_identities: tuple[str, ...] | None = None,
 ) -> bool:
     """Reset all widget families with movable routes to canonical app defaults."""
 
@@ -2814,6 +2902,7 @@ def restore_all_widget_positions_to_application_defaults(
                 widgets_config,
                 widget_id,
                 default_widgets_config=defaults_candidate,
+                screen_identities=screen_identities,
             )
             or restored_any
         )

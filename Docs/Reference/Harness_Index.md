@@ -421,7 +421,7 @@ Focused tests already guard:
 - effective transition Random pool filtering and final activation/hardware admission;
 - Widgets/Transitions `SETUP`, live lazy navigation and hidden-page save safety;
 - runtime widget factory creation filtered by family activation;
-- global-singleton Visualizer CUSTOM 30-second failover/reclaim generation/lifecycle rules.
+- physical widget assignment and strict single-owner Visualizer admission across monitor loss/return.
 
 When touching that foundation, route through current test ownership in `Docs/TestSuite.md`; common files
 include:
@@ -430,7 +430,9 @@ include:
 tests/test_widget_family_catalog.py
 tests/test_capability_activation.py
 tests/test_transition_distribution.py
-tests/test_visualizer_failover_reclaim.py
+tests/test_widget_monitor_bindings.py
+tests/test_qtquick_visualizer_admission.py
+tests/test_visualizer_owner_retirement.py
 ```
 
 This list is routing, not a frozen manifest. Resolve exact test functions and current existence from `tests/run_chunked.py` and the source tree before running a command.
@@ -516,7 +518,7 @@ Do not interpret startup/capture rows before intentional presentation as active-
 Do not infer continuous displayed FPS from sparse/non-occupancy GDI `DisplayedTime` rows.
 Use p95/p99/tails/severe gaps plus phase correlation when cadence evidence is actually needed.
 
-Current display-topology/Visualizer failover must be assessed against its active Quick coordinator and `Docs/Guardrails/Visualizer_Presentation.md`, not the retired pre-Quick R-26 grace implementation. If a real off/asleep/late-return symptom recurs, collect hardware evidence instead of assuming source inspection proves physical acceptance.
+Current display-topology/Visualizer admission must be assessed against its active Quick coordinator and `Docs/Guardrails/Visualizer_Presentation.md`, not the retired pre-Quick R-26 grace implementation. If a real off/asleep/late-return symptom recurs, collect hardware evidence instead of assuming source inspection proves physical acceptance.
 
 ## 10. Runtime diagnostics
 

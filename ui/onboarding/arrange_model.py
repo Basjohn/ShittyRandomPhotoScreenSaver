@@ -23,6 +23,7 @@ from PySide6.QtCore import QPoint, QRect
 
 from core.logging.logger import get_logger
 from core.settings.capability_activation import is_widget_family_effective
+from core.settings.monitor_routes import bound_monitor_identity
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     get_visualizer_presentation_policy,
@@ -45,6 +46,7 @@ from rendering.custom_layout_contract import (
     resolve_resize_edge_snap,
     resolve_uniform_scale_snap,
     remove_screen_layout_entry,
+    restore_custom_monitor_binding,
     should_transfer_rect_to_screen,
     resolve_snap_local_rect_for_edit,
     write_custom_layout_map,
@@ -78,6 +80,7 @@ from rendering.widget_descriptors import (
     WidgetRuntimeDescriptor,
     get_widget_runtime_descriptors,
     get_effective_monitor_value_for_widget,
+    get_effective_monitor_settings_key_for_widget,
     get_effective_position_settings_key_for_widget,
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
@@ -250,21 +253,29 @@ class ArrangeModel:
         return (clock_geometry_variant(self.widgets, descriptor.widget_id, display.identity),)
 
     def _routed_displays(self, descriptor: WidgetRuntimeDescriptor) -> tuple[ArrangeDisplay, ...]:
-        if descriptor.widget_id == "spotify_visualizer":
-            # The saver runs exactly one Visualizer: on its requested display when
-            # shown, otherwise (and for ALL) the first shown display. Never one per display.
-            requested = requested_visualizer_screen_index(
-                get_effective_monitor_value_for_widget(descriptor.widget_id, self.widgets)
+        route = get_effective_monitor_value_for_widget(descriptor.widget_id, self.widgets)
+        route_key = get_effective_monitor_settings_key_for_widget(descriptor.widget_id, self.widgets)
+        bound = bound_monitor_identity(self.widgets, route_key, route)
+        if bound is not None:
+            from rendering.custom_layout_contract import normalize_screen_signature
+
+            matches = tuple(
+                display for display in self.displays
+                if normalize_screen_signature(display.identity) == bound
             )
+            return matches if len(matches) == 1 else ()
+        if descriptor.widget_id == "spotify_visualizer":
+            # The saver admits one Visualizer only on its assigned display;
+            # ALL selects the first participating display.
+            requested = requested_visualizer_screen_index(route)
             participants = [
                 SimpleNamespace(screen_index=int(display.monitor_route) - 1, participating=True, display=display)
                 for display in self.displays if str(display.monitor_route).isdigit()
             ]
             chosen = resolve_quick_visualizer_owner_unit(requested, participants)
             return (chosen.display,) if chosen is not None else ()
-        section = self._route_section_for(descriptor)
-        route = str(section.get("monitor", "ALL")) if isinstance(section, Mapping) else "ALL"
-        if route.upper() == "ALL":
+        route = str(route)
+        if route.strip().upper() == "ALL":
             return self.displays
         return tuple(display for display in self.displays if display.monitor_route == route)
 
@@ -832,7 +843,22 @@ class ArrangeModel:
             self._refresh_projections()
             for item in anchored:
                 descriptor = self._descriptors_by_key[item.source_key]
-                rect, auto_scale = self._authored_placement(descriptor, self._display_map[item.source_key.display_identity])
+                routed = self._routed_displays(descriptor)
+                if not routed:
+                    # Reset can restore an authored assignment whose display
+                    # is currently off. Keep its settings and suppress the draft.
+                    item.removed = True
+                    continue
+                display = next(
+                    (display for display in routed if display.identity == item.source_key.display_identity),
+                    routed[0],
+                )
+                item.set_current_display(
+                    display.identity,
+                    monitor_route=get_effective_monitor_value_for_widget(descriptor.widget_id, self.widgets),
+                )
+                item.removed = False
+                rect, auto_scale = self._authored_placement(descriptor, display)
                 # The session's authored-size restore also drops any saved logical
                 # box, so a later move cannot write an old content extent back.
                 item.restore_authored_size(rect, size_payload=self._authored_payload(descriptor, rect, auto_scale), resize_scale=auto_scale)
@@ -980,4 +1006,9 @@ class ArrangeModel:
                     mon = widgets.setdefault(get_custom_persistence_monitor_settings_key_for_widget(key.widget_id), {})
                     if isinstance(pos, dict): pos["position"] = route["position"]
                     if isinstance(mon, dict): mon["monitor"] = route["monitor"]
+                    restore_custom_monitor_binding(
+                        widgets,
+                        get_custom_persistence_monitor_settings_key_for_widget(key.widget_id),
+                        route,
+                    )
         write_custom_layout_map(widgets, custom)

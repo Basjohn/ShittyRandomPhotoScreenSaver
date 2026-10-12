@@ -38,3 +38,19 @@ This physical run closes R-79. The same-signature `ApplicationActive` repair bra
 ## Closure bar
 
 **PASSED.** Automated wake/reconcile coverage is green and the installed dual-display power/wake case returned to one correctly bound full-screen Quick surface per admitted display.
+
+## Related rapid-toggle evidence — 2026-10-12
+
+`diagnosticmonitoroffonrapid.zip` proves a different same-signature edge: at 13:02:16 Qt added/removed an LG QScreen,
+the runtime recorded binding loss, and at 13:02:17 the coalesced reconciler returned no-op because monitor facts matched.
+The displaced runtime rejected transition admission at 13:02:28 and stayed paused until MSI returned at 13:02:30.
+Identical physical facts do not restore a lost QScreen object binding. Reconciliation now sends any live displaced
+unit through the existing generation replacement even with an unchanged signature; healthy unchanged geometry still
+uses the bounded re-anchor path. Focused tests cover both coalesced replacement and ApplicationActive with binding loss.
+
+The same capture exposes index-based widget reassignment after MSI removal and the former Visualizer 30-second
+relocation. The current assignment policy is in `Docs/Contracts.md` → Geometry / CUSTOM, not the historical fallback
+policy. All six recorded replacements completed barriers/reveal; explicit exit at 13:03:53 completed orderly at
+13:03:54. Captured Interaction Mode was enabled, so mouse-motion exit was intentionally disabled. These facts do not
+establish a general wake-exit defect. New physical acceptance remains in `Current_Plan.md` §1B; the earlier closure
+above applies only to its September evidence.

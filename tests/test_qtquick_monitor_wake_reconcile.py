@@ -212,6 +212,60 @@ def test_application_resume_with_same_signature_reapplies_bound_quick_geometry(m
     manager.disconnect_monitor_detection()
 
 
+def test_same_signature_screen_replacement_rebuilds_displaced_runtime(monkeypatch):
+    """A coalesced wake must replace closed input/render owners despite matching facts."""
+
+    original = _Screen("LG", 0, 2560, 1440)
+    manager, app, scheduler = _manager(monkeypatch, [original])
+    unit = _Unit()
+    monkeypatch.setattr(display_module, "QuickDisplayUnit", _Unit)
+    manager.displays = [unit]
+    changes: list[int] = []
+    manager.monitors_changed.connect(changes.append)
+    original_signature = manager._screen_signature
+
+    # Windows re-enumerates the same physical monitor with a new QScreen. The
+    # first add/remove edge owns the callback; binding loss arrives later in
+    # that burst and must survive its coalescing into the unchanged signature.
+    replacement = _Screen("LG", 0, 2560, 1440)
+    app.screens = [replacement]
+    app.primary = replacement
+    app.screenAdded.emit(replacement)
+    app.screenRemoved.emit(original)
+    unit.runtime.binding_loss = object()
+    manager._schedule_monitor_reconcile("quick_binding_loss")
+    assert len(scheduler.calls) == 1
+
+    scheduler.run_next()
+
+    assert manager._screen_signature == original_signature
+    assert changes == [1]
+    assert unit.runtime.window.revalidations == 0
+    assert unit.reanchors == 0
+    manager.disconnect_monitor_detection()
+
+
+def test_same_signature_resume_rebuilds_displaced_runtime(monkeypatch):
+    """Resume revalidation cannot revive a runtime whose binding loss closed input."""
+
+    screen = _Screen("LG", 0, 2560, 1440)
+    manager, app, scheduler = _manager(monkeypatch, [screen])
+    unit = _Unit()
+    unit.runtime.binding_loss = object()
+    monkeypatch.setattr(display_module, "QuickDisplayUnit", _Unit)
+    manager.displays = [unit]
+    changes: list[int] = []
+    manager.monitors_changed.connect(changes.append)
+
+    app.applicationStateChanged.emit(Qt.ApplicationState.ApplicationActive)
+    scheduler.run_next()
+
+    assert changes == [1]
+    assert unit.runtime.window.revalidations == 0
+    assert unit.reanchors == 0
+    manager.disconnect_monitor_detection()
+
+
 def test_inactive_application_state_does_not_schedule_reconcile(monkeypatch):
     """Only ApplicationActive is a resume/recovery edge."""
 

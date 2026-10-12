@@ -63,7 +63,7 @@ _DISPLAY_ROOTS = frozenset({"display", "input", "accessibility", "timing", "scen
 _THEME_UI_KEYS = frozenset({"settings_theme_selection"})
 # Where widgets sit, not how they look or behave: per-widget placement fields,
 # per-display clock faces, CUSTOM layouts and the numbered layout slots.
-_GEOMETRY_WIDGET_SECTIONS = frozenset({"custom_layout", "custom_layout_restore", "layout_slots"})
+_GEOMETRY_WIDGET_SECTIONS = frozenset({"custom_layout", "custom_layout_restore", "layout_slots", "monitor_bindings"})
 _GEOMETRY_WIDGET_FIELDS = frozenset({"position", "monitor", "margin", "width", "height", "display_mode_overrides"})
 
 
@@ -206,6 +206,7 @@ def _project_import_state(
                 state["visualizer_custom_presets"] = (
                     normalize_visualizer_custom_snapshot_cache(existing_cache)
                 )
+    previous_widgets = deepcopy(state.get("widgets", {}))
 
     for section_key, section_value in normalized_root.items():
         section_key = str(section_key)
@@ -289,6 +290,27 @@ def _project_import_state(
             continue
         state[canonical_key] = mgr._coerce_import_value(canonical_key, section_value)
 
+    widgets_import = normalized_root.get("widgets")
+    if isinstance(widgets_import, Mapping) and (
+        "monitor_bindings" in widgets_import
+        or any(isinstance(section, Mapping) and "monitor" in section
+               for section in widgets_import.values())
+    ):
+        # replace_all bypasses the ordinary widgets-write seam. Apply the same
+        # assignment contract here, including preview, while style-only imports
+        # leave geometry metadata untouched.
+        from core.settings.monitor_routes import (
+            BINDINGS_KEY, current_screen_identities, reconcile_monitor_bindings,
+        )
+        widgets = state.get("widgets", {})
+        if isinstance(widgets, Mapping):
+            widgets = dict(widgets)
+            widgets[BINDINGS_KEY] = reconcile_monitor_bindings(
+                widgets,
+                previous_widgets if isinstance(previous_widgets, Mapping) else {},
+                current_screen_identities(),
+            )
+            state["widgets"] = widgets
     return state
 
 

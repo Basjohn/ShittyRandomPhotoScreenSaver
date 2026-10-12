@@ -323,6 +323,7 @@ class OrdinaryFamilyPresentationBinder:
                     widget_id,
                     config,
                     self._screen_index,
+                    display_identity=self._display_identity,
                 ):
                     logger.debug(
                         "[FAMILY_BINDER] Monitor route excludes %s from screen %d",

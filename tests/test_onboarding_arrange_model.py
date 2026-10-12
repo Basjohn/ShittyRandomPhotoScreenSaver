@@ -523,3 +523,92 @@ def test_apply_merges_onto_current_settings_instead_of_a_stale_snapshot() -> Non
     assert result["layout_slots"] == current["layout_slots"]
     assert result["weather"]["position"] == "Custom"   # the draft's placement landed
     assert "screen:test" in result["custom_layout"]["displays"]
+
+
+@pytest.mark.parametrize('widget_id,position,binding_key', [
+    ('weather', 'Top Right', 'weather'),
+    ('spotify_visualizer', 'Custom', 'spotify_visualizer'),
+    ('spotify_visualizer', 'Center', 'media'),
+])
+def test_arrange_assignment_tracks_physical_display_after_renumbering(widget_id, position, binding_key):
+    widgets = _widgets() if widget_id == 'weather' else _only_default_widget(widget_id)
+    widgets[widget_id]['position'] = position
+    widgets[binding_key]['monitor'] = '2'
+    widgets['monitor_bindings'] = {binding_key: {'monitor': '2', 'screen': 'screen:test'}}
+    displays = _two_displays()  # Assigned screen:test now carries the number 1.
+    model = ArrangeModel(widgets, displays)
+    descriptor = model.descriptors[widget_id]
+    assert model._routed_displays(descriptor) == (displays[0],)
+    assert all(item.current_display_identity == 'screen:test'
+               for item in model.session.items() if item.model_identity == widget_id)
+
+    absent = ArrangeModel(widgets, (displays[1],))
+    assert absent._routed_displays(absent.descriptors[widget_id]) == ()
+    assert not any(item.model_identity == widget_id for item in absent.session.items())
+    assert absent.apply() == widgets
+
+
+@pytest.mark.parametrize('widget_id', ['weather', 'spotify_visualizer'])
+def test_arrange_all_keeps_product_cardinality(widget_id):
+    widgets = _widgets() if widget_id == 'weather' else _only_default_widget(widget_id)
+    widgets[widget_id]['monitor'] = 'ALL'
+    widgets[widget_id]['position'] = 'Custom'
+    model = ArrangeModel(widgets, _two_displays())
+    routed = model._routed_displays(model.descriptors[widget_id])
+    assert routed == (_two_displays()[:1] if widget_id == 'spotify_visualizer' else _two_displays())
+
+
+def test_explicit_transfer_rebinds_identity_when_monitor_number_is_unchanged():
+    widgets = _widgets()
+    widgets['weather']['monitor'] = '2'
+    widgets['monitor_bindings'] = {'weather': {'monitor': '2', 'screen': 'screen:test'}}
+    model = ArrangeModel(widgets, _two_displays())
+    item = model.session.items()[0]
+    proposed = QRect(1050, 42, 300, 150)
+    model.move(item.source_key, proposed, cursor_global=proposed.center())
+    assert model.item(item.source_key).current_display_identity == 'screen:two'
+    result = model.apply()
+    assert result['weather']['monitor'] == '2'
+    assert result['monitor_bindings']['weather'] == {'monitor': '2', 'screen': 'screen:two'}
+    reloaded = ArrangeModel(result, _two_displays())
+    assert reloaded._routed_displays(reloaded.descriptors['weather']) == (_two_displays()[1],)
+
+
+def test_arrange_reset_restores_original_physical_assignment_after_same_number_transfer():
+    widgets = _widgets()
+    widgets['weather']['monitor'] = '2'
+    widgets['monitor_bindings'] = {'weather': {'monitor': '2', 'screen': 'screen:test'}}
+    model = ArrangeModel(widgets, _two_displays())
+    item = model.session.items()[0]
+    proposed = QRect(1050, 42, 300, 150)
+    model.move(item.source_key, proposed, cursor_global=proposed.center())
+    transferred = model.apply()
+    assert transferred['custom_layout_restore']['widgets']['weather']['screen'] == 'screen:test'
+    reset = ArrangeModel(transferred, _two_displays())
+    custom_item = reset.session.items()[0]
+    assert custom_item.current_display_identity == 'screen:two'
+    reset.reset(custom_item.source_key)
+    assert reset.item(custom_item.source_key).current_display_identity == 'screen:test'
+    restored = reset.apply()
+    assert restored['weather']['position'] == 'Top Right'
+    assert restored['weather']['monitor'] == '2'
+    assert restored['monitor_bindings']['weather'] == {'monitor': '2', 'screen': 'screen:test'}
+    assert ArrangeModel(restored, _two_displays()).session.items()[0].current_display_identity == 'screen:test'
+
+
+def test_arrange_reset_suppresses_original_authored_display_while_it_is_off():
+    widgets = _widgets()
+    widgets['weather']['monitor'] = '2'
+    widgets['monitor_bindings'] = {'weather': {'monitor': '2', 'screen': 'screen:test'}}
+    model = ArrangeModel(widgets, _two_displays())
+    item = model.session.items()[0]
+    model.move(item.source_key, QRect(1050, 42, 300, 150), cursor_global=QPoint(1200, 100))
+    transferred = model.apply()
+    reset = ArrangeModel(transferred, (_two_displays()[1],))
+    custom_item = reset.session.items()[0]
+    reset.reset(custom_item.source_key)
+    assert reset.item(custom_item.source_key).removed is True
+    restored = reset.apply()
+    assert restored['weather']['enabled'] is True
+    assert restored['monitor_bindings']['weather']['screen'] == 'screen:test'
+    assert ArrangeModel(restored, (_two_displays()[1],)).session.items() == ()
