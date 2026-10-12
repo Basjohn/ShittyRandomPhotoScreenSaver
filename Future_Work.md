@@ -40,7 +40,7 @@ Dissolve, VHS Distortion, Edge Bloom Reveal, Liquid Lens, Membrane Turnover, Sur
 Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than this backlog.
 
 - **Volumetric music chamber** — bounded fog volume, light shafts and spectrum-driven emitters.
-- **Audio aurora / ribbon volume** — translucent ribbons with OIT, glow and slow logical-history advection.
+- **Audio aurora / ribbon volume** — translucent ribbons with OIT, glow and slow logical-history advection. - Generate mock for promotion possibility
 - **Photo fracture portal** — depth-bearing source shell around a destination-space portal.
 - **Voxel morph field** — deterministic compute/SSBO rearrangement between shapes/topologies, distinct from Voxel Sphere.
 - **Reactive Liquid / Audio Melt Pool** — bounded 2D/2.5D height+velocity field or deformable sheet; do not restart the rejected
