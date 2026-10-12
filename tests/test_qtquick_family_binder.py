@@ -127,6 +127,27 @@ def test_binder_routes_each_enabled_instance_to_its_effective_monitor(qt_app) ->
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_binder_uses_physical_assignment_after_first_monitor_disappears(qt_app) -> None:
+    runtime, factory = _make_runtime(qt_app, 189, screen_index=0)
+    config = _widgets_config(
+        clock={"enabled": True, "monitor": "1"},
+        clock2={"enabled": True, "monitor": "2"},
+        monitor_bindings={
+            "clock": {"monitor": "1", "screen": "screen:missing"},
+            "clock2": {"monitor": "2", "screen": "screen:survivor"},
+        },
+    )
+    try:
+        binder = _binder(runtime, adapters=(ClockFamilyAdapter(),), display_identity="screen:survivor")
+        assert binder.bind(config) == ("clock2",)
+        assert runtime.scene_controller.ordinary_widget_host.model_identities() == ("clock2",)
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_binder_mid_generation_retirement_drops_media_service_group_without_qt() -> None:
     class _Presentation:
         def __init__(self) -> None:

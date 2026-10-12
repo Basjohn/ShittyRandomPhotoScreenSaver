@@ -91,9 +91,10 @@ distinct high-volume domain has a coherent correlation workflow.
 `[VIS_ROUTING]` is a bounded main-sequence INFO record emitted once when a `DisplayManager`
 generation attempts to admit the single Visualizer. It records the persisted Visualizer/Media route,
 CUSTOM decision, canonical effective monitor, requested screen, participant/binding-loss
-set, current failover state, chosen unit and construction result/reject reason. It is not a
-per-frame stream. A pending-grace result describes that initial decision; correlate it with
-the existing `[VIS_FAILOVER]` lifecycle messages for later fallback/reclaim outcomes.
+set, chosen unit and construction result/reject reason. It is not a per-frame stream. An absent
+assigned display is rejected until return; no delayed failover runs. `[MONITOR_ROUTES]` records
+initial physical binding migration. Topology reconciliation includes `binding_loss_screens`:
+lost QScreen ownership requires replacement even if the replacement screen reports identical facts.
 
 ## Rotation and Retention
 

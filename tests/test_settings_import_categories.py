@@ -78,6 +78,47 @@ def test_credentials_never_travel_in_a_category_import(tmp_path, settings_manage
     assert "api_key" not in (settings_manager.get("widgets.steam") or {})
 
 
+def test_geometry_import_reconciles_changed_route_before_runtime_and_preserves_saved_identity(
+        tmp_path, settings_manager, monkeypatch):
+    import core.settings.monitor_routes as routes
+
+    monkeypatch.setattr(routes, "current_screen_identities", lambda: ("serial:MSI", "serial:LG"))
+    settings_manager.set("widgets.clock.monitor", "1")
+    path = _snapshot(tmp_path, settings_manager)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    widgets = payload["snapshot"]["widgets"]
+    widgets["clock"]["monitor"] = "2"
+    # The previous binding accompanies a changed numeric route and must be
+    # reconciled at import rather than waiting for a saver runtime to start.
+    widgets["monitor_bindings"]["clock"] = {"monitor": "1", "screen": "serial:MSI"}
+    widgets["weather"]["monitor"] = "1"
+    widgets["monitor_bindings"]["weather"] = {"monitor": "1", "screen": "serial:REMOTE"}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    preview = settings_manager.preview_import_from_sst(str(path))
+    assert preview["widgets"][1]["monitor_bindings"]["clock"] == {
+        "monitor": "2", "screen": "serial:LG",
+    }
+    assert settings_manager.import_from_sst(str(path), categories=("geometry",))
+    bindings = settings_manager.get("widgets.monitor_bindings")
+    assert bindings["clock"] == {"monitor": "2", "screen": "serial:LG"}
+    assert bindings["weather"] == {"monitor": "1", "screen": "serial:REMOTE"}
+
+
+def test_style_import_does_not_capture_or_reassign_geometry_metadata(tmp_path, settings_manager, monkeypatch):
+    import core.settings.monitor_routes as routes
+
+    monkeypatch.setattr(routes, "current_screen_identities", lambda: ())
+    settings_manager.set("widgets.clock.monitor", "1")
+    settings_manager.set("widgets.monitor_bindings", {})
+    before = settings_manager.get("widgets.monitor_bindings")
+    path = _snapshot(tmp_path, settings_manager)
+    monkeypatch.setattr(routes, "current_screen_identities", lambda: ("serial:LG",))
+    assert settings_manager.import_from_sst(str(path), categories=("widgets",))
+    assert settings_manager.get("widgets.monitor_bindings") == before
+    assert settings_manager.get("widgets.clock.font_size") == 111
+
+
 def test_chooser_all_settings_toggles_every_available_category(qapp):
     from ui.settings_import import ImportCategoryChooser
     chooser = ImportCategoryChooser(("display", "widgets", "misc"))

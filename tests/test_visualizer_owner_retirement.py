@@ -1,8 +1,8 @@
-"""DisplayManager adapter retirement must detach both visualizer owner authorities."""
+"""DisplayManager CUSTOM Edit retirement must detach both visualizer owner authorities."""
 
 from __future__ import annotations
 
-from engine.display_manager import _QuickVisualizerFailoverTopology
+from engine.display_manager import DisplayManager
 
 
 class _Owner:
@@ -66,10 +66,14 @@ class _Display:
 
 class _Manager:
     def __init__(self, display: _Display, owner: _Owner) -> None:
+        self._retired = False
         self._quick_visualizer_unit = display
         self._quick_visualizer_owner = owner
         self.disconnect_calls = 0
         self.release_calls = 0
+
+    def _refresh_all_quick_context_menus(self) -> None:
+        pass
 
     def _disconnect_quick_visualizer_media_route(self) -> None:
         self.disconnect_calls += 1
@@ -81,21 +85,12 @@ class _Manager:
         self._quick_visualizer_owner = None
 
 
-def test_adapter_retires_before_detaching_manager_and_display_unit_owner():
+def test_edit_disable_retires_and_detaches_both_owner_authorities():
     owner = _Owner()
     display = _Display(owner)
     manager = _Manager(display, owner)
-    topology = _QuickVisualizerFailoverTopology(manager, [display])
-
-    assert topology.cleanup_owner(display) is True
+    assert DisplayManager._commit_quick_visualizer_presence(manager, False) is True
     assert owner.retire_calls == 1
-    # Retirement confirmation alone must not strand either authority. The
-    # neutral failover lifecycle calls detach_owner only after this succeeds.
-    assert manager._quick_visualizer_owner is owner
-    assert manager._quick_visualizer_unit is display
-    assert display.visualizer_owner is owner
-
-    topology.detach_owner(display)
     assert display.visualizer_owner is None
     assert display.detach_calls == 1
     assert manager._quick_visualizer_owner is None
@@ -104,16 +99,30 @@ def test_adapter_retires_before_detaching_manager_and_display_unit_owner():
     assert display.runtime.scene_controller.discard_calls == 1
 
 
-def test_adapter_keeps_owner_attached_when_logical_retirement_does_not_join():
+def test_edit_disable_keeps_owner_attached_when_logical_retirement_does_not_join():
     owner = _Owner(joins=False)
     display = _Display(owner)
     manager = _Manager(display, owner)
-    topology = _QuickVisualizerFailoverTopology(manager, [display])
-
-    assert topology.cleanup_owner(display) is False
+    assert DisplayManager._commit_quick_visualizer_presence(manager, False) is False
     assert owner.retire_calls == 1
     assert manager._quick_visualizer_owner is owner
     assert manager._quick_visualizer_unit is display
     assert display.visualizer_owner is owner
     assert manager.release_calls == 0
     assert display.detach_calls == 0
+
+
+def test_edit_disable_retirement_exception_preserves_owner_for_retry():
+    owner = _Owner()
+    display = _Display(owner)
+    manager = _Manager(display, owner)
+    def raises():
+        raise RuntimeError('failed join')
+    owner.retire = raises
+    assert DisplayManager._commit_quick_visualizer_presence(manager, False) is False
+    assert manager._quick_visualizer_owner is owner
+    assert display.visualizer_owner is owner
+    owner.retire = lambda: setattr(owner, 'is_retired', True)
+    assert DisplayManager._commit_quick_visualizer_presence(manager, False) is True
+    assert manager._quick_visualizer_owner is None
+    assert display.visualizer_owner is None

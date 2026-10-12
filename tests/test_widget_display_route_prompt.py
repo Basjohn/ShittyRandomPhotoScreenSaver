@@ -62,6 +62,63 @@ def test_switching_moves_only_the_named_widgets():
     assert widgets["clock"]["monitor"] == "1" and widgets["weather"]["monitor"] == "2"
 
 
+def test_physical_routes_follow_their_display_after_indices_shift():
+    widgets = _widgets(clock="1", weather="2")
+    widgets["monitor_bindings"] = {
+        "clock": {"monitor": "1", "screen": "serial:MSI"},
+        "weather": {"monitor": "2", "screen": "serial:LG"},
+    }
+    assert widgets_routed_off_monitors(
+        widgets, ("clock", "weather"), {1}, screen_identities=("serial:LG",)
+    ) == ("clock",)
+
+
+def test_explicit_switch_rebinds_same_number_and_keeps_other_assignments():
+    widgets = _widgets(clock="1", weather="2", clock2="ALL")
+    widgets["monitor_bindings"] = {
+        "clock": {"monitor": "1", "screen": "serial:MSI"},
+        "weather": {"monitor": "2", "screen": "serial:LG"},
+    }
+    changed = route_widgets_to_single_monitor(
+        widgets, 1, ("clock", "clock2"), screen_identities=("serial:LG",)
+    )
+    assert changed == ("clock",)
+    assert widgets["clock"]["monitor"] == "1"
+    assert widgets["monitor_bindings"]["clock"] == {"monitor": "1", "screen": "serial:LG"}
+    assert widgets["monitor_bindings"]["weather"] == {"monitor": "2", "screen": "serial:LG"}
+    assert widgets["clock2"]["monitor"] == "ALL"
+    assert route_widgets_to_single_monitor(
+        widgets, 1, ("clock",), screen_identities=("serial:LG",)
+    ) == ()
+
+
+def test_explicit_switch_captures_a_numbered_route_without_metadata():
+    widgets = _widgets(clock="1")
+    assert route_widgets_to_single_monitor(
+        widgets, 1, ("clock",), screen_identities=("serial:LG",)
+    ) == ("clock",)
+    assert widgets["monitor_bindings"]["clock"] == {"monitor": "1", "screen": "serial:LG"}
+
+
+def test_explicit_switch_updates_authored_restore_identity_even_when_number_matches():
+    from rendering.custom_layout_contract import (
+        load_custom_layout_restore_map, get_custom_layout_restore_entry,
+        set_custom_layout_restore_entry, write_custom_layout_restore_map,
+    )
+
+    widgets = _widgets(clock="1")
+    widgets["monitor_bindings"] = {"clock": {"monitor": "1", "screen": "serial:MSI"}}
+    restore = load_custom_layout_restore_map(widgets)
+    set_custom_layout_restore_entry(
+        restore, "clock", position="Top Right", monitor="1", screen="serial:MSI",
+    )
+    write_custom_layout_restore_map(widgets, restore)
+    route_widgets_to_single_monitor(widgets, 1, ("clock",), screen_identities=("serial:LG",))
+    assert get_custom_layout_restore_entry(load_custom_layout_restore_map(widgets), "clock") == {
+        "position": "Top Right", "monitor": "1", "screen": "serial:LG",
+    }
+
+
 class _Settings:
     def __init__(self, show_on, **routes):
         self.values = {"widgets": _widgets(**routes), "display": {"show_on_monitors": show_on}}
@@ -125,6 +182,28 @@ def test_nothing_is_asked_when_every_widget_can_show(monkeypatch, two_displays):
     for settings in (_Settings("ALL", clock="2"), _Settings([1, 2], clock="2"), _Settings([2], clock="ALL")):
         assert DisplayRouteLeaveGuard(settings).resolve(None, ("clock", "clock2", "clock3")) is True
     assert asked == []
+
+
+def test_guard_switches_absent_physical_assignment_even_with_same_display_number(monkeypatch):
+    import ui.widget_display_routes as routes
+
+    monkeypatch.setattr(routes.QGuiApplication, "screens", staticmethod(lambda: [object()]))
+    monkeypatch.setattr(routes, "current_screen_identities", lambda: ("serial:LG",))
+    settings = _Settings([1], clock="1", weather="2")
+    settings.values["widgets"]["monitor_bindings"] = {
+        "clock": {"monitor": "1", "screen": "serial:MSI"},
+        "weather": {"monitor": "2", "screen": "serial:LG"},
+    }
+    asked = []
+    _answer(monkeypatch, ["switch"], asked)
+    guard = routes.DisplayRouteLeaveGuard(settings)
+    # The surviving LG widget is already visible despite retaining its old number.
+    assert guard.resolve(None, ("weather",)) is True and asked == []
+    assert guard.resolve(None, ("clock",)) is True and len(asked) == 1
+    assert settings.values["widgets"]["monitor_bindings"]["clock"] == {
+        "monitor": "1", "screen": "serial:LG",
+    }
+    assert guard.resolve(None, ("clock",)) is True and len(asked) == 1
 
 
 @pytest.fixture

@@ -54,6 +54,23 @@ R154 lifecycle (`test_qtquick_display_unit`, `test_runtime_destruction`, `test_t
 - [ ] **CROSS-DISPLAY MEDIA SHORTCUTS (R155):** focused test `test_media_shortcuts_cross_displays_once_and_ignore_retired_owners` is green. Only a quick physical check with the Media widget on the *other* display remains; do not start a new build solely for this gate.
 - [ ] **Scope restriction:** The 90 Hz versus 60 Hz observation remains expressly **off limits**. With R168 focused tests passed and the separate Dev Curve floor explicitly still open, proceed to the shared 3D/transition tranche of §0/§2/§4; do not revive old runtime-performance investigations to delay it.
 
+## 1B. Monitor power/wake and physical widget assignment | Awaiting Validation
+
+- [ ] **Operator physical validation:** Repeat monitor-off/return and rapid toggles on the next operator-built product.
+  Check either display disappearing, a single-display interval longer than 30 seconds, reversed enumeration and return:
+  only widgets assigned to surviving displays remain; absent widgets return with their original CUSTOM geometry.
+  Check Settings explicit reassignment, Arrange/Edit transfer and Reset with one display absent. Source regressions
+  cover identity-bound admission, strict Visualizer admission and same-signature QScreen binding-loss replacement;
+  installed Windows/Qt power behavior remains unclaimed. Contract: `Docs/Contracts.md` → Geometry / CUSTOM.
+- [ ] **Awaiting Logs only if wake-exit persistence recurs:** Record whether Interaction Mode is enabled and the exact
+  input used to exit. `diagnosticmonitoroffonrapid.zip` shows Interaction Mode enabled, six completed replacements and
+  a clean explicit exit; it does not prove ordinary saver exit failure. The separate 13:02:16–13:02:30 displaced-runtime
+  stall is documented in R-79 and repaired at the existing topology reconciler.
+- [ ] **Separate display-selection follow-up:** `display.show_on_monitors` itself still uses current numeric indices
+  and canonical repair when all selected indices are unavailable (`core/settings/display_selection.py`). Extend
+  physical assignment to the saver-wide display selection and retire that unavailable-selection substitution,
+  with focused Display Settings/MC admission tests. Widget assignments are now independent of this selection.
+
 ## 2. New transitions | implementation queue
 
 These transition concepts are promoted into the active roadmap rather than left as distant-future backlog. **Every entry

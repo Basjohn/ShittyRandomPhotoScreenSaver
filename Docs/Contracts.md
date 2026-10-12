@@ -526,6 +526,18 @@ defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere
 
 ## Geometry / CUSTOM
 
+**Physical monitor assignments:** `widgets.monitor_bindings` stores each numbered route's owning settings section
+as `{monitor: <authoring number>, screen: <canonical CUSTOM display signature>}`. Settings owns this metadata in the
+same transaction as the widget route; it survives generation replacement and process restart. Before legacy numeric
+routes first admit a runtime, Settings binds them once to current screen identity (a unique saved CUSTOM home can
+identify an already absent display). Unchanged assignments never learn a replacement identity from hotplug. Runtime,
+Arrange and Settings route warnings consume the descriptor's effective route owner, including Media-following Visualizer.
+Absent assigned displays admit no widget owner and no temporary geometry on a surviving screen. ALL remains explicit
+multi-display intent; Visualizer ALL still has one owner. Explicit Settings selection, Arrange/Edit transfer, import and
+layout reset/slot replay update or restore physical assignment at their existing mutation boundaries. Authored restore
+entries retain optional `screen` with position/monitor so Reset can return to an absent original display. No new timer,
+per-frame work, provider, layout store or topology owner is permitted.
+
 Non-CUSTOM stacking first attempts full authored sizes, then bounded whole-card
 shrink/re-stack trials down to the shared 40% whole-card floor only when placement remains unresolved.
 The bounded search samples 5% bands and refines the first fitting band in 1% steps;

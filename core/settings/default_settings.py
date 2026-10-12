@@ -545,6 +545,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                         'show_timezone': True,
                         'timezone': 'local'},
              'custom_layout': {'displays': {}, 'version': 2},
+             'monitor_bindings': {},
              'custom_layout_restore': {'version': 1, 'widgets': {}},
              'family_activation': {'clocks': True,
                                    'feeds': False,

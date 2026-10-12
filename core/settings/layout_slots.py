@@ -13,7 +13,7 @@ LAYOUT_SLOT_PAYLOAD_VERSION = 2
 LAYOUT_SLOTS_SETTINGS_KEY = "layout_slots"
 VALID_LAYOUT_SLOT_IDS = tuple(str(value) for value in range(1, 10)) + ("0",)
 
-_ROOT_LAYOUT_KEYS = ("custom_layout", "custom_layout_restore")
+_ROOT_LAYOUT_KEYS = ("custom_layout", "custom_layout_restore", "monitor_bindings")
 _CLOCK_WIDGET_IDS = ("clock", "clock2", "clock3")
 _CLOCK_DISPLAY_MODES = frozenset({"analog", "digital"})
 

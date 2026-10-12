@@ -17,6 +17,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
 from core.settings.display_selection import describe_monitors, enabled_monitor_numbers
+from core.settings.monitor_routes import current_screen_identities, bound_monitor_identity
 from core.settings.widget_family_catalog import get_widget_member_label
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
@@ -38,7 +39,7 @@ class DisplayRouteLeaveGuard:
 
     def __init__(self, settings) -> None:
         self._settings = settings
-        self._trusted: set[tuple[str, str, frozenset[int]]] = set()
+        self._trusted: set[tuple[str, str, str | None, frozenset[int]]] = set()
 
     def resolve(
         self,
@@ -62,23 +63,30 @@ class DisplayRouteLeaveGuard:
                                           len(QGuiApplication.screens()))
         if not enabled:
             return True      # no display at all: nothing to switch to, and not this page's concern
+        screens = current_screen_identities()
         routes = {}
-        for widget_id in widgets_routed_off_monitors(widgets, widget_ids, enabled):
+        identities = {}
+        from rendering.widget_descriptors import get_effective_monitor_settings_key_for_widget
+        for widget_id in widgets_routed_off_monitors(
+                widgets, widget_ids, enabled, screen_identities=screens):
             route = get_effective_monitor_value_for_widget(widget_id, widgets)
-            if (widget_id, route, enabled) not in self._trusted:
+            identity = bound_monitor_identity(
+                widgets, get_effective_monitor_settings_key_for_widget(widget_id, widgets), route)
+            if (widget_id, route, identity, enabled) not in self._trusted:
                 routes[widget_id] = route
+                identities[widget_id] = identity
         if not routes:
             return True
         target = min(enabled)
         names = [get_widget_member_label(widget_id) for widget_id in routes]
         off_numbers = {int(route) for route in routes.values()}
         verb, them = ("is", "it") if len(names) == 1 else ("are", "them")
-        isnt = "isn't" if len(off_numbers) == 1 else "aren't"
         popup = StyledPopup(
             parent.window() if parent is not None else None,
-            "Widget On A Disabled Display",
-            f"{_join(names)} {verb} set to show only on {describe_monitors(off_numbers)}, which {isnt} enabled "
-            f"in Display settings, so the saver won't show {them}. Switch For Me moves {them} to Display {target}.",
+            "Widget On An Unavailable Display",
+            f"{_join(names)} {verb} assigned to {describe_monitors(off_numbers)}, whose assigned display "
+            f"is unavailable or isn't selected in Display settings, so the saver won't show {them}. "
+            f"Switch For Me moves {them} to the current Display {target}.",
             icon_type="warning",
             buttons=[("Switch For Me", SWITCH), ("Trust Me Bro", TRUST)],
             default_button_index=0,
@@ -87,12 +95,13 @@ class DisplayRouteLeaveGuard:
         choice = popup.result_value
         if choice == SWITCH:
             routed = deepcopy(dict(widgets))
-            route_widgets_to_single_monitor(routed, target, routes)
+            route_widgets_to_single_monitor(routed, target, routes, screen_identities=screens)
             self._settings.set("widgets", routed)
             if on_switched is not None:
                 on_switched()
             return True
         if choice == TRUST:
-            self._trusted.update((widget_id, route, enabled) for widget_id, route in routes.items())
+            self._trusted.update((widget_id, route, identities[widget_id], enabled)
+                                 for widget_id, route in routes.items())
             return True
         return False

@@ -610,8 +610,10 @@ one Visualizer owner, controller, BeatEngine/source, logical-runtime slot, retai
 Outside CUSTOM, the Visualizer follows Media's effective position/monitor route. In committed CUSTOM, the Visualizer's
 own persisted position, monitor and geometry are authoritative and may place it on a different selected display from
 Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on
-that unit is not an admission condition. `DisplayManager` still admits exactly one Visualizer owner, with the existing
-generation-fenced CUSTOM grace/fallback/reclaim lifecycle when the requested display is unavailable. Playback truth is
+that unit is not an admission condition. Numbered widget routes bind to physical display identity; Windows renumbering
+does not reassign them. An unavailable assignment suppresses its widgets until that display returns or the user explicitly
+changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` admits at most one
+Visualizer owner, with no delayed relocation; ALL continues to select its first participating display. Playback truth is
 bound from the already-admitted effective Media presentation model across the active display set; a CUSTOM Visualizer on
 another display must not require or construct a duplicate Media presentation on its own unit.
 

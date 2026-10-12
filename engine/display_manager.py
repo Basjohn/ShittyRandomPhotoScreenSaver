@@ -10,7 +10,7 @@ import time
 import weakref
 from copy import deepcopy
 from dataclasses import asdict, replace
-from types import MappingProxyType, SimpleNamespace
+from types import MappingProxyType
 from typing import Any, Callable, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, QPoint, Signal, Slot, QUrl, Qt
 from PySide6.QtGui import QGuiApplication, QScreen, QDesktopServices
@@ -216,9 +216,6 @@ class DisplayManager(QObject):
         self._quick_visualizer_edit_orbit_sample: tuple[object, ...] | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
         self._quick_visualizer_media_model: Any | None = None
-        # Secondary fence for the CUSTOM failover grace deadline (bumped on a
-        # temporary-owner retirement so a stale deadline cannot resurrect it).
-        self._quick_visualizer_failover_token: int = 0
         self._quick_visualizer_construct_result = "not_attempted"
         self._quick_visualizer_construct_reject_reason: str | None = None
         self._quick_visualizer_routing_trace_emitted = False
@@ -628,7 +625,18 @@ class DisplayManager(QObject):
         old_signature = self._screen_signature
         new_signature = self._current_screen_signature()
         new_count = len(new_signature)
-        if new_count == old_count and new_signature == old_signature:
+        # Qt can replace a QScreen during wake with another object exposing the
+        # same monitor facts. Binding loss permanently closes the old runtime;
+        # identical signature facts do not make that generation usable again.
+        binding_loss_screens = tuple(
+            unit.screen_index
+            for unit in self.displays
+            if isinstance(unit, QuickDisplayUnit)
+            and not unit.is_retired
+            and getattr(unit.runtime, "binding_loss", None) is not None
+        )
+        if (new_count == old_count and new_signature == old_signature
+                and not binding_loss_screens):
             if resume_revalidation:
                 self._revalidate_quick_display_geometry_after_resume()
             logger.debug("[DISPLAY_MANAGER] Monitor reconcile no-op reason=%s count=%d", reason, new_count)
@@ -637,12 +645,13 @@ class DisplayManager(QObject):
         self.screen_count = new_count
         self._screen_signature = new_signature
         logger.info(
-            "[DISPLAY_MANAGER] Monitor topology reconciled reason=%s old_count=%d new_count=%d old_signature=%s new_signature=%s",
+            "[DISPLAY_MANAGER] Monitor topology reconciled reason=%s old_count=%d new_count=%d old_signature=%s new_signature=%s binding_loss_screens=%s",
             reason,
             old_count,
             new_count,
             old_signature,
             new_signature,
+            binding_loss_screens,
         )
         self.monitors_changed.emit(new_count)
 
@@ -1910,11 +1919,9 @@ class DisplayManager(QObject):
     def _commit_quick_visualizer_presence(self, enabled: bool) -> bool:
         """Reconcile the single Visualizer owner without replacing DisplayManager.
 
-        CUSTOM Edit disable is a normal retained-lifecycle retirement, just like
-        monitor failover/reclaim. Use the existing Visualizer lifecycle authority
-        so the controller/logical runtime/GL owner retires exactly once and stale
-        failover callbacks are fenced. Construction is intentionally not invented
-        here; callers that need a new owner use the existing admission path.
+        CUSTOM Edit disable retires the current logical and retained owner before
+        dropping either ownership reference. A failed retirement stays attached
+        for the runtime destruction barrier to retry.
         """
 
         if self._retired:
@@ -1925,19 +1932,25 @@ class DisplayManager(QObject):
         owner = self._quick_visualizer_owner
         if owner is None or host is None:
             return True
-        from rendering.quick.visualizer_failover_lifecycle import (
-            retire_visualizer_owner,
-        )
-        from rendering.quick.visualizer_failover import (
-            get_visualizer_failover_state,
-        )
-
-        topology = _QuickVisualizerFailoverTopology(self, tuple(self.displays))
-        if not retire_visualizer_owner(topology, host):
+        self._disconnect_quick_visualizer_media_route()
+        host.presenter.set_layout_observer(None)
+        host.presenter.set_external_stack_obstacles(None)
+        scene = host.runtime.scene_controller
+        scene.set_visualizer_double_click_admission(None)
+        scene.set_visualizer_middle_click_admission(None)
+        scene.set_visualizer_volume_wheel_handler(None)
+        try:
+            if not owner.is_retired:
+                owner.retire()
+        except Exception:
+            logger.warning("[SPOTIFY_VIS] Visualizer retirement failed", exc_info=True)
             return False
-        # Per-instance disable supersedes any pending CUSTOM monitor failover. A
-        # stale deadline must never recreate an owner after the explicit Edit Save.
-        get_visualizer_failover_state().clear_visualizer_failover()
+        if not owner.is_retired:
+            logger.warning("[SPOTIFY_VIS] Visualizer retirement unconfirmed; retaining ownership")
+            return False
+        host.detach_visualizer_owner(owner)
+        self._release_quick_visualizer_routes(host)
+        scene.discard_unowned_visualizer_admission()
         self._refresh_all_quick_context_menus()
         return self._quick_visualizer_owner is None
 
@@ -2267,6 +2280,9 @@ class DisplayManager(QObject):
         from core.settings.models import ShadowSettings
 
         if self.settings_manager is not None:
+            bind_routes = getattr(self.settings_manager, "ensure_widget_monitor_bindings", None)
+            if callable(bind_routes):
+                bind_routes()
             self._widgets_config_snapshot = self.settings_manager.get_widgets_map()
             self._shadow_values_snapshot = asdict(
                 ShadowSettings.from_settings(self.settings_manager)
@@ -2390,12 +2406,21 @@ class DisplayManager(QObject):
 
         from rendering.widget_descriptors import (
             get_effective_monitor_value_for_widget,
+            get_effective_monitor_settings_key_for_widget,
         )
 
         effective_monitor = get_effective_monitor_value_for_widget(
             "spotify_visualizer",
             widgets if isinstance(widgets, dict) else {},
         )
+        if isinstance(widgets, dict):
+            from core.settings.monitor_routes import (
+                bound_monitor_identity, bound_monitor_index, current_screen_identities,
+            )
+            section = get_effective_monitor_settings_key_for_widget("spotify_visualizer", widgets)
+            identity = bound_monitor_identity(widgets, section, effective_monitor)
+            if identity is not None:
+                return bound_monitor_index(identity, current_screen_identities())
         return cls._requested_visualizer_screen_index(effective_monitor)
 
     def _set_quick_visualizer_construct_outcome(
@@ -2424,9 +2449,6 @@ class DisplayManager(QObject):
             return
         self._quick_visualizer_routing_trace_emitted = True
 
-        from rendering.quick.visualizer_failover import (
-            get_visualizer_failover_state,
-        )
         from rendering.widget_descriptors import (
             get_effective_monitor_value_for_widget,
             is_custom_position_selected_for_widget,
@@ -2479,24 +2501,12 @@ class DisplayManager(QObject):
                 }
             )
 
-        failover_record = get_visualizer_failover_state().get_visualizer_failover()
-        if failover_record is None:
-            failover_state = None
-        else:
-            failover_host = failover_record.get("host")
-            failover_state = {
-                "target": failover_record.get("intended_index"),
-                "pending": bool(failover_record.get("pending", False)),
-                "generation": failover_record.get("generation"),
-                "fallback": getattr(failover_host, "screen_index", None),
-            }
-
         selected = chosen if chosen is not None else self._quick_visualizer_unit
         logger.info(
             "[VIS_ROUTING] runtime_generation=%s spotify_enabled=%r "
             "spotify_visualizers_enabled=%r spotify_position=%r spotify_monitor=%r "
             "media_enabled=%r media_position=%r media_monitor=%r custom=%s "
-            "effective_monitor=%r requested_screen=%s participants=%s failover=%s "
+            "effective_monitor=%r requested_screen=%s participants=%s "
             "chosen_screen=%s construct_result=%s reject_reason=%s",
             self._runtime_generation,
             section.get("enabled"),
@@ -2510,7 +2520,6 @@ class DisplayManager(QObject):
             effective_monitor,
             requested,
             participant_state,
-            failover_state,
             getattr(selected, "screen_index", None),
             construct_result,
             reject_reason,
@@ -2520,14 +2529,11 @@ class DisplayManager(QObject):
         self,
         participants: list[QuickDisplayUnit],
     ) -> bool:
-        """Admit the one Quick visualizer owner, honouring CUSTOM failover.
+        """Admit one owner on its participating assigned display.
 
-        Non-CUSTOM routing (and CUSTOM ``ALL``) admits immediately on the
-        canonical effective monitor route. A CUSTOM route to a SPECIFIC monitor
-        engages the durable failover/reclaim lifecycle: admit immediately when
-        that monitor participates, otherwise arm ONE 30 s grace (never an
-        immediate fallback) before a single temporary fallback owner. Topology
-        returns rebuild the generation and re-admit, which is the reclaim point.
+        CUSTOM and Media-derived routes use the same admission boundary. An
+        unavailable assignment stays suppressed until a topology replacement
+        returns it; ALL chooses the first participating display.
         """
 
         if self._quick_visualizer_owner is not None:
@@ -2570,56 +2576,7 @@ class DisplayManager(QObject):
                 reason="visualizer_capability_not_effective",
             )
 
-        from rendering.widget_descriptors import (
-            is_custom_position_selected_for_widget,
-        )
-
         requested = self._resolve_visualizer_requested_screen_index(widgets)
-        custom = bool(
-            is_custom_position_selected_for_widget("spotify_visualizer", widgets)
-        )
-
-        if custom and requested >= 0:
-            # Durable CUSTOM failover/reclaim: drive the presentation-neutral
-            # lifecycle over the Quick ownership topology. Start each generation
-            # from a clean failover record so a fresh outage arms a fresh grace
-            # generation.
-            from rendering.quick.visualizer_failover import (
-                get_visualizer_failover_state,
-            )
-            from rendering.quick.visualizer_failover_lifecycle import (
-                reconcile_custom_visualizer,
-            )
-
-            get_visualizer_failover_state().clear_visualizer_failover()
-            self._quick_visualizer_failover_token = 0
-            try:
-                reconcile_custom_visualizer(
-                    _QuickVisualizerFailoverTopology(self, participants)
-                )
-            except Exception as exc:
-                if self._quick_visualizer_construct_result != "exception":
-                    self._set_quick_visualizer_construct_outcome(
-                        "exception",
-                        f"custom_reconcile_raised_{type(exc).__name__}",
-                    )
-                _finish(False)
-                raise
-            admitted = self._quick_visualizer_owner is not None
-            if admitted:
-                return _finish(True, chosen=self._quick_visualizer_unit)
-            failover_record = (
-                get_visualizer_failover_state().get_visualizer_failover()
-            )
-            if failover_record is not None and bool(
-                failover_record.get("pending", False)
-            ):
-                return _finish(
-                    False,
-                    result="pending_grace",
-                    reason="requested_custom_display_not_participating",
-                )
-            return _finish(False)
 
         from rendering.quick.visualizer_admission import (
             resolve_quick_visualizer_owner_unit,
@@ -2628,12 +2585,16 @@ class DisplayManager(QObject):
         chosen = resolve_quick_visualizer_owner_unit(requested, participants)
         if chosen is None:
             logger.warning(
-                "[SPOTIFY_VIS] No participating Quick display admits the visualizer"
+                "[SPOTIFY_VIS] Requested display %s unavailable; visualizer suppressed",
+                requested,
             )
             return _finish(
                 False,
                 result="rejected",
-                reason="no_participating_quick_display",
+                reason=(
+                    "requested_display_not_participating" if requested >= 0
+                    else "no_participating_quick_display"
+                ),
             )
         try:
             admitted = self._construct_quick_visualizer_owner_on(chosen)
@@ -2860,11 +2821,10 @@ class DisplayManager(QObject):
     ) -> bool:
         """Construct, bind and start the single visualizer owner on ``chosen``.
 
-        Shared final-create boundary for immediate admission, the CUSTOM grace
-        deadline and reclaim. Re-resolves the live model/config so a delayed
-        create honours current settings, and fails closed when the visualizers
-        capability is no longer effective or the instance is disabled. Returns
-        True only when the single owner is admitted.
+        Final-create boundary for admission. Re-resolves the current model/config
+        and fails closed when the visualizers capability is no longer effective
+        or the instance is disabled. Returns True only when the single owner is
+        admitted.
         """
 
         if self._quick_visualizer_owner is not None:
@@ -3453,56 +3413,6 @@ class DisplayManager(QObject):
         self._quick_visualizer_unit = None
         self._publish_quick_view_orbit_admission()
         return True
-
-    def _schedule_visualizer_failover_deadline(
-        self,
-        delay_ms: int,
-        *,
-        target_screen_index: int,
-        token: int,
-        generation: int,
-    ) -> None:
-        """Schedule ONE generation-fenced CUSTOM failover grace deadline.
-
-        A single token/generation-fenced single-shot, never a recurring poll. The
-        deadline re-resolves the live topology and creates at most one temporary
-        fallback owner if the configured monitor is still absent.
-        """
-
-        manager_ref = weakref.ref(self)
-        runtime_generation = self._runtime_generation
-
-        def _run() -> None:
-            manager = manager_ref()
-            if manager is None or manager._retired:
-                return
-            if manager._runtime_generation != runtime_generation:
-                return
-            from rendering.quick.visualizer_failover_lifecycle import (
-                run_fallback_recheck,
-            )
-
-            run_fallback_recheck(
-                _QuickVisualizerFailoverTopology(manager, list(manager.displays)),
-                target_screen_index=target_screen_index,
-                token=token,
-                generation=generation,
-            )
-
-        _run._srpss_runtime_generation = runtime_generation
-
-        scheduler = self._thread_manager
-        if scheduler is None or not hasattr(scheduler, "single_shot"):
-            from core.threading.manager import ThreadManager
-
-            scheduler = ThreadManager
-        try:
-            scheduler.single_shot(max(0, int(delay_ms)), _run)
-        except Exception:
-            logger.warning(
-                "[SPOTIFY_VIS][FALLBACK] Failed to schedule CUSTOM grace deadline",
-                exc_info=True,
-            )
 
     def _quick_ordinary_family_adapters(self):
         """Build one generation's family adapters with weak product-action routes.
@@ -5509,12 +5419,6 @@ class DisplayManager(QObject):
         self._cancel_idle_transition_warmup()
         self._retired = True
         self._cancel_quick_startup_reveal()
-        # Retire the process-scoped CUSTOM failover record with this generation so
-        # a stale grace/fallback cannot leak into a replacement generation and a
-        # fresh outage arms a fresh grace generation.
-        from rendering.quick.visualizer_failover import get_visualizer_failover_state
-
-        get_visualizer_failover_state().clear_visualizer_failover()
         self.disconnect_monitor_detection()
         self.disconnect_runtime_signal_connections()
         self._display_startup_generation += 1
@@ -5610,119 +5514,3 @@ class DisplayManager(QObject):
                         logger.warning("[REDDIT] Safety-net queue failed: %s", url, exc_info=True)
             else:
                 logger.warning("[REDDIT] Bridge unavailable; %d URLs will be lost", len(urls))
-
-
-class _QuickVisualizerFailoverTopology:
-    """DisplayManager-bound adapter for the neutral CUSTOM failover lifecycle.
-
-    Presentation-neutral policy lives in
-    ``rendering/quick/visualizer_failover_lifecycle``; this adapter only supplies
-    the Quick mechanism: live canonical routing/capability, participant
-    resolution over the current display units, and construction/retirement of the
-    SINGLE manager-owned visualizer owner. It never creates a second owner and
-    never persists the temporary fallback monitor/geometry.
-    """
-
-    def __init__(self, manager: "DisplayManager", participants) -> None:
-        self._manager = manager
-        self._participants = list(participants)
-
-    def capability_admitted(self) -> bool:
-        widgets = self._manager._widgets_config_snapshot
-        if not isinstance(widgets, dict):
-            return False
-        try:
-            return bool(is_widget_family_effective(widgets, "visualizers"))
-        except Exception:
-            return False
-
-    def live_widgets(self):
-        return self._manager._widgets_config_snapshot
-
-    def is_custom_selected(self, widgets) -> bool:
-        from rendering.widget_descriptors import (
-            is_custom_position_selected_for_widget,
-        )
-
-        return bool(
-            is_custom_position_selected_for_widget("spotify_visualizer", widgets)
-        )
-
-    def effective_monitor_index(self, widgets):
-        idx = self._manager._resolve_visualizer_requested_screen_index(widgets)
-        return idx if idx >= 0 else None
-
-    def resolve(self, intended_index):
-        from rendering.quick.visualizer_admission import (
-            resolve_quick_visualizer_admission,
-        )
-
-        admission = resolve_quick_visualizer_admission(
-            intended_index, self._participants
-        )
-        return SimpleNamespace(
-            requested_display=admission.requested,
-            requested_is_participating=admission.requested_is_participating,
-            fallback_display=admission.fallback,
-        )
-
-    def owner_present_on(self, display) -> bool:
-        manager = self._manager
-        return (
-            display is not None
-            and manager._quick_visualizer_unit is display
-            and manager._quick_visualizer_owner is not None
-        )
-
-    def screen_index_of(self, display):
-        return getattr(display, "screen_index", None)
-
-    def create_owner(self, display, intended_index) -> bool:
-        return self._manager._construct_quick_visualizer_owner_on(display)
-
-    def cleanup_owner(self, display) -> bool:
-        manager = self._manager
-        owner = manager._quick_visualizer_owner
-        if manager._quick_visualizer_unit is not display or owner is None:
-            return True
-        # Keep both manager and display-unit ownership attached until logical
-        # retirement is confirmed. Dropping manager routing first can strand a
-        # live owner on failure; dropping only manager routing on success leaves
-        # a retired owner attached to QuickDisplayUnit, which is later mistaken
-        # for a live owner by the display destruction barrier.
-        manager._disconnect_quick_visualizer_media_route()
-        display.presenter.set_layout_observer(None)
-        display.presenter.set_external_stack_obstacles(None)
-        display.runtime.scene_controller.set_visualizer_double_click_admission(None)
-        display.runtime.scene_controller.set_visualizer_middle_click_admission(None)
-        display.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
-        if not owner.is_retired:
-            owner.retire()
-        return bool(owner.is_retired)
-
-    def detach_owner(self, display) -> None:
-        manager = self._manager
-        owner = manager._quick_visualizer_owner
-        if manager._quick_visualizer_unit is not display or owner is None:
-            return
-        display.detach_visualizer_owner(owner)
-        manager._release_quick_visualizer_routes(display)
-        # The QML shell is retained for this display generation, but an owner
-        # retirement must make that shell unequivocally inert so a later Settings
-        # round-trip cannot expose stale input/render admission.
-        display.runtime.scene_controller.discard_unowned_visualizer_admission()
-
-    def current_token(self) -> int:
-        return int(self._manager._quick_visualizer_failover_token)
-
-    def bump_token(self) -> int:
-        self._manager._quick_visualizer_failover_token += 1
-        return int(self._manager._quick_visualizer_failover_token)
-
-    def schedule(self, delay_ms, *, target_screen_index, token, generation) -> None:
-        self._manager._schedule_visualizer_failover_deadline(
-            delay_ms,
-            target_screen_index=target_screen_index,
-            token=token,
-            generation=generation,
-        )

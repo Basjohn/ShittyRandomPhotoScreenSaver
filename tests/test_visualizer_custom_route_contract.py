@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +10,6 @@ import pytest
 from engine import display_manager as display_manager_module
 from engine.display_manager import DisplayManager
 from rendering.quick.display_unit import QuickDisplayUnit
-from rendering.quick.visualizer_failover import get_visualizer_failover_state
 
 
 class _Signal:
@@ -95,7 +95,6 @@ def _manager(position: str) -> DisplayManager:
     manager._quick_visualizer_owner = None
     manager._quick_visualizer_unit = None
     manager._quick_view_orbit_pending = None
-    manager._quick_visualizer_failover_token = 0
     manager._quick_visualizer_construct_result = "not_attempted"
     manager._quick_visualizer_construct_reject_reason = None
     manager._quick_visualizer_routing_trace_emitted = False
@@ -133,8 +132,6 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
 ) -> None:
     """CUSTOM routing must not make playback binding same-display-only."""
 
-    state = get_visualizer_failover_state()
-    state.clear_visualizer_failover()
     media_model = SimpleNamespace(
         playbackState="paused",
         stateChanged=_Signal(),
@@ -189,8 +186,6 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
     import widgets.spotify_visualizer.quick_display_visualizer_owner as owner_module
 
     monkeypatch.setattr(owner_module, "QuickDisplayVisualizerOwner", _Owner)
-    # CUSTOM routing now belongs to visualizer_failover_lifecycle, not the
-    # removed display_manager.resolve_quick_custom_entry shim.
     try:
         assert manager._admit_quick_visualizer(manager.displays) is True
         assert len(owners) == 1
@@ -214,7 +209,6 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
         assert len(owner.playing) == observed_count
     finally:
         manager._disconnect_quick_visualizer_media_route()
-        state.clear_visualizer_failover()
 
 
 @pytest.mark.parametrize(
@@ -227,8 +221,6 @@ def test_two_live_units_keep_custom_route_independent_of_media(
     expected_effective_monitor: str,
     monkeypatch,
 ) -> None:
-    state = get_visualizer_failover_state()
-    state.clear_visualizer_failover()
     manager = _manager(position)
     participants = [_live_unit(0), _live_unit(1)]
     constructed: list[QuickDisplayUnit] = []
@@ -247,37 +239,33 @@ def test_two_live_units_keep_custom_route_independent_of_media(
         "info",
         lambda message, *args: messages.append(message % args),
     )
-    try:
-        assert all(unit.is_visualizer_participant() for unit in participants)
-        assert manager._admit_quick_visualizer(participants) is True
-        assert len(constructed) == 1
-        assert constructed[0] is participants[expected_screen]
-        assert manager._quick_visualizer_unit is participants[expected_screen]
-        assert manager._quick_visualizer_owner is not None
-        assert (
-            sum(unit is manager._quick_visualizer_unit for unit in participants) == 1
-        )
-        assert state.get_visualizer_failover() is None
+    assert all(unit.is_visualizer_participant() for unit in participants)
+    assert manager._admit_quick_visualizer(participants) is True
+    assert len(constructed) == 1
+    assert constructed[0] is participants[expected_screen]
+    assert manager._quick_visualizer_unit is participants[expected_screen]
+    assert manager._quick_visualizer_owner is not None
+    assert (
+        sum(unit is manager._quick_visualizer_unit for unit in participants) == 1
+    )
 
-        route_records = [
-            message for message in messages if "[VIS_ROUTING]" in message
-        ]
-        assert len(route_records) == 1
-        trace = route_records[0]
-        assert "runtime_generation=805" in trace
-        assert f"spotify_position='{position}'" in trace
-        assert "spotify_monitor='2'" in trace
-        assert "media_monitor='1'" in trace
-        assert f"custom={position == 'Custom'}" in trace
-        assert f"effective_monitor='{expected_effective_monitor}'" in trace
-        assert f"requested_screen={expected_screen}" in trace
-        assert f"chosen_screen={expected_screen}" in trace
-        assert "construct_result=admitted" in trace
-        assert "reject_reason=None" in trace
-        assert "'screen': 0, 'participating': True, 'binding_loss': None" in trace
-        assert "'screen': 1, 'participating': True, 'binding_loss': None" in trace
-    finally:
-        state.clear_visualizer_failover()
+    route_records = [
+        message for message in messages if "[VIS_ROUTING]" in message
+    ]
+    assert len(route_records) == 1
+    trace = route_records[0]
+    assert "runtime_generation=805" in trace
+    assert f"spotify_position='{position}'" in trace
+    assert "spotify_monitor='2'" in trace
+    assert "media_monitor='1'" in trace
+    assert f"custom={position == 'Custom'}" in trace
+    assert f"effective_monitor='{expected_effective_monitor}'" in trace
+    assert f"requested_screen={expected_screen}" in trace
+    assert f"chosen_screen={expected_screen}" in trace
+    assert "construct_result=admitted" in trace
+    assert "reject_reason=None" in trace
+    assert "'screen': 0, 'participating': True, 'binding_loss': None" in trace
+    assert "'screen': 1, 'participating': True, 'binding_loss': None" in trace
 
 
 def test_generation_trace_records_preconstruction_reject_reason(monkeypatch) -> None:
@@ -304,58 +292,57 @@ def test_generation_trace_records_preconstruction_reject_reason(monkeypatch) -> 
     assert "reject_reason=invalid_visualizer_section" in route_records[0]
 
 
-def test_custom_missing_target_records_initial_pending_grace_decision(
-    monkeypatch,
+@pytest.mark.parametrize('position', ['Custom', 'Center'])
+@pytest.mark.parametrize('target_present', [False, True])
+def test_assigned_display_unavailable_suppresses_owner_without_delayed_work(
+    position, target_present, monkeypatch,
 ) -> None:
-    state = get_visualizer_failover_state()
-    state.clear_visualizer_failover()
-    manager = _manager("Custom")
-    participants = [
-        _live_unit(0),
-        _live_unit(
-            1,
-            binding_loss=SimpleNamespace(
-                as_dict=lambda: {"reason": "test_binding_loss"}
-            ),
-        ),
-    ]
-    scheduled: list[tuple[int, dict[str, int]]] = []
-    messages: list[str] = []
+    manager = _manager(position)
+    # Outside CUSTOM Media owns the effective route.
+    manager._widgets_config_snapshot['media']['monitor'] = '2'
+    participants = [_live_unit(0)]
+    if target_present:
+        participants.append(_live_unit(1, binding_loss=SimpleNamespace(
+            as_dict=lambda: {'reason': 'test_binding_loss'},
+        )))
+    messages = []
     manager._construct_quick_visualizer_owner_on = lambda _unit: pytest.fail(
-        "pending grace must not construct an immediate fallback"
+        'unavailable assignment must suppress construction',
     )
-    manager._schedule_visualizer_failover_deadline = (
-        lambda delay_ms, **kwargs: scheduled.append((delay_ms, kwargs))
+    manager._thread_manager = SimpleNamespace(
+        single_shot=lambda *_args: pytest.fail('no Visualizer grace or retry timer'),
     )
-    monkeypatch.setattr(
-        display_manager_module.logger,
-        "info",
-        lambda message, *args: messages.append(message % args),
-    )
-    try:
-        assert manager._admit_quick_visualizer(participants) is False
-        record = state.get_visualizer_failover()
-        assert record is not None
-        assert record["intended_index"] == 1
-        assert record["pending"] is True
-        assert len(scheduled) == 1
-        delay_ms, schedule_kwargs = scheduled[0]
-        assert delay_ms == 30000
-        assert schedule_kwargs["target_screen_index"] == 1
+    monkeypatch.setattr(display_manager_module.logger, 'info',
+                        lambda message, *args: messages.append(message % args))
+    assert manager._admit_quick_visualizer(participants) is False
+    assert manager._quick_visualizer_owner is None
+    trace = next(message for message in messages if '[VIS_ROUTING]' in message)
+    assert 'requested_screen=1' in trace
+    assert 'chosen_screen=None' in trace
+    assert 'construct_result=rejected' in trace
+    assert 'reject_reason=requested_display_not_participating' in trace
 
-        route_records = [
-            message for message in messages if "[VIS_ROUTING]" in message
-        ]
-        assert len(route_records) == 1
-        trace = route_records[0]
-        assert "requested_screen=1" in trace
-        assert "chosen_screen=None" in trace
-        assert "construct_result=pending_grace" in trace
-        assert "reject_reason=requested_custom_display_not_participating" in trace
-        assert "'target': 1, 'pending': True" in trace
-        assert "'reason': 'test_binding_loss'" in trace
-    finally:
-        state.clear_visualizer_failover()
+
+@pytest.mark.parametrize('position', ['Custom', 'Center'])
+def test_returning_display_restores_assignment_with_one_owner(position) -> None:
+    manager = _manager(position)
+    manager._widgets_config_snapshot['media']['monitor'] = '2'
+    widgets_before = deepcopy(manager._widgets_config_snapshot)
+    first, assigned = _live_unit(0), _live_unit(1)
+    constructed = []
+
+    def construct(unit):
+        constructed.append(unit)
+        manager._quick_visualizer_owner = object()
+        manager._quick_visualizer_unit = unit
+        return True
+
+    manager._construct_quick_visualizer_owner_on = construct
+    assert manager._admit_quick_visualizer([first]) is False
+    assert constructed == []
+    assert manager._admit_quick_visualizer([first, assigned]) is True
+    assert constructed == [assigned]
+    assert manager._widgets_config_snapshot == widgets_before
 
 
 def test_constructor_exception_preserves_canonical_stage_reason(monkeypatch) -> None:

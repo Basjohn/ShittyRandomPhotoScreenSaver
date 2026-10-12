@@ -908,6 +908,33 @@ def test_restore_widget_family_to_application_default_layout_restores_visualizer
     assert "screen:a" not in displays or not displays["screen:a"]
 
 
+def test_application_default_reset_rebinds_same_label_to_current_display():
+    default_widgets = get_default_settings()["widgets"]
+    default_widgets["clock"]["monitor"] = "1"
+    widgets_cfg = {"clock": dict(default_widgets["clock"]), "monitor_bindings": {
+        "clock": {"monitor": "1", "screen": "serial:MSI"},
+    }}
+    assert restore_widget_family_to_application_default_layout(
+        widgets_cfg, "clock", default_widgets_config=default_widgets,
+        screen_identities=("serial:LG",),
+    )
+    assert widgets_cfg["clock"]["monitor"] == "1"
+    assert widgets_cfg["monitor_bindings"]["clock"] == {"monitor": "1", "screen": "serial:LG"}
+
+
+def test_application_default_reset_clears_previous_binding_when_target_is_absent():
+    default_widgets = get_default_settings()["widgets"]
+    default_widgets["clock"]["monitor"] = "2"
+    widgets_cfg = {"clock": dict(default_widgets["clock"]), "monitor_bindings": {
+        "clock": {"monitor": "2", "screen": "serial:MSI"},
+    }}
+    assert restore_widget_family_to_application_default_layout(
+        widgets_cfg, "clock", default_widgets_config=default_widgets,
+        screen_identities=("serial:LG",),
+    )
+    assert "clock" not in widgets_cfg["monitor_bindings"]
+
+
 def test_restore_all_widget_positions_to_application_defaults_resets_all_custom_routes():
     default_widgets = get_default_settings()["widgets"]
     widgets_cfg = {
@@ -1088,3 +1115,31 @@ def test_build_widget_stack_preview_config_reads_live_clock_controls(qt_app, set
         assert config["clock"]["font_size"] == 64
     finally:
         tab.deleteLater()
+
+
+
+def test_custom_reset_restores_same_number_original_physical_assignment():
+    widgets = {
+        'weather': {'position': 'Top Right', 'monitor': '2'},
+        'monitor_bindings': {'weather': {'monitor': '2', 'screen': 'screen:a'}},
+    }
+    sync_custom_layout_restore_routes(widgets)
+    assert widgets['custom_layout_restore']['widgets']['weather']['screen'] == 'screen:a'
+    widgets['weather']['position'] = 'Custom'
+    widgets['monitor_bindings']['weather']['screen'] = 'screen:b'
+    # CUSTOM sync must not overwrite the original authored assignment.
+    sync_custom_layout_restore_routes(widgets)
+    assert widgets['custom_layout_restore']['widgets']['weather']['screen'] == 'screen:a'
+    assert restore_widget_family_to_authored_layout(widgets, 'weather') is True
+    assert widgets['weather'] == {'position': 'Top Right', 'monitor': '2'}
+    assert widgets['monitor_bindings']['weather'] == {'monitor': '2', 'screen': 'screen:a'}
+
+
+def test_custom_reset_to_all_clears_physical_binding():
+    widgets = {'weather': {'position': 'Top Right', 'monitor': 'ALL'}}
+    sync_custom_layout_restore_routes(widgets)
+    widgets['weather'] = {'position': 'Custom', 'monitor': '2'}
+    widgets['monitor_bindings'] = {'weather': {'monitor': '2', 'screen': 'screen:b'}}
+    assert restore_widget_family_to_authored_layout(widgets, 'weather') is True
+    assert widgets['weather']['monitor'] == 'ALL'
+    assert 'weather' not in widgets['monitor_bindings']
