@@ -556,7 +556,7 @@ mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visuali
   Glow, a 180x120 grid; Balanced 2x, Glow, 128x85; Performance single-sampled, no Glow, 64x43; KAK the same at 48x32
   (`shockwave_grid_cells`). Measured as above with Glow 0.8: GPU median 0.17 / 0.13 / 0.04 / 0.04 ms, CPU 1.0 / 1.2 /
   0.65 / 0.67 ms (the bloom chain's calls go with the Glow).
-- **Physical checks (open):** the reactivity on real music: calm at near-silence and between songs, ordinary beats
+- **Regression reference (accepted, not an open gate):** the reactivity on real music: calm at near-silence and between songs, ordinary beats
   against big drops, the idle swell's pace; wave timing (kicks vs. snares, busy tracks hitting the 16-event cap),
   the presets on both displays, glow strength, the horizon ridge, orbiting, and Allow Overflow near screen edges.
 
@@ -693,7 +693,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 - **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
   submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
   backdrop copy.
-- **Physical checks (open):** each preset with live music on both displays (Visualizer freshness alongside 3D
+- **Regression reference (accepted, not an open gate):** each preset with live music on both displays (Visualizer freshness alongside 3D
   transitions); edge lines at strong tilt/turn with Smooth Edges on and off; Mirror Faces' horizon and softboxes
   while orbiting; W/A/S/D feel (step size, key-repeat pace), the view surviving a restart, and a curated preset
   becoming Custom after an orbit; Allow Overflow near screen edges.
@@ -701,6 +701,8 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   (`_RENDERED_VISUALIZER_PREVIEWS`); legacy screenshot sheets are not catalog authority.
 
 ## 16C. Oscilloscope
+
+**Operator accepted and fully validated, 2026-10-12.** Reopen only for a concrete regression or a newly changed feature.
 
 Rebuilt from scratch on 2026-10-11 (operator: the old mode had very bad Settings UX and unreliable, disappointing
 output). An analog scope's phosphor beam drawing the music itself. Settings: its spec in
@@ -743,6 +745,6 @@ renderer `rendering/quick/visualizer/implementations/oscilloscope.py`.
   colours. Every pre-rework key is retired (`core/settings/visualizer_retired_modes.py`).
 - **Curated presets:** Phosphor (green Trace on a grid), Neon Halo (Ring, spectral tint), Lissajous (Phase, gold, long
   afterglow), Amber Terminal (dense amber Trace, analog beam). Authored content: never test fixtures.
-- **Physical checks (open):** the look and the presets on real music on both displays (card and wallpaper behind it),
+- **Regression reference (accepted, not an open gate):** the look and the presets on real music on both displays (card and wallpaper behind it),
   trigger steadiness on sustained notes, afterglow pace, flare and loudness-glow feel through quiet and loud passages,
   Settings body UX, and cost against the other modes (`tools/overhead_baseline.py --match oscilloscope`).

@@ -6,7 +6,7 @@ All effects use the canonical transition catalog, Settings activation and Random
 
 ## Expanded effects
 
-The expansion capabilities remain **deactivated by default** unless explicitly activated, except where accepted: Glass Shatter and Melt Drip are activated and in the Random pool by default (Melt at 8500 ms). Tendril Reveal was rejected and has been fully retired; it has no registry descriptor, Settings surface, renderer or shader, and stale persisted Tendril state is removed by canonical transition normalization. Melt is accepted in its current reworked form: the photograph itself melts from a chosen origin under gravity, without the rejected detached droplet bodies or ray-marched pseudo-volume. Remaining visual/load acceptance is listed under Physical acceptance below. Existing activated effects and settings retain their values.
+The expansion capabilities remain **deactivated by default** unless explicitly activated, except where accepted: Glass Shatter and Melt Drip are activated and in the Random pool by default (Melt at 8500 ms). Tendril Reveal was rejected and has been fully retired; it has no registry descriptor, Settings surface, renderer or shader, and stale persisted Tendril state is removed by canonical transition normalization. Melt is accepted in its current reworked form: the photograph itself melts from a chosen origin under gravity, without the rejected detached droplet bodies or ray-marched pseudo-volume. All landed transitions are operator-accepted (2026-10-12); the reference appearance checks apply only to new work or a concrete regression. Existing activated effects and settings retain their values.
 
 | Effect | Appearance | Controls |
 | --- | --- | --- |
