@@ -126,7 +126,7 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     # participation explicitly in its own Appearance bucket.
     expected_buckets = {
         "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["3D Effects"]),
-        "shockwave_grid": (["Appearance", "Waves", "Bar Response"], ["Render"]),
+        "shockwave_grid": (["Terrain", "Appearance", "Waves"], ["Frequency Response", "Render"]),
         "sphere": (["Frequency Zones", "Appearance", "Particle Flow"], ["Reactivity", "Rotation", "Effects"]),
     }
     presentation_controls = {
@@ -162,6 +162,13 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
                 assert hasattr(tab, "extruded_spectrum_rainbow_enabled")
                 assert hasattr(tab, "extruded_spectrum_rainbow_faces")
                 assert hasattr(tab, "extruded_spectrum_rainbow_edges")
+
+            if mode == "shockwave_grid":
+                terrain_host = normal.findChild(type(normal), "shockwave_grid_bucket_terrain")
+                response_host = advanced.findChild(type(advanced), "shockwave_grid_bucket_response")
+                assert terrain_host.isAncestorOf(tab.shockwave_grid_terrain_editor)
+                assert response_host.isAncestorOf(tab.shockwave_grid_shape_editor)
+                assert not hasattr(tab, "shockwave_grid_allow_overflow")
 
             technical = get_per_mode_controls_for_mode(tab, mode)
             assert technical is not None

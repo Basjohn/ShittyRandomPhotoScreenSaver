@@ -133,6 +133,11 @@ class VisualizerModeDescriptor:
     # units. Empty: the keys keep their ordinary meaning (any key exits).
     view_orbit_settings: tuple[str, ...] = ()
     view_orbit_steps: tuple[float, ...] = ()
+    # Optional framed scene pose (scale, screen-normalized pan x/y). These
+    # capabilities target the scene inside the card, never CUSTOM geometry.
+    # Canonical presentation specs own the numeric ranges and defaults.
+    scene_transform_settings: tuple[str, ...] = ()
+    scene_scale_step: float = 1.1
     # The renderer offers ``prepare_step``: a mode or preset reveal stays hidden while it
     # compiles and allocates on the hidden frames (one spaced unit each), so first use never
     # costs a visible frame (``quick_display_visualizer_owner``, ``render_host``).
@@ -311,17 +316,16 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         geometry_kind="freeform_3d",
         layout_profile="3d:extruded_spectrum",
     ),
-    # A neon grid floor rippled by shockwaves from musical onsets, with Spectrum's shared source
-    # implementation feeding the ridge along its horizon. It owns only the consumed technical and
-    # source-shaper profile plus a bounded onset-event ring; frameless and orbitable like Extruded Spectrum.
+    # A framed neon basin with an internal 3D view. Its stable geometry profile
+    # remains independent from the shell, renderer-only pose and art presets.
     VisualizerModeDescriptor(
         "shockwave_grid",
-        "Shockwave Grid",
+        "Neon Lake Basin",
         "_shockwave_grid_preset_slider",
         ("shockwave_grid_",),
         VisualizerModePresentationPolicy(
-            shell_policy=VisualizerShellPolicy.FRAMELESS,
-            clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            shell_policy=VisualizerShellPolicy.CARD,
+            clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
             viewport_resize_capable=True,
         ),
         frame_runtime_module="widgets.spotify_visualizer.shockwave_frame_runtime",
@@ -334,9 +338,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         shared_bar_appearance=False,
         spectrum_shape_controls=True,
         profile_migration_source_mode="spectrum",
-        renderer_overflow_setting="shockwave_grid_allow_overflow",
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        scene_transform_settings=("shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y"),
         prepared_reveal=True,
         geometry_kind="freeform_3d",
         layout_profile="3d:shockwave_grid",
@@ -398,7 +402,8 @@ def get_visualizer_view_pose_keys(mode_id: str) -> tuple[str, ...]:
     View authoring persists in the live mode-scoped visualizer settings, never
     inside curated or Custom preset snapshots or CUSTOM stage rectangles.
     """
-    return tuple(get_visualizer_mode_descriptor(mode_id).view_orbit_settings)
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    return tuple((*descriptor.view_orbit_settings, *descriptor.scene_transform_settings))
 
 
 def get_visualizer_layout_profile(mode_id: str) -> str:

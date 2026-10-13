@@ -128,19 +128,19 @@ def resolve_visualizer_presentation(
     # committed scale that every downstream geometry consumer receives.
     resolved_scale = (
         requested_scale
-        if committed_outer_size is not None and policy.shell_policy is VisualizerShellPolicy.FRAMELESS
+        if committed_outer_size is not None
         else min(requested_scale, display_width / extent_width, display_height / extent_height)
     )
     outer_width = extent_width * resolved_scale
     outer_height = extent_height * resolved_scale
     if committed_outer_size is not None:
-        # Frameless-3D CUSTOM has two independent authored extents: the outer
+        # Freeform-3D CUSTOM has two independent authored extents: the outer
         # stage rect and the renderer's logical viewport. A width-derived
         # height silently discards the saved stage's aspect, particularly after
         # switching between Shockwave and Sphere. The stage is one persisted
         # authority; do not reverse-infer its height from the render world.
-        if policy.shell_policy is not VisualizerShellPolicy.FRAMELESS:
-            raise ValueError("explicit CUSTOM outer size is for frameless presentations")
+        # Shell policy determines chrome and clipping, not stage ownership.
+        # A bordered 3D scene retains this same independent authored card rect.
         outer_width, outer_height = _positive_size(
             committed_outer_size, name="committed outer size"
         )

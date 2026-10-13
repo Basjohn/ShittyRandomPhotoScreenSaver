@@ -1,6 +1,6 @@
 """Settle 3D view pose without granting visualizer presets geometry authority.
 
-Turn/tilt remain canonical, mode-specific *live* settings. Curated/Custom
+Orbit and optional internal pan/scale remain canonical, mode-specific live settings. Curated/Custom
 presets may change appearance and response but never select or overwrite a
 view pose. A finished gesture makes one settings commit; no per-frame writes.
 """

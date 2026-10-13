@@ -101,8 +101,9 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
     """Show each conditional row only while its condition holds; re-applied after a load."""
     conditional = [(rows[control.key], control.when) for control in spec.controls
                    if control.when and control.key in rows]
-    enabled = [(getattr(tab, control.key), control) for control in spec.controls
-               if getattr(control, "enabled_when", ()) and hasattr(tab, control.key)]
+    enabled = [(getattr(tab, f"{control.key}_btn" if isinstance(control, Colour) else control.key), control)
+               for control in spec.controls if getattr(control, "enabled_when", ())
+               and hasattr(tab, f"{control.key}_btn" if isinstance(control, Colour) else control.key)]
     if not conditional and not enabled:
         return
 

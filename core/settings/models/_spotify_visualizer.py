@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Tuple, TYPE_CHECKING
 
 from core.settings.default_contract import require_canonical_default
+from rendering.gl_programs.heightfield import normalize_heightfield
 from core.settings.bubble_gradient_semantics import (
     CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
     get_bubble_gradient_semantics_version,
@@ -514,6 +515,7 @@ def _build_visualizer_model_kwargs(
         _build_visualizer_sphere_kwargs(read_value),
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
         _build_spec_kwargs(read_value),
+        {"shockwave_grid_terrain": read_value("shockwave_grid_terrain", _visualizer_default("shockwave_grid_terrain"))},
         preset_kwargs,
     )
 
@@ -984,15 +986,13 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing_enabled'))
     extruded_spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing'))
     extruded_spectrum_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_solid_bar_hysteresis_enabled'))
+    shockwave_grid_terrain: dict = field(default_factory=lambda: deepcopy(_visualizer_default("shockwave_grid_terrain")))
     shockwave_grid_mirrored: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_mirrored'))
     shockwave_grid_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('shockwave_grid_shape_nodes'))
     shockwave_grid_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('shockwave_grid_notch_positions_mirrored'))
     shockwave_grid_notch_positions_linear: List[List] = field(default_factory=lambda: _visualizer_default('shockwave_grid_notch_positions_linear'))
     shockwave_grid_lane_strengths_mirrored: Dict[str, float] = field(default_factory=lambda: _visualizer_default('shockwave_grid_lane_strengths_mirrored'))
     shockwave_grid_lane_strengths_linear: Dict[str, float] = field(default_factory=lambda: _visualizer_default('shockwave_grid_lane_strengths_linear'))
-    shockwave_grid_wave_amplitude: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_wave_amplitude'))
-    shockwave_grid_profile_floor: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_profile_floor'))
-    shockwave_grid_drop_speed: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_drop_speed'))
     shockwave_grid_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing_enabled'))
     shockwave_grid_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing'))
     shockwave_grid_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_solid_bar_hysteresis_enabled'))
@@ -1128,6 +1128,7 @@ class SpotifyVisualizerSettings:
         self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
+        self.shockwave_grid_terrain = normalize_heightfield(self.shockwave_grid_terrain)
         self._apply_spectrum_source_profile_defaults('extruded_spectrum')
         self._apply_spectrum_source_profile_defaults('shockwave_grid')
         for control in spec_controls():
@@ -1369,6 +1370,7 @@ class SpotifyVisualizerSettings:
             self._serialize_sphere_settings(prefix),
             _serialize_prefixed_fields(self, prefix, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
             _serialize_prefixed_fields(self, prefix, _SPEC_SERIALIZERS),
+            {f"{prefix}.shockwave_grid_terrain": deepcopy(self.shockwave_grid_terrain)},
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),

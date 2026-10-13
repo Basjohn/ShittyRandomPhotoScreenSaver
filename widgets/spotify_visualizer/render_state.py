@@ -314,6 +314,14 @@ class ShockwaveGridFrame(SpectrumFrame):
     aged on the logical clock at capture, oldest first, at most ``SHOCKWAVE_CAPACITY``."""
 
     events: tuple[tuple[float, float, float, float], ...] = ()
+    terrain_growth: tuple[float, ...] = (0.0,) * 8
+
+    def __post_init__(self) -> None:
+        SpectrumFrame.__post_init__(self)
+        growth = _float_tuple(self.terrain_growth, name="terrain growth")
+        if len(growth) != 8 or any(value < 0.0 or value > 1.0 for value in growth):
+            raise ValueError("terrain growth requires eight values within 0..1")
+        object.__setattr__(self, "terrain_growth", growth)
 
     @property
     def mode_id(self) -> str:

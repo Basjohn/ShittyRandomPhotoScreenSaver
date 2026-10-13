@@ -8,7 +8,7 @@ QQuickItem, paint callback, render cadence, or compatibility presenter.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
@@ -355,14 +355,31 @@ def _capture_shockwave_grid(
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
-    return _capture_spectrum_family(
+    growth_enabled = float(parameters["shockwave_grid_terrain_reactivity"]) > 0.0
+    captured = _capture_spectrum_family(
         widget, engine, context, mode_id="shockwave_grid", frame_type=ShockwaveGridFrame,
         extra_parameters=parameters,
         # Waves move (and the grid may scroll, the swell drift) on Spectrum's animation clock.
         animation_enabled=(bool(events) or float(parameters["shockwave_grid_scroll"]) > 0.0
-                           or float(parameters["shockwave_grid_idle"]) > 0.0),
+                           or float(parameters["shockwave_grid_idle"]) > 0.0
+                           or (growth_enabled and runtime.terrain_growth_pending)),
         frame_fields={"events": events},
     )
+    if captured is None:
+        return None
+    frame, extra = captured
+    growth = runtime.advance_terrain_growth(
+        extra["_quick_resolved_bars"], now_ts=context.now_ts, playing=context.playing,
+        identity=(context.runtime_generation, context.engine_generation, context.activation_id),
+        source_identity=(context.source_generation, context.source_activation_id),
+        attack=float(parameters["shockwave_grid_terrain_growth_attack"]),
+        release=float(parameters["shockwave_grid_terrain_growth_release"]),
+        enabled=growth_enabled,
+    )
+    if growth is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
+        return None
+    extra["_quick_mode_changed"] = bool(extra.get("_quick_mode_changed", False) or growth.changed)
+    return replace(frame, terrain_growth=growth.values), extra
 
 
 def _capture_spectrum_family(

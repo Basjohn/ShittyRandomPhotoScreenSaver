@@ -17,20 +17,15 @@ import pytest
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_CAPACITY,
     SHOCKWAVE_DEPTH,
-    SHOCKWAVE_FAR_LINE,
     SHOCKWAVE_LIFETIME,
     SHOCKWAVE_MAX_TILT,
     SHOCKWAVE_MAX_TURN,
     SHOCKWAVE_MIN_GAP,
-    SHOCKWAVE_NEAR_LINE,
-    SHOCKWAVE_VISIBLE,
-    shockwave_camera,
-    shockwave_fit,
     shockwave_height,
     shockwave_origin,
-    shockwave_project,
     shockwave_strength,
 )
+from rendering.gl_programs.neon_lake_basin_program import basin_camera, basin_fit, basin_project
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
@@ -153,13 +148,14 @@ def test_the_fit_frames_the_visible_grid_for_any_view():
     for _ in range(300):
         tilt, turn = rng.uniform(0.05, SHOCKWAVE_MAX_TILT), rng.uniform(-SHOCKWAVE_MAX_TURN, SHOCKWAVE_MAX_TURN)
         half_width, ridge = rng.uniform(1.0, 5.0), rng.uniform(0.0, 0.6)
-        scale, base = shockwave_fit(tilt, turn, half_width, ridge)
-        camera = shockwave_camera(half_width)
-        for x in (-SHOCKWAVE_VISIBLE * half_width, SHOCKWAVE_VISIBLE * half_width):
-            for z in (0.0, -SHOCKWAVE_VISIBLE * SHOCKWAVE_DEPTH):
+        aspect = max(1.0,(half_width-0.9)/0.8)
+        scale, base = basin_fit(tilt, turn, half_width, ridge, aspect)
+        camera = basin_camera(half_width,ridge)
+        for x in (-half_width, half_width):
+            for z in (0.0, -SHOCKWAVE_DEPTH):
                 assert math.hypot(x, z + 0.5 * SHOCKWAVE_DEPTH) < camera            # nothing reaches the camera
-                y = base - shockwave_project((x, 0.0, z), tilt, turn, camera)[1] * scale
-                assert SHOCKWAVE_FAR_LINE - 1e-9 <= y <= SHOCKWAVE_NEAR_LINE + 1e-9
+                y = base - basin_project((x, 0.0, z), tilt, turn, camera)[1] * scale
+                assert 0.16 - 1e-9 <= y <= 0.96 + 1e-9
 
 
 def test_the_capture_turns_transient_onsets_into_aged_events():

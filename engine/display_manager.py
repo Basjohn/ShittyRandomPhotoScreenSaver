@@ -213,6 +213,9 @@ class DisplayManager(QObject):
         self._quick_visualizer_owner: Any | None = None
         # A live W/A/S/D view orbit not yet saved: (mode id, {setting: value}).
         self._quick_view_orbit_pending: tuple[str, dict[str, float]] | None = None
+        self._quick_view_pose_owner = None
+        # Press-scoped internal pan baseline: owner, mode, generation, pan x/y.
+        self._quick_scene_view_gesture = None
         self._quick_visualizer_edit_orbit_sample: tuple[object, ...] | None = None
         self._quick_visualizer_unit: QuickDisplayUnit | None = None
         self._quick_visualizer_media_model: Any | None = None
@@ -799,6 +802,12 @@ class DisplayManager(QObject):
                 continue
             try:
                 display.runtime.input_controller.set_view_orbit_enabled(admitted)
+                owner = self._quick_visualizer_owner
+                from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+                display.runtime.input_controller.set_scene_transform_enabled(bool(
+                    admitted and owner is not None
+                    and get_visualizer_mode_descriptor(owner.controller.mode_id).scene_transform_settings
+                ), mode_id=owner.controller.mode_id if owner is not None else "")
             except RuntimeError:
                 # A replacement generation can retire between snapshot and push.
                 continue
@@ -817,6 +826,7 @@ class DisplayManager(QObject):
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
+            self._quick_view_pose_owner = owner
             self._refresh_quick_visualizer_edit_content_envelope()
 
     def _orbit_quick_visualizer_view(self, turn_steps: float, tilt_steps: float) -> None:
@@ -833,6 +843,7 @@ class DisplayManager(QObject):
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
+            self._quick_view_pose_owner = owner
             self._refresh_quick_visualizer_edit_content_envelope()
 
     def _orbit_quick_visualizer_view_from_edit_drag(
@@ -956,13 +967,13 @@ class DisplayManager(QObject):
             accepted_parameters = edit_content_envelope_parameters(
                 logical.mode_id, logical.mode_state.parameters, bar_count=logical.common.bar_count,
             )
-        if accepted_parameters is not None and logical.mode_id == 'sphere':
+        if accepted_parameters is not None and logical.mode_id in ('sphere','shockwave_grid'):
             # A pointer drag changes the saved presentation view directly with
             # no held-key rate.  Use that same live camera for every accepted
             # Edit refresh, including after a new audio packet lands.
-            from widgets.spotify_visualizer.view_orbit import view_orbit_values
-            accepted_parameters.update(view_orbit_values(
-                owner.controller.presentation_state, 'sphere', time.time()))
+            from widgets.spotify_visualizer.view_orbit import view_pose_values
+            accepted_parameters.update(view_pose_values(
+                owner.controller.presentation_state, logical.mode_id, time.time()))
         if track_orbit and accepted_parameters is not None:
             shadow_style = None
             alpha_style = None
@@ -997,11 +1008,11 @@ class DisplayManager(QObject):
         else:
             publish_footprint(resolve_owner_edit_content_envelope(owner, presentation, logical=logical))
 
-    def _persist_quick_visualizer_view(self) -> None:
+    def _persist_quick_visualizer_view(self, *, settle_motion: bool = True) -> None:
         """Settle and save a finished orbit once (no key held and no drag on any more)."""
 
         owner = self._quick_visualizer_owner
-        if owner is not None:
+        if owner is not None and settle_motion:
             from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion
 
             now = time.time()
@@ -1016,6 +1027,8 @@ class DisplayManager(QObject):
                     self._quick_view_orbit_pending = ('sphere', endpoint)
         pending = self._quick_view_orbit_pending
         self._quick_view_orbit_pending = None
+        pose_owner = getattr(self, '_quick_view_pose_owner', None)
+        self._quick_view_pose_owner = None
         self._refresh_quick_visualizer_edit_content_envelope()
         settings = self.settings_manager
         if pending is None or settings is None:
@@ -1024,6 +1037,12 @@ class DisplayManager(QObject):
         from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
 
         mode_id, values = pending
+        if (owner is None or owner.is_retired or str(owner.controller.mode_id) != mode_id
+                or pose_owner is not None and pose_owner is not owner):
+            return  # stale mode/generation gesture never writes another view
+        from widgets.spotify_visualizer.view_orbit import view_pose_values
+        current_pose = view_pose_values(owner.controller.presentation_state, mode_id, time.time())
+        values = {**current_pose, **values} if settle_motion else current_pose
         section = settings.get("widgets.spotify_visualizer")
         custom_presets = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(section, Mapping) or not isinstance(custom_presets, Mapping):
@@ -1060,27 +1079,120 @@ class DisplayManager(QObject):
             self._set_quick_authored_layout_enabled(True, restore_base=False)
         return began
 
+    def _quick_scene_view_context(self):
+        """Descriptor-admitted internal transform using the current immutable interior."""
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return None
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        descriptor = get_visualizer_mode_descriptor(owner.controller.mode_id)
+        if not descriptor.scene_transform_settings:
+            return None
+        item = owner.presentation_runtime.scene_controller.visualizer_item
+        presentation = item.presentation if item is not None else None
+        return owner, descriptor, presentation
+
+    def _capture_quick_scene_view_gesture(self, owner, descriptor) -> None:
+        _scale, pan_x, pan_y = descriptor.scene_transform_settings
+        state = owner.controller.presentation_state
+        self._quick_scene_view_gesture = (
+            owner, descriptor.mode_id, getattr(self, '_runtime_generation', None),
+            float(getattr(state, f'_{pan_x}')), float(getattr(state, f'_{pan_y}')),
+        )
+
+    def _quick_scene_view_gesture_current(self, owner, descriptor) -> bool:
+        sample = getattr(self, '_quick_scene_view_gesture', None)
+        return bool(sample is not None and sample[0] is owner and sample[1] == descriptor.mode_id
+                    and sample[2] == getattr(self, '_runtime_generation', None))
+
+    def _publish_quick_scene_view(self, owner, descriptor, values) -> None:
+        from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+        pose = transform_visualizer_scene(owner.controller.presentation_state, descriptor.mode_id, values)
+        if pose:
+            self._quick_view_orbit_pending = (descriptor.mode_id, pose)
+            self._quick_view_pose_owner = owner
+            self._refresh_quick_visualizer_edit_content_envelope()
+
     def _start_quick_visualizer_move(self) -> None:
-        """A new Alt+right press starts a new pointer origin, even after Alt+wheel."""
+        """Rebase each native press; framed scenes never enter direct CUSTOM."""
+        self._quick_scene_view_gesture = None
+        context = self._quick_scene_view_context()
+        if context is not None:
+            owner, descriptor, _presentation = context
+            self._capture_quick_scene_view_gesture(owner, descriptor)
+            return
         if self._begin_quick_visualizer_gesture():
             self._quick_custom_layout_owner.rebase_direct_visualizer_drag()
 
     def _move_quick_visualizer(self, offset: QPoint, cursor: QPoint) -> None:
+        context = self._quick_scene_view_context()
+        if context is not None:
+            owner, descriptor, presentation = context
+            if not self._quick_scene_view_gesture_current(owner, descriptor):
+                return
+            if presentation is None:
+                return
+            width, height = presentation.content_rect[2:]
+            if width <= 0 or height <= 0:
+                return
+            sample = self._quick_scene_view_gesture
+            _scale, pan_x, pan_y = descriptor.scene_transform_settings
+            self._publish_quick_scene_view(owner, descriptor, {
+                pan_x: sample[3] + float(offset.x()) / float(width),
+                pan_y: sample[4] + float(offset.y()) / float(height),
+            })
+            return
+        if getattr(self, '_quick_scene_view_gesture', None) is not None:
+            return  # a mode replacement cannot turn an old pan into outer movement
         if self._begin_quick_visualizer_gesture():
             self._quick_custom_layout_owner.move_direct_visualizer(offset, cursor)
 
     def _scale_quick_visualizer(self, angle_delta_y: int) -> None:
+        context = self._quick_scene_view_context()
+        if context is not None:
+            owner, descriptor, _presentation = context
+            if getattr(self, '_quick_scene_view_gesture', None) is None:
+                self._capture_quick_scene_view_gesture(owner, descriptor)
+            if not self._quick_scene_view_gesture_current(owner, descriptor):
+                return
+            scale_key, _pan_x, _pan_y = descriptor.scene_transform_settings
+            state = owner.controller.presentation_state
+            step = max(-100.0, min(100.0, float(angle_delta_y) / 120.0))
+            self._publish_quick_scene_view(owner, descriptor, {
+                scale_key: float(getattr(state, f'_{scale_key}')) * descriptor.scene_scale_step ** step,
+            })
+            return
+        if getattr(self, '_quick_scene_view_gesture', None) is not None:
+            return
         if self._begin_quick_visualizer_gesture():
             self._quick_custom_layout_owner.scale_direct_visualizer(angle_delta_y)
 
     def _finish_quick_visualizer_gesture(self) -> None:
-        """The gesture's end: one commit through Edit's Save (nothing when nothing changed)."""
+        """Settle internal pose once; frameless direct gestures retain Edit's Save."""
+        sample = getattr(self, '_quick_scene_view_gesture', None)
+        if sample is not None:
+            self._quick_scene_view_gesture = None
+            owner = self._quick_visualizer_owner
+            if (owner is sample[0] and owner is not None and not owner.is_retired
+                    and str(owner.controller.mode_id) == sample[1]
+                    and getattr(self, '_runtime_generation', None) == sample[2]):
+                self._persist_quick_visualizer_view(settle_motion=False)
+            elif getattr(self, '_quick_view_pose_owner', None) is sample[0]:
+                self._quick_view_orbit_pending = None
+                self._quick_view_pose_owner = None
+            return
         owner = self._quick_custom_layout_owner
         if not owner.is_direct:
             return
         owner.finish_direct_visualizer_gesture()
         if self._authored_layout_allowed_by_settings():
             self._set_quick_authored_layout_enabled(True, restore_base=False)
+
+    def _route_quick_visualizer_input(self, unit, callback, *args) -> None:
+        if (unit.is_retired or unit.runtime.runtime_generation != self._runtime_generation
+                or not unit.runtime.input_controller.input_state.admission_open):
+            return
+        callback(*args)
 
     def _configure_quick_auxiliary(self, unit: QuickDisplayUnit) -> None:
         """Apply canonical generation-scoped auxiliary state once before show."""
@@ -1782,14 +1894,34 @@ class DisplayManager(QObject):
         runtime.cycle_transition_requested.connect(
             self.cycle_transition_requested.emit
         )
-        runtime.view_orbit_rates_changed.connect(self._set_quick_view_orbit_rates)
-        runtime.view_orbit_requested.connect(self._orbit_quick_visualizer_view)
-        runtime.view_orbit_finished.connect(self._persist_quick_visualizer_view)
-        runtime.visualizer_move_started.connect(self._start_quick_visualizer_move)
-        runtime.visualizer_move_requested.connect(self._move_quick_visualizer)
-        runtime.visualizer_scale_requested.connect(self._scale_quick_visualizer)
-        runtime.visualizer_gesture_finished.connect(self._finish_quick_visualizer_gesture)
+        runtime.view_orbit_rates_changed.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._set_quick_view_orbit_rates, *args)
+        )
+        runtime.view_orbit_requested.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._orbit_quick_visualizer_view, *args)
+        )
+        runtime.view_orbit_finished.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._persist_quick_visualizer_view, *args)
+        )
+        runtime.visualizer_move_started.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._start_quick_visualizer_move, *args)
+        )
+        runtime.visualizer_move_requested.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._move_quick_visualizer, *args)
+        )
+        runtime.visualizer_scale_requested.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._scale_quick_visualizer, *args)
+        )
+        runtime.visualizer_gesture_finished.connect(
+            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._finish_quick_visualizer_gesture, *args)
+        )
         runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        owner = self._quick_visualizer_owner
+        runtime.input_controller.set_scene_transform_enabled(bool(
+            owner is not None and not owner.is_retired
+            and get_visualizer_mode_descriptor(owner.controller.mode_id).scene_transform_settings
+        ), mode_id=owner.controller.mode_id if owner is not None else "")
         runtime.context_menu_requested.connect(
             lambda _position, display=unit: self._refresh_quick_context_menu(
                 display
@@ -3398,6 +3530,8 @@ class DisplayManager(QObject):
             chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
         # An orbit still held when the Visualizer goes is saved now; its release never comes.
         self._persist_quick_visualizer_view()
+        self._quick_scene_view_gesture = None
+        self._quick_view_pose_owner = None
         self._quick_visualizer_owner = None
         self._quick_visualizer_unit = None
         self._publish_quick_view_orbit_admission()

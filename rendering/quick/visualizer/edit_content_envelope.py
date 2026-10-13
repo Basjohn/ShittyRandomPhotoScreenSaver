@@ -28,8 +28,9 @@ _ENVELOPE_PARAMETER_KEYS = {
         "spectrum_ghosting_enabled", "spectrum_ghost_alpha",
     ),
     "shockwave_grid": (
-        "shockwave_grid_turn", "shockwave_grid_tilt", "shockwave_grid_horizon",
-        "shockwave_grid_wave_height", "shockwave_grid_idle",
+        "shockwave_grid_turn", "shockwave_grid_tilt", "shockwave_grid_scene_scale",
+        "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y",
+        "shockwave_grid_terrain", "shockwave_grid_terrain_height",
     ),
     "sphere": (
         "sphere_fragment_strength", "sphere_particle_distance", "sphere_perspective_strength",
@@ -264,19 +265,11 @@ def _shockwave_envelope(
 ) -> dict[str, object] | None:
     from rendering.gl_programs.shockwave_grid_program import (
         SHOCKWAVE_DEPTH,
-        SHOCKWAVE_MAX_RIDGE,
         SHOCKWAVE_MAX_TILT,
         SHOCKWAVE_MAX_TURN,
-        SHOCKWAVE_MAX_STRENGTH,
-        SHOCKWAVE_IDLE_HEIGHT,
-        SHOCKWAVE_VISIBLE,
-        shockwave_camera,
-        shockwave_fit,
         shockwave_half_width,
-        shockwave_amplitude,
-        shockwave_project,
-        shockwave_reach,
     )
+    from rendering.gl_programs.neon_lake_basin_program import basin_bounds, basin_fit, basin_item_point
 
     field = _local_content_rect(presentation)
     if field[3] <= 0.0:
@@ -284,43 +277,31 @@ def _shockwave_envelope(
     half_width = shockwave_half_width(field[2] / field[3])
     tilt = SHOCKWAVE_MAX_TILT * float(parameters["shockwave_grid_tilt"])
     turn = SHOCKWAVE_MAX_TURN * float(parameters["shockwave_grid_turn"])
-    ridge = SHOCKWAVE_MAX_RIDGE * float(parameters["shockwave_grid_horizon"])
-    fit = shockwave_fit(tilt, turn, half_width, ridge)
-    scale, base = fit
-    projected_pivot = shockwave_project(
-        (0.0, 0.0, -0.5 * SHOCKWAVE_DEPTH), tilt, turn,
-        shockwave_camera(half_width),
-    )
-    pivot = (
-        field[0] + 0.5 * field[2] + projected_pivot[0] * scale * field[3],
-        field[1] + field[3] * (base - projected_pivot[1] * scale),
-    )
-    wave_height = float(parameters["shockwave_grid_wave_height"])
-    idle = float(parameters["shockwave_grid_idle"])
-    reach = shockwave_reach(
-        field, fit, tilt, turn, half_width, ridge, wave_height, idle,
-    )
-    amplitude = shockwave_amplitude(wave_height)
-    crest = (
-        1.25 * amplitude * SHOCKWAVE_MAX_STRENGTH
-        + amplitude * SHOCKWAVE_IDLE_HEIGHT * max(0.0, idle)
-    )
-    reach_x = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * half_width
-    reach_z = min(1.0, 1.05 * SHOCKWAVE_VISIBLE) * SHOCKWAVE_DEPTH
-    low_y = -0.5 * crest
-    high_y = max(crest, 1.05 * ridge)
-    camera = shockwave_camera(half_width)
+    terrain = parameters["shockwave_grid_terrain"]
+    height_scale = float(parameters["shockwave_grid_terrain_height"])*1.50
+    maximum = max(0.19, float(terrain["maximum"])*height_scale)
+    fit = basin_fit(tilt, turn, half_width, maximum, field[2]/field[3],
+                    basin_bounds(terrain["size"], terrain["data"]), height_scale)
+    scene_scale = float(parameters["shockwave_grid_scene_scale"])
+    pan = (float(parameters["shockwave_grid_scene_pan_x"]), float(parameters["shockwave_grid_scene_pan_y"]))
+
+    def project(point):
+        x,y = basin_item_point(point, field, fit, tilt, turn, half_width, maximum, scene_scale, pan)
+        # The derived guide follows the same scene pose but lives inside the
+        # card, including extreme zoom/pan and Edit. It cannot author geometry.
+        return (min(max(x,field[0]),field[0]+field[2]), min(max(y,field[1]),field[1]+field[3]))
+
+    pivot = project((0.0,0.0,-0.5*SHOCKWAVE_DEPTH))
     world = (
-        (-reach_x, low_y, 0.0), (reach_x, low_y, 0.0),
-        (reach_x, high_y, 0.0), (-reach_x, high_y, 0.0),
-        (-reach_x, low_y, -reach_z), (reach_x, low_y, -reach_z),
-        (reach_x, high_y, -reach_z), (-reach_x, high_y, -reach_z),
+        (-half_width,0.0,0.0),(half_width,0.0,0.0),
+        (half_width,maximum,0.0),(-half_width,maximum,0.0),
+        (-half_width,0.0,-SHOCKWAVE_DEPTH),(half_width,0.0,-SHOCKWAVE_DEPTH),
+        (half_width,maximum,-SHOCKWAVE_DEPTH),(-half_width,maximum,-SHOCKWAVE_DEPTH),
     )
-    cage = tuple(
-        (field[0] + 0.5 * field[2] + projected[0] * scale * field[3],
-         field[1] + field[3] * (base - projected[1] * scale))
-        for projected in (shockwave_project(point, tilt, turn, camera) for point in world)
-    )
+    cage = tuple(project(point) for point in world)
+    # Normal-card selection remains its fixed authored outer rectangle. Only
+    # the clipped internal camera guide changes with view pose.
+    reach = (0.0,0.0,float(presentation.outer_rect[2]),float(presentation.outer_rect[3]))
     return _record(
         "shockwave_grid", reach, pivot, cage_points=cage,
         north_face=_north_face_pose(cage),

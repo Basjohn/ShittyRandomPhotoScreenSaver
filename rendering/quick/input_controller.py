@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from rendering.runtime_input import RuntimeInputOwner
@@ -17,6 +17,7 @@ class QuickInputController(RuntimeInputOwner):
     """Apply shared product input policy without hot-path Settings/provider reads."""
 
     input_state_changed = Signal(object)
+    scene_transform_admission_changed = Signal(bool)
     widget_glow_pressed = Signal(object, object)
     admitted_pointer_pressed = Signal(object, object)
     custom_layout_edit_requested = Signal()
@@ -53,6 +54,62 @@ class QuickInputController(RuntimeInputOwner):
             interaction_mode_enabled=bool(interaction_mode_enabled),
         )
         self._custom_layout_active_provider = custom_layout_active_provider
+        self._scene_transform_enabled = False
+        self._scene_transform_mode = ""
+
+    def set_scene_transform_enabled(self, enabled: bool, *, mode_id: str = "") -> None:
+        """Event-published descriptor capability, with no passive Settings reads."""
+        enabled = bool(enabled)
+        mode_id = str(mode_id) if enabled else ""
+        changed = self._scene_transform_enabled != enabled or self._scene_transform_mode != mode_id
+        if self._scene_transform_enabled and (not enabled or self._scene_transform_mode != mode_id):
+            self._end_visualizer_gesture()
+            if self._view_orbit_drag is not None:
+                self._view_orbit_drag = None
+                self._finish_view_orbit_if_idle()
+        self._scene_transform_enabled = enabled
+        self._scene_transform_mode = str(mode_id) if enabled else ""
+        if changed:
+            self.scene_transform_admission_changed.emit(enabled)
+
+    @property
+    def scene_transform_enabled(self) -> bool:
+        return self._scene_transform_enabled
+
+    def eventFilter(self, watched, event) -> bool:
+        # Installed only while Edit is active on a framed scene. Qt Quick's
+        # retained wheel delivery precedes wheelEvent, so intercept that narrow
+        # Alt pose gesture before QML can also resize its outer card.
+        kind = event.type()
+        if kind == QEvent.Type.Wheel:
+            return self.handle_framed_scene_wheel(event)
+        if kind == QEvent.Type.MouseButtonPress:
+            return self.handle_framed_scene_press(event)
+        if self.framed_scene_gesture_active:
+            if kind == QEvent.Type.MouseMove:
+                return self.handle_mouse_move(event)
+            if kind == QEvent.Type.MouseButtonRelease:
+                return self.handle_mouse_release(event)
+        return False
+
+    @property
+    def framed_scene_gesture_active(self) -> bool:
+        return bool(self._state.admission_open and self._scene_transform_enabled
+                    and (self._view_orbit_drag is not None or self._visualizer_drag_origin is not None))
+
+    def handle_framed_scene_press(self, event: QMouseEvent) -> bool:
+        """Edit retains geometry handles; Alt over a framed scene owns its pose."""
+        if not (self._state.admission_open and self._scene_transform_enabled
+                and event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton)
+                and self._alt_gesture_on_visualizer(event.modifiers(), event.position(), True)):
+            return False
+        return super().handle_mouse_press(event, global_ctrl_held=True)
+
+    def handle_framed_scene_wheel(self, event) -> bool:
+        if not (self._state.admission_open and self._scene_transform_enabled
+                and self._alt_gesture_on_visualizer(event.modifiers(), event.position(), True)):
+            return False
+        return super().handle_wheel(event, global_ctrl_held=True)
 
     @property
     def screen_index(self) -> int:
@@ -266,6 +323,7 @@ class QuickInputController(RuntimeInputOwner):
         if not self._state.admission_open:
             return False
         super().cleanup()
+        self.set_scene_transform_enabled(False)
         self._custom_layout_active_provider = None
         self._publish_state(
             admission_open=False,

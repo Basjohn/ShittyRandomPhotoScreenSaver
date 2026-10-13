@@ -114,7 +114,7 @@ Reference figures (relative GPU in cf, thread CPU in ms, counts per frame):
 | Particle | 152.4 | 0.145 | 65 | 385 |
 | Spectrum | 2.40 | 0.183 | 17 | 754 |
 | Sphere | 6.86 | 0.394 | 78 | 1473 |
-| Shockwave Grid | 15.89 | 0.429 | 146 | 1883 |
+| Shockwave Grid (flat scene before Neon Lake Basin) | 15.89 | 0.429 | 146 | 1883 |
 | Oscilloscope | 144.0 | 0.325 | 17 | 1768 |
 
 Every transition's own steady cost is recorded beside it in `Docs/Reference/Transitions.md`.

@@ -26,6 +26,19 @@ Two-sampler warm passes remove five Python-to-GL calls. A bounded local measurem
 median per call. This measures only frame binding, not whole-transition FPS or loaded-desktop tails. Static DSA mesh
 construction alone is not claimed to improve steady frames.
 
+## Opt-in authored heightfields
+
+`rendering/gl_programs/heightfield.py` and `heightfield_glsl.py` share bilinear authored-zero water classification and
+opt-in positive cubic B-spline surface sampling, over the existing bendable mesh. Fragment-only helpers supply curved
+surface wire coordinates and contours; tessellation edges are not the artistic wireframe.
+Only admitted heightfield consumers import/use these primitives. `rendering/quick/scene3d/heightfield.py` owns one lazy
+immutable R32F or explicitly requested RG32F texture per consumer/context, with upload-on-change and explicit
+unpack/texture/sampler restoration. The optional second channel holds authored distance to bilinear land support;
+its bounded separable distance transform runs at configuration, never on the logical or render clock.
+Failed release retains the owned handle for retry. There is no shared simulation, clock or global texture cache.
+Neon Lake Basin's source/authoring contract lives in `Docs/Reference/Neon_Lake_Basin.md`; its cost/fidelity gates remain
+in `Current_Plan.md` until measured and accepted.
+
 ## Photo reflection resources
 
 `PhotoEnvironment` owns its photo copy, immutable texture and framebuffer. Named construction allocates the complete

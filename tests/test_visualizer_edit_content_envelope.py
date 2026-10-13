@@ -25,7 +25,12 @@ def _presentation(mode: str, *, extent=(420.0, 280.0)):
 
 
 def _parameters() -> dict[str, object]:
-    return dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    values = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
+    pres = SimpleNamespace()
+    apply_presentation_vis_mode_kwargs(pres, values)
+    values["shockwave_grid_terrain"] = pres._shockwave_grid_terrain
+    return values
 
 
 def _logical(count=24):
@@ -124,6 +129,25 @@ def test_north_is_centered_on_world_face_and_rotates_with_projected_cage_edge(mo
 def test_planar_mode_has_no_edit_content_envelope() -> None:
     presentation = _presentation("spectrum")
     assert resolve_edit_content_envelope("spectrum", presentation, _parameters()) is None
+
+
+def test_framed_scene_guide_and_selection_never_escape_card_at_extreme_pose():
+    presentation = _presentation("shockwave_grid", extent=(480.0,210.0))
+    values = _parameters()
+    normal = resolve_edit_content_envelope("shockwave_grid",presentation,values)
+    values.update(shockwave_grid_scene_scale=4.0,shockwave_grid_scene_pan_x=1.8,
+                  shockwave_grid_scene_pan_y=-1.4,shockwave_grid_turn=.8,shockwave_grid_tilt=.9)
+    extreme = resolve_edit_content_envelope("shockwave_grid",presentation,values)
+    assert normal is not None and extreme is not None
+    assert tuple(normal[k] for k in ('left','top','right','bottom')) == tuple(extreme[k] for k in ('left','top','right','bottom'))
+    assert (extreme['left'],extreme['top'],extreme['right'],extreme['bottom']) == (0.,0.,480.,210.)
+    left,top,width,height = presentation.content_rect
+    left-=presentation.outer_rect[0]; top-=presentation.outer_rect[1]
+    for point in extreme['cage_points']:
+        assert left <= point['x'] <= left+width
+        assert top <= point['y'] <= top+height
+    assert left <= extreme['pivot_x'] <= left+width
+    assert top <= extreme['pivot_y'] <= top+height
 
 
 def test_missing_or_silent_extruded_source_has_no_fake_maximum_height_item() -> None:
