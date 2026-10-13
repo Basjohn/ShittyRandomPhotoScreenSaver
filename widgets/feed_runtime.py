@@ -14,7 +14,7 @@ import weakref
 from typing import Any, Callable
 
 from core.feeds.config import CustomFeedConfig
-from core.feeds.models import FeedRefreshResult, FeedSourceSpec
+from core.feeds.models import FeedHealth, FeedRefreshResult, FeedSourceSpec
 from core.feeds.source import FeedRefreshCancelled
 from core.task_control import ExpectedTaskCancellation
 from core.feeds.news import NewsFeedConfig, NewsProvider, merge_news_results
@@ -62,7 +62,7 @@ class _SourceState:
     # Leading stories covered by the last artwork job (see _artwork_limit).
     artwork_item_limit: int = 0
     # A manual refresh requested while another source owns the family remote
-    # lane stays queued and retains force semantics until it is admitted.
+    # lane stays queued as explicit manual intent until it is admitted.
     force_refresh_pending: bool = False
     # False while this source still has immediate work in its current
     # presentation bundle (cache -> due refresh -> optional artwork). Consumers
@@ -311,7 +311,7 @@ class _FeedFamilyOwner:
                 # an accepted in-memory result, later visibility/reactivation
                 # must not reread the same cache merely to recreate an HTTP
                 # object; network state is constructed only when actually due.
-                self._submit(state, cache_only=True, force=False)
+                self._submit(state, cache_only=True)
             else:
                 # Reactivation is an event: resume an interrupted optional
                 # artwork batch only if this accepted snapshot still needs it.
@@ -319,7 +319,7 @@ class _FeedFamilyOwner:
                 if state.due_at <= self._now() + 0.001:
                     self._admit_due_work()
                 elif self._artwork_needed(state):
-                    self._submit(state, cache_only=False, force=False, artwork_only=True)
+                    self._submit(state, cache_only=False, artwork_only=True)
         self._reschedule()
         return True
 
@@ -335,6 +335,15 @@ class _FeedFamilyOwner:
                 # has an active consumer. Do not let it survive dormancy and
                 # fire unexpectedly on a later reactivation.
                 state.force_refresh_pending = False
+                from core.threading.refresh_transition_gate import current_gate
+                gate = current_gate(self._generation)
+                if gate is not None:
+                    gate.cancel_refresh((id(self), state.spec.cache_key))
+                self._refresh_gate_deferred.discard(state.spec.cache_key)
+                if not state.in_flight:
+                    # A deferred follow-on has no worker left to finish its
+                    # bundle after its last consumer cancels the gate waiter.
+                    self._finish_remote_bundle(state.spec.cache_key)
             self._recompute_state_cadence(state)
             self._release_source_if_idle(state)
         if not self._active:
@@ -343,6 +352,7 @@ class _FeedFamilyOwner:
             # child is recreated lazily on the next real remote parse.
             self._close_parse_process()
         else:
+            self._maybe_complete_initial_admission()
             self._reschedule()
 
     def detach(self, lease: "FeedRuntimeLease") -> None:
@@ -403,7 +413,7 @@ class _FeedFamilyOwner:
             if lease.config.source_spec.cache_key == key and lease._running
         )
 
-    def request_refresh(self, lease: "FeedRuntimeLease") -> bool:
+    def request_refresh(self, lease: "FeedRuntimeLease", *, defer_admission: bool = False) -> bool:
         if self._retired or lease not in self._active:
             return False
         state = self._state_for(lease)
@@ -414,11 +424,17 @@ class _FeedFamilyOwner:
         if state.in_flight:
             return False
         state.force_refresh_pending = True
-        state.due_at = self._now()
-        state.due_is_backoff = False
+        state.presentation_settled = False
+        # Manual intent bypasses ordinary freshness, never a persisted provider floor.
+        now = self._now()
+        state.due_at = max(now, state.due_at) if state.due_is_backoff else now
+        if state.due_is_backoff and state.due_at > now:
+            _logger.info("[FEEDS] Manual refresh deferred by provider backoff source=%s remaining_s=%.1f",
+                         state.spec.cache_key, state.due_at - now)
         self._cancel_deadline()
-        self._admit_due_work()
-        self._reschedule()
+        if not defer_admission:
+            self._admit_due_work()
+            self._reschedule()
         return True
 
     def _source_for(self, state: _SourceState):
@@ -491,7 +507,7 @@ class _FeedFamilyOwner:
             self._admit_due_work()
             self._reschedule()
             return
-        if not self._submit(state, cache_only=False, force=False, artwork_only=True):
+        if not self._submit(state, cache_only=False, artwork_only=True):
             self._reschedule()
 
     def _artwork_needed(self, state: _SourceState) -> bool:
@@ -554,7 +570,7 @@ class _FeedFamilyOwner:
             artwork_files_by_item=tuple(warm.files_by_item.items()),
         )
 
-    def _submit(self, state: _SourceState, *, cache_only: bool, force: bool,
+    def _submit(self, state: _SourceState, *, cache_only: bool,
                 artwork_only: bool = False) -> bool:
         if self._retired or state.in_flight or not self._active_leases_for_state(state):
             return False
@@ -574,11 +590,11 @@ class _FeedFamilyOwner:
             owner_ref_for_resume = weakref.ref(self)
             def _resume_feed_work() -> None:
                 owner = owner_ref_for_resume()
-                if owner is None or owner._retired:
+                if owner is None or owner._retired or owner._states.get(cache_key) is not state:
                     return
                 owner._refresh_gate_deferred.discard(cache_key)
                 if cache_only or artwork_only:
-                    owner._submit(state, cache_only=cache_only, force=force,
+                    owner._submit(state, cache_only=cache_only,
                                   artwork_only=artwork_only)
                 else:
                     owner._admit_due_work()
@@ -591,6 +607,8 @@ class _FeedFamilyOwner:
         if remote_work:
             self._remote_bundle_key = cache_key
             state.presentation_settled = False
+            if not artwork_only:
+                state.force_refresh_pending = False
         state.in_flight = True
         state.work_cancel = Event()
         state.work_token += 1
@@ -639,18 +657,21 @@ class _FeedFamilyOwner:
                     raise ExpectedTaskCancellation("feed artwork no longer active") from None
             source = owner._source_for(state)
             try:
-                return source.load_cached() if cache_only else source.refresh(force=force)
+                return source.load_cached() if cache_only else source.refresh()
             except FeedRefreshCancelled as exc:
                 raise ExpectedTaskCancellation(str(exc) or "feed source no longer active") from None
 
         _work._srpss_runtime_generation = self._generation
 
+        admissions = self._refresh_gate_tokens
+
         def _release_admission() -> None:
-            owner = owner_ref()
-            if owner is not None:
-                owner._refresh_gate_tokens.pop(admission_key, None)
-            if gate is not None and gate_token is not None:
-                gate.finish_refresh(gate_token)
+            # Keep only the claim map alive, not its generation owner. Retirement
+            # clears this same map, so owner collection cannot cause a second finish.
+            claim = admissions.pop(admission_key, None)
+            if claim is not None:
+                admitted_gate, admitted_token = claim
+                admitted_gate.finish_refresh(admitted_token)
 
         def _completed(task_result: object) -> None:
             result = (
@@ -658,6 +679,13 @@ class _FeedFamilyOwner:
                 if getattr(task_result, "success", False)
                 else None
             )
+            error = getattr(task_result, "error", None)
+            failure = ("cancelled" if isinstance(error, ExpectedTaskCancellation) else "worker_failed")
+            if not isinstance(result, FeedRefreshResult) and failure != "cancelled":
+                _logger.error("[FEEDS] Terminal worker failure source=%s phase=%s error_type=%s", cache_key,
+                              "cache" if cache_only else "artwork" if artwork_only else "refresh",
+                              type(error).__name__ if error is not None else "InvalidTaskResult")
+            delivery_started = False
             owner = owner_ref()
             if owner is None or owner._retired:
                 # Completion runs only after the worker returns. An obsolete
@@ -681,7 +709,7 @@ class _FeedFamilyOwner:
                     start = time.perf_counter() if measured else 0.0
                     try:
                         owner._complete(cache_key, state, token, cancel, result,
-                                        cache_only=cache_only, artwork_only=artwork_only)
+                                        cache_only=cache_only, artwork_only=artwork_only, failure=failure)
                     finally:
                         if measured:
                             elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -693,6 +721,10 @@ class _FeedFamilyOwner:
                                 )
 
             def _deliver() -> None:
+                nonlocal delivery_started
+                if delivery_started:
+                    return
+                delivery_started = True
                 try:
                     _publish_completed()
                 finally:
@@ -702,25 +734,18 @@ class _FeedFamilyOwner:
             try:
                 admitted = self._ui_dispatch(_deliver)
             except Exception:
-                # A dispatcher that executes inline may raise *after* delivery.
-                # Only attempt idempotent claim release, not duplicate publication.
-                _logger.exception("[REFRESH_GATE][FEEDS] GUI publication dispatch raised")
-                from core.threading.manager import ThreadManager
-                if not ThreadManager.run_on_ui_thread(_release_admission):
-                    if gate is not None:
-                        gate.close()  # no safe UI event loop for transition callbacks
-                return
-            if admitted is False:
-                # run_on_ui_thread explicitly returns False on rejected delivery.
-                # Missing this result previously left a claim held indefinitely.
-                # Legacy/test dispatchers returning None after executing inline
-                # are intentionally accepted; only False means rejection.
-                _logger.warning("[REFRESH_GATE][FEEDS] GUI publication rejected; retrying via UI owner")
+                _logger.exception("[FEEDS] GUI publication dispatch raised source=%s", cache_key)
+                if delivery_started:
+                    return  # inline delivery already completed; never republish
+                admitted = False
+                result, failure = None, "gui_dispatch_failed"
+            if admitted is False and not delivery_started:
+                _logger.warning("[FEEDS] GUI publication rejected source=%s; settling through canonical UI owner", cache_key)
+                result, failure = None, "gui_dispatch_failed"
                 from core.threading.manager import ThreadManager
                 if not ThreadManager.run_on_ui_thread(_deliver):
-                    # The runtime's own generation stop/retirement normally
-                    # releases claims. If there is no live GUI dispatcher, do
-                    # not invoke a deferred wallpaper callback on an IO thread.
+                    # No legal GUI owner remains. Retirement owns settlement;
+                    # never invoke presentation or transition callbacks on IO.
                     if gate is not None:
                         gate.close()
                 return
@@ -734,12 +759,16 @@ class _FeedFamilyOwner:
                 priority=self._task_priority,
             )
         except Exception:
-            state.in_flight = False
-            _release_admission()
-            if remote_work and self._remote_bundle_key == cache_key:
-                self._finish_remote_bundle(cache_key)
-            state.due_at = self._now() + 60.0
-            self._reschedule()
+            _logger.exception("[FEEDS] Worker submission failed source=%s", cache_key)
+            # Some managers execute callbacks inline before raising. That token
+            # has already settled (or advanced to its artwork follow-on).
+            if token != state.work_token or not state.in_flight:
+                return True
+            try:
+                self._complete(cache_key, state, token, cancel, None,
+                               cache_only=cache_only, artwork_only=artwork_only, failure="submission_failed")
+            finally:
+                _release_admission()
             return False
         return True
 
@@ -759,18 +788,17 @@ class _FeedFamilyOwner:
         *,
         cache_only: bool,
         artwork_only: bool = False,
+        failure: str = "worker_failed",
     ) -> None:
         if self._retired:
             return
         state = self._states.get(cache_key)
         remote_work = not cache_only
-        if (state is not submitted_state or token != state.work_token
-            or not state.in_flight):
-            self._release_source(submitted_state)
-            if remote_work:
-                self._finish_remote_bundle(cache_key)
-                self._admit_due_work()
-                self._reschedule()
+        if state is not submitted_state or token != state.work_token or not state.in_flight:
+            # A duplicate/late callback cannot close the transport or remote
+            # bundle now owned by a newer token on this same source.
+            if state is not submitted_state and token == submitted_state.work_token:
+                self._release_source(submitted_state)
             return
         state.in_flight = False
         if cancel.is_set():
@@ -784,7 +812,7 @@ class _FeedFamilyOwner:
             self._release_source(state)
             if self._active_leases_for_state(state):
                 if state.last_result is None:
-                    self._submit(state, cache_only=True, force=False)
+                    self._submit(state, cache_only=True)
                 else:
                     self._update_due(state, state.last_result)
                     self._admit_due_work()
@@ -795,6 +823,21 @@ class _FeedFamilyOwner:
                 self._admit_due_work()
             self._reschedule()
             return
+        terminal = not isinstance(result, FeedRefreshResult)
+        if terminal:
+            previous = state.last_result
+            # Runtime orchestration failures never invent/persist provider
+            # health. Retain the actual last-good text/art and settle visibly.
+            result = replace(previous, status=(previous.status if failure == "cancelled" else
+                                              "stale_cache" if previous.snapshot is not None else "unavailable"),
+                             failure=failure, changed=False) if previous is not None else FeedRefreshResult(
+                                 "unavailable", None, FeedHealth(), failure=failure)
+            if not artwork_only:
+                state.due_at = max(self._now() + 60.0, state.due_at if state.due_is_backoff else 0.0)
+            state.presentation_settled = True
+            if result.snapshot is not None:
+                state.artwork_attempted_at = result.snapshot.fetched_at
+                state.artwork_item_limit = self._artwork_limit(state)
         if isinstance(result, FeedRefreshResult):
             previous = state.last_result
             # An unchanged conditional response keeps already-admitted local art
@@ -810,7 +853,7 @@ class _FeedFamilyOwner:
                 )
             state.last_result = result
             self._refresh_published_artwork()
-            if not artwork_only and not cache_only:
+            if not terminal and not artwork_only and not cache_only:
                 # A 304 or an identical ordinary refresh must not reissue the
                 # same optional image requests at every source cadence. Only a
                 # changed document is eligible for another artwork batch.
@@ -821,7 +864,7 @@ class _FeedFamilyOwner:
                     state.artwork_attempted_at = result.snapshot.fetched_at
                 else:
                     state.artwork_attempted_at = None
-            if not artwork_only:
+            if not terminal and not artwork_only:
                 self._update_due(state, result)
 
             # Settlement belongs to the whole source bundle, not each callback.
@@ -829,7 +872,7 @@ class _FeedFamilyOwner:
             # or artwork pass. A remote text refresh likewise remains unsettled
             # until any admitted artwork follow-on completes.
             artwork_needed = self._artwork_needed(state)
-            if artwork_only:
+            if terminal or artwork_only:
                 state.presentation_settled = True
             elif cache_only:
                 state.presentation_settled = bool(
@@ -848,21 +891,24 @@ class _FeedFamilyOwner:
             self._refresh_published_artwork()
             for lease in self._active_leases_for_state(state):
                 lease._accept(result, from_cache=cache_only)
-        elif not artwork_only:
-            state.due_at = self._now() + 60.0
-            state.presentation_settled = True
 
+        if state.in_flight:
+            # NEWS share projection can start this source's artwork inside
+            # lease._accept. Its new token now owns the same remote bundle.
+            self._reschedule()
+            return
         if cache_only:
             # Cache-first publication never bypasses the shared remote lane.
             # A due source joins the serialized admission queue instead of
             # launching beside another source that happened to wake with it.
             self._admit_due_work()
-        elif not artwork_only and self._artwork_needed(state):
+        elif not terminal and not artwork_only and self._artwork_needed(state):
             # Keep this source's artwork in the same owned bundle. Only after
             # the bundle finishes does the next source receive admission.
-            if not self._submit(state, cache_only=False, force=False, artwork_only=True):
-                self._finish_remote_bundle(cache_key)
-                self._admit_due_work()
+            if not self._submit(state, cache_only=False, artwork_only=True):
+                if cache_key not in self._refresh_gate_deferred and not state.in_flight:
+                    self._finish_remote_bundle(cache_key)
+                    self._admit_due_work()
         else:
             if remote_work:
                 self._finish_remote_bundle(cache_key)
@@ -878,6 +924,9 @@ class _FeedFamilyOwner:
         if health.backoff_until is not None and health.backoff_until > now:
             state.due_at = float(health.backoff_until)
             state.due_is_backoff = True
+            return
+        if state.force_refresh_pending:
+            state.due_at = now
             return
         success = health.last_success_at
         if success is not None:
@@ -908,14 +957,13 @@ class _FeedFamilyOwner:
         candidates = [
             state for state in self._states.values()
             if (not state.in_flight
+                and state.last_result is not None
                 and self._active_leases_for_state(state)
                 and state.due_at <= now + 0.001)
         ]
         if candidates:
             state = min(candidates, key=lambda item: (item.due_at, item.spec.cache_key))
-            force = bool(state.force_refresh_pending)
-            if self._submit(state, cache_only=False, force=force):
-                state.force_refresh_pending = False
+            self._submit(state, cache_only=False)
             return
 
         # Optional artwork also uses the same remote lane, but never outranks a
@@ -932,7 +980,7 @@ class _FeedFamilyOwner:
                 artwork_candidates,
                 key=lambda item: (item.due_at, item.spec.cache_key),
             )
-            self._submit(state, cache_only=False, force=False, artwork_only=True)
+            self._submit(state, cache_only=False, artwork_only=True)
 
     def _reschedule(self) -> None:
         self._cancel_deadline()
@@ -1082,7 +1130,10 @@ class FeedRuntimeLease:
             return
         accept = getattr(consumer, "on_feed_runtime_result", None)
         if callable(accept):
-            accept(result, from_cache=bool(from_cache))
+            try:
+                accept(result, from_cache=bool(from_cache))
+            except Exception:
+                _logger.exception("[FEEDS] Consumer publication failed widget=%s", self.config.widget_id)
 
     @property
     def presentation_settled(self) -> bool:
@@ -1090,10 +1141,11 @@ class FeedRuntimeLease:
         if self._retired or not self._running or owner is None or owner.is_retired:
             return False
         state = owner._states.get(self.config.source_spec.cache_key)
-        return bool(state is not None and state.presentation_settled and not state.in_flight)
+        return bool(state is not None and state.presentation_settled and not state.in_flight
+                    and not state.force_refresh_pending)
 
-    def request_refresh(self) -> bool:
-        return bool(self._running and self._owner and self._owner.request_refresh(self))
+    def request_refresh(self, *, defer_admission: bool = False) -> bool:
+        return bool(self._running and self._owner and self._owner.request_refresh(self, defer_admission=defer_admission))
 
     def detach_consumer(self, consumer: object | None = None) -> None:
         """Sever the retained presentation callback without retiring twice.
@@ -1353,7 +1405,13 @@ class NewsRuntimeService:
     def request_refresh(self) -> bool:
         if self._retired:
             return False
-        admitted = [lease.request_refresh() for _provider_id, lease in self._leases]
+        # Stage the whole manual NEWS intent before any inline provider can
+        # finish; a publisher still queued must keep the aggregate unsettled.
+        admitted = [lease.request_refresh(defer_admission=True) for _provider_id, lease in self._leases]
+        owners = {lease._owner for _provider_id, lease in self._leases if lease._owner is not None}
+        for owner in owners:
+            owner._admit_due_work()
+            owner._reschedule()
         return any(admitted)
 
     def detach_consumer(self, consumer: object | None = None) -> None:

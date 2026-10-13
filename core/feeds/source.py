@@ -171,7 +171,7 @@ class FeedSource:
             return replace(result, local_artwork_by_item=local, artwork_files_by_item=files)
         return result
 
-    def refresh(self, *, force: bool = False) -> FeedRefreshResult:
+    def refresh(self) -> FeedRefreshResult:
         self._ensure_needed()
         now = float(self.now())
         record = self._load_compatible_record()
@@ -179,7 +179,7 @@ class FeedSource:
             record = FeedCacheRecord(source_id=self.spec.source_id, endpoint_fingerprint=self.fingerprint)
         self._ensure_needed()
         health = record.health
-        if not force and health.backoff_until is not None and now < health.backoff_until:
+        if health.backoff_until is not None and now < health.backoff_until:
             return self._result_from_record(
                 record,
                 status="backoff_cache" if record.snapshot is not None else "unavailable",

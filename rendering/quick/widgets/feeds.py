@@ -841,6 +841,10 @@ class FeedPresentationModel(QObject):
             )
             return
 
+        if not result.presentation_settled:
+            # NEWS may have no usable stories while another accepted provider
+            # remains queued. Its intermediate error cannot finish that intent.
+            return
         self._pending_content = None
         self._refreshing = False
         self._view_state = "error"

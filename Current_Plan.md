@@ -6,10 +6,10 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current authorization:** resumed by the operator, 2026-10-13. §1 is source-complete; next complete
-§2 FEEDS terminal-failure handling, then stop at that clean checkpoint. Visualizer
-migration, graphics expansion, media production and operator builds remain subsequent work. Use reviewed Luna xHigh/Max
-or Sol 6.1 Medium agents for bounded work; reserve one High Astra agent for visual parity audits after very significant work.
+**Current checkpoint:** §1 physical saver selection and §2 FEEDS terminal handling are source-complete, 2026-10-13.
+Stopped at the agreed checkpoint. Next implementation is §2A V1 when resumed; graphics, media production and operator
+builds remain subsequent work. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work; reserve one High
+Astra agent for visual parity audits after very significant work.
 
 **Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
 are accepted. Dev Curve currently has no observed issue; its earlier replay-floor investigation is closed. Do not reopen
@@ -27,42 +27,13 @@ Preserve unrelated local/user work. Agents do not run Nuitka, Build Runner or in
 
 Physical selection, Settings/draft/import/reset authoring and zero-live-display lifecycle are implemented. Durable
 behavior lives in `Docs/Contracts.md` → Geometry / CUSTOM; regression inventory lives in `Docs/TestSuite.md`.
-Physical power-cycle observation remains only the nonblocking §5 watchlist. Proceed to §2.
+Physical power-cycle observation remains only the nonblocking §5 watchlist.
 
-## 2. FEEDS queued/busy and terminal failure | In progress
+## 2. FEEDS queued/busy and terminal failure | Source checkpoint complete
 
-Busy begins when refresh is accepted, including admission queue time. A queued refresh is not by itself a stranded one.
-`widgets/feed_runtime.py` owns source scheduling/leases; `core/feeds` owns neutral source data; the shared refresh gate owns
-cross-family admission. `Docs/Reference/Feeds.md` owns provider/startup behavior.
-
-- [ ] **F1 — Trace every terminal path.** Follow accepted request through family/transition queue, worker submission,
-  result/error callbacks and GUI publication. Inspect thrown worker exceptions, cancellation, failed submission or GUI
-  dispatch, source removal, retirement and stale generation/epoch completions, especially paths without FeedRefreshResult.
-  Identify which existing owner must clear busy/in-flight, settle startup and release an admission claim exactly once.
-- [ ] **F2 — Fix proven gaps at that owner.** Preserve immediate busy, last-good stories/artwork, NEWS all-publisher cache
-  barrier, family startup settlement, source backoff and 2.5-second staggering. A terminal failure must neither leave busy
-  true nor finish a newer request. Surface failures loudly; do not add a timer, synthetic successful result, second source
-  queue or silent fallback. Keep unrelated services outside the gate until separately audited.
-  Read-only production-seam reproduction identified four concrete cases to turn into retained regression tests:
-  initial-cache worker failure leaves startup loading/the NEWS barrier open; refresh worker failure clears in-flight but
-  leaves presentation busy; artwork worker failure leaves presentation unsettled; and NEWS manual refresh can publish
-  settled after one publisher finishes while another remains queued. Trace `_FeedFamilyOwner` worker delivery/finish,
-  `FeedRuntimeLease.presentation_settled` and NEWS aggregation in `widgets/feed_runtime.py`. Reopen settlement on accepted
-  manual intent and account for `force_refresh_pending`; terminal errors need explicit publication at the existing owner.
-  The reproduced refresh/artwork failures released their admission claims: do not describe them as proven stranded gates.
-  Submission rejection also clears admission without publishing a terminal outcome; include it in the same generation-fenced
-  completion path. Preserve cancellation semantics rather than inventing a provider failure. Separately verify the source
-  discrepancy where manual `force` clears/bypasses backoff (`FeedSource.refresh`); reconcile it with the documented backoff
-  floor before changing behavior. This last discrepancy is source evidence, not yet a runtime reproduction.
-  Independent review also identified text-to-artwork bundle completion while the follow-on is still gate-deferred or has
-  started reentrantly from NEWS artwork-share publication. Preserve that same source's remote bundle through deferred/
-  in-flight artwork; start the 2.5-second inter-source cooldown only at real bundle completion. Prove linked NEWS/manual
-  refresh with images enabled through the real gate, including source removal/cancellation, without a new timer or queue.
-- [ ] **F3 — Fault-injection proof and checkpoint.** Use controlled worker/GUI callbacks to prove queued busy, exception,
-  cancel, rejected dispatch, retirement and late-completion behavior, with claims and startup settlement observed through
-  production seams. The existing runtime/gate baseline passed 35 tests during inspection; fixes and retained fault-injection
-  regressions are still outstanding. Run only relevant FEEDS/gate tests; update contract, commit and push. Stop the resumed run here.
-  Real contention attribution/fairness remains a nonblocking Awaiting Logs item in §5.
+Terminal failure, queued NEWS settlement, cache-first admission and text/artwork bundle ownership are implemented at
+existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
+live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
 ## 2A. Visualizer spec migration | Subsequent implementation
 
