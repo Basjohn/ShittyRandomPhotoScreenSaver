@@ -58,6 +58,11 @@ acceptance gate.
   mode identity/activation and shared audio/transient, Quick presentation, orbit/geometry and lazy Scene3D ownership,
   staying on the Qt Quick + Python + OpenGL 4.6 architecture. Adapt old saved settings safely where possible instead
   of silently corrupting or discarding Custom state.
+  **Framing contract (operator, 2026-10-13):** Neon Lake Basin is a normal bordered/framed card containing an orbitable
+  3D scene. Use CARD / CARD_INTERIOR presentation and retain the applicable 3D geometry/orbit contracts inside that card.
+  The scene never escapes its border at any pose or during Edit; no overflow option may bypass the clip. Forward-retire
+  the old Shockwave overflow state at canonical input/save boundaries, and prove real rendered clip pixels as well as
+  fixed outer-card geometry through orbit/resize. The old frameless Shockwave policy is superseded by this replacement.
   Reuse existing GPU wave/event facilities, stream rings, bloom and scene primitives; any missing heightfield/material
   capability is built as a measured, opt-in shared primitive **within this V4A delivery**, not silently deferred to §4
   or added as a private rendering stack. **High visual and musical parity with the supplied mocks is required on at
@@ -71,6 +76,8 @@ acceptance gate.
   still legible. Scope and checkpoint V4A internally as necessary, but **do not mark migration complete until the
   full rework and at least one high-parity preset are implemented and accepted together**.
   Internal checkpoints remain part of this one delivery:
+  Render-cost baseline before this replacement: `tools/baselines/overhead/2026-10-13_000e222e.json` (960×540,
+  control-relative timings and deterministic GL/Python call counts; compare unrelated consumers after shared changes).
   - [ ] **V4A.1 — Terrain and migration contract.** Define bounded immutable heightfield control data, base-height water
     classification and one-way adaptation of old profile/Custom/preset inputs. Old spectral-response nodes are not
     terrain coordinates: preserve their consumed audio intent explicitly rather than relabelling or discarding them.
@@ -81,7 +88,8 @@ acceptance gate.
   - [ ] **V4A.3 — Shared heightfield and complete scene.** Add only the missing opt-in sampling/classification/GPU
     representation to Scene3D, mirrored by CPU/GL tests. Reuse the existing onset ring, MeshResources, StreamRing,
     SceneTarget and optional emission bloom. Terrain changes replace one bounded GPU representation; ordinary frames
-    allocate/rebuild nothing. Deliver distinct water waves and solid terrain/ridge response with lazy retirement.
+    allocate/rebuild nothing. Deliver distinct water waves and solid terrain/ridge response with lazy retirement, a fixed
+    normal card and unconditional interior clipping of the orbitable 3D scene.
   - [ ] **V4A.4 — Preset, reaction and visual proof.** Author one editable basin preset, capture low/high frames and
     quiet/onset/sustained sequences from identical synthetic and real clips, and compare with the supplied mock.
     Use the single High Astra audit after this significant renderer work; resolve parity findings before acceptance.
