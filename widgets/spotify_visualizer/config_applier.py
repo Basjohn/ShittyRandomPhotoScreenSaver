@@ -349,40 +349,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     # The DevCurve field solve runs on the authored logical clock and consumes
     # its full parameter snapshot (including per-layer colour/outline), so these
     # are logical-owned even though some read as styling.
-    if 'devcurve_base_level' in kwargs:
-        host._devcurve_base_level = max(0.10, min(0.90, float(kwargs['devcurve_base_level'])))
-    if 'devcurve_motion_power' in kwargs:
-        host._devcurve_motion_power = max(0.0, min(3.0, float(kwargs['devcurve_motion_power'])))
-    if 'devcurve_idle_motion' in kwargs:
-        host._devcurve_idle_motion = max(0.0, min(1.5, float(kwargs['devcurve_idle_motion'])))
-    if 'devcurve_idle_speed' in kwargs:
-        host._devcurve_idle_speed = max(0.05, min(2.0, float(kwargs['devcurve_idle_speed'])))
-    if 'devcurve_smoothness' in kwargs:
-        host._devcurve_smoothness = max(0.0, min(1.0, float(kwargs['devcurve_smoothness'])))
-    if 'devcurve_ghosting_enabled' in kwargs:
-        host._devcurve_ghosting_enabled = bool(kwargs['devcurve_ghosting_enabled'])
-    if 'devcurve_ghost_alpha' in kwargs:
-        host._devcurve_ghost_alpha = max(0.0, min(1.0, float(kwargs['devcurve_ghost_alpha'])))
-    if 'devcurve_ghost_decay' in kwargs:
-        host._devcurve_ghost_decay = max(0.1, min(1.0, float(kwargs['devcurve_ghost_decay'])))
-    if 'devcurve_foreground_shadow_enabled' in kwargs:
-        host._devcurve_foreground_shadow_enabled = bool(kwargs['devcurve_foreground_shadow_enabled'])
-    if 'devcurve_foreground_shadow_alpha' in kwargs:
-        host._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_alpha'])))
-    if 'devcurve_foreground_shadow_darken' in kwargs:
-        host._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_darken'])))
-    if 'devcurve_foreground_shadow_offset' in kwargs:
-        host._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(kwargs['devcurve_foreground_shadow_offset'])))
-    if 'devcurve_foreground_specular_enabled' in kwargs:
-        host._devcurve_foreground_specular_enabled = bool(kwargs['devcurve_foreground_specular_enabled'])
-    if 'devcurve_foreground_specular_alpha' in kwargs:
-        host._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_specular_alpha'])))
-    if 'devcurve_foreground_specular_width' in kwargs:
-        host._devcurve_foreground_specular_width = max(0.002, min(0.120, float(kwargs['devcurve_foreground_specular_width'])))
-    if 'devcurve_foreground_specular_offset' in kwargs:
-        host._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(kwargs['devcurve_foreground_specular_offset'])))
-    if 'devcurve_foreground_specular_crest_bias' in kwargs:
-        host._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(kwargs['devcurve_foreground_specular_crest_bias'])))
     if 'devcurve_active_layer' in kwargs:
         active = str(kwargs['devcurve_active_layer']).strip().lower()
         host._devcurve_active_layer = active if active in {'bass', 'vocals', 'mids', 'transients'} else 'bass'

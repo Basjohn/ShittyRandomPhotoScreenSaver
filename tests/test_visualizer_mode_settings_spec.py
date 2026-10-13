@@ -101,6 +101,32 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
     assert set(parameters) == {control.key for control in spec.presentation_controls()}
 
 
+def test_devcurve_production_applier_writes_each_logical_control_once():
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from widgets.spotify_visualizer.config_applier import (
+        apply_logical_vis_mode_kwargs,
+        apply_presentation_vis_mode_kwargs,
+    )
+
+    class Owner:
+        def __init__(self):
+            object.__setattr__(self, "writes", {})
+
+        def __setattr__(self, name, value):
+            self.writes[name] = self.writes.get(name, 0) + 1
+            object.__setattr__(self, name, value)
+
+    spec = require_mode_settings("devcurve")
+    values = {control.key: _different(control, DEFAULTS[control.key]) for control in spec.controls}
+    logical, presentation = Owner(), Owner()
+    apply_logical_vis_mode_kwargs(logical, values)
+    apply_presentation_vis_mode_kwargs(presentation, values)
+    assert logical.writes == {f"_{key}": 1 for key in values}
+    assert presentation.writes == {}
+    for key, value in values.items():
+        assert getattr(logical, f"_{key}") == value
+
+
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.mode_id)
 def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settings_manager, spec):
     from PySide6.QtGui import QColor
@@ -223,7 +249,7 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
             load_spec_mode_settings(tab, mode, {**DEFAULTS, key: not value})
             assert rows[control.key].isHidden(), control.key
         for control in spec.controls:
-            if isinstance(control, Toggle) and control.bucket and not control.label:
+            if isinstance(control, Toggle) and control.bucket and not control.label and not control.row_group:
                 assert rows[control.key] is getattr(tab, control.key), "a label-less toggle stands alone"
     finally:
         tab.deleteLater()

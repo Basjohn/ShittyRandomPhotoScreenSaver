@@ -56,7 +56,8 @@ class Slider:
     """A float shown on a slider of ``scale`` positions per unit (0.01 steps by default).
 
     Its value reads as ``decimals`` places plus ``suffix``, or as a whole percent (``percent``);
-    ``integer`` keeps it a whole number; ``tick`` marks every that many positions under it."""
+    ``integer`` keeps it a whole number; ``tick`` marks every that many positions under it;
+    ``signed`` shows a plus sign for nonnegative values."""
 
     key: str
     label: str
@@ -72,6 +73,7 @@ class Slider:
     integer: bool = False
     tick: int = 0
     when: When = ()
+    signed: bool = False
 
     def admit(self, value: object, default: object) -> float | int:
         number = _finite(value)
@@ -87,13 +89,14 @@ class Slider:
         """The value label for a slider position."""
         if self.percent:
             return f"{round(position * 100 / self.scale)}%"
-        return f"{position / self.scale:.{self.decimals}f}{self.suffix}"
+        sign = "+" if self.signed else ""
+        return f"{position / self.scale:{sign}.{self.decimals}f}{self.suffix}"
 
 
 @dataclass(frozen=True)
 class Toggle:
     """A checkbox; ``text`` is the checkbox's own words, ``label`` its row label (none: the checkbox
-    stands alone across the bucket)."""
+    stands alone across the bucket). ``row_group`` places toggles together in one aligned row."""
 
     key: str
     label: str
@@ -102,6 +105,7 @@ class Toggle:
     bucket: str = ""
     logical: bool = False
     when: When = ()
+    row_group: str = ""
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -447,7 +451,100 @@ def _oscilloscope() -> ModeSettings:
     )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID)
+# ---- Spline Curve ------------------------------------------------------------------------------
+
+# DevCurve solves its full visual snapshot on the logical clock, including styling.
+
+_DEVCURVE = ModeSettings(
+    "devcurve",
+    buckets=(
+        Bucket("shaper", "Shaper", "Layer-first spline editor with per-layer shape and energy arrows."),
+        Bucket("core", "Core", "Global curve motion and fill styling."),
+        Bucket("foreground_fx", "Foreground FX", "Optional dynamic shadow/specular effects for the current top layer."),
+        Bucket("ghost", "Ghost", "Optional trail for debug visibility.", advanced=True),
+    ),
+    entries=(
+        Custom("layers", "shaper", "ui.tabs.media.devcurve_builder:build_devcurve_layers",
+               "ui.tabs.media.devcurve_settings_binding:load_devcurve_layers",
+               "ui.tabs.media.devcurve_settings_binding:collect_devcurve_layers",
+               keys=(
+                   'devcurve_active_layer',
+                   'devcurve_layer_bass_shape_nodes',
+                   'devcurve_layer_bass_enabled',
+                   'devcurve_layer_bass_color',
+                   'devcurve_layer_bass_alpha',
+                   'devcurve_layer_bass_power',
+                   'devcurve_layer_bass_offset',
+                   'devcurve_layer_bass_outline_color',
+                   'devcurve_layer_bass_outline_width',
+                   'devcurve_layer_bass_order',
+                   'devcurve_layer_vocals_shape_nodes',
+                   'devcurve_layer_vocals_enabled',
+                   'devcurve_layer_vocals_color',
+                   'devcurve_layer_vocals_alpha',
+                   'devcurve_layer_vocals_power',
+                   'devcurve_layer_vocals_offset',
+                   'devcurve_layer_vocals_outline_color',
+                   'devcurve_layer_vocals_outline_width',
+                   'devcurve_layer_vocals_order',
+                   'devcurve_layer_mids_shape_nodes',
+                   'devcurve_layer_mids_enabled',
+                   'devcurve_layer_mids_color',
+                   'devcurve_layer_mids_alpha',
+                   'devcurve_layer_mids_power',
+                   'devcurve_layer_mids_offset',
+                   'devcurve_layer_mids_outline_color',
+                   'devcurve_layer_mids_outline_width',
+                   'devcurve_layer_mids_order',
+                   'devcurve_layer_transients_shape_nodes',
+                   'devcurve_layer_transients_enabled',
+                   'devcurve_layer_transients_color',
+                   'devcurve_layer_transients_alpha',
+                   'devcurve_layer_transients_power',
+                   'devcurve_layer_transients_offset',
+                   'devcurve_layer_transients_outline_color',
+                   'devcurve_layer_transients_outline_width',
+                   'devcurve_layer_transients_order',
+               )),
+        Slider('devcurve_base_level', 'Base Level:', 0.1, 0.9,
+               'Global baseline height for all Spline Curve layers.', bucket='core', logical=True, percent=True),
+        Slider('devcurve_motion_power', 'Motion Power:', 0.0, 3.0,
+               'Master reactive deformation gain for all layers.', bucket='core', logical=True, suffix="x"),
+        Slider('devcurve_idle_motion', 'Idle Motion:', 0.0, 1.5,
+               'Constant low-energy wobble while idle or between beats.', bucket='core', logical=True),
+        Slider('devcurve_idle_speed', 'Idle Speed:', 0.05, 2.0,
+               'Travel speed of the low-energy idle wobble.', bucket='core', logical=True, suffix="x"),
+        Slider('devcurve_smoothness', 'Smoothness:', 0.0, 1.0,
+               'Extra curve smoothing. Higher values reduce lumpiness while keeping spline motion reactive.', bucket='core', logical=True, percent=True),
+        Toggle('devcurve_foreground_shadow_enabled', '', 'Shadow',
+               'Enable a dynamic full-width shadow fill tied to the current foreground layer.', bucket='foreground_fx', logical=True, row_group='foreground'),
+        Toggle('devcurve_foreground_specular_enabled', '', 'Specular',
+               'Enable a dynamic crest-following specular highlight on the foreground layer.', bucket='foreground_fx', logical=True, row_group='foreground'),
+        Slider('devcurve_foreground_shadow_alpha', 'Shadow Alpha:', 0.0, 1.0,
+               'Opacity of the dynamic foreground shadow.', bucket='foreground_fx', logical=True, percent=True, when=("devcurve_foreground_shadow_enabled", True)),
+        Slider('devcurve_foreground_shadow_darken', 'Shadow Darken:', 0.0, 1.0,
+               'How much darker the shadow is than the foreground layer color.', bucket='foreground_fx', logical=True, percent=True, when=("devcurve_foreground_shadow_enabled", True)),
+        Slider('devcurve_foreground_shadow_offset', 'Shadow Offset:', 0.0, 0.45,
+               'Vertical offset of the foreground shadow below the foreground spline.', bucket='foreground_fx', logical=True, when=("devcurve_foreground_shadow_enabled", True)),
+        Slider('devcurve_foreground_specular_alpha', 'Specular Alpha:', 0.0, 1.0,
+               'Opacity of the foreground specular highlight.', bucket='foreground_fx', logical=True, percent=True, when=("devcurve_foreground_specular_enabled", True)),
+        Slider('devcurve_foreground_specular_width', 'Specular Width:', 0.002, 0.12,
+               'Thickness of the specular band around the foreground spline.', bucket='foreground_fx', logical=True, scale=1000, decimals=3, when=("devcurve_foreground_specular_enabled", True)),
+        Slider('devcurve_foreground_specular_offset', 'Specular Offset:', -0.2, 0.2,
+               'Vertical offset for the specular band relative to the foreground spline.', bucket='foreground_fx', logical=True, signed=True, when=("devcurve_foreground_specular_enabled", True)),
+        Slider('devcurve_foreground_specular_crest_bias', 'Specular Crest Bias:', 0.0, 2.0,
+               'Bias toward crest zones based on local curvature.', bucket='foreground_fx', logical=True, suffix="x", when=("devcurve_foreground_specular_enabled", True)),
+        Toggle('devcurve_ghosting_enabled', ' ', 'Enable Ghosting',
+               'Enable a lightweight trail to inspect motion history.', bucket='ghost', logical=True),
+        Slider('devcurve_ghost_alpha', 'Ghost Opacity:', 0.0, 1.0,
+               'Opacity of the trail overlay.', bucket='ghost', logical=True, percent=True),
+        Slider('devcurve_ghost_decay', 'Ghost Decay:', 0.1, 1.0,
+               'How quickly the trail fades.', bucket='ghost', logical=True, suffix="x"),
+    ),
+)
+
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 
 

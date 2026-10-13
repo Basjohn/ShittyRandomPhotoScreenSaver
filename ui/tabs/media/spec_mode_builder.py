@@ -73,6 +73,7 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
             mode_key=mode_id, bucket_key=bucket.key, title=bucket.title, helper_text=bucket.helper,
         )
     rows = {}
+    toggle_groups = {}
     for entry in spec.entries:
         if not entry.bucket:
             continue          # set elsewhere (live orbit), not from the body
@@ -80,7 +81,17 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         if isinstance(entry, Custom):
             _resolve(entry.build)(tab, layout)
         else:
-            rows[entry.key] = _build_control(tab, layout, entry)
+            if isinstance(entry, Toggle) and entry.row_group:
+                group = (entry.bucket, entry.row_group)
+                if group not in toggle_groups:
+                    toggle_groups[group] = _row(layout, entry.label)
+                else:
+                    toggle_groups[group][1].addSpacing(16)
+                rows[entry.key] = _build_control(tab, layout, entry, toggle_groups[group])
+            else:
+                rows[entry.key] = _build_control(tab, layout, entry)
+    for _row_widget, content in toggle_groups.values():
+        content.addStretch()
     setattr(tab, f"_{prefix}_rows", rows)
     _bind_conditions(tab, spec, rows)
 
@@ -120,7 +131,7 @@ def _row(layout, label: str):
     return widget, content
 
 
-def _build_control(tab, layout, control):
+def _build_control(tab, layout, control, shared_row=None):
     """Build one control's row; returns the row widget (hidden with the control)."""
     default = tab._widget_default("spotify_visualizer", control.key)
     if isinstance(control, Colour):
@@ -134,7 +145,9 @@ def _build_control(tab, layout, control):
         content.addWidget(button)
         content.addStretch()
         return row
-    if isinstance(control, Toggle) and not control.label:
+    if shared_row is not None:
+        row, content = shared_row
+    elif isinstance(control, Toggle) and not control.label:
         row = widget = QCheckBox(control.text)       # stands alone across the bucket
         layout.addWidget(widget)
     else:
@@ -154,10 +167,11 @@ def _build_control(tab, layout, control):
         content.addWidget(widget)
         content.addWidget(value)
     elif isinstance(control, Toggle):
-        if control.label:
+        if control.label or shared_row is not None:
             widget = QCheckBox(control.text)
             content.addWidget(widget)
-            content.addStretch()
+            if shared_row is None:
+                content.addStretch()
         widget.setProperty("circleIndicator", True)
         widget.setChecked(control.admit(default, default))
         bind_setting_signal(tab, widget.toggled, auto_switch=True)
