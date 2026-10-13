@@ -515,6 +515,11 @@ simulation cadence.
 
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect; every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
 
+A bordered/framed 3D Visualizer uses the normal card shell with an orbitable 3D scene **inside** it. CARD / CARD_INTERIOR
+keeps the scene inside the border at every pose, scale, viewport and Edit state; orbit rotates the scene, not the card.
+Applicable 3D geometry/layout-profile contracts still apply, but no overflow option can bypass the interior clip.
+Neon Lake Basin is required to use this presentation contract in its Shockwave replacement.
+
 ```text
 uniform_visual_scale
     wheel -> whole visualizer scales uniformly; viewport extent unchanged
