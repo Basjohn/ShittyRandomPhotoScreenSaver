@@ -11,6 +11,9 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - [ ] Descriptor-projected source controls use `source=True` and create no unused private logical/presentation attributes;
       aliases still reach their existing consumers once. Availability metadata keeps unavailable controls disabled on
       build/load/reset without discarding saved intent. Bucketless typed orbit fields retain their body/preset exclusions.
+- [ ] A persisted key with a different runtime spelling/value declares that translation and its canonical input resolver;
+      remove the old setter/read path when promoted, and prove one owner write. Preserve any established difference
+      between UI position/range and saved/runtime admission. Silent hydration restores pre-existing signal blockers.
 
 ## 1. Read first
 

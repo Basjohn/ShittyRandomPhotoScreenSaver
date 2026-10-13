@@ -2,18 +2,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Callable
+from typing import Any
 
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QSignalBlocker
 
-from core.logging.logger import get_logger
-from core.settings.visualizer_settings_contract import resolve_spectrum_render_mode
-from ui.color_utils import qcolor_to_list as _qcolor_to_list
+from core.settings.visualizer_mode_settings import read_control_value, require_mode_settings
+from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
-logger = get_logger(__name__)
 
 _SPECTRUM_LEGACY_NOTCHES_LINEAR = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
-
 
 
 def _promote_legacy_linear_notch_family(
@@ -82,96 +79,33 @@ def _normalize_lane_strengths(value: Any, defaults: Mapping[str, float]) -> dict
     }
 
 
-def load_spectrum_mode_settings(
-    tab,
-    spotify_vis_config: Mapping[str, Any] | None,
-    *,
-    sync_color_button: Callable[[str, str], None],
-    update_ghost_visibility: Callable[[Any], None],
-) -> None:
-    """Load Spectrum-owned settings from the visualizer config into the tab."""
-    config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
-    spectrum_render_mode = resolve_spectrum_render_mode(
-        lambda key, default=None: config.get(key, default),
-        fallback=tab._default_str("spotify_visualizer", "spectrum_render_mode"),
-    )
-    if hasattr(tab, "_set_spectrum_render_mode"):
-        tab._set_spectrum_render_mode(spectrum_render_mode, save=False)
-    elif hasattr(tab, "spectrum_render_mode_buttons"):
-        tab._spectrum_render_mode = spectrum_render_mode
-        for key, button in getattr(tab, "spectrum_render_mode_buttons", {}).items():
-            button.setChecked(key == spectrum_render_mode)
-    if hasattr(tab, "spectrum_visual_smoothing_enabled"):
-        tab.spectrum_visual_smoothing_enabled.setChecked(
-            tab._config_bool(
-                "spotify_visualizer",
-                config,
-                "spectrum_visual_smoothing_enabled")
-        )
-    if hasattr(tab, "spectrum_visual_smoothing"):
-        spectrum_visual_smoothing = max(
-            0,
-            min(
-                100,
-                int(
-                    tab._config_float(
-                        "spotify_visualizer",
-                        config,
-                        "spectrum_visual_smoothing")
-                    * 100
-                ),
-            ),
-        )
-        tab.spectrum_visual_smoothing.setValue(spectrum_visual_smoothing)
-        tab.spectrum_visual_smoothing_label.setText(
-            f"{spectrum_visual_smoothing}%"
-        )
-    if hasattr(tab, "spectrum_rainbow_per_bar"):
-        tab.spectrum_rainbow_per_bar.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_unique_colors")
-        )
-    if hasattr(tab, "spectrum_rainbow_fill"):
-        tab.spectrum_rainbow_fill.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_rainbow_fill")
-        )
-    if hasattr(tab, "spectrum_rainbow_border"):
-        tab.spectrum_rainbow_border.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_rainbow_border")
-        )
-    if hasattr(tab, "spectrum_wave_amplitude"):
-        spectrum_wave_amplitude = int(tab._config_float("spotify_visualizer", config, "spectrum_wave_amplitude") * 100)
-        tab.spectrum_wave_amplitude.setValue(max(0, min(100, spectrum_wave_amplitude)))
-        tab.spectrum_wave_amplitude_label.setText(f"{spectrum_wave_amplitude}%")
-    if hasattr(tab, "spectrum_profile_floor"):
-        spectrum_profile_floor = int(tab._config_float("spotify_visualizer", config, "spectrum_profile_floor") * 100)
-        tab.spectrum_profile_floor.setValue(max(5, min(30, spectrum_profile_floor)))
-        tab.spectrum_profile_floor_label.setText(f"{spectrum_profile_floor / 100.0:.2f}")
-    if hasattr(tab, "spectrum_drop_speed"):
-        spectrum_drop_speed = int(tab._config_float("spotify_visualizer", config, "spectrum_drop_speed") * 100)
-        tab.spectrum_drop_speed.setValue(max(50, min(300, spectrum_drop_speed)))
-        tab.spectrum_drop_speed_label.setText(f"{spectrum_drop_speed / 100.0:.1f}x")
-    if hasattr(tab, "spectrum_border_radius"):
-        spectrum_border_radius = int(tab._config_float("spotify_visualizer", config, "spectrum_border_radius"))
-        tab.spectrum_border_radius.setValue(max(0, min(12, spectrum_border_radius)))
-        tab.spectrum_border_radius_label.setText(f"{spectrum_border_radius}px")
-    if hasattr(tab, "spectrum_glow_enabled"):
-        tab.spectrum_glow_enabled.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_glow_enabled")
-        )
-    if hasattr(tab, "spectrum_glow_intensity"):
-        spectrum_glow_intensity = int(tab._config_float("spotify_visualizer", config, "spectrum_glow_intensity") * 100)
-        tab.spectrum_glow_intensity.setValue(max(0, min(150, spectrum_glow_intensity)))
-        tab.spectrum_glow_intensity_label.setText(f"{spectrum_glow_intensity}%")
+def load_spectrum_mode_settings(tab, config) -> None:
+    load_spec_mode_settings(tab, "spectrum", config)
 
-    spectrum_glow_color_default = tab._widget_default("spotify_visualizer", "spectrum_glow_color")
-    spectrum_glow_color_data = config.get("spectrum_glow_color", spectrum_glow_color_default)
-    try:
-        tab._spectrum_glow_color = QColor(*spectrum_glow_color_data)
-    except Exception:
-        logger.debug("[SPECTRUM_BINDING] Failed to set spectrum_glow_color=%s", spectrum_glow_color_data, exc_info=True)
-        tab._spectrum_glow_color = QColor(*spectrum_glow_color_default)
-    sync_color_button("spectrum_glow_color_btn", "_spectrum_glow_color")
 
+def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
+    return collect_spec_mode_settings(tab, "spectrum")
+
+
+def load_spectrum_render_mode(tab, config) -> None:
+    key = "spectrum_render_mode"
+    default = tab._widget_default("spotify_visualizer", key)
+    control = require_mode_settings("spectrum").control(key)
+    value = control.admit(read_control_value(control, config.get, default), default)
+    tab._set_spectrum_render_mode(value, save=False)
+
+
+def collect_spectrum_render_mode(tab) -> dict:
+    return {"spectrum_render_mode": tab._spectrum_render_mode}
+
+
+def load_spectrum_shape(tab, config) -> None:
+    blockers = [QSignalBlocker(tab.spectrum_mirrored), QSignalBlocker(tab.spectrum_shape_editor)]
+    _load_spectrum_shape(tab, config)
+    del blockers
+
+
+def _load_spectrum_shape(tab, config) -> None:
     if hasattr(tab, "spectrum_mirrored"):
         tab.spectrum_mirrored.setChecked(
             tab._config_bool("spotify_visualizer", config, "spectrum_mirrored")
@@ -207,68 +141,30 @@ def load_spectrum_mode_settings(
             mirrored=False,
         )
 
-    if hasattr(tab, "spectrum_rainbow_ghost"):
-        tab.spectrum_rainbow_ghost.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_rainbow_ghost")
-        )
-    ghost_enabled = config.get(
-        "spectrum_ghosting_enabled",
-        tab._widget_default("spotify_visualizer", "spectrum_ghosting_enabled"),
-    )
-    tab.vis_ghost_enabled.setChecked(bool(ghost_enabled))
-    ghost_alpha = float(
-        config.get(
-            "spectrum_ghost_alpha",
-            tab._widget_default("spotify_visualizer", "spectrum_ghost_alpha"),
-        )
-    )
-    ghost_alpha_pct = max(0, min(100, int(ghost_alpha * 100)))
-    tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
-    tab.vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
 
-    ghost_decay = float(
-        config.get(
-            "spectrum_ghost_decay",
-            tab._widget_default("spotify_visualizer", "spectrum_ghost_decay"),
-        )
-    )
-    ghost_decay_slider = max(10, min(100, int(ghost_decay * 100.0)))
-    tab.vis_ghost_decay_slider.setValue(ghost_decay_slider)
-    tab.vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
-    update_ghost_visibility(tab)
-
-
-def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
-    """Collect Spectrum settings without introducing save-side shadow defaults."""
-    d_bool = lambda key: tab._default_bool("spotify_visualizer", key)
-    d_float = lambda key: tab._default_float("spotify_visualizer", key)
-    d_str = lambda key: tab._default_str("spotify_visualizer", key)
-    d_value = lambda key: tab._widget_default("spotify_visualizer", key)
-    pct = lambda key: int(round(d_float(key) * 100.0))
-
-    shape_editor = getattr(tab, "spectrum_shape_editor", None)
+def collect_spectrum_shape(tab) -> dict:
+    editor = tab.spectrum_shape_editor
     return {
-        "spectrum_rainbow_ghost": tab.spectrum_rainbow_ghost.isChecked() if hasattr(tab, "spectrum_rainbow_ghost") else d_bool("spectrum_rainbow_ghost"),
-        "spectrum_ghosting_enabled": tab.vis_ghost_enabled.isChecked() if hasattr(tab, "vis_ghost_enabled") else d_bool("spectrum_ghosting_enabled"),
-        "spectrum_ghost_alpha": (tab.vis_ghost_opacity_slider.value() if hasattr(tab, "vis_ghost_opacity_slider") else pct("spectrum_ghost_alpha")) / 100.0,
-        "spectrum_ghost_decay": max(0.1, (tab.vis_ghost_decay_slider.value() if hasattr(tab, "vis_ghost_decay_slider") else pct("spectrum_ghost_decay")) / 100.0),
-        "spectrum_render_mode": getattr(tab, "_spectrum_render_mode", d_str("spectrum_render_mode")),
-        "spectrum_visual_smoothing_enabled": tab.spectrum_visual_smoothing_enabled.isChecked() if hasattr(tab, "spectrum_visual_smoothing_enabled") else d_bool("spectrum_visual_smoothing_enabled"),
-        "spectrum_visual_smoothing": (tab.spectrum_visual_smoothing.value() if hasattr(tab, "spectrum_visual_smoothing") else pct("spectrum_visual_smoothing")) / 100.0,
-        "spectrum_unique_colors": tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, "spectrum_rainbow_per_bar") else d_bool("spectrum_unique_colors"),
-        "spectrum_rainbow_fill": tab.spectrum_rainbow_fill.isChecked() if hasattr(tab, "spectrum_rainbow_fill") else d_bool("spectrum_rainbow_fill"),
-        "spectrum_rainbow_border": tab.spectrum_rainbow_border.isChecked() if hasattr(tab, "spectrum_rainbow_border") else d_bool("spectrum_rainbow_border"),
-        "spectrum_border_radius": float(tab.spectrum_border_radius.value()) if hasattr(tab, "spectrum_border_radius") else d_float("spectrum_border_radius"),
-        "spectrum_glow_enabled": tab.spectrum_glow_enabled.isChecked() if hasattr(tab, "spectrum_glow_enabled") else d_bool("spectrum_glow_enabled"),
-        "spectrum_glow_intensity": (tab.spectrum_glow_intensity.value() if hasattr(tab, "spectrum_glow_intensity") else pct("spectrum_glow_intensity")) / 100.0,
-        "spectrum_glow_color": _qcolor_to_list(getattr(tab, "_spectrum_glow_color", None), d_value("spectrum_glow_color")),
-        "spectrum_mirrored": tab.spectrum_mirrored.isChecked() if hasattr(tab, "spectrum_mirrored") else d_bool("spectrum_mirrored"),
-        "spectrum_shape_nodes": shape_editor.get_nodes() if shape_editor is not None else d_value("spectrum_shape_nodes"),
-        "spectrum_notch_positions_mirrored": list(shape_editor._notches_mirrored) if shape_editor is not None else d_value("spectrum_notch_positions_mirrored"),
-        "spectrum_notch_positions_linear": list(shape_editor._notches_linear) if shape_editor is not None else d_value("spectrum_notch_positions_linear"),
-        "spectrum_lane_strengths_mirrored": shape_editor.get_lane_strengths(mirrored=True) if shape_editor is not None else d_value("spectrum_lane_strengths_mirrored"),
-        "spectrum_lane_strengths_linear": shape_editor.get_lane_strengths(mirrored=False) if shape_editor is not None else d_value("spectrum_lane_strengths_linear"),
-        "spectrum_wave_amplitude": (tab.spectrum_wave_amplitude.value() if hasattr(tab, "spectrum_wave_amplitude") else pct("spectrum_wave_amplitude")) / 100.0,
-        "spectrum_profile_floor": (tab.spectrum_profile_floor.value() if hasattr(tab, "spectrum_profile_floor") else pct("spectrum_profile_floor")) / 100.0,
-        "spectrum_drop_speed": (tab.spectrum_drop_speed.value() if hasattr(tab, "spectrum_drop_speed") else pct("spectrum_drop_speed")) / 100.0,
+        "spectrum_mirrored": tab.spectrum_mirrored.isChecked(),
+        "spectrum_shape_nodes": editor.get_nodes(),
+        "spectrum_notch_positions_mirrored": list(editor._notches_mirrored),
+        "spectrum_notch_positions_linear": list(editor._notches_linear),
+        "spectrum_lane_strengths_mirrored": editor.get_lane_strengths(mirrored=True),
+        "spectrum_lane_strengths_linear": editor.get_lane_strengths(mirrored=False),
     }
+
+
+def load_spectrum_smoothing(tab, config) -> None:
+    enabled = tab.spectrum_visual_smoothing_enabled
+    strength = tab.spectrum_visual_smoothing
+    blockers = [QSignalBlocker(enabled), QSignalBlocker(strength)]
+    enabled.setChecked(tab._config_bool("spotify_visualizer", config, "spectrum_visual_smoothing_enabled"))
+    strength.setValue(max(0, min(100, int(tab._config_float("spotify_visualizer", config, "spectrum_visual_smoothing") * 100))))
+    tab.spectrum_visual_smoothing_label.setText(f"{strength.value()}%")
+    strength.parentWidget().setVisible(enabled.isChecked())
+    del blockers
+
+
+def collect_spectrum_smoothing(tab) -> dict:
+    return {"spectrum_visual_smoothing_enabled": tab.spectrum_visual_smoothing_enabled.isChecked(),
+            "spectrum_visual_smoothing": tab.spectrum_visual_smoothing.value() / 100.0}

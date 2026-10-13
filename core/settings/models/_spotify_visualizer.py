@@ -21,7 +21,7 @@ from core.settings.visualizer_mode_registry import (
     resolve_effective_enabled_modes,
     VISUALIZER_MODE_IDS,
 )
-from core.settings.visualizer_mode_settings import spec_control, spec_controls
+from core.settings.visualizer_mode_settings import read_control_value, spec_control, spec_controls
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
@@ -38,8 +38,6 @@ from core.settings.visualizer_settings_contract import (
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
-    resolve_spectrum_render_mode,
-    resolve_spectrum_unique_colors,
     strip_legacy_global_technical_keys,
 )
 from core.settings.models._visualizer_helpers import (
@@ -146,30 +144,15 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "spectrum_render_mode": str,
     "spectrum_visual_smoothing_enabled": bool,
     "spectrum_visual_smoothing": float,
-    "spectrum_unique_colors": bool,
-    "spectrum_rainbow_fill": bool,
-    "spectrum_rainbow_border": bool,
-    "spectrum_rainbow_ghost": bool,
-    "spectrum_border_radius": float,
     "spectrum_link_fill_border": bool,
-    "spectrum_glow_enabled": bool,
-    "spectrum_glow_intensity": float,
-    "spectrum_glow_color": list,
-    "spectrum_ghosting_enabled": bool,
-    "spectrum_ghost_alpha": float,
-    "spectrum_ghost_decay": float,
     "spectrum_mirrored": bool,
     "spectrum_shape_nodes": lambda value: value,
     "spectrum_notch_positions_mirrored": lambda value: value,
     "spectrum_notch_positions_linear": lambda value: value,
     "spectrum_lane_strengths_mirrored": dict,
     "spectrum_lane_strengths_linear": dict,
-    "spectrum_wave_amplitude": float,
-    "spectrum_profile_floor": float,
-    "spectrum_drop_speed": float,
 }
 
 _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -254,23 +237,10 @@ _CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
 _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_visual_smoothing_enabled': bool,
     'spectrum_visual_smoothing': float,
-    'spectrum_rainbow_fill': bool,
-    'spectrum_rainbow_border': bool,
-    'spectrum_rainbow_ghost': bool,
-    'spectrum_border_radius': float,
     'spectrum_link_fill_border': bool,
-    'spectrum_glow_enabled': bool,
-    'spectrum_glow_intensity': float,
-    'spectrum_glow_color': list,
-    'spectrum_ghosting_enabled': bool,
-    'spectrum_ghost_alpha': float,
-    'spectrum_ghost_decay': float,
     'spectrum_mirrored': bool,
     'spectrum_shape_nodes': list,
     'spectrum_notch_positions_mirrored': list,
-    'spectrum_wave_amplitude': float,
-    'spectrum_profile_floor': float,
-    'spectrum_drop_speed': float,
 }
 
 _BUBBLE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
@@ -517,7 +487,7 @@ def _build_spec_kwargs(read_value: Callable[[str, Any], Any]) -> Dict[str, Any]:
     kwargs: Dict[str, Any] = {}
     for control in spec_controls():
         default = _visualizer_default(control.key)
-        kwargs[control.key] = control.admit(read_value(control.key, default), default)
+        kwargs[control.key] = control.admit(read_control_value(control, read_value, default), default)
     return kwargs
 
 
@@ -636,12 +606,6 @@ def _build_visualizer_spectrum_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _SPECTRUM_BUILD_SPECS)
-    data["spectrum_render_mode"] = resolve_spectrum_render_mode(
-        read_value, fallback=str(_visualizer_default("spectrum_render_mode"))
-    )
-    data["spectrum_unique_colors"] = resolve_spectrum_unique_colors(
-        read_value, fallback=bool(_visualizer_default("spectrum_unique_colors"))
-    )
     canonical_linear_notches = _visualizer_default("spectrum_notch_positions_linear")
     data["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
         read_value("spectrum_notch_positions_linear", canonical_linear_notches),
@@ -1048,30 +1012,15 @@ class SpotifyVisualizerSettings:
             _visualizer_default('mode_activation')
         )
     )
-    spectrum_render_mode: str = field(default_factory=lambda: _visualizer_default('spectrum_render_mode'))
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
-    spectrum_unique_colors: bool = field(default_factory=lambda: _visualizer_default('spectrum_unique_colors'))
-    spectrum_rainbow_fill: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_fill'))
-    spectrum_rainbow_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_border'))
-    spectrum_rainbow_ghost: bool = field(default_factory=lambda: _visualizer_default('spectrum_rainbow_ghost'))
-    spectrum_border_radius: float = field(default_factory=lambda: _visualizer_default('spectrum_border_radius'))
     spectrum_link_fill_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_link_fill_border'))
-    spectrum_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_glow_enabled'))
-    spectrum_glow_intensity: float = field(default_factory=lambda: _visualizer_default('spectrum_glow_intensity'))
-    spectrum_glow_color: List[int] = field(default_factory=lambda: _visualizer_default('spectrum_glow_color'))
-    spectrum_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_ghosting_enabled'))
-    spectrum_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('spectrum_ghost_alpha'))
-    spectrum_ghost_decay: float = field(default_factory=lambda: _visualizer_default('spectrum_ghost_decay'))
     spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
     spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('spectrum_shape_nodes'))
     spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('spectrum_notch_positions_mirrored'))
     spectrum_notch_positions_linear: List[List] = field(default_factory=lambda: _visualizer_default('spectrum_notch_positions_linear'))
     spectrum_lane_strengths_mirrored: Dict[str, float] = field(default_factory=lambda: _visualizer_default('spectrum_lane_strengths_mirrored'))
     spectrum_lane_strengths_linear: Dict[str, float] = field(default_factory=lambda: _visualizer_default('spectrum_lane_strengths_linear'))
-    spectrum_wave_amplitude: float = field(default_factory=lambda: _visualizer_default('spectrum_wave_amplitude'))
-    spectrum_profile_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_profile_floor'))
-    spectrum_drop_speed: float = field(default_factory=lambda: _visualizer_default('spectrum_drop_speed'))
     extruded_spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_mirrored'))
     extruded_spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shape_nodes'))
     extruded_spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_notch_positions_mirrored'))

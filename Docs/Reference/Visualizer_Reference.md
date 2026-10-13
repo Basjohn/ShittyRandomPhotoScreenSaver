@@ -35,6 +35,13 @@ Generic appliers create no unused private attributes for these authored source k
 rejected cast-shadow controls disabled during build, preset load and reset while retaining their saved values. Orbit
 turn/tilt remain excluded from the body/preset payload, and Rainbow Ghost remains independently editable.
 
+Spectrum's scalar declarations retain its distinct consumer routes: source response enters BeatEngine, render mode
+maps once to the logical solid-bar boolean, and Unique Colours maps once to the existing per-bar presentation field.
+Declared input hooks reuse canonical alias migration; obsolete UI attribute/save paths are retired. Render-style buttons,
+shape/lane authoring and smoothing stay Custom, with the shared Bar Appearance/Rainbow groups outside the body. The spec
+preserves Spectrum's signal policy, slider-position conversion, conditional rows and the wider saved border-radius range
+than its UI slider offers. Nested hydration restores the caller's prior signal-block state.
+
 ### Spectrum-family ghost and rainbow ownership
 
 Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in their existing Ghost settings. Each setting persists under its own mode (`spectrum_rainbow_ghost`, `extruded_spectrum_rainbow_ghost`) and colours **only existing falling-peak geometry**, not the bars, faces, edges or reflection. A ghost uses its own enabled/opacity/decay ownership and remains visible when the authored bar border is black or transparent. Spectrum's segmented and solid paths use the same spectral ghost rule; a ghost must never be recoloured a second time by Rainbow Borders. Extruded uses its existing Scene3D ghost-column pass and hue, not a second texture, draw loop, clock or BeatEngine. Both advance colours on their existing Spectrum logical animation time; dormant/disabled modes create no extra work. User-authored presets are editable and are not golden-value test fixtures. Real GL tests must verify visible peak-only pixels with dark borders and bar-fill independence.

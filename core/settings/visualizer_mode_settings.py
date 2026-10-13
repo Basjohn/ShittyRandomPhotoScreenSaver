@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import import_module
 import math
 from types import MappingProxyType
 from typing import Union
@@ -66,7 +67,9 @@ class Slider:
     ``integer`` keeps it a whole number; ``tick`` marks every that many positions under it;
     ``signed`` shows a plus sign for nonnegative values. ``source`` delegates consumption to the
     existing descriptor source-profile projection; it creates no private logical/renderer value.
-    ``availability`` optionally names an import-safe capability flag and its disabled tooltip."""
+    ``availability`` optionally names an import-safe capability flag and its disabled tooltip.
+    ``truncate`` retains a body's existing position conversion; ``admission_high`` preserves a
+    wider saved/runtime range than the authoring slider offers."""
 
     key: str
     label: str
@@ -85,12 +88,20 @@ class Slider:
     signed: bool = False
     source: bool = False
     availability: tuple[str, str] = ()
+    truncate: bool = False
+    admission_high: float | None = None
+    bottom_padding: int = 0
+
+    def position(self, value: object) -> int:
+        number = float(value) * self.scale
+        return int(number) if self.truncate else round(number)
 
     def admit(self, value: object, default: object) -> float | int:
         number = _finite(value)
         if number is None:
             number = float(default)
-        number = max(float(self.low), min(float(self.high), number))
+        high = self.high if self.admission_high is None else self.admission_high
+        number = max(float(self.low), min(float(high), number))
         return int(round(number)) if self.integer else number
 
     def coerce(self, value: object) -> float | int:
@@ -119,6 +130,9 @@ class Toggle:
     row_group: str = ""
     source: bool = False
     availability: tuple[str, str] = ()
+    runtime_attr: str = ""
+    read: str = ""
+    input_aliases: tuple[str, ...] = ()
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -151,6 +165,10 @@ class Choice:
     source: bool = False
     availability: tuple[str, str] = ()
     compact: bool = True
+    runtime_attr: str = ""
+    runtime_values: tuple[object, ...] = ()
+    read: str = ""
+    input_aliases: tuple[str, ...] = ()
 
     def admit(self, value: object, default: object) -> str | int:
         if self.indexed:
@@ -178,6 +196,7 @@ class Colour:
     when: When = ()
     source: bool = False
     availability: tuple[str, str] = ()
+    swatch_row: bool = True
 
     def admit(self, value: object, default: object) -> list[int]:
         channels = list(value) if isinstance(value, (list, tuple)) else []
@@ -220,6 +239,7 @@ class ModeSettings:
     buckets: tuple[Bucket, ...]
     entries: tuple[Entry, ...]
     attr_prefix: str = ""
+    auto_switch: bool = True
 
     @property
     def prefix(self) -> str:
@@ -635,7 +655,69 @@ _EXTRUDED_SPECTRUM = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM)
+# ---- Spectrum ----------------------------------------------------------------------------------
+
+_SPECTRUM = ModeSettings(
+    "spectrum",
+    auto_switch=False,
+    buckets=(
+        Bucket("appearance", "Appearance", "Spectrum colors and rim-glow styling still apply when hidden."),
+        Bucket("shape", "Shape", "Spectrum layout and authored silhouette still apply when hidden."),
+        Bucket("render", "Render", "Render-style controls still apply when hidden.", advanced=True),
+        Bucket("audio", "Audio", "Creative motion controls live here. Technical noise-floor and signal tuning live in Technical.", advanced=True),
+        Bucket("ghost", "Ghost", "Ghost controls still apply when hidden.", advanced=True),
+    ),
+    entries=(
+        Toggle('spectrum_glow_enabled', " ", 'Enable Rim Glow',
+               'Add a thin emissive rim around Spectrum bars without adding bloom smear.', bucket='appearance'),
+        Colour("spectrum_glow_color", "Glow Color:", "Choose Spectrum Rim Glow Color",
+               bucket="appearance", when=("spectrum_glow_enabled", True), swatch_row=False),
+        Slider('spectrum_glow_intensity', 'Glow Intensity:', 0.0, 1.5,
+               'How bright the thin Spectrum rim glow appears. Higher = stronger emissive edge.', bucket='appearance', truncate=True, percent=True, tick=10, when=('spectrum_glow_enabled', True)),
+        Custom("shape", "shape", "ui.tabs.media.spectrum_builder:build_spectrum_shape",
+               "ui.tabs.media.spectrum_settings_binding:load_spectrum_shape",
+               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_shape",
+               keys=("spectrum_mirrored", "spectrum_shape_nodes", "spectrum_notch_positions_mirrored",
+                     "spectrum_notch_positions_linear", "spectrum_lane_strengths_mirrored", "spectrum_lane_strengths_linear")),
+        Choice("spectrum_render_mode", "", ("segment", "bars"), logical=True,
+               runtime_attr="_spectrum_single_piece", runtime_values=(False, True),
+               read="core.settings.visualizer_settings_contract:resolve_spectrum_render_mode",
+               input_aliases=("spectrum_single_piece",)),
+        Custom("render_mode", "render", "ui.tabs.media.spectrum_builder:build_spectrum_render_mode",
+               "ui.tabs.media.spectrum_settings_binding:load_spectrum_render_mode",
+               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_render_mode"),
+        Custom("smoothing", "render", "ui.tabs.media.spectrum_builder:build_spectrum_smoothing",
+               "ui.tabs.media.spectrum_settings_binding:load_spectrum_smoothing",
+               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_smoothing",
+               keys=("spectrum_visual_smoothing_enabled", "spectrum_visual_smoothing")),
+        Toggle('spectrum_unique_colors', " ", 'Unique Colours Per Bar',
+               "When 'Taste the Rainbow' is enabled: each bar gets its own unique colour spread across the rainbow. Off = all bars share one shifting colour.", bucket='render', runtime_attr='_rainbow_per_bar', read='core.settings.visualizer_settings_contract:resolve_spectrum_unique_colors', input_aliases=('spectrum_rainbow_per_bar', 'rainbow_per_bar')),
+        Toggle('spectrum_rainbow_fill', " ", 'Rainbow Fill',
+               'When rainbow/unique colours are active: bar fill participates in the colour shift. Off = keep the configured fill colour while rainbow ghost and optional rainbow borders remain independent.', bucket='render'),
+        Toggle('spectrum_rainbow_border', " ", 'Rainbow Borders',
+               'When rainbow/unique colours are active: bar borders also participate in the colour shift. Off = borders keep their configured border colour.', bucket='render'),
+        Slider('spectrum_border_radius', 'Border Radius:', 0.0, 12.0,
+               'Round bar corners (0 = square, 6 = nicely rounded).', bucket='render', truncate=True, scale=1, decimals=0, suffix='px', admission_high=20.0),
+        Custom("audio_hint", "audio", "ui.tabs.media.spectrum_builder:build_spectrum_audio_hint"),
+        Slider('spectrum_wave_amplitude', 'Reactivity:', 0.0, 1.0,
+               'Overall Spectrum motion scaling after lane routing.\nLower = calmer, more reserved movement.\nHigher = punchier motion and stronger lane response.\nThis is creative reactivity, not the Technical sensitivity/noise-floor path.', bucket='audio', truncate=True, source=True, percent=True, tick=25),
+        Slider('spectrum_profile_floor', 'Shape Floor:', 0.05, 0.3,
+               'Minimum visual shape floor for the authored Spectrum silhouette.\nLower = bars can collapse more deeply into the drawn profile.\nHigher = bars keep more body even when a lane is quiet.\nThis is separate from the Technical noise-floor controls.', bucket='audio', truncate=True, source=True, tick=5),
+        Slider('spectrum_drop_speed', 'Drop Speed:', 0.5, 3.0,
+               'How fast Spectrum bars fall after a peak.\nLower = stickier sustain and softer release.\nHigher = sharper, snappier drops.\n1.0x is the current neutral baseline.', bucket='audio', truncate=True, source=True, decimals=1, suffix='x', tick=25),
+        Toggle('spectrum_ghosting_enabled', " ", 'Enable Ghosting',
+               'When enabled, the visualizer draws trailing ghost bars above the current height.', bucket='ghost', logical=True),
+        Toggle('spectrum_rainbow_ghost', " ", 'Rainbow Ghost',
+               'Colour only the existing falling peak trails with a per-bar rainbow, independently of Rainbow Fill and Rainbow Borders.', bucket='ghost'),
+        Slider('spectrum_ghost_alpha', 'Ghost Opacity:', 0.0, 1.0,
+               '', bucket='ghost', truncate=True, percent=True, tick=5, when=('spectrum_ghosting_enabled', True)),
+        Slider('spectrum_ghost_decay', 'Ghost Decay Speed:', 0.1, 1.0,
+               '', bucket='ghost', truncate=True, logical=True, suffix='x', tick=5, when=('spectrum_ghosting_enabled', True), bottom_padding=12),
+    ),
+)
+
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 
 
@@ -666,6 +748,25 @@ def spec_control(key: str) -> Control | None:
     return None
 
 
+def control_runtime_attr(control: Control) -> str:
+    return getattr(control, "runtime_attr", "") or f"_{control.key}"
+
+
+def control_runtime_value(control: Control, value: object) -> object:
+    if isinstance(control, Choice) and control.runtime_values:
+        return control.runtime_values[control.choices.index(value)]
+    return value
+
+
+def read_control_value(control: Control, read_value, default: object) -> object:
+    """Reuse a declared canonical input migration when a setting has historical aliases."""
+    path = getattr(control, "read", "")
+    if path:
+        module, _, name = path.partition(":")
+        return getattr(import_module(module), name)(read_value, fallback=default)
+    return read_value(control.key, default)
+
+
 __all__ = [
     "Bucket",
     "Choice",
@@ -680,4 +781,7 @@ __all__ = [
     "require_mode_settings",
     "spec_control",
     "spec_controls",
+    "control_runtime_attr",
+    "control_runtime_value",
+    "read_control_value",
 ]

@@ -2249,407 +2249,118 @@ class TestSineWaveSettingsBinding:
         assert payload["sine_ghost_line3_enabled"] is False
 
 
+@pytest.fixture
+def spectrum_spec_tab(qt_app, settings_manager):
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    settings_manager.set("widgets", {"spotify_visualizer": {
+        "enabled": True, "visualizers_enabled": True, "mode": "spectrum",
+        "mode_activation": build_visualizer_mode_activation(["spectrum"]),
+        "preset_spectrum": get_custom_preset_index("spectrum"),
+    }})
+    tab = VisualizersTab(settings_manager)
+    tab._select_mode_page("spectrum")
+    yield tab
+    tab.deleteLater()
+    qt_app.processEvents()
+
+
 class TestSpectrumSettingsBinding:
-    def test_load_spectrum_mode_settings_updates_spectrum_owned_controls(self):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings
+    def test_load_spectrum_mode_settings_updates_spectrum_owned_controls(self, spectrum_spec_tab, monkeypatch):
+        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
 
-        class _Check:
-            def __init__(self):
-                self.checked = None
+        tab = spectrum_spec_tab
+        tab.spectrum_unique_colors.blockSignals(True)
+        tab.spectrum_render_mode_buttons["bars"].blockSignals(True)
+        calls = []
+        monkeypatch.setattr(tab, "_save_settings", lambda: calls.append("save"))
+        monkeypatch.setattr(tab, "_force_visualizer_preset_to_custom", lambda *_: calls.append("custom"))
+        cfg = {'spectrum_render_mode': 'bars',
+         'spectrum_visual_smoothing_enabled': False,
+         'spectrum_visual_smoothing': 0.72,
+         'spectrum_unique_colors': True,
+         'spectrum_rainbow_fill': False,
+         'spectrum_rainbow_border': True,
+         'spectrum_lane_strengths_mirrored': {'Mid': 0.52, 'Vocal': 0.67, 'Low-Mid': 0.72, 'Bass': 0.88},
+         'spectrum_lane_strengths_linear': {'Bass': 0.63,
+                                            'Low-Mid': 0.54,
+                                            'Vocal': 0.46,
+                                            'Hi-Mid': 0.71,
+                                            'Treble': 0.93},
+         'spectrum_wave_amplitude': 0.55,
+         'spectrum_profile_floor': 0.17,
+         'spectrum_drop_speed': 1.9,
+         'spectrum_border_radius': 7,
+         'spectrum_glow_enabled': True,
+         'spectrum_glow_intensity': 1.15,
+         'spectrum_glow_color': [1, 2, 3, 4],
+         'spectrum_mirrored': False,
+         'spectrum_shape_nodes': [[0.0, 0.22], [1.0, 0.88]],
+         'spectrum_notch_positions_mirrored': [[0.0, 'Mid'], [1.0, 'Bass']],
+         'spectrum_notch_positions_linear': [[0.0, 'Bass'], [1.0, 'Treble']],
+         'spectrum_ghosting_enabled': False,
+         'spectrum_ghost_alpha': 0.37,
+         'spectrum_ghost_decay': 0.42}
+        cfg.update({
+            "spectrum_notch_positions_mirrored": [[0.0, "Mid"], [0.25, "Vocal"], [0.60, "Low-Mid"], [1.0, "Bass"]],
+            "spectrum_notch_positions_linear": [[0.0, "Bass"], [0.20, "Low-Mid"], [0.40, "Vocal"], [0.70, "Hi-Mid"], [1.0, "Treble"]],
+        })
+        load_spectrum_mode_settings(tab, cfg)
+        assert tab.spectrum_unique_colors.signalsBlocked()
+        assert tab.spectrum_render_mode_buttons["bars"].signalsBlocked()
+        assert calls == []
+        payload = collect_spectrum_mode_settings(tab)
+        for key, value in cfg.items():
+            if key == "spectrum_glow_intensity":
+                assert tab.spectrum_glow_intensity.value() == 114  # existing truncation admission
+            elif isinstance(value, float):
+                assert payload[key] == pytest.approx(value), key
+            else:
+                assert payload[key] == value, key
+        assert tab.spectrum_profile_floor_label.text() == "0.17"
+        assert tab.spectrum_drop_speed_label.text() == "1.9x"
+        assert tab.spectrum_border_radius_label.text() == "7px"
+        assert tab._spectrum_rows["spectrum_ghost_alpha"].isHidden()
+        assert not tab._spectrum_rows["spectrum_glow_intensity"].isHidden()
 
-            def setChecked(self, checked):
-                self.checked = checked
+    def test_collect_spectrum_mode_settings_serializes_spectrum_owned_state(self, spectrum_spec_tab):
+        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
 
-        class _Slider:
-            def __init__(self):
-                self.value = None
+        cfg = {
+            "spectrum_ghosting_enabled": True, "spectrum_ghost_alpha": 0.43, "spectrum_ghost_decay": 0.38,
+            "spectrum_render_mode": "bars", "spectrum_visual_smoothing_enabled": False,
+            "spectrum_visual_smoothing": 0.64, "spectrum_unique_colors": False,
+            "spectrum_rainbow_fill": False, "spectrum_rainbow_border": True,
+            "spectrum_border_radius": 6.0, "spectrum_glow_enabled": True,
+            "spectrum_glow_intensity": 1.2, "spectrum_glow_color": [1, 2, 3, 4],
+            "spectrum_mirrored": False, "spectrum_shape_nodes": [[0.0, 0.21], [1.0, 0.79]],
+            "spectrum_notch_positions_mirrored": [[0.0, "Mid"], [0.25, "Vocal"], [0.60, "Low-Mid"], [1.0, "Bass"]],
+            "spectrum_notch_positions_linear": [[0.0, "Bass"], [0.20, "Low-Mid"], [0.40, "Vocal"], [0.70, "Hi-Mid"], [1.0, "Treble"]],
+            "spectrum_lane_strengths_mirrored": {"Mid": 0.58, "Vocal": 0.65, "Low-Mid": 0.72, "Bass": 0.83},
+            "spectrum_lane_strengths_linear": {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91},
+            "spectrum_wave_amplitude": 0.51, "spectrum_profile_floor": 0.18, "spectrum_drop_speed": 1.75,
+        }
+        load_spectrum_mode_settings(spectrum_spec_tab, cfg)
+        payload = collect_spectrum_mode_settings(spectrum_spec_tab)
+        for key, value in cfg.items():
+            assert payload[key] == (pytest.approx(value) if isinstance(value, float) else value), key
 
-            def setValue(self, value):
-                self.value = value
+    @pytest.mark.parametrize("notches, expected", [
+        ([[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]],
+         [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]),
+        ([[0.0, "Bass"], [0.21, "Low"], [0.43, "Mid"], [0.74, "Hi-Mid"], [1.0, "Treble"]],
+         [[0.0, "Bass"], [0.21, "Low-Mid"], [0.43, "Vocal"], [0.74, "Hi-Mid"], [1.0, "Treble"]]),
+    ])
+    def test_load_spectrum_mode_settings_promotes_legacy_linear_labels_to_vocal_lane(
+        self, spectrum_spec_tab, notches, expected,
+    ):
+        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
 
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _ShapeEditor:
-            def __init__(self):
-                self.nodes = None
-                self.mirrored = None
-                self.notches = []
-
-            def set_nodes(self, nodes):
-                self.nodes = nodes
-
-            def set_mirrored(self, mirrored):
-                self.mirrored = mirrored
-
-            def set_notch_positions(self, notches, mirrored):
-                self.notches.append((mirrored, notches))
-
-            def set_lane_strengths(self, strengths, *, mirrored):
-                if not hasattr(self, "lane_strengths"):
-                    self.lane_strengths = []
-                self.lane_strengths.append((mirrored, strengths))
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                self._spectrum_render_mode = None
-                self.spectrum_visual_smoothing_enabled = _Check()
-                self.spectrum_visual_smoothing = _Slider()
-                self.spectrum_visual_smoothing_label = _Label()
-                self.spectrum_rainbow_per_bar = _Check()
-                self.spectrum_rainbow_fill = _Check()
-                self.spectrum_rainbow_border = _Check()
-                self.spectrum_wave_amplitude = _Slider()
-                self.spectrum_wave_amplitude_label = _Label()
-                self.spectrum_profile_floor = _Slider()
-                self.spectrum_profile_floor_label = _Label()
-                self.spectrum_drop_speed = _Slider()
-                self.spectrum_drop_speed_label = _Label()
-                self.spectrum_border_radius = _Slider()
-                self.spectrum_border_radius_label = _Label()
-                self.spectrum_glow_enabled = _Check()
-                self.spectrum_glow_intensity = _Slider()
-                self.spectrum_glow_intensity_label = _Label()
-                self.spectrum_mirrored = _Check()
-                self.spectrum_shape_editor = _ShapeEditor()
-                self.vis_ghost_enabled = _Check()
-                self.vis_ghost_opacity_slider = _Slider()
-                self.vis_ghost_opacity_label = _Label()
-                self.vis_ghost_decay_slider = _Slider()
-                self.vis_ghost_decay_label = _Label()
-
-            def _set_spectrum_render_mode(self, mode, save=False):
-                self._spectrum_render_mode = mode
-
-        tab = _Tab()
-        synced = []
-        ghost_visibility_calls = []
-
-        load_spectrum_mode_settings(
-            tab,
-            {
-                "spectrum_render_mode": "bars",
-                "spectrum_visual_smoothing_enabled": False,
-                "spectrum_visual_smoothing": 0.72,
-                "spectrum_unique_colors": True,
-                "spectrum_rainbow_fill": False,
-                "spectrum_rainbow_border": True,
-                "spectrum_lane_strengths_mirrored": {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88},
-                "spectrum_lane_strengths_linear": {"Bass": 0.63, "Low-Mid": 0.54, "Vocal": 0.46, "Hi-Mid": 0.71, "Treble": 0.93},
-                "spectrum_wave_amplitude": 0.55,
-                "spectrum_profile_floor": 0.17,
-                "spectrum_drop_speed": 1.9,
-                "spectrum_border_radius": 7,
-                "spectrum_glow_enabled": True,
-                "spectrum_glow_intensity": 1.15,
-                "spectrum_glow_color": [1, 2, 3, 4],
-                "spectrum_mirrored": False,
-                "spectrum_shape_nodes": [[0.0, 0.22], [1.0, 0.88]],
-                "spectrum_notch_positions_mirrored": [[0.0, "Mid"], [1.0, "Bass"]],
-                "spectrum_notch_positions_linear": [[0.0, "Bass"], [1.0, "Treble"]],
-                "spectrum_ghosting_enabled": False,
-                "spectrum_ghost_alpha": 0.37,
-                "spectrum_ghost_decay": 0.42,
-            },
-            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
-            update_ghost_visibility=lambda tab_obj: ghost_visibility_calls.append(tab_obj),
-        )
-
-        assert tab._spectrum_render_mode == "bars"
-        assert tab.spectrum_visual_smoothing_enabled.checked is False
-        assert tab.spectrum_visual_smoothing.value == 72
-        assert tab.spectrum_visual_smoothing_label.text == "72%"
-        assert tab.spectrum_rainbow_per_bar.checked is True
-        assert tab.spectrum_rainbow_fill.checked is False
-        assert tab.spectrum_rainbow_border.checked is True
-        assert tab.spectrum_wave_amplitude.value == 55
-        assert tab.spectrum_profile_floor.value == 17
-        assert tab.spectrum_profile_floor_label.text == "0.17"
-        assert tab.spectrum_drop_speed.value == 190
-        assert tab.spectrum_border_radius.value == 7
-        assert tab.spectrum_glow_enabled.checked is True
-        assert tab.spectrum_glow_intensity.value == 114
-        assert tab.spectrum_mirrored.checked is False
-        assert tab.spectrum_shape_editor.nodes == [[0.0, 0.22], [1.0, 0.88]]
-        assert tab.spectrum_shape_editor.mirrored is False
-        assert tab.spectrum_shape_editor.notches == [
-            (True, [[0.0, "Mid"], [1.0, "Bass"]]),
-            (False, [[0.0, "Bass"], [1.0, "Treble"]]),
-        ]
-        assert tab.spectrum_shape_editor.lane_strengths == [
-            (True, {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88}),
-            (False, {"Bass": 0.63, "Low-Mid": 0.54, "Vocal": 0.46, "Hi-Mid": 0.71, "Treble": 0.93}),
-        ]
-        assert tab.vis_ghost_enabled.checked is False
-        assert tab.vis_ghost_opacity_slider.value == 37
-        assert tab.vis_ghost_decay_slider.value == 42
-        assert (tab._spectrum_glow_color.red(), tab._spectrum_glow_color.green(), tab._spectrum_glow_color.blue(), tab._spectrum_glow_color.alpha()) == (1, 2, 3, 4)
-        assert synced == [("spectrum_glow_color_btn", "_spectrum_glow_color")]
-        assert ghost_visibility_calls == [tab]
-
-    def test_collect_spectrum_mode_settings_serializes_spectrum_owned_state(self):
-        from ui.tabs.media.spectrum_settings_binding import collect_spectrum_mode_settings
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _ShapeEditor:
-            def __init__(self):
-                self._notches_mirrored = [[0.0, "Mid"], [1.0, "Bass"]]
-                self._notches_linear = [[0.0, "Bass"], [1.0, "Treble"]]
-                self._lane_strengths_mirrored = {"Mid": 0.58, "Vocal": 0.65, "Low-Mid": 0.72, "Bass": 0.83}
-                self._lane_strengths_linear = {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91}
-
-            def get_nodes(self):
-                return [[0.0, 0.21], [1.0, 0.79]]
-
-            def get_lane_strengths(self, mirrored=None):
-                return dict(self._lane_strengths_mirrored if mirrored else self._lane_strengths_linear)
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            vis_ghost_enabled = _Check(True)
-            vis_ghost_opacity_slider = _Slider(43)
-            vis_ghost_decay_slider = _Slider(38)
-            _spectrum_render_mode = "bars"
-            spectrum_visual_smoothing_enabled = _Check(False)
-            spectrum_visual_smoothing = _Slider(64)
-            spectrum_rainbow_per_bar = _Check(False)
-            spectrum_rainbow_fill = _Check(False)
-            spectrum_rainbow_border = _Check(True)
-            spectrum_border_radius = _Slider(6)
-            spectrum_glow_enabled = _Check(True)
-            spectrum_glow_intensity = _Slider(120)
-            _spectrum_glow_color = QColor(1, 2, 3, 4)
-            spectrum_mirrored = _Check(False)
-            spectrum_shape_editor = _ShapeEditor()
-            spectrum_wave_amplitude = _Slider(51)
-            spectrum_profile_floor = _Slider(18)
-            spectrum_drop_speed = _Slider(175)
-
-        payload = collect_spectrum_mode_settings(_Tab())
-
-        assert payload["spectrum_ghosting_enabled"] is True
-        assert payload["spectrum_ghost_alpha"] == pytest.approx(0.43)
-        assert payload["spectrum_ghost_decay"] == pytest.approx(0.38)
-        assert payload["spectrum_render_mode"] == "bars"
-        assert payload["spectrum_visual_smoothing_enabled"] is False
-        assert payload["spectrum_visual_smoothing"] == pytest.approx(0.64)
-        assert payload["spectrum_unique_colors"] is False
-        assert payload["spectrum_rainbow_fill"] is False
-        assert payload["spectrum_rainbow_border"] is True
-        assert payload["spectrum_border_radius"] == pytest.approx(6.0)
-        assert payload["spectrum_glow_enabled"] is True
-        assert payload["spectrum_glow_intensity"] == pytest.approx(1.2)
-        assert payload["spectrum_glow_color"] == [1, 2, 3, 4]
-        assert payload["spectrum_mirrored"] is False
-        assert payload["spectrum_shape_nodes"] == [[0.0, 0.21], [1.0, 0.79]]
-        assert payload["spectrum_notch_positions_mirrored"] == [[0.0, "Mid"], [1.0, "Bass"]]
-        assert payload["spectrum_notch_positions_linear"] == [[0.0, "Bass"], [1.0, "Treble"]]
-        assert payload["spectrum_lane_strengths_mirrored"] == {"Mid": 0.58, "Vocal": 0.65, "Low-Mid": 0.72, "Bass": 0.83}
-        assert payload["spectrum_lane_strengths_linear"] == {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91}
-        assert payload["spectrum_wave_amplitude"] == pytest.approx(0.51)
-        assert payload["spectrum_profile_floor"] == pytest.approx(0.18)
-        assert payload["spectrum_drop_speed"] == pytest.approx(1.75)
-
-    def test_load_spectrum_mode_settings_promotes_legacy_linear_default_to_vocal_lane(self):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings
-
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, checked):
-                self.checked = checked
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
-
-            def setValue(self, value):
-                self.value = value
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _ShapeEditor:
-            def __init__(self):
-                self.nodes = None
-                self.mirrored = None
-                self.notches = []
-
-            def set_nodes(self, nodes):
-                self.nodes = nodes
-
-            def set_mirrored(self, mirrored):
-                self.mirrored = mirrored
-
-            def set_notch_positions(self, notches, mirrored):
-                self.notches.append((mirrored, notches))
-
-            def set_lane_strengths(self, strengths, *, mirrored):
-                if not hasattr(self, "lane_strengths"):
-                    self.lane_strengths = []
-                self.lane_strengths.append((mirrored, strengths))
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                self._spectrum_render_mode = None
-                self.spectrum_rainbow_per_bar = _Check()
-                self.spectrum_rainbow_border = _Check()
-                self.spectrum_wave_amplitude = _Slider()
-                self.spectrum_wave_amplitude_label = _Label()
-                self.spectrum_profile_floor = _Slider()
-                self.spectrum_profile_floor_label = _Label()
-                self.spectrum_drop_speed = _Slider()
-                self.spectrum_drop_speed_label = _Label()
-                self.spectrum_border_radius = _Slider()
-                self.spectrum_border_radius_label = _Label()
-                self.spectrum_glow_enabled = _Check()
-                self.spectrum_glow_intensity = _Slider()
-                self.spectrum_glow_intensity_label = _Label()
-                self.spectrum_mirrored = _Check()
-                self.spectrum_shape_editor = _ShapeEditor()
-                self.vis_ghost_enabled = _Check()
-                self.vis_ghost_opacity_slider = _Slider()
-                self.vis_ghost_opacity_label = _Label()
-                self.vis_ghost_decay_slider = _Slider()
-                self.vis_ghost_decay_label = _Label()
-
-            def _set_spectrum_render_mode(self, mode, save=False):
-                self._spectrum_render_mode = mode
-
-        tab = _Tab()
-
-        load_spectrum_mode_settings(
-            tab,
-            {
-                "spectrum_mirrored": False,
-                "spectrum_notch_positions_linear": [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]],
-            },
-            sync_color_button=lambda *_args, **_kwargs: None,
-            update_ghost_visibility=lambda *_args, **_kwargs: None,
-        )
-
-        assert tab.spectrum_shape_editor.notches[-1] == (
-            False,
-            [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]],
-        )
-
-    def test_load_spectrum_mode_settings_promotes_drifted_legacy_linear_labels_to_vocal_lane(self):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings
-
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, checked):
-                self.checked = checked
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
-
-            def setValue(self, value):
-                self.value = value
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _ShapeEditor:
-            def __init__(self):
-                self.nodes = None
-                self.mirrored = None
-                self.notches = []
-
-            def set_nodes(self, nodes):
-                self.nodes = nodes
-
-            def set_mirrored(self, mirrored):
-                self.mirrored = mirrored
-
-            def set_notch_positions(self, notches, mirrored):
-                self.notches.append((mirrored, notches))
-
-            def set_lane_strengths(self, strengths, *, mirrored):
-                if not hasattr(self, "lane_strengths"):
-                    self.lane_strengths = []
-                self.lane_strengths.append((mirrored, strengths))
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                self._spectrum_render_mode = None
-                self.spectrum_rainbow_per_bar = _Check()
-                self.spectrum_rainbow_border = _Check()
-                self.spectrum_wave_amplitude = _Slider()
-                self.spectrum_wave_amplitude_label = _Label()
-                self.spectrum_profile_floor = _Slider()
-                self.spectrum_profile_floor_label = _Label()
-                self.spectrum_drop_speed = _Slider()
-                self.spectrum_drop_speed_label = _Label()
-                self.spectrum_border_radius = _Slider()
-                self.spectrum_border_radius_label = _Label()
-                self.spectrum_glow_enabled = _Check()
-                self.spectrum_glow_intensity = _Slider()
-                self.spectrum_glow_intensity_label = _Label()
-                self.spectrum_mirrored = _Check()
-                self.spectrum_shape_editor = _ShapeEditor()
-                self.vis_ghost_enabled = _Check()
-                self.vis_ghost_opacity_slider = _Slider()
-                self.vis_ghost_opacity_label = _Label()
-                self.vis_ghost_decay_slider = _Slider()
-                self.vis_ghost_decay_label = _Label()
-
-            def _set_spectrum_render_mode(self, mode, save=False):
-                self._spectrum_render_mode = mode
-
-        tab = _Tab()
-
-        load_spectrum_mode_settings(
-            tab,
-            {
-                "spectrum_mirrored": False,
-                "spectrum_notch_positions_linear": [
-                    [0.0, "Bass"],
-                    [0.21, "Low"],
-                    [0.43, "Mid"],
-                    [0.74, "Hi-Mid"],
-                    [1.0, "Treble"],
-                ],
-            },
-            sync_color_button=lambda *_args, **_kwargs: None,
-            update_ghost_visibility=lambda *_args, **_kwargs: None,
-        )
-
-        assert tab.spectrum_shape_editor.notches[-1] == (
-            False,
-            [[0.0, "Bass"], [0.21, "Low-Mid"], [0.43, "Vocal"], [0.74, "Hi-Mid"], [1.0, "Treble"]],
-        )
+        load_spectrum_mode_settings(spectrum_spec_tab, {"spectrum_mirrored": False,
+                                                       "spectrum_notch_positions_linear": notches})
+        assert collect_spectrum_mode_settings(spectrum_spec_tab)["spectrum_notch_positions_linear"] == expected
 
     def test_spotify_visualizer_settings_promotes_drifted_legacy_linear_labels_to_vocal_lane(self):
         from core.settings.models import SpotifyVisualizerSettings

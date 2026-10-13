@@ -134,14 +134,6 @@ def _update_visualizers_enabled_visibility(tab) -> None:
         container.setVisible(bool(enabled))
 
 
-def _update_ghost_visibility(tab) -> None:
-    """Show/hide ghost opacity/decay sliders based on ghost_enabled checkbox."""
-    show = getattr(tab, 'vis_ghost_enabled', None) and tab.vis_ghost_enabled.isChecked()
-    container = getattr(tab, '_ghost_sub_container', None)
-    if container is not None:
-        container.setVisible(bool(show))
-
-
 def _update_media_bg_visibility(tab) -> None:
     """Show/hide media background styling controls based on show_background checkbox."""
     show = getattr(tab, 'media_show_background', None) and tab.media_show_background.isChecked()
@@ -825,12 +817,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
         _apply_vis_color_to_button(tab, btn_attr, color_attr)
 
     if mode_id == "spectrum":
-        load_spectrum_mode_settings(
-            tab,
-            cfg,
-            sync_color_button=_sync,
-            update_ghost_visibility=_update_ghost_visibility,
-        )
+        load_spectrum_mode_settings(tab, cfg)
     elif mode_id == "oscilloscope":
         load_oscilloscope_mode_settings(tab, cfg)
     elif mode_id == "sine_wave":
@@ -1411,13 +1398,6 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             _host.enabled_modes
         )
 
-    # Spectrum-owned ghost controls: only present when Spectrum's body is built
-    # (V6a lazy). When Spectrum is unbuilt its persisted ghost state stays
-    # authoritative via the save merge and is never synthesized here.
-    if hasattr(tab, 'vis_ghost_enabled'):
-        spotify_vis_config['spectrum_ghosting_enabled'] = tab.vis_ghost_enabled.isChecked()
-        spotify_vis_config['spectrum_ghost_alpha'] = tab.vis_ghost_opacity_slider.value() / 100.0
-        spotify_vis_config['spectrum_ghost_decay'] = max(0.1, tab.vis_ghost_decay_slider.value() / 100.0)
     collect_visualizer_rainbow_state(tab, spotify_vis_config)
     # Option A: only collect settings for the CURRENT visualizer mode to prevent
     # cross-mode pollution. Under lazy bodies the current mode may be unbuilt

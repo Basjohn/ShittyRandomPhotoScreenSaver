@@ -17,6 +17,8 @@ from core.settings.visualizer_mode_settings import (
     Slider,
     Toggle,
     iter_mode_settings,
+    control_runtime_attr,
+    control_runtime_value,
 )
 
 SPECS = iter_mode_settings()
@@ -75,7 +77,7 @@ def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
     for control in spec.controls:
         value = getattr(model, control.key)
         if isinstance(control, Slider):
-            assert value == control.high
+            assert value == (control.high if control.admission_high is None else control.admission_high)
         elif isinstance(control, (Colour, Choice)):
             assert value == control.admit(DEFAULTS[control.key], DEFAULTS[control.key])
         else:
@@ -106,7 +108,9 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
             assert projected[f"spectrum_{suffix}"] == DEFAULTS[control.key]
             continue
         owner, other = (logical, presentation) if control.logical else (presentation, logical)
-        assert hasattr(owner, f"_{control.key}") and not hasattr(other, f"_{control.key}"), control.key
+        attr = control_runtime_attr(control)
+        assert getattr(owner, attr) == control_runtime_value(control, control.admit(DEFAULTS[control.key], DEFAULTS[control.key]))
+        assert not hasattr(other, attr), control.key
     parameters = spec_mode_parameters(presentation, spec.mode_id)
     assert set(parameters) == {control.key for control in spec.presentation_controls()}
 
