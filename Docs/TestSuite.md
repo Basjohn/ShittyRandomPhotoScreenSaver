@@ -465,6 +465,11 @@ consumers once. Rainbow/shape/smoothing Custom loads are silent; saved shadow va
 disabled on load/reset; orbit and external Bar Appearance stay outside the body payload. Independent Rainbow Ghost and
 ordinary ghost detail conditions retain their behavior. Fixed-recording equality uses the same frozen-fixture discipline.
 
+`test_spectrum_settings_spec.py` checks canonical/legacy input precedence and one write to each existing runtime alias,
+source shaping and capture-style projection, independent ghost/Rainbow routes, and saved radii beyond the UI range.
+Spectrum cases in `test_visualizer_settings_plumbing.py` use the real body/editor for silent load, nested blockers,
+render buttons, conditional rows and mirrored/linear lane/notch migration rather than fake controls.
+
 Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
 
 Protect:

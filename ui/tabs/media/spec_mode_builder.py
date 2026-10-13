@@ -24,6 +24,7 @@ from core.settings.visualizer_mode_settings import (
     Slider,
     Toggle,
     require_mode_settings,
+    read_control_value,
 )
 from ui.color_utils import qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
@@ -87,9 +88,9 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
                     toggle_groups[group] = _row(layout, entry.label)
                 else:
                     toggle_groups[group][1].addSpacing(16)
-                rows[entry.key] = _build_control(tab, layout, entry, toggle_groups[group])
+                rows[entry.key] = _build_control(tab, layout, entry, toggle_groups[group], auto_switch=spec.auto_switch)
             else:
-                rows[entry.key] = _build_control(tab, layout, entry)
+                rows[entry.key] = _build_control(tab, layout, entry, auto_switch=spec.auto_switch)
     for _row_widget, content in toggle_groups.values():
         content.addStretch()
     setattr(tab, f"_{prefix}_rows", rows)
@@ -131,17 +132,20 @@ def _row(layout, label: str):
     return widget, content
 
 
-def _build_control(tab, layout, control, shared_row=None):
+def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
     """Build one control's row; returns the row widget (hidden with the control)."""
     default = tab._widget_default("spotify_visualizer", control.key)
     if isinstance(control, Colour):
-        row, content, _label = add_builder_swatch_row(layout, control.label, label_width=_LABEL_WIDTH)
+        if control.swatch_row:
+            row, content, _label = add_builder_swatch_row(layout, control.label, label_width=_LABEL_WIDTH)
+        else:
+            row, content = _row(layout, control.label)
         colour = QColor(*control.admit(default, default))
         setattr(tab, f"_{control.key}", colour)
         button = ColorSwatchButton(title=control.title, show_alpha=control.alpha)
         button.setToolTip(control.tooltip)
         _apply_availability(button, control)
-        bind_color_button(tab, button, f"_{control.key}", auto_switch=True, initial_color=colour)
+        bind_color_button(tab, button, f"_{control.key}", auto_switch=auto_switch, initial_color=colour)
         setattr(tab, f"{control.key}_btn", button)
         content.addWidget(button)
         content.addStretch()
@@ -156,7 +160,7 @@ def _build_control(tab, layout, control, shared_row=None):
     if isinstance(control, Slider):
         widget = NoWheelSlider(Qt.Orientation.Horizontal)
         widget.setRange(round(control.low * control.scale), round(control.high * control.scale))
-        widget.setValue(round(control.admit(default, default) * control.scale))
+        widget.setValue(control.position(control.admit(default, default)))
         if control.tick:
             widget.setTickPosition(QSlider.TickPosition.TicksBelow)
             widget.setTickInterval(control.tick)
@@ -164,7 +168,7 @@ def _build_control(tab, layout, control, shared_row=None):
         value.setText(control.text(widget.value()))
         setattr(tab, f"{control.key}_label", value)
         widget.valueChanged.connect(lambda position, c=control, label=value: label.setText(c.text(position)))
-        bind_setting_signal(tab, widget.valueChanged, auto_switch=True)
+        bind_setting_signal(tab, widget.valueChanged, auto_switch=auto_switch)
         content.addWidget(widget)
         content.addWidget(value)
     elif isinstance(control, Toggle):
@@ -175,19 +179,23 @@ def _build_control(tab, layout, control, shared_row=None):
                 content.addStretch()
         widget.setProperty("circleIndicator", True)
         widget.setChecked(control.admit(default, default))
-        bind_setting_signal(tab, widget.toggled, auto_switch=True)
+        bind_setting_signal(tab, widget.toggled, auto_switch=auto_switch)
     else:
         widget = StyledComboBox(size_variant="compact") if control.compact else StyledComboBox()
         widget.addItems(list(control.choices))
         if control.indexed:
             widget.setCurrentIndex(control.admit(default, default))
-            bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=True)
+            bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)
         else:
             widget.setCurrentText(control.admit(default, default))
-            bind_setting_signal(tab, widget.currentTextChanged, auto_switch=True)
+            bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(control.tooltip)
+    if isinstance(control, Slider) and control.bottom_padding:
+        margins = row.layout().contentsMargins()
+        row.layout().setContentsMargins(margins.left(), margins.top(), margins.right(),
+                                       margins.bottom() + control.bottom_padding)
     _apply_availability(widget, control)
     setattr(tab, control.key, widget)
     return row
@@ -214,7 +222,7 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
                 _resolve(entry.load)(tab, config)
             continue
         default = tab._widget_default("spotify_visualizer", entry.key)
-        value = entry.admit(config.get(entry.key, default), default)
+        value = entry.admit(read_control_value(entry, config.get, default), default)
         if isinstance(entry, Colour):
             colour = QColor(*value)
             setattr(tab, f"_{entry.key}", colour)
@@ -226,10 +234,10 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
         widget = getattr(tab, entry.key, None)
         if widget is None:
             continue
-        widget.blockSignals(True)
+        previous = widget.blockSignals(True)
         try:
             if isinstance(entry, Slider):
-                widget.setValue(round(value * entry.scale))
+                widget.setValue(entry.position(value))
             elif isinstance(entry, Toggle):
                 widget.setChecked(value)
             elif entry.indexed:
@@ -237,7 +245,7 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
             else:
                 widget.setCurrentText(value)
         finally:
-            widget.blockSignals(False)
+            widget.blockSignals(previous)
         if isinstance(entry, Slider):
             # Its value label follows valueChanged, which was blocked.
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))

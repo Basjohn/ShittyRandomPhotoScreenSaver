@@ -594,7 +594,7 @@ The currently curated Sphere presentation examples include **Glass Current** (Pr
 Migrated modes declare their controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.
 Bespoke shape/layer editors remain Custom entries at their existing owner. Reference → Settings declarations describes
-the boundaries, including descriptor source-profile projection and unavailable-feature metadata; a declaration migration
+the boundaries, including descriptor source-profile projection, canonical runtime aliases and unavailable-feature metadata; a declaration migration
 preserves rendering, saved intent and musical response.
 
 ## Visualizer preset catalogue ownership

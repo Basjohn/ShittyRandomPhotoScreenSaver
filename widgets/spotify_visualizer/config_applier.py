@@ -17,7 +17,6 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_gradient_direction,
     normalize_bubble_specular_direction,
 )
-from core.settings.visualizer_settings_contract import normalize_spectrum_render_mode
 from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_fields
 
@@ -292,22 +291,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_ghosting_enabled' in kwargs:
         host._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
 
-    # --- Spectrum authored logical inputs (SpectrumFrameRuntime.resolve) ---
-    # Canonical presets/settings store ``spectrum_render_mode``.  The historical
-    # creator translated that value to the boolean consumed by authored state;
-    # Quick has no creator façade, so the logical owner performs that tiny
-    # semantic translation directly.  Retain the legacy boolean only as a
-    # fallback for old focused callers.
-    if 'spectrum_render_mode' in kwargs:
-        host._spectrum_single_piece = (
-            normalize_spectrum_render_mode(
-                kwargs['spectrum_render_mode'],
-                str(_visualizer_default('spectrum_render_mode')),
-            )
-            == 'bars'
-        )
-    elif 'spectrum_single_piece' in kwargs:
-        host._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
+    # Spectrum smoothing remains with its existing Custom/logical owner.
     if 'spectrum_visual_smoothing_enabled' in kwargs:
         host._spectrum_visual_smoothing_enabled = bool(
             kwargs['spectrum_visual_smoothing_enabled']
@@ -316,11 +300,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._spectrum_visual_smoothing = max(
             0.0, min(1.0, float(kwargs['spectrum_visual_smoothing']))
         )
-    if 'spectrum_ghosting_enabled' in kwargs:
-        host._spectrum_ghosting_enabled = bool(kwargs['spectrum_ghosting_enabled'])
-    if 'spectrum_ghost_decay' in kwargs:
-        host._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
-
     # --- Sine authored logical inputs (SineFrameRuntime.resolve) -----------
     if 'sine_line_count' in kwargs:
         host._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
@@ -416,33 +395,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         color.setAlphaF(opacity)
         host._bar_border_color = color
 
-    # --- Spectrum styling (glow / border / rainbow border) -----------
-    # ``spectrum_unique_colors`` is the canonical settings/preset key.  The old
-    # QWidget creator translated it to ``spectrum_rainbow_per_bar`` before the
-    # mixed applier ran; Quick consumes the canonical model directly.
-    if 'spectrum_unique_colors' in kwargs:
-        host._rainbow_per_bar = bool(kwargs['spectrum_unique_colors'])
-    elif 'spectrum_rainbow_per_bar' in kwargs:
-        host._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
-    if 'spectrum_rainbow_fill' in kwargs:
-        host._spectrum_rainbow_fill = bool(kwargs['spectrum_rainbow_fill'])
-    if 'spectrum_rainbow_border' in kwargs:
-        host._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
-    if 'spectrum_rainbow_ghost' in kwargs:
-        host._spectrum_rainbow_ghost = bool(kwargs['spectrum_rainbow_ghost'])
-    if 'spectrum_border_radius' in kwargs:
-        host._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
-    if 'spectrum_glow_enabled' in kwargs:
-        host._spectrum_glow_enabled = bool(kwargs['spectrum_glow_enabled'])
-    if 'spectrum_glow_intensity' in kwargs:
-        host._spectrum_glow_intensity = max(0.0, min(1.5, float(kwargs['spectrum_glow_intensity'])))
-    if 'spectrum_glow_color' in kwargs:
-        c = _color_or_none(kwargs['spectrum_glow_color'])
-        if c is not None:
-            host._spectrum_glow_color = c
-    if 'spectrum_ghost_alpha' in kwargs:
-        host._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
-
     # --- Sine styling ------------------------------------------------
     if 'sine_line_dim' in kwargs:
         host._sine_line_dim = bool(kwargs['sine_line_dim'])
@@ -482,8 +434,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         host._rainbow_speed = max(0.01, min(5.0, float(kwargs[_pm_rs])))
     elif 'rainbow_speed' in kwargs:
         host._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
-    if 'rainbow_per_bar' in kwargs:
-        host._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
 
     # --- Bubble renderer styling -------------------------------------
     if 'bubble_ghosting_enabled' in kwargs:
@@ -542,22 +492,24 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
     """Store each spec'd control present in ``kwargs`` on its owner as ``_<key>``, admitted by
     its control (clamped; a malformed value becomes the canonical default)."""
     from core.settings.visualizer_mode_settings import iter_mode_settings
+    from core.settings.visualizer_mode_settings import control_runtime_attr, control_runtime_value, read_control_value
 
     for spec in iter_mode_settings():
         for control in (spec.logical_controls() if logical else spec.presentation_controls()):
-            if control.key in kwargs:
-                setattr(host, f"_{control.key}",
-                        control.admit(kwargs[control.key], _visualizer_default(control.key)))
+            if control.key in kwargs or any(key in kwargs for key in getattr(control, "input_aliases", ())):
+                default = _visualizer_default(control.key)
+                value = control.admit(read_control_value(control, kwargs.get, default), default)
+                setattr(host, control_runtime_attr(control), control_runtime_value(control, value))
 
 
 def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:
     """A spec'd mode's renderer parameters: every presentation control, under its own key
     (colours as tuples)."""
-    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.settings.visualizer_mode_settings import control_runtime_attr, require_mode_settings
 
     values: Dict[str, object] = {}
     for control in require_mode_settings(mode_id).presentation_controls():
-        value = getattr(owner, f"_{control.key}")
+        value = getattr(owner, control_runtime_attr(control))
         values[control.key] = tuple(value) if isinstance(value, list) else value
     return values
 
