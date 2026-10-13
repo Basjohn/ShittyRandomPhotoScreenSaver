@@ -80,6 +80,23 @@ acceptance gate.
   Reject jelly mountains, harsh strobing, uncontrolled flashes or saturated glow; high react should be powerful but
   still legible. Scope and checkpoint V4A internally as necessary, but **do not mark migration complete until the
   full rework and at least one high-parity preset are implemented and accepted together**.
+  Internal checkpoints remain part of this one delivery:
+  - [ ] **V4A.1 — Terrain and migration contract.** Define bounded immutable heightfield control data, base-height water
+    classification and one-way adaptation of old profile/Custom/preset inputs. Old spectral-response nodes are not
+    terrain coordinates: preserve their consumed audio intent explicitly rather than relabelling or discarding them.
+    Keep terrain data out of per-tick recursive copies; settings/defaults and Custom snapshots retain canonical ownership.
+  - [ ] **V4A.2 — Spec and terrain authoring.** Finish the mode's typed declarations and bespoke terrain editor, with
+    raise/lower/flatten, bounded brush behavior, explicit water preview and silent load. Prove edit/save/reload/reset,
+    preset cycling, old-input adaptation and independent orbit/layout intent before committing this checkpoint.
+  - [ ] **V4A.3 — Shared heightfield and complete scene.** Add only the missing opt-in sampling/classification/GPU
+    representation to Scene3D, mirrored by CPU/GL tests. Reuse the existing onset ring, MeshResources, StreamRing,
+    SceneTarget and optional emission bloom. Terrain changes replace one bounded GPU representation; ordinary frames
+    allocate/rebuild nothing. Deliver distinct water waves and solid terrain/ridge response with lazy retirement.
+  - [ ] **V4A.4 — Preset, reaction and visual proof.** Author one editable basin preset, capture low/high frames and
+    quiet/onset/sustained sequences from identical synthetic and real clips, and compare with the supplied mock.
+    Use the single High Astra audit after this significant renderer work; resolve parity findings before acceptance.
+    Measure control-relative CPU/GPU/resource cost at supported tiers and both-display use. Leave only evidence that
+    genuinely needs operator eyes/logs as Awaiting Validation; internal green checkpoints alone do not close V4A.
 - [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
@@ -112,6 +129,10 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
 - [ ] **SC2 — Blinds Flat endpoint discrepancy, nonblocking.** Reproduce the prior capture endpoint mismatch at the exact
   production endpoint before deciding whether the defect is in capture or rendering. Landed transitions are accepted;
   do not reopen broad appearance work, change authored behavior or demand another build absent a reproduced defect.
+- [ ] **SC3 — Retire unused Spectrum fill/border-link state.** Current source finds `spectrum_link_fill_border` only in
+  defaults/model serialization and authored preset/fixture payloads, with no UI or renderer consumer. After the Settings
+  migration checkpoint, confirm caller absence and forward-strip it at canonical input/save boundaries without linking
+  the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
 ## 4. Graphics decomposition | After migration and bounded side work
 
