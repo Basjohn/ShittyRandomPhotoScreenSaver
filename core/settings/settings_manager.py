@@ -207,6 +207,8 @@ class SettingsManager(QObject):
         except Exception:
             logger.debug("Settings validation failed", exc_info=True)
 
+        self.ensure_display_monitor_bindings()
+
         # Startup is the first explicit durability boundary.  Runtime changes
         # are admitted to the ordered writer without holding the GUI thread;
         # construction finishes only after migrations/default repair are on
@@ -1009,6 +1011,13 @@ class SettingsManager(QObject):
             return self._to_plain_value(value)
 
         try:
+            if dotted == "display.show_on_monitors":
+                from core.settings.display_selection import normalize_selection
+                selection = normalize_selection(value)
+                if selection is None:
+                    logger.warning("[DISPLAY_SELECTION] Invalid imported selection %r; repairing through profile default", value)
+                    return deepcopy(canonical)
+                return selection
             if dotted == RESAMPLE_FILTER_KEY:
                 return normalize_resample_filter(value, fallback=canonical)
             if isinstance(canonical, bool):
@@ -1042,7 +1051,7 @@ class SettingsManager(QObject):
 
         return self._to_plain_value(value)
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, *, emit_change: bool = True) -> None:
         """
         Set a setting value.
         
@@ -1051,7 +1060,48 @@ class SettingsManager(QObject):
             value: Value to set
         """
         key = self._canonicalize_key(key)
+        if key == "display" and isinstance(value, Mapping):
+            # A whole display section is one store transaction: publish only
+            # after selection and its physical bindings are both coherent.
+            from core.settings.display_selection import normalize_selection, selection_bindings, SELECTION_KEY, BINDINGS_KEY
+            from core.settings.monitor_routes import current_screen_identities
+            with self._lock:
+                updates = {f"display.{leaf}": item for leaf, item in value.items()}
+                previous = {leaf: self.get(leaf) for leaf in updates}
+                if SELECTION_KEY in updates:
+                    selection = normalize_selection(updates[SELECTION_KEY])
+                    if selection is None:
+                        logger.warning("[DISPLAY_SELECTION] Invalid section selection %r; repairing through profile default", updates[SELECTION_KEY])
+                        selection = require_canonical_default(SELECTION_KEY, self._application)
+                    updates[SELECTION_KEY] = selection
+                    updates[BINDINGS_KEY] = selection_bindings(
+                        selection, value.get("monitor_bindings", {}), current_screen_identities(),
+                        explicit="monitor_bindings" not in value,
+                    )
+                elif BINDINGS_KEY in updates:
+                    updates[BINDINGS_KEY] = selection_bindings(self.get(SELECTION_KEY), updates[BINDINGS_KEY], current_screen_identities())
+                for leaf, item in updates.items():
+                    self._settings.setValue(leaf, item)
+                self._invalidate_cache_for_key_locked("display")
+                self._settings.sync()
+            if emit_change:
+                for leaf, item in updates.items():
+                    self._publish_store_change(leaf, item, previous.get(leaf))
+            return
         with self._lock:
+            if key == "display.monitor_bindings":
+                from core.settings.display_selection import selection_bindings
+                from core.settings.monitor_routes import current_screen_identities
+                value = selection_bindings(self.get("display.show_on_monitors"), value, current_screen_identities())
+            if key == "display.show_on_monitors":
+                from core.settings.display_selection import normalize_selection, selection_bindings, BINDINGS_KEY
+                from core.settings.monitor_routes import current_screen_identities
+                normalized = normalize_selection(value)
+                if normalized is None:
+                    logger.warning("[DISPLAY_SELECTION] Invalid selection %r; repairing through profile default", value)
+                    normalized = require_canonical_default(key, self._application)
+                value = normalized
+                self._settings.setValue(BINDINGS_KEY, selection_bindings(value, {}, current_screen_identities(), explicit=True))
             handled, old_value = self._set_structured_value_locked(key, value)
             if not handled:
                 if key == "widgets" and isinstance(value, Mapping):
@@ -1073,7 +1123,8 @@ class SettingsManager(QObject):
             # in-memory visibility, cache invalidation, and notification do not.
             self._settings.sync()
 
-        self._publish_store_change(key, value, old_value)
+        if emit_change:
+            self._publish_store_change(key, value, old_value)
 
         # Compact logging by default so large nested maps (e.g. 'widgets')
         # do not flood the log. When verbose logging is enabled we still
@@ -1209,7 +1260,13 @@ class SettingsManager(QObject):
 
     def set_many(self, values: Mapping[str, Any]) -> None:
         """Set multiple settings in one call."""
+        display_values = {key[len("display."):]: value for key, value in values.items()
+                          if key.startswith("display.")}
+        if len(display_values) > 1:
+            self.set("display", display_values)
         for k, v in values.items():
+            if len(display_values) > 1 and k.startswith("display."):
+                continue
             self.set(k, v)
 
     # Typed helpers -----------------------------------------------------
@@ -1357,6 +1414,14 @@ class SettingsManager(QObject):
                     self._settings.setValue('sources.rss_feeds', require_canonical_default('sources.rss_feeds', self._application))
                 repairs['sources.rss_feeds'] = f"Invalid type: {type(rss_feeds).__name__}"
             
+            from core.settings.display_selection import normalize_selection, SELECTION_KEY, BINDINGS_KEY
+            raw_selection = self._settings.value(SELECTION_KEY)
+            if normalize_selection(raw_selection) is None:
+                logger.warning("[DISPLAY_SELECTION] Invalid persisted selection %r; repairing through profile default", raw_selection)
+                self._settings.setValue(SELECTION_KEY, require_canonical_default(SELECTION_KEY, self._application))
+                self._settings.setValue(BINDINGS_KEY, {})
+                repairs[SELECTION_KEY] = "Malformed selection"
+
             # Validate timing.interval - must be positive number
             interval = self._settings.value('timing.interval')
             if interval is not None:
@@ -1622,6 +1687,7 @@ class SettingsManager(QObject):
             # or flattening algorithm.
             from core.settings.defaults import get_flat_defaults
             self._settings.replace_all(get_flat_defaults(self._application))
+            self.ensure_display_monitor_bindings()
             
             # Restore preserved values using the same structured-key contract.
             for key, value in preserved.items():
@@ -1850,6 +1916,9 @@ class SettingsManager(QObject):
         """
 
         mapping = dict(value) if isinstance(value, Mapping) else value
+        if section == "display" and isinstance(mapping, Mapping):
+            self.set("display", mapping, emit_change=emit_change)
+            return
         with self._lock:
             old_value = self._settings.value(section)
             if section == "widgets":
@@ -1878,6 +1947,28 @@ class SettingsManager(QObject):
 
         value = self.get_section('widgets', {})
         return dict(value) if isinstance(value, Mapping) else {}
+
+    def ensure_display_monitor_bindings(self) -> None:
+        """Bind legacy saver selection once using the existing Settings transaction."""
+        from core.settings.display_selection import SELECTION_KEY, BINDINGS_KEY, selection_bindings
+        from core.settings.monitor_routes import current_screen_identities
+        screens = current_screen_identities()
+        if not screens:
+            from PySide6.QtCore import QThread
+            from PySide6.QtGui import QGuiApplication
+            app = QGuiApplication.instance()
+            if not isinstance(app, QGuiApplication) or QThread.currentThread() != app.thread():
+                return
+        with self._lock:
+            raw = self._settings.value(SELECTION_KEY)
+            old = self._settings.value(BINDINGS_KEY, {})
+            bindings = selection_bindings(raw, old, screens)
+            if old == bindings:
+                return
+            self._settings.setValue(BINDINGS_KEY, bindings)
+            self._invalidate_cache_for_key_locked(BINDINGS_KEY)
+            self._settings.sync()
+        logger.info("[DISPLAY_SELECTION] Captured physical selection bindings: %r", bindings)
 
     def ensure_widget_monitor_bindings(self) -> None:
         """Capture legacy numeric assignments before the first runtime can hotplug.

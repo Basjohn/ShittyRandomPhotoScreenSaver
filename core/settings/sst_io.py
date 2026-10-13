@@ -311,6 +311,20 @@ def _project_import_state(
                 current_screen_identities(),
             )
             state["widgets"] = widgets
+    display_import = normalized_root.get("display")
+    if isinstance(display_import, Mapping) and (
+        "show_on_monitors" in display_import or "monitor_bindings" in display_import
+    ):
+        from core.settings.display_selection import SELECTION_KEY, BINDINGS_KEY, selection_bindings
+        from core.settings.monitor_routes import current_screen_identities
+        state[BINDINGS_KEY] = selection_bindings(
+            state.get(SELECTION_KEY), state.get(BINDINGS_KEY, {}) if "show_on_monitors" not in display_import
+            else display_import.get("monitor_bindings", {}), current_screen_identities(),
+        )
+    elif not merge:
+        from core.settings.display_selection import SELECTION_KEY, BINDINGS_KEY, selection_bindings
+        from core.settings.monitor_routes import current_screen_identities
+        state[BINDINGS_KEY] = selection_bindings(state.get(SELECTION_KEY), {}, current_screen_identities())
     return state
 
 

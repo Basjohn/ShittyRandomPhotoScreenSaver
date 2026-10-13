@@ -335,6 +335,8 @@ class ScreensaverEngine(QObject):
         
         # Process Supervisor for multiprocessing workers
         self._process_supervisor: Optional[ProcessSupervisor] = None
+        self._workers_waiting_for_display = False
+        self._image_sources_waiting_for_display = False
         
         logger.info("ScreensaverEngine created")
     
@@ -509,18 +511,12 @@ class ScreensaverEngine(QObject):
                 logger.error("Failed to load settings")
                 return False
             
-            # Initialize image sources
-            if not self._initialize_sources():
-                logger.warning("[FALLBACK] No image sources initialized")
-                # Continue anyway, might add sources later
-            
-            # Build image queue
-            if not self._build_image_queue():
-                logger.error("Failed to build image queue")
-                return False
-            # Initialize cache + prefetcher after queue is ready. Display-sized
-            # scaled warmup is scheduled after display creation below.
-            self._initialize_cache_prefetcher()
+            from core.settings.display_selection import resolve_monitor_numbers
+
+            self._image_sources_waiting_for_display = not resolve_monitor_numbers(self.settings_manager)
+            if not self._image_sources_waiting_for_display:
+                if not self._initialize_image_sources():
+                    return False
             
             # Initialize display manager
             if not self._initialize_display():
@@ -677,6 +673,17 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Settings load failed: {e}")
             return False
     
+    def _initialize_image_sources(self) -> bool:
+        """Initialize the existing queue/cache owners when a display can consume them."""
+        if not self._initialize_sources():
+            logger.warning("[FALLBACK] No image sources initialized")
+        if not self._build_image_queue():
+            logger.error("Failed to build image queue")
+            return False
+        self._initialize_cache_prefetcher()
+        self._image_sources_waiting_for_display = False
+        return True
+
     def _initialize_sources(self) -> bool:
         """Initialize image sources from settings."""
         try:
@@ -867,11 +874,15 @@ class ScreensaverEngine(QObject):
 
     def _start_rss_background_refresh_if_needed(self) -> None:
         """Delegates to engine.engine_rss."""
+        if self._display_selection_suspended():
+            return
         from engine.engine_rss import start_rss_background_refresh_if_needed
         start_rss_background_refresh_if_needed(self)
 
     def _background_refresh_rss(self) -> None:
         """Delegates to engine.engine_rss."""
+        if self._display_selection_suspended():
+            return
         from engine.engine_rss import background_refresh_rss
         background_refresh_rss(self)
 
@@ -912,6 +923,8 @@ class ScreensaverEngine(QObject):
 
     def _schedule_prefetch(self) -> None:
         """Delegates to engine.image_pipeline."""
+        if self._display_selection_suspended():
+            return
         from engine.image_pipeline import schedule_prefetch
         schedule_prefetch(self)
 
@@ -933,6 +946,11 @@ class ScreensaverEngine(QObject):
                 self._rebase_rotation_timer(reason='manual_ban')
             else:
                 logger.warning('[IMAGE_BAN] Deferred ban could not advance: no admitted image available')
+
+    def _display_selection_suspended(self) -> bool:
+        """Read this generation's admission decision, without querying topology."""
+        probe = getattr(self.display_manager, "is_selection_suspended", None)
+        return bool(probe()) if callable(probe) else False
 
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
@@ -1057,7 +1075,13 @@ class ScreensaverEngine(QObject):
                 logger.debug("ProcessSupervisor wired to display manager")
             
             # Set flag on success
-            if display_count > 0:
+            if display_count > 0 or self._display_selection_suspended():
+                if display_count > 0 and self._image_sources_waiting_for_display:
+                    if not self._initialize_image_sources():
+                        self._display_initializing = False
+                        self._pending_displays_ready_generation = None
+                        return False
+                    self._start_rss_background_refresh_if_needed()
                 self._display_initialized = True
                 self._display_initializing = False
                 pending_ready = self._pending_displays_ready_generation
@@ -1103,6 +1127,8 @@ class ScreensaverEngine(QObject):
             )
             return
 
+        if self._display_selection_suspended():
+            return
         image = self._pending_monitor_replay_image
         if image is None:
             return
@@ -1129,6 +1155,8 @@ class ScreensaverEngine(QObject):
         work while the replacement was still bringing up its windows.
         """
 
+        if self._display_selection_suspended():
+            return False
         perf_trace = ImageChangePerfTrace(origin="monitor_replay")
         generation, manager = self._capture_runtime_identity()
         def _resume_monitor_replay() -> None:
@@ -1281,12 +1309,14 @@ class ScreensaverEngine(QObject):
 
     def _setup_rotation_timer(self) -> None:
         """Setup timer for image rotation."""
-        interval_seconds = self.settings_manager.get('timing.interval')
-        interval_ms = interval_seconds * 1000
-
         if self._rotation_timer:
             self._stop_qtimer_safe(self._rotation_timer, description="Engine rotation timer (reconfigure)")
             self._rotation_timer = None
+
+        if self._display_selection_suspended():
+            return
+        interval_seconds = self.settings_manager.get('timing.interval')
+        interval_ms = interval_seconds * 1000
 
         if not self.thread_manager:
             logger.error("Cannot configure rotation timer without ThreadManager")
@@ -1340,6 +1370,10 @@ class ScreensaverEngine(QObject):
 
         Respects max_workers setting: 'auto' = half CPU cores, or explicit 1-8.
         """
+        if self._display_selection_suspended():
+            self._workers_waiting_for_display = True
+            return
+        self._workers_waiting_for_display = False
         if not self._process_supervisor:
             logger.debug("ProcessSupervisor not initialized, skipping worker startup")
             return
@@ -1414,18 +1448,29 @@ class ScreensaverEngine(QObject):
         
         try:
             logger.info("Starting screensaver engine...")
+
+            suspended = self._display_selection_suspended()
+            if suspended:
+                logger.info("[DISPLAY] Engine observing topology with no selected live display")
+                self._end_replacement_watchdog("no_selected_live_display")
+                from core.diagnostics import lifecycle_window
+
+                lifecycle_window.close_window()
+            else:
+                if self._workers_waiting_for_display:
+                    self._start_workers()
             
             # Show first image immediately unless a topology rebuild replays the
             # current image into this generation. That replay owns the first
             # image once the generation's displays are ready; a parallel retry
             # here would race it into a second batch.
-            if show_first_image:
+            if show_first_image and not suspended:
                 if not self._show_next_image(origin="startup"):
                     logger.warning("[FALLBACK] Failed to show first image")
                     self._schedule_startup_first_image_retry()
             
             # Start rotation timer
-            if self._rotation_timer:
+            if self._rotation_timer and not suspended:
                 self._rotation_timer.start()
                 logger.info(f"Rotation timer started ({self._rotation_timer.interval()}ms)")
             
@@ -1470,6 +1515,8 @@ class ScreensaverEngine(QObject):
 
     def _show_next_image(self, *, origin: str = "unspecified", _gate_reserved: bool = False) -> bool:
         """Load and display next image from queue with passive admission tracing."""
+        if self._display_selection_suspended():
+            return False
         perf_trace = ImageChangePerfTrace(origin=origin)
         if not self.image_queue or not self.display_manager:
             perf_trace.finish("unavailable", reason="queue_or_display_missing")
@@ -1643,6 +1690,8 @@ class ScreensaverEngine(QObject):
 
     def _schedule_startup_first_image_retry(self, attempt: int = 1) -> None:
         """Best-effort bounded retry owned by one runtime generation."""
+        if self._display_selection_suspended():
+            return
         max_attempts = 4
         if attempt > max_attempts:
             logger.error(
@@ -1693,6 +1742,8 @@ class ScreensaverEngine(QObject):
         perf_trace: ImageChangePerfTrace | None = None,
     ) -> bool:
         """Delegates to engine.image_pipeline."""
+        if self._display_selection_suspended():
+            return False
         from engine.image_pipeline import load_and_display_image_async
         return bool(
             load_and_display_image_async(

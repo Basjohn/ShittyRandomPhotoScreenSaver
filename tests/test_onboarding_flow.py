@@ -163,6 +163,8 @@ def test_display_selection_keeps_one_connected_screen_and_hydration_is_read_only
     screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080), devicePixelRatio=lambda: 1.0),
                SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1280, 1024), devicePixelRatio=lambda: 1.0)]
     monkeypatch.setattr(basic_pages.QGuiApplication, "screens", staticmethod(lambda: screens))
+    import core.settings.monitor_routes as identities
+    monkeypatch.setattr(identities, "current_screen_identities", lambda: ("serial:left", "serial:right"))
     settings.set("display.show_on_monitors", [3])
     settings.writes.clear()
     page = DisplaysPage(settings)
@@ -187,6 +189,8 @@ def test_display_diagram_click_toggles_a_display(qapp, settings, monkeypatch):
     screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080), devicePixelRatio=lambda: 1.0),
                SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1920, 1080), devicePixelRatio=lambda: 1.0)]
     monkeypatch.setattr(basic_pages.QGuiApplication, "screens", staticmethod(lambda: screens))
+    import core.settings.monitor_routes as identities
+    monkeypatch.setattr(identities, "current_screen_identities", lambda: ("serial:left", "serial:right"))
     settings.set("display.show_on_monitors", "ALL")
     page = DisplaysPage(settings)
     try:

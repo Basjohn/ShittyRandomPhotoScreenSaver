@@ -80,9 +80,54 @@ class SettingsDraft:
         return deepcopy(value)
 
     def set(self, key: str, value: Any) -> None:
+        from core.settings.display_selection import normalize_selection, selection_bindings, SELECTION_KEY, BINDINGS_KEY
+        from core.settings.monitor_routes import current_screen_identities
+        if key == SELECTION_KEY:
+            selection = normalize_selection(value)
+            if selection is None:
+                from core.logging.logger import get_logger
+                from core.settings.default_contract import require_canonical_default
+                get_logger(__name__).warning("[DISPLAY_SELECTION] Invalid draft selection %r; repairing through profile default", value)
+                selection = require_canonical_default(SELECTION_KEY, getattr(self._real, '_application', None))
+            # Explicit authoring captures today's target, including the same
+            # number after renumbering. Preview and Finish share this snapshot.
+            self._record(BINDINGS_KEY, selection_bindings(selection, {}, current_screen_identities(), explicit=True))
+            value = selection
+        elif key == "display" and isinstance(value, dict) and "show_on_monitors" in value:
+            value = deepcopy(value)
+            selection = normalize_selection(value["show_on_monitors"])
+            if selection is None:
+                from core.logging.logger import get_logger
+                from core.settings.default_contract import require_canonical_default
+                get_logger(__name__).warning("[DISPLAY_SELECTION] Invalid draft selection %r; repairing through profile default", value["show_on_monitors"])
+                selection = require_canonical_default(SELECTION_KEY, getattr(self._real, '_application', None))
+            value["show_on_monitors"] = selection
+            value["monitor_bindings"] = selection_bindings(
+                selection, value.get("monitor_bindings", {}), current_screen_identities(),
+                explicit="monitor_bindings" not in value,
+            )
+        self._record(key, value)
+
+    def _record(self, key: str, value: Any) -> None:
         # A later whole-key write supersedes earlier writes to it or beneath it.
         self._entries = [(k, v) for k, v in self._entries if k != key and not k.startswith(key + ".")]
         self._entries.append((key, deepcopy(value)))
+
+    def ensure_display_monitor_bindings(self) -> None:
+        """Resolve an unbound legacy draft without writing through to real Settings."""
+        from core.settings.display_selection import SELECTION_KEY, BINDINGS_KEY, selection_bindings
+        from core.settings.monitor_routes import current_screen_identities
+        screens = current_screen_identities()
+        if not screens:
+            from PySide6.QtCore import QThread
+            from PySide6.QtGui import QGuiApplication
+            app = QGuiApplication.instance()
+            if not isinstance(app, QGuiApplication) or QThread.currentThread() != app.thread():
+                return
+        old = self.get(BINDINGS_KEY, {})
+        bindings = selection_bindings(self.get(SELECTION_KEY), old, screens)
+        if bindings != old:
+            self._record(BINDINGS_KEY, bindings)
 
     def save(self) -> None:
         """Persistence is explicit: only :meth:`commit` saves."""
@@ -102,12 +147,27 @@ class SettingsDraft:
     def persist_now(self, key: str, value: Any) -> None:
         """An explicit save button (e.g. Save to Slot) writes straight through."""
         self.set(key, value)
-        self._real.set(key, deepcopy(value))
+        if key == "display.show_on_monitors":
+            self._real.set("display", {"show_on_monitors": self.get(key),
+                                       "monitor_bindings": self.get("display.monitor_bindings")})
+        else:
+            self._real.set(key, deepcopy(value))
         self._real.save()
 
     def commit(self) -> None:
+        display = {}
         for key, value in self._entries:
-            self._real.set(key, value)
+            if key == "display":
+                display = deepcopy(value)
+            elif key.startswith("display."):
+                display = _patch(display, key[len("display."):].split("."), value)
+        # Carry staged physical bindings together with selection; Finish must
+        # not recapture a different screen from its current enumeration.
+        if display:
+            self._real.set("display", display)
+        for key, value in self._entries:
+            if key != "display" and not key.startswith("display."):
+                self._real.set(key, value)
         self._real.save()
         self._entries = []
 

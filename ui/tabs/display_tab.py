@@ -657,46 +657,23 @@ class DisplayTab(QWidget):
         self.widget_glow_jedi_mode_check.blockSignals(True)
         
         try:
-            # Monitor selection (new canonical: display.show_on_monitors)
+            from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
             raw_show_on = self._settings.get('display.show_on_monitors')
-
-            show_all = False
-            selected_monitors: set[int] = set()
-            if isinstance(raw_show_on, str):
-                if raw_show_on.upper() == 'ALL':
-                    show_all = True
-                else:
-                    # Attempt to parse stringified list, fall back to legacy setting
-                    try:
-                        import ast
-                        parsed = ast.literal_eval(raw_show_on)
-                        if isinstance(parsed, (list, tuple, set)):
-                            selected_monitors = {int(x) for x in parsed}
-                    except Exception as e:
-                        logger.debug("[MISC] Exception suppressed: %s", e)
-                        selected_monitors = set()
-            elif isinstance(raw_show_on, (list, tuple, set)):
-                try:
-                    selected_monitors = {int(x) for x in raw_show_on}
-                except Exception as e:
-                    logger.debug("[MISC] Exception suppressed: %s", e)
-                    selected_monitors = set()
-
+            show_all = normalize_selection(raw_show_on) == 'ALL'
+            selected_monitors = resolve_monitor_numbers(self._settings)
             self.show_all_check.setChecked(show_all)
-
-            # Apply selection to per-monitor checkboxes, respecting available screens
-            screen_count = max(1, get_screen_count())
+            screen_count = get_screen_count()
             for idx, cb in enumerate(self.monitor_checks, start=1):
-                enabled = idx <= screen_count
-                cb.setEnabled(enabled)
-                if not enabled:
-                    cb.setChecked(False)
-                else:
-                    if show_all or not selected_monitors:
-                        cb.setChecked(True)
-                    else:
-                        cb.setChecked(idx in selected_monitors)
-            
+                cb.setEnabled(idx <= screen_count)
+                cb.setChecked(idx in selected_monitors)
+            self._display_selection_dirty = False
+            unavailable = normalize_selection(raw_show_on)
+            self.show_all_check.setToolTip(
+                "All displays, including displays connected later."
+                if not isinstance(unavailable, list) or len(selected_monitors) == len(unavailable)
+                else "Some selected physical displays are unavailable. They remain selected until you change this choice."
+            )
+
             # Same image toggle
             same_image = self._settings.get('display.same_image_all_monitors')
             # Convert to bool (settings may return string "true"/"false")
@@ -816,22 +793,14 @@ class DisplayTab(QWidget):
         """Save current settings to settings manager."""
         if getattr(self, "_loading", False):
             return
-        # Monitor selection (canonical show_on_monitors + legacy shim)
-        screen_count = max(1, get_screen_count())
-        show_all = self.show_all_check.isChecked()
+        # Only explicit authoring changes selection; unrelated saves preserve absent targets.
+        if getattr(self, '_display_selection_dirty', False):
+            selected = [idx for idx, cb in enumerate(self.monitor_checks, 1)
+                        if cb.isEnabled() and cb.isChecked()]
+            show_value = 'ALL' if self.show_all_check.isChecked() else selected or 'NONE'
+            self._settings.set('display.show_on_monitors', show_value)
+            self._display_selection_dirty = False
 
-        selected: list[int] = []
-        for idx, cb in enumerate(self.monitor_checks, start=1):
-            if idx <= screen_count and cb.isEnabled() and cb.isChecked():
-                selected.append(idx)
-
-        if show_all or not selected:
-            show_value = 'ALL'
-        else:
-            show_value = selected
-
-        self._settings.set('display.show_on_monitors', show_value)
-        
         # Same image toggle
         self._settings.set('display.same_image_all_monitors', self.same_image_check.isChecked())
         
@@ -937,17 +906,9 @@ class DisplayTab(QWidget):
                     cb.setChecked(checked)
                     cb.blockSignals(False)
         else:
-            # A specific monitor checkbox changed; update the "All" checkbox
-            # to reflect whether every enabled monitor is selected.
-            all_enabled_checked = True
-            for idx, cb in enumerate(self.monitor_checks, start=1):
-                if idx <= screen_count and cb.isEnabled():
-                    if not cb.isChecked():
-                        all_enabled_checked = False
-                        break
-
             self.show_all_check.blockSignals(True)
-            self.show_all_check.setChecked(all_enabled_checked)
+            self.show_all_check.setChecked(False)
             self.show_all_check.blockSignals(False)
 
+        self._display_selection_dirty = True
         self._save_settings()

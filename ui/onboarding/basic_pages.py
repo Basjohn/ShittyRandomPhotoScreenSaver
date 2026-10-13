@@ -319,12 +319,14 @@ class DisplaysPage(Page):
         self.refresh()
 
     def refresh(self):
-        selected = self.settings.get("display.show_on_monitors")
+        from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
+        selected = normalize_selection(self.settings.get("display.show_on_monitors"))
+        active = resolve_monitor_numbers(self.settings)
         with QSignalBlocker(self.all):
             self.all.setChecked(selected == "ALL")
         for index, check in enumerate(self.checks, 1):
             with QSignalBlocker(check):
-                check.setChecked(selected == "ALL" or index in (selected if isinstance(selected, list) else []))
+                check.setChecked(index in active)
                 check.setEnabled(selected != "ALL")
         self.diagram.set_active(i for i, check in enumerate(self.checks, 1) if check.isChecked())
         self.reason.setText("" if self.can_continue() else "Select at least one connected display to continue.")

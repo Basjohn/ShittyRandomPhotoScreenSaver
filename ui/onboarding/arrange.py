@@ -461,15 +461,15 @@ class ArrangePage(Page):
         self.refresh()
 
     def _live_displays(self) -> tuple[ArrangeDisplay, ...]:
-        raw = self.settings.get("display.show_on_monitors", require_canonical_default("display.show_on_monitors"))
-        selected = None if str(raw).upper() == "ALL" else {int(value) for value in raw if str(value).isdigit()} if isinstance(raw, (list, tuple, set)) else set()
+        from core.settings.display_selection import resolve_monitor_numbers
         screens = list(QGuiApplication.screens())
+        selected = resolve_monitor_numbers(self.settings)
         return tuple(
             ArrangeDisplay(
                 get_screen_signature(screen), get_screen_signature_aliases(screen), QRect(screen.geometry()),
                 str(index + 1), float(screen.devicePixelRatio() or 1.0), screen_device_size(screen),
             )
-            for index, screen in enumerate(screens) if selected is None or index + 1 in selected
+            for index, screen in enumerate(screens) if index + 1 in selected
         )
 
     def refresh(self):
