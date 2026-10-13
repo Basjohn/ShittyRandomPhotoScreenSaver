@@ -11,13 +11,16 @@ def test_devcurve_builder_uses_widgets_tab_color_default_helper():
 
 
 def test_devcurve_builder_keeps_mode_scaffold_and_bucket_contracts():
+    from core.settings.visualizer_mode_settings import Custom, require_mode_settings
+
     builder_path = Path(__file__).resolve().parents[1] / "ui" / "tabs" / "media" / "devcurve_builder.py"
     src = builder_path.read_text(encoding="utf-8")
 
-    assert 'build_mode_scaffold(' in src
-    assert 'mode_key="devcurve"' in src
-    assert 'build_collapsible_bucket(' in src
-    assert 'bucket_key="shaper"' in src
-    assert 'bucket_key="core"' in src
-    assert 'bucket_key="foreground_fx"' in src
-    assert 'bucket_key="ghost"' in src
+    assert 'build_spec_mode_ui(tab, parent_layout, "devcurve")' in src
+    spec = require_mode_settings("devcurve")
+    assert [(bucket.key, bucket.advanced) for bucket in spec.buckets] == [
+        ("shaper", False), ("core", False), ("foreground_fx", False), ("ghost", True),
+    ]
+    custom = next(entry for entry in spec.entries if isinstance(entry, Custom))
+    assert custom.build == "ui.tabs.media.devcurve_builder:build_devcurve_layers"
+    assert all(control.logical for control in spec.controls)

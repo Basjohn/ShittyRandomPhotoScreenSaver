@@ -16,6 +16,17 @@ This reference documents shared policy plus mode-specific exceptions where they 
 state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
 metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own their persisted technical and source profiles; old borrowed values are promoted only once. **Spectrum bar shaping is a descriptor-declared capability**, not a universal BeatEngine operation. Only Spectrum, Extruded Spectrum and Shockwave evaluate authored Spectrum shape nodes/lane strengths. Bubble and Sphere consume raw FFT/zone/control/transient data without that stage. Sine heartbeat and Dev Curve layer motion consume a pre-AGC musical-energy output instead of shaped Spectrum bars; Dev Curve applies its separate authored layer shaper in its logical runtime. Oscilloscope retains waveform analysis. The single shared engine fences the policy on every activation/compute snapshot, with no second DSP/capture authority. Bubble's accepted response is protected by differential synthetic PCM tests against the former shaper-enabled path (energy, transient, onsets and adaptive-floor history); never replace this with static curated preset-value assertions. Heavy implementation resources remain lazy and retire through the normal owner.
 
+### Settings declarations
+
+`core/settings/visualizer_mode_settings.py` owns each migrated mode's control declarations; `iter_mode_settings()` is
+the membership authority. Canonical defaults and editable presets own values. The model, appliers and lazy body use
+the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
+
+Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
+snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
+opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows
+and existing buckets. Loading either scalar controls or the Custom editor emits no save or preset-change signal.
+
 ### Spectrum-family ghost and rainbow ownership
 
 Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in their existing Ghost settings. Each setting persists under its own mode (`spectrum_rainbow_ghost`, `extruded_spectrum_rainbow_ghost`) and colours **only existing falling-peak geometry**, not the bars, faces, edges or reflection. A ghost uses its own enabled/opacity/decay ownership and remains visible when the authored bar border is black or transparent. Spectrum's segmented and solid paths use the same spectral ghost rule; a ghost must never be recoloured a second time by Rainbow Borders. Extruded uses its existing Scene3D ghost-column pass and hue, not a second texture, draw loop, clock or BeatEngine. Both advance colours on their existing Spectrum logical animation time; dormant/disabled modes create no extra work. User-authored presets are editable and are not golden-value test fixtures. Real GL tests must verify visible peak-only pixels with dark borders and bar-fill independence.

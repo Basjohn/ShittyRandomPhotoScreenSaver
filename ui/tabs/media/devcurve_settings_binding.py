@@ -1,9 +1,9 @@
 """Spline Curve settings load/save binding helpers."""
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, Callable
+from typing import Any
 
+from PySide6.QtCore import QSignalBlocker
 from PySide6.QtGui import QColor
 
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
@@ -36,40 +36,33 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
-def load_devcurve_mode_settings(
-    tab,
-    spotify_vis_config: Mapping[str, Any] | None,
-    *,
-    sync_color_button: Callable[[str, str], None],
-) -> None:
-    _ = sync_color_button
-    config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
+def load_devcurve_mode_settings(tab, config) -> None:
+    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
 
-    if hasattr(tab, "devcurve_base_level"):
-        v = int(float(config.get("devcurve_base_level", tab._widget_default("spotify_visualizer", "devcurve_base_level"))) * 100.0)
-        v = max(10, min(90, v))
-        tab.devcurve_base_level.setValue(v)
-        tab.devcurve_base_level_label.setText(f"{v}%")
-    if hasattr(tab, "devcurve_motion_power"):
-        v = int(float(config.get("devcurve_motion_power", tab._widget_default("spotify_visualizer", "devcurve_motion_power"))) * 100.0)
-        v = max(0, min(300, v))
-        tab.devcurve_motion_power.setValue(v)
-        tab.devcurve_motion_power_label.setText(f"{v / 100.0:.2f}x")
-    if hasattr(tab, "devcurve_idle_motion"):
-        v = int(float(config.get("devcurve_idle_motion", tab._widget_default("spotify_visualizer", "devcurve_idle_motion"))) * 100.0)
-        v = max(0, min(150, v))
-        tab.devcurve_idle_motion.setValue(v)
-        tab.devcurve_idle_motion_label.setText(f"{v / 100.0:.2f}")
-    if hasattr(tab, "devcurve_idle_speed"):
-        v = int(float(config.get("devcurve_idle_speed", tab._widget_default("spotify_visualizer", "devcurve_idle_speed"))) * 100.0)
-        v = max(5, min(200, v))
-        tab.devcurve_idle_speed.setValue(v)
-        tab.devcurve_idle_speed_label.setText(f"{v / 100.0:.2f}x")
-    if hasattr(tab, "devcurve_smoothness"):
-        v = int(float(config.get("devcurve_smoothness", tab._widget_default("spotify_visualizer", "devcurve_smoothness"))) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_smoothness.setValue(v)
-        tab.devcurve_smoothness_label.setText(f"{v}%")
+    load_spec_mode_settings(tab, "devcurve", config)
+
+
+def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
+
+    return collect_spec_mode_settings(tab, "devcurve")
+
+
+def load_devcurve_layers(tab, config) -> None:
+    # The Custom entry obeys the same silent-load boundary as spec-built controls.
+    blockers = [QSignalBlocker(tab.devcurve_shape_editor)]
+    blockers.extend(
+        QSignalBlocker(getattr(tab, f"devcurve_layer_{source}_{field}"))
+        for source in _LAYER_SOURCES
+        for field in ("enabled", "alpha", "offset")
+    )
+    try:
+        _load_devcurve_layers(tab, config)
+    finally:
+        del blockers
+
+
+def _load_devcurve_layers(tab, config) -> None:
     if hasattr(tab, "devcurve_shape_editor"):
         layer_nodes = {}
         for src in _LAYER_SOURCES:
@@ -95,7 +88,6 @@ def load_devcurve_mode_settings(
     for src in _LAYER_SOURCES:
         defaults = _layer_defaults(tab, src)
         enabled = bool(config.get(f"devcurve_layer_{src}_enabled", defaults["enabled"]))
-        setattr(tab, f"devcurve_layer_{src}_enabled", getattr(tab, f"devcurve_layer_{src}_enabled"))
         getattr(tab, f"devcurve_layer_{src}_enabled").setChecked(enabled)
 
         alpha = int(float(config.get(f"devcurve_layer_{src}_alpha", defaults["alpha"])) * 100.0)
@@ -122,8 +114,6 @@ def load_devcurve_mode_settings(
             setattr(tab, f"_devcurve_layer_{src}_color", QColor(*color_data))
         except Exception:
             setattr(tab, f"_devcurve_layer_{src}_color", QColor(*defaults["color"]))
-        if hasattr(tab, f"devcurve_layer_{src}_color_btn"):
-            sync_color_button(f"devcurve_layer_{src}_color_btn", f"_devcurve_layer_{src}_color")
         outline_width = int(float(config.get(f"devcurve_layer_{src}_outline_width", defaults["outline_width"])) * 1000.0)
         setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width)))
         outline_color_data = config.get(f"devcurve_layer_{src}_outline_color", defaults["outline_color"])
@@ -141,121 +131,10 @@ def load_devcurve_mode_settings(
     if callable(normalize_layer_orders):
         normalize_layer_orders(save=False)
 
-    if hasattr(tab, "devcurve_foreground_shadow_enabled"):
-        tab.devcurve_foreground_shadow_enabled.setChecked(
-            bool(config.get("devcurve_foreground_shadow_enabled", tab._widget_default("spotify_visualizer", "devcurve_foreground_shadow_enabled")))
-        )
-    if hasattr(tab, "devcurve_foreground_specular_enabled"):
-        tab.devcurve_foreground_specular_enabled.setChecked(
-            bool(config.get("devcurve_foreground_specular_enabled", tab._widget_default("spotify_visualizer", "devcurve_foreground_specular_enabled")))
-        )
-    if hasattr(tab, "devcurve_foreground_shadow_alpha"):
-        v = int(float(config.get("devcurve_foreground_shadow_alpha", tab._widget_default("spotify_visualizer", "devcurve_foreground_shadow_alpha"))) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_foreground_shadow_alpha.setValue(v)
-        tab.devcurve_foreground_shadow_alpha_label.setText(f"{v}%")
-    if hasattr(tab, "devcurve_foreground_shadow_darken"):
-        v = int(float(config.get("devcurve_foreground_shadow_darken", tab._widget_default("spotify_visualizer", "devcurve_foreground_shadow_darken"))) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_foreground_shadow_darken.setValue(v)
-        tab.devcurve_foreground_shadow_darken_label.setText(f"{v}%")
-    if hasattr(tab, "devcurve_foreground_shadow_offset"):
-        v = int(float(config.get("devcurve_foreground_shadow_offset", tab._widget_default("spotify_visualizer", "devcurve_foreground_shadow_offset"))) * 100.0)
-        v = max(0, min(45, v))
-        tab.devcurve_foreground_shadow_offset.setValue(v)
-        tab.devcurve_foreground_shadow_offset_label.setText(f"{v / 100.0:.2f}")
-    if hasattr(tab, "devcurve_foreground_specular_alpha"):
-        v = int(float(config.get("devcurve_foreground_specular_alpha", tab._widget_default("spotify_visualizer", "devcurve_foreground_specular_alpha"))) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_foreground_specular_alpha.setValue(v)
-        tab.devcurve_foreground_specular_alpha_label.setText(f"{v}%")
-    if hasattr(tab, "devcurve_foreground_specular_width"):
-        v = int(float(config.get("devcurve_foreground_specular_width", tab._widget_default("spotify_visualizer", "devcurve_foreground_specular_width"))) * 1000.0)
-        v = max(2, min(120, v))
-        tab.devcurve_foreground_specular_width.setValue(v)
-        tab.devcurve_foreground_specular_width_label.setText(f"{v / 1000.0:.3f}")
-    if hasattr(tab, "devcurve_foreground_specular_offset"):
-        v = int(float(config.get("devcurve_foreground_specular_offset", tab._widget_default("spotify_visualizer", "devcurve_foreground_specular_offset"))) * 100.0)
-        v = max(-20, min(20, v))
-        tab.devcurve_foreground_specular_offset.setValue(v)
-        tab.devcurve_foreground_specular_offset_label.setText(f"{v / 100.0:+.2f}")
-    if hasattr(tab, "devcurve_foreground_specular_crest_bias"):
-        v = int(float(config.get("devcurve_foreground_specular_crest_bias", tab._widget_default("spotify_visualizer", "devcurve_foreground_specular_crest_bias"))) * 100.0)
-        v = max(0, min(200, v))
-        tab.devcurve_foreground_specular_crest_bias.setValue(v)
-        tab.devcurve_foreground_specular_crest_bias_label.setText(f"{v / 100.0:.2f}x")
-    update_fx_visibility = getattr(tab, "_devcurve_update_foreground_fx_visibility", None)
-    if callable(update_fx_visibility):
-        update_fx_visibility()
-
-    if hasattr(tab, "devcurve_ghost_enabled"):
-        tab.devcurve_ghost_enabled.setChecked(bool(config.get("devcurve_ghosting_enabled", tab._widget_default("spotify_visualizer", "devcurve_ghosting_enabled"))))
-    if hasattr(tab, "devcurve_ghost_opacity"):
-        v = int(float(config.get("devcurve_ghost_alpha", tab._widget_default("spotify_visualizer", "devcurve_ghost_alpha"))) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_ghost_opacity.setValue(v)
-        tab.devcurve_ghost_opacity_label.setText(f"{v}%")
-    if hasattr(tab, "devcurve_ghost_decay"):
-        v = int(float(config.get("devcurve_ghost_decay", tab._widget_default("spotify_visualizer", "devcurve_ghost_decay"))) * 100.0)
-        v = max(10, min(100, v))
-        tab.devcurve_ghost_decay.setValue(v)
-        if hasattr(tab, "devcurve_ghost_decay_label"):
-            tab.devcurve_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
 
 
-def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
-    """Collect DevCurve settings without introducing save-side shadow defaults."""
-    d_bool = lambda key: tab._default_bool("spotify_visualizer", key)
-    d_int = lambda key: tab._default_int("spotify_visualizer", key)
-    d_float = lambda key: tab._default_float("spotify_visualizer", key)
-    d_str = lambda key: tab._default_str("spotify_visualizer", key)
-    d_value = lambda key: tab._widget_default("spotify_visualizer", key)
-    pct = lambda key: int(round(d_float(key) * 100.0))
-    milli = lambda key: int(round(d_float(key) * 1000.0))
-
-    payload: dict[str, Any] = {
-        "devcurve_base_level": (tab.devcurve_base_level.value() if hasattr(tab, "devcurve_base_level") else pct("devcurve_base_level")) / 100.0,
-        "devcurve_motion_power": (tab.devcurve_motion_power.value() if hasattr(tab, "devcurve_motion_power") else pct("devcurve_motion_power")) / 100.0,
-        "devcurve_idle_motion": (tab.devcurve_idle_motion.value() if hasattr(tab, "devcurve_idle_motion") else pct("devcurve_idle_motion")) / 100.0,
-        "devcurve_idle_speed": (tab.devcurve_idle_speed.value() if hasattr(tab, "devcurve_idle_speed") else pct("devcurve_idle_speed")) / 100.0,
-        "devcurve_smoothness": (tab.devcurve_smoothness.value() if hasattr(tab, "devcurve_smoothness") else pct("devcurve_smoothness")) / 100.0,
-        "devcurve_active_layer": str(getattr(tab, "_devcurve_active_layer", d_str("devcurve_active_layer"))),
-        "devcurve_ghosting_enabled": tab.devcurve_ghost_enabled.isChecked() if hasattr(tab, "devcurve_ghost_enabled") else d_bool("devcurve_ghosting_enabled"),
-        "devcurve_ghost_alpha": (tab.devcurve_ghost_opacity.value() if hasattr(tab, "devcurve_ghost_opacity") else pct("devcurve_ghost_alpha")) / 100.0,
-        "devcurve_ghost_decay": (tab.devcurve_ghost_decay.value() if hasattr(tab, "devcurve_ghost_decay") else pct("devcurve_ghost_decay")) / 100.0,
-        "devcurve_foreground_shadow_enabled": (
-            tab.devcurve_foreground_shadow_enabled.isChecked()
-            if hasattr(tab, "devcurve_foreground_shadow_enabled")
-            else d_bool("devcurve_foreground_shadow_enabled")
-        ),
-        "devcurve_foreground_shadow_alpha": (
-            (tab.devcurve_foreground_shadow_alpha.value() if hasattr(tab, "devcurve_foreground_shadow_alpha") else pct("devcurve_foreground_shadow_alpha")) / 100.0
-        ),
-        "devcurve_foreground_shadow_darken": (
-            (tab.devcurve_foreground_shadow_darken.value() if hasattr(tab, "devcurve_foreground_shadow_darken") else pct("devcurve_foreground_shadow_darken")) / 100.0
-        ),
-        "devcurve_foreground_shadow_offset": (
-            (tab.devcurve_foreground_shadow_offset.value() if hasattr(tab, "devcurve_foreground_shadow_offset") else pct("devcurve_foreground_shadow_offset")) / 100.0
-        ),
-        "devcurve_foreground_specular_enabled": (
-            tab.devcurve_foreground_specular_enabled.isChecked()
-            if hasattr(tab, "devcurve_foreground_specular_enabled")
-            else d_bool("devcurve_foreground_specular_enabled")
-        ),
-        "devcurve_foreground_specular_alpha": (
-            (tab.devcurve_foreground_specular_alpha.value() if hasattr(tab, "devcurve_foreground_specular_alpha") else pct("devcurve_foreground_specular_alpha")) / 100.0
-        ),
-        "devcurve_foreground_specular_width": (
-            (tab.devcurve_foreground_specular_width.value() if hasattr(tab, "devcurve_foreground_specular_width") else milli("devcurve_foreground_specular_width")) / 1000.0
-        ),
-        "devcurve_foreground_specular_offset": (
-            (tab.devcurve_foreground_specular_offset.value() if hasattr(tab, "devcurve_foreground_specular_offset") else pct("devcurve_foreground_specular_offset")) / 100.0
-        ),
-        "devcurve_foreground_specular_crest_bias": (
-            (tab.devcurve_foreground_specular_crest_bias.value() if hasattr(tab, "devcurve_foreground_specular_crest_bias") else pct("devcurve_foreground_specular_crest_bias")) / 100.0
-        ),
-    }
-
+def collect_devcurve_layers(tab) -> dict[str, Any]:
+    payload = {"devcurve_active_layer": str(getattr(tab, "_devcurve_active_layer", tab._default_str("spotify_visualizer", "devcurve_active_layer")))}
     layer_strengths = {}
     if hasattr(tab, "devcurve_shape_editor") and hasattr(tab.devcurve_shape_editor, "get_layer_strengths"):
         try:
@@ -311,12 +190,11 @@ def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
             min(0.020, float(getattr(tab, f"_devcurve_layer_{src}_outline_width", int(float(defaults["outline_width"]) * 1000))) / 1000.0),
         )
         layer_nodes = layer_nodes_map.get(src)
-        canonical_nodes = d_value(f"devcurve_layer_{src}_shape_nodes")
+        canonical_nodes = tab._widget_default("spotify_visualizer", f"devcurve_layer_{src}_shape_nodes")
         payload[f"devcurve_layer_{src}_shape_nodes"] = (
             layer_nodes if isinstance(layer_nodes, list) and layer_nodes else canonical_nodes
         )
     return payload
 
 
-__all__ = ["load_devcurve_mode_settings", "collect_devcurve_mode_settings"]
-
+__all__ = ["load_devcurve_mode_settings", "collect_devcurve_mode_settings", "load_devcurve_layers", "collect_devcurve_layers"]

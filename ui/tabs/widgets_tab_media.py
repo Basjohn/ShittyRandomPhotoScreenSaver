@@ -838,7 +838,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     elif mode_id == "bubble":
         load_bubble_mode_settings(tab, cfg, sync_color_button=_sync)
     elif mode_id == "devcurve":
-        load_devcurve_mode_settings(tab, cfg, sync_color_button=_sync)
+        load_devcurve_mode_settings(tab, cfg)
     elif mode_id == "sphere":
         load_sphere_mode_settings(tab, cfg)
     elif mode_id == "extruded_spectrum":

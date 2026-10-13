@@ -345,11 +345,6 @@ _DEVCURVE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'devcurve_layer_vocals_shape_nodes': list,
     'devcurve_layer_mids_shape_nodes': list,
     'devcurve_layer_transients_shape_nodes': list,
-    'devcurve_base_level': float,
-    'devcurve_motion_power': float,
-    'devcurve_idle_motion': float,
-    'devcurve_idle_speed': float,
-    'devcurve_smoothness': float,
     'devcurve_layer_bass_enabled': bool,
     'devcurve_layer_bass_color': list,
     'devcurve_layer_bass_alpha': float,
@@ -382,18 +377,6 @@ _DEVCURVE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'devcurve_layer_transients_outline_color': list,
     'devcurve_layer_transients_outline_width': float,
     'devcurve_layer_transients_order': int,
-    'devcurve_ghosting_enabled': bool,
-    'devcurve_ghost_alpha': float,
-    'devcurve_ghost_decay': float,
-    'devcurve_foreground_shadow_enabled': bool,
-    'devcurve_foreground_shadow_alpha': float,
-    'devcurve_foreground_shadow_darken': float,
-    'devcurve_foreground_shadow_offset': float,
-    'devcurve_foreground_specular_enabled': bool,
-    'devcurve_foreground_specular_alpha': float,
-    'devcurve_foreground_specular_width': float,
-    'devcurve_foreground_specular_offset': float,
-    'devcurve_foreground_specular_crest_bias': float,
 }
 
 _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -402,11 +385,6 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "devcurve_layer_vocals_shape_nodes": list,
     "devcurve_layer_mids_shape_nodes": list,
     "devcurve_layer_transients_shape_nodes": list,
-    "devcurve_base_level": float,
-    "devcurve_motion_power": float,
-    "devcurve_idle_motion": float,
-    "devcurve_idle_speed": float,
-    "devcurve_smoothness": float,
     "devcurve_layer_bass_enabled": bool,
     "devcurve_layer_bass_color": list,
     "devcurve_layer_bass_alpha": float,
@@ -439,18 +417,6 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "devcurve_layer_transients_outline_color": lambda value: _serialize_outline_rgb(value),
     "devcurve_layer_transients_outline_width": float,
     "devcurve_layer_transients_order": int,
-    "devcurve_ghosting_enabled": bool,
-    "devcurve_ghost_alpha": float,
-    "devcurve_ghost_decay": float,
-    "devcurve_foreground_shadow_enabled": bool,
-    "devcurve_foreground_shadow_alpha": float,
-    "devcurve_foreground_shadow_darken": float,
-    "devcurve_foreground_shadow_offset": float,
-    "devcurve_foreground_specular_enabled": bool,
-    "devcurve_foreground_specular_alpha": float,
-    "devcurve_foreground_specular_width": float,
-    "devcurve_foreground_specular_offset": float,
-    "devcurve_foreground_specular_crest_bias": float,
 }
 
 _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
@@ -593,16 +559,6 @@ _DEVCURVE_OUTLINE_WIDTH_LIMITS: Dict[str, Tuple[float, float]] = {
     "devcurve_layer_vocals_outline_width": (0.001, 0.020),
     "devcurve_layer_mids_outline_width": (0.001, 0.020),
     "devcurve_layer_transients_outline_width": (0.001, 0.020),
-}
-_DEVCURVE_CLAMP_LIMITS: Dict[str, Tuple[float, float]] = {
-    "devcurve_smoothness": (0.0, 1.0),
-    "devcurve_foreground_shadow_alpha": (0.0, 1.0),
-    "devcurve_foreground_shadow_darken": (0.0, 1.0),
-    "devcurve_foreground_shadow_offset": (0.0, 0.45),
-    "devcurve_foreground_specular_alpha": (0.0, 1.0),
-    "devcurve_foreground_specular_width": (0.002, 0.120),
-    "devcurve_foreground_specular_offset": (-0.20, 0.20),
-    "devcurve_foreground_specular_crest_bias": (0.0, 2.0),
 }
 _DEVCURVE_OUTLINE_COLOR_ATTRS = (
     "devcurve_layer_bass_outline_color",
@@ -1255,11 +1211,6 @@ class SpotifyVisualizerSettings:
     devcurve_layer_vocals_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_vocals_shape_nodes'))
     devcurve_layer_mids_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_mids_shape_nodes'))
     devcurve_layer_transients_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_shape_nodes'))
-    devcurve_base_level: float = field(default_factory=lambda: _visualizer_default('devcurve_base_level'))
-    devcurve_motion_power: float = field(default_factory=lambda: _visualizer_default('devcurve_motion_power'))
-    devcurve_idle_motion: float = field(default_factory=lambda: _visualizer_default('devcurve_idle_motion'))
-    devcurve_idle_speed: float = field(default_factory=lambda: _visualizer_default('devcurve_idle_speed'))
-    devcurve_smoothness: float = field(default_factory=lambda: _visualizer_default('devcurve_smoothness'))
     devcurve_layer_bass_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_enabled'))
     devcurve_layer_bass_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_color'))
     devcurve_layer_bass_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_alpha'))
@@ -1292,18 +1243,6 @@ class SpotifyVisualizerSettings:
     devcurve_layer_transients_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_color'))
     devcurve_layer_transients_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_width'))
     devcurve_layer_transients_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_order'))
-    devcurve_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_ghosting_enabled'))
-    devcurve_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_ghost_alpha'))
-    devcurve_ghost_decay: float = field(default_factory=lambda: _visualizer_default('devcurve_ghost_decay'))
-    devcurve_foreground_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_enabled'))
-    devcurve_foreground_shadow_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_alpha'))
-    devcurve_foreground_shadow_darken: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_darken'))
-    devcurve_foreground_shadow_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_shadow_offset'))
-    devcurve_foreground_specular_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_enabled'))
-    devcurve_foreground_specular_alpha: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_alpha'))
-    devcurve_foreground_specular_width: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_width'))
-    devcurve_foreground_specular_offset: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_offset'))
-    devcurve_foreground_specular_crest_bias: float = field(default_factory=lambda: _visualizer_default('devcurve_foreground_specular_crest_bias'))
     sphere_finish: str = field(default_factory=lambda: _visualizer_default('sphere_finish'))
     sphere_fill_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_fill_color')))
     sphere_edge_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_edge_color')))
@@ -1450,8 +1389,6 @@ class SpotifyVisualizerSettings:
         for attr_name, (minimum, maximum) in _DEVCURVE_OUTLINE_WIDTH_LIMITS.items():
             _clamp_attr_range(self, attr_name, minimum, maximum)
         _force_full_alpha_on_attrs(self, _DEVCURVE_OUTLINE_COLOR_ATTRS)
-        for attr_name, (minimum, maximum) in _DEVCURVE_CLAMP_LIMITS.items():
-            _clamp_attr_range(self, attr_name, minimum, maximum)
         for attr in _DEVCURVE_SHAPE_NODE_ATTRS:
             self._ensure_non_empty_nodes(attr)
         _normalize_ranked_attrs(self, _DEVCURVE_ORDER_ATTRS)

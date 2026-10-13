@@ -11,8 +11,6 @@ from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.builder_scaffold import (
     add_builder_swatch_row,
     bind_setting_signal,
-    build_collapsible_bucket,
-    build_mode_scaffold,
 )
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_aligned_row, add_aligned_row_widget
@@ -31,24 +29,6 @@ _TOOLTIP_LAYER_ENABLED = "Enable/disable this layer's rendering and audio respon
 _TOOLTIP_LAYER_ALPHA = "Fill opacity for this layer only."
 _TOOLTIP_LAYER_OFFSET = "Vertical lane offset for this layer before audio deformation."
 _TOOLTIP_LAYER_ORDER = "Layer stack order. Higher numbers render on top of lower numbers."
-_TOOLTIP_BASE_LEVEL = "Global baseline height for all Spline Curve layers."
-_TOOLTIP_MOTION_POWER = "Master reactive deformation gain for all layers."
-_TOOLTIP_IDLE_MOTION = "Constant low-energy wobble while idle or between beats."
-_TOOLTIP_IDLE_SPEED = "Travel speed of the low-energy idle wobble."
-_TOOLTIP_SMOOTHNESS = "Extra curve smoothing. Higher values reduce lumpiness while keeping spline motion reactive."
-_TOOLTIP_CARD_HEIGHT = "Height multiplier for the visualizer card area."
-_TOOLTIP_GHOST_ENABLED = "Enable a lightweight trail to inspect motion history."
-_TOOLTIP_GHOST_OPACITY = "Opacity of the trail overlay."
-_TOOLTIP_GHOST_DECAY = "How quickly the trail fades."
-_TOOLTIP_FG_SHADOW_ENABLED = "Enable a dynamic full-width shadow fill tied to the current foreground layer."
-_TOOLTIP_FG_SHADOW_ALPHA = "Opacity of the dynamic foreground shadow."
-_TOOLTIP_FG_SHADOW_DARKEN = "How much darker the shadow is than the foreground layer color."
-_TOOLTIP_FG_SHADOW_OFFSET = "Vertical offset of the foreground shadow below the foreground spline."
-_TOOLTIP_FG_SPECULAR_ENABLED = "Enable a dynamic crest-following specular highlight on the foreground layer."
-_TOOLTIP_FG_SPECULAR_ALPHA = "Opacity of the foreground specular highlight."
-_TOOLTIP_FG_SPECULAR_WIDTH = "Thickness of the specular band around the foreground spline."
-_TOOLTIP_FG_SPECULAR_OFFSET = "Vertical offset for the specular band relative to the foreground spline."
-_TOOLTIP_FG_SPECULAR_CREST_BIAS = "Bias toward crest zones based on local curvature."
 
 def _row(parent_layout: QVBoxLayout, label_text: str):
     content, _ = add_aligned_row(parent_layout, label_text, label_width=LABEL_WIDTH, wrap=True)
@@ -90,55 +70,13 @@ def _add_slider(
 
 
 def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBoxLayout) -> None:
+    from ui.tabs.media.spec_mode_builder import build_spec_mode_ui
+
+    build_spec_mode_ui(tab, parent_layout, "devcurve")
+
+
+def build_devcurve_layers(tab: "VisualizerSettingsContextMixin", shaper_bucket: QVBoxLayout) -> None:
     from ui.tabs.media.devcurve_shape_editor import DevCurveShapeEditor
-
-    scaffold = build_mode_scaffold(
-        tab,
-        parent_layout,
-        mode_key="devcurve",
-        settings_container_attr="_devcurve_settings_container",
-        preset_slider_attr="_devcurve_preset_slider",
-        normal_attr="_devcurve_normal",
-        advanced_host_attr="_devcurve_advanced_host",
-        advanced_toggle_attr="_devcurve_adv_toggle",
-        advanced_helper_attr="_devcurve_adv_helper",
-        advanced_attr="_devcurve_advanced",
-    )
-    normal_layout = scaffold.normal_layout
-    adv_layout = scaffold.advanced_layout
-
-    _, shaper_bucket = build_collapsible_bucket(
-        tab,
-        normal_layout,
-        mode_key="devcurve",
-        bucket_key="shaper",
-        title="Shaper",
-        helper_text="Layer-first spline editor with per-layer shape and energy arrows.",
-    )
-    _, core_bucket = build_collapsible_bucket(
-        tab,
-        normal_layout,
-        mode_key="devcurve",
-        bucket_key="core",
-        title="Core",
-        helper_text="Global curve motion and fill styling.",
-    )
-    _, foreground_fx_bucket = build_collapsible_bucket(
-        tab,
-        normal_layout,
-        mode_key="devcurve",
-        bucket_key="foreground_fx",
-        title="Foreground FX",
-        helper_text="Optional dynamic shadow/specular effects for the current top layer.",
-    )
-    _, ghost_bucket = build_collapsible_bucket(
-        tab,
-        adv_layout,
-        mode_key="devcurve",
-        bucket_key="ghost",
-        title="Ghost",
-        helper_text="Optional trail for debug visibility.",
-    )
 
     hint = QLabel(
         "Click a layer to edit its spline. Non-active layers stay visible with reduced opacity."
@@ -440,228 +378,4 @@ def build_devcurve_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         ]
     _normalize_layer_orders(save=False)
     _apply_active_layer_ui(str(getattr(tab, "_devcurve_active_layer", "bass")))
-
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_base_level",
-        label="Base Level:",
-        min_v=10,
-        max_v=90,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_base_level") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    tab.devcurve_base_level.setToolTip(_TOOLTIP_BASE_LEVEL)
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_motion_power",
-        label="Motion Power:",
-        min_v=0,
-        max_v=300,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_motion_power") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}x",
-        auto_switch=True,
-    )
-    tab.devcurve_motion_power.setToolTip(_TOOLTIP_MOTION_POWER)
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_idle_motion",
-        label="Idle Motion:",
-        min_v=0,
-        max_v=150,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_motion") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}",
-        auto_switch=True,
-    )
-    tab.devcurve_idle_motion.setToolTip(_TOOLTIP_IDLE_MOTION)
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_idle_speed",
-        label="Idle Speed:",
-        min_v=5,
-        max_v=200,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_idle_speed") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}x",
-        auto_switch=True,
-    )
-    tab.devcurve_idle_speed.setToolTip(_TOOLTIP_IDLE_SPEED)
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_smoothness",
-        label="Smoothness:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_smoothness") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    tab.devcurve_smoothness.setToolTip(_TOOLTIP_SMOOTHNESS)
-    fx_toggle_row = _row(foreground_fx_bucket, "")
-    tab.devcurve_foreground_shadow_enabled = QCheckBox("Shadow")
-    tab.devcurve_foreground_shadow_enabled.setProperty("circleIndicator", True)
-    tab.devcurve_foreground_shadow_enabled.setChecked(
-        tab._default_bool("spotify_visualizer", "devcurve_foreground_shadow_enabled")
-    )
-    tab.devcurve_foreground_shadow_enabled.setToolTip(_TOOLTIP_FG_SHADOW_ENABLED)
-    bind_setting_signal(tab, tab.devcurve_foreground_shadow_enabled.stateChanged, auto_switch=True)
-    fx_toggle_row.addWidget(tab.devcurve_foreground_shadow_enabled)
-    tab.devcurve_foreground_specular_enabled = QCheckBox("Specular")
-    tab.devcurve_foreground_specular_enabled.setProperty("circleIndicator", True)
-    tab.devcurve_foreground_specular_enabled.setChecked(
-        tab._default_bool("spotify_visualizer", "devcurve_foreground_specular_enabled")
-    )
-    tab.devcurve_foreground_specular_enabled.setToolTip(_TOOLTIP_FG_SPECULAR_ENABLED)
-    bind_setting_signal(tab, tab.devcurve_foreground_specular_enabled.stateChanged, auto_switch=True)
-    fx_toggle_row.addSpacing(16)
-    fx_toggle_row.addWidget(tab.devcurve_foreground_specular_enabled)
-    fx_toggle_row.addStretch()
-
-    _shadow_alpha = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_shadow_alpha",
-        label="Shadow Alpha:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_alpha") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    _shadow_alpha.setToolTip(_TOOLTIP_FG_SHADOW_ALPHA)
-    _shadow_darken = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_shadow_darken",
-        label="Shadow Darken:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_darken") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    _shadow_darken.setToolTip(_TOOLTIP_FG_SHADOW_DARKEN)
-    _shadow_offset = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_shadow_offset",
-        label="Shadow Offset:",
-        min_v=0,
-        max_v=45,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_offset") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}",
-        auto_switch=True,
-    )
-    _shadow_offset.setToolTip(_TOOLTIP_FG_SHADOW_OFFSET)
-
-    _spec_alpha = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_specular_alpha",
-        label="Specular Alpha:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_alpha") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    _spec_alpha.setToolTip(_TOOLTIP_FG_SPECULAR_ALPHA)
-    _spec_width = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_specular_width",
-        label="Specular Width:",
-        min_v=2,
-        max_v=120,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_width") * 1000),
-        fmt=lambda v: f"{v / 1000.0:.3f}",
-        auto_switch=True,
-    )
-    _spec_width.setToolTip(_TOOLTIP_FG_SPECULAR_WIDTH)
-    _spec_offset = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_specular_offset",
-        label="Specular Offset:",
-        min_v=-20,
-        max_v=20,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_offset") * 100),
-        fmt=lambda v: f"{v / 100.0:+.2f}",
-        auto_switch=True,
-    )
-    _spec_offset.setToolTip(_TOOLTIP_FG_SPECULAR_OFFSET)
-    _spec_crest = _add_slider(
-        tab,
-        foreground_fx_bucket,
-        attr="devcurve_foreground_specular_crest_bias",
-        label="Specular Crest Bias:",
-        min_v=0,
-        max_v=200,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_crest_bias") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}x",
-        auto_switch=True,
-    )
-    _spec_crest.setToolTip(_TOOLTIP_FG_SPECULAR_CREST_BIAS)
-
-    tab._devcurve_foreground_shadow_rows = [
-        getattr(_shadow_alpha, "_row_widget"),
-        getattr(_shadow_darken, "_row_widget"),
-        getattr(_shadow_offset, "_row_widget"),
-    ]
-    tab._devcurve_foreground_specular_rows = [
-        getattr(_spec_alpha, "_row_widget"),
-        getattr(_spec_width, "_row_widget"),
-        getattr(_spec_offset, "_row_widget"),
-        getattr(_spec_crest, "_row_widget"),
-    ]
-
-    def _update_foreground_fx_visibility() -> None:
-        shadow_on = bool(tab.devcurve_foreground_shadow_enabled.isChecked())
-        for row in getattr(tab, "_devcurve_foreground_shadow_rows", []):
-            row.setVisible(shadow_on)
-        spec_on = bool(tab.devcurve_foreground_specular_enabled.isChecked())
-        for row in getattr(tab, "_devcurve_foreground_specular_rows", []):
-            row.setVisible(spec_on)
-
-    tab._devcurve_update_foreground_fx_visibility = _update_foreground_fx_visibility
-    tab.devcurve_foreground_shadow_enabled.stateChanged.connect(lambda _state: _update_foreground_fx_visibility())
-    tab.devcurve_foreground_specular_enabled.stateChanged.connect(lambda _state: _update_foreground_fx_visibility())
-    _update_foreground_fx_visibility()
-
-    g_row = _row(ghost_bucket, "")
-    tab.devcurve_ghost_enabled = QCheckBox("Enable Ghosting")
-    tab.devcurve_ghost_enabled.setProperty("circleIndicator", True)
-    tab.devcurve_ghost_enabled.setChecked(tab._default_bool("spotify_visualizer", "devcurve_ghosting_enabled"))
-    tab.devcurve_ghost_enabled.setToolTip(_TOOLTIP_GHOST_ENABLED)
-    bind_setting_signal(tab, tab.devcurve_ghost_enabled.stateChanged, auto_switch=True)
-    g_row.addWidget(tab.devcurve_ghost_enabled)
-    g_row.addStretch()
-    _add_slider(
-        tab,
-        ghost_bucket,
-        attr="devcurve_ghost_opacity",
-        label="Ghost Opacity:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_alpha") * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    tab.devcurve_ghost_opacity.setToolTip(_TOOLTIP_GHOST_OPACITY)
-    _add_slider(
-        tab,
-        ghost_bucket,
-        attr="devcurve_ghost_decay",
-        label="Ghost Decay:",
-        min_v=10,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_ghost_decay") * 100),
-        fmt=lambda v: f"{v / 100.0:.2f}x",
-        auto_switch=True,
-    )
-    tab.devcurve_ghost_decay.setToolTip(_TOOLTIP_GHOST_DECAY)
 

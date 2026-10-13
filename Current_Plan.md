@@ -6,9 +6,9 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current checkpoint:** §1 physical saver selection and §2 FEEDS terminal handling are source-complete, 2026-10-13.
-Stopped at the agreed checkpoint. Next implementation is §2A V1 when resumed; graphics, media production and operator
-builds remain subsequent work. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work; reserve one High
+**Current authorization:** continue the live plan in order, 2026-10-13. §1/§2 are source-complete; §2A migration is active.
+Continue between green mode checkpoints without another routine stop. Graphics, media production and operator builds
+follow their listed dependencies. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work; reserve one High
 Astra agent for visual parity audits after very significant work.
 
 **Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
@@ -35,20 +35,22 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | Subsequent implementation
+## 2A. Visualizer spec migration | V2 next
 
 One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
 unchanged **except for the explicitly authorized Shockwave Grid replacement in V4A**.
 `core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries for modes that
-still use them. Oscilloscope, Sine Waves and Shockwave already have spec-layer support; Shockwave's existing support does
+still use them. Oscilloscope, Sine Waves and Dev Curve are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
 not substitute for completing its spec migration **together with** the Neon Lake Basin rework. No further Oscilloscope
 acceptance gate.
 
-- [ ] **V1 — Spline Curve / Dev Curve.** Inventory existing controls, model fields, appliers and renderer inputs; express
-  the same controls through the spec and retain bespoke layer/shape editors. Prove round-trip and conditional controls
-  using `test_visualizer_mode_settings_spec`; compare fixed recorded response if shared runtime code is touched.
 - [ ] **V2 — Extruded Spectrum.** Preserve mode-owned technical settings, preset/custom payload boundaries, 3D controls
   and ordinary/Rainbow Ghost behavior. Migrate only Settings plumbing; keep geometry and render ownership unchanged.
+  Preserve the composite Rainbow enable + Faces/Edges UI, shared shape editor, source/smoothing owners, live orbit
+  and permanently unavailable cast-shadow controls. Source-profile controls must not create unused logical/presentation
+  attributes; extend the spec's consumer metadata only if necessary for one typed declaration owner. Keep the existing
+  tab-owned Bar Appearance group, ghost conditions and Custom/preset payload exclusions. Prove real body round-trip,
+  source projection, single-owner application, dormancy and fixed-recording parity before its checkpoint.
 - [ ] **V3 — Spectrum.** Preserve accepted 2D ordinary/Rainbow Ghost source routing and shaping; prove every migrated
   control reaches its current owner once without constructing hidden pages or adding observers.
 - [ ] **V4 — Voxel Sphere.** Preserve analysis-only DSP, accepted motion and CUSTOM orbit/geometry; exercise serialization,
