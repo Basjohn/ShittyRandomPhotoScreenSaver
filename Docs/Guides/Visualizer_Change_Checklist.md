@@ -8,6 +8,9 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - [ ] Adding/renaming a Visualizer Settings bucket changes its builder, canonical defaults/schema, selected-mode state map and reset/save consumers coherently. No consumer constructs guessed family keys for a mode without that capability.
 - [ ] A spec'd mode's Settings (membership from `iter_mode_settings()`) are declared once in `core/settings/visualizer_mode_settings.py`: a new setting is its canonical default plus one control there (a `Slider` reads as decimals + suffix or as a whole percent, may be a whole number, carry ticks or show signed offsets; grouped `Toggle` controls share one aligned row; a `Choice` persists its label or, `indexed`, its position; `when` shows a control only while a toggle holds a value). The model field, clamp, serializer, appliers, renderer parameter and the body come from it; only parts no control describes are `Custom`. New Visualizers start there. `tests/test_visualizer_mode_settings_spec.py` covers every spec'd mode at once.
 - [ ] Synthetic test-owned fixtures assert exact behavior; operator-authored Organs, Sphere or other curated preset contents are tested for schema/round-trip/preservation, never frozen as historical response-oracle bytes.
+- [ ] Descriptor-projected source controls use `source=True` and create no unused private logical/presentation attributes;
+      aliases still reach their existing consumers once. Availability metadata keeps unavailable controls disabled on
+      build/load/reset without discarding saved intent. Bucketless typed orbit fields retain their body/preset exclusions.
 
 ## 1. Read first
 

@@ -140,6 +140,7 @@ def _build_control(tab, layout, control, shared_row=None):
         setattr(tab, f"_{control.key}", colour)
         button = ColorSwatchButton(title=control.title, show_alpha=control.alpha)
         button.setToolTip(control.tooltip)
+        _apply_availability(button, control)
         bind_color_button(tab, button, f"_{control.key}", auto_switch=True, initial_color=colour)
         setattr(tab, f"{control.key}_btn", button)
         content.addWidget(button)
@@ -176,7 +177,7 @@ def _build_control(tab, layout, control, shared_row=None):
         widget.setChecked(control.admit(default, default))
         bind_setting_signal(tab, widget.toggled, auto_switch=True)
     else:
-        widget = StyledComboBox(size_variant="compact")
+        widget = StyledComboBox(size_variant="compact") if control.compact else StyledComboBox()
         widget.addItems(list(control.choices))
         if control.indexed:
             widget.setCurrentIndex(control.admit(default, default))
@@ -187,8 +188,17 @@ def _build_control(tab, layout, control, shared_row=None):
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(control.tooltip)
+    _apply_availability(widget, control)
     setattr(tab, control.key, widget)
     return row
+
+
+def _apply_availability(widget, control) -> None:
+    if control.availability:
+        flag, unavailable_tooltip = control.availability
+        available = bool(_resolve(flag))
+        widget.setEnabled(available)
+        widget.setToolTip(control.tooltip if available else unavailable_tooltip)
 
 
 def load_spec_mode_settings(tab, mode_id: str, config) -> None:
@@ -211,6 +221,7 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
             button = getattr(tab, f"{entry.key}_btn", None)
             if button is not None:
                 button.set_color(colour)
+                _apply_availability(button, entry)
             continue
         widget = getattr(tab, entry.key, None)
         if widget is None:
@@ -230,6 +241,7 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
         if isinstance(entry, Slider):
             # Its value label follows valueChanged, which was blocked.
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))
+        _apply_availability(widget, entry)
     # Conditions follow their controls' signals, which were blocked.
     apply = getattr(tab, f"_{spec.prefix}_apply_conditions", None)
     if apply is not None:

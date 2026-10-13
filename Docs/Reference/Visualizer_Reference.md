@@ -27,6 +27,14 @@ snapshot consumes them. Its four-layer spline editor remains Custom with indepen
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows
 and existing buckets. Loading either scalar controls or the Custom editor emits no save or preset-change signal.
 
+Extruded Spectrum's scalar controls and live orbit ranges are spec-owned. Its composite Rainbow surface selector,
+mirrored/linear shape editor and shared smoothing controls remain Custom entries; Bar Appearance and technical controls
+retain their existing tab/descriptor owners. A `source=True` control keeps the descriptor's existing source-profile
+projection: shaping reaches BeatEngine, and ordinary ghost aliases reach their shared logical/presentation consumers.
+Generic appliers create no unused private attributes for these authored source keys. Availability metadata keeps the
+rejected cast-shadow controls disabled during build, preset load and reset while retaining their saved values. Orbit
+turn/tilt remain excluded from the body/preset payload, and Rainbow Ghost remains independently editable.
+
 ### Spectrum-family ghost and rainbow ownership
 
 Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in their existing Ghost settings. Each setting persists under its own mode (`spectrum_rainbow_ghost`, `extruded_spectrum_rainbow_ghost`) and colours **only existing falling-peak geometry**, not the bars, faces, edges or reflection. A ghost uses its own enabled/opacity/decay ownership and remains visible when the authored bar border is black or transparent. Spectrum's segmented and solid paths use the same spectral ghost rule; a ghost must never be recoloured a second time by Rainbow Borders. Extruded uses its existing Scene3D ghost-column pass and hue, not a second texture, draw loop, clock or BeatEngine. Both advance colours on their existing Spectrum logical animation time; dormant/disabled modes create no extra work. User-authored presets are editable and are not golden-value test fixtures. Real GL tests must verify visible peak-only pixels with dark borders and bar-fill independence.

@@ -35,24 +35,23 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | V2 next
+## 2A. Visualizer spec migration | V3 next
 
 One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
 unchanged **except for the explicitly authorized Shockwave Grid replacement in V4A**.
 `core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries for modes that
-still use them. Oscilloscope, Sine Waves and Dev Curve are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
+still use them. Oscilloscope, Sine Waves, Dev Curve and Extruded Spectrum are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
 not substitute for completing its spec migration **together with** the Neon Lake Basin rework. No further Oscilloscope
 acceptance gate.
 
-- [ ] **V2 — Extruded Spectrum.** Preserve mode-owned technical settings, preset/custom payload boundaries, 3D controls
-  and ordinary/Rainbow Ghost behavior. Migrate only Settings plumbing; keep geometry and render ownership unchanged.
-  Preserve the composite Rainbow enable + Faces/Edges UI, shared shape editor, source/smoothing owners, live orbit
-  and permanently unavailable cast-shadow controls. Source-profile controls must not create unused logical/presentation
-  attributes; extend the spec's consumer metadata only if necessary for one typed declaration owner. Keep the existing
-  tab-owned Bar Appearance group, ghost conditions and Custom/preset payload exclusions. Prove real body round-trip,
-  source projection, single-owner application, dormancy and fixed-recording parity before its checkpoint.
 - [ ] **V3 — Spectrum.** Preserve accepted 2D ordinary/Rainbow Ghost source routing and shaping; prove every migrated
   control reaches its current owner once without constructing hidden pages or adding observers.
+  Retain Appearance/Shape and Advanced Render/Audio/Ghost buckets, independent Rainbow Fill/Borders/Unique Colours,
+  ghost opacity/decay conditions and the shared tab-owned Bar Appearance/Rainbow controls. Keep the coupled shape editor
+  and both mirrored/linear node/notch/lane profiles as Custom; preserve smoothing's existing logical owner and Spectrum's
+  render-mode-owned hysteresis rather than adding Extruded's explicit stabilization toggle. Retire duplicate model/maps
+  for promoted fields while retaining existing render-mode/unique-colour input migration and unrelated payloads.
+  Prove the real body, single-owner source/logical/presentation routing, lazy activation and fixed-recording equality.
 - [ ] **V4 — Voxel Sphere.** Preserve analysis-only DSP, accepted motion and CUSTOM orbit/geometry; exercise serialization,
   conditional controls and same activation/config projection with mode-specific focused tests.
 - [ ] **V4A — Shockwave Grid: finish spec migration AND completely rework into Neon Lake Basin in the same slice.**

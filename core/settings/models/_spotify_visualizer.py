@@ -21,7 +21,7 @@ from core.settings.visualizer_mode_registry import (
     resolve_effective_enabled_modes,
     VISUALIZER_MODE_IDS,
 )
-from core.settings.visualizer_mode_settings import spec_controls
+from core.settings.visualizer_mode_settings import spec_control, spec_controls
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
@@ -469,29 +469,6 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
-# Extruded Spectrum (experimental): presentation-only keys. Its bars, analysis and colours
-# come from Spectrum's runtime, technical profile and shared-bar profile (descriptor).
-_EXTRUDED_SPECTRUM_LIMITS: Dict[str, Tuple[float, float]] = {
-    'extruded_spectrum_depth': (0.25, 3.0),
-    'extruded_spectrum_tilt': (0.0, 1.0),
-    'extruded_spectrum_gloss': (0.0, 1.0),
-    'extruded_spectrum_reflection': (0.0, 1.0),
-    'extruded_spectrum_face_mirror': (0.0, 1.0),
-    'extruded_spectrum_hue_drift': (0.0, 1.0),
-    'extruded_spectrum_turn': (-1.0, 1.0),
-    'extruded_spectrum_shadow_strength': (0.0, 1.0),
-}
-_EXTRUDED_SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    **{key: float for key in _EXTRUDED_SPECTRUM_LIMITS},
-    'extruded_spectrum_colouring': str,
-    'extruded_spectrum_rainbow_ghost': bool,
-    'extruded_spectrum_allow_overflow': bool,
-    'extruded_spectrum_smooth_edges': bool,
-    'extruded_spectrum_shadow_reach': str,
-    'extruded_spectrum_shadow_enabled': bool,
-}
-_EXTRUDED_SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_EXTRUDED_SPECTRUM_BUILD_SPECS)
-
 # These modes use Spectrum's bounded source/shaper machinery, but own their
 # authored profiles.  The mode prefixes are deliberate: the shared machinery
 # receives a resolved projection at activation, never another mode's mutable
@@ -528,17 +505,8 @@ _SPECTRUM_SOURCE_MODE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     f'{mode}_{suffix}': _SPECTRUM_SOURCE_VALUE_COERCERS[suffix]
     for mode in ('extruded_spectrum', 'shockwave_grid')
     for suffix in _SPECTRUM_SOURCE_SUFFIXES
+    if spec_control(f"{mode}_{suffix}") is None
 }
-_SPECTRUM_SOURCE_MODE_SERIALIZERS.update(
-    {
-        f'extruded_spectrum_{suffix}': serializer
-        for suffix, serializer in {
-            'ghosting_enabled': bool,
-            'ghost_alpha': float,
-            'ghost_decay': float,
-        }.items()
-    }
-)
 # Spec'd modes (``core/settings/visualizer_mode_settings.py``): every control is a model field, read
 # through its control's admission (canonical default for a missing or malformed value) and serialized
 # by its type.
@@ -620,7 +588,6 @@ def _build_visualizer_model_kwargs(
         ),
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
-        _build_read_value_map(read_value, _EXTRUDED_SPECTRUM_BUILD_SPECS),
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
         _build_spec_kwargs(read_value),
         preset_kwargs,
@@ -1105,25 +1072,15 @@ class SpotifyVisualizerSettings:
     spectrum_wave_amplitude: float = field(default_factory=lambda: _visualizer_default('spectrum_wave_amplitude'))
     spectrum_profile_floor: float = field(default_factory=lambda: _visualizer_default('spectrum_profile_floor'))
     spectrum_drop_speed: float = field(default_factory=lambda: _visualizer_default('spectrum_drop_speed'))
-    extruded_spectrum_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghosting_enabled'))
-    extruded_spectrum_rainbow_ghost: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_rainbow_ghost'))
-    extruded_spectrum_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghost_alpha'))
-    extruded_spectrum_ghost_decay: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_ghost_decay'))
     extruded_spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_mirrored'))
     extruded_spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shape_nodes'))
     extruded_spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_notch_positions_mirrored'))
     extruded_spectrum_notch_positions_linear: List[List] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_notch_positions_linear'))
     extruded_spectrum_lane_strengths_mirrored: Dict[str, float] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_lane_strengths_mirrored'))
     extruded_spectrum_lane_strengths_linear: Dict[str, float] = field(default_factory=lambda: _visualizer_default('extruded_spectrum_lane_strengths_linear'))
-    extruded_spectrum_wave_amplitude: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_wave_amplitude'))
-    extruded_spectrum_profile_floor: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_profile_floor'))
-    extruded_spectrum_drop_speed: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_drop_speed'))
     extruded_spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing_enabled'))
     extruded_spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing'))
     extruded_spectrum_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_solid_bar_hysteresis_enabled'))
-    extruded_spectrum_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_enabled'))
-    extruded_spectrum_shadow_strength: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_strength'))
-    extruded_spectrum_shadow_reach: str = field(default_factory=lambda: _visualizer_default('extruded_spectrum_shadow_reach'))
     shockwave_grid_mirrored: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_mirrored'))
     shockwave_grid_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('shockwave_grid_shape_nodes'))
     shockwave_grid_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('shockwave_grid_notch_positions_mirrored'))
@@ -1302,20 +1259,6 @@ class SpotifyVisualizerSettings:
     preset_bubble: int = field(default_factory=lambda: _visualizer_default('preset_bubble'))
     preset_devcurve: int = field(default_factory=lambda: _visualizer_default('preset_devcurve'))
     preset_sphere: int = field(default_factory=lambda: _visualizer_default('preset_sphere'))
-    extruded_spectrum_depth: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_depth'))
-    extruded_spectrum_tilt: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_tilt'))
-    extruded_spectrum_gloss: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_gloss'))
-    extruded_spectrum_reflection: float = field(
-        default_factory=lambda: _visualizer_default('extruded_spectrum_reflection'))
-    extruded_spectrum_hue_drift: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_hue_drift'))
-    extruded_spectrum_turn: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_turn'))
-    extruded_spectrum_colouring: str = field(default_factory=lambda: _visualizer_default('extruded_spectrum_colouring'))
-    extruded_spectrum_allow_overflow: bool = field(
-        default_factory=lambda: _visualizer_default('extruded_spectrum_allow_overflow'))
-    extruded_spectrum_face_mirror: float = field(
-        default_factory=lambda: _visualizer_default('extruded_spectrum_face_mirror'))
-    extruded_spectrum_smooth_edges: bool = field(
-        default_factory=lambda: _visualizer_default('extruded_spectrum_smooth_edges'))
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
     preset_shockwave_grid: int = field(default_factory=lambda: _visualizer_default('preset_shockwave_grid'))
 
@@ -1325,16 +1268,6 @@ class SpotifyVisualizerSettings:
         self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
-        for attr, (low, high) in _EXTRUDED_SPECTRUM_LIMITS.items():
-            _clamp_attr_range(self, attr, low, high)
-        self.extruded_spectrum_allow_overflow = bool(self.extruded_spectrum_allow_overflow)
-        self.extruded_spectrum_smooth_edges = bool(self.extruded_spectrum_smooth_edges)
-        self.extruded_spectrum_shadow_enabled = bool(self.extruded_spectrum_shadow_enabled)
-        if self.extruded_spectrum_shadow_reach not in ('Nearby', 'Distant'):
-            self.extruded_spectrum_shadow_reach = _visualizer_default('extruded_spectrum_shadow_reach')
-        from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
-        if self.extruded_spectrum_colouring not in EXTRUDED_COLOURINGS:
-            self.extruded_spectrum_colouring = _visualizer_default('extruded_spectrum_colouring')
         self._apply_spectrum_source_profile_defaults('extruded_spectrum')
         self._apply_spectrum_source_profile_defaults('shockwave_grid')
         for control in spec_controls():
@@ -1447,9 +1380,11 @@ class SpotifyVisualizerSettings:
             defaults = _visualizer_default(attr)
             setattr(self, attr, _normalize_spectrum_lane_strengths(getattr(self, attr), defaults))
         setattr(self, f"{prefix}mirrored", bool(getattr(self, f"{prefix}mirrored")))
-        _clamp_attr_range(self, f"{prefix}wave_amplitude", 0.0, 1.0)
-        _clamp_attr_range(self, f"{prefix}profile_floor", 0.05, 0.30)
-        _clamp_attr_range(self, f"{prefix}drop_speed", 0.5, 3.0)
+        for suffix, low, high in (("wave_amplitude", 0.0, 1.0), ("profile_floor", 0.05, 0.30),
+                                  ("drop_speed", 0.5, 3.0)):
+            key = f"{prefix}{suffix}"
+            if spec_control(key) is None:
+                _clamp_attr_range(self, key, low, high)
         _clamp_attr_range(self, f"{prefix}visual_smoothing", 0.0, 1.0)
         for suffix in ('visual_smoothing_enabled', 'solid_bar_hysteresis_enabled'):
             setattr(self, f"{prefix}{suffix}", bool(getattr(self, f"{prefix}{suffix}")))
@@ -1607,7 +1542,6 @@ class SpotifyVisualizerSettings:
             self._serialize_bubble_settings(prefix),
             self._serialize_devcurve_settings(prefix),
             self._serialize_sphere_settings(prefix),
-            _serialize_prefixed_fields(self, prefix, _EXTRUDED_SPECTRUM_SERIALIZERS),
             _serialize_prefixed_fields(self, prefix, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
             _serialize_prefixed_fields(self, prefix, _SPEC_SERIALIZERS),
             self._serialize_preset_indices(prefix),

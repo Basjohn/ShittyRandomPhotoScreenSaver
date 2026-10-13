@@ -519,29 +519,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     if 'bubble_tail_opacity' in kwargs:
         host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
-    # --- Extruded Spectrum presentation -------------------------------
-    for key, (low, high) in _EXTRUDED_SPECTRUM_KEYS.items():
-        if key in kwargs:
-            setattr(host, f"_{key}", max(low, min(high, float(kwargs[key]))))
-    if 'extruded_spectrum_rainbow_ghost' in kwargs:
-        host._extruded_spectrum_rainbow_ghost = bool(kwargs['extruded_spectrum_rainbow_ghost'])
-    if 'extruded_spectrum_colouring' in kwargs:
-        from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
-        colouring = str(kwargs['extruded_spectrum_colouring'])
-        if colouring not in EXTRUDED_COLOURINGS:
-            raise ValueError(f"invalid Extruded Spectrum colouring {colouring!r}")
-        host._extruded_spectrum_colouring = colouring
-    if 'extruded_spectrum_allow_overflow' in kwargs:
-        host._extruded_spectrum_allow_overflow = bool(kwargs['extruded_spectrum_allow_overflow'])
-    if 'extruded_spectrum_smooth_edges' in kwargs:
-        host._extruded_spectrum_smooth_edges = bool(kwargs['extruded_spectrum_smooth_edges'])
-    if 'extruded_spectrum_shadow_enabled' in kwargs:
-        host._extruded_spectrum_shadow_enabled = bool(kwargs['extruded_spectrum_shadow_enabled'])
-    if 'extruded_spectrum_shadow_reach' in kwargs:
-        reach = str(kwargs['extruded_spectrum_shadow_reach'])
-        if reach not in ('Nearby', 'Distant'):
-            raise ValueError(f'invalid Extruded shadow reach {reach!r}')
-        host._extruded_spectrum_shadow_reach = reach
     if 'scene3d_detail' in kwargs:
         from rendering.gl_programs.scene3d import scene3d_detail
 
@@ -559,18 +536,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     _apply_spec_controls(host, kwargs, logical=False)
 
 
-
-
-_EXTRUDED_SPECTRUM_KEYS: Dict[str, tuple[float, float]] = {
-    "extruded_spectrum_depth": (0.25, 3.0),
-    "extruded_spectrum_tilt": (0.0, 1.0),
-    "extruded_spectrum_gloss": (0.0, 1.0),
-    "extruded_spectrum_reflection": (0.0, 1.0),
-    "extruded_spectrum_face_mirror": (0.0, 1.0),
-    "extruded_spectrum_hue_drift": (0.0, 1.0),
-    "extruded_spectrum_turn": (-1.0, 1.0),
-    "extruded_spectrum_shadow_strength": (0.0, 1.0),
-}
 
 
 def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) -> None:
@@ -604,7 +569,7 @@ def presentation_setting_range(key: str) -> tuple[float, float]:
     control = spec_control(key)
     if isinstance(control, Slider):
         return control.low, control.high
-    return {**_EXTRUDED_SPECTRUM_KEYS, "sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
+    return {"sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
 
 
 def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
@@ -624,13 +589,7 @@ def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Di
     """Extruded Spectrum's renderer-only parameters from the presentation owner, with any
     held-key view orbit evaluated at the capture's ``now_ts``."""
     pres = _presentation_source(widget)
-    values: Dict[str, object] = {key: float(getattr(pres, f"_{key}")) for key in _EXTRUDED_SPECTRUM_KEYS}
-    values["extruded_spectrum_colouring"] = str(pres._extruded_spectrum_colouring)
-    values["extruded_spectrum_rainbow_ghost"] = bool(pres._extruded_spectrum_rainbow_ghost)
-    values["extruded_spectrum_allow_overflow"] = bool(pres._extruded_spectrum_allow_overflow)
-    values["extruded_spectrum_smooth_edges"] = bool(pres._extruded_spectrum_smooth_edges)
-    values["extruded_spectrum_shadow_enabled"] = bool(pres._extruded_spectrum_shadow_enabled)
-    values['extruded_spectrum_shadow_reach'] = str(pres._extruded_spectrum_shadow_reach)
+    values = spec_mode_parameters(pres, "extruded_spectrum")
     values["scene3d_detail"] = str(pres._scene3d_detail)
     values["backdrop"] = getattr(pres, "_backdrop", None)    # the reflected wallpaper, when it reflects
     values["backdrop_blend_s"] = getattr(pres, "_backdrop_blend_s", None)

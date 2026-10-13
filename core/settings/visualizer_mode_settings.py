@@ -17,6 +17,11 @@ Values never live here: defaults stay in the canonical defaults and presets stay
 part no control type describes (Spectrum's shape editor, smoothing controls) is a ``Custom`` entry
 naming its own build/load/collect functions by import path, so this module stays free of Qt.
 
+``source=True`` delegates a control to the existing descriptor source-profile projection, without
+creating private logical or presentation attributes under its authored mode key. That projection
+owns the aliases: source shaping reaches BeatEngine, while ordinary ghost aliases reach the existing
+shared logical and presentation consumers. It introduces no new runtime owner.
+
 Adding a setting to a spec'd mode is its default plus one control here; the renderer reads it by key.
 A control may also be shown only while another control holds a value (``when``), so a group that only
 matters while its toggle is on hides with it.
@@ -28,6 +33,8 @@ from dataclasses import dataclass
 import math
 from types import MappingProxyType
 from typing import Union
+
+from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 
 
 def _finite(value: object) -> float | None:
@@ -57,7 +64,9 @@ class Slider:
 
     Its value reads as ``decimals`` places plus ``suffix``, or as a whole percent (``percent``);
     ``integer`` keeps it a whole number; ``tick`` marks every that many positions under it;
-    ``signed`` shows a plus sign for nonnegative values."""
+    ``signed`` shows a plus sign for nonnegative values. ``source`` delegates consumption to the
+    existing descriptor source-profile projection; it creates no private logical/renderer value.
+    ``availability`` optionally names an import-safe capability flag and its disabled tooltip."""
 
     key: str
     label: str
@@ -74,6 +83,8 @@ class Slider:
     tick: int = 0
     when: When = ()
     signed: bool = False
+    source: bool = False
+    availability: tuple[str, str] = ()
 
     def admit(self, value: object, default: object) -> float | int:
         number = _finite(value)
@@ -106,6 +117,8 @@ class Toggle:
     logical: bool = False
     when: When = ()
     row_group: str = ""
+    source: bool = False
+    availability: tuple[str, str] = ()
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -135,6 +148,9 @@ class Choice:
     logical: bool = False
     indexed: bool = False
     when: When = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+    compact: bool = True
 
     def admit(self, value: object, default: object) -> str | int:
         if self.indexed:
@@ -160,6 +176,8 @@ class Colour:
     logical: bool = False
     alpha: bool = True
     when: When = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
 
     def admit(self, value: object, default: object) -> list[int]:
         channels = list(value) if isinstance(value, (list, tuple)) else []
@@ -227,10 +245,13 @@ class ModeSettings:
         raise KeyError(f"{self.mode_id} declares no bucket {key!r}")
 
     def presentation_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if not control.logical)
+        return tuple(control for control in self.controls if not control.logical and not control.source)
 
     def logical_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if control.logical)
+        return tuple(control for control in self.controls if control.logical and not control.source)
+
+    def source_controls(self) -> tuple[Control, ...]:
+        return tuple(control for control in self.controls if control.source)
 
 
 # ---- Shockwave Grid ----------------------------------------------------------------------------
@@ -544,7 +565,77 @@ _DEVCURVE = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE)
+# ---- Extruded Spectrum -------------------------------------------------------------------------
+
+# Source controls project through the descriptor onto the existing Spectrum source/ghost owners.
+_EXTRUDED_SPECTRUM = ModeSettings(
+    "extruded_spectrum",
+    buckets=(
+        Bucket("appearance", "Appearance",
+               "Rainbow participation and hue drift are authored explicitly here. Fill and border colour/alpha "
+               "live in this mode's Bar Appearance bucket rather than behind a colouring preset."),
+        Bucket("shape", "Shape", "3D bar geometry plus this mode's mirrored/linear silhouette and lane-energy mapping."),
+        Bucket("response", "Response", "Tune global reactivity, shape-floor support, falloff and smoothing after the authored lane mapping."),
+        Bucket("effects", "3D Effects", "Material finish, floor reflection, directional shadow, overflow and trailing ghosts.", advanced=True),
+    ),
+    entries=(
+        Choice("extruded_spectrum_colouring", "", EXTRUDED_COLOURINGS),
+        Custom("rainbow", "appearance", "ui.tabs.media.extruded_spectrum_builder:build_extruded_rainbow",
+               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_rainbow",
+               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_rainbow"),
+        Slider('extruded_spectrum_hue_drift', 'Hue Drift:', 0.0, 1.0,
+               'How fast Rainbow hues drift across the bars; zero holds the spectral colours still.', bucket='appearance'),
+        Slider('extruded_spectrum_depth', 'Bar Depth:', 0.25, 3.0,
+               'How deep each bar is, as a multiple of its width.', bucket='shape'),
+        Custom("shape", "shape", "ui.tabs.media.extruded_spectrum_builder:build_extruded_shape",
+               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_shape",
+               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_shape",
+               keys=tuple(f"extruded_spectrum_{suffix}" for suffix in (
+                   "mirrored", "shape_nodes", "notch_positions_mirrored", "notch_positions_linear",
+                   "lane_strengths_mirrored", "lane_strengths_linear"))),
+        Slider('extruded_spectrum_wave_amplitude', 'Reactivity:', 0.0, 1.0,
+               'Overall motion scaling after the authored lane routing.', bucket='response', source=True),
+        Slider('extruded_spectrum_profile_floor', 'Shape Floor:', 0.05, 0.3,
+               'Minimum body retained by the authored bar profile.', bucket='response', source=True),
+        Slider('extruded_spectrum_drop_speed', 'Falloff:', 0.5, 3.0,
+               'How quickly the shared bar field falls after an energy drop.', bucket='response', source=True),
+        Custom("smoothing", "response", "ui.tabs.media.extruded_spectrum_builder:build_extruded_smoothing",
+               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_smoothing",
+               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_smoothing",
+               keys=("extruded_spectrum_visual_smoothing_enabled", "extruded_spectrum_visual_smoothing",
+                     "extruded_spectrum_solid_bar_hysteresis_enabled")),
+        Slider('extruded_spectrum_gloss', 'Gloss:', 0.0, 1.0,
+               "Shine on the bars' faces.", bucket='effects'),
+        Slider('extruded_spectrum_face_mirror', 'Mirror Faces:', 0.0, 1.0,
+               "Gives the bars' faces (not their edges) a polished, mirror surface reflecting the wallpaper, sharper with Gloss; zero leaves them plain.", bucket='effects'),
+        Toggle('extruded_spectrum_smooth_edges', 'Smooth Edges:', "Anti-alias the bars' edge lines at an angle",
+               'On: edge lines keep an even, smoothed width however the bars are turned or tilted. Off: lines are sized as if seen head-on, which thins and roughens them on faces seen at an angle.', bucket="effects"),
+        Slider('extruded_spectrum_reflection', 'Reflection:', 0.0, 1.0,
+               'How strongly the bars reflect in the floor beneath them; zero shows no floor.', bucket='effects'),
+        Toggle('extruded_spectrum_shadow_enabled', 'Cast Shadow:', 'Project a shared Scene3D shadow',
+               "Draw the optional Scene3D ground shadow using the display's existing shadow direction.", bucket="effects", availability=("core.settings.visualizer_mode_registry:EXTRUDED_CAST_SHADOW_AVAILABLE", "Temporarily unavailable: Extruded cast shadows are disabled pending a redesign.")),
+        Choice("extruded_spectrum_shadow_reach", "Shadow Reach:", ("Nearby", "Distant"),
+               "Nearby hugs the base line; Distant casts a longer silhouette. Both inherit the global Widgets shadow direction.",
+               bucket="effects", compact=False, availability=("core.settings.visualizer_mode_registry:EXTRUDED_CAST_SHADOW_AVAILABLE", "Temporarily unavailable: Extruded cast shadows are disabled pending a redesign.")),
+        Slider('extruded_spectrum_shadow_strength', 'Shadow Strength:', 0.0, 1.0,
+               'Opacity of the cast shadow (requires Cast Shadow enabled).', bucket='effects', availability=("core.settings.visualizer_mode_registry:EXTRUDED_CAST_SHADOW_AVAILABLE", "Temporarily unavailable: Extruded cast shadows are disabled pending a redesign.")),
+        Toggle('extruded_spectrum_allow_overflow', 'Allow Overflow:', "Let the 3D leave the visualizer's rectangle",
+               "On: the bars keep Spectrum's size and tilted tops, the turn and the reflection may reach past the rectangle. Off: the whole 3D scene is fitted inside it.", bucket="effects"),
+        Toggle('extruded_spectrum_ghosting_enabled', 'Enable Ghosting:', 'Draw trailing bar ghosts',
+               '', bucket="effects", source=True),
+        Toggle('extruded_spectrum_rainbow_ghost', 'Rainbow Ghost:', 'Colour trailing ghosts with rainbow hues',
+               'Colour only the existing 3D ghost columns; faces and edges retain their independently authored Rainbow/Bar Colours presentation.', bucket="effects"),
+        Slider('extruded_spectrum_ghost_alpha', 'Ghost Opacity:', 0.0, 1.0,
+               'Opacity of the bar-history ghosts.', bucket='effects', source=True, when=('extruded_spectrum_ghosting_enabled', True)),
+        Slider('extruded_spectrum_ghost_decay', 'Ghost Decay:', 0.1, 1.0,
+               'How quickly ghosts descend after a bar falls.', bucket='effects', source=True, when=('extruded_spectrum_ghosting_enabled', True)),
+        Slider("extruded_spectrum_turn", "", -1.0, 1.0),
+        Slider("extruded_spectrum_tilt", "", 0.0, 1.0),
+    ),
+)
+
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 
 

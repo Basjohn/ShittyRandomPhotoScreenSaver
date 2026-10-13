@@ -459,6 +459,12 @@ or preset-change signals. Its production applier seam verifies one scalar write 
 Recorded-response migration checks use frozen fixtures and identical clips; full logical-series equality also protects styling
 and parameter projection, and remains separate from actual GPU/physical pixel acceptance.
 
+`test_extruded_settings_spec.py` crosses the real body and source/application seams: typed renderer values apply once,
+descriptor-projected source values create no private authored attributes, and shaping/ghost aliases reach their existing
+consumers once. Rainbow/shape/smoothing Custom loads are silent; saved shadow values survive while availability remains
+disabled on load/reset; orbit and external Bar Appearance stay outside the body payload. Independent Rainbow Ghost and
+ordinary ghost detail conditions retain their behavior. Fixed-recording equality uses the same frozen-fixture discipline.
+
 Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
 
 Protect:
