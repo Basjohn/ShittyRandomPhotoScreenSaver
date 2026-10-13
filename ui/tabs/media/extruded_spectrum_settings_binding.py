@@ -1,130 +1,91 @@
-"""Persistence binding for the lazy Extruded Spectrum Settings body."""
+"""Bespoke persistence hooks for the Extruded Spectrum spec-built Settings body."""
 from __future__ import annotations
 
-from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
-from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
+from PySide6.QtCore import QSignalBlocker
 
-_SLIDER_KEYS = (
-    "extruded_spectrum_depth",
-    "extruded_spectrum_hue_drift",
-    "extruded_spectrum_gloss",
-    "extruded_spectrum_reflection",
-    "extruded_spectrum_face_mirror",
-    "extruded_spectrum_shadow_strength",
-    "extruded_spectrum_wave_amplitude",
-    "extruded_spectrum_profile_floor",
-    "extruded_spectrum_drop_speed",
-    "extruded_spectrum_visual_smoothing",
-    "extruded_spectrum_ghost_alpha",
-    "extruded_spectrum_ghost_decay",
-)
-_CHECK_KEYS = (
-    "extruded_spectrum_allow_overflow",
-    "extruded_spectrum_smooth_edges",
-    "extruded_spectrum_shadow_enabled",
-    "extruded_spectrum_mirrored",
-    "extruded_spectrum_ghosting_enabled",
-    "extruded_spectrum_rainbow_ghost",
-    "extruded_spectrum_visual_smoothing_enabled",
-    "extruded_spectrum_solid_bar_hysteresis_enabled",
-)
-
-
-def _resolved_colouring(tab, value) -> str:
-    colouring = str(value)
-    if colouring in EXTRUDED_COLOURINGS:
-        return colouring
-    fallback = str(tab._widget_default("spotify_visualizer", "extruded_spectrum_colouring"))
-    if fallback not in EXTRUDED_COLOURINGS:
-        raise ValueError(f"Canonical Extruded Spectrum colouring is invalid: {fallback!r}")
-    return fallback
+from core.settings.visualizer_mode_settings import require_mode_settings
+from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
 
 def load_extruded_spectrum_mode_settings(tab, config) -> None:
-    def value(key):
-        return config.get(key, tab._widget_default("spotify_visualizer", key))
-
-    for key in _SLIDER_KEYS:
-        control = getattr(tab, key, None)
-        if control is not None:
-            control.setValue(round(float(value(key)) * 100.0))
-
-    # The persisted enum is a compatibility/runtime encoding only. Settings
-    # presents explicit Rainbow enable + surface participation controls.
-    colouring = _resolved_colouring(tab, value("extruded_spectrum_colouring"))
-    control = getattr(tab, "extruded_spectrum_rainbow_enabled", None)
-    if control is not None:
-        control.setChecked(colouring != "Bar Colours")
-    faces = getattr(tab, "extruded_spectrum_rainbow_faces", None)
-    edges = getattr(tab, "extruded_spectrum_rainbow_edges", None)
-    if faces is not None and edges is not None:
-        if colouring == "Spectral Edges":
-            edges.setChecked(True)
-        else:
-            faces.setChecked(True)
-        enabled = colouring != "Bar Colours"
-        faces.setEnabled(enabled)
-        edges.setEnabled(enabled)
-
-    reach = getattr(tab, 'extruded_spectrum_shadow_reach', None)
-    if reach is not None:
-        reach.setCurrentText(str(value('extruded_spectrum_shadow_reach')))
-    for key in _CHECK_KEYS:
-        control = getattr(tab, key, None)
-        if control is not None:
-            control.setChecked(bool(value(key)))
-    # Preset/reset hydration may change checked values but never availability.
-    for name in ('extruded_spectrum_shadow_enabled',
-                 'extruded_spectrum_shadow_reach',
-                 'extruded_spectrum_shadow_strength'):
-        control = getattr(tab, name, None)
-        if control is not None:
-            control.setEnabled(EXTRUDED_CAST_SHADOW_AVAILABLE)
-    shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
-    if shape_editor is not None:
-        mirrored = bool(value("extruded_spectrum_mirrored"))
-        shape_editor.set_mirrored(mirrored)
-        shape_editor.set_nodes(value("extruded_spectrum_shape_nodes"))
-        shape_editor.set_notch_positions(
-            value("extruded_spectrum_notch_positions_mirrored"), mirrored=True
-        )
-        shape_editor.set_notch_positions(
-            value("extruded_spectrum_notch_positions_linear"), mirrored=False
-        )
-        shape_editor.set_lane_strengths(
-            value("extruded_spectrum_lane_strengths_mirrored"), mirrored=True
-        )
-        shape_editor.set_lane_strengths(
-            value("extruded_spectrum_lane_strengths_linear"), mirrored=False
-        )
+    load_spec_mode_settings(tab, "extruded_spectrum", config)
 
 
 def collect_extruded_spectrum_mode_settings(tab) -> dict:
-    values: dict = {key: getattr(tab, key).value() / 100.0 for key in _SLIDER_KEYS}
-    if not tab.extruded_spectrum_rainbow_enabled.isChecked():
-        values["extruded_spectrum_colouring"] = "Bar Colours"
-    elif tab.extruded_spectrum_rainbow_edges.isChecked():
-        values["extruded_spectrum_colouring"] = "Spectral Edges"
-    else:
-        values["extruded_spectrum_colouring"] = "Spectral Faces"
-    values.update({key: getattr(tab, key).isChecked() for key in _CHECK_KEYS})
-    values['extruded_spectrum_shadow_reach'] = tab.extruded_spectrum_shadow_reach.currentText()
-    # Preset/reset hydration may change checked values but never availability.
-    for name in ('extruded_spectrum_shadow_enabled',
-                 'extruded_spectrum_shadow_reach',
-                 'extruded_spectrum_shadow_strength'):
-        control = getattr(tab, name, None)
-        if control is not None:
-            control.setEnabled(EXTRUDED_CAST_SHADOW_AVAILABLE)
-    shape_editor = getattr(tab, "extruded_spectrum_shape_editor", None)
-    if shape_editor is not None:
-        values.update(
-            {
-                "extruded_spectrum_shape_nodes": shape_editor.get_nodes(),
-                "extruded_spectrum_notch_positions_mirrored": list(shape_editor._notches_mirrored),
-                "extruded_spectrum_notch_positions_linear": list(shape_editor._notches_linear),
-                "extruded_spectrum_lane_strengths_mirrored": shape_editor.get_lane_strengths(mirrored=True),
-                "extruded_spectrum_lane_strengths_linear": shape_editor.get_lane_strengths(mirrored=False),
-            }
-        )
-    return values
+    return collect_spec_mode_settings(tab, "extruded_spectrum")
+
+
+def load_extruded_rainbow(tab, config) -> None:
+    key = "extruded_spectrum_colouring"
+    default = tab._widget_default("spotify_visualizer", key)
+    colouring = require_mode_settings("extruded_spectrum").control(key).admit(config.get(key, default), default)
+    controls = (tab.extruded_spectrum_rainbow_enabled, tab.extruded_spectrum_rainbow_faces,
+                tab.extruded_spectrum_rainbow_edges)
+    blockers = [QSignalBlocker(control) for control in controls]
+    enabled, faces, edges = controls
+    enabled.setChecked(colouring != "Bar Colours")
+    (edges if colouring == "Spectral Edges" else faces).setChecked(True)
+    faces.setEnabled(enabled.isChecked())
+    edges.setEnabled(enabled.isChecked())
+    del blockers
+
+
+def collect_extruded_rainbow(tab) -> dict:
+    return {"extruded_spectrum_colouring": (
+        "Bar Colours" if not tab.extruded_spectrum_rainbow_enabled.isChecked()
+        else "Spectral Edges" if tab.extruded_spectrum_rainbow_edges.isChecked()
+        else "Spectral Faces"
+    )}
+
+
+def load_extruded_shape(tab, config) -> None:
+    def value(suffix):
+        key = f"extruded_spectrum_{suffix}"
+        return config.get(key, tab._widget_default("spotify_visualizer", key))
+
+    editor = tab.extruded_spectrum_shape_editor
+    blockers = [QSignalBlocker(editor), QSignalBlocker(tab.extruded_spectrum_mirrored)]
+    mirrored = bool(value("mirrored"))
+    tab.extruded_spectrum_mirrored.setChecked(mirrored)
+    editor.set_mirrored(mirrored)
+    editor.set_nodes(value("shape_nodes"))
+    for mirror, suffix in ((True, "mirrored"), (False, "linear")):
+        editor.set_notch_positions(value(f"notch_positions_{suffix}"), mirrored=mirror)
+        editor.set_lane_strengths(value(f"lane_strengths_{suffix}"), mirrored=mirror)
+    del blockers
+
+
+def collect_extruded_shape(tab) -> dict:
+    editor = tab.extruded_spectrum_shape_editor
+    return {
+        "extruded_spectrum_mirrored": tab.extruded_spectrum_mirrored.isChecked(),
+        "extruded_spectrum_shape_nodes": editor.get_nodes(),
+        "extruded_spectrum_notch_positions_mirrored": list(editor._notches_mirrored),
+        "extruded_spectrum_notch_positions_linear": list(editor._notches_linear),
+        "extruded_spectrum_lane_strengths_mirrored": editor.get_lane_strengths(mirrored=True),
+        "extruded_spectrum_lane_strengths_linear": editor.get_lane_strengths(mirrored=False),
+    }
+
+
+def load_extruded_smoothing(tab, config) -> None:
+    keys = ("extruded_spectrum_visual_smoothing_enabled", "extruded_spectrum_visual_smoothing",
+            "extruded_spectrum_solid_bar_hysteresis_enabled")
+    enabled, strength, stabilization = [getattr(tab, key) for key in keys]
+    blockers = [QSignalBlocker(control) for control in (enabled, strength, stabilization)]
+    for key, control in zip(keys, (enabled, strength, stabilization)):
+        value = config.get(key, tab._widget_default("spotify_visualizer", key))
+        if control is strength:
+            control.setValue(round(float(value) * 100.0))
+            getattr(tab, f"{key}_label").setText(f"{control.value()}%")
+        else:
+            control.setChecked(bool(value))
+    strength.parentWidget().setVisible(enabled.isChecked())
+    del blockers
+
+
+def collect_extruded_smoothing(tab) -> dict:
+    return {
+        "extruded_spectrum_visual_smoothing_enabled": tab.extruded_spectrum_visual_smoothing_enabled.isChecked(),
+        "extruded_spectrum_visual_smoothing": tab.extruded_spectrum_visual_smoothing.value() / 100.0,
+        "extruded_spectrum_solid_bar_hysteresis_enabled": tab.extruded_spectrum_solid_bar_hysteresis_enabled.isChecked(),
+    }

@@ -45,6 +45,7 @@ def test_a_spec_is_a_registered_mode_and_owns_canonical_keys(spec):
         assert key.startswith(descriptor.setting_prefixes), key
         assert key in DEFAULTS, f"{key} has no canonical default"
     for control in spec.controls:
+        assert not (control.logical and control.source), control.key
         default = DEFAULTS[control.key]
         if isinstance(control, Colour):
             assert control.admit(default, default) == [int(c) for c in default][:4] + [255] * (4 - len(default))
@@ -95,6 +96,15 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
     _apply_spec_controls(logical, dict(DEFAULTS), logical=True)
     _apply_spec_controls(presentation, dict(DEFAULTS), logical=False)
     for control in spec.controls:
+        if control.source:
+            from widgets.spotify_visualizer.source_config_applier import resolve_mode_source_config
+
+            assert not hasattr(logical, f"_{control.key}")
+            assert not hasattr(presentation, f"_{control.key}")
+            projected = resolve_mode_source_config(spec.mode_id, dict(DEFAULTS))
+            suffix = control.key.removeprefix(f"{spec.mode_id}_")
+            assert projected[f"spectrum_{suffix}"] == DEFAULTS[control.key]
+            continue
         owner, other = (logical, presentation) if control.logical else (presentation, logical)
         assert hasattr(owner, f"_{control.key}") and not hasattr(other, f"_{control.key}"), control.key
     parameters = spec_mode_parameters(presentation, spec.mode_id)

@@ -74,7 +74,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| Visualizer Settings declarations, typed controls and bespoke editor boundaries | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
+| Visualizer Settings declarations, typed/source controls, availability and bespoke editor boundaries | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
 | planned Shockwave Grid / Neon Lake Basin replacement and terrain editor | `Current_Plan.md` §2A V4A; `Docs/Future_Work/Additional_Future_Transitions_Package.zip` |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
