@@ -173,7 +173,7 @@ def test_feed_source_uses_injected_document_parser_for_remote_feed(tmp_path: Pat
         now=lambda: 1000.0,
         document_parser=parser,
     )
-    result = source.refresh(force=True)
+    result = source.refresh()
     assert result.snapshot is not None
     assert result.snapshot.document == document
     assert len(calls) == 1
@@ -207,7 +207,7 @@ def test_feed_source_prefers_isolated_response_examiner_for_remote_documents(tmp
         ),
         response_examiner=examiner,
     )
-    result = source.refresh(force=True)
+    result = source.refresh()
     assert result.snapshot is not None
     assert result.snapshot.document == document
     assert calls == [(RSS, "https://example.test/feed", 12)]
@@ -237,7 +237,7 @@ def test_isolated_parser_failure_retains_last_good_rows_and_artwork(tmp_path: Pa
             ValueError("parser child unavailable")
         ),
     )
-    result = source.refresh(force=True)
+    result = source.refresh()
     assert result.status == "stale_cache"
     assert result.snapshot is not None and result.snapshot.document == document
     assert dict(result.local_artwork_by_item) == dict(warm.local_by_item)

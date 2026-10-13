@@ -262,7 +262,7 @@ def test_source_failure_never_replaces_last_good_snapshot(tmp_path: Path):
     source = FeedSource(spec, transport=transport, cache=FeedCacheStore(tmp_path), now=lambda: next(clock))
     first = source.refresh()
     assert first.status == "available"
-    second = source.refresh(force=True)
+    second = source.refresh()
     assert second.status == "stale_cache"
     assert second.snapshot == first.snapshot
     retained = FeedCacheStore(tmp_path).read("source")
@@ -327,7 +327,7 @@ def test_builtin_provider_can_preserve_last_good_across_official_endpoint_migrat
     second = FeedSource(
         FeedSourceSpec("provider:cbs_world", "https://new.example/rss", "provider_cbs_world", allow_endpoint_migration=True),
         transport=failing, cache=store, now=lambda: next(clock),
-    ).refresh(force=True)
+    ).refresh()
     assert second.status == "stale_cache"
     assert second.snapshot == first.snapshot
     # Old ETag is never sent to a different official endpoint.
@@ -368,7 +368,7 @@ def test_empty_success_response_never_replaces_last_good_snapshot(tmp_path: Path
     source = FeedSource(spec, transport=transport, cache=FeedCacheStore(tmp_path), now=lambda: next(clock))
     first = source.refresh()
     assert first.status == "available"
-    second = source.refresh(force=True)
+    second = source.refresh()
     assert second.status == "stale_cache"
     assert second.snapshot == first.snapshot
     retained = FeedCacheStore(tmp_path).read("source")
@@ -411,3 +411,27 @@ def test_retired_feed_fetch_does_not_write_success_or_failure_backoff(tmp_path: 
     # Neither a completed generation nor a manufactured source-health failure
     # may be persisted after a final-consumer cancellation.
     assert cache.read("source") is None
+
+
+def test_persisted_backoff_is_an_absolute_floor_across_manual_refresh_and_restart(tmp_path):
+    clock = [1000.0]
+    transport = _SequenceTransport(_ok(), FeedTransportError("offline"))
+    cache = FeedCacheStore(tmp_path)
+    spec = FeedSourceSpec("source", "https://example.test/feed", "source")
+    source = FeedSource(spec, transport=transport, cache=cache, now=lambda: clock[0])
+    good = source.refresh()
+    clock[0] = 1010.0
+    failed = source.refresh()
+    assert failed.snapshot == good.snapshot
+    floor = failed.health.backoff_until
+    assert floor is not None and floor > clock[0]
+    replacement_transport = _SequenceTransport(_ok())
+    restarted = FeedSource(spec, transport=replacement_transport, cache=cache, now=lambda: clock[0])
+    clock[0] = floor - 0.001
+    deferred = restarted.refresh()
+    assert deferred.health == failed.health and deferred.snapshot == good.snapshot
+    assert replacement_transport.calls == []
+    clock[0] = floor
+    restored = restarted.refresh()
+    assert len(replacement_transport.calls) == 1
+    assert restored.health.consecutive_failures == 0

@@ -44,6 +44,23 @@ shared retained two-buffer `ArtworkFadeImage` primitive, with FEEDS' same 900 ms
 artwork URI cannot flash into a raw fully opaque `Image`. Geometry-only resize/reflow still performs no source work or row
 publication.
 
+**Terminal outcomes and queued intent:** the family owner publishes a failed cache, refresh, artwork, worker submission
+or GUI dispatch as a terminal outcome, retaining last-good stories/local artwork and provider health. Infrastructure failure
+never becomes a fabricated successful refresh or persisted provider backoff. Cache failure still answers NEWS cache admission
+and family startup; optional artwork failure settles that attempt without pulling healthy text acquisition earlier.
+Cancellation retains provider health and cannot publish a canceled generation. Each completion is source/token fenced;
+duplicate or late callbacks cannot close a newer transport/bundle or release its gate claim. Consumer exceptions are loud
+and isolated so other leases and terminal accounting still complete. Dispatch recovery uses the canonical GUI owner once;
+if no legal dispatcher remains, the gate closes and retirement owns cleanup, with no publication/transition callback on IO.
+
+Busy starts at accepted manual intent, including family/gate/backoff queue time. NEWS stages every selected publisher's
+intent before admission; settlement includes queued intent even when no usable stories exist. A source's text-plus-artwork
+bundle remains owned while its artwork follow-on is gate-deferred or already in flight, including reentrant NEWS artwork
+share changes. The 2.5-second inter-source cooldown starts only when that bundle actually finishes. Removing the last active
+source lease cancels its deferred gate waiter and rechecks the remaining startup participants. Manual intent bypasses ordinary
+freshness but never the persisted provider floor; `FeedSource.refresh()` exposes no bypass flag. Deferral by that floor logs
+one attributed event per accepted manual request, with no deadline polling log.
+
 ## Transport
 
 - HTTP/S only for feed documents; malformed/non-network endpoints are rejected before I/O.

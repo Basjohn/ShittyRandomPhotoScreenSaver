@@ -74,12 +74,13 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
+| planned Shockwave Grid / Neon Lake Basin replacement and terrain editor | `Current_Plan.md` §2A V4A; `Docs/Future_Work/Additional_Future_Transitions_Package.zip` |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | active 3D scene foundation plan / live slices | `Current_Plan.md` |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |
-| current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |
+| FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | Guided Setup / Quick Start / Settings Arrange | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |

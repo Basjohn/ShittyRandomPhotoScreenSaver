@@ -289,7 +289,7 @@ def test_site_address_resolves_once_then_refreshes_the_feed_with_one_conditional
 
     web.calls.clear()
     web.routes["https://site.test/feed/"] = FeedHttpResponse("not_modified", b"", "https://site.test/feed/")
-    second = source.refresh(force=True)
+    second = source.refresh()
     assert second.status == "not_modified"
     assert second.snapshot == first.snapshot
     # Steady state is exactly today's cost: one conditional request to the
@@ -311,7 +311,7 @@ def test_moved_feed_is_rediscovered_and_old_validators_stay_with_the_old_url(tmp
     web.routes["https://site.test"] = _html(
         "https://site.test/", _page('<link rel="alternate" type="application/atom+xml" href="/atom.xml">'))
     web.routes["https://site.test/atom.xml"] = _feed("https://site.test/atom.xml", MOVED_RSS, etag='"new"')
-    moved = source.refresh(force=True)
+    moved = source.refresh()
     assert moved.status == "available" and moved.changed is True
     assert moved.snapshot.document.items[0].title == "Story from the new feed"
     assert web.urls == ["https://site.test/feed/", "https://site.test", "https://site.test/atom.xml"]
@@ -331,7 +331,7 @@ def test_transient_failure_of_a_resolved_feed_keeps_last_good_without_rediscover
 
     web.calls.clear()
     web.routes["https://site.test/feed/"] = FeedTransportError("HTTP 503", status_code=503)
-    failed = source.refresh(force=True)
+    failed = source.refresh()
     assert failed.status == "stale_cache"
     assert failed.snapshot == first.snapshot
     assert web.urls == ["https://site.test/feed/"]
@@ -351,7 +351,7 @@ def test_dead_direct_feed_is_found_again_from_its_own_site_link(tmp_path: Path):
     web.routes["https://site.test/"] = _html(
         "https://site.test/", _page('<link rel="alternate" type="application/rss+xml" href="/feed/">'))
     web.routes["https://site.test/feed/"] = _feed("https://site.test/feed/", MOVED_RSS)
-    moved = source.refresh(force=True)
+    moved = source.refresh()
     assert moved.status == "available"
     # The feed's own <link> (its site) is tried before any path guessing.
     assert web.urls == ["https://site.test/old.rss", "https://site.test/", "https://site.test/feed/"]
@@ -367,7 +367,7 @@ def test_dead_feed_on_a_bot_walled_site_is_guessed_at_the_site_not_under_the_fee
     web.routes["https://site.test/feed"] = FeedTransportError("HTTP 404", status_code=404)
     web.routes["https://site.test/"] = FeedTransportError("HTTP 405", status_code=405)
     web.routes["https://site.test/rss"] = _feed("https://site.test/rss", MOVED_RSS)
-    moved = source.refresh(force=True)
+    moved = source.refresh()
     # A dead feed is not a directory: ``/feed/feed`` style guesses would spend
     # the whole fetch budget before the site's own conventional paths.
     assert moved.status == "available"
