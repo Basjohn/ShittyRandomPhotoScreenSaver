@@ -542,7 +542,9 @@ def test_dead_experimental_controls_are_retired_and_sustained_growth_is_live() -
         assert name not in config
         assert name not in defaults
         assert name not in model
-    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    _SPHERE_SETTING_KEYS = require_mode_settings("sphere").keys()
 
     # Live behavior is proved by the runtime tests below; Settings copy is not an oracle.
     assert {"sphere_size_response", "sphere_base_rotation_speed"} <= set(_SPHERE_SETTING_KEYS)
@@ -919,10 +921,16 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
     binding = (ROOT / "ui/tabs/media/sphere_settings_binding.py").read_text(encoding="utf-8")
     config_applier = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
 
+    from widgets.spotify_visualizer.config_applier import _SPHERE_PARAMETER_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    spec = require_mode_settings("sphere")
     for key in ("sphere_fill_color", "sphere_edge_color", "sphere_shadow_enabled"):
-        assert f'"{key}"' in config_applier
+        assert key in _SPHERE_PARAMETER_KEYS and spec.control(key).logical
     assert "ColorSwatchButton" in builder
-    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    _SPHERE_SETTING_KEYS = require_mode_settings("sphere").keys()
 
     assert {
         "sphere_finish",
@@ -934,11 +942,10 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
         "sphere_shadow_distance",
         "sphere_shadow_size",
     ):
-        assert key in builder
-        assert key in binding
-        assert f'"{key}"' in config_applier
-    assert "apply_shadow_dependency" in builder
-    assert "sphere_finish" in binding and "sphere_fill_color" in binding and "sphere_edge_color" in binding
+        assert key in _SPHERE_PARAMETER_KEYS
+        assert spec.control(key).enabled_when == ("sphere_shadow_enabled", True)
+    assert "sphere_finish" in spec.keys()
+    assert spec.control("sphere_fill_color").logical and spec.control("sphere_edge_color").logical
     for rejected in (
         "sphere_rainbow_ghosting",
         "_GHOST_FRAGMENT_SOURCE",
@@ -961,25 +968,27 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
 
 def test_sphere_builder_uses_shared_circular_toggle_style_and_real_advanced_buckets() -> None:
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    assert 'control.setProperty("circleIndicator", True)' in builder
-    assert 'scaffold.advanced_layout' in builder
-    for bucket_key in (
-        'bucket_key="appearance"',
-        'bucket_key="particle_flow"',
-        'bucket_key="reaction"',
-        'bucket_key="rotation"',
-        'bucket_key="effects"',
-    ):
-        assert bucket_key in builder
-    assert 'bucket_key="inactive_compatibility"' not in builder
-    assert "apply_flow_dependency" in builder
-    assert "RecommendedMarkSlider" in builder
-    assert "_RECOMMENDED_SLIDER_VALUES" in builder
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    spec = require_mode_settings("sphere")
+    shared = (ROOT / "ui/tabs/media/spec_mode_builder.py").read_text(encoding="utf-8")
+    assert 'widget.setProperty("circleIndicator", True)' in shared
+    assert [(bucket.key, bucket.advanced) for bucket in spec.buckets] == [
+        ("analysis", False), ("appearance", False), ("particle_flow", False),
+        ("reaction", True), ("rotation", True), ("effects", True),
+    ]
+    assert spec.control("sphere_particle_amount").enabled_when == ("sphere_fade_incoming_blocks", True)
+    assert "RecommendedMarkSlider" in shared
+    assert spec.control("sphere_gloss").recommended == 0.75
+    assert spec.control("sphere_specular").recommended == 1.08
+
 
 def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
     runtime_source = (ROOT / "widgets/spotify_visualizer/sphere_frame_runtime.py").read_text(encoding="utf-8")
-    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    _SPHERE_SETTING_KEYS = require_mode_settings("sphere").keys()
 
     assert "sphere_light_tracer_enabled" in runtime_source
     assert "sphere_light_tracer_enabled" in _SPHERE_SETTING_KEYS
@@ -1048,7 +1057,9 @@ def test_fragment_interpolation_is_visual_only_and_settings_owned() -> None:
     assert raw_hit is not None
     assert max(raw_hit.section_drives) > first_peak
 
-    from ui.tabs.media.sphere_settings_binding import _SPHERE_SETTING_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    _SPHERE_SETTING_KEYS = require_mode_settings("sphere").keys()
 
     assert "sphere_fragment_interpolation_enabled" in _SPHERE_SETTING_KEYS
 
@@ -1385,7 +1396,9 @@ def test_particle_outtake_is_optional() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"], bool)
-    assert "sphere_particle_outtake_enabled" in builder
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    assert require_mode_settings("sphere").control("sphere_particle_outtake_enabled").logical
 
 
 def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None:
@@ -1509,7 +1522,11 @@ def test_finish_preset_is_ui_only_and_never_reaches_voxel_renderer() -> None:
     config = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert "sphere_finish" not in renderer
-    assert '"sphere_finish"' not in config.split("_SPHERE_PARAMETER_KEYS = (", 1)[1].split(")", 1)[0]
+    from widgets.spotify_visualizer.config_applier import _SPHERE_PARAMETER_KEYS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    assert "sphere_finish" not in _SPHERE_PARAMETER_KEYS
+    assert require_mode_settings("sphere").control("sphere_finish").authoring
     assert "_FINISH_PRESETS" in builder
     assert "tab.sphere_gloss.setValue" in builder
     assert "tab.sphere_specular.setValue" in builder
@@ -1832,15 +1849,16 @@ def test_sphere_energy_floor_persistence() -> None:
     snapshot = build_defaults_snapshot()
     assert snapshot == DEFAULT_SETTINGS
 
-    required_sources = (
-        "core/settings/models/_spotify_visualizer.py",
-        "widgets/spotify_visualizer/config_applier.py",
-        "ui/tabs/media/sphere_builder.py",
-        "ui/tabs/media/sphere_settings_binding.py",
-    )
-    for relative_path in required_sources:
-        source = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert 'sphere_fragment_energy_floor' in source, relative_path
-        assert 'sphere_particle_energy_floor' in source, relative_path
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from widgets.spotify_visualizer.config_applier import _SPHERE_PARAMETER_KEYS
 
-
+    spec = require_mode_settings("sphere")
+    model = SpotifyVisualizerSettings.from_mapping({"sphere_fragment_energy_floor": 0.237,
+                                                    "sphere_particle_energy_floor": 0.641},
+                                                   apply_preset_overlay=False)
+    assert model.sphere_fragment_energy_floor == 0.237
+    assert model.sphere_particle_energy_floor == 0.641
+    for key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor"):
+        assert spec.control(key).logical and key in _SPHERE_PARAMETER_KEYS
+        assert f"widgets.spotify_visualizer.{key}" in model.to_dict()

@@ -35,25 +35,15 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | V4 next
+## 2A. Visualizer spec migration | V4A next
 
 One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
 unchanged **except for the explicitly authorized Shockwave Grid replacement in V4A**.
 `core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries for modes that
-still use them. Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum and Spectrum are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
+still use them. Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
 not substitute for completing its spec migration **together with** the Neon Lake Basin rework. No further Oscilloscope
 acceptance gate.
 
-- [ ] **V4 — Voxel Sphere.** Preserve analysis-only DSP, accepted motion and CUSTOM orbit/geometry; exercise serialization,
-  conditional controls and same activation/config projection with mode-specific focused tests.
-  Keep its paired Frequency Zones editor, Finish-to-Gloss/Specular authoring, RGBA alpha sliders and recommended marks.
-  Dependencies disable visible children while retaining latent values; do not replace them with hidden `when` rows.
-  Frame-snapshotted styling/response continues through the configure-owned immutable Sphere bundle; mirror/backdrop,
-  detail and bodyless turn/tilt retain presentation ownership. Finish is persisted authoring metadata with no renderer
-  attribute. Analysis notches reach BeatEngine without Spectrum shaping; Analysis Bands never changes voxel topology.
-  Retire promoted model/build/serializer/clamp/applier duplication together, keeping existing material/fragment and raw
-  technical-profile migration. Prove silent real-body round-trip, disabled-value retention, single-owner configuration,
-  preset/orbit exclusions, dormancy and exact frozen-recording output before checkpointing.
 - [ ] **V4A — Shockwave Grid: finish spec migration AND completely rework into Neon Lake Basin in the same slice.**
   This is one coordinated Settings/spec + logical/reaction + renderer + authoring replacement, **not** a spec-only pass
   followed by a postponed visual upgrade. Use `Docs/Future_Work/Additional_Future_Transitions_Package.zip`, including its
@@ -101,6 +91,13 @@ acceptance gate.
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
   authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
+  Preserve the one-key Swirl composite, versioned gradient-direction input migration, live ghost conditions and external
+  Rainbow/Bar Appearance/Technical owners. Declare current UI/storage versus runtime range differences explicitly:
+  stream reactivity and pulse controls have tighter runtime caps, stream-speed minimum differs, and contraction admits
+  a wider runtime range than its slider. Preserve current hydration quantization and the actual simulation/render
+  consumers of ghost enablement, with one canonical authored intent. Retire promoted model/binding/applier tables
+  atomically; do not invent controls in the currently empty Layout bucket or introduce Spectrum shaping. Prove real-body
+  round-trip, Swirl/gradient migration, one application per consumer, dormancy and fixed-clip full-output equality.
 
 Each slice ends in focused proof, refreshed owner docs and a checkpoint before starting the next mode. New modes use the
 spec from their first implementation. Graphics implementation follows §4 after this migration and bounded side work;

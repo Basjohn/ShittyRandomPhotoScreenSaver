@@ -22,6 +22,11 @@ creating private logical or presentation attributes under its authored mode key.
 owns the aliases: source shaping reaches BeatEngine, while ordinary ghost aliases reach the existing
 shared logical and presentation consumers. It introduces no new runtime owner.
 
+``authoring=True`` choices persist convenience metadata without installing a runtime attribute.
+``enabled_when`` keeps dependent controls visible and preserves their values while disabling them;
+``when`` hides their rows. Runtime aliases and strict admission remain configuration-only. Immutable
+specs cache their derived control/consumer tuples; frame extraction does not rebuild membership.
+
 Adding a setting to a spec'd mode is its default plus one control here; the renderer reads it by key.
 A control may also be shown only while another control holds a value (``when``), so a group that only
 matters while its toggle is on hides with it.
@@ -30,12 +35,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from importlib import import_module
 import math
 from types import MappingProxyType
 from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
 
 
 def _finite(value: object) -> float | None:
@@ -91,6 +98,9 @@ class Slider:
     truncate: bool = False
     admission_high: float | None = None
     bottom_padding: int = 0
+    enabled_when: When = ()
+    recommended: float | None = None
+    runtime_strict: bool = False
 
     def position(self, value: object) -> int:
         number = float(value) * self.scale
@@ -106,6 +116,17 @@ class Slider:
 
     def coerce(self, value: object) -> float | int:
         return int(value) if self.integer else float(value)
+
+    def admit_runtime(self, value: object, default: object) -> float | int:
+        if self.runtime_strict:
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{self.key} must be numeric") from exc
+            if not math.isfinite(number):
+                raise ValueError(f"{self.key} must be finite")
+            value = number
+        return self.admit(value, default)
 
     def text(self, position: int) -> str:
         """The value label for a slider position."""
@@ -133,6 +154,8 @@ class Toggle:
     runtime_attr: str = ""
     read: str = ""
     input_aliases: tuple[str, ...] = ()
+    enabled_when: When = ()
+    runtime_bool: bool = False
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -147,6 +170,9 @@ class Toggle:
 
     def coerce(self, value: object) -> bool:
         return bool(value)
+
+    def admit_runtime(self, value: object, default: object) -> bool:
+        return bool(value) if self.runtime_bool else self.admit(value, default)
 
 
 @dataclass(frozen=True)
@@ -169,17 +195,45 @@ class Choice:
     runtime_values: tuple[object, ...] = ()
     read: str = ""
     input_aliases: tuple[str, ...] = ()
+    enabled_when: When = ()
+    authoring: bool = False
+    runtime_strict: bool = False
+    ingress_strict: bool = False
+    normalizer: str = ""
+    uppercase: bool = False
+
+    def _normalize(self, value: object) -> object:
+        if self.normalizer:
+            module, _, name = self.normalizer.partition(":")
+            return getattr(import_module(module), name)(value)
+        return str(value).strip().upper() if self.uppercase else value
 
     def admit(self, value: object, default: object) -> str | int:
+        try:
+            value = self._normalize(value)
+        except ValueError:
+            if self.ingress_strict:
+                raise
+            return str(default)
         if self.indexed:
             number = None if isinstance(value, bool) else _finite(value)
             if number is None or number != int(number):
                 return int(default)
             return max(0, min(len(self.choices) - 1, int(number)))
-        return value if isinstance(value, str) and value in self.choices else str(default)
+        if isinstance(value, str) and value in self.choices:
+            return value
+        if self.ingress_strict:
+            raise ValueError(f"invalid {self.key} {value!r}")
+        return str(default)
 
     def coerce(self, value: object) -> str | int:
         return int(value) if self.indexed else str(value)
+
+    def admit_runtime(self, value: object, default: object) -> str | int:
+        value = self._normalize(value)
+        if self.runtime_strict and value not in self.choices:
+            raise ValueError(f"invalid {self.key} {value!r}")
+        return self.admit(value, default)
 
 
 @dataclass(frozen=True)
@@ -197,6 +251,7 @@ class Colour:
     source: bool = False
     availability: tuple[str, str] = ()
     swatch_row: bool = True
+    runtime_strict: bool = False
 
     def admit(self, value: object, default: object) -> list[int]:
         channels = list(value) if isinstance(value, (list, tuple)) else []
@@ -209,6 +264,15 @@ class Colour:
 
     def coerce(self, value: object) -> list:
         return list(value)
+
+    def admit_runtime(self, value: object, default: object) -> list[int] | tuple[int, ...]:
+        if self.runtime_strict:
+            if not isinstance(value, (list, tuple)) or len(value) < 3:
+                raise ValueError(f"{self.key} must be an RGB/RGBA sequence")
+            if any(_finite(channel) is None for channel in value[:4]):
+                raise ValueError(f"{self.key} must contain numeric RGB/RGBA channels")
+            return tuple(self.admit(value, default))
+        return self.admit(value, default)
 
 
 @dataclass(frozen=True)
@@ -245,7 +309,7 @@ class ModeSettings:
     def prefix(self) -> str:
         return self.attr_prefix or self.mode_id
 
-    @property
+    @cached_property
     def controls(self) -> tuple[Control, ...]:
         return tuple(entry for entry in self.entries if not isinstance(entry, Custom))
 
@@ -265,12 +329,33 @@ class ModeSettings:
         raise KeyError(f"{self.mode_id} declares no bucket {key!r}")
 
     def presentation_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if not control.logical and not control.source)
+        return self._presentation_controls
+
+    @cached_property
+    def _presentation_controls(self) -> tuple[Control, ...]:
+        return tuple(control for control in self.controls if not control.logical and not control.source
+                     and not getattr(control, "authoring", False))
 
     def logical_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if control.logical and not control.source)
+        return self._logical_controls
+
+    @cached_property
+    def _logical_controls(self) -> tuple[Control, ...]:
+        return tuple(control for control in self.controls if control.logical and not control.source
+                     and not getattr(control, "authoring", False))
+
+    def authoring_controls(self) -> tuple[Control, ...]:
+        return self._authoring_controls
+
+    @cached_property
+    def _authoring_controls(self) -> tuple[Control, ...]:
+        return tuple(control for control in self.controls if getattr(control, "authoring", False))
 
     def source_controls(self) -> tuple[Control, ...]:
+        return self._source_controls
+
+    @cached_property
+    def _source_controls(self) -> tuple[Control, ...]:
         return tuple(control for control in self.controls if control.source)
 
 
@@ -717,8 +802,129 @@ _SPECTRUM = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM)
+# ---- Voxel Sphere ------------------------------------------------------------------------------
+
+# Styling and response belong to Sphere's configure-owned frozen logical bundle. Finish is authoring only.
+_SPHERE = ModeSettings(
+    "sphere",
+    buckets=(
+        Bucket("analysis", "Frequency Zones", "Sphere's own bass, mid and treble boundaries for spatial response and source events."),
+        Bucket("appearance", "Appearance", "Literal voxel colours, finish and fixed-light presentation. These are Sphere-local presentation controls and do not author audio response."),
+        Bucket("particle_flow", "Particle Flow", "Detached voxel intake/outtake options. Sub-options keep their authored values when the master Particle Flow switch is off."),
+        Bucket("reaction", "Reactivity", "Music-driven geometry response. These controls affect Sphere only; they do not retune shared visualizer analysis.", advanced=True),
+        Bucket("rotation", "Rotation", "Base Rotation is the continuous floor; Velocity Reaction adds music-driven speed without changing phase or direction.", advanced=True),
+        Bucket("effects", "Effects", "Optional Sphere-only render effects. None may become a shared visualizer setting family; Sphere keeps these controls mode-owned.", advanced=True),
+    ),
+    entries=(
+        Custom("analysis", "analysis", "ui.tabs.media.sphere_builder:build_sphere_analysis",
+               "ui.tabs.media.sphere_settings_binding:load_sphere_analysis",
+               "ui.tabs.media.sphere_settings_binding:collect_sphere_analysis",
+               keys=("sphere_analysis_notch_positions",)),
+        Choice("sphere_finish", "", SPHERE_FINISH_VALUES, authoring=True, ingress_strict=True,
+               normalizer="core.settings.visualizer_settings_contract:normalize_sphere_finish"),
+        Custom("finish", "appearance", "ui.tabs.media.sphere_builder:build_sphere_finish",
+               "ui.tabs.media.sphere_settings_binding:load_sphere_finish",
+               "ui.tabs.media.sphere_settings_binding:collect_sphere_finish"),
+        Colour("sphere_fill_color", 'Fill Color:', 'Choose Sphere Fill Color',
+               'Literal voxel base RGBA. No finish preset or per-cube pseudo-material multiplier changes this colour.', logical=True, runtime_strict=True, swatch_row=False),
+        Custom("fill_colour", "appearance", "ui.tabs.media.sphere_builder:build_sphere_fill_colour",
+               "ui.tabs.media.sphere_settings_binding:load_sphere_fill_colour",
+               "ui.tabs.media.sphere_settings_binding:collect_sphere_fill_colour"),
+        Colour("sphere_edge_color", 'Edge Color:', 'Choose Sphere Edge Color',
+               'Independent cube bevel/ink RGBA. Its alpha is authored separately from Fill Color alpha.', logical=True, runtime_strict=True, swatch_row=False),
+        Custom("edge_colour", "appearance", "ui.tabs.media.sphere_builder:build_sphere_edge_colour",
+               "ui.tabs.media.sphere_settings_binding:load_sphere_edge_colour",
+               "ui.tabs.media.sphere_settings_binding:collect_sphere_edge_colour"),
+        Slider('sphere_edge_weight', 'Edge Weight:', 0.25, 1.75,
+               'Controls how much of each existing cube face is treated as the authored Edge Color. 1.0 is the accepted current edge width; lower values thin it and higher values thicken it without adding geometry or another draw.', bucket='appearance', logical=True, runtime_strict=True, suffix='x', recommended=1.0),
+        Slider('sphere_voxel_size_variation', 'Voxel Size Variation:', 0.0, 1.0,
+               'Exposes the existing deterministic per-voxel size variation. 0.35 is the accepted current appearance; zero makes every cube uniform and higher values increase the existing variation without changing voxel count or audio response.', bucket='appearance', logical=True, runtime_strict=True, recommended=0.35),
+        Toggle('sphere_taste_the_rainbow_enabled', 'Taste The Rainbow:', 'Enable Sphere-local voxel rainbow',
+               "Sphere-only presentation effect. It uses the voxel renderer's own colour field and does not opt Sphere into the shared Rainbow settings family.", bucket='appearance', logical=True, runtime_bool=True),
+        Toggle('sphere_taste_the_rainbow_surfaces', 'Rainbow Surfaces:', 'Apply rainbow to voxel surfaces',
+               'Replaces Fill RGB with one coherent moving partial-spectrum gradient across blocks while preserving the authored Fill alpha.', bucket='appearance', logical=True, runtime_bool=True, enabled_when=('sphere_taste_the_rainbow_enabled', True)),
+        Toggle('sphere_taste_the_rainbow_edges', 'Rainbow Edges:', 'Apply rainbow to voxel edges',
+               'Replaces Edge RGB with the same coherent moving partial-spectrum gradient while preserving the independently authored Edge alpha.', bucket='appearance', logical=True, runtime_bool=True, enabled_when=('sphere_taste_the_rainbow_enabled', True)),
+        Slider('sphere_taste_the_rainbow_speed', 'Rainbow Speed:', 0.0, 1.0,
+               'How fast the voxel colour field travels. Zero holds its colours still.', bucket='appearance', logical=True, runtime_strict=True, scale=1000, decimals=3, suffix=' cycles/s', enabled_when=('sphere_taste_the_rainbow_enabled', True)),
+        Slider('sphere_taste_the_rainbow_extent', 'Rainbow Extent:', 0.0, 1.0,
+               'How much of the colour wheel spans the voxel field; zero gives one uniform hue.', bucket='appearance', logical=True, runtime_strict=True, enabled_when=('sphere_taste_the_rainbow_enabled', True)),
+        Choice("sphere_light_direction", "Light Direction:", ("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+               bucket="appearance", logical=True, compact=False, uppercase=True, runtime_strict=True, ingress_strict=True),
+        Slider('sphere_perspective_strength', 'Perspective Strength:', 0.0, 1.0,
+               'Controls only the existing voxel camera perspective. 1.0 is the accepted current projection; lower values flatten toward orthographic. The range cannot exceed the current golden perspective.', bucket='appearance', logical=True, runtime_strict=True, suffix='x', recommended=1.0),
+        Slider('sphere_gloss', 'Gloss:', 0.0, 1.0,
+               'Controls per-face highlight width/smoothness. It does not select or brighten a special cube.', bucket='appearance', logical=True, runtime_strict=True, recommended=0.75),
+        Slider('sphere_specular', 'Specular:', 0.0, 2.0,
+               'Controls per-face reflected sheen strength. Zero is matte; high values increase face shine without a shell-space glow lobe.', bucket='appearance', logical=True, runtime_strict=True, recommended=1.08),
+        Slider('sphere_mirror', 'Mirror Cubes:', 0.0, 1.0,
+               "Gives the cubes' faces (not their edges) a polished mirror surface reflecting the wallpaper, sharper with Gloss; zero leaves them plain. Needs a 3D Detail tier with reflections.", bucket='appearance', logical=False, runtime_strict=True),
+        Custom("finish_hooks", "appearance", "ui.tabs.media.sphere_builder:bind_sphere_finish_axes"),
+        Toggle('sphere_fade_incoming_blocks', 'Particle Flow:', 'Enable detached voxel intake/outtake',
+               'Master detached-voxel presentation. In Intake mode selected shell voxels begin outside and return to their canonical slots; Particle Outtake reverses newly launched cohorts so source voxels leave/fade while replacements fade into the canonical shell.', bucket='particle_flow', logical=True, runtime_bool=True),
+        Toggle('sphere_incoming_density_response_enabled', 'Particle Density Response:', 'Scale detached voxel count with live energy',
+               'Keeps all four stable ingress quadrants participating, but quiet passages launch a smaller subset and strong passages approach the full 46/46/46/70 population. Playing-state silence still admits no new detached voxels even when this option is off.', bucket='particle_flow', logical=True, runtime_bool=True, enabled_when=('sphere_fade_incoming_blocks', True)),
+        Toggle('sphere_incoming_transient_velocity_enabled', 'Particle Velocity:', 'Use transient-responsive detached-voxel travel speed',
+               'Uses real cohort travel progress. Speed is captured from Sphere-local acoustic contrast at launch; in-flight cohorts do not globally chase later audio.', bucket='particle_flow', logical=True, runtime_bool=True, enabled_when=('sphere_fade_incoming_blocks', True)),
+        Toggle('sphere_particle_outtake_enabled', 'Particle Outtake:', 'Reverse detached voxel flow outward',
+               'New qualified cohorts shed stable shell voxels outward and fade them gently while replacement voxels fade into the canonical shell positions. Direction is captured at launch, so toggling this never reverses a cohort already in flight.', bucket='particle_flow', logical=True, runtime_bool=True, enabled_when=('sphere_fade_incoming_blocks', True)),
+        Slider('sphere_particle_amount', 'Particle Amount:', 0.25, 1.75,
+               'Scales the number of voxels selected after a qualified cohort has already been admitted. It never changes onset thresholds, event qualification, acoustic impact or particle velocity.', bucket='particle_flow', logical=True, runtime_strict=True, suffix='x', recommended=1.0, enabled_when=('sphere_fade_incoming_blocks', True)),
+        Slider('sphere_particle_energy_floor', 'Particle Energy Floor:', 0.0, 1.0,
+               "How loud the passage must be, within the track's own range, for a qualified event to launch particles: 0 its quietest passages, 1 its loudest. Raise it to keep particles for the louder moments. Real silence never launches particles.", bucket='particle_flow', logical=True, runtime_strict=True, scale=1000, decimals=3, enabled_when=('sphere_fade_incoming_blocks', True)),
+        Toggle('sphere_fragment_interpolation_enabled', 'Fragment Interpolation:', 'Smooth fragment travel (visual only)',
+               'Keeps audio/onset admission instantaneous but interpolates detached cube displacement over a few rendered frames. It does not smooth the audio signal, reduce packet strength, blur frames, or add motion blur.', bucket='reaction', logical=True, runtime_bool=True),
+        Slider('sphere_fragment_energy_floor', 'Fragment Energy Floor:', 0.0, 1.0,
+               "How loud the passage must be, within the track's own range, for a qualified event to fragment the sphere: 0 its quietest passages, 1 its loudest. Raise it to keep fragmentation for the louder moments. Does not change particles or the tracer.", bucket='reaction', logical=True, runtime_strict=True, scale=1000, decimals=3),
+        Slider('sphere_fragment_strength', 'Fragment Strength:', 0.0, 9.0,
+               'Single authority for earned local sectional displacement. Existing settings migrate exactly from the former Deformation × Block Reactivity product.', bucket='reaction', logical=True, runtime_strict=True, recommended=3.6),
+        Slider('sphere_particle_distance', 'Particle Distance:', 0.0, 4.5,
+               'Controls detached intake/outtake travel distance only. It no longer changes local fragment strength.', bucket='reaction', logical=True, runtime_strict=True, recommended=2.25),
+        Slider('sphere_size_response', 'Size Response:', 0.0, 2.54,
+               'Controls staged slow sustained passage-weight growth without beat-pulsing or flicker. The range stops where the existing growth equation saturates.', bucket='reaction', logical=True, runtime_strict=True, recommended=2.25),
+        Slider('sphere_vocal_response', 'Vocal Response:', 0.0, 1.35,
+               'Controls the dominant vocal/mid-high sectional event voice. The range ends at the existing effective maximum rather than exposing a dead tail.', bucket='reaction', logical=True, runtime_strict=True, recommended=1.35),
+        Choice("sphere_spin_direction", "Spin Direction:", ("Default", "Reverse", "Y Clockwise", "Y Counterclockwise"),
+               "Choose the shell rotation axis/direction. Default keeps the original compound rotation; the velocity floor remains continuous.",
+               bucket="rotation", logical=True, compact=False, runtime_strict=True),
+        Slider('sphere_base_rotation_speed', 'Base Rotation:', 0.0, 0.5,
+               'Continuous authored rotation floor/idle velocity.', bucket='rotation', logical=True, runtime_strict=True, suffix='x', recommended=0.02),
+        Slider('sphere_rotation_speed', 'Velocity Reaction:', 0.0, 2.0,
+               'Additional rotation velocity driven by current articulation; phase/direction remain continuous.', bucket='rotation', logical=True, runtime_strict=True, suffix='x', recommended=0.99),
+        Toggle('sphere_shadow_enabled', 'Drop Shadow:', 'Enable projected voxel drop shadow',
+               'Draws a Sphere-local flat-colour projection of the same rotating/deforming voxel instances. It follows detached particles without shadow maps, mutual lighting, an FBO blur, or another cadence.', bucket='effects', logical=True, runtime_bool=True),
+        Slider('sphere_shadow_opacity', 'Shadow Opacity:', 0.0, 2.0,
+               'Scales the inherited shadow-colour alpha. 1.00x preserves the previous Sphere shadow intensity curve; lower values soften it and values above 1.00x deliberately strengthen it.', bucket='effects', logical=True, runtime_strict=True, suffix='x', recommended=1.0, enabled_when=('sphere_shadow_enabled', True)),
+        Slider('sphere_shadow_softness', 'Shadow Softness:', 0.0, 0.45,
+               'Controls one cheap expanded feather layer around the projected voxel silhouette. 0 disables that extra layer; 0.18 is the suggested starting point without an offscreen blur pass.', bucket='effects', logical=True, runtime_strict=True, recommended=0.18, enabled_when=('sphere_shadow_enabled', True)),
+        Slider('sphere_shadow_distance', 'Shadow Distance:', 0.0, 2.5,
+               'Scales the existing light-opposite Sphere shadow offset. 1.00x preserves the previous distance response, including its small whole-body pulse accent.', bucket='effects', logical=True, runtime_strict=True, suffix='x', recommended=1.0, enabled_when=('sphere_shadow_enabled', True)),
+        Slider('sphere_shadow_size', 'Shadow Size:', 0.6, 1.6,
+               'Scales the projected silhouette around the Sphere centre. 1.00x follows the actual voxel projection; detached particle positions remain represented rather than collapsing back to a circular proxy.', bucket='effects', logical=True, runtime_strict=True, suffix='x', recommended=1.0, enabled_when=('sphere_shadow_enabled', True)),
+        Toggle('sphere_depth_shading_enabled', 'Depth Shading:', 'Darken rear voxels to reinforce sphere depth',
+               'Cheap Sphere-only luminance cue derived from the existing transformed voxel depth. It does not cast shadows, sample neighbouring voxels, desaturate colours, or add a render pass.', bucket='effects', logical=True, runtime_bool=True),
+        Slider('sphere_depth_shading_strength', 'Depth Strength:', 0.0, 0.5,
+               'Maximum rear-hemisphere darkening. 0.20 is the suggested restrained value; the front remains unchanged and authored/Rainbow colour hue and alpha are preserved.', bucket='effects', logical=True, runtime_strict=True, recommended=0.2, enabled_when=('sphere_depth_shading_enabled', True)),
+        Toggle('sphere_cel_shading', 'Toon Shading:', 'Enable hard toon bands + inked cube edges',
+               'Uses deliberately hard light bands and strong edge ink. It changes presentation only, never voxel motion or audio reactivity.', bucket='effects', logical=True, runtime_bool=True),
+        Toggle('sphere_light_tracer_enabled', 'Light Tracer:', 'Enable music-driven light snake',
+               'The sole moving bright-block effect. Each accepted audio onset queues one bounded step; travel is speed-capped and settles before fading. Gloss/Specular are per-face finish controls and cannot create a competing bright block.', bucket='effects', logical=True, runtime_bool=True),
+        Colour("sphere_tracer_color", "Tracer Color:", "Choose Sphere Tracer Color",
+               'Styles the existing causal tracer only. The default warm cream exactly matches the accepted hard-coded tracer colour; alpha may soften its blend without changing tracer timing or admission.', logical=True, runtime_strict=True, swatch_row=False),
+        Custom("tracer_colour", "effects", "ui.tabs.media.sphere_builder:build_sphere_tracer_colour",
+               "ui.tabs.media.sphere_settings_binding:load_sphere_tracer_colour",
+               "ui.tabs.media.sphere_settings_binding:collect_sphere_tracer_colour"),
+        Toggle('sphere_allow_overflow', 'Scene Overflow:', 'Allow blocks outside the visualizer bounds',
+               'Sphere-only render capability. Other visualizer modes remain on the existing clipped path.', bucket='effects', logical=True, runtime_bool=True),
+        Slider("sphere_turn", "", -1.0, 1.0, runtime_strict=True),
+        Slider("sphere_tilt", "", 0.0, 1.0, runtime_strict=True),
+    ),
+)
+
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
+_CONTROLS = tuple(control for spec in _SPECS for control in spec.controls)
 
 
 def iter_mode_settings() -> tuple[ModeSettings, ...]:
@@ -738,7 +944,7 @@ def require_mode_settings(mode_id: str) -> ModeSettings:
 
 def spec_controls() -> tuple[Control, ...]:
     """Every spec'd mode's controls (the settings model gains a field for each)."""
-    return tuple(control for spec in _SPECS for control in spec.controls)
+    return _CONTROLS
 
 
 def spec_control(key: str) -> Control | None:

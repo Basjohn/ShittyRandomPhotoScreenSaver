@@ -27,8 +27,9 @@ The five September 10 incidents about silent intakes, density, velocity and corn
 
 `config_applier.py` owns configure-time Sphere parameters; `sphere_capture.py` supplies immutable frame input to
 `SphereFrameRuntime`, and `sphere_voxel.py` consumes its result. The following field suffixes use the `sphere_` prefix.
-This is a consumer inventory, not another settings/default catalog; the canonical model/descriptor and Settings binding
-remain authoritative for persisted fields and ranges.
+This is a consumer inventory, not another settings/default catalog. Canonical defaults own values, the mode's declaration
+in `visualizer_mode_settings.py` owns scalar types/ranges/consumers, and the descriptor owns capabilities. The lazy spec body
+retains Custom Frequency Zones, Finish and combined RGBA/alpha hooks; the existing input boundaries retain migration.
 
 | Consumer | Controls that reach it | Meaningful boundary |
 | --- | --- | --- |
@@ -86,6 +87,12 @@ Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphe
 ## Current Settings hygiene
 
 Sphere Custom now uses the shared themed circular checkbox styling and collapsible bucket scaffold while all persisted/runtime ownership remains Sphere-local. Recommended slider notches are presentation-only hints matching the accepted **Glass Current** baseline; they are not defaults and do not alter saved or runtime values.
+
+Dependent controls remain visible and disabled when their master is off, retaining all saved child values. Finish persists
+only authoring intent and writes Gloss/Specular through its existing convenience editor; it creates no renderer attribute.
+Scalar configuration freezes the same logical bundle once at configuration time. Invalid trusted runtime numeric, colour
+and enum values remain explicit errors; model ingress keeps its existing normalization/repair rules. Direct spec hydration
+is silent, preserves outer signal blockers and reapplies the bespoke tracer swatch/alpha dependency.
 
 The lazy Settings body exposes the descriptor-selected analysis controls as **Analysis Bands**, PCM block size,
 sensitivity, noise floor, input gain and transient clamp, with two **Frequency Zones** splits. Direct fill, edge and tracer

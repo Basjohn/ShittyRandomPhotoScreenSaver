@@ -12,13 +12,15 @@ import pytest
 
 def test_sphere_conversion_specs_are_functions_not_range_tuples():
     from core.settings.models._spotify_visualizer import (
-        _SPHERE_BUILD_SPECS, _SPHERE_SERIALIZERS,
+        _SPEC_SERIALIZERS,
     )
+    from core.settings.visualizer_mode_settings import Slider, require_mode_settings
 
-    for table in (_SPHERE_BUILD_SPECS, _SPHERE_SERIALIZERS):
-        assert table['sphere_turn'] is float
-        assert table['sphere_tilt'] is float
-        assert all(callable(converter) for converter in table.values())
+    for key in ("sphere_turn", "sphere_tilt"):
+        assert isinstance(require_mode_settings("sphere").control(key), Slider)
+        assert callable(_SPEC_SERIALIZERS[key])
+        assert isinstance(_SPEC_SERIALIZERS[key]("0.42"), float)
+    assert all(callable(converter) for converter in _SPEC_SERIALIZERS.values())
 
 
 def test_canonical_startup_ingests_sphere_view_pose_and_clamps_range():

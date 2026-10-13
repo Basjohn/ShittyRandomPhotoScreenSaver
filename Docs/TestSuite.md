@@ -470,6 +470,13 @@ source shaping and capture-style projection, independent ghost/Rainbow routes, a
 Spectrum cases in `test_visualizer_settings_plumbing.py` use the real body/editor for silent load, nested blockers,
 render buttons, conditional rows and mirrored/linear lane/notch migration rather than fake controls.
 
+`test_sphere_settings_spec.py` checks one application per actual consumer, configuration-only frozen-bundle identity,
+authoring-only Finish, malformed trusted runtime errors and strict enum ingress. Its real body checks visible disabled
+children with latent values retained, direct spec tracer hydration, precise Frequency Zones, RGBA alpha, Finish axes and
+recommended markers. Shared condition coverage proves availability cannot be overridden by an enabled condition, while
+immutable declaration membership is reused during repeated parameter extraction. Existing Sphere source/audio/orbit and
+lazy-body suites retain their production contracts; recorded equality uses frozen fixtures rather than curated art.
+
 Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
 
 Protect:
