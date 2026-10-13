@@ -29,10 +29,11 @@ def test_the_display_selection_parser():
     assert selected_monitor_numbers("NONE", 2) == frozenset()
     assert selected_monitor_numbers([2, 5], 3) == {2}                 # absent displays are ignored
     assert selected_monitor_numbers("[1, 3]", 3) == {1, 3}             # historical string form
-    for broken in ([4], [], "garbage", 7, ["x"]):
+    for broken in ("garbage", 7, ["x"], [0], [-1], [True], [1.5]):
         assert selected_monitor_numbers(broken, 3) is None             # repaired by the caller
     canonical = enabled_monitor_numbers(DEFAULT_SETTINGS["display"]["show_on_monitors"], 2)
-    assert enabled_monitor_numbers([9], 2) == canonical and enabled_monitor_numbers([2], 2) == {2}
+    assert selected_monitor_numbers([4], 3) == set() and selected_monitor_numbers([], 3) == set()
+    assert enabled_monitor_numbers([9], 2) == set() and enabled_monitor_numbers([2], 2) == {2}
     assert describe_monitors({2}) == "Display 2" and describe_monitors({3, 2}) == "Displays 2 and 3"
 
 
@@ -151,6 +152,9 @@ def two_displays(monkeypatch):
     import ui.widget_display_routes as routes
 
     monkeypatch.setattr(routes.QGuiApplication, "screens", staticmethod(lambda: [object(), object()]))
+    import core.settings.monitor_routes as identities
+    monkeypatch.setattr(identities, "current_screen_identities", lambda: ("serial:one", "serial:two"))
+    monkeypatch.setattr(routes, "current_screen_identities", lambda: ("serial:one", "serial:two"))
 
 
 def test_the_guard_switches_trusts_or_stays(monkeypatch, two_displays):
@@ -302,13 +306,15 @@ def test_leaving_visualizers_asks_about_a_visualizer_on_a_disabled_display(dialo
     assert len(asked) == 2 and dialog.content_stack.currentIndex() == 0
 
 
-def test_the_saver_selects_displays_through_the_same_parser():
+def test_the_saver_selects_displays_through_the_same_parser(monkeypatch):
     from types import SimpleNamespace
 
     from engine.display_manager import DisplayManager
 
     def allowed(raw, count):
-        owner = SimpleNamespace(settings_manager=SimpleNamespace(get=lambda _key: raw))
+        import core.settings.monitor_routes as identities
+        monkeypatch.setattr(identities, "current_screen_identities", lambda: tuple(f"serial:{n}" for n in range(count)))
+        owner = SimpleNamespace(settings_manager=SimpleNamespace(get=lambda key, default=None: raw if key == "display.show_on_monitors" else {}))
         return DisplayManager._get_allowed_screen_indices(owner, count)
 
     assert allowed("ALL", 3) == {0, 1, 2} and allowed([2, 3], 3) == {1, 2} and allowed("NONE", 2) == set()

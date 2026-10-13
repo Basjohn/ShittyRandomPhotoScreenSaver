@@ -540,7 +540,12 @@ class ReadyPage(Page):
 
     def refresh(self):
         state = current_setup_summary(self.settings)
-        displays = "All displays" if state["displays"] == "ALL" else ", ".join(map(str, state["displays"]))
+        selection = state["displays"]
+        displays = ("All displays" if selection == "ALL" else "No displays" if selection == "NONE"
+                    else ", ".join(map(str, selection)) or "Selected displays unavailable")
+        missing = state["unavailable_displays"]
+        if missing and selection:
+            displays += f" · {missing} selected display" + ("s" if missing != 1 else "") + " unavailable"
         accounts = state["accounts"]
         def count(value, noun):
             return f"{value} {noun}" + ("" if value == 1 else "s")

@@ -607,6 +607,13 @@ one Visualizer owner, controller, BeatEngine/source, logical-runtime slot, retai
 
 ## Visualizer display routing
 
+The saver-wide display choice preserves selected physical monitors across renumbering, power-off and restart. ALL includes
+displays connected later; a fixed numbered selection stays fixed even when it includes every present display. NONE selects
+none. If every assigned display is absent, the saver observes topology without creating a window or acquiring fresh image
+work, then restores normally when a selected display returns. Unrelated Settings saves retain unavailable choices; explicit
+display selection or import/reset changes the assignment. The canonical owner and persistence shape are in Contracts →
+Geometry / CUSTOM.
+
 Outside CUSTOM, the Visualizer follows Media's effective position/monitor route. In committed CUSTOM, the Visualizer's
 own persisted position, monitor and geometry are authoritative and may place it on a different selected display from
 Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on

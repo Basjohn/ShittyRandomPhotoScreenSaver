@@ -44,14 +44,18 @@ def route_widgets_to_single_display(settings) -> bool:
     from rendering.widget_descriptors import route_widgets_to_single_monitor
     from core.settings.monitor_routes import current_screen_identities
 
-    selected = settings.get("display.show_on_monitors")
-    if not isinstance(selected, (list, tuple)) or len(selected) != 1:
+    from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
+    authored = normalize_selection(settings.get("display.show_on_monitors"))
+    if not isinstance(authored, list) or len(authored) != 1:
+        return False
+    selected = resolve_monitor_numbers(settings)
+    if len(selected) != 1:
         return False
     widgets = settings.get("widgets", {})
     if not isinstance(widgets, Mapping):
         return False
     routed = deepcopy(dict(widgets))
-    route_widgets_to_single_monitor(routed, selected[0], screen_identities=current_screen_identities())
+    route_widgets_to_single_monitor(routed, next(iter(selected)), screen_identities=current_screen_identities())
     if routed == widgets:
         return False
     settings.set("widgets", routed)
@@ -110,10 +114,14 @@ def current_setup_summary(settings) -> dict[str, object]:
     modes = resolve_admissible_enabled_modes(visualizer.get("mode_activation") if isinstance(visualizer, Mapping) else None)
     transitions = settings.get("transitions", {})
     activation = transitions.get("activation", {}) if isinstance(transitions, Mapping) else {}
-    display = settings.get("display.show_on_monitors")
+    from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
+    authored = normalize_selection(settings.get("display.show_on_monitors"))
+    resolved = resolve_monitor_numbers(settings)
+    display = authored if authored in ("ALL", "NONE") else sorted(resolved)
+    unavailable_displays = max(0, len(authored) - len(resolved)) if isinstance(authored, list) else 0
     visualizer_active = (
         isinstance(visualizer, Mapping)
         and bool(visualizer.get("enabled"))
         and is_widget_family_effective(widgets, "visualizers")
     )
-    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": len(settings.get("sources.rss_feeds") or ()), "displays": display, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}
+    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": len(settings.get("sources.rss_feeds") or ()), "displays": display, "unavailable_displays": unavailable_displays, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}

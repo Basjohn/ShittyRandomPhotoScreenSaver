@@ -341,7 +341,7 @@ The desktop snapshot is never queue/history/current-image semantic truth and is 
 
 ### Runtime replacement and monitor topology
 
-Settings, CUSTOM Edit and monitor-topology replacements share one construction path: `engine_handlers._construct_and_start_replacement_runtime`. Its all-thread stack-dump window (`hang_watchdog`, label `replacement_to_reveal:<event>:generation=<n>`, 20 s) stays armed until the generation's coordinated reveal completes. It is closed by that reveal, by generation retirement, by construction failure, when the queue has no image, or when the first-image retry is exhausted. A stale edge cannot close a newer window, because disarm checks the label.
+Settings, CUSTOM Edit and monitor-topology replacements share one construction path: `engine_handlers._construct_and_start_replacement_runtime`. Its all-thread stack-dump window (`hang_watchdog`, label `replacement_to_reveal:<event>:generation=<n>`, 20 s) stays armed until the generation's coordinated reveal completes. It is closed by that reveal, by generation retirement, by construction failure, when the queue has no image, when the first-image retry is exhausted, or when no selected physical display is present. A stale edge cannot close a newer window, because disarm checks the label.
 
 A replacement generation has exactly one first-image admission owner. A monitor-topology rebuild replays the current image through the ordinary image-change owner, and `start(show_first_image=False)` schedules no parallel startup retry. Only a rejected replay hands the first image to the bounded startup retry, and it says so loudly (`[DISPLAY][FALLBACK]`). A work-area-only change (taskbar or app-bar) is not a topology change: the monitor signature excludes `availableGeometry`, and each window re-applies its bound screen geometry on that edge. Adding a monitor still rebuilds the whole generation, because screen indices shift and routing, Visualizer ownership and CUSTOM layout are generation-wide (R-96). Every application quit is queued through `engine.runtime_destruction.request_application_quit(reason)` (Guardrails § Lifecycle). Bars: `tests/test_monitor_replay_admission.py`, `tests/test_replacement_hang_window.py`, `tests/test_qtquick_monitor_wake_reconcile.py`, `tests/test_quit_request_render_thread_gil.py`.
 
@@ -525,6 +525,18 @@ Startup, legacy Custom-cache and SST migration seed absent owned values from the
 defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Shockwave is different:** its renderer intentionally consumes Spectrum-shaped bars for the grid horizon, and its authored Shape editor remains active. Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
 
 ## Geometry / CUSTOM
+
+**Saver display selection:** `core/settings/display_selection.py` owns normalization and physical admission of
+`display.show_on_monitors`. `display.monitor_bindings` maps authored number strings to canonical CUSTOM signatures;
+an unresolved first-migration target stores null and cannot capture a later unrelated display. Settings captures once
+on its GUI thread and preserves metadata through unrelated saves/restart; explicit selection (including the same number),
+reset and import author or restore it in the existing store transaction. ALL admits every current/future screen; NONE
+admits none. Malformed input repairs through the application profile default, while valid absent selection stays empty.
+Display tab, onboarding, Arrange, route warnings and DisplayManager consume this authority. With empty admission,
+DisplayManager retains its topology observer but creates no Quick scene/window/provider owner. The engine remains running
+without image admission/retry, rotation, RSS scheduling or new image workers; cold source/queue/cache acquisition is deferred.
+Returning selected screens use the ordinary destruction/replacement barrier and current-image replay, without changing
+queue position. Failure to construct a requested window remains initialization failure, not selection suspension.
 
 **Physical monitor assignments:** `widgets.monitor_bindings` stores each numbered route's owning settings section
 as `{monitor: <authoring number>, screen: <canonical CUSTOM display signature>}`. Settings owns this metadata in the

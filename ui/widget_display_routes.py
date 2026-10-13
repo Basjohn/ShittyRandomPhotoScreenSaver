@@ -16,7 +16,7 @@ from copy import deepcopy
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
-from core.settings.display_selection import describe_monitors, enabled_monitor_numbers
+from core.settings.display_selection import describe_monitors, resolve_monitor_numbers
 from core.settings.monitor_routes import current_screen_identities, bound_monitor_identity
 from core.settings.widget_family_catalog import get_widget_member_label
 from rendering.widget_descriptors import (
@@ -59,8 +59,7 @@ class DisplayRouteLeaveGuard:
         widgets = self._settings.get("widgets", {})
         if not isinstance(widgets, Mapping):
             return True
-        enabled = enabled_monitor_numbers(self._settings.get("display.show_on_monitors"),
-                                          len(QGuiApplication.screens()))
+        enabled = resolve_monitor_numbers(self._settings)
         if not enabled:
             return True      # no display at all: nothing to switch to, and not this page's concern
         screens = current_screen_identities()

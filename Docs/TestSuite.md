@@ -279,6 +279,13 @@ High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `
 
 `test_qtquick_monitor_wake_reconcile.py` protects the event-driven topology contract, including replacement after binding loss despite identical final screen facts. `test_widget_monitor_bindings.py` and the real family-binder/Arrange tests protect physical assignment through renumbering, return, Settings edits and restart; restore/slot/import tests protect persisted intent. Installed dual-display wake/topology validation is already recorded in the relevant Historical Bug; do not reintroduce a debounce/poller merely because a future test fixture is easier that way.
 
+`test_saver_physical_selection.py` crosses real Settings, DisplayManager admission, Display tab, onboarding and Arrange seams:
+fixed physical choices survive disappearance/reorder/restart; ALL/NONE, MC repair, unresolved migration, explicit reassignment,
+atomic import/bulk authoring and silent writes stay coherent. `test_display_selection_lifecycle.py` proves empty admission keeps
+topology detection alive without Quick allocation, image/provider/retry/rotation work or a stale replacement watchdog; cold
+source work is deferred until a selected return. Requested-window construction failure remains distinct. Together with the
+replay/destruction bars these are focused source evidence; physical power-cycle observations remain the nonblocking watchlist.
+
 **Runtime replacement / Settings admission:** `tests/test_qtquick_transition_controller.py` guards silent transition terminalization and forbids live `clear_all()` / `unit.clear()` from the full destruction path; `tests/test_visualizer_owner_retirement.py` guards manager + display-unit Visualizer owner detachment after confirmed retirement; `tests/test_audio_event_mailbox.py` guards bounded callback delivery and callback-cycle severing at retirement; and `tests/test_settings_dialog.py` guards semantic tab/section/builder restoration with top-of-section scroll anchoring. These are current lifecycle contracts. Qt/Windows execution is required for replacement-generation, retained-scene and native COM acceptance; pure source/default/mailbox gates alone do not close those physical checks.
 
 **Replacement first image, hang window, reveal ownership and quit (R-96):**

@@ -6,10 +6,10 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current checkpoint:** paused at documentation/decomposition by the operator, 2026-10-12. Resume only when requested:
-§1 saver-wide physical display selection, then §2 FEEDS terminal-failure handling, then stop at that clean checkpoint.
-Neither implementation slice has landed; incomplete selection edits were withdrawn before this pause. Visualizer migration,
-graphics expansion, media production and operator builds remain subsequent work.
+**Current authorization:** resumed by the operator, 2026-10-13. §1 is source-complete; next complete
+§2 FEEDS terminal-failure handling, then stop at that clean checkpoint. Visualizer
+migration, graphics expansion, media production and operator builds remain subsequent work. Use reviewed Luna xHigh/Max
+or Sol 6.1 Medium agents for bounded work; reserve one High Astra agent for visual parity audits after very significant work.
 
 **Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
 are accepted. Dev Curve currently has no observed issue; its earlier replay-floor investigation is closed. Do not reopen
@@ -23,37 +23,11 @@ transition timings. Test the smallest production seam that can falsify the chang
 build unless the operator requests it. After each green slice: inspect diff, narrow commit, push, refresh this checklist.
 Preserve unrelated local/user work. Agents do not run Nuitka, Build Runner or installers.
 
-## 1. Saver-wide physical display selection | Next on resume
+## 1. Saver-wide physical display selection | Source checkpoint complete
 
-Widget physical assignments are already implemented. This slice extends the same physical identity policy to
-`display.show_on_monitors`; it must not substitute another display when a selected monitor disappears.
-
-- [ ] **D1 — Resolve selection at its canonical owner.** Trace `core/settings/display_selection.py`, Settings persistence,
-  Display tab, onboarding/Arrange, route warnings and `DisplayManager._get_allowed_screen_indices`. Reuse the canonical
-  CUSTOM screen signature and existing Settings store. Preserve ALL (every present display), NONE (none), numbered
-  selection and Media Center's selected-display default. Distinguish malformed input from a valid absent selection:
-  absence must resolve empty, never repair to ALL or an unrelated display.
-  The current parser conflates valid absent numeric selection with malformed input; change resolution together with D3,
-  since the existing engine treats zero constructed windows as initialization failure.
-- [ ] **D2 — Persist intent and explicit authoring.** Bind legacy numeric selection once, preserve physical identity across
-  renumbering and restart, and update only on explicit selection/reset/import. Loading or saving unrelated Settings must
-  not rebind an unplugged selection. Display UI, Arrange and warnings must agree on effective selected displays. Cover
-  explicit reassignment to today's same-number display and retain unavailable choices unless the user changes them.
-  Correct the Display tab's NONE round-trip (currently loaded/saved as ALL) and prevent checking all currently present
-  displays from silently converting fixed selection to ALL. Use one companion binding map in the existing Settings owner;
-  wire persistence/import/reset, Display tab, onboarding, Arrange and route warnings before exposing strict resolution.
-- [ ] **D3 — Zero selected live displays.** Trace engine startup, topology replacement and first-image admission when all
-  selected displays are off. Keep the existing event-driven monitor owner able to observe their return without a phantom
-  window, retry spin, duplicate generation, provider admission or premature process exit. Retire resources legally; no
-  polling or new lifecycle owner. Inspect rapid return during destruction before changing any barrier.
-  Distinguish intentionally empty selection from failure to create a requested window. Resolve admission before constructing
-  Quick scene resources; keep DisplayManager's topology observation alive. Audit ScreensaverEngine initialization/start,
-  rotation and first-image retries, replay admission, RSS scheduling and the replacement watchdog. Returning selected screens
-  must use the normal destruction/replacement barrier and replay, without a second provider or topology owner.
-- [ ] **D4 — Focused proof and checkpoint.** Exercise selected second display becoming index zero, either display missing,
-  reordered return, all selected displays absent, ALL/NONE, MC default, settings save/reload/import/reset and explicit
-  reassignment. Test production admission, not only parser output. Update Contracts/TestSuite, commit and push. Physical
-  Windows/frozen power-cycle observation belongs only to §5 and does not block this source checkpoint.
+Physical selection, Settings/draft/import/reset authoring and zero-live-display lifecycle are implemented. Durable
+behavior lives in `Docs/Contracts.md` → Geometry / CUSTOM; regression inventory lives in `Docs/TestSuite.md`.
+Physical power-cycle observation remains only the nonblocking §5 watchlist. Proceed to §2.
 
 ## 2. FEEDS queued/busy and terminal failure | Ready after §1
 
@@ -232,6 +206,15 @@ an instruction to rebuild, poll or repeat the full suite.
   1–7 second manual delays, but no stranded FEEDS claim was proved. R164 fixed missing False dispatch handling and added
   event-only family attribution. Check fairness/no post-transition stampede; never hide busy during queue time.
   Steam/Weather/Friend Pulse and startup cache readers join no shared gate until their publication/retirement is audited.
+- [ ] **Wallpaper RSS after runtime replacement — source audit required.** `engine_lifecycle.stop(exit_app=False)`
+  permanently sets the existing RSSCoordinator stop event, while topology replacement reuses that coordinator and does
+  not restore its refresh timer. Audit Settings/CUSTOM/topology generation ownership and pending IO drain before deciding
+  whether this session owner should resume or be rebuilt. Prove refresh resumes once, with no stale queue publication,
+  duplicated session rotation or acquisition while selected displays are absent; keep this separate from FEEDS widgets.
+- [ ] **Display Settings scalability — deferred UI cleanup.** The Display tab currently exposes four numbered monitor
+  checkboxes. Resolver/persistence and ALL support larger topologies; replace that fixed UI capacity with current-screen
+  rows before claiming full explicit selection authoring for more than four displays. Preserve unavailable choices and
+  physical bindings through the same authoring boundary; no runtime/provider changes are needed.
 - [ ] **Cross-display Media shortcuts — Awaiting Validation when used.** Media on the other display should receive each
   shortcut once; source regression is green. Do not build solely for this check.
 - [ ] **Music recorder — Awaiting Validation of capture, not its accepted launch buttons.** When recording is needed,

@@ -43,6 +43,11 @@ without the safe path below.
   Current binding metadata travels with geometry imports and layout slots. *Blocked:* rebinding unchanged routes
   from the current screen enumeration after a power-off, or interpreting absent identity as ALL. Without a saved
   physical identity or unique CUSTOM home, first migration can only use the currently enumerated numbered display.
+- **Numeric saver selection** (`core/settings/display_selection.py`). GUI-thread Settings capture binds selected numbers
+  to the same canonical physical signatures in `display.monitor_bindings`. Missing first-migration numbers are persisted
+  unresolved until explicit reassignment; capture waits for a GUI application rather than using a headless topology.
+  *Blocked:* repairing a valid absent selection to ALL, rebinding on unrelated Settings saves, or treating intentionally
+  zero selected displays as failed window construction. Current imports/export carry binding metadata with selection.
 - **Wallpaper resampling choice** (`core/settings/resample_filter_input_compat.py`). Profile/SST input promotes the
   retired `display.use_lanczos` boolean to `display.resample_filter` before defaults merge, then removes the old leaf.
   Explicit current choices win. Runtime/UI/export use only the enum. *Blocked:* default-merging first and losing an

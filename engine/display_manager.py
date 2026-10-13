@@ -301,6 +301,7 @@ class DisplayManager(QObject):
         self._monitor_resume_revalidation_pending = False
         self._monitor_detection_screens: list[QScreen] = []
         self._screen_signature: tuple[tuple[object, ...], ...] = ()
+        self._selection_suspended = False
         
         # Monitor hotplug detection
         self.screen_count = 0
@@ -707,38 +708,16 @@ class DisplayManager(QObject):
         self._schedule_monitor_reconcile("applicationStateChanged")
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
-        """Resolve which screen indices should create Quick display units.
-
-        Persisted/malformed monitor routing repairs through the canonical
-        ``display.show_on_monitors`` value.  This method owns topology clamping
-        only; it does not carry a second product-default route.
-        """
-
-        from core.settings.display_selection import enabled_monitor_numbers, selected_monitor_numbers
-
-        canonical_raw = require_canonical_default("display.show_on_monitors")
+        """Resolve physical saver selection before admitting any Quick resources."""
+        from core.settings.display_selection import resolve_monitor_numbers, enabled_monitor_numbers
         if self.settings_manager is None:
-            raw = canonical_raw
+            numbers = enabled_monitor_numbers(require_canonical_default("display.show_on_monitors"), screen_count)
         else:
-            try:
-                raw = self.settings_manager.get("display.show_on_monitors")
-            except Exception as exc:
-                logger.debug("[DISPLAY_MANAGER] show_on_monitors read failed: %s", exc)
-                raw = canonical_raw
-
-        # A configured route whose selected displays are all currently
-        # unavailable is repaired through canonical routing rather than an
-        # implicit local "show everything" policy.
-        if selected_monitor_numbers(raw, screen_count) is None:
-            logger.debug(
-                "[DISPLAY] Invalid/unavailable show_on_monitors=%r; repairing through canonical value %r",
-                raw,
-                canonical_raw,
-            )
-        allowed = {number - 1 for number in enabled_monitor_numbers(raw, screen_count)}
-        logger.info("[DISPLAY] show_on_monitors=%r → allowed screen indices=%s", raw, sorted(allowed))
+            numbers = resolve_monitor_numbers(self.settings_manager)
+        allowed = {number - 1 for number in numbers if number <= screen_count}
+        logger.info("[DISPLAY] Physical selection allowed screen indices=%s", sorted(allowed))
         return allowed
-    
+
     def _on_screen_added(self, screen: QScreen) -> None:
         """Handle screen added event."""
         logger.info("Screen added: %s (%dx%d)" % (screen.name(), screen.geometry().width(), screen.geometry().height()))
@@ -2251,6 +2230,10 @@ class DisplayManager(QObject):
             )
         return started
     
+    def is_selection_suspended(self) -> bool:
+        """No selected physical screen is present in this generation."""
+        return self._selection_suspended
+
     def initialize_displays(self) -> int:
         """
         Create and show the one authoritative Quick unit for each selected monitor.
@@ -2274,6 +2257,15 @@ class DisplayManager(QObject):
         self._display_startup_generation += 1
         startup_generation = self._display_startup_generation
 
+        # Keep the existing topology observer alive when selection is NONE or
+        # every assigned screen is absent. No Quick/provider owner is needed
+        # until a normal topology replacement can admit a selected screen.
+        allowed_indices = self._get_allowed_screen_indices(screen_count)
+        self._selection_suspended = not allowed_indices
+        if self._selection_suspended:
+            logger.info("[DISPLAY] No selected physical screens present; awaiting topology change")
+            return 0
+
         self._quick_scene_factory = QuickSceneFactory(parent=self)
         self._quick_ctrl_coordinator.reset()
         self._quick_readiness_by_screen.clear()
@@ -2293,9 +2285,6 @@ class DisplayManager(QObject):
             # resolved shadow contract; downstream Quick consumers are strict.
             self._shadow_values_snapshot = asdict(ShadowSettings())
 
-        # Resolve which screens should actually create one Quick display unit.
-        allowed_indices = self._get_allowed_screen_indices(screen_count)
-        
         # Instantiate the full active display set before the first display runs
         # widget setup. Visualizer CUSTOM owner selection is participation-based,
         # so screen 0 must be able to see later requested displays as pending
