@@ -69,6 +69,7 @@ yarn-error.log*
 agent.md
 *.lnk
 *.zip
+!Docs/Future_Work/Additional_Future_Transitions_Package.zip
 
 # Build/release binary artifacts
 release/

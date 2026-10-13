@@ -63,6 +63,11 @@ acceptance gate.
   The scene never escapes its border at any pose or during Edit; no overflow option may bypass the clip. Forward-retire
   the old Shockwave overflow state at canonical input/save boundaries, and prove real rendered clip pixels as well as
   fixed outer-card geometry through orbit/resize. The old frameless Shockwave policy is superseded by this replacement.
+  Preserve the existing 3D bindings: **WASD / Alt+left-drag orbit, Alt+right-drag moves, Alt+scroll scales**. In framed
+  modes every one targets the internal scene, leaving outer-card position, size and viewport unchanged. Internal
+  turn/tilt/pan/scale persist through future load via the canonical view-pose owner, independently of art presets and
+  CUSTOM geometry. Add real input/settlement/reload tests and an independent audit even if the implementation appears
+  correct; this spec/descriptor contract is the template for later bordered 3D modes.
   Reuse existing GPU wave/event facilities, stream rings, bloom and scene primitives; any missing heightfield/material
   capability is built as a measured, opt-in shared primitive **within this V4A delivery**, not silently deferred to §4
   or added as a private rendering stack. **High visual and musical parity with the supplied mocks is required on at

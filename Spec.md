@@ -513,12 +513,18 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
 simulation cadence.
 
-Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect; every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
+Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
 
 A bordered/framed 3D Visualizer uses the normal card shell with an orbitable 3D scene **inside** it. CARD / CARD_INTERIOR
 keeps the scene inside the border at every pose, scale, viewport and Edit state; orbit rotates the scene, not the card.
 Applicable 3D geometry/layout-profile contracts still apply, but no overflow option can bypass the interior clip.
 Neon Lake Basin is required to use this presentation contract in its Shockwave replacement.
+
+The existing 3D controls retain their bindings: WASD and Alt+left-drag orbit, Alt+right-drag moves, and Alt+scroll scales.
+For framed 3D modes these operations affect internal scene turn/tilt/pan/scale only; they never change the outer card's
+geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
+
+Every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
 
 ```text
 uniform_visual_scale
