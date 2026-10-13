@@ -34,7 +34,6 @@ from core.settings.visualizer_settings_contract import (
     migrate_profile_lender_owned_settings,
     migrate_legacy_sphere_finish_keys,
     migrate_legacy_sphere_control_keys,
-    normalize_sphere_finish,
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
@@ -391,51 +390,6 @@ _DEVCURVE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 
 _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_analysis_notch_positions': list,
-    'sphere_taste_the_rainbow_speed': float,
-    'sphere_taste_the_rainbow_extent': float,
-    'sphere_finish': str,
-    'sphere_fill_color': list,
-    'sphere_edge_color': list,
-    'sphere_tracer_color': list,
-    'sphere_edge_weight': float,
-    'sphere_voxel_size_variation': float,
-    'sphere_depth_shading_enabled': bool,
-    'sphere_depth_shading_strength': float,
-    'sphere_allow_overflow': bool,
-    'sphere_cel_shading': bool,
-    'sphere_light_tracer_enabled': bool,
-    'sphere_fragment_interpolation_enabled': bool,
-    'sphere_incoming_density_response_enabled': bool,
-    'sphere_incoming_transient_velocity_enabled': bool,
-    'sphere_particle_outtake_enabled': bool,
-    'sphere_shadow_enabled': bool,
-    'sphere_shadow_opacity': float,
-    'sphere_shadow_softness': float,
-    'sphere_shadow_distance': float,
-    'sphere_shadow_size': float,
-    'sphere_fade_incoming_blocks': bool,
-    'sphere_fragment_energy_floor': float,
-    'sphere_fragment_strength': float,
-    'sphere_particle_distance': float,
-    'sphere_particle_energy_floor': float,
-    'sphere_particle_amount': float,
-    'sphere_perspective_strength': float,
-    # View-pose range limits are applied in normalize_inplace(), not here.
-    # Build specs and serializers must contain callables exclusively.
-    'sphere_turn': float,
-    'sphere_tilt': float,
-    'sphere_taste_the_rainbow_enabled': bool,
-    'sphere_taste_the_rainbow_surfaces': bool,
-    'sphere_taste_the_rainbow_edges': bool,
-    'sphere_spin_direction': str,
-    'sphere_base_rotation_speed': float,
-    'sphere_rotation_speed': float,
-    'sphere_gloss': float,
-    'sphere_specular': float,
-    'sphere_mirror': float,
-    'sphere_light_direction': str,
-    'sphere_vocal_response': float,
-    'sphere_size_response': float,
 }
 _SPHERE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = dict(_SPHERE_BUILD_SPECS)
 
@@ -1149,35 +1103,6 @@ class SpotifyVisualizerSettings:
     devcurve_layer_transients_outline_color: Any = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_color'))
     devcurve_layer_transients_outline_width: float = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_outline_width'))
     devcurve_layer_transients_order: int = field(default_factory=lambda: _visualizer_default('devcurve_layer_transients_order'))
-    sphere_finish: str = field(default_factory=lambda: _visualizer_default('sphere_finish'))
-    sphere_fill_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_fill_color')))
-    sphere_edge_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_edge_color')))
-    sphere_tracer_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_tracer_color')))
-    sphere_edge_weight: float = field(default_factory=lambda: _visualizer_default('sphere_edge_weight'))
-    sphere_voxel_size_variation: float = field(default_factory=lambda: _visualizer_default('sphere_voxel_size_variation'))
-    sphere_depth_shading_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_depth_shading_enabled'))
-    sphere_depth_shading_strength: float = field(default_factory=lambda: _visualizer_default('sphere_depth_shading_strength'))
-    sphere_allow_overflow: bool = field(default_factory=lambda: _visualizer_default('sphere_allow_overflow'))
-    sphere_cel_shading: bool = field(default_factory=lambda: _visualizer_default('sphere_cel_shading'))
-    sphere_light_tracer_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_light_tracer_enabled'))
-    sphere_fragment_interpolation_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_fragment_interpolation_enabled'))
-    sphere_incoming_density_response_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_density_response_enabled'))
-    sphere_incoming_transient_velocity_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_transient_velocity_enabled'))
-    sphere_particle_outtake_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_particle_outtake_enabled'))
-    sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
-    sphere_shadow_opacity: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_opacity'))
-    sphere_shadow_softness: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_softness'))
-    sphere_shadow_distance: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_distance'))
-    sphere_shadow_size: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_size'))
-    sphere_fade_incoming_blocks: bool = field(default_factory=lambda: _visualizer_default('sphere_fade_incoming_blocks'))
-    sphere_fragment_energy_floor: float = field(default_factory=lambda: _visualizer_default('sphere_fragment_energy_floor'))
-    sphere_fragment_strength: float = field(default_factory=lambda: _visualizer_default('sphere_fragment_strength'))
-    sphere_particle_distance: float = field(default_factory=lambda: _visualizer_default('sphere_particle_distance'))
-    sphere_particle_energy_floor: float = field(default_factory=lambda: _visualizer_default('sphere_particle_energy_floor'))
-    sphere_particle_amount: float = field(default_factory=lambda: _visualizer_default('sphere_particle_amount'))
-    sphere_perspective_strength: float = field(default_factory=lambda: _visualizer_default('sphere_perspective_strength'))
-    sphere_turn: float = field(default_factory=lambda: _visualizer_default('sphere_turn'))
-    sphere_tilt: float = field(default_factory=lambda: _visualizer_default('sphere_tilt'))
     sphere_bar_count: int = field(default_factory=lambda: _visualizer_default('sphere_bar_count'))
     sphere_audio_block_size: int = field(default_factory=lambda: _visualizer_default('sphere_audio_block_size'))
     sphere_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('sphere_adaptive_sensitivity'))
@@ -1187,20 +1112,6 @@ class SpotifyVisualizerSettings:
     sphere_input_gain: float = field(default_factory=lambda: _visualizer_default('sphere_input_gain'))
     sphere_transient_clamp: float = field(default_factory=lambda: _visualizer_default('sphere_transient_clamp'))
     sphere_analysis_notch_positions: list = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_analysis_notch_positions')))
-    sphere_taste_the_rainbow_speed: float = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_speed'))
-    sphere_taste_the_rainbow_extent: float = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_extent'))
-    sphere_taste_the_rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_enabled'))
-    sphere_taste_the_rainbow_surfaces: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_surfaces'))
-    sphere_taste_the_rainbow_edges: bool = field(default_factory=lambda: _visualizer_default('sphere_taste_the_rainbow_edges'))
-    sphere_spin_direction: str = field(default_factory=lambda: _visualizer_default('sphere_spin_direction'))
-    sphere_base_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_base_rotation_speed'))
-    sphere_rotation_speed: float = field(default_factory=lambda: _visualizer_default('sphere_rotation_speed'))
-    sphere_gloss: float = field(default_factory=lambda: _visualizer_default('sphere_gloss'))
-    sphere_specular: float = field(default_factory=lambda: _visualizer_default('sphere_specular'))
-    sphere_mirror: float = field(default_factory=lambda: _visualizer_default('sphere_mirror'))
-    sphere_light_direction: str = field(default_factory=lambda: _visualizer_default('sphere_light_direction'))
-    sphere_vocal_response: float = field(default_factory=lambda: _visualizer_default('sphere_vocal_response'))
-    sphere_size_response: float = field(default_factory=lambda: _visualizer_default('sphere_size_response'))
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_spectrum'))
     preset_oscilloscope: int = field(default_factory=lambda: _visualizer_default('preset_oscilloscope'))
@@ -1276,44 +1187,9 @@ class SpotifyVisualizerSettings:
         _normalize_ranked_attrs(self, _DEVCURVE_ORDER_ATTRS)
 
     def _apply_sphere_defaults(self) -> None:
-        _apply_canonical_list_defaults(self, _SPHERE_SERIALIZERS)
         from core.settings.sphere_analysis_contract import normalize_sphere_analysis_notches
+
         self.sphere_analysis_notch_positions = normalize_sphere_analysis_notches(self.sphere_analysis_notch_positions)
-        for attr in ('sphere_taste_the_rainbow_speed', 'sphere_taste_the_rainbow_extent'):
-            _clamp_attr_range(self, attr, 0.0, 1.0)
-        self.sphere_allow_overflow = bool(self.sphere_allow_overflow)
-        self.sphere_cel_shading = bool(self.sphere_cel_shading)
-        self.sphere_light_tracer_enabled = bool(self.sphere_light_tracer_enabled)
-        self.sphere_fragment_interpolation_enabled = bool(self.sphere_fragment_interpolation_enabled)
-        self.sphere_incoming_density_response_enabled = bool(self.sphere_incoming_density_response_enabled)
-        self.sphere_incoming_transient_velocity_enabled = bool(self.sphere_incoming_transient_velocity_enabled)
-        self.sphere_particle_outtake_enabled = bool(self.sphere_particle_outtake_enabled)
-        self.sphere_shadow_enabled = bool(self.sphere_shadow_enabled)
-        self.sphere_depth_shading_enabled = bool(self.sphere_depth_shading_enabled)
-        self.sphere_fade_incoming_blocks = bool(self.sphere_fade_incoming_blocks)
-        self.sphere_taste_the_rainbow_enabled = bool(self.sphere_taste_the_rainbow_enabled)
-        self.sphere_taste_the_rainbow_surfaces = bool(self.sphere_taste_the_rainbow_surfaces)
-        self.sphere_taste_the_rainbow_edges = bool(self.sphere_taste_the_rainbow_edges)
-        self.sphere_finish = normalize_sphere_finish(self.sphere_finish)
-        for attr in ("sphere_fill_color", "sphere_edge_color", "sphere_tracer_color"):
-            value = list(getattr(self, attr))
-            fallback = list(_visualizer_default(attr))
-            if len(value) < 3:
-                value = fallback
-            while len(value) < 4:
-                value.append(255)
-            setattr(
-                self,
-                attr,
-                [max(0, min(255, int(round(float(channel))))) for channel in value[:4]],
-            )
-        if self.sphere_spin_direction not in ('Default', 'Reverse', 'Y Clockwise', 'Y Counterclockwise'):
-            self.sphere_spin_direction = _visualizer_default('sphere_spin_direction')
-        self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
-        if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
-            raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_turn", -1.0, 1.0), ("sphere_tilt", 0.0, 1.0), ("sphere_fragment_energy_floor", 0.0, 1.0), ("sphere_particle_energy_floor", 0.0, 1.0), ("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_mirror", 0.0, 1.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
-            _clamp_attr_range(self, attr, low, high)
 
     def _apply_spectrum_source_profile_defaults(self, mode: str) -> None:
         """Validate a 3D mode's independently-owned Spectrum source profile."""

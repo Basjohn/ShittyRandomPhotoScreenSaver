@@ -14,6 +14,10 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - [ ] A persisted key with a different runtime spelling/value declares that translation and its canonical input resolver;
       remove the old setter/read path when promoted, and prove one owner write. Preserve any established difference
       between UI position/range and saved/runtime admission. Silent hydration restores pre-existing signal blockers.
+- [ ] Authoring-only metadata creates no runtime attribute. Distinguish persisted-input repair from trusted runtime
+      validation; retain explicit failure contracts. `enabled_when` keeps latent controls visible, and availability is
+      still an absolute gate. Derived declaration membership is immutable/cached; configuration-owned bundles stay off
+      per-frame rebuild paths. Recommended slider marks never supply defaults.
 
 ## 1. Read first
 

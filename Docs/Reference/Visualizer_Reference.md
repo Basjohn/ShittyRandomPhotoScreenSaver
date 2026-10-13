@@ -42,6 +42,13 @@ shape/lane authoring and smoothing stay Custom, with the shared Bar Appearance/R
 preserves Spectrum's signal policy, slider-position conversion, conditional rows and the wider saved border-radius range
 than its UI slider offers. Nested hydration restores the caller's prior signal-block state.
 
+Sphere's response and frame-snapshotted styling declarations feed its existing configure-owned immutable logical bundle.
+Mirror and bodyless orbit remain presentation-owned; Finish is persisted authoring-only metadata. Frequency Zones,
+Finish and combined RGBA/alpha controls remain Custom hooks. `enabled_when` disables visible controls while preserving
+latent values; it cannot override an unavailable capability. Recommended slider marks remain UI guidance. Trusted runtime
+admission retains Sphere's explicit errors for malformed values and its direction normalization. Derived control/consumer
+memberships are cached as immutable declaration data, so frame extraction adds no recurring membership allocation.
+
 ### Spectrum-family ghost and rainbow ownership
 
 Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in their existing Ghost settings. Each setting persists under its own mode (`spectrum_rainbow_ghost`, `extruded_spectrum_rainbow_ghost`) and colours **only existing falling-peak geometry**, not the bars, faces, edges or reflection. A ghost uses its own enabled/opacity/decay ownership and remains visible when the authored bar border is black or transparent. Spectrum's segmented and solid paths use the same spectral ghost rule; a ghost must never be recoloured a second time by Rainbow Borders. Extruded uses its existing Scene3D ghost-column pass and hue, not a second texture, draw loop, clock or BeatEngine. Both advance colours on their existing Spectrum logical animation time; dormant/disabled modes create no extra work. User-authored presets are editable and are not golden-value test fixtures. Real GL tests must verify visible peak-only pixels with dark borders and bar-fill independence.

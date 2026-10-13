@@ -22,61 +22,14 @@ from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_
 
 logger = get_logger(__name__)
 
-_SPHERE_PARAMETER_KEYS = (
-    "sphere_fill_color",
-    "sphere_edge_color",
-    "sphere_tracer_color",
-    "sphere_edge_weight",
-    "sphere_voxel_size_variation",
-    "sphere_depth_shading_enabled",
-    "sphere_depth_shading_strength",
-    "sphere_allow_overflow",
-    "sphere_cel_shading",
-    "sphere_light_tracer_enabled",
-    "sphere_fragment_interpolation_enabled",
-    "sphere_incoming_density_response_enabled",
-    "sphere_incoming_transient_velocity_enabled",
-    "sphere_particle_outtake_enabled",
-    "sphere_shadow_enabled",
-    "sphere_shadow_opacity",
-    "sphere_shadow_softness",
-    "sphere_shadow_distance",
-    "sphere_shadow_size",
-    "sphere_fade_incoming_blocks",
-    "sphere_fragment_energy_floor",
-    "sphere_particle_energy_floor",
-    "sphere_fragment_strength",
-    "sphere_particle_distance",
-    "sphere_particle_amount",
-    "sphere_perspective_strength",
-    "sphere_taste_the_rainbow_enabled",
-    "sphere_taste_the_rainbow_speed",
-    "sphere_taste_the_rainbow_extent",
-    "sphere_taste_the_rainbow_surfaces",
-    "sphere_taste_the_rainbow_edges",
-    "sphere_spin_direction",
-    "sphere_base_rotation_speed",
-    "sphere_rotation_speed",
-    "sphere_gloss",
-    "sphere_specular",
-    "sphere_light_direction",
-    "sphere_vocal_response",
-    "sphere_size_response",
-)
+# Derived once; the immutable Sphere bundle still freezes only when configuration changes.
+from core.settings.visualizer_mode_settings import require_mode_settings
+
+_SPHERE_PARAMETER_KEYS = tuple(control.key for control in require_mode_settings("sphere").logical_controls())
 
 
 def _visualizer_default(key: str) -> Any:
     return require_canonical_default(f"widgets.spotify_visualizer.{key}")
-
-
-def _sphere_bounded(value: object, minimum: float, maximum: float, key: str) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{key} must be numeric") from exc
-    if number != number or number in (float("inf"), float("-inf")):
-        raise ValueError(f"{key} must be finite")
-    return max(minimum, min(maximum, number))
 
 
 def _color_or_none(value: Any) -> QColor | None:
@@ -123,77 +76,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     # Spec'd modes' controls their logical evolution reads (visualizer_mode_settings).
     _apply_spec_controls(host, kwargs, logical=True)
 
-    # Sphere keeps one configure-owned immutable parameter bundle. The voxel
-    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_depth_shading_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
-        if key in kwargs:
-            setattr(host, f"_{key}", bool(kwargs[key]))
-    # renderer consumes that snapshot without a second
-    # settings/runtime authority or per-frame Python geometry rebuild.
-    for key in ('sphere_taste_the_rainbow_speed', 'sphere_taste_the_rainbow_extent'):
-        if key in kwargs:
-            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.0, 1.0, key))
-    for key in ('sphere_fill_color', 'sphere_edge_color', 'sphere_tracer_color'):
-        if key in kwargs:
-            raw = kwargs[key]
-            if not isinstance(raw, (list, tuple)) or len(raw) < 3:
-                raise ValueError(f"{key} must be an RGB/RGBA sequence")
-            values = list(raw[:4])
-            while len(values) < 4:
-                values.append(255)
-            try:
-                rgba = tuple(max(0, min(255, int(round(float(v))))) for v in values)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{key} must contain numeric RGB/RGBA channels") from exc
-            setattr(host, f"_{key}", rgba)
-    for key in ('sphere_fragment_energy_floor', 'sphere_particle_energy_floor'):
-        if key in kwargs:
-            setattr(host, f'_{key}', _sphere_bounded(kwargs[key], 0.0, 1.0, key))
-    if 'sphere_fragment_strength' in kwargs:
-        host._sphere_fragment_strength = _sphere_bounded(kwargs['sphere_fragment_strength'], 0.0, 9.0, 'sphere_fragment_strength')
-    if 'sphere_particle_distance' in kwargs:
-        host._sphere_particle_distance = _sphere_bounded(kwargs['sphere_particle_distance'], 0.0, 4.5, 'sphere_particle_distance')
-    if 'sphere_particle_amount' in kwargs:
-        host._sphere_particle_amount = _sphere_bounded(kwargs['sphere_particle_amount'], 0.25, 1.75, 'sphere_particle_amount')
-    if 'sphere_perspective_strength' in kwargs:
-        host._sphere_perspective_strength = _sphere_bounded(kwargs['sphere_perspective_strength'], 0.0, 1.0, 'sphere_perspective_strength')
-    if 'sphere_edge_weight' in kwargs:
-        host._sphere_edge_weight = _sphere_bounded(kwargs['sphere_edge_weight'], 0.25, 1.75, 'sphere_edge_weight')
-    if 'sphere_voxel_size_variation' in kwargs:
-        host._sphere_voxel_size_variation = _sphere_bounded(kwargs['sphere_voxel_size_variation'], 0.0, 1.0, 'sphere_voxel_size_variation')
-    if 'sphere_depth_shading_strength' in kwargs:
-        host._sphere_depth_shading_strength = _sphere_bounded(kwargs['sphere_depth_shading_strength'], 0.0, 0.5, 'sphere_depth_shading_strength')
-    if 'sphere_shadow_opacity' in kwargs:
-        host._sphere_shadow_opacity = _sphere_bounded(kwargs['sphere_shadow_opacity'], 0.0, 2.0, 'sphere_shadow_opacity')
-    if 'sphere_shadow_softness' in kwargs:
-        host._sphere_shadow_softness = _sphere_bounded(kwargs['sphere_shadow_softness'], 0.0, 0.45, 'sphere_shadow_softness')
-    if 'sphere_shadow_distance' in kwargs:
-        host._sphere_shadow_distance = _sphere_bounded(kwargs['sphere_shadow_distance'], 0.0, 2.5, 'sphere_shadow_distance')
-    if 'sphere_shadow_size' in kwargs:
-        host._sphere_shadow_size = _sphere_bounded(kwargs['sphere_shadow_size'], 0.6, 1.6, 'sphere_shadow_size')
-    if 'sphere_spin_direction' in kwargs:
-        direction = str(kwargs['sphere_spin_direction'])
-        if direction not in ('Default', 'Reverse', 'Y Clockwise', 'Y Counterclockwise'):
-            raise ValueError(f'invalid Sphere spin direction {direction!r}')
-        host._sphere_spin_direction = direction
-    if 'sphere_base_rotation_speed' in kwargs:
-        host._sphere_base_rotation_speed = _sphere_bounded(kwargs['sphere_base_rotation_speed'], 0.0, 0.5, 'sphere_base_rotation_speed')
-    if 'sphere_rotation_speed' in kwargs:
-        host._sphere_rotation_speed = _sphere_bounded(kwargs['sphere_rotation_speed'], 0.0, 2.0, 'sphere_rotation_speed')
-    if 'sphere_gloss' in kwargs:
-        host._sphere_gloss = _sphere_bounded(kwargs['sphere_gloss'], 0.0, 1.0, 'sphere_gloss')
-    if 'sphere_specular' in kwargs:
-        host._sphere_specular = _sphere_bounded(kwargs['sphere_specular'], 0.0, 2.0, 'sphere_specular')
-    if 'sphere_light_direction' in kwargs:
-        direction = str(kwargs['sphere_light_direction']).strip().upper()
-        if direction not in {'N','NE','E','SE','S','SW','W','NW'}:
-            raise ValueError(f"invalid sphere light direction {direction!r}")
-        host._sphere_light_direction = direction
-    for key, maximum in (
-        ('sphere_vocal_response', 1.35),
-        ('sphere_size_response', 2.54),
-    ):
-        if key in kwargs:
-            setattr(host, f"_{key}", _sphere_bounded(kwargs[key], 0.0, maximum, key))
+    # Sphere keeps one configure-owned immutable parameter bundle.
     if any(key in kwargs for key in _SPHERE_PARAMETER_KEYS):
         host._sphere_parameters = freeze_render_fields({
             key: getattr(host, f"_{key}")
@@ -474,14 +357,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
         host._scene3d_detail = scene3d_detail(kwargs['scene3d_detail']).name   # resolved upstream
 
-    # --- Voxel Sphere presentation (renderer-only; the logical runtime never reads it) ---
-    if 'sphere_turn' in kwargs:
-        host._sphere_turn = _sphere_bounded(kwargs['sphere_turn'], -1.0, 1.0, 'sphere_turn')
-    if 'sphere_tilt' in kwargs:
-        host._sphere_tilt = _sphere_bounded(kwargs['sphere_tilt'], 0.0, 1.0, 'sphere_tilt')
-    if 'sphere_mirror' in kwargs:
-        host._sphere_mirror = _sphere_bounded(kwargs['sphere_mirror'], 0.0, 1.0, 'sphere_mirror')
-
     # --- Spec'd modes' renderer-only controls (core/settings/visualizer_mode_settings.py) ---
     _apply_spec_controls(host, kwargs, logical=False)
 
@@ -490,7 +365,8 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
 def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) -> None:
     """Store each spec'd control present in ``kwargs`` on its owner as ``_<key>``, admitted by
-    its control (clamped; a malformed value becomes the canonical default)."""
+    its control. Canonical ingress repairs and trusted runtime admission are distinct: controls
+    retaining a strict runtime contract reject malformed values instead of substituting defaults."""
     from core.settings.visualizer_mode_settings import iter_mode_settings
     from core.settings.visualizer_mode_settings import control_runtime_attr, control_runtime_value, read_control_value
 
@@ -498,7 +374,7 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
         for control in (spec.logical_controls() if logical else spec.presentation_controls()):
             if control.key in kwargs or any(key in kwargs for key in getattr(control, "input_aliases", ())):
                 default = _visualizer_default(control.key)
-                value = control.admit(read_control_value(control, kwargs.get, default), default)
+                value = control.admit_runtime(read_control_value(control, kwargs.get, default), default)
                 setattr(host, control_runtime_attr(control), control_runtime_value(control, value))
 
 
@@ -521,7 +397,7 @@ def presentation_setting_range(key: str) -> tuple[float, float]:
     control = spec_control(key)
     if isinstance(control, Slider):
         return control.low, control.high
-    return {"sphere_turn": (-1.0, 1.0), "sphere_tilt": (0.0, 1.0)}[key]
+    raise KeyError(f"no ranged presentation setting {key!r}")
 
 
 def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:

@@ -35,7 +35,7 @@ from ui.tabs.media.builder_scaffold import (
     build_collapsible_bucket,
     build_mode_scaffold,
 )
-from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
+from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
 
 _LABEL_WIDTH = 150
@@ -101,15 +101,23 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
     """Show each conditional row only while its condition holds; re-applied after a load."""
     conditional = [(rows[control.key], control.when) for control in spec.controls
                    if control.when and control.key in rows]
-    if not conditional:
+    enabled = [(getattr(tab, control.key), control) for control in spec.controls
+               if getattr(control, "enabled_when", ()) and hasattr(tab, control.key)]
+    if not conditional and not enabled:
         return
 
     def apply(*_args) -> None:
         for row, (key, value) in conditional:
             row.setVisible(_current_value(tab, spec.control(key)) == value)
+        for widget, control in enabled:
+            key, value = control.enabled_when
+            available = not control.availability or bool(_resolve(control.availability[0]))
+            widget.setEnabled(available and _current_value(tab, spec.control(key)) == value)
 
     setattr(tab, f"_{spec.prefix}_apply_conditions", apply)
-    for key in {key for _row, (key, _value) in conditional}:
+    condition_keys = {key for _row, (key, _value) in conditional}
+    condition_keys.update(control.enabled_when[0] for _widget, control in enabled)
+    for key in condition_keys:
         control = spec.control(key)
         widget = getattr(tab, control.key)
         signal = (widget.toggled if isinstance(control, Toggle) else widget.valueChanged
@@ -158,9 +166,12 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
     else:
         row, content = _row(layout, control.label)
     if isinstance(control, Slider):
-        widget = NoWheelSlider(Qt.Orientation.Horizontal)
+        widget = (NoWheelSlider(Qt.Orientation.Horizontal) if control.recommended is None
+                  else RecommendedMarkSlider(Qt.Orientation.Horizontal))
         widget.setRange(round(control.low * control.scale), round(control.high * control.scale))
         widget.setValue(control.position(control.admit(default, default)))
+        if control.recommended is not None:
+            widget.set_recommended_value(control.position(control.recommended))
         if control.tick:
             widget.setTickPosition(QSlider.TickPosition.TicksBelow)
             widget.setTickInterval(control.tick)

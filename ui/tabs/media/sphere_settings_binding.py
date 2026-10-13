@@ -1,150 +1,94 @@
-"""Persistence binding for the lazy Sphere Settings body."""
+"""Bespoke persistence hooks for Sphere's spec-built Settings body."""
 from __future__ import annotations
 
 from copy import deepcopy
 
+from PySide6.QtCore import QSignalBlocker
 from PySide6.QtGui import QColor
-from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
-
-_SPHERE_SETTING_KEYS = (
-    "sphere_finish",
-    "sphere_edge_weight",
-    "sphere_voxel_size_variation",
-    "sphere_depth_shading_enabled",
-    "sphere_depth_shading_strength",
-    "sphere_allow_overflow",
-    "sphere_cel_shading",
-    "sphere_light_tracer_enabled",
-    "sphere_fragment_interpolation_enabled",
-    "sphere_incoming_density_response_enabled",
-    "sphere_incoming_transient_velocity_enabled",
-    "sphere_particle_outtake_enabled",
-    "sphere_shadow_enabled",
-    "sphere_shadow_opacity",
-    "sphere_shadow_softness",
-    "sphere_shadow_distance",
-    "sphere_shadow_size",
-    "sphere_fade_incoming_blocks",
-    "sphere_fragment_energy_floor",
-    "sphere_particle_energy_floor",
-    "sphere_fragment_strength",
-    "sphere_particle_distance",
-    "sphere_particle_amount",
-    "sphere_perspective_strength",
-    "sphere_taste_the_rainbow_enabled",
-    "sphere_taste_the_rainbow_surfaces",
-    "sphere_taste_the_rainbow_edges",
-    "sphere_taste_the_rainbow_speed",
-    "sphere_taste_the_rainbow_extent",
-    "sphere_spin_direction",
-    "sphere_base_rotation_speed",
-    "sphere_rotation_speed",
-    "sphere_gloss",
-    "sphere_specular",
-    "sphere_mirror",
-    "sphere_light_direction",
-    "sphere_vocal_response",
-    "sphere_size_response",
-)
+from core.settings.visualizer_mode_settings import require_mode_settings
+from ui.color_utils import qcolor_to_list
+from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
 
 def load_sphere_mode_settings(tab, config) -> None:
-    notches = deepcopy(config.get("sphere_analysis_notch_positions", tab._widget_default("spotify_visualizer", "sphere_analysis_notch_positions")))
-    tab._sphere_analysis_notch_positions = notches
-    for name, index in (("bass", 1), ("high", 2)):
-        control = getattr(tab, f"sphere_analysis_{name}_boundary", None)
-        if control is not None:
-            previous = control.blockSignals(True)
-            control.setValue(round(notches[index][0] * 1000))
-            control.blockSignals(previous)
-            control._sphere_refresh_label()
-    for key in _SPHERE_SETTING_KEYS:
-        control = getattr(tab, key, None)
-        if control is None:
-            continue
-        default = tab._widget_default("spotify_visualizer", key)
-        value = config.get(key, default)
-        previous = control.blockSignals(True)
-        if hasattr(control, "setCurrentText"):
-            control.setCurrentText(str(value))
-        elif hasattr(control, "setChecked"):
-            control.setChecked(bool(value))
-        else:
-            control.setValue(round(float(value) * (1000 if key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor", "sphere_taste_the_rainbow_speed") else 100)))
-        control.blockSignals(previous)
-        refresh_label = getattr(control, "_sphere_refresh_label", None)
-        if refresh_label is not None:
-            refresh_label()
-
-    for key, attr, button_attr in (
-        ("sphere_fill_color", "_sphere_fill_color", "sphere_fill_color_btn"),
-        ("sphere_edge_color", "_sphere_edge_color", "sphere_edge_color_btn"),
-        ("sphere_tracer_color", "_sphere_tracer_color", "sphere_tracer_color_btn"),
-    ):
-        default = tab._widget_default("spotify_visualizer", key)
-        raw = config.get(key, default)
-        color = QColor(*raw)
-        if not color.isValid():
-            raise ValueError(f"Sphere Settings requires resolved RGBA for {key}")
-        setattr(tab, attr, color)
-        button = getattr(tab, button_attr, None)
-        if button is not None and hasattr(button, "set_color"):
-            button.set_color(color)
-        alpha = getattr(tab, key.replace("_color", "_alpha"), None)
-        if alpha is not None:
-            previous = alpha.blockSignals(True)
-            alpha.setValue(color.alpha())
-            alpha.blockSignals(previous)
-            alpha._sphere_refresh_label()
-
-    refresh_dependencies = getattr(tab, "_refresh_sphere_dependencies", None)
-    if refresh_dependencies is not None:
-        refresh_dependencies()
+    load_spec_mode_settings(tab, "sphere", config)
 
 
 def collect_sphere_mode_settings(tab) -> dict:
-    return {
-        "sphere_analysis_notch_positions": deepcopy(tab._sphere_analysis_notch_positions),
-        "sphere_finish": tab.sphere_finish.currentText(),
-        "sphere_allow_overflow": tab.sphere_allow_overflow.isChecked(),
-        "sphere_cel_shading": tab.sphere_cel_shading.isChecked(),
-        "sphere_light_tracer_enabled": tab.sphere_light_tracer_enabled.isChecked(),
-        "sphere_fragment_interpolation_enabled": tab.sphere_fragment_interpolation_enabled.isChecked(),
-        "sphere_incoming_density_response_enabled": tab.sphere_incoming_density_response_enabled.isChecked(),
-        "sphere_incoming_transient_velocity_enabled": tab.sphere_incoming_transient_velocity_enabled.isChecked(),
-        "sphere_particle_outtake_enabled": tab.sphere_particle_outtake_enabled.isChecked(),
-        "sphere_shadow_enabled": tab.sphere_shadow_enabled.isChecked(),
-        "sphere_shadow_opacity": tab.sphere_shadow_opacity.value() / 100.0,
-        "sphere_shadow_softness": tab.sphere_shadow_softness.value() / 100.0,
-        "sphere_shadow_distance": tab.sphere_shadow_distance.value() / 100.0,
-        "sphere_shadow_size": tab.sphere_shadow_size.value() / 100.0,
-        "sphere_depth_shading_enabled": tab.sphere_depth_shading_enabled.isChecked(),
-        "sphere_fill_color": _qcolor_to_list(getattr(tab, "_sphere_fill_color", None), tab._widget_default("spotify_visualizer", "sphere_fill_color")),
-        "sphere_edge_color": _qcolor_to_list(getattr(tab, "_sphere_edge_color", None), tab._widget_default("spotify_visualizer", "sphere_edge_color")),
-        "sphere_tracer_color": _qcolor_to_list(getattr(tab, "_sphere_tracer_color", None), tab._widget_default("spotify_visualizer", "sphere_tracer_color")),
-        "sphere_fade_incoming_blocks": tab.sphere_fade_incoming_blocks.isChecked(),
-        "sphere_taste_the_rainbow_enabled": tab.sphere_taste_the_rainbow_enabled.isChecked(),
-        "sphere_taste_the_rainbow_surfaces": tab.sphere_taste_the_rainbow_surfaces.isChecked(),
-        "sphere_taste_the_rainbow_edges": tab.sphere_taste_the_rainbow_edges.isChecked(),
-        "sphere_taste_the_rainbow_speed": tab.sphere_taste_the_rainbow_speed.value() / 1000.0,
-        "sphere_taste_the_rainbow_extent": tab.sphere_taste_the_rainbow_extent.value() / 100.0,
-        "sphere_light_direction": tab.sphere_light_direction.currentText(),
-        "sphere_fragment_energy_floor": tab.sphere_fragment_energy_floor.value() / 1000.0,
-        "sphere_particle_energy_floor": tab.sphere_particle_energy_floor.value() / 1000.0,
-        "sphere_fragment_strength": tab.sphere_fragment_strength.value() / 100.0,
-        "sphere_particle_distance": tab.sphere_particle_distance.value() / 100.0,
-        "sphere_particle_amount": tab.sphere_particle_amount.value() / 100.0,
-        "sphere_perspective_strength": tab.sphere_perspective_strength.value() / 100.0,
-        "sphere_edge_weight": tab.sphere_edge_weight.value() / 100.0,
-        "sphere_voxel_size_variation": tab.sphere_voxel_size_variation.value() / 100.0,
-        "sphere_depth_shading_strength": tab.sphere_depth_shading_strength.value() / 100.0,
-        "sphere_spin_direction": tab.sphere_spin_direction.currentText(),
-        "sphere_base_rotation_speed": tab.sphere_base_rotation_speed.value() / 100.0,
-        "sphere_rotation_speed": tab.sphere_rotation_speed.value() / 100.0,
-        "sphere_gloss": tab.sphere_gloss.value() / 100.0,
-        "sphere_specular": tab.sphere_specular.value() / 100.0,
-        "sphere_mirror": tab.sphere_mirror.value() / 100.0,
-        "sphere_size_response": tab.sphere_size_response.value() / 100.0,
-        "sphere_vocal_response": tab.sphere_vocal_response.value() / 100.0,
-    }
+    return collect_spec_mode_settings(tab, "sphere")
+
+
+def load_sphere_analysis(tab, config) -> None:
+    key = "sphere_analysis_notch_positions"
+    notches = deepcopy(config.get(key, tab._widget_default("spotify_visualizer", key)))
+    tab._sphere_analysis_notch_positions = notches
+    for name, index in (("bass", 1), ("high", 2)):
+        control = getattr(tab, f"sphere_analysis_{name}_boundary")
+        blocker = QSignalBlocker(control)
+        control.setValue(round(notches[index][0] * 1000))
+        control._sphere_refresh_label()
+        del blocker
+
+
+def collect_sphere_analysis(tab) -> dict:
+    return {"sphere_analysis_notch_positions": deepcopy(tab._sphere_analysis_notch_positions)}
+
+
+def load_sphere_finish(tab, config) -> None:
+    key = "sphere_finish"
+    default = tab._widget_default("spotify_visualizer", key)
+    value = require_mode_settings("sphere").control(key).admit(config.get(key, default), default)
+    blocker = QSignalBlocker(tab.sphere_finish)
+    tab.sphere_finish.setCurrentText(value)
+    del blocker
+
+
+def collect_sphere_finish(tab) -> dict:
+    return {"sphere_finish": tab.sphere_finish.currentText()}
+
+
+def _load_colour(tab, config, channel) -> None:
+    key = f"sphere_{channel}_color"
+    default = tab._widget_default("spotify_visualizer", key)
+    value = require_mode_settings("sphere").control(key).admit(config.get(key, default), default)
+    color = QColor(*value)
+    setattr(tab, f"_{key}", color)
+    button = getattr(tab, f"{key}_btn")
+    alpha = getattr(tab, f"sphere_{channel}_alpha")
+    blockers = [QSignalBlocker(button), QSignalBlocker(alpha)]
+    button.set_color(color)
+    alpha.setValue(color.alpha())
+    alpha._sphere_refresh_label()
+    del blockers
+    if channel == "tracer":
+        tab._sphere_apply_tracer_dependency()
+
+
+def _collect_colour(tab, channel) -> dict:
+    key = f"sphere_{channel}_color"
+    return {key: qcolor_to_list(getattr(tab, f"_{key}"), tab._widget_default("spotify_visualizer", key))}
+
+
+def load_sphere_fill_colour(tab, config) -> None:
+    _load_colour(tab, config, "fill")
+
+
+def collect_sphere_fill_colour(tab) -> dict:
+    return _collect_colour(tab, "fill")
+
+
+def load_sphere_edge_colour(tab, config) -> None:
+    _load_colour(tab, config, "edge")
+
+
+def collect_sphere_edge_colour(tab) -> dict:
+    return _collect_colour(tab, "edge")
+
+
+def load_sphere_tracer_colour(tab, config) -> None:
+    _load_colour(tab, config, "tracer")
+
+
+def collect_sphere_tracer_colour(tab) -> dict:
+    return _collect_colour(tab, "tracer")

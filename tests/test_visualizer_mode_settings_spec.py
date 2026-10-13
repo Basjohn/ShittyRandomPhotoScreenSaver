@@ -47,7 +47,7 @@ def test_a_spec_is_a_registered_mode_and_owns_canonical_keys(spec):
         assert key.startswith(descriptor.setting_prefixes), key
         assert key in DEFAULTS, f"{key} has no canonical default"
     for control in spec.controls:
-        assert not (control.logical and control.source), control.key
+        assert sum((control.logical, control.source, getattr(control, "authoring", False))) <= 1, control.key
         default = DEFAULTS[control.key]
         if isinstance(control, Colour):
             assert control.admit(default, default) == [int(c) for c in default][:4] + [255] * (4 - len(default))
@@ -70,7 +70,7 @@ def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
         elif isinstance(control, Colour):
             wild[control.key] = "not a colour"
         elif isinstance(control, Choice):
-            wild[control.key] = "not a choice"
+            wild[control.key] = DEFAULTS[control.key] if control.ingress_strict else "not a choice"
         else:
             wild[control.key] = "on"
     model = SpotifyVisualizerSettings.from_mapping(wild, apply_preset_overlay=False)
@@ -107,9 +107,12 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
             suffix = control.key.removeprefix(f"{spec.mode_id}_")
             assert projected[f"spectrum_{suffix}"] == DEFAULTS[control.key]
             continue
+        if getattr(control, "authoring", False):
+            assert not hasattr(logical, f"_{control.key}") and not hasattr(presentation, f"_{control.key}")
+            continue
         owner, other = (logical, presentation) if control.logical else (presentation, logical)
         attr = control_runtime_attr(control)
-        assert getattr(owner, attr) == control_runtime_value(control, control.admit(DEFAULTS[control.key], DEFAULTS[control.key]))
+        assert getattr(owner, attr) == control_runtime_value(control, control.admit_runtime(DEFAULTS[control.key], DEFAULTS[control.key]))
         assert not hasattr(other, attr), control.key
     parameters = spec_mode_parameters(presentation, spec.mode_id)
     assert set(parameters) == {control.key for control in spec.presentation_controls()}
@@ -139,6 +142,39 @@ def test_devcurve_production_applier_writes_each_logical_control_once():
     assert presentation.writes == {}
     for key, value in values.items():
         assert getattr(logical, f"_{key}") == value
+
+
+def test_a_live_condition_cannot_reenable_a_permanently_unavailable_control(qt_app, settings_manager):
+    from dataclasses import replace
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.tabs.media.spec_mode_builder import _bind_conditions, load_spec_mode_settings
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    settings_manager.set("widgets", {"spotify_visualizer": {
+        "enabled": True, "visualizers_enabled": True, "mode": "extruded_spectrum",
+        "mode_activation": build_visualizer_mode_activation(["extruded_spectrum"]),
+        "preset_extruded_spectrum": get_custom_preset_index("extruded_spectrum"),
+    }})
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("extruded_spectrum")
+        spec = require_mode_settings("extruded_spectrum")
+        combined = replace(spec, entries=tuple(
+            replace(entry, enabled_when=("extruded_spectrum_shadow_enabled", True))
+            if getattr(entry, "key", "") == "extruded_spectrum_shadow_strength" else entry
+            for entry in spec.entries
+        ))
+        _bind_conditions(tab, combined, tab._extruded_spectrum_rows)
+        for enabled in (True, False, True):
+            tab.extruded_spectrum_shadow_enabled.setChecked(enabled)
+            assert not tab.extruded_spectrum_shadow_strength.isEnabled()
+            load_spec_mode_settings(tab, "extruded_spectrum", {**DEFAULTS, "extruded_spectrum_shadow_enabled": enabled})
+            assert not tab.extruded_spectrum_shadow_strength.isEnabled()
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.mode_id)
