@@ -682,7 +682,10 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
             filtered[key] = value
     # Ensure presets never flip the visualizer mode when applied.
     filtered["mode"] = mode
-    return filtered
+    # Every preset/save/repair path shares forward retirement. Mode prefixes
+    # cannot retain a removed authority (e.g. framed scene overflow).
+    from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
+    return strip_retired_visualizer_settings(filtered)
 
 
 def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, Any]:

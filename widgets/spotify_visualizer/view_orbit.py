@@ -123,6 +123,24 @@ def view_orbit_values(host: Any, mode_id: str, now: float | None = None) -> Dict
     return {key: float(getattr(host, f"_{key}")) for key in view_orbit_settings(mode_id)}
 
 
+def view_pose_values(host: Any, mode_id: str, now: float | None = None) -> Dict[str, float]:
+    """The complete persistent view, including optional framed scene transform."""
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    return {**view_orbit_values(host, mode_id, now),
+            **{key: float(getattr(host, f"_{key}")) for key in descriptor.scene_transform_settings}}
+
+
+def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, float]) -> Dict[str, float]:
+    """Apply an admitted internal pose through the canonical presentation spec."""
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    keys = frozenset(descriptor.scene_transform_settings)
+    if not keys or not set(values) <= keys:
+        return {}
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    apply_presentation_vis_mode_kwargs(host, {key: _clamped(key, float(value)) for key, value in values.items()})
+    return view_pose_values(host, mode_id)
+
+
 def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object], now: float) -> Dict[str, object]:
     """A capture's ``values`` with the held-key view at ``now`` (logical thread; read only)."""
     motion = _motion(host, mode_id)

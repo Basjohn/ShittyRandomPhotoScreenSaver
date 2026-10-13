@@ -47,7 +47,9 @@ def test_only_3d_freeform_modes_orbit_through_their_own_view_settings():
         if not keys:
             continue
         descriptor = get_visualizer_mode_descriptor(mode)
-        assert descriptor.presentation_policy.shell_policy.value == "frameless", mode
+        assert descriptor.geometry_kind == "freeform_3d", mode
+        assert descriptor.presentation_policy.shell_policy.value == (
+            "card" if descriptor.scene_transform_settings else "frameless"), mode
         assert len(keys) == 2 and all(key.startswith(descriptor.setting_prefixes) for key in keys)
         assert all(key in _DEFAULTS for key in keys)
 
@@ -457,3 +459,23 @@ def test_sphere_inertia_cleared_when_preset_rebases_without_held_keys():
     rebase_view_orbit_motion(host, 4.1)
     assert host._view_orbit_drag_velocity is None
     assert host._view_orbit_inertia is None
+
+
+def test_framed_orbit_settlement_preserves_the_complete_internal_pose():
+    from engine.display_manager import DisplayManager
+    from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    mode = 'shockwave_grid'
+    section = {**deepcopy(_DEFAULTS), 'mode': mode}
+    manager = _manager(section, mode)
+    transform_visualizer_scene(manager._quick_visualizer_owner.controller.presentation_state, mode, {
+        'shockwave_grid_scene_scale': 1.7, 'shockwave_grid_scene_pan_x': .4, 'shockwave_grid_scene_pan_y': -.3,
+    })
+    DisplayManager._orbit_quick_visualizer_view(manager, 1., .5)
+    DisplayManager._persist_quick_visualizer_view(manager)
+    saved, custom = manager.settings_manager.writes[0]
+    assert saved['shockwave_grid_scene_scale'] == 1.7
+    assert saved['shockwave_grid_scene_pan_x'] == .4
+    assert saved['shockwave_grid_scene_pan_y'] == -.3
+    assert set(get_visualizer_view_pose_keys(mode)) <= set(saved)
+    assert custom == {}

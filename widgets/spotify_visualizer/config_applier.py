@@ -264,6 +264,14 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     """
 
     # --- Card + bar styling (global across modes) --------------------
+    if "shockwave_grid_terrain" in kwargs:
+        from rendering.gl_programs.heightfield import heightfield_surface_bytes, normalize_heightfield
+
+        terrain = normalize_heightfield(kwargs["shockwave_grid_terrain"])
+        host._shockwave_grid_terrain = freeze_render_fields({
+            "size": terrain["size"], "data": heightfield_surface_bytes(terrain),
+            "maximum": max(terrain["heights"]),
+        })
     if 'bar_fill_color' in kwargs:
         c = _color_or_none(kwargs['bar_fill_color'])
         if c is not None:
@@ -405,6 +413,7 @@ def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[
     held-key view orbit evaluated at the capture's ``now_ts``."""
     pres = _presentation_source(widget)
     values = spec_mode_parameters(pres, "shockwave_grid")
+    values["shockwave_grid_terrain"] = pres._shockwave_grid_terrain
     values["scene3d_detail"] = str(pres._scene3d_detail)
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion

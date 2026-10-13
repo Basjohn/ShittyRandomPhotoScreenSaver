@@ -6,6 +6,8 @@ Nothing is generated from it; every reader uses it directly.
 """
 from __future__ import annotations
 
+from rendering.gl_programs.heightfield import basin_profile
+
 
 DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15},
                    'pixel_shift': {'enabled': False, 'rate': 1}},
@@ -263,6 +265,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                      'extruded_spectrum:response': False,
                                      'extruded_spectrum:shape': False,
                                      'shockwave_grid:appearance': False,
+                                     'shockwave_grid:terrain': False,
                                      'shockwave_grid:render': False,
                                      'shockwave_grid:response': False,
                                      'shockwave_grid:waves': False,
@@ -1121,7 +1124,23 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_spectrum_transient_pulse_gain': 1.0,
                                     'extruded_spectrum_turn': 0.0,
                                     'extruded_spectrum_wave_amplitude': 0.15,
-                                    'shockwave_grid_allow_overflow': True,
+                                    'shockwave_grid_terrain': basin_profile(),
+                                    'shockwave_grid_terrain_height': 0.90,
+                                    'shockwave_grid_terrain_reactivity': 0.18,
+                                    'shockwave_grid_terrain_growth_attack': 0.35,
+                                    'shockwave_grid_terrain_growth_release': 1.2,
+                                    'shockwave_grid_terrain_detail': 0.35,
+                                    'shockwave_grid_water_color': [40, 105, 180, 255],
+                                    'shockwave_grid_water_reflection': 0.55,
+                                    'shockwave_grid_water_detail': 0.45,
+                                    'shockwave_grid_sky_enabled': True,
+                                    'shockwave_grid_sun_enabled': True,
+                                    'shockwave_grid_sun_color': [255, 25, 180, 255],
+                                    'shockwave_grid_sky_strength': 0.8,
+                                    'shockwave_grid_sky_color': [10, 18, 46, 255],
+                                    'shockwave_grid_scene_scale': 1.3,
+                                    'shockwave_grid_scene_pan_x': 0.0,
+                                    'shockwave_grid_scene_pan_y': -0.02,
                                     'shockwave_grid_adaptive_sensitivity': True,
                                     'shockwave_grid_agc_strength': 0.5,
                                     'shockwave_grid_audio_block_size': 512,
@@ -1168,7 +1187,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                    [0.35, 0.75],
                                                                    [0.65, 0.55],
                                                                    [1.0, 0.8]],
-                                    'shockwave_grid_tilt': 0.22,
+                                    'shockwave_grid_tilt': 0.40,
                                     'shockwave_grid_transient_clamp': 1.5,
                                     'shockwave_grid_transient_pulse_gain': 1.0,
                                     'shockwave_grid_turn': 0.0,

@@ -522,7 +522,10 @@ their Quick window/context and retire through one-shot render events on admissio
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
 Sphere owns only the descriptor-declared technical inputs its analysis consumes, plus the two selected frequency splits.
 Startup, legacy Custom-cache and SST migration seed absent owned values from the former RAW Spectrum profile once before
-defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Shockwave is different:** its renderer intentionally consumes Spectrum-shaped bars for the grid horizon, and its authored Shape editor remains active. Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
+defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Neon Lake Basin retains the Shockwave source identity:** its owned Advanced Frequency Response editor still shapes
+bars for ridge lighting and separate terrain-growth envelopes. Its primary Terrain editor authors land/water heights,
+not audio coordinates; the onset ring continues to drive water independently. See
+[Neon Lake Basin](Reference/Neon_Lake_Basin.md). Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
 
 ## Geometry / CUSTOM
 
@@ -586,10 +589,13 @@ promoted. These two explicit transaction operations prevent false one-publicatio
 the bridge's normal stale-presentation rejection. A full Edit transaction keeps its source profile identity until it finishes; a
 direct gesture commits through its existing Save boundary before target-profile activation begins.
 
-**Camera/preset state is not layout geometry.** Descriptor `view_orbit_settings`, curated/Custom preset fields, turn, tilt,
-material, response and any future camera parameters remain in the mode's existing presentation/settings authority. A visible
-3D pose is the composition of the active `layout_profile` (stage position/size/viewport) plus the mode's own presentation state.
-Neither side may serialize, infer or overwrite the other.
+**View pose and artistic presets are separate from layout geometry.** Descriptor `view_orbit_settings` and optional
+`scene_transform_settings` identify canonical mode-specific view settings. Sphere and Extruded declare turn/tilt;
+framed Neon Lake Basin additionally declares internal scene scale and pan X/Y. All five Neon view keys persist through
+the existing view owner and are excluded from curated art presets and Custom art snapshots. View gestures do not
+select Custom art; art application cannot overwrite the view. Material and response remain artistic settings. A visible
+3D pose combines the active `layout_profile` (stage position/size/viewport) with its mode's presentation view state.
+Neither authority may infer or overwrite the other. See [Neon Lake Basin](Reference/Neon_Lake_Basin.md).
 
 Freeform-3D Edit framing shows multiple derivative views of that same one geometry owner. The persisted CUSTOM rectangle is the
 stage/viewport; the renderer-derived content envelope remains the honest projected footprint/hit cue; and a projected **3D cage**
@@ -598,8 +604,12 @@ paint only. They never persist, snap, collide, fit, move, resize or become a pro
 cage from the same production projection/fit used by its renderer; Shockwave mirrors its production camera projection; Sphere
 uses its renderer's stage/perspective convention. Conservative renderer reach remains allocation/visibility evidence only.
 Descriptor-owned orbit admission is separate from footprint visibility, so empty scenes may expose Orbit without fabricated
-content geometry. CUSTOM's native pointer block remains binding; Orbit/Alt-left, Alt-right move and Alt-wheel scale route through
-the existing orbit resolver and current `CustomLayoutSession`. Wheel input preserves signed movement on either Qt axis; zero
+content geometry. CUSTOM's native pointer block remains binding. Orbit/Alt-left uses the existing view resolver. For unframed 3D modes,
+Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Framed Neon Lake Basin instead routes
+Alt-right to internal pan and Alt-wheel to internal scale, including during Edit: its card rectangle, viewport and CUSTOM
+geometry never change from those inputs. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
+rectangle owns selection; the projected internal guide is clipped derivative paint. See
+[Neon Lake Basin](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero
 movement is a no-op. Geometry/settings/orbit edges refresh framing; ordinary audio and closed/deselected Edit add no continuing
 projection work. Gesture hit regions remain frozen while derivative paint follows the projection; persisted stage handle paint
 stays secondary until hovered or dragged.
@@ -645,7 +655,7 @@ independent position owners. Normal render has no edit-rail descriptor scan.
 
 ### 3D Visualizer geometry vs pose vs preset ownership
 
-A new Visualizer mode declares `geometry_kind` (only shared Edit/Arrange mechanics), `layout_profile` (compatible authored CUSTOM stage slot), and optionally `view_orbit_settings` (canonical persistent *mode* view keys) in the existing lazy mode descriptor. The canonical live mode section persists view keys. No Custom layout entry or preset owns view keys. Adding another freeform-3D mode is descriptor metadata plus its mode's renderer/projection contract, not a second geometry store or duplicate Settings UI.
+A new Visualizer mode declares `geometry_kind` (only shared Edit/Arrange mechanics), `layout_profile` (compatible authored CUSTOM stage slot), and optionally `view_orbit_settings` plus `scene_transform_settings` (canonical persistent *mode* view keys) in the existing lazy mode descriptor. The canonical live mode section persists view keys. No Custom layout entry or preset owns view keys. Adding another freeform-3D mode is descriptor metadata plus its mode's renderer/projection contract, not a second geometry store or duplicate Settings UI.
 
 On mode hot-swap, resolve the target stage while hidden. Never borrow an outgoing mode's rectangle or per-mode camera. Save/Cancel and display transfer persist only the current active layout-profile stage and preserve every dormant sibling. Arrange must use the same descriptor lookup. In active Edit, cross-profile mode changes are refused until the transaction closes.
 

@@ -1,0 +1,405 @@
+"""Neon renderer resource contracts and actual GL/QSG clipping; no preset art goldens."""
+from dataclasses import replace
+import json
+from pathlib import Path
+import struct
+import subprocess
+import sys
+
+import numpy as np
+from OpenGL import GL as gl
+import pytest
+
+from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+from rendering.gl_programs.heightfield import heightfield_surface_bytes
+from tests.test_qtquick_extruded_spectrum import H, W, _Target
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
+
+
+def _snapshot(**parameters):
+    # Same production seam as the Shockwave fixture, without importing its
+    # retired flat-grid shader oracles while the renderer replacement lands.
+    from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
+    snapshot = _build_spectrum_preview_snapshot(width=W, height=H, mode='shockwave_grid',
+                                               settings=frozen_visualizer_settings('shockwave_grid'))
+    state = snapshot.logical.mode_state
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), **parameters})))
+
+
+@pytest.fixture
+def target(qt_app):
+    capture, host = _Target(), QuickVisualizerRenderHost()
+    try:
+        yield capture, host
+    finally:
+        assert capture.capture.context.makeCurrent(capture.capture.surface)
+        host.release_resources()
+        capture.close()
+
+
+def _pose(snapshot, *, turn=.83, tilt=.7, scale=3.8, pan_x=1.7, pan_y=-1.6):
+    state = snapshot.logical.mode_state
+    values = {**dict(state.parameters), 'shockwave_grid_turn': turn, 'shockwave_grid_tilt': tilt,
+              'shockwave_grid_scene_scale': scale, 'shockwave_grid_scene_pan_x': pan_x,
+              'shockwave_grid_scene_pan_y': pan_y}
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state, parameters=values)))
+
+
+def test_warmed_neon_frames_allocate_or_upload_no_static_resources(target, monkeypatch):
+    capture, host = target
+    snapshot = _snapshot(shockwave_grid_glow=.8, shockwave_grid_sky_enabled=True)
+    capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    allocation = renderer._target.allocation
+    names = dict(renderer._target._names)
+    terrain_uploads = renderer._heightfield.uploads
+    def forbidden(*args, **kwargs):
+        pytest.fail('ordinary warmed frame allocated/uploaded static GPU resources')
+    # Mapped onset/event-ring writes and GL fences remain the authored stream;
+    # static meshes, shaders, terrain texture and render targets cannot rebuild.
+    from rendering.quick.scene3d import resources
+    monkeypatch.setattr(resources, 'compile_program', forbidden)
+    monkeypatch.setattr(resources, 'compile_compute_program', forbidden)
+    for name in ('glCreateProgram', 'glCreateShader', 'glCreateTextures', 'glCreateBuffers',
+                 'glCreateVertexArrays', 'glCreateFramebuffers', 'glTextureStorage2D',
+                 'glTextureStorage2DMultisample', 'glNamedBufferStorage', 'glTextureSubImage2D'):
+        monkeypatch.setattr(gl, name, forbidden)
+    for frame in (snapshot, _pose(snapshot), _pose(snapshot, scale=.3, pan_x=-1.8, pan_y=1.8), snapshot):
+        capture.render(host, frame)
+        assert renderer._target.allocation == allocation
+        assert renderer._target._names == names
+        assert renderer._heightfield.uploads == terrain_uploads
+
+
+def test_authored_terrain_replacement_uploads_once_without_target_churn(target, monkeypatch):
+    capture, host = target
+    snapshot = _snapshot(shockwave_grid_glow=.0)
+    capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    names = dict(renderer._target._names)
+    allocation = renderer._target.allocation
+    texture = renderer._heightfield.texture_id
+    uploads = renderer._heightfield.uploads
+    terrain = dict(snapshot.logical.mode_state.parameters['shockwave_grid_terrain'])
+    heights = list(struct.unpack(f"<{terrain['size'] ** 2 * 2}f", terrain['data'])[::2])
+    middle = len(heights) // 2
+    heights[middle] = .2 if heights[middle] != .2 else .4  # TEST INPUT: a bounded real authoring edit
+    terrain['data'] = heightfield_surface_bytes({'size': terrain['size'], 'heights': heights})
+    terrain['maximum'] = max(heights)
+    state = snapshot.logical.mode_state
+    changed = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
+    real_upload = gl.glTextureSubImage2D
+    calls = []
+    def upload(*args, **kwargs):
+        calls.append(args[:7])
+        return real_upload(*args, **kwargs)
+    monkeypatch.setattr(gl, 'glTextureSubImage2D', upload)
+    for frame in (changed, changed, _pose(changed), changed):
+        capture.render(host, frame)
+    assert len(calls) == 1 and renderer._heightfield.uploads == uploads + 1
+    assert renderer._heightfield.texture_id == texture
+    assert renderer._target.allocation == allocation and renderer._target._names == names
+
+
+
+def test_low_terrain_height_invalidates_fit_even_below_maximum_floor(target, monkeypatch):
+    from rendering.quick.visualizer.implementations import shockwave_grid as implementation
+    capture, host = target
+    original = _snapshot(shockwave_grid_terrain_height=0., shockwave_grid_glow=0.)
+    terrain = dict(original.logical.mode_state.parameters['shockwave_grid_terrain'])
+    # Low, level terrain keeps the camera maximum at .19 for both settings,
+    # while its actual positive bounds still move under the authored height.
+    terrain['data'] = heightfield_surface_bytes({'size': terrain['size'],
+                                               'heights': [.08] * terrain['size'] ** 2})
+    terrain['maximum'] = .08
+    state = original.logical.mode_state
+    initial = replace(original, logical=replace(original.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
+    raised = replace(initial, logical=replace(initial.logical, mode_state=replace(
+        initial.logical.mode_state, parameters={**dict(initial.logical.mode_state.parameters),
+                                              'shockwave_grid_terrain_height': .12})))
+    fits = []
+    actual_fit = implementation.basin_fit
+    def fit(*args, **kwargs):
+        result = actual_fit(*args, **kwargs)
+        fits.append((args, result))
+        return result
+    monkeypatch.setattr(implementation, 'basin_fit', fit)
+    capture.render(host, initial)
+    renderer = host._implementations['shockwave_grid']
+    first_fit = renderer._fit
+    capture.render(host, raised)
+    assert len(fits) == 2  # Changing height must invalidate the production cache.
+    assert fits[0][0][3] == fits[1][0][3] == .19
+    assert fits[0][0][-1] == 0. and fits[1][0][-1] == pytest.approx(.18)
+    assert renderer._fit == fits[1][1] and renderer._fit != first_fit
+    for frame in (raised, raised):
+        capture.render(host, frame)
+    assert len(fits) == 2  # Ordinary frames continue reusing the same fit.
+
+
+def test_actual_sun_toggle_preserves_sky_and_sky_strength_does_not_fade_sun(target):
+    capture, host = target
+    base = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=True,
+                     shockwave_grid_sun_color=[245, 20, 175, 255],
+                     shockwave_grid_turn=0., shockwave_grid_tilt=.5)
+    def render(sun, strength):
+        state = base.logical.mode_state
+        frame = replace(base, logical=replace(base.logical, mode_state=replace(
+            state, parameters={**dict(state.parameters), 'shockwave_grid_sun_enabled': sun,
+                               'shockwave_grid_sky_strength': strength})))
+        return capture.render(host, frame)
+    sky_only = render(False, .7)
+    sky_sun = render(True, .7)
+    sun_only = render(True, 0.)
+    neither = render(False, 0.)
+    # Derive coverage from real production pixels, not a golden art layout.
+    sun_change = np.max(np.abs(sun_only - neither), axis=2) > 8
+    sky_change = np.max(np.abs(sky_only - neither), axis=2) > 8
+    assert np.count_nonzero(sun_change) > 20
+    assert np.count_nonzero(sky_change & ~sun_change) > 100
+    assert np.count_nonzero(np.max(np.abs(sky_sun - sky_only), axis=2) > 8) > 20
+    # Opaque Sun centres have the same colour with and without the sky layer.
+    centre = sun_change & (sun_only[..., 3] == 255) & (neither[..., 3] < 5)
+    assert np.count_nonzero(centre) > 10
+    assert np.abs(sky_sun[centre] - sun_only[centre]).max() <= 2
+    assert np.max(sun_only[centre, 0]) > 150
+    assert np.max(sun_only[centre, 2]) > 100
+
+
+def test_maximum_water_highlights_have_bounded_float_coverage(target, monkeypatch):
+    from rendering.quick.scene3d.target import SceneTarget
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_MAX_STRENGTH
+    capture, host = target
+    allocate = SceneTarget._allocate_attachment
+    def floating_colour(owner, key, samples, width, height, internal):
+        # The production colour attachment is RGBA8 and would hide alpha >1.
+        # Change only its observation precision; shaders, blending, mesh and
+        # all renderer/target ownership remain the actual production paths.
+        return allocate(owner, key, samples, width, height,
+                        gl.GL_RGBA16F if key == 'colour' else internal)
+    monkeypatch.setattr(SceneTarget, '_allocate_attachment', floating_colour)
+    snapshot = _snapshot(scene3d_detail='Performance', shockwave_grid_glow=0.,
+                         shockwave_grid_sky_enabled=False, shockwave_grid_water_detail=1.,
+                         shockwave_grid_wave_height=1., shockwave_grid_wave_speed=1.,
+                         shockwave_grid_floor=0., shockwave_grid_water_reflection=0.,
+                         shockwave_grid_line_color=[255, 255, 255, 255],
+                         shockwave_grid_crest_color=[255, 255, 255, 255])
+    state = snapshot.logical.mode_state
+    terrain = dict(state.parameters['shockwave_grid_terrain'])
+    terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
+                                                  'heights': [0.] * terrain['size'] ** 2}), maximum=0.)
+    # Loudest admitted onset strength and minimum onset gap: overlapping crests
+    # reach the shader's 2.5 clamp while detail/sheens are at their legal maximum.
+    events = tuple((.1 + index * .09, 0., -1.2, SHOCKWAVE_MAX_STRENGTH) for index in range(16))
+    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain}, events=events)))
+    capture.render(host, snapshot)
+    scene = host._implementations['shockwave_grid']._target
+    width, height, samples = scene.allocation
+    assert samples == 1
+    gl.glBindTexture(gl.GL_TEXTURE_2D, scene._names['colour'])
+    try:
+        raw = gl.glGetTexImage(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, gl.GL_FLOAT)
+    finally:
+        gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+    pixels = np.frombuffer(raw, np.float32).reshape(height, width, 4)
+    assert np.isfinite(pixels).all()
+    alpha = pixels[..., 3]
+    assert alpha.min() >= 0. and alpha.max() <= 1.
+    assert np.count_nonzero(alpha > .5) > 20
+    assert np.max(pixels[..., :3]) > .5  # Actual luminous water, not an empty target.
+
+def test_unresolved_and_faded_renderer_are_lazy_then_release_cleanly(target):
+    from rendering.quick.visualizer.implementations.shockwave_grid import QuickShockwaveGridRenderer
+    from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+    capture, host = target
+    renderer = QuickShockwaveGridRenderer()
+    assert not renderer.has_resources and not host.has_resources and not host.resolved_mode_ids
+    snapshot = _snapshot()
+    hidden = replace(snapshot, presentation=replace(snapshot.presentation, content_fade=0.))
+    renderer.render(QuickVisualizerRenderFrame(hidden, (0, 0, W, H), (float(W), float(H)), (1.,) * 16, capture.capture.vao))
+    assert not renderer.has_resources
+    capture.render(host, snapshot)
+    live = host._implementations['shockwave_grid']
+    assert live.has_resources
+    host.release_resources()
+    assert not live.has_resources and not host.has_resources
+
+
+def test_failed_neon_release_is_loud_and_keeps_its_handle_for_legal_retry(target, monkeypatch):
+    capture, host = target
+    capture.render(host, _snapshot())
+    renderer = host._implementations['shockwave_grid']
+    texture = renderer._heightfield.texture_id
+    actual_delete = gl.glDeleteTextures
+    def fail_heightfield(names, *args, **kwargs):
+        if texture in list(names):
+            raise RuntimeError('injected terrain deletion failure')
+        return actual_delete(names, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(gl, 'glDeleteTextures', fail_heightfield)
+        with pytest.raises(RuntimeError, match='injected terrain deletion failure'):
+            host.release_resources()
+        assert renderer._heightfield.texture_id == texture and renderer.has_resources
+        assert host._implementations['shockwave_grid'] is renderer
+    host.release_resources()
+    assert not renderer.has_resources and not host.has_resources
+
+
+def test_two_contexts_keep_neon_resources_independent(qt_app):
+    first, first_host = _Target(), QuickVisualizerRenderHost()
+    second, second_host = None, None
+    try:
+        snapshot = _snapshot()
+        first_pixels = first.render(first_host, snapshot)
+        first_renderer = first_host._implementations['shockwave_grid']
+        second, second_host = _Target(), QuickVisualizerRenderHost()
+        second.render(second_host, snapshot)
+        second_pixels = second.render(second_host, snapshot)  # warmed baseline, same immutable input
+        second_renderer = second_host._implementations['shockwave_grid']
+        assert first_renderer is not second_renderer and first_renderer._heightfield is not second_renderer._heightfield
+        assert first.capture.context.makeCurrent(first.capture.surface)
+        first_host.release_resources()
+        assert not first_renderer.has_resources and second_renderer.has_resources
+        assert second.capture.context.makeCurrent(second.capture.surface)
+        after = second.render(second_host, snapshot)
+        # RGBA8 quantization permits one least-significant bit of driver rounding.
+        assert np.abs(after - second_pixels).max() <= 1
+        assert first_pixels[..., 3].max() > 0
+    finally:
+        if second is not None:
+            assert second.capture.context.makeCurrent(second.capture.surface)
+            second_host.release_resources()
+            second.close()
+        assert first.capture.context.makeCurrent(first.capture.surface)
+        first_host.release_resources()
+        first.close()
+
+
+def _qsg_clip_probe(nested=False):
+    """Run the actual production QSG node/clip host in an isolated Qt process."""
+    import time
+    from PySide6.QtCore import QMetaObject, QTimer, Qt
+    from PySide6.QtGui import QColor, QGuiApplication
+    from PySide6.QtQuick import QQuickItem, QQuickWindow
+    from rendering.quick.bootstrap import configure_quick_graphics
+    from rendering.quick.visualizer import VisualizerRenderItem, VisualizerRenderNode, VisualizerRenderNodeTelemetry
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+    from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity, VisualizerSnapshotBridge
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from tests._invisible_windows import keep_off_screen
+    configure_quick_graphics(reason='neon-qsg-clip-regression')
+    app = QGuiApplication.instance() or QGuiApplication([])
+    width, height = 460, 330
+    background = (17, 23, 31)
+    window = QQuickWindow()
+    window.setColor(QColor(*background))
+    window.resize(width, height)
+    window.setPersistentGraphics(False)
+    window.setPersistentSceneGraph(False)
+    keep_off_screen(window)
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy('shockwave_grid'), display_size=(width, height),
+        outer_origin=(45., 40.), viewport_extent=(360., 240.), border_width=6., corner_radius=38.,
+        content_inset=0., background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0),
+        shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0., shadow_offset=(0., 0.),
+        shadow_spread=0., shadow_extensions=(0., 0., 0., 0.))
+    snapshot = _pose(_snapshot(shockwave_grid_sky_enabled=True), scale=4., pan_x=.9, pan_y=-.9)
+    snapshot = replace(snapshot, presentation=presentation)
+    telemetry = VisualizerRenderNodeTelemetry()
+    captured = {}
+    class Node(VisualizerRenderNode):
+        def render(self, state):
+            super().render(state)
+            info = telemetry.snapshot()
+            if info.error is not None:
+                captured['error'] = info.error
+                return
+            if info.draw_count < 1 or captured:
+                return
+            try:
+                target_size = self.renderTarget().pixelSize()
+                tw, th = target_size.width(), target_size.height()
+                raw = gl.glReadPixels(0, 0, tw, th, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+                pixels = np.flipud(np.frombuffer(bytes(raw), np.uint8).reshape(th, tw, 4))
+                yy, xx = np.mgrid[:th, :tw]
+                lx, ly = (xx + .5) * width / tw, (yy + .5) * height / th
+                x, y, cw, ch = presentation.content_rect
+                # Stay two pixels off the antialiased boundary. Rounded corner
+                # exclusions use the same resolved radius, not a painted fake.
+                outside = (lx < x - 2) | (lx > x + cw + 2) | (ly < y - 2) | (ly > y + ch + 2)
+                radius = float(presentation.shell_style['inner_corner_radius'])
+                qx = np.maximum(np.maximum(x + radius - lx, lx - (x + cw - radius)), 0.)
+                qy = np.maximum(np.maximum(y + radius - ly, ly - (y + ch - radius)), 0.)
+                rounded_outside = (qx * qx + qy * qy) > (radius + 2.) ** 2
+                if nested:
+                    outside |= lx > presentation.outer_rect[0] + 210. + 2.
+                rounded_corners = rounded_outside & (lx >= x) & (lx <= x + cw) & (ly >= y) & (ly <= y + ch)
+                rgb_delta = np.abs(pixels[..., :3].astype(np.int16) - np.array(background))
+                captured.update(outside_delta=int(rgb_delta[outside].max()),
+                                rounded_corner_delta=int(rgb_delta[rounded_corners].max()),
+                                rounded_corner_pixels=int(rounded_corners.sum()),
+                                changed_pixels=int(np.count_nonzero(rgb_delta.max(axis=2) > 3)),
+                                draw_count=info.draw_count, mode=info.drawn_mode_id,
+                                incoming_scissor=bool(state.scissorEnabled()), error=None)
+            except Exception as exc:
+                captured['error'] = f'{type(exc).__name__}: {exc}'
+    class Item(VisualizerRenderItem):
+        def _create_render_node(self):
+            return Node(telemetry)
+    outer_x, outer_y, outer_w, outer_h = presentation.outer_rect
+    parent = QQuickItem(window.contentItem())
+    parent.setX(outer_x); parent.setY(outer_y)
+    parent.setWidth(210. if nested else outer_w); parent.setHeight(outer_h)
+    parent.setClip(bool(nested))
+    item = Item(parent, telemetry=telemetry)
+    item.set_presentation(presentation)
+    logical = snapshot.logical
+    bridge = VisualizerSnapshotBridge()
+    identity = VisualizerRenderIdentity(runtime_generation=logical.runtime_generation,
+        engine_generation=logical.engine_generation, activation_id=logical.activation_id, mode_id=logical.mode_id)
+    bridge.begin_activation(runtime_generation=logical.runtime_generation,
+                            engine_generation=logical.engine_generation, activation_id=logical.activation_id, mode_id=logical.mode_id)
+    assert bridge.publish(snapshot)
+    item.bind_render_source(bridge, identity)
+    deadline = time.monotonic() + 12.
+    closing = [False]
+    def poll():
+        if captured and not closing[0]:
+            closing[0] = True
+            for method in ('hide', 'releaseResources', 'close'):
+                QMetaObject.invokeMethod(window, method, Qt.ConnectionType.QueuedConnection)
+        if closing[0] and telemetry.snapshot().release_count:
+            captured['release_count'] = telemetry.snapshot().release_count
+            print(json.dumps(captured), flush=True)
+            app.quit()
+            return
+        if time.monotonic() > deadline:
+            captured['error'] = captured.get('error') or 'actual QSG clip capture timed out'
+            print(json.dumps(captured), flush=True)
+            app.quit()
+            return
+        QTimer.singleShot(20, poll)
+    window.show()
+    window.update()
+    QTimer.singleShot(20, poll)
+    app.exec()
+
+
+@pytest.mark.parametrize('nested', [False, True])
+def test_actual_neon_qsg_pixels_respect_card_interior_and_rounded_corners(nested):
+    completed = subprocess.run([sys.executable, '-c',
+        f'from tests.test_neon_lake_renderer import _qsg_clip_probe; _qsg_clip_probe(nested={nested})'],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=25)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout[completed.stdout.index('{'):])
+    assert report['error'] is None, report
+    assert report['mode'] == 'shockwave_grid' and report['draw_count'] > 0
+    assert report['changed_pixels'] > 100
+    assert report['outside_delta'] <= 2 and report['rounded_corner_delta'] <= 2
+    assert report['rounded_corner_pixels'] > 0 and report['release_count'] > 0
+    if nested:
+        assert report['incoming_scissor'] is True

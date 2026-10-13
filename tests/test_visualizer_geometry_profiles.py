@@ -46,16 +46,21 @@ def test_layout_profile_is_compatibility_metadata_not_camera_state():
 
 def test_view_pose_keys_are_explicitly_inert_when_curated_presets_are_applied():
     from core.settings.visualizer_presets import apply_preset_to_config, get_presets
-    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys, get_visualizer_mode_descriptor
+    from core.settings.default_contract import require_canonical_default
 
     for mode in ("extruded_spectrum", "shockwave_grid", "sphere"):
-        turn, tilt = get_visualizer_view_pose_keys(mode)
+        turn, tilt = get_visualizer_mode_descriptor(mode).view_orbit_settings
         # 0.275 is valid for every registered 3D tilt range, including
         # Sphere's non-negative authored camera tilt.
-        live = {turn: 0.741, tilt: 0.275, "mode": mode}
+        live = {key: require_canonical_default(f"widgets.spotify_visualizer.{key}")
+                for key in get_visualizer_view_pose_keys(mode)}
+        live.update({turn: 0.741, tilt: 0.275, "mode": mode})
         for index, preset in enumerate(get_presets(mode)):
             if preset.is_custom:
                 continue
             result = apply_preset_to_config(mode, index, live)
             assert result[turn] == 0.741
             assert result[tilt] == 0.275
+            assert {key: result[key] for key in get_visualizer_view_pose_keys(mode)} == {
+                key: live[key] for key in get_visualizer_view_pose_keys(mode)}

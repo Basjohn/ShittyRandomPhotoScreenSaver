@@ -68,6 +68,11 @@ acceptance gate.
   turn/tilt/pan/scale persist through future load via the canonical view-pose owner, independently of art presets and
   CUSTOM geometry. Add real input/settlement/reload tests and an independent audit even if the implementation appears
   correct; this spec/descriptor contract is the template for later bordered 3D modes.
+  **Visual correction (operator, 2026-10-13):** the first rendered candidates are rejected for poor fidelity. Wireframe,
+  including terrain, must be based on curves; water must retain the older Shockwave crest/trough ripple character;
+  terrain needs its own growth mechanics; the sun must be independently optional and vibrant. Use genuine displaced
+  3D geometry, shared Scene3D projection/depth/resources and the existing logical clock. Do not accept a flat cosmetic
+  substitute or a dense straight-triangle reskin. Preserve this correction alongside the mock and Astra's detailed audit.
   Reuse existing GPU wave/event facilities, stream rings, bloom and scene primitives; any missing heightfield/material
   capability is built as a measured, opt-in shared primitive **within this V4A delivery**, not silently deferred to §4
   or added as a private rendering stack. **High visual and musical parity with the supplied mocks is required on at
@@ -83,23 +88,33 @@ acceptance gate.
   Internal checkpoints remain part of this one delivery:
   Render-cost baseline before this replacement: `tools/baselines/overhead/2026-10-13_000e222e.json` (960×540,
   control-relative timings and deterministic GL/Python call counts; compare unrelated consumers after shared changes).
-  - [ ] **V4A.1 — Terrain and migration contract.** Define bounded immutable heightfield control data, base-height water
-    classification and one-way adaptation of old profile/Custom/preset inputs. Old spectral-response nodes are not
-    terrain coordinates: preserve their consumed audio intent explicitly rather than relabelling or discarding them.
-    Keep terrain data out of per-tick recursive copies; settings/defaults and Custom snapshots retain canonical ownership.
-  - [ ] **V4A.2 — Spec and terrain authoring.** Finish the mode's typed declarations and bespoke terrain editor, with
-    raise/lower/flatten, bounded brush behavior, explicit water preview and silent load. Prove edit/save/reload/reset,
-    preset cycling, old-input adaptation and independent orbit/layout intent before committing this checkpoint.
+  Terrain/migration, typed controls, editor and five-key framed input/persistence are source-complete; durable contracts
+  live in Docs/Reference/Neon_Lake_Basin.md. Native input, real QSG clipping, authoring/save/reset, lazy GPU ownership
+  and shared-consumer preservation have focused proof. Visual acceptance remains open and the source checkpoint does
+  not close V4A.
   - [ ] **V4A.3 — Shared heightfield and complete scene.** Add only the missing opt-in sampling/classification/GPU
     representation to Scene3D, mirrored by CPU/GL tests. Reuse the existing onset ring, MeshResources, StreamRing,
     SceneTarget and optional emission bloom. Terrain changes replace one bounded GPU representation; ordinary frames
     allocate/rebuild nothing. Deliver distinct water waves and solid terrain/ridge response with lazy retirement, a fixed
     normal card and unconditional interior clipping of the orbitable 3D scene.
+    Curved cubic geometry/wire paths, separate capture-clock growth, old crest/trough response, bank continuity and
+    optional vibrant Sun are implemented. The Astra audit still rejects reflection/foreground fidelity. Finish these:
+    - [ ] Broaden the near bank into smooth overlapping lobes and carry its outer foot through the card bottom.
+    - [ ] Break/distort mirrored wire shapes into water trails, preserving bright shoreline connections and dark gaps.
+    - [ ] Reduce resting longitudinal lake lines; retain curved horizontal sheen and travelling crests.
+    - [ ] Assess independent growth contrast on production real music: selected quiet passages still leave many envelopes
+      near their upper range. Inspect passage/presence weighting at the mode owner if motion remains persistently grown.
   - [ ] **V4A.4 — Preset, reaction and visual proof.** Author one editable basin preset, capture low/high frames and
     quiet/onset/sustained sequences from identical synthetic and real clips, and compare with the supplied mock.
     Use the single High Astra audit after this significant renderer work; resolve parity findings before acceptance.
     Measure control-relative CPU/GPU/resource cost at supported tiers and both-display use. Leave only evidence that
     genuinely needs operator eyes/logs as Awaiting Validation; internal green checkpoints alone do not close V4A.
+    **Current visual audit actions:** separate dark terrain faces from selective cyan/magenta curve/ridge light; add a
+    luminous irregular shoreline and broken water reflections without reflected land fill; replace dotted water with
+    directional ripples/sheens driven by the original waves; retain an enclosed lake and foreground continuing to the
+    card bottom; give the optional sun vibrant colour/emission and keep a navy sky with sparse stars and broken clouds.
+    Capture the actual editable preset and production quiet/onset/sustained motion after these corrections; stills and
+    green engineering tests do not establish fidelity. Refresh the stale Guided Setup mode artwork from accepted pixels.
 - [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately

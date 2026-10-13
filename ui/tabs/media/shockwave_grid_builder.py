@@ -1,27 +1,15 @@
 """Lazy Settings body for the Shockwave Grid visualizer.
 
 The body comes from Shockwave Grid's spec (``core/settings/visualizer_mode_settings.py``); only its
-Bar Response section, which reuses Spectrum's shape editor and smoothing controls, is built here.
+Terrain editor and Advanced Frequency Response/smoothing hooks are built here.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QLabel
 
 from ui.tabs.media.builder_scaffold import bind_setting_signal
 from ui.tabs.media.spec_mode_builder import build_spec_mode_ui
-from ui.tabs.shared_styles import NoWheelSlider, add_aligned_row_widget
-
-# The Spectrum-source response values this grid owns (persisted with the shared source family).
-RESPONSE_SLIDERS = (
-    ("shockwave_grid_wave_amplitude", "Reactivity:", 0, 100,
-     "Overall horizon response after the authored lane routing."),
-    ("shockwave_grid_profile_floor", "Shape Floor:", 5, 30,
-     "Minimum bar field retained by the authored profile."),
-    ("shockwave_grid_drop_speed", "Falloff:", 50, 300,
-     "How quickly the shared bar field falls after an energy drop."),
-)
-
+from ui.tabs.shared_styles import add_aligned_row_widget
 
 def build_shockwave_grid_ui(tab, parent_layout) -> None:
     """Build Shockwave Grid's body and its consumed source/technical profile."""
@@ -35,7 +23,7 @@ def _row(layout, label):
 
 
 def build_response_section(tab, response) -> None:
-    """Mirrored layout, the shared Spectrum shape editor, the response sliders and smoothing."""
+    """Preserve the independently authored audio-frequency shape and lane routing."""
 
     content = _row(response, "Mirrored Layout:")
     tab.shockwave_grid_mirrored = QCheckBox("Center-Out (Mirrored Shape)")
@@ -68,17 +56,20 @@ def build_response_section(tab, response) -> None:
     tab.shockwave_grid_mirrored.stateChanged.connect(
         lambda state: tab.shockwave_grid_shape_editor.set_mirrored(bool(state))
     )
-    for key, label, minimum, maximum, tooltip in RESPONSE_SLIDERS:
-        content = _row(response, label)
-        control = NoWheelSlider(Qt.Orientation.Horizontal)
-        control.setRange(minimum, maximum)
-        control.setValue(round(float(tab._default_float("spotify_visualizer", key)) * 100.0))
-        control.setToolTip(tooltip)
-        value = QLabel(f"{control.value() / 100.0:.2f}")
-        control.valueChanged.connect(lambda number, text=value: text.setText(f"{number / 100.0:.2f}"))
-        bind_setting_signal(tab, control.valueChanged, auto_switch=True)
-        setattr(tab, key, control)
-        content.addWidget(control)
-        content.addWidget(value)
+
+
+def build_smoothing_section(tab, response) -> None:
     from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
     build_spectrum_smoothing_controls(tab, response, mode_key="shockwave_grid")
+
+
+def build_terrain_section(tab, layout) -> None:
+    from ui.tabs.media.terrain_editor import TerrainEditor
+
+    tab.shockwave_grid_terrain_editor = TerrainEditor(tab._widget_default("spotify_visualizer", "shockwave_grid_terrain"))
+    def changed(_terrain):
+        tab._force_visualizer_preset_to_custom("shockwave_grid")
+        tab._save_settings()
+
+    tab.shockwave_grid_terrain_editor.terrain_changed.connect(changed)
+    layout.addWidget(tab.shockwave_grid_terrain_editor)

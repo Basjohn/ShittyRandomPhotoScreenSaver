@@ -70,6 +70,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
         self._semantic_middle_click_hit_test: Callable[[QPointF], bool] | None = None
         self._custom_layout_input_blocked = False
+        self._framed_scene_filter_installed = False
         self._desired_visible = False
         self._close_queued = False
         self._scene_rect: QRectF | None = None
@@ -152,6 +153,8 @@ class QuickDisplayWindow(QQuickWindow):
         ):
             raise ValueError("Quick input identity does not match its display window")
         self._input_controller = controller
+        controller.scene_transform_admission_changed.connect(self._refresh_framed_scene_input_filter)
+        self._refresh_framed_scene_input_filter()
 
     def _validate_scene_graph_opengl(self) -> None:
         """Enforce the one graphics contract at actual scene-graph startup."""
@@ -198,6 +201,19 @@ class QuickDisplayWindow(QQuickWindow):
         """
 
         self._custom_layout_input_blocked = bool(blocked)
+        self._refresh_framed_scene_input_filter()
+
+    def _refresh_framed_scene_input_filter(self, _enabled=None) -> None:
+        controller = self._input_controller
+        admitted = bool(self._custom_layout_input_blocked and controller is not None
+                        and controller.scene_transform_enabled)
+        if admitted == self._framed_scene_filter_installed:
+            return
+        if admitted:
+            self.installEventFilter(controller)
+        elif controller is not None:
+            self.removeEventFilter(controller)
+        self._framed_scene_filter_installed = admitted
 
     def show_on_screen(self) -> None:
         """Commit exact physical-screen placement before making the window visible."""

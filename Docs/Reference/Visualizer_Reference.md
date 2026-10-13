@@ -78,7 +78,9 @@ admission/status/defaults and close acceptance gates, not require reimplementing
 
 ### Direct 3D interaction geometry
 
-Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. Neither input path may create a timer, change the mode's camera, or borrow geometry from a sibling layout profile.
+For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed Neon Lake
+Basin routes the same Alt inputs to internal scene pan/scale instead, with no CUSTOM geometry transaction; see
+[Neon Lake Basin](Neon_Lake_Basin.md).
 
 ## 2. Capability model
 
@@ -171,11 +173,9 @@ loudness scale; nothing learned from the track). Real scales (loudness 3-17 in m
 **Shared 3D view and lines.** Every 3D Visualizer orbits and projects through `SCENE3D_ORBIT_GLSL` /
 `scene3d_orbit_project` (`rendering/gl_programs/scene3d.py`): turn about the vertical axis, tilt toward the camera
 about a `pivot` that then sits at an `anchor` in front of a pinhole camera; a mode supplies only those constants and
-its own fit (Extruded Spectrum pivots at mid-bar and keeps it there; Shockwave Grid pivots at the grid's centre and
-faces it). Lines are `sceneLineCoverage` / `sceneGridLineDistancePx` (anti-aliased by their screen-pixel width).
-Moving both modes onto them changed nothing visible: Extruded byte-identical in 10 views, Shockwave within 1/255 (float
-order). A new 3D mode uses these instead of copying a projection. Bar: `test_scene3d_foundation.py`
-(`test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection`).
+its own fit (Extruded Spectrum pivots at mid-bar; Neon Lake Basin pivots about the basin centre). Lines use the shared
+screen-pixel coverage helpers; Neon adds curved surface wire coordinates through its dedicated reference. A new 3D
+mode reuses the shared projection instead of copying it. See [Neon Lake Basin](Neon_Lake_Basin.md).
 
 **Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Shockwave Grid)
 offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host lets it compile or allocate one unit
@@ -445,8 +445,9 @@ perspective-correct read-only wireframe cage. The cage consists of eight rendere
 and an `N` at the canonical north/far face centre. It is paint/orientation chrome only: never a snap/collision/persistence,
 Fit Scene, movement or resize authority. Extruded derives it from its production projection/fit, Shockwave from its production
 camera projection, and Sphere from its stage/perspective convention. These records update only on relevant Edit/view/geometry
-edges, not per-audio-frame. Turn/tilt and any other camera/preset fields remain the mode's own presentation-state authority and
-are never copied into layout profiles.
+edges, not per-audio-frame. Turn/tilt and optional internal scene pan/scale remain mode-owned view settings, excluded
+from artistic presets and never copied into layout profiles. For framed Neon Lake Basin, the fixed card owns selection
+and its internal guide stays clipped derivative paint; see [Neon Lake Basin](Neon_Lake_Basin.md).
 
 Required visualizer resize semantics:
 
@@ -536,62 +537,20 @@ resource/ring substrate while its reaction semantics remain mode-owned and its a
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
 
-## 16B. Shockwave Grid
+## 16B. Neon Lake Basin (Shockwave identity)
 
-A neon grid floor in perspective (`rendering/quick/visualizer/implementations/shockwave_grid.py`, GLSL and CPU
-mirrors in `rendering/gl_programs/shockwave_grid_program.py`), the first Visualizer with its own authored events.
+[Neon Lake Basin](Neon_Lake_Basin.md) owns the terrain/water authoring, curved wire rendering, growth, sky/sun,
+framed-card clipping, internal scene pose and resource contracts. The mode ID and settings prefix remain
+`shockwave_grid`; its independent CUSTOM profile remains `3d:shockwave_grid`. It is a normal bordered card whose
+3D scene always stays inside the rounded interior. The old overflow setting and flat-grid fit/reach path are retired.
 
-- **Authored state:** Shockwave owns the technical and Spectrum-shaper values it consumes (bar count/response, mirrored
-  layout, nodes, notches, lane strengths, wave amplitude, floor, falloff and temporal bar treatment). It projects that profile once per
-  activation onto the single Spectrum source implementation, then extends it through
-  `ShockwaveGridFrameRuntime` (`widgets/spotify_visualizer/shockwave_frame_runtime.py`) with a bounded event ring:
-  each musical onset the transient bus publishes (at least `shockwave_gap` after the last, only while playing) becomes one
-  event, born when the onset happened, with a deterministic origin (from its admission number; kicks nearer the
-  front middle) and the onset's strength. Onsets are taken exactly once by serial (see "Musical onsets" below). Events are aged on the logical clock at capture, dropped after 3.2 s, at most 16 held.
-  `ShockwaveGridFrame.events` carries them aged, so the renderer has no clock or history of its own. Live events (or
-  Scroll) keep Spectrum's animation clock running, so frames publish while waves move.
-- **Picture:** one draw of the shared triangle grid (180x120 cells) displaced in the vertex shader: each event a
-  circular crest with a shallow trough behind, travelling at Wave Speed and fading over 1.1 s; Spectrum's bars raise a
-  ridge along the far edge (Horizon). Lines are analytic in the fragment shader (anti-aliased by their on-screen
-  width), turning toward the crest colour on crests and the ridge, over a dark translucent floor (Floor). The grid
-  fades out at its far edge and sides.
-- **Reactivity:** near-silence stays calm, big hits retain clear separation from medium ones, and idle
-  motion and brighter glow where it is loudest). A wave's strength is `shockwave_strength` of the onset's magnitude,
-  loudness and presence (`MusicalOnset`) under the shared musical rule in `transient_bus.py` (Voxel Sphere uses the
-  same rule): no wave below an absolute loudness (`MUSICAL_QUIET`) or when quiet against the running level
-  (`MUSICAL_PRESENCE`: a near-silent passage of a loud track) (`musical_weight`), and the onset's loudness on the fixed
-  scale (`musical_emphasis`, around `MUSICAL_USUAL_LOUDNESS`; learned track-relative normalization is forbidden because it flattens a sustained
-  loud chorus) sets how much it stands out: a hit 1.6x the usual loudness reaches about 2.9x a medium one, capped at 2. Strengths under 0.12 make no wave. Above 1 a
-  wave grows taller more slowly, widens, brightens and trails an echo ring at 0.62 of its speed, so the biggest
-  moments look different, not just larger. The crest light follows the strength, and the horizon ridge is up to 40%
-  brighter where Spectrum's bars are loudest. **Idle Swell** (Waves bucket, 0.35 by default) sweeps a soft ridge
-  smoothly from side to side over 11 s, so the grid moves between beats (it keeps the animation clock running).
-  **Everything ramps:** the emphasis is relative to the track's usual onset, so on recorded music a soft
-  passage's onsets stood out like a loud one's: ~9 waves/s at every level, strength flat ~0.45, big waves commonest
-  in quiet passages. Both now ramp on the passage intensity (`BeatEngine.get_musical_intensity`): the gap between
-  waves (`shockwave_gap`, 0.6 s in the quietest passage down to 0.09 s in the loudest) and the strength's share
-  (`shockwave_passage_share` = `passage_ramp`, 0.3 in the quietest). Four songs, 2 s passage windows, quietest
-  quarter / middle / loudest quarter: ~3 / 4-6.6 / 5.5-8.9 waves/s, strength ~0.31 / 0.40 / 0.48, big waves now in
-  loud passages. Loud passages keep nearly their previous rate.
-  Bars: `tests/test_qtquick_shockwave_grid.py`.
-- **Glow** uses the overlay bloom of `SceneTarget` (`Docs/Reference/Scene3D_Resources.md`): the lines emit their
-  light into the emission attachment and the glow is added over the wallpaper. Glow 0 allocates no emission
-  attachment or bloom chain.
-- **View:** turn a full circle and tilt from level to straight down about the grid's centre, from a camera beyond the
-  grid's reach (`shockwave_camera`); `shockwave_fit` frames the visible grid and the highest ridge between 10% and 96%
-  of the field for every view. W/A/S/D and Alt + drag orbit it (`view_orbit_settings`), Allow Overflow lets it pass the
-  rectangle. CUSTOM quarter-turn is not offered.
-- **Guided Setup preview:** rendered by the foundry with three fixture onsets fed through a minimal transient-bus
-  stand-in (`_PREVIEW_ONSETS`).
-- **Cost** at a card filling a 2560x1440 display (RTX 4090), median: 0.6 ms CPU submit and 0.07 ms GPU without glow;
-  1.0 ms and 0.16 ms with glow (the bloom passes), 3 or 16 live waves alike.
-- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `shockwave_quality`): High 4x multisampling,
-  Glow, a 180x120 grid; Balanced 2x, Glow, 128x85; Performance single-sampled, no Glow, 64x43; KAK the same at 48x32
-  (`shockwave_grid_cells`). Measured as above with Glow 0.8: GPU median 0.17 / 0.13 / 0.04 / 0.04 ms, CPU 1.0 / 1.2 /
-  0.65 / 0.67 ms (the bloom chain's calls go with the Glow).
-- **Regression reference (accepted, not an open gate):** the reactivity on real music: calm at near-silence and between songs, ordinary beats
-  against big drops, the idle swell's pace; wave timing (kicks vs. snares, busy tracks hitting the 16-event cap),
-  the presets on both displays, glow strength, the horizon ridge, orbiting, and Allow Overflow near screen edges.
+The existing musical source remains authoritative: the mode projects its owned technical and Spectrum frequency
+profile onto the shared source implementation. Its bounded onset ring consumes each serial once, spaces admission
+by passage intensity, preserves deterministic origins and onset strength, and ages/drops events on the logical
+capture clock. Water retains that travelling crest/trough/echo response. Terrain growth uses separate eight-region
+attack/release envelopes from the resolved bars; paused Spectrum idle bars never become musical growth. The renderer
+consumes immutable events and growth rather than owning another simulation or clock. Current visual acceptance and
+cost work remain in the live plan, not the retired flat-grid acceptance description.
 
 ## 16A. Extruded Spectrum
 
@@ -610,7 +569,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   their selected Spectrum preset; no runtime setting follows Spectrum afterwards.
 
   Canonical Extruded defaults and every shipped Extruded curated preset now freeze that complete default-Organs effective
-  response into `extruded_spectrum_*` keys while their **3D finish/material/orbit settings remain independently authored**.
+  response into `extruded_spectrum_*` keys while their **3D finish/material settings remain independently authored**. Live orbit remains separate from art presets.
   The one historical presentation exception is fill alpha: old Extruded rendered the borrowed Organs fill opaquely, so the
   owned colour preserves Organs RGB `[12,12,12]` with alpha 255 rather than importing Organs' planar alpha 230. A schema-11
   repair recognizes only the accidentally generated schema-10 Extruded bundle (33 bars / 512 samples plus its matching
@@ -674,62 +633,37 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   depth and reflection, so no setting can push the scene out of the rectangle; with overflow on (default), the scene
   keeps its front-on scale and is not contained to its frame: the target covers everything the bars can draw for the
   view (`extruded_reach`, every bar at the ceiling plus its reflection), grown in `REACH_STEP` steps and clamped to
-  the window (`reach_item_frame`; Shockwave Grid the same with `shockwave_reach`). Stacking: the Visualizer layer is
+  the window (`reach_item_frame`). This overflow policy belongs to Extruded Spectrum; framed Neon Lake Basin
+  always clips its internal scene instead. Stacking: the Visualizer layer is
   above every widget and below only the OSD, Edit chrome and the context menu (`DisplayScene.qml`).
 - **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
-- **Live view orbit (W/A/S/D):** a 3D freeform mode names its (turn, tilt) settings in the descriptor's
-  `view_orbit_settings` and one step of each in `view_orbit_steps` (2 degrees). DisplayManager publishes "a 3D view is
-  shown" to every display's input owner on owner creation/retirement and mode completion (an event fact, no provider
-  read per key). While it is shown, W/S tilt the camera up/down and A/D move it left/right at a steady 30 steps a
-  second (60 degrees) while held, several keys at once. The rate runs on the logical clock, never on OS key repeat
-  (which stops repeating an older key once another is pressed): the input owner
-  publishes the held keys' combined direction when it changes, the GUI thread replaces one immutable
-  `ViewOrbitMotion` (view at a moment + rates) on the presentation state, and the logical capture evaluates it at its
-  own frame time (`widgets/spotify_visualizer/view_orbit.py`). The GUI thread is the only writer; release settles the
-  reached view into the settings (freeze, write, drop, so no capture sees a half update). Turn goes a full circle and
-  wraps (-1..1 is -180..180 degrees); tilt runs from level to straight down (0..1 is 0..90 degrees) about the bars'
-  mid-height. Nothing is saved while orbiting: the result is written once, through the atomic runtime-preset
-  persistence, when no key is held and no drag is on, when the Visualizer retires mid-orbit, or never if a preset
-  replaced the view (held keys then carry on from the preset's view). On a curated preset the edit moves the mode to
-  Custom holding what was shown (`core/settings/visualizer_view_orbit.py`), as a Settings edit would. This persistence is
-  deliberately **mode/preset state**, not CUSTOM outer geometry: Extruded and Shockwave retain independent turn/tilt values
-  and independent Custom snapshots even though both use `freeform_3d` mechanics. They may share a future descriptor-owned
-  `layout_profile` only if their authored stage geometry is deliberately judged compatible. Sphere does not
-  currently declare the descriptor orbit seam; its promotion work owns that parity decision. With no 3D view shown W/A/S/D
-  exit like any other key. The S key no longer opens Settings (the context menu does).
-- **Alt + left drag** on the shown Visualizer in interaction (or Ctrl) mode orbits it too: a step per 4 pixels, the
-  scene turning toward the drag and the camera rising as you drag down. The display runtime lends its own input
-  owner the scene's `visualizer_contains_scene_position` hit test; the input owner drops it (with any held keys or
-  drag) when its admission closes. While a drag is on, pointer motion is routed to the input owner even in
-  interaction mode. A drag's steps are fractions per mouse move, so every relay of `view_orbit_requested` carries
-  floats (an int relay once truncated them all to zero; `tests/test_visualizer_view_orbit.py` drives the real window
-  and runtime). Without Alt, off the Visualizer or outside interaction/Ctrl mode, pointer behaviour is unchanged.
-- **Alt + right drag / Alt + wheel** (the same admission: a shown 3D Visualizer under the pointer, interaction or Ctrl
-  mode) move and resize it outside Edit. The input owner takes Alt + right before the context menu and Alt + wheel
-  before the Visualizer's volume wheel (`QuickDisplayWindow.wheelEvent`; Qt may report the wheel as horizontal with
-  Alt held); every other press or wheel is untouched. A gesture runs through Edit's own session machinery in
-  `QuickCustomLayoutOwner` (`begin_direct_visualizer_gesture`): a session holding only the Visualizer, its display
-  bound chrome-less (`bind_direct_custom_layout_session`: no overlay model or guides, native and widget input not
-  blocked), authored placement quiesced as Edit does. The move follows the pointer exactly, clamped to its display
-  (no invisible magnetic snap, no display transfer); the wheel is Edit's uniform resize. It ends at the drag's release,
-  or when Alt is released after wheeling (one gesture, finished once, whichever ends last), and commits through
-  Edit's `save` once: the same persistence and live promotion, nothing written when nothing changed, and no Edit-close
-  input guard. Edit never inherits one (starting Edit commits it first; Edit's keys follow `is_editing`, not a
-  gesture); teardown, Settings and layout slots treat it as an open session (`is_active`). Nothing is held between
-  gestures. Bars: `tests/test_visualizer_direct_gestures.py` (the input owner, and the real display unit + Visualizer
-  + owner seam).
-  While Edit is active, keep CUSTOM's normal product-input block in place. Route the same Alt semantics through the selected
-  3D edit frame instead: Alt-left uses the existing orbit resolver; Alt-right and Alt-wheel use the active CUSTOM session's
-  move/resize operations. Do not start the outside-Edit direct gesture session underneath Edit. Geometry Save/Cancel owns the
-  move/scale result; orbit remains mode/preset view state on its existing orbit-finish boundary.
+- **Live view pose:** Sphere, Extruded Spectrum and Neon Lake Basin declare turn/tilt through
+  `view_orbit_settings`. W/A/S/D holds one immutable `ViewOrbitMotion`; the logical capture evaluates it at its own
+  timestamp, independent of OS key repeat. Alt+left-drag uses the same orbit owner. The GUI owner settles the reached
+  view once through canonical Settings when the gesture finishes or the owner retires; ordinary frames write nothing.
+  These are mode-specific view settings, excluded from curated art presets and Custom art snapshots. Applying art
+  cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
+  stage geometry, with no camera authority.
+- **Framed scene exception:** Neon Lake Basin additionally declares `scene_transform_settings` for scene scale and
+  pan X/Y. Its complete five-key view pose persists independently of art and layout Save/Cancel. WASD and Alt+left
+  orbit inside the card; Alt+right pans inside it; Alt+wheel scales about the interior centre, using either Qt wheel
+  axis. They never move/resize the card or alter its viewport, in ordinary interaction or Edit. See
+  [Neon Lake Basin](Neon_Lake_Basin.md) for admission, persistence and clipping.
+- **Whole-stage gestures:** for unframed 3D modes, Alt+right and Alt+wheel retain the existing direct CUSTOM
+  move/resize transaction outside Edit. Press-time move origins rebase to the current rectangle after scaling; wheel
+  scaling preserves the stage centre subject to display-edge clamping. One completed gesture commits through the
+  existing Save boundary. During Edit, those whole-stage operations use the active `CustomLayoutSession`, without
+  opening a second direct session. Orbit still settles through its separate view-settings owner. Native product-input
+  blocking remains binding; descriptor admission routes only the selected mode's supported gestures. Without Alt,
+  outside the admitted Visualizer, or outside interaction/Ctrl/Edit admission, pointer behavior is unchanged.
 
 - **Cost** at a card filling a 2560x1440 display (the worst case; RTX 4090), median (p90): about 0.7 (0.8) ms CPU
   submit and 0.09 (0.10) ms GPU per frame; Mirror Faces 0.10 (0.62) ms GPU, the p90 being every sixth frame's
   backdrop copy.
 - **Regression reference (accepted, not an open gate):** each preset with live music on both displays (Visualizer freshness alongside 3D
   transitions); edge lines at strong tilt/turn with Smooth Edges on and off; Mirror Faces' horizon and softboxes
-  while orbiting; W/A/S/D feel (step size, key-repeat pace), the view surviving a restart, and a curated preset
-  becoming Custom after an orbit; Allow Overflow near screen edges.
+  while orbiting; W/A/S/D feel (step size, held-key pace), the view surviving a restart independently of art presets;
+  Extruded Allow Overflow near screen edges.
 - **Guided Setup preview:** rendered by the foundry through the production capture and renderer
   (`_RENDERED_VISUALIZER_PREVIEWS`); legacy screenshot sheets are not catalog authority.
 
