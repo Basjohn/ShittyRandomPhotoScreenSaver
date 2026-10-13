@@ -29,7 +29,7 @@ Physical selection, Settings/draft/import/reset authoring and zero-live-display 
 behavior lives in `Docs/Contracts.md` → Geometry / CUSTOM; regression inventory lives in `Docs/TestSuite.md`.
 Physical power-cycle observation remains only the nonblocking §5 watchlist. Proceed to §2.
 
-## 2. FEEDS queued/busy and terminal failure | Ready after §1
+## 2. FEEDS queued/busy and terminal failure | In progress
 
 Busy begins when refresh is accepted, including admission queue time. A queued refresh is not by itself a stranded one.
 `widgets/feed_runtime.py` owns source scheduling/leases; `core/feeds` owns neutral source data; the shared refresh gate owns
@@ -54,6 +54,10 @@ cross-family admission. `Docs/Reference/Feeds.md` owns provider/startup behavior
   completion path. Preserve cancellation semantics rather than inventing a provider failure. Separately verify the source
   discrepancy where manual `force` clears/bypasses backoff (`FeedSource.refresh`); reconcile it with the documented backoff
   floor before changing behavior. This last discrepancy is source evidence, not yet a runtime reproduction.
+  Independent review also identified text-to-artwork bundle completion while the follow-on is still gate-deferred or has
+  started reentrantly from NEWS artwork-share publication. Preserve that same source's remote bundle through deferred/
+  in-flight artwork; start the 2.5-second inter-source cooldown only at real bundle completion. Prove linked NEWS/manual
+  refresh with images enabled through the real gate, including source removal/cancellation, without a new timer or queue.
 - [ ] **F3 — Fault-injection proof and checkpoint.** Use controlled worker/GUI callbacks to prove queued busy, exception,
   cancel, rejected dispatch, retirement and late-completion behavior, with claims and startup settlement observed through
   production seams. The existing runtime/gate baseline passed 35 tests during inspection; fixes and retained fault-injection
@@ -63,8 +67,11 @@ cross-family admission. `Docs/Reference/Feeds.md` owns provider/startup behavior
 ## 2A. Visualizer spec migration | Subsequent implementation
 
 One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
-unchanged. `core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries.
-Oscilloscope, Sine Waves and Shockwave are already on the layer; no further Oscilloscope acceptance gate.
+unchanged **except for the explicitly authorized Shockwave Grid replacement in V4A**.
+`core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries for modes that
+still use them. Oscilloscope, Sine Waves and Shockwave already have spec-layer support; Shockwave's existing support does
+not substitute for completing its spec migration **together with** the Neon Lake Basin rework. No further Oscilloscope
+acceptance gate.
 
 - [ ] **V1 — Spline Curve / Dev Curve.** Inventory existing controls, model fields, appliers and renderer inputs; express
   the same controls through the spec and retain bespoke layer/shape editors. Prove round-trip and conditional controls
@@ -75,13 +82,40 @@ Oscilloscope, Sine Waves and Shockwave are already on the layer; no further Osci
   control reaches its current owner once without constructing hidden pages or adding observers.
 - [ ] **V4 — Voxel Sphere.** Preserve analysis-only DSP, accepted motion and CUSTOM orbit/geometry; exercise serialization,
   conditional controls and same activation/config projection with mode-specific focused tests.
+- [ ] **V4A — Shockwave Grid: finish spec migration AND completely rework into Neon Lake Basin in the same slice.**
+  This is one coordinated Settings/spec + logical/reaction + renderer + authoring replacement, **not** a spec-only pass
+  followed by a postponed visual upgrade. Use `Docs/Future_Work/Additional_Future_Transitions_Package.zip`, including its
+  `Additional_Future_Transitions.md` and the **Neon Lake Basin low-/high-react visual mocks**, as the concept and
+  feasibility reference. Replace the flat Shockwave Grid scene with an 80s/cyberpunk neon-wireframe basin: an editable
+  terrain heightfield whose **unraised/base-level regions are water**, with raised mountains/islands around or within it.
+  Both water (ripples/rings/wave propagation) and terrain (contour glow, restrained displacement and ridge energy)
+  react musically, with distinct tunable responses rather than identical motion. Replace Shockwave's shape-authoring
+  approach with a **proper terrain editor** exposed as a bespoke spec-owned Custom entry. Complete and consolidate
+  all remaining controls, defaults, conditional settings, persisted state, presets and editor hooks through the new
+  `visualizer_mode_settings` spec method; do not create competing settings or geometry authorities. Preserve existing
+  mode identity/activation and shared audio/transient, Quick presentation, orbit/geometry and lazy Scene3D ownership,
+  staying on the Qt Quick + Python + OpenGL 4.6 architecture. Adapt old saved settings safely where possible instead
+  of silently corrupting or discarding Custom state.
+  Reuse existing GPU wave/event facilities, stream rings, bloom and scene primitives; any missing heightfield/material
+  capability is built as a measured, opt-in shared primitive **within this V4A delivery**, not silently deferred to §4
+  or added as a private rendering stack. **High visual and musical parity with the supplied mocks is required on at
+  least one curated preset**, at both low and high reactivity, rather than accepting a token terrain reskin. Keep other
+  presets freely operator-editable; do not freeze artistic preset values as regression-test oracles. Prove terrain
+  editing/save/reload/reset, water classification, distinct terrain/water response, quiet/onset/sustained passages on
+  fixed synthetic clips and the operator's real-music recordings at
+  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`, plus bounded CPU/GPU cost and
+  dormancy in both-display use.
+  Reject jelly mountains, harsh strobing, uncontrolled flashes or saturated glow; high react should be powerful but
+  still legible. Scope and checkpoint V4A internally as necessary, but **do not mark migration complete until the
+  full rework and at least one high-parity preset are implemented and accepted together**.
 - [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
   authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
 
 Each slice ends in focused proof, refreshed owner docs and a checkpoint before starting the next mode. New modes use the
-spec from their first implementation. Graphics implementation follows §4 after this migration and bounded side work.
+spec from their first implementation. Graphics implementation follows §4 after this migration and bounded side work;
+the specifically authorized Neon Lake Basin conversion is already included in V4A and is not a second §4 project.
 
 ## 3. Release media and bounded source cleanup | Subsequent work
 
