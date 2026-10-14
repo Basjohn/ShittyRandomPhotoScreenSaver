@@ -119,6 +119,12 @@ Reference figures (relative GPU in cf, thread CPU in ms, counts per frame):
 
 Every transition's own steady cost is recorded beside it in `Docs/Reference/Transitions.md`.
 
+Neon Lake Basin's foundation reference is `tools/baselines/overhead/2026-10-13_6a63dcda.json` at 960×540, compared
+with `2026-10-13_000e222e.json`. All unchanged consumers retained their deterministic call counts. Neon alone added
+its new scene work (146→180 GL calls, 1883→2256 Python calls); its control-relative GPU equivalent rose from 0.190 to
+0.243 ms under different GPU clock conditions. These are foundation measurements; later optional point/celestial
+features require their own focused measurements, not attribution to unchanged consumers.
+
 ## Lifecycle contract (no timing)
 
 `tests/test_transition_lifecycle_contract.py` holds every showcase transition (new ones join through

@@ -26,6 +26,21 @@ The maintained `destination` profile's status must come from its actual current 
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 
+**Operator no-environment-mutation rule (2026-10-13):** do not set or modify process
+environment variables to select Python, graphics plugins or test storage. The existing
+`tests/conftest.py` currently changes `APPDATA` and `LOCALAPPDATA`, which conflicts with
+that policy. This is a documented test-harness violation, NOT an authorization to remove
+isolation and risk reading/writing real user settings. Until replaced with explicit test-owned
+storage injection, the normal pytest Qt suite must not be represented as policy-compliant.
+The independently runnable Neon mesh/projection regression avoids the shared fixture:
+
+```powershell
+& ".\.venv\Scripts\python.exe" -m pytest -q --noconftest tests/test_neon_lake_landscape_extension.py
+```
+
+This command has no environment-variable manipulation. It validates pure mesh/projection
+geometry only, not Qt/OpenGL pixels, visual acceptance or full suite status.
+
 ## 1.1 Test durability and authority hygiene
 
 Tests are strict about product contracts, not accidental copies of today's authored data. Mutable defaults, extensible registry membership/cardinality and curated preset payloads remain owned by their canonical source. Authored Markdown explains contracts and is never a proxy runtime oracle. Behavior tests derive expectations from the owning source or use self-owned fixtures; exact literal pins remain appropriate when the literal itself is a protocol, compatibility, golden, geometry, ownership or negative-control invariant. The blocking audit follows canonical-default aliases transitively so an intermediate `widgets = defaults[...]` assignment cannot hide a copied authored value.
@@ -406,7 +421,20 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 - `tests/test_framed_scene_input.py`, `tests/test_neon_lake_renderer.py`, `tests/test_neon_lake_reaction.py` — actual native
   WASD/Alt input, five-key settlement/reload with fixed card/viewport, production QSG rounded stencil plus inherited scissor,
   warm resource reuse and two independent contexts, GPU quiet/onset/sustained classification and distinct bounded water/land.
+  Wire-style cases exercise actual displaced GL points, lazy point resources, shared surface depth,
+  reflection ordering, round-marker pixels and inherited state restoration; float attachment probes expose unbounded
+  coverage before an 8-bit target could hide it.
   These establish source contracts; the mock's artistic values and physical musical feel are separate acceptance.
+- `tests/test_neon_terrain_growth.py` — capture-clock attack/release, spatial regions, musical quiet/loud weighting,
+  silence despite retained bars, no invisible growth work, generation/retirement fences and unchanged water events.
+- `tests/test_neon_celestial.py`, `tests/test_heightfield_volume.py`, `tests/test_neon_scene_materials.py` — actual GL
+  Sun/Moon colour/phase, logical-clock orbit, bounded premultiplied scattering, controlled world-height falloff and land
+  occlusion; all seven surface styles and authored material colours, no warm static allocation, and actual QSG glass/ray
+  clipping. Pixel regressions protect foreground partial-alpha/AA body blending and rear-body transmission through
+  transparent water/glass, plus buried-body rejection in visible and reflected paths. Frozen test-owned inputs protect
+  contracts; authored preset numbers remain editable. Smooth glass uses the exact displaced surface for vertex normals;
+  moving highlight fidelity remains visual acceptance. Active configuration caching and inactive-mode EDT dormancy are
+  covered at the real presentation/default-install owner by `tests/test_neon_lake_settings.py`.
 
 - `tests/test_qtquick_extruded_spectrum.py`, `tests/test_qtquick_shockwave_grid.py` — renders through the production
   host on an offscreen context: projections against their GPU mirrors, Smooth Edges, polished Mirror Faces reflecting the
@@ -690,3 +718,35 @@ No deterministic FEEDS test should require live publisher access. `tools/feed_pr
 ### Sphere drag momentum / wallpaper ban ownership (R129)
 
 `tests/test_visualizer_view_orbit.py` protects Sphere presentation-clock inertia, finite settle/cancel and pose persistence boundaries, including preset rebase without held keys. `tests/test_image_bans.py` protects zero-ban no-lookup admission, hashed sentinel restart/clear, local-vs-remote canonical identity, queue skipping, preview/peek and all-banned termination, plus context-menu routing. Both require the operator's Windows Qt runtime before reporting a green gate; pure local source/execution probes are not real Quick/GL acceptance. The R128 focused result (140 pass) predates these modifications.
+
+## 2026-10-13 Neon Lake terrain continuation / camera checkpoint
+
+`tests/test_neon_lake_landscape_extension.py` uses test-owned lattice sizes to prove
+that the authored editor 0..1 subgrid is preserved verbatim, all four sides overscan,
+triangle and vertex-point UVs are identical, and mesh caching/reduced density holds.
+`tests/test_visualizer_view_orbit.py` covers independent Shockwave saturation for both
+held keys and drag, plus the scale-dependent internal pan clamp and config reload;
+Sphere/Extruded keep circular turn. Real GL/QSG acceptance is still mandatory for
+cut-off edges, skyline contours, Glass + Vertices, celestial occlusion and cost.
+Keep the operator's real recordings at
+`F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`
+in the musical validation loop alongside test-owned synthetic replay fixtures.
+
+### Neon Lake sky/GL continuity and glow gate
+
+`tests/test_neon_glow_and_sky_composition.py` asserts closed canonical Glow bucket ownership, dependent visibility, conservative celestial orbit headroom, continuous sky-before-depth ordering and matching colour/emission opacity subtraction, plus deterministic, bounded visible panorama beat-star selection. `tests/test_neon_skyline_occlusion_and_starscape.py`, `tests/test_neon_skyline_and_preset_retirement.py` and `tests/test_neon_lake_landscape_extension.py` protect the accepted terrain-triangle skyline, actual continuation lattice and retired Edge styles without freezing operator-authored Preset 1 numbers. These are structural/mathematical tests, not proof of raster alpha correctness or musical presentation. After a GODZIP apply, use the project `.venv` and no environment-variable commands. Windows GPU inspection must include full/partial-alpha background, terrain skyline and rear horizon at low and high tilt, star events against quiet/loud recorded clips, and Sun/Moon halo with and without active audio. Preserve the operator's local real-music recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` alongside synthetic replays.
+
+### 2026-10-14 Neon Lake final two-item checkpoint
+
+`tests/test_neon_final_horizon_and_beat_floor.py` proves that the beat-star
+admission floor is **0.28** (20% lower than 0.35), with no new audio detector,
+and that sky alpha and the distant skyline do not use competing artificial
+horizon bands. `tests/test_neon_visible_stars_and_horizon.py` checks the same
+single-source terrain coverage and the unchanged camera-relative star selection.
+Structural checks do **not** certify rendered depth, cloud silhouettes or the
+horizon contour. Only a real image inspected by an agent or explicit operator
+acceptance closes the first of the two live items in `Current_Plan.md` §2A.
+The second remains terrain-musical-response rework, using deterministic fixtures
+and the operator's real-music recordings at
+`F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
+Use the project `.venv`, and never mutate environment variables.

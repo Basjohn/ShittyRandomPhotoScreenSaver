@@ -477,6 +477,17 @@ def stop(
     # Determine target state based on exit_app
     target_state = EngineState.SHUTTING_DOWN if exit_app else EngineState.STOPPING
 
+    # RUN's one-shot GC freeze may have captured this exact Quick generation.
+    # It must be thawed before the strict Settings/exit destruction barrier:
+    # frozen native/Python callback cycles cannot be collected at all. The
+    # existing barrier will perform at most one stop-only cycle sweep once
+    # every Qt object, GL resource and worker has already gone. Never weaken
+    # the barrier, and never collect during active presentation.
+    gc_policy = getattr(engine, "_gc_policy", None)
+    thaw = getattr(gc_policy, "thaw_for_runtime_retirement", None)
+    if callable(thaw):
+        thaw()
+
     # Transition to stopping/shutting_down state
     # This makes _shutting_down property return True, signaling async tasks to abort
     if not engine._transition_state(

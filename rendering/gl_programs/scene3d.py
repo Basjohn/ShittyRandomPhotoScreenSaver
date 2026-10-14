@@ -589,7 +589,7 @@ def scene3d_grid_size(detail: Scene3DDetail, aspect: float) -> tuple[int, int]:
 
 
 @lru_cache(maxsize=8)
-def scene3d_grid_vertices(columns: int, rows: int) -> tuple[float, ...]:
+def scene3d_grid_vertices(columns: int, rows: int, front_extension: float = 0.0) -> tuple[float, ...]:
     """A static triangle list over the photograph: (u, v) per vertex, v down, uv in [0, 1].
 
     Two triangles per cell, wound consistently, so the displaced surface's normals and
@@ -598,12 +598,25 @@ def scene3d_grid_vertices(columns: int, rows: int) -> tuple[float, ...]:
     if columns < 1 or rows < 1:
         raise ValueError("a grid needs at least one cell each way")
     values: list[float] = []
-    for row in range(rows):
-        v0, v1 = row / rows, (row + 1) / rows
+    if not math.isfinite(front_extension) or not 0.0 <= front_extension <= 1.0:
+        raise ValueError("grid front extension must be finite within 0..1")
+    for row in range(-1 if front_extension else 0, rows):
+        v0, v1 = (-front_extension if row == -1 else row / rows), (row + 1) / rows
         for column in range(columns):
             u0, u1 = column / columns, (column + 1) / columns
             values.extend((u0, v0, u0, v1, u1, v1, u0, v0, u1, v1, u1, v0))
     return tuple(values)
+
+
+@lru_cache(maxsize=8)
+def scene3d_grid_points(columns: int, rows: int, front_extension: float = 0.0) -> tuple[float, ...]:
+    """Unique surface vertices for an opt-in point presentation of the same UV grid."""
+    if columns < 1 or rows < 1:
+        raise ValueError("a grid needs at least one cell each way")
+    if not math.isfinite(front_extension) or not 0.0 <= front_extension <= 1.0:
+        raise ValueError("grid front extension must be finite within 0..1")
+    return tuple(value for row in range(-1 if front_extension else 0, rows + 1) for column in range(columns + 1)
+                 for value in (column / columns, -front_extension if row == -1 else row / rows))
 
 
 def scene3d_grid_vertex_source(displacement_glsl: str, declarations_glsl: str = "") -> str:

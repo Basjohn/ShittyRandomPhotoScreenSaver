@@ -1888,6 +1888,15 @@ class DisplayManager(QObject):
 
         runtime = unit.runtime
         screen_index = int(unit.screen_index)
+        # Qt retains callable slots separately from QObject wrapper lifetime.
+        # These routes must not pin the Python display owner after destruction.
+        unit_ref = weakref.ref(unit)
+
+        def live_unit_route(callback, *args):
+            active = unit_ref()
+            if active is None or active.is_retired:
+                return None
+            return callback(active, *args)
         runtime.exit_requested.connect(self._on_exit_requested)
         runtime.previous_requested.connect(self.previous_requested.emit)
         runtime.next_requested.connect(self.next_requested.emit)
@@ -1895,25 +1904,39 @@ class DisplayManager(QObject):
             self.cycle_transition_requested.emit
         )
         runtime.view_orbit_rates_changed.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._set_quick_view_orbit_rates, *args)
+            lambda *args, callback=self._set_quick_view_orbit_rates: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.view_orbit_requested.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._orbit_quick_visualizer_view, *args)
+            lambda *args, callback=self._orbit_quick_visualizer_view: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.view_orbit_finished.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._persist_quick_visualizer_view, *args)
+            lambda *args, callback=self._persist_quick_visualizer_view: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.visualizer_move_started.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._start_quick_visualizer_move, *args)
+            lambda *args, callback=self._start_quick_visualizer_move: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.visualizer_move_requested.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._move_quick_visualizer, *args)
+            lambda *args, callback=self._move_quick_visualizer: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.visualizer_scale_requested.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._scale_quick_visualizer, *args)
+            lambda *args, callback=self._scale_quick_visualizer: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.visualizer_gesture_finished.connect(
-            lambda *args, display=unit: self._route_quick_visualizer_input(display, self._finish_quick_visualizer_gesture, *args)
+            lambda *args, callback=self._finish_quick_visualizer_gesture: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
         )
         runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -1923,50 +1946,45 @@ class DisplayManager(QObject):
             and get_visualizer_mode_descriptor(owner.controller.mode_id).scene_transform_settings
         ), mode_id=owner.controller.mode_id if owner is not None else "")
         runtime.context_menu_requested.connect(
-            lambda _position, display=unit: self._refresh_quick_context_menu(
-                display
-            )
+            lambda _position: live_unit_route(self._refresh_quick_context_menu)
         )
         # Exactly one product context menu globally: when this display's retained
         # menu becomes visible, retire any menu still open on another display.
         runtime.context_menu_model.visibilityChanged.connect(
-            lambda visible, opening=unit: self._enforce_single_quick_context_menu(
-                opening
-            )
-            if visible
-            else None
+            lambda visible: live_unit_route(self._enforce_single_quick_context_menu)
+            if visible else None
         )
         runtime.play_pause_requested.connect(
-            lambda display=unit: self._route_quick_media_transport(display, "play")
+            lambda: live_unit_route(self._route_quick_media_transport, "play")
         )
         runtime.home_play_pause_requested.connect(
-            lambda display=unit: self._route_quick_media_transport(display, "play")
+            lambda: live_unit_route(self._route_quick_media_transport, "play")
         )
         runtime.previous_track_requested.connect(
-            lambda display=unit: self._route_quick_media_transport(display, "previous")
+            lambda: live_unit_route(self._route_quick_media_transport, "previous")
         )
         runtime.next_track_requested.connect(
-            lambda display=unit: self._route_quick_media_transport(display, "next")
+            lambda: live_unit_route(self._route_quick_media_transport, "next")
         )
         runtime.slider_volume_up_requested.connect(
-            lambda display=unit: display.request_app_volume_step(+1)
+            lambda: live_unit_route(lambda display: display.request_app_volume_step(+1))
         )
         runtime.slider_volume_down_requested.connect(
-            lambda display=unit: display.request_app_volume_step(-1)
+            lambda: live_unit_route(lambda display: display.request_app_volume_step(-1))
         )
         runtime.global_volume_up_requested.connect(
-            lambda display=unit: display.request_system_volume_step(+0.05)
+            lambda: live_unit_route(lambda display: display.request_system_volume_step(+0.05))
         )
         runtime.global_volume_down_requested.connect(
-            lambda display=unit: display.request_system_volume_step(-0.05)
+            lambda: live_unit_route(lambda display: display.request_system_volume_step(-0.05))
         )
         runtime.global_mute_toggle_requested.connect(
-            lambda display=unit: display.request_system_mute_toggle()
+            lambda: live_unit_route(lambda display: display.request_system_mute_toggle())
         )
         runtime.layout_slot_load_requested.connect(self._load_layout_slot)
         runtime.layout_slot_save_requested.connect(self._save_layout_slot)
         runtime.custom_layout_edit_requested.connect(
-            lambda display=unit: self._start_quick_custom_layout_from_shortcut(display)
+            lambda: live_unit_route(self._start_quick_custom_layout_from_shortcut)
         )
         runtime.custom_layout_save_requested.connect(
             self._save_quick_custom_layout
@@ -1993,20 +2011,15 @@ class DisplayManager(QObject):
             self._refresh_quick_visualizer_edit_content_envelope
         )
         runtime.transition_finalized.connect(
-            lambda completion, display=unit: self._on_quick_transition_finalized(
-                display,
-                completion,
-            )
+            lambda completion: live_unit_route(self._on_quick_transition_finalized, completion)
         )
         runtime.readiness_changed.connect(
-            lambda readiness, display=unit, generation=startup_generation: self._on_quick_readiness_changed(
-                display,
-                readiness,
-                generation,
+            lambda readiness, generation=startup_generation: live_unit_route(
+                self._on_quick_readiness_changed, readiness, generation
             )
         )
         runtime.display_identity_changed.connect(
-            lambda _identity, display=unit: display.reanchor_for_current_bounds()
+            lambda _identity: live_unit_route(lambda display: display.reanchor_for_current_bounds())
         )
         runtime.topology_loss_detected.connect(
             lambda _loss: self._schedule_monitor_reconcile("quick_binding_loss")

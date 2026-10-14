@@ -155,7 +155,9 @@ def test_the_fit_frames_the_visible_grid_for_any_view():
             for z in (0.0, -SHOCKWAVE_DEPTH):
                 assert math.hypot(x, z + 0.5 * SHOCKWAVE_DEPTH) < camera            # nothing reaches the camera
                 y = base - basin_project((x, 0.0, z), tilt, turn, camera)[1] * scale
-                assert 0.16 - 1e-9 <= y <= 0.96 + 1e-9
+                # Framed composition reserves sky and intentionally carries the
+                # near foot beyond the card bottom; the real QSG clip owns it.
+                assert 0.14 - 1e-9 <= y <= 1.04 + 1e-9
 
 
 def test_the_capture_turns_transient_onsets_into_aged_events():

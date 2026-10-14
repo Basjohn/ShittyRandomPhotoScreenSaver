@@ -155,6 +155,7 @@ class RuntimeDestructionBarrier:
         self._completed = False
         self._completion_scheduled = False
         self._had_qobjects = False
+        self._thaw_collection_deferred = False
         self._continuation: Callable[[], None] | None = None
         self._qobject_labels: dict[int, str] = {}
         self._qobject_refs: dict[int, weakref.ReferenceType[QObject]] = {}
@@ -457,6 +458,34 @@ class RuntimeDestructionBarrier:
                 self._completion_scheduled = True
                 self._complete()
                 return
+        # The RUN freeze can pin a generation's Python callback cycles even
+        # after Qt has released every QObject. Once all *native* roots have
+        # disappeared, allow the GC policy exactly one stop-boundary sweep.
+        # Neither the barrier timeout nor the strict owner test is relaxed:
+        # remaining owners after that sweep are genuine failures.
+        if (not self._qobject_labels and self._python_labels
+                and not self._remaining_generation_resources()
+                and not self._remaining_thread_work()
+                and not self._remaining_global_subscriptions()):
+            engine = self._engine_ref()
+            policy = getattr(engine, "_gc_policy", None) if engine is not None else None
+            finish = getattr(policy, "collect_thawed_retirement_cycles_once", None)
+            if (callable(finish)
+                    and bool(getattr(policy, "retirement_collection_pending", False))):
+                if not self._thaw_collection_deferred:
+                    # The final QObject weakref may fire *inside* a native
+                    # QObject.destroyed emission. Never run a gen2 cycle sweep
+                    # there: schedule once on the barrier's already-existing
+                    # resource-recheck single shot, after that signal returns.
+                    self._thaw_collection_deferred = True
+                    timer = self._resource_recheck_timer
+                    if timer is None:
+                        raise RuntimeError("Runtime destruction recheck timer was disposed")
+                    timer.start(0)
+                    return
+                finish()
+                if self._completed or self._completion_scheduled:
+                    return
         if self._qobject_labels or self._python_labels:
             return
         resources = self._remaining_generation_resources()

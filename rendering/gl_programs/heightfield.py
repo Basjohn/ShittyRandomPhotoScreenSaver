@@ -191,6 +191,11 @@ def basin_profile(size: int = 65) -> dict:
                             (0.86,0.12,0.25,0.26,0.50), (0.23,0.94,0.22,0.20,0.46)))
             facets = 0.035 * (math.sin(63*u+19*v) + math.cos(47*v-23*u))
             land = bank * max(0.0, 0.045 + peaks + facets)
+            # Three overlapping curved foreground lobes give the near bank
+            # depth; the existing exact-zero lake remains enclosed behind it.
+            foreground = max(amplitude*max(0.0,1.0-((u-centre)/width)**2-((v-0.02)/0.12)**2)**2
+                             for centre,width,amplitude in ((0.16,0.15,0.10),(0.49,0.18,0.08),(0.82,0.16,0.12)))
+            land += bank*foreground
             for ix, iy, radius, height in ((0.24,0.57,0.045,0.14),(0.75,0.48,0.035,0.08)):
                 distance = math.hypot(u - ix, v - iy) / radius
                 if distance < 1.0:

@@ -6,13 +6,22 @@ card target. Optional sky and bloom retire with this activation.
 """
 from __future__ import annotations
 
+import math
+from contextlib import contextmanager
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
+from rendering.gl_programs.neon_lake_basin_mesh import basin_mesh_vertices, basin_mesh_points
+from rendering.gl_programs.neon_starscape import starscape_beat_cells
+from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
     NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE, NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE,
+    NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
     basin_camera, basin_fit, basin_bounds,
 )
+from rendering.gl_programs.neon_celestial import basin_body_position
+from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_QUALITY_STEPS
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, shockwave_half_width,
@@ -30,18 +39,35 @@ from .spectrum import prepare_spectrum_shader_levels
 
 _EVENT_BINDING, _HEIGHT_UNIT = 3, 4
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uScenePose")
+_CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
+                     "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uCloudColor","uHorizonColor")
 _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells", "uTerrainGrowth",
-)
-_SKY_UNIFORMS = _VIEW_UNIFORMS + ("uSkyColor", "uSkyStrength", "uSunEnabled", "uSunColor")
+    "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
+    "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
+) + _CELESTIAL_UNIFORMS
+_SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
+    "uSkyPass","uHalfWidth","uTerrain","uTerrainSize","uLand","uTerrainGrowth","uLandHeight","uVolumeStrength","uVolumeColour","uVolumeSteps","uMidband", "uBeatPulse", "uCelestialGlow", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
+_SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
+    "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uTerrainGrowth",
+    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc")
+
+
 
 
 def shockwave_quality(parameters) -> tuple[int, float, tuple[int, int]]:
     detail = scene3d_detail(parameter(parameters, "scene3d_detail"))
     glow = float(parameter(parameters, "shockwave_grid_glow")) if detail.post_effects else 0.0
-    return detail.overlay_samples, glow, shockwave_grid_cells(detail.grid_cells)
+    cells=shockwave_grid_cells(detail.grid_cells)
+    if _wire_display(parameters)&2:
+        frequency=12.0+40.0*float(parameter(parameters,"shockwave_grid_density"))
+        cells=(max(cells[0],math.ceil(frequency*1.5)),max(cells[1],math.ceil(frequency)))
+        # Ten percent more vertices by area; keep marks on the same surface
+        # lattice rather than introducing a second approximation/depth owner.
+        cells=tuple(round(value*math.sqrt(1.10)) for value in cells)
+    return detail.overlay_samples, glow, cells
 
 
 class QuickShockwaveGridRenderer:
@@ -58,14 +84,29 @@ class QuickShockwaveGridRenderer:
         self._terrain_bounds = ()
         self._mesh_cells = None
         self._mesh_data = None
+        self._points_cells = None
+        self._points_data = None
 
     def _mesh(self,cells):
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
-            self._mesh_data = self._resources.mesh(_mesh_key(cells),scene3d_grid_vertices(*cells),(2,))
+            self._mesh_data = self._resources.mesh(_mesh_key(cells),basin_mesh_vertices(cells),(2,))
             self._mesh_cells = cells
         return self._mesh_data
+
+    def _points(self, cells):
+        if cells != self._points_cells:
+            self._drop_points()
+            self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(cells),(2,))
+            self._points_cells=cells
+        return self._points_data
+
+    def _drop_points(self):
+        if self._points_cells is not None:
+            self._resources.drop_mesh(_point_key(self._points_cells))
+            self._points_cells=None
+            self._points_data=None
 
     @property
     def has_resources(self) -> bool:
@@ -92,8 +133,9 @@ class QuickShockwaveGridRenderer:
 
     def _programs(self, parameters, samples, bloom):
         r = self._resources
-        programs = [(r, "basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)]
-        if bool(parameter(parameters, "shockwave_grid_sky_enabled")):
+        programs = [(r, "basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE),
+                    (r, "skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)]
+        if _sky_admitted(parameters):
             programs.append((r, "sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE))
         programs.extend((r, *program) for program in scene_target_programs(samples, bloom, False, overlay=True))
         return programs
@@ -107,7 +149,16 @@ class QuickShockwaveGridRenderer:
         if not r.has_mesh(_mesh_key(cells)):
             self._mesh(cells)
             return False
-        if bool(parameter(parameters, "shockwave_grid_sky_enabled")) and not r.has_mesh("sky"):
+        style=_wire_display(parameters)
+        if style&2:
+            prior=self._points_cells
+            self._points(cells)
+            if prior != self._points_cells:
+                return False
+        elif self._points_cells is not None:
+            self._drop_points()
+            return False
+        if _sky_admitted(parameters) and not r.has_mesh("sky"):
             r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
             return False
         terrain = parameter(parameters, "shockwave_grid_terrain")
@@ -130,6 +181,22 @@ class QuickShockwaveGridRenderer:
                        float(parameter(parameters, "shockwave_grid_scene_pan_x")),
                        float(parameter(parameters, "shockwave_grid_scene_pan_y")))
 
+    @staticmethod
+    def _bind_celestial(uniforms,parameters,half_width,animation_time):
+        position=basin_body_position(*(float(parameter(parameters,"shockwave_grid_sun_"+axis)) for axis in "xyz"),
+                                     half_width,float(animation_time),bool(parameter(parameters,"shockwave_grid_sun_orbit_enabled")),
+                                     float(parameter(parameters,"shockwave_grid_sun_orbit_speed")))
+        gl.glUniform3f(uniforms["uBodyPosition"],*position)
+        gl.glUniform1f(uniforms["uBodySize"],float(parameter(parameters,"shockwave_grid_sun_size")))
+        gl.glUniform1i(uniforms["uBodyKind"],BASIN_BODY_MODES[str(parameter(parameters,"shockwave_grid_sun_mode"))])
+        gl.glUniform1i(uniforms["uSunEnabled"],int(bool(parameter(parameters,"shockwave_grid_sun_enabled"))))
+        gl.glUniform1f(uniforms["uMoonPhase"],float(parameter(parameters,"shockwave_grid_moon_phase")))
+        gl.glUniform1i(uniforms["uSkyEnabled"],int(bool(parameter(parameters,"shockwave_grid_sky_enabled"))))
+        gl.glUniform1f(uniforms["uSkyStrength"],float(parameter(parameters,"shockwave_grid_sky_strength")))
+        for uniform,key in (("uSunColor","sun_color"),("uMoonColor","moon_color"),("uSkyColor","sky_color"),
+                            ("uStarColor","star_color"),("uCloudColor","cloud_color"),("uHorizonColor","horizon_color")):
+            gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
+
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
         logical = snapshot.logical
@@ -148,32 +215,67 @@ class QuickShockwaveGridRenderer:
         count = min(SHOCKWAVE_MAX_BARS, int(logical.common.bar_count))
         levels, _peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
         events = shockwave_event_records(tuple(mode_state.events), half_width)
+        # Existing capture bars, not a new vocal detector, clock or DSP pipeline.
+        low, high = count // 4, max(count // 4 + 1, count * 3 // 5)
+        presence = levels[low:high]
+        midband = max(0.0, min(1.0, sum(presence) / len(presence))) if presence else 0.0
+        # One envelope sampled from the existing captured onset ring, not a new
+        # clock, DSP lane, or frame-rate-dependent accumulator.
+        beat_pulse = max((min(1.0, strength) * math.exp(-age * 2.8)
+                          for age, _x, _z, strength in mode_state.events if age >= 0.0), default=0.0)
         samples, glow, cells = shockwave_quality(parameters)
+        style=_wire_display(parameters)
         r = self._resources
         program = r.program("basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
         uniforms = r.uniforms("basin", _UNIFORMS)
+        skyline_program = r.program("skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)
+        skyline_uniforms = r.uniforms("skyline", _SKYLINE_UNIFORMS)
         vao, vertices = self._mesh(cells)
         terrain = parameter(parameters, "shockwave_grid_terrain")
         self._heightfield.ensure(terrain["size"], terrain["data"])
         records = SHOCKWAVE_EVENTS.pack(events or [{"age": 0.0, "x": 0.0, "z": 0.0, "strength": 0.0}])
-        with self._target.scope(frame, samples, r, overlay=presentation.content_fade, bloom=1.4 * glow):
-            if bool(parameter(parameters, "shockwave_grid_sky_enabled")):
+        with self._target.scope(frame, samples, r, overlay=presentation.content_fade, bloom=1.4 * glow), _scene_depth(), self._heightfield.bound(_HEIGHT_UNIT):
+            sky=None
+            if _sky_admitted(parameters):
                 sky = r.program("sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
                 sky_uniforms = r.uniforms("sky", _SKY_UNIFORMS)
                 sky_vao, sky_count = r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
                 gl.glUseProgram(sky)
                 self._bind_view(sky_uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
-                gl.glUniform4f(sky_uniforms["uSkyColor"], *rgba(parameter(parameters, "shockwave_grid_sky_color")))
-                gl.glUniform1f(sky_uniforms["uSkyStrength"], float(parameter(parameters, "shockwave_grid_sky_strength")))
-                gl.glUniform1i(sky_uniforms["uSunEnabled"], int(bool(parameter(parameters,"shockwave_grid_sun_enabled"))))
-                gl.glUniform4f(sky_uniforms["uSunColor"],*rgba(parameter(parameters,"shockwave_grid_sun_color")))
-                gl.glDisable(gl.GL_DEPTH_TEST)
-                gl.glDepthMask(gl.GL_FALSE)
-                gl.glBindVertexArray(sky_vao)
-                with self._target.emission_writes():
-                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, sky_count)
+                self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
+                gl.glUniform1f(sky_uniforms["uMidband"],midband)
+                gl.glUniform1f(sky_uniforms["uBeatPulse"],beat_pulse)
+                gl.glUniform2f(sky_uniforms["uCelestialGlow"],
+                               float(parameter(parameters,"shockwave_grid_celestial_glow_strength"))
+                               if bool(parameter(parameters,"shockwave_grid_celestial_glow_enabled")) else 0.0,
+                               float(parameter(parameters,"shockwave_grid_celestial_glow_reactivity")))
+                gl.glUniform2f(sky_uniforms["uStarGlow"],
+                               float(parameter(parameters,"shockwave_grid_star_glow_strength")),
+                               float(parameter(parameters,"shockwave_grid_star_glow_reactivity")))
+                star_bursts = starscape_beat_cells(
+                    mode_state.events, tilt, turn,
+                    camera=basin_camera(half_width, maximum),
+                    fit=self._fit,
+                    pose=(float(parameter(parameters,"shockwave_grid_scene_scale")),
+                          float(parameter(parameters,"shockwave_grid_scene_pan_x")),
+                          float(parameter(parameters,"shockwave_grid_scene_pan_y"))),
+                    aspect=field[2]/field[3],
+                ) if bool(parameter(parameters, "shockwave_grid_starscape_beat")) else ()
+                gl.glUniform1i(sky_uniforms["uBeatStarCount"], len(star_bursts))
+                if star_bursts:
+                    gl.glUniform4fv(sky_uniforms["uBeatStarCells"], len(star_bursts),
+                                    tuple(value for item in star_bursts for value in item))
+                gl.glUniform1f(sky_uniforms["uHalfWidth"],half_width)
+                gl.glUniform1i(sky_uniforms["uTerrain"],_HEIGHT_UNIT)
+                gl.glUniform1i(sky_uniforms["uTerrainSize"],terrain["size"])
+                gl.glUniform3f(sky_uniforms["uLand"],float(parameter(parameters,"shockwave_grid_terrain_height")),
+                               float(parameter(parameters,"shockwave_grid_terrain_reactivity")),float(parameter(parameters,"shockwave_grid_terrain_detail")))
+                gl.glUniform1fv(sky_uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
+                # Sky is composited AFTER a depth-only terrain admission. Otherwise
+                # transparent/glass terrain lets distant stars bleed through land.
             gl.glUseProgram(program)
             self._bind_view(uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
+            self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time)
             gl.glUniform1f(uniforms["uHalfWidth"], half_width)
             gl.glUniform1i(uniforms["uEventCount"], len(events))
             gl.glUniform2f(uniforms["uWave"], shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
@@ -193,6 +295,19 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uGlow"], glow)
             gl.glUniform1f(uniforms["uEdgePx"], 0.75 * frame.viewport[2]/frame.logical_size[0])
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
+            gl.glUniform1i(uniforms["uWireDisplay"],style)
+            gl.glUniform1i(uniforms["uMarks"],0)
+            for uniform,key in (("uTerrainFillColor","terrain_fill_color"),("uVertexColor","vertex_color"),
+                                ("uVertexAccentColor","vertex_accent_color"),("uVertexOutlineColor","vertex_outline_color"),
+                                ("uGlassTint","glass_tint")):
+                gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
+            gl.glUniform2f(uniforms["uGlass"],float(parameter(parameters,"shockwave_grid_glass_strength")),
+                           float(parameter(parameters,"shockwave_grid_glass_roughness")))
+            gl.glUniform1i(uniforms["uSmoothGlass"],int(bool(style&4)
+                           and float(parameter(parameters,"shockwave_grid_glass_strength"))>0.0
+                           and rgba(parameter(parameters,"shockwave_grid_glass_tint"))[3]>0.0))
+            light_strength=float(parameter(parameters,"shockwave_grid_sun_rays_strength")) if _rays_admitted(parameters) else 0.0
+            gl.glUniform1f(uniforms["uLightStrength"],light_strength)
             gl.glUniform1fv(uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
             gl.glUniform1i(uniforms["uTerrain"], _HEIGHT_UNIT)
             gl.glUniform1i(uniforms["uTerrainSize"], terrain["size"])
@@ -206,15 +321,133 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uReflection"], reflection)
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_DEPTH_TEST)
-            with self._heightfield.bound(_HEIGHT_UNIT), self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _EVENT_BINDING, records):
+            with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _EVENT_BINDING, records):
                 with self._target.emission_writes():
-                    if reflection > 0.0 and tilt > 0.001:
+                    body_enabled=bool(parameter(parameters,"shockwave_grid_sun_enabled"))
+                    depth_prepared = body_enabled or bool(parameter(parameters,"shockwave_grid_sky_enabled"))
+                    if bool(parameter(parameters,"shockwave_grid_sky_enabled")):
+                        # First establish the same sky continuously across the
+                        # entire card. The terrain prepass subtracts only its
+                        # opaque coverage, smoothly across its outer fade.
+                        gl.glUseProgram(sky)
+                        gl.glUniform1i(sky_uniforms["uSkyPass"],0)
+                        gl.glDisable(gl.GL_DEPTH_TEST)
                         gl.glDepthMask(gl.GL_FALSE)
-                        gl.glUniform1i(uniforms["uPass"], 0)
-                        gl.glDrawArrays(gl.GL_TRIANGLES, 0, vertices)
-                    gl.glDepthMask(gl.GL_TRUE)
-                    gl.glUniform1i(uniforms["uPass"], 1)
-                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, vertices)
+                        gl.glBindVertexArray(sky_vao)
+                        gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+                        gl.glEnable(gl.GL_DEPTH_TEST)
+                    if depth_prepared:
+                        gl.glUseProgram(program)
+                        gl.glUniform1i(uniforms["uDepthOnly"],1)
+                        gl.glUniform1i(uniforms["uMarks"],0)
+                        gl.glUniform1i(uniforms["uPass"],1)
+                        gl.glDepthFunc(gl.GL_LESS)
+                        gl.glDepthMask(gl.GL_TRUE)
+                        gl.glBindVertexArray(vao)
+                        with _terrain_sky_occlusion_blend(glow > 0.0):
+                            gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                    gl.glUseProgram(program)
+                    gl.glUniform1i(uniforms["uDepthOnly"],0)
+                    self._draw_scene(frame,uniforms,vao,vertices,cells,style,
+                                     reflection>0.0 and tilt>0.001,depth_prepared=depth_prepared)
+                    # Screen-space displacement of the exact terrain triangles.
+                    # The unshifted surface depth rejects internal colour, leaving
+                    # a narrow ridge line against sky (never projected-column boxes).
+                    gl.glUseProgram(skyline_program)
+                    self._bind_view(skyline_uniforms,frame,parameters,field,half_width,tilt,turn,maximum)
+                    gl.glUniform1f(skyline_uniforms["uHalfWidth"],half_width)
+                    gl.glUniform1i(skyline_uniforms["uTerrain"],_HEIGHT_UNIT)
+                    gl.glUniform1i(skyline_uniforms["uTerrainSize"],terrain["size"])
+                    gl.glUniform3f(skyline_uniforms["uLand"],
+                                   float(parameter(parameters,"shockwave_grid_terrain_height")),
+                                   float(parameter(parameters,"shockwave_grid_terrain_reactivity")),
+                                   float(parameter(parameters,"shockwave_grid_terrain_detail")))
+                    gl.glUniform1fv(skyline_uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
+                    gl.glUniform4f(skyline_uniforms["uCrestColor"],
+                                   *rgba(parameter(parameters,"shockwave_grid_crest_color")))
+                    gl.glUniform1f(skyline_uniforms["uGlow"],glow)
+                    gl.glUniform1f(skyline_uniforms["uMidband"],midband)
+                    gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 * 1.8 / max(frame.viewport[3],1))
+                    gl.glEnable(gl.GL_DEPTH_TEST)
+                    gl.glDepthFunc(gl.GL_LEQUAL)
+                    gl.glDepthMask(gl.GL_FALSE)
+                    gl.glBindVertexArray(vao)
+                    gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                    if body_enabled:
+                        # Translucent bodies and their antialiased limbs blend
+                        # over the completed surface while retaining 3D depth.
+                        gl.glUseProgram(sky)
+                        gl.glUniform1i(sky_uniforms["uSkyPass"],2)
+                        gl.glEnable(gl.GL_DEPTH_TEST)
+                        gl.glDepthFunc(gl.GL_LEQUAL)
+                        gl.glDepthMask(gl.GL_FALSE)
+                        gl.glBindVertexArray(sky_vao)
+                        gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+                    if _rays_admitted(parameters):
+                        gl.glUseProgram(sky)
+                        gl.glUniform1i(sky_uniforms["uSkyPass"],1)
+                        gl.glUniform1f(sky_uniforms["uHalfWidth"],half_width)
+                        gl.glUniform1i(sky_uniforms["uTerrain"],_HEIGHT_UNIT)
+                        gl.glUniform1i(sky_uniforms["uTerrainSize"],terrain["size"])
+                        height=float(parameter(parameters,"shockwave_grid_terrain_height"))
+                        movement=float(parameter(parameters,"shockwave_grid_terrain_reactivity"))
+                        gl.glUniform1f(sky_uniforms["uLandHeight"],height*(1.0+0.25*movement*max(mode_state.terrain_growth))/1.25)
+                        gl.glUniform1f(sky_uniforms["uVolumeStrength"],light_strength)
+                        colour=rgba(parameter(parameters,"shockwave_grid_sun_rays_color"))
+                        body_alpha=rgba(parameter(parameters,"shockwave_grid_"+("sun_color" if str(parameter(parameters,"shockwave_grid_sun_mode"))=="Sun" else "moon_color")))[3]
+                        gl.glUniform4f(sky_uniforms["uVolumeColour"],*colour[:3],colour[3]*body_alpha)
+                        steps=HEIGHTFIELD_VOLUME_QUALITY_STEPS[str(parameter(parameters,"scene3d_detail"))]
+                        gl.glUniform1i(sky_uniforms["uVolumeSteps"],steps)
+                        gl.glDisable(gl.GL_DEPTH_TEST)
+                        gl.glDepthMask(gl.GL_FALSE)
+                        gl.glBindVertexArray(sky_vao)
+                        gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+
+    def _draw_scene(self,frame,uniforms,vao,vertices,cells,style,reflections,*,depth_prepared=False):
+        points=self._points(cells) if style&2 else None
+        if not style&2 and self._points_cells is not None:
+            self._drop_points()
+        point_size_enabled=bool(gl.glIsEnabled(gl.GL_PROGRAM_POINT_SIZE)) if points else False
+        try:
+            if points:
+                gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
+                diameter=1.9 if style&4 else (2.1 if style==2 else 1.7)
+                gl.glUniform1f(uniforms["uPointPx"],diameter*frame.viewport[2]/frame.logical_size[0])
+            if reflections:
+                if depth_prepared:
+                    # Mirrors are composed below the later visible surface,
+                    # as when its depth buffer was initially clear.
+                    gl.glDepthFunc(gl.GL_ALWAYS)
+                gl.glDepthMask(gl.GL_FALSE)
+                gl.glUniform1i(uniforms["uPass"],0)
+                gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                if points:
+                    self._draw_points(uniforms,points,0,depth_function=gl.GL_ALWAYS if depth_prepared else gl.GL_LEQUAL)
+            if depth_prepared:
+                gl.glDepthFunc(gl.GL_LEQUAL)
+            elif points and reflections:
+                gl.glDepthFunc(gl.GL_LESS)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glUniform1i(uniforms["uMarks"],0)
+            gl.glUniform1i(uniforms["uPass"],1)
+            gl.glBindVertexArray(vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+            if points:
+                gl.glDepthMask(gl.GL_FALSE)
+                self._draw_points(uniforms,points,1)
+        finally:
+            if points:
+                gl.glDepthFunc(gl.GL_LESS)
+                if not point_size_enabled:
+                    gl.glDisable(gl.GL_PROGRAM_POINT_SIZE)
+
+    @staticmethod
+    def _draw_points(uniforms,points,pass_id,*,depth_function=gl.GL_LEQUAL):
+        gl.glDepthFunc(depth_function)
+        gl.glUniform1i(uniforms["uMarks"],1)
+        gl.glUniform1i(uniforms["uPass"],pass_id)
+        gl.glBindVertexArray(points[0])
+        gl.glDrawArrays(gl.GL_POINTS,0,points[1])
 
     def release_resources(self) -> None:
         errors = []
@@ -228,12 +461,65 @@ class QuickShockwaveGridRenderer:
         self._terrain_bounds = ()
         self._mesh_cells = None
         self._mesh_data = None
+        self._points_cells = None
+        self._points_data = None
         if errors:
             raise RuntimeError(" | ".join(errors))
 
 
 def _mesh_key(cells: tuple[int, int]) -> str:
     return f"basin {cells[0]}x{cells[1]}"
+
+
+def _point_key(cells: tuple[int, int]) -> str:
+    return f"basin vertices {cells[0]}x{cells[1]}"
+
+
+def _wire_display(parameters):
+    return BASIN_SURFACE_STYLES[str(parameter(parameters,"shockwave_grid_wire_display"))]
+
+
+def _sky_admitted(parameters):
+    return bool(parameter(parameters,"shockwave_grid_sky_enabled") or parameter(parameters,"shockwave_grid_sun_enabled"))
+
+
+def _rays_admitted(parameters):
+    return bool(parameter(parameters,"shockwave_grid_sun_enabled") and parameter(parameters,"shockwave_grid_sun_rays_enabled")
+                and float(parameter(parameters,"shockwave_grid_sun_rays_strength"))>0.0)
+
+
+@contextmanager
+def _terrain_sky_occlusion_blend(emission: bool):
+    """Subtract only fading terrain coverage from the sky behind it.
+
+    Attachment 0 holds premultiplied colour; attachment 1 is additive emission.
+    The depth prepass writes terrain depth as normal, but its alpha erases the
+    portion of the sky actually covered. It never alters the card or other modes.
+    """
+    factors = tuple(gl_query.get_int(key) for key in (
+        gl.GL_BLEND_SRC_RGB, gl.GL_BLEND_DST_RGB,
+        gl.GL_BLEND_SRC_ALPHA, gl.GL_BLEND_DST_ALPHA))
+    try:
+        gl.glBlendFuncSeparatei(0,gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA,
+                                gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA)
+        if emission:
+            gl.glBlendFuncSeparatei(1,gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA,
+                                    gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA)
+        yield
+    finally:
+        gl.glBlendFuncSeparatei(0,*factors)
+        if emission:
+            gl.glBlendFuncSeparatei(1,gl.GL_ONE,gl.GL_ONE,gl.GL_ONE,gl.GL_ONE)
+
+
+@contextmanager
+def _scene_depth():
+    prior=gl_query.get_int(gl.GL_DEPTH_FUNC)
+    try:
+        gl.glDepthFunc(gl.GL_LESS)
+        yield
+    finally:
+        gl.glDepthFunc(prior)
 
 
 def create_visualizer_renderer() -> QuickShockwaveGridRenderer:

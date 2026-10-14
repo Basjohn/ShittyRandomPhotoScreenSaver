@@ -28,6 +28,12 @@ construction alone is not claimed to improve steady frames.
 
 ## Opt-in authored heightfields
 
+`scene3d_grid_points` supplies unique UV vertices for an optional point presentation. Consumers draw the same displaced
+lattice as their surface triangles, retain real depth/occlusion and own the lazy mesh with MeshResources. A consumer that
+uses edges only acquires no point mesh or point-size state work.
+Both grid helpers accept an optional bounded front extension; default consumers keep the original UV domain/data.
+An extended mesh's near controls sample clamped authored data, with identical point/triangle UV coordinates.
+
 `rendering/gl_programs/heightfield.py` and `heightfield_glsl.py` share bilinear authored-zero water classification and
 opt-in positive cubic B-spline surface sampling, over the existing bendable mesh. Fragment-only helpers supply curved
 surface wire coordinates and contours; tessellation edges are not the artistic wireframe.
@@ -36,6 +42,12 @@ immutable R32F or explicitly requested RG32F texture per consumer/context, with 
 unpack/texture/sampler restoration. The optional second channel holds authored distance to bilinear land support;
 its bounded separable distance transform runs at configuration, never on the logical or render clock.
 Failed release retains the owned handle for retry. There is no shared simulation, clock or global texture cache.
+`heightfield_volume_glsl.py` supplies opt-in bounded single scattering over that same sampler. High/Balanced/
+Performance/KAK admit 12/8/6/4 world-ray steps with four coarse light-occlusion taps each, at most 60 height samples
+per fragment. Density fades from water/lower slopes with world height; zero strength returns transparent black.
+Thin ridges between taps may be missed, and this is not a shadow map or a fluid simulation. The consumer reuses its
+target/program/quad and owns admission; no volume texture or independent clock is created. Unrelated consumers
+do not import this shader fragment or acquire its work.
 Neon Lake Basin's source/authoring contract lives in `Docs/Reference/Neon_Lake_Basin.md`; its cost/fidelity gates remain
 in `Current_Plan.md` until measured and accepted.
 
