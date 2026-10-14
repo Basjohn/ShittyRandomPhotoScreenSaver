@@ -57,7 +57,7 @@ float sceneHeightfieldWaterCurves(vec2 uv,float height,float cells,float pixels)
     float contour=height*cells*0.6;
     float width=fwidth(contour);
     float contourDistance=width>1e-4 ? abs(fract(contour-0.5)-0.5)/width : 1e5;
-    return max(max(curves.x*0.28,curves.y),1.0-smoothstep(0.0,pixels,contourDistance));
+    return max(max(curves.x*0.14,curves.y),1.0-smoothstep(0.0,pixels,contourDistance));
 }
 """
 

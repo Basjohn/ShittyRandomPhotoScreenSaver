@@ -54,7 +54,7 @@ def test_only_3d_freeform_modes_orbit_through_their_own_view_settings():
         assert all(key in _DEFAULTS for key in keys)
 
 
-@pytest.mark.parametrize("mode", _ORBITING)
+@pytest.mark.parametrize("mode", [mode for mode in _ORBITING if mode != "shockwave_grid"])
 def test_turn_goes_round_a_full_circle_and_tilt_stops_at_its_ends(mode):
     turn, tilt = view_orbit_settings(mode)
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode).view_orbit_steps
@@ -77,6 +77,41 @@ def test_turn_goes_round_a_full_circle_and_tilt_stops_at_its_ends(mode):
         orbit_visualizer_view(host, mode, 0, -1)
     low = view_orbit_values(host, mode)[tilt]
     assert low < high and orbit_visualizer_view(host, mode, 0, -1)[tilt] == low
+
+
+def test_neon_lake_landscape_turn_tilt_are_bounded_for_drag_and_held_keys():
+    from widgets.spotify_visualizer.view_orbit import (ViewOrbitMotion, orbit_motion_values)
+    host = _host()
+    for _ in range(180):
+        view = orbit_visualizer_view(host, "shockwave_grid", 1, 1)
+    assert view["shockwave_grid_turn"] == pytest.approx(.2)
+    assert view["shockwave_grid_tilt"] == pytest.approx(.58)
+    for _ in range(180):
+        view = orbit_visualizer_view(host, "shockwave_grid", -1, -1)
+    assert view["shockwave_grid_turn"] == pytest.approx(-.2)
+    assert view["shockwave_grid_tilt"] == pytest.approx(.17)
+    motion = ViewOrbitMotion("shockwave_grid", 0.0, 0.4, 1.0, -1.0, 10.0)
+    assert orbit_motion_values(motion, 50.0) == {
+        "shockwave_grid_turn": .2, "shockwave_grid_tilt": .17}
+    motion = ViewOrbitMotion("shockwave_grid", 0.0, 0.4, -1.0, 1.0, 10.0)
+    assert orbit_motion_values(motion, 50.0) == {
+        "shockwave_grid_turn": -.2, "shockwave_grid_tilt": .58}
+
+
+def test_neon_lake_pan_bound_reapplies_on_zoom_and_configuration_reload():
+    from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    host = _host()
+    mode = "shockwave_grid"
+    pose = transform_visualizer_scene(host, mode, {
+        "shockwave_grid_scene_pan_x": 2.0, "shockwave_grid_scene_pan_y": 2.0})
+    assert pose["shockwave_grid_scene_pan_x"] == pytest.approx(.42)
+    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.24)
+    pose = transform_visualizer_scene(host, mode, {"shockwave_grid_scene_scale": 4.0})
+    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(-.30)
+    apply_presentation_vis_mode_kwargs(host, {"shockwave_grid_scene_scale": 4.0,
+                                             "shockwave_grid_scene_pan_y": -2.0})
+    assert host._shockwave_grid_scene_pan_y == pytest.approx(-1.14)
 
 
 def test_a_mode_without_a_view_ignores_orbiting():

@@ -24,6 +24,8 @@ shared logical and presentation consumers. It introduces no new runtime owner.
 
 ``authoring=True`` choices persist convenience metadata without installing a runtime attribute.
 ``enabled_when`` keeps dependent controls visible and preserves their values while disabling them;
+``when`` hides irrelevant rows without changing saved values. Both accept an AND tuple of predicate
+pairs; Choice predicates may admit a tuple of alternative values;
 ``when`` hides their rows. Runtime aliases and strict admission remain configuration-only. Immutable
 specs cache their derived control/consumer tuples; frame extraction does not rebuild membership.
 
@@ -42,6 +44,7 @@ from types import MappingProxyType
 from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
 
 
@@ -63,7 +66,9 @@ class Bucket:
     advanced: bool = False
 
 
-When = tuple   # (key, value): shown only while that control of the same mode holds that value
+Predicate = tuple[str, bool | str | int | tuple[str, ...]]
+When = Predicate | tuple[Predicate, ...]
+EnabledWhen = When | tuple[Predicate, ...]
 
 
 @dataclass(frozen=True)
@@ -98,7 +103,7 @@ class Slider:
     truncate: bool = False
     admission_high: float | None = None
     bottom_padding: int = 0
-    enabled_when: When = ()
+    enabled_when: EnabledWhen = ()
     recommended: float | None = None
     runtime_strict: bool = False
 
@@ -154,7 +159,7 @@ class Toggle:
     runtime_attr: str = ""
     read: str = ""
     input_aliases: tuple[str, ...] = ()
-    enabled_when: When = ()
+    enabled_when: EnabledWhen = ()
     runtime_bool: bool = False
 
     def admit(self, value: object, default: object) -> bool:
@@ -195,7 +200,7 @@ class Choice:
     runtime_values: tuple[object, ...] = ()
     read: str = ""
     input_aliases: tuple[str, ...] = ()
-    enabled_when: When = ()
+    enabled_when: EnabledWhen = ()
     authoring: bool = False
     runtime_strict: bool = False
     ingress_strict: bool = False
@@ -252,7 +257,7 @@ class Colour:
     availability: tuple[str, str] = ()
     swatch_row: bool = True
     runtime_strict: bool = False
-    enabled_when: When = ()
+    enabled_when: EnabledWhen = ()
 
     def admit(self, value: object, default: object) -> list[int]:
         channels = list(value) if isinstance(value, (list, tuple)) else []
@@ -362,20 +367,32 @@ class ModeSettings:
 
 # ---- Shockwave Grid ----------------------------------------------------------------------------
 
+_BASIN_WIRE_CHOICES = tuple(BASIN_SURFACE_STYLES)
+_BASIN_GLASS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&4)
+_BASIN_PLAIN_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&2 and not bits&4)
+_BASIN_GLASS_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&6==6)
+_BASIN_BODY = ("shockwave_grid_sun_enabled", True)
+
+
 _SHOCKWAVE_GRID = ModeSettings(
     "shockwave_grid",
     buckets=(
         Bucket("terrain", "Terrain", "Raise mountains and islands; exact base-level regions are the lake's water."),
         Bucket("appearance", "Appearance",
-               "Author terrain wire, water and musical crest colours directly, including alpha."),
+               "Terrain and water colours, including the shared wave/ridge highlight colour and alpha."),
         Bucket("waves", "Waves",
-               "Water carries spreading waves; solid land keeps a restrained separate response."),
+               "Water height, motion, flow and idle swell; land growth is a separate musical response."),
+        Bucket("terrain_motion", "Growth Timing",
+               "Rise and settle times for the Terrain Growth control under Waves.", advanced=True),
         Bucket("response", "Frequency Response",
                "This independent audio profile routes frequency lanes into water and ridge energy; it does not author terrain.",
                advanced=True),
         Bucket("render", "Render",
-               "Terrain wires, emission, surface fill, water flow and sky stay inside the bordered card.",
+               "Surface style, glass, water reflection and base opacity inside the bordered card.",
                advanced=True),
+        Bucket("sky", "Sky", "Atmosphere and starfield colours; beat-star lighting is under Glow.", advanced=True),
+        Bucket("celestial", "Celestial", "Sun/Moon appearance, placement and orbit; halo and light rays are under Glow.", advanced=True),
+        Bucket("glow", "Glow", "Surface and ridge light, optional celestial halo/rays, and beat-reactive stars.", advanced=True),
     ),
     entries=(
         Custom("terrain", "terrain", "ui.tabs.media.shockwave_grid_builder:build_terrain_section",
@@ -385,29 +402,28 @@ _SHOCKWAVE_GRID = ModeSettings(
                "Vertical scale of the authored solid land. Authored zero regions remain water.", bucket="terrain"),
         Slider("shockwave_grid_terrain_detail", "Terrain Detail:", 0.0, 1.0,
                "Fine surface definition on solid terrain, without moving its water boundary.", bucket="terrain"),
-        Colour("shockwave_grid_line_color", "Terrain Lines:", "Choose Terrain Line Colour",
-               "The terrain wire colour, including alpha.", bucket="appearance"),
+        Colour("shockwave_grid_line_color", "Shoreline Colour:", "Choose Shoreline Colour",
+               "Colour used along the lake shore (and remaining water highlights).", bucket="appearance"),
         Colour("shockwave_grid_crest_color", "Wave / Ridge Glow:", "Choose Wave and Ridge Glow Colour",
                "Colour of musical water crests and energized terrain ridges, including alpha.",
                bucket="appearance"),
         Colour("shockwave_grid_water_color", "Water Colour:", "Choose Lake Water Colour",
                "The water's authored base colour, including alpha.", bucket="appearance"),
-        Slider("shockwave_grid_water_reflection", "Water Reflection:", 0.0, 1.0,
-               "Reflection strength on the water surface.", bucket="appearance"),
+        Colour("shockwave_grid_terrain_fill_color", "Terrain Fill:", "Choose Terrain Fill Colour", bucket="appearance"),
         Slider("shockwave_grid_water_detail", "Water Detail:", 0.0, 1.0,
-               "Small surface details on the lake, separate from musical wave height.", bucket="appearance"),
+               "Small surface details on the lake, separate from musical wave height.", bucket="waves"),
         Slider("shockwave_grid_wave_height", "Wave Height:", 0.0, 1.0,
                "How high musical waves lift the water surface.", bucket="waves"),
         Slider("shockwave_grid_wave_speed", "Wave Speed:", 0.0, 1.0,
                "How fast musical waves propagate across the water.", bucket="waves"),
-        Slider("shockwave_grid_horizon", "Ridge Glow Response:", 0.0, 1.0,
-               "How strongly the frequency response lights up terrain ridges.", bucket="waves"),
         Slider("shockwave_grid_terrain_reactivity", "Terrain Growth:", 0.0, 1.0,
                "Strength of the land's own gradual musical growth, independent of travelling water waves.", bucket="waves"),
         Slider("shockwave_grid_terrain_growth_attack", "Growth Rise:", 0.08, 2.0,
-               "Seconds for solid land to grow toward the musical body.", bucket="waves", suffix="s"),
+               "Seconds for solid land to grow toward the musical body.", bucket="terrain_motion", suffix="s"),
         Slider("shockwave_grid_terrain_growth_release", "Growth Settle:", 0.2, 4.0,
-               "Seconds for solid land to settle after the musical body recedes.", bucket="waves", suffix="s"),
+               "Seconds for solid land to settle after the musical body recedes.", bucket="terrain_motion", suffix="s"),
+        Slider("shockwave_grid_scroll", "Water Flow:", 0.0, 1.0,
+               "Slow surface flow across the water, without moving authored terrain.", bucket="waves"),
         Slider("shockwave_grid_idle", "Idle Swell:", 0.0, 1.0,
                "Subtle water swell between musical waves.", bucket="waves"),
         Custom("shape", "response", build="ui.tabs.media.shockwave_grid_builder:build_response_section",
@@ -426,26 +442,90 @@ _SHOCKWAVE_GRID = ModeSettings(
                "ui.tabs.media.shockwave_grid_settings_binding:load_smoothing_section",
                "ui.tabs.media.shockwave_grid_settings_binding:collect_smoothing_section",
                keys=("shockwave_grid_visual_smoothing_enabled", "shockwave_grid_visual_smoothing", "shockwave_grid_solid_bar_hysteresis_enabled")),
-        Slider("shockwave_grid_density", "Wire Density:", 0.0, 1.0, "Density of the terrain's neon wire mesh.",
+        Choice("shockwave_grid_wire_display", "Surface Style:", _BASIN_WIRE_CHOICES,
+               "Choose vertices, glass or both; lake and mountain outlines are always independent.", bucket="render"),
+        Colour("shockwave_grid_glass_tint", "Glass Tint:", "Choose Glass Tint", bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_GLASS)),
+        Slider("shockwave_grid_glass_strength", "Glass Strength:", 0.0, 1.0, bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_GLASS)),
+        Slider("shockwave_grid_glass_roughness", "Glass Roughness:", 0.05, 0.5, bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_GLASS)),
+        Colour("shockwave_grid_vertex_color", "Vertex Colour:", "Choose Vertex Colour", bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_PLAIN_POINTS)),
+        Colour("shockwave_grid_vertex_accent_color", "Vertex Accent:", "Choose Vertex Accent Colour", bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_PLAIN_POINTS)),
+        Colour("shockwave_grid_vertex_outline_color", "Vertex Outline:", "Choose Glass Vertex Outline Colour", bucket="render",
+               when=("shockwave_grid_wire_display", _BASIN_GLASS_POINTS)),
+        Slider("shockwave_grid_density", "Surface Detail:", 0.0, 1.0, "Vertex density and water-surface detail (also affects render workload).",
                bucket="render"),
-        Slider("shockwave_grid_glow", "Glow:", 0.0, 1.0,
-               "Post emission from terrain wires and water crests.", bucket="render"),
-        Slider("shockwave_grid_floor", "Surface Fill:", 0.0, 1.0,
-               "Base visibility of the land and water surfaces under the wire mesh.", bucket="render"),
-        Slider("shockwave_grid_scroll", "Water Flow:", 0.0, 1.0,
-               "Slow surface flow across the water, without moving authored terrain.", bucket="render"),
-        Toggle("shockwave_grid_sky_enabled", "Sky:", "Enable neon sky", bucket="render"),
-        Toggle("shockwave_grid_sun_enabled", "Sun:", "Show neon sun", bucket="render",
-               enabled_when=("shockwave_grid_sky_enabled", True)),
-        Colour("shockwave_grid_sun_color", "Sun Colour:", "Choose Neon Sun Colour", bucket="render",
-               enabled_when=("shockwave_grid_sun_enabled", True)),
+        Slider("shockwave_grid_water_reflection", "Water Reflection:", 0.0, 1.0,
+               "Reflection strength on the water surface.", bucket="render"),
+        Slider("shockwave_grid_glow", "Surface Glow:", 0.0, 1.0,
+               "Emission from terrain, shoreline, skyline and wave highlights; distinct from body and star halos.", bucket="glow"),
+        Slider("shockwave_grid_horizon", "Ridge Light Response:", 0.0, 1.0,
+               "How strongly the frequency response lights up terrain ridges.", bucket="glow"),
+        Slider("shockwave_grid_floor", "Base Opacity:", 0.0, 1.0,
+               "Shared base visibility of land and water before their independent colour alpha.", bucket="render"),
+        Toggle("shockwave_grid_sky_enabled", "Sky:", "Enable neon sky", bucket="sky"),
         Slider("shockwave_grid_sky_strength", "Sky Strength:", 0.0, 1.0,
-               "Sky intensity behind the basin.", bucket="render", enabled_when=("shockwave_grid_sky_enabled", True)),
-        Colour("shockwave_grid_sky_color", "Sky Colour:", "Choose Basin Sky Colour", bucket="render",
+               "Sky intensity behind the basin.", bucket="sky", enabled_when=("shockwave_grid_sky_enabled", True)),
+        Colour("shockwave_grid_sky_color", "Sky Colour:", "Choose Basin Sky Colour", bucket="sky",
                enabled_when=("shockwave_grid_sky_enabled", True)),
+        Colour("shockwave_grid_star_color", "Stars:", "Choose Star Colour", bucket="sky",
+               enabled_when=("shockwave_grid_sky_enabled", True)),
+        Colour("shockwave_grid_cloud_color", "Clouds:", "Choose Cloud Colour", bucket="sky",
+               enabled_when=("shockwave_grid_sky_enabled", True)),
+        Colour("shockwave_grid_horizon_color", "Horizon:", "Choose Horizon Colour", bucket="sky",
+               enabled_when=("shockwave_grid_sky_enabled", True)),
+        Toggle("shockwave_grid_celestial_glow_enabled", "Celestial Halo:",
+               "Show a halo surrounding the Sun or Moon without changing its light or reflections.",
+               bucket="glow", when=_BASIN_BODY),
+        Slider("shockwave_grid_celestial_glow_strength", "Halo Intensity:", 0.0, 2.0,
+               "Baseline radiance of the Sun/Moon halo.", bucket="glow",
+               when=(_BASIN_BODY, ("shockwave_grid_celestial_glow_enabled", True)), enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_celestial_glow_reactivity", "Halo Reactivity:", 0.0, 2.0,
+               "Small response to existing midband presence and recent strong beats.", bucket="glow",
+               when=(_BASIN_BODY, ("shockwave_grid_celestial_glow_enabled", True)), enabled_when=_BASIN_BODY),
+        Toggle("shockwave_grid_sun_rays_enabled", "Light Rays:", "Enable volumetric rays", bucket="glow", when=_BASIN_BODY, enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_rays_strength", "Ray Strength:", 0.0, 1.0, bucket="glow",
+               when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True)),
+               enabled_when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True))),
+        Colour("shockwave_grid_sun_rays_color", "Ray Colour:", "Choose Volumetric Ray Colour", bucket="glow",
+               when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True)),
+               enabled_when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True))),
+        Toggle("shockwave_grid_starscape_beat", "Starscape Beat:",
+               "On stronger admitted beats, briefly brighten three widely separated stars. Gentle decay; no separate DSP clock.",
+               bucket="glow", when=("shockwave_grid_sky_enabled", True), enabled_when=("shockwave_grid_sky_enabled", True)),
+        Slider("shockwave_grid_star_glow_strength", "Star Glow Intensity:", 0.0, 2.0,
+               "Brightened stars on admitted strong beats.", bucket="glow",
+               when=(("shockwave_grid_sky_enabled", True), ("shockwave_grid_starscape_beat", True)),
+               enabled_when=(("shockwave_grid_sky_enabled", True), ("shockwave_grid_starscape_beat", True))),
+        Slider("shockwave_grid_star_glow_reactivity", "Star Glow Reactivity:", 0.0, 2.0,
+               "Brightness response of the three selected beat stars.", bucket="glow",
+               when=(("shockwave_grid_sky_enabled", True), ("shockwave_grid_starscape_beat", True)),
+               enabled_when=(("shockwave_grid_sky_enabled", True), ("shockwave_grid_starscape_beat", True))),
+        Toggle("shockwave_grid_sun_enabled", "Celestial Body:", "Show Sun / Moon", bucket="celestial"),
+        Choice("shockwave_grid_sun_mode", "Body:", tuple(BASIN_BODY_MODES), bucket="celestial", enabled_when=_BASIN_BODY),
+        Colour("shockwave_grid_sun_color", "Sun Colour:", "Choose Neon Sun Colour", bucket="celestial",
+               when=("shockwave_grid_sun_mode", "Sun"), enabled_when=_BASIN_BODY),
+        Colour("shockwave_grid_moon_color", "Moon Colour:", "Choose Moon Colour", bucket="celestial",
+               when=("shockwave_grid_sun_mode", "Moon"), enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_moon_phase", "Moon Phase:", 0.0, 1.0, bucket="celestial",
+               when=("shockwave_grid_sun_mode", "Moon"), enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_x", "Position X:", -2.0, 2.0,
+               "Horizontal position in basin half-widths.", bucket="celestial", signed=True, enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_y", "Position Y:", 0.1, 3.0,
+               "Height above the basin in scene units.", bucket="celestial", enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_z", "Position Z:", -6.0, 2.0,
+               "Scene depth: negative positions lie farther into the basin.", bucket="celestial", signed=True, enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_size", "Size:", 0.1, 1.0,
+               "Celestial body size in scene units.", bucket="celestial", enabled_when=_BASIN_BODY),
+        Toggle("shockwave_grid_sun_orbit_enabled", "Orbit:", "Orbit around basin centre", bucket="celestial", enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_sun_orbit_speed", "Orbit Speed:", 0.0, 0.025, bucket="celestial", scale=1000, decimals=3, suffix=" rev/s",
+               enabled_when=(_BASIN_BODY, ("shockwave_grid_sun_orbit_enabled", True))),
         # Orbited live (W/A/S/D, Alt + drag) rather than from a body control.
-        Slider("shockwave_grid_tilt", "", 0.0, 1.0, bucket=""),
-        Slider("shockwave_grid_turn", "", -1.0, 1.0, bucket=""),
+        Slider("shockwave_grid_tilt", "", 0.17, 0.58, bucket=""),
+        Slider("shockwave_grid_turn", "", -0.20, 0.20, bucket=""),
         Slider("shockwave_grid_scene_scale", "", 0.25, 4.0),
         Slider("shockwave_grid_scene_pan_x", "", -2.0, 2.0),
         Slider("shockwave_grid_scene_pan_y", "", -2.0, 2.0),

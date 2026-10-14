@@ -780,3 +780,14 @@ def migrate_legacy_sphere_control_keys(
         migrated.pop(old_reactivity_key, None)
 
     return migrated
+
+
+def migrate_retired_neon_surface_style(data, *, prefix="widgets.spotify_visualizer"):
+    """Forward-only persisted input migration. Runtime/spec accept canonical styles only."""
+    mapped = {"Edges": "Vertices", "Both": "Vertices",
+              "Glass + Edges": "Glass", "Glass + Both": "Glass + Vertices"}
+    result = dict(data)
+    for key in ("shockwave_grid_wire_display", f"{prefix}.shockwave_grid_wire_display"):
+        if key in result:
+            result[key] = mapped.get(result[key], result[key])
+    return result

@@ -287,16 +287,24 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
         for control in (control for control in spec.controls if control.when):
             key, value = control.when
             condition = spec.control(key)
-            assert isinstance(condition, Toggle), "conditions name a toggle of the same mode"
             switch = getattr(tab, key)
-            switch.setChecked(value)
+            accepted = value[0] if isinstance(value, tuple) else value
+            if isinstance(condition, Toggle):
+                rejected = not accepted
+                set_value = switch.setChecked
+            else:
+                assert isinstance(condition, Choice)
+                admitted = value if isinstance(value, tuple) else (value,)
+                rejected = next(option for option in condition.choices if option not in admitted)
+                set_value = switch.setCurrentText
+            set_value(accepted)
             assert not rows[control.key].isHidden(), control.key
-            switch.setChecked(not value)
+            set_value(rejected)
             assert rows[control.key].isHidden(), control.key
             # A load blocks the switch's signals; the condition still follows the loaded value.
-            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: value})
+            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: accepted})
             assert not rows[control.key].isHidden(), control.key
-            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: not value})
+            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: rejected})
             assert rows[control.key].isHidden(), control.key
         for control in spec.controls:
             if isinstance(control, Toggle) and control.bucket and not control.label and not control.row_group:
@@ -305,3 +313,15 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
         tab.deleteLater()
         qt_app.processEvents()
 
+
+
+def test_neon_glass_roughness_first_slider_step_respects_shared_material_floor():
+    import math
+    from core.settings.visualizer_mode_settings import spec_control
+    from rendering.gl_programs.scene3d import Scene3DMaterial, _material_roughness
+    control=spec_control('shockwave_grid_glass_roughness')
+    floor=_material_roughness(Scene3DMaterial((1.0,1.0,1.0),0.0,0.0))
+    assert control.low == math.ceil(floor*control.scale)/control.scale
+    assert control.admit(0.02,DEFAULTS[control.key]) == control.low
+    model=SpotifyVisualizerSettings.from_mapping({control.key:0.02},apply_preset_overlay=False)
+    assert getattr(model,control.key)==control.low

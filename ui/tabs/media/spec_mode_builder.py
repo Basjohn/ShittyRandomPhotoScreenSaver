@@ -98,8 +98,15 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
 
 
 def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
-    """Show each conditional row only while its condition holds; re-applied after a load."""
-    conditional = [(rows[control.key], control.when) for control in spec.controls
+    """One spec-authoritative predicate path for row visibility and widget enablement.
+
+    Both ``when`` and ``enabled_when`` admit one predicate or an AND tuple.
+    Hiding a row never clears its widget value or switches preset authority.
+    """
+    def terms(condition):
+        return (condition,) if isinstance(condition[0], str) else condition
+
+    conditional = [(rows[control.key], terms(control.when)) for control in spec.controls
                    if control.when and control.key in rows]
     enabled = [(getattr(tab, f"{control.key}_btn" if isinstance(control, Colour) else control.key), control)
                for control in spec.controls if getattr(control, "enabled_when", ())
@@ -107,17 +114,20 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
     if not conditional and not enabled:
         return
 
+    def matches(key, value):
+        current = _current_value(tab, spec.control(key))
+        return current in value if isinstance(value, tuple) else current == value
+
     def apply(*_args) -> None:
-        for row, (key, value) in conditional:
-            row.setVisible(_current_value(tab, spec.control(key)) == value)
+        for row, conditions in conditional:
+            row.setVisible(all(matches(key, value) for key, value in conditions))
         for widget, control in enabled:
-            key, value = control.enabled_when
             available = not control.availability or bool(_resolve(control.availability[0]))
-            widget.setEnabled(available and _current_value(tab, spec.control(key)) == value)
+            widget.setEnabled(available and all(matches(key, value) for key, value in terms(control.enabled_when)))
 
     setattr(tab, f"_{spec.prefix}_apply_conditions", apply)
-    condition_keys = {key for _row, (key, _value) in conditional}
-    condition_keys.update(control.enabled_when[0] for _widget, control in enabled)
+    condition_keys = {key for _row, conditions in conditional for key, _value in conditions}
+    condition_keys.update(key for _widget, control in enabled for key, _value in terms(control.enabled_when))
     for key in condition_keys:
         control = spec.control(key)
         widget = getattr(tab, control.key)

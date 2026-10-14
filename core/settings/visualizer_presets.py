@@ -690,6 +690,9 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
 
 def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, Any]:
     """Apply forward-migrations for removed/renamed settings keys."""
+    if mode == "shockwave_grid":
+        from core.settings.visualizer_settings_contract import migrate_retired_neon_surface_style
+        settings = migrate_retired_neon_surface_style(settings)
     if mode == "sphere":
         settings = migrate_legacy_sphere_finish_keys(settings)
         settings = migrate_legacy_sphere_control_keys(settings)

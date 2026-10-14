@@ -98,11 +98,32 @@ def _clamped(key: str, value: float) -> float:
     return max(low, min(high, value))
 
 
+def _turn_for_mode(mode_id: str, key: str, value: float) -> float:
+    # The framed basin is a landscape: no wrapping through its back/underside.
+    # Sphere and Extruded keep their established unrestricted orbit behavior.
+    return _clamped(key, value) if mode_id == "shockwave_grid" else _wrap(value)
+
+
+def _bounded_basin_pose(scale: float, pan_x: float, pan_y: float) -> tuple[float, float]:
+    """Keep a central authored-basin reference within the framed viewport.
+
+    The scene is scaled about the interior centre. Pan bounds therefore depend
+    on zoom; fixed pan +/- limits alone let a zoom gesture lose the entire lake.
+    This is mode-only presentation admission, not editor/card geometry.
+    """
+    anchor_x, anchor_y = 0.50, 0.68
+    left, right = 0.08, 0.92
+    projected_x = 0.5 + (anchor_x - 0.5) * scale
+    projected_y = 0.5 + (anchor_y - 0.5) * scale
+    return (max(left-projected_x, min(right-projected_x, pan_x)),
+            max(left-projected_y, min(right-projected_y, pan_y)))
+
+
 def orbit_motion_values(motion: ViewOrbitMotion, now: float) -> Dict[str, float]:
     """The view ``motion`` has reached at ``now``."""
     turn_key, tilt_key = view_orbit_settings(motion.mode_id)
     elapsed = max(0.0, float(now) - motion.since)
-    return {turn_key: _wrap(motion.turn + motion.turn_rate * elapsed),
+    return {turn_key: _turn_for_mode(motion.mode_id, turn_key, motion.turn + motion.turn_rate * elapsed),
             tilt_key: _clamped(tilt_key, motion.tilt + motion.tilt_rate * elapsed)}
 
 
@@ -217,7 +238,7 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
     if motion is not None and now is not None:
         values = orbit_motion_values(motion, now)
         setattr(host, _MOTION, ViewOrbitMotion(
-            mode_id, _wrap(values[turn_key] + turn_step * float(turn_steps)),
+            mode_id, _turn_for_mode(mode_id, turn_key, values[turn_key] + turn_step * float(turn_steps)),
             _clamped(tilt_key, values[tilt_key] + tilt_step * float(tilt_steps)),
             motion.turn_rate, motion.tilt_rate, float(now)))
         return view_orbit_values(host, mode_id, now)
@@ -240,7 +261,7 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
             tilt_rate = 0.65 * tilt_rate + 0.35 * previous.tilt_rate
         setattr(host, _DRAG, OrbitDragVelocity(mode_id, float(now), turn_rate, tilt_rate))
     apply_presentation_vis_mode_kwargs(host, {
-        turn_key: _wrap(values[turn_key] + turn_delta),
+        turn_key: _turn_for_mode(mode_id, turn_key, values[turn_key] + turn_delta),
         tilt_key: values[tilt_key] + tilt_delta,
     })
     return view_orbit_values(host, mode_id, now)

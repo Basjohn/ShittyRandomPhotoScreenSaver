@@ -264,14 +264,18 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     """
 
     # --- Card + bar styling (global across modes) --------------------
-    if "shockwave_grid_terrain" in kwargs:
+    if ("shockwave_grid_terrain" in kwargs
+            and getattr(getattr(host, "runtime_controller", None), "mode_id", None) == "shockwave_grid"):
         from rendering.gl_programs.heightfield import heightfield_surface_bytes, normalize_heightfield
 
         terrain = normalize_heightfield(kwargs["shockwave_grid_terrain"])
-        host._shockwave_grid_terrain = freeze_render_fields({
-            "size": terrain["size"], "data": heightfield_surface_bytes(terrain),
-            "maximum": max(terrain["heights"]),
-        })
+        signature = (terrain["size"], tuple(terrain["heights"]))
+        if signature != getattr(host, "_shockwave_grid_terrain_signature", None):
+            host._shockwave_grid_terrain = freeze_render_fields({
+                "size": terrain["size"], "data": heightfield_surface_bytes(terrain),
+                "maximum": max(terrain["heights"]),
+            })
+            host._shockwave_grid_terrain_signature = signature
     if 'bar_fill_color' in kwargs:
         c = _color_or_none(kwargs['bar_fill_color'])
         if c is not None:
@@ -384,6 +388,17 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
                 default = _visualizer_default(control.key)
                 value = control.admit_runtime(read_control_value(control, kwargs.get, default), default)
                 setattr(host, control_runtime_attr(control), control_runtime_value(control, value))
+
+    if not logical and any(key in kwargs for key in (
+            "shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y")):
+        # One admission path for live drags, scroll, config reload and repair.
+        # View transform keys stay spec-owned, and the outer card never moves.
+        from widgets.spotify_visualizer.view_orbit import _bounded_basin_pose
+        scale = float(getattr(host, "_shockwave_grid_scene_scale", _visualizer_default("shockwave_grid_scene_scale")))
+        x, y = _bounded_basin_pose(scale, float(getattr(host, "_shockwave_grid_scene_pan_x", _visualizer_default("shockwave_grid_scene_pan_x"))),
+                                   float(getattr(host, "_shockwave_grid_scene_pan_y", _visualizer_default("shockwave_grid_scene_pan_y"))))
+        host._shockwave_grid_scene_pan_x = x
+        host._shockwave_grid_scene_pan_y = y
 
 
 def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:

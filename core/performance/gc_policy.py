@@ -12,9 +12,11 @@ This owner deliberately does much less:
 * observe every collection without adding a timer or polling cadence;
 * restore the interpreter's original policy when RUN lifetime ends.
 
-No manual ``gc.collect()`` is performed here.  The current evidence shows
-40ms-class generation-2 scans frequently collecting zero objects; forcing
-those scans at another arbitrary scene boundary would merely move the hitch.
+No manual ``gc.collect()`` occurs during active rendering. A single explicit
+stop-boundary collection is permitted only if this RUN has frozen a live Quick
+generation and that generation's Qt/GL/thread roots have all retired. This
+resolves the freeze-versus-Settings-destruction conflict without shifting an
+expensive gen2 scan into a visualizer frame.
 """
 from __future__ import annotations
 
@@ -110,6 +112,7 @@ class RuntimeGCPolicy:
         self._warmup_thresholds = derive_warmup_thresholds(self._active_thresholds)
         self._active = False
         self._frozen = False
+        self._retirement_collection_pending = False
         self._freeze_duration_ms: float | None = None
         self._frozen_object_count = 0
         self._starts_ns = [0, 0, 0]
@@ -149,7 +152,7 @@ class RuntimeGCPolicy:
           is still collected on the normal cadence and stays visible;
         - ordinary refcount-zero destruction still frees frozen objects
           immediately; only *cyclic* collection of the frozen set is deferred to
-          ``gc.unfreeze()`` on stop;
+          ``gc.unfreeze()`` at the first runtime retirement or RUN stop;
         - consequence: the single runtime generation live *at freeze time* has a
           cyclic Python graph, so if it later retires it stays pinned until
           unfreeze. This is a bounded one-generation offset, NOT unbounded
@@ -204,6 +207,48 @@ class RuntimeGCPolicy:
         )
         return True
 
+    def thaw_for_runtime_retirement(self) -> bool:
+        """Release the RUN snapshot before a frozen display generation retires.
+
+        Settings/CUSTOM retirement has a strict Python-owner destruction barrier.
+        The one-shot startup freeze can capture the *current* Qt Quick generation,
+        including native-connected Python callback cycles, which cannot be
+        collected while permanently frozen. Only a RUN boundary may thaw it;
+        the normal visualizer cadence never collects or polls. The retired
+        generation is collected once, after Qt roots/resources have drained.
+        There is no second freeze in this RUN, since that would immediately pin
+        the next editable generation behind the same barrier.
+        """
+        with self._lock:
+            if not self._active or not self._frozen:
+                return False
+            gc.unfreeze()
+            self._frozen = False
+            self._retirement_collection_pending = True
+        logger.info("[GC_POLICY] Thawed frozen Quick generation before runtime retirement")
+        return True
+
+    @property
+    def retirement_collection_pending(self) -> bool:
+        with self._lock:
+            return self._retirement_collection_pending
+
+    def collect_thawed_retirement_cycles_once(self) -> bool:
+        """One stop-boundary gen2 sweep, only after all Qt/native roots drained.
+
+        Called by the existing destruction barrier when it sees exclusively
+        outstanding Python owners and zero live Qt/resources/thread work.
+        The barrier still requires every weak owner to disappear, and still
+        fails loudly if an actual reference leak remains. No frame-time GC.
+        """
+        with self._lock:
+            if not self._retirement_collection_pending:
+                return False
+            self._retirement_collection_pending = False
+        collected = gc.collect(2)
+        logger.info("[GC_POLICY] Stop-boundary thaw sweep collected=%d", collected)
+        return True
+
     def stop(self) -> bool:
         with self._lock:
             if not self._active:
@@ -231,6 +276,7 @@ class RuntimeGCPolicy:
                         exc_info=True,
                     )
             self._active = False
+            self._retirement_collection_pending = False
         snapshot = self.snapshot()
         logger.info(
             "[GC_POLICY] RUN policy restored original=%s collections=%s "

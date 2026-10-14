@@ -4,12 +4,25 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPalette, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from rendering.gl_programs.heightfield import normalize_heightfield, sample_heightfield
 from ui.tabs.shared_styles import NoWheelSlider
 from ui.widgets import StyledComboBox
+
+
+# Same dark-glass foundation, grid and labels as the Spectrum/Dev Curve editors.
+# Terrain height stays a distinct muted ramp; zero stays unmistakably water.
+_BG_COLOR = QColor(18, 18, 18, 240)
+_GRID_COLOR = QColor(255, 255, 255, 18)
+_GRID_MAJOR_COLOR = QColor(255, 255, 255, 35)
+_BORDER_COLOR = QColor(255, 255, 255, 60)
+_LABEL_COLOR = QColor(255, 255, 255, 100)
+_CURSOR_COLOR = QColor(180, 200, 255, 220)
+_WATER_COLOR = QColor(35, 78, 106)
+_LAND_LOW = QColor(38, 44, 67)
+_LAND_HIGH = QColor(178, 194, 239)
 
 
 class TerrainCanvas(QWidget):
@@ -27,7 +40,6 @@ class TerrainCanvas(QWidget):
         self._last_uv = None
         self._hover = None
         self._image = None
-        self._palette_key = None
         self.mode = "Raise"
         self.radius = 0.12
         self.strength = 0.12
@@ -109,9 +121,14 @@ class TerrainCanvas(QWidget):
         strength = max(0.01, min(0.50, float(self.strength)))
         lower_x, upper_x = max(0, math.floor((u - radius) * (n - 1))), min(n - 1, math.ceil((u + radius) * (n - 1)))
         lower_y, upper_y = max(0, math.floor((v - radius) * (n - 1))), min(n - 1, math.ceil((v + radius) * (n - 1)))
+        rect = self.field_rect()
+        width, height = rect.width(), rect.height()
         for y in range(lower_y, upper_y + 1):
             for x in range(lower_x, upper_x + 1):
-                distance = math.hypot(x / (n - 1) - u, y / (n - 1) - v) / radius
+                # Radius is measured against the shorter screen-space side: a
+                # physically round dab, not an ellipse stretched with the editor.
+                distance = math.hypot((x / (n - 1) - u) * width,
+                                      (y / (n - 1) - v) * height) / (radius * min(width, height))
                 if distance > 1.0:
                     continue
                 index = y * n + x
@@ -183,40 +200,45 @@ class TerrainCanvas(QWidget):
             super().keyPressEvent(event)
 
     def paintEvent(self, event):
-        palette = self.palette()
-        base = palette.color(QPalette.ColorRole.Base)
-        ink = palette.color(QPalette.ColorRole.Text)
-        accent = palette.color(QPalette.ColorRole.Highlight)
-        palette_key = base.rgba(), ink.rgba(), accent.rgba()
-        if self._image is None or self._palette_key != palette_key:
-            self._palette_key = palette_key
+        # Cached pixels change only on a stroke/load, not on every pointer move.
+        if self._image is None:
             n = self._size
             self._image = QImage(n, n, QImage.Format.Format_ARGB32)
-            hue = accent.hsvHueF() if accent.hsvHueF() >= 0.0 else 0.58
             for y in range(n):
                 for x in range(n):
                     height = self._heights[(n - 1 - y) * n + x]
                     if height == 0.0:
-                        colour = QColor.fromHsvF(0.58, 0.64, 0.48)
+                        colour = _WATER_COLOR
                     else:
-                        contour = int(height * 12.0)
-                        colour = QColor.fromHsvF((hue + 0.35) % 1.0, 0.28, 0.35 + 0.60 * height)
-                        if contour > 0 and int(height * 12.0 * 8) % 8 == 0:
-                            colour = colour.lighter(122)
+                        t = max(0.0, min(1.0, height ** 0.84))
+                        colour = QColor(
+                            round(_LAND_LOW.red() + (_LAND_HIGH.red() - _LAND_LOW.red()) * t),
+                            round(_LAND_LOW.green() + (_LAND_HIGH.green() - _LAND_LOW.green()) * t),
+                            round(_LAND_LOW.blue() + (_LAND_HIGH.blue() - _LAND_LOW.blue()) * t),
+                        )
                     self._image.setPixelColor(x, y, colour)
         painter = QPainter(self)
-        painter.fillRect(self.rect(), base)
+        painter.fillRect(self.rect(), _BG_COLOR)
         rect = self.field_rect()
         painter.drawImage(rect, self._image)
-        painter.setPen(QPen(ink, 1.0))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for step in range(1, 8):
+            fraction = step / 8.0
+            painter.setPen(QPen(_GRID_MAJOR_COLOR if step == 4 else _GRID_COLOR, 1.0))
+            painter.drawLine(QPointF(rect.left() + fraction * rect.width(), rect.top()),
+                             QPointF(rect.left() + fraction * rect.width(), rect.bottom()))
+            painter.drawLine(QPointF(rect.left(), rect.top() + fraction * rect.height()),
+                             QPointF(rect.right(), rect.top() + fraction * rect.height()))
+        painter.setPen(QPen(_BORDER_COLOR, 1.0))
         painter.drawRect(rect)
+        painter.setPen(_LABEL_COLOR)
         painter.drawText(QRectF(12.0, 2.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter, "FAR / BACK")
         painter.drawText(QRectF(12.0, self.height() - 23.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter,
                          "NEAR / FRONT  •  Blue: base water  •  Light: higher land")
         if self._hover is not None:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(QPen(ink, 1.5, Qt.PenStyle.DashLine))
-            painter.drawEllipse(self._hover, rect.width() * self.radius, rect.height() * self.radius)
+            painter.setPen(QPen(_CURSOR_COLOR, 1.5, Qt.PenStyle.DashLine))
+            brush_radius_px = min(rect.width(), rect.height()) * self.radius
+            painter.drawEllipse(self._hover, brush_radius_px, brush_radius_px)
             u, v = self._uv(self._hover)
             height = sample_heightfield({"size": self._size, "heights": self._heights}, u, v)
             painter.drawText(rect.adjusted(8.0, 6.0, -8.0, -6.0), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,

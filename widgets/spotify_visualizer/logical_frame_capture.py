@@ -14,6 +14,7 @@ from typing import Any
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer import config_applier, mode_capabilities
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
+from widgets.spotify_visualizer.transient_bus import musical_weight, passage_ramp
 from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_reactivity_boundary,
 )
@@ -348,20 +349,26 @@ def _capture_shockwave_grid(
         return None
     getter = getattr(engine, "get_onset_events", None) if engine is not None else None
     onsets = getter(runtime.onset_serial) if callable(getter) else ()
-    intensity_getter = getattr(engine, "get_musical_intensity", None) if engine is not None else None
-    intensity = float(intensity_getter()) if callable(intensity_getter) else 0.0
+    intensity = float(engine.get_musical_intensity())
     events = runtime.record_onsets(onsets=onsets, now_ts=context.now_ts, playing=context.playing,
                                    passage_intensity=intensity)
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
     growth_enabled = float(parameters["shockwave_grid_terrain_reactivity"]) > 0.0
+    growth_gain = 0.0
+    if growth_enabled:
+        loudness, presence = engine.get_musical_level()
+        growth_gain = passage_ramp(intensity, 0.15) * musical_weight(loudness, presence)
     captured = _capture_spectrum_family(
         widget, engine, context, mode_id="shockwave_grid", frame_type=ShockwaveGridFrame,
         extra_parameters=parameters,
         # Waves move (and the grid may scroll, the swell drift) on Spectrum's animation clock.
         animation_enabled=(bool(events) or float(parameters["shockwave_grid_scroll"]) > 0.0
                            or float(parameters["shockwave_grid_idle"]) > 0.0
+                           or (parameters["shockwave_grid_sun_enabled"]
+                               and parameters["shockwave_grid_sun_orbit_enabled"]
+                               and float(parameters["shockwave_grid_sun_orbit_speed"]) > 0.0)
                            or (growth_enabled and runtime.terrain_growth_pending)),
         frame_fields={"events": events},
     )
@@ -375,6 +382,7 @@ def _capture_shockwave_grid(
         attack=float(parameters["shockwave_grid_terrain_growth_attack"]),
         release=float(parameters["shockwave_grid_terrain_growth_release"]),
         enabled=growth_enabled,
+        musical_gain=growth_gain,
     )
     if growth is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
         return None

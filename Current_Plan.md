@@ -35,86 +35,89 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | V4A next
+## 2A. Visualizer spec migration | final Neon Lake acceptance, then Bubble
 
-One mode per slice in this order. Rendering, saved values, Settings appearance/behavior and musical response remain
-unchanged **except for the explicitly authorized Shockwave Grid replacement in V4A**.
-`core/settings/visualizer_mode_settings.py` owns declarations; bespoke shape editors stay Custom entries for modes that
-still use them. Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated; Shockwave already has spec-layer support; Shockwave's existing support does
-not substitute for completing its spec migration **together with** the Neon Lake Basin rework. No further Oscilloscope
-acceptance gate.
+Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated.
+Neon Lake (`shockwave_grid`) now has its spec-owned Settings, framed camera, authored terrain,
+Vertices/Glass parity, one retained Preset 1 plus Custom, and the simplified three-style control
+catalog. The operator has confirmed no Settings crashes in the latest build and accepts the
+main mountain skyline, star-glow appearance and broad terrain continuity. Starscape Beat's
+entry floor was reduced **20%**, from 0.35 to 0.28, with the existing onset/clock authority,
+three stars and gentle decay unchanged. No new DSP, timers or polling.
 
-- [ ] **V4A — Shockwave Grid: finish spec migration AND completely rework into Neon Lake Basin in the same slice.**
-  This is one coordinated Settings/spec + logical/reaction + renderer + authoring replacement, **not** a spec-only pass
-  followed by a postponed visual upgrade. Use `Docs/Future_Work/Additional_Future_Transitions_Package.zip`, including its
-  `Additional_Future_Transitions.md` and the **Neon Lake Basin low-/high-react visual mocks**, as the concept and
-  feasibility reference. Replace the flat Shockwave Grid scene with an 80s/cyberpunk neon-wireframe basin: an editable
-  terrain heightfield whose **unraised/base-level regions are water**, with raised mountains/islands around or within it.
-  Both water (ripples/rings/wave propagation) and terrain (contour glow, restrained displacement and ridge energy)
-  react musically, with distinct tunable responses rather than identical motion. Replace Shockwave's shape-authoring
-  approach with a **proper terrain editor** exposed as a bespoke spec-owned Custom entry. Complete and consolidate
-  all remaining controls, defaults, conditional settings, persisted state, presets and editor hooks through the new
-  `visualizer_mode_settings` spec method; do not create competing settings or geometry authorities. Preserve existing
-  mode identity/activation and shared audio/transient, Quick presentation, orbit/geometry and lazy Scene3D ownership,
-  staying on the Qt Quick + Python + OpenGL 4.6 architecture. Adapt old saved settings safely where possible instead
-  of silently corrupting or discarding Custom state.
-  **Framing contract (operator, 2026-10-13):** Neon Lake Basin is a normal bordered/framed card containing an orbitable
-  3D scene. Use CARD / CARD_INTERIOR presentation and retain the applicable 3D geometry/orbit contracts inside that card.
-  The scene never escapes its border at any pose or during Edit; no overflow option may bypass the clip. Forward-retire
-  the old Shockwave overflow state at canonical input/save boundaries, and prove real rendered clip pixels as well as
-  fixed outer-card geometry through orbit/resize. The old frameless Shockwave policy is superseded by this replacement.
-  Preserve the existing 3D bindings: **WASD / Alt+left-drag orbit, Alt+right-drag moves, Alt+scroll scales**. In framed
-  modes every one targets the internal scene, leaving outer-card position, size and viewport unchanged. Internal
-  turn/tilt/pan/scale persist through future load via the canonical view-pose owner, independently of art presets and
-  CUSTOM geometry. Add real input/settlement/reload tests and an independent audit even if the implementation appears
-  correct; this spec/descriptor contract is the template for later bordered 3D modes.
-  **Visual correction (operator, 2026-10-13):** the first rendered candidates are rejected for poor fidelity. Wireframe,
-  including terrain, must be based on curves; water must retain the older Shockwave crest/trough ripple character;
-  terrain needs its own growth mechanics; the sun must be independently optional and vibrant. Use genuine displaced
-  3D geometry, shared Scene3D projection/depth/resources and the existing logical clock. Do not accept a flat cosmetic
-  substitute or a dense straight-triangle reskin. Preserve this correction alongside the mock and Astra's detailed audit.
-  Reuse existing GPU wave/event facilities, stream rings, bloom and scene primitives; any missing heightfield/material
-  capability is built as a measured, opt-in shared primitive **within this V4A delivery**, not silently deferred to §4
-  or added as a private rendering stack. **High visual and musical parity with the supplied mocks is required on at
-  least one curated preset**, at both low and high reactivity, rather than accepting a token terrain reskin. Keep other
-  presets freely operator-editable; do not freeze artistic preset values as regression-test oracles. Prove terrain
-  editing/save/reload/reset, water classification, distinct terrain/water response, quiet/onset/sustained passages on
-  fixed synthetic clips and the operator's real-music recordings at
-  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`, plus bounded CPU/GPU cost and
-  dormancy in both-display use.
-  Reject jelly mountains, harsh strobing, uncontrolled flashes or saturated glow; high react should be powerful but
-  still legible. Scope and checkpoint V4A internally as necessary, but **do not mark migration complete until the
-  full rework and at least one high-parity preset are implemented and accepted together**.
-  Internal checkpoints remain part of this one delivery:
-  Render-cost baseline before this replacement: `tools/baselines/overhead/2026-10-13_000e222e.json` (960×540,
-  control-relative timings and deterministic GL/Python call counts; compare unrelated consumers after shared changes).
-  Terrain/migration, typed controls, editor and five-key framed input/persistence are source-complete; durable contracts
-  live in Docs/Reference/Neon_Lake_Basin.md. Native input, real QSG clipping, authoring/save/reset, lazy GPU ownership
-  and shared-consumer preservation have focused proof. Visual acceptance remains open and the source checkpoint does
-  not close V4A.
-  - [ ] **V4A.3 — Shared heightfield and complete scene.** Add only the missing opt-in sampling/classification/GPU
-    representation to Scene3D, mirrored by CPU/GL tests. Reuse the existing onset ring, MeshResources, StreamRing,
-    SceneTarget and optional emission bloom. Terrain changes replace one bounded GPU representation; ordinary frames
-    allocate/rebuild nothing. Deliver distinct water waves and solid terrain/ridge response with lazy retirement, a fixed
-    normal card and unconditional interior clipping of the orbitable 3D scene.
-    Curved cubic geometry/wire paths, separate capture-clock growth, old crest/trough response, bank continuity and
-    optional vibrant Sun are implemented. The Astra audit still rejects reflection/foreground fidelity. Finish these:
-    - [ ] Broaden the near bank into smooth overlapping lobes and carry its outer foot through the card bottom.
-    - [ ] Break/distort mirrored wire shapes into water trails, preserving bright shoreline connections and dark gaps.
-    - [ ] Reduce resting longitudinal lake lines; retain curved horizontal sheen and travelling crests.
-    - [ ] Assess independent growth contrast on production real music: selected quiet passages still leave many envelopes
-      near their upper range. Inspect passage/presence weighting at the mode owner if motion remains persistently grown.
-  - [ ] **V4A.4 — Preset, reaction and visual proof.** Author one editable basin preset, capture low/high frames and
-    quiet/onset/sustained sequences from identical synthetic and real clips, and compare with the supplied mock.
-    Use the single High Astra audit after this significant renderer work; resolve parity findings before acceptance.
-    Measure control-relative CPU/GPU/resource cost at supported tiers and both-display use. Leave only evidence that
-    genuinely needs operator eyes/logs as Awaiting Validation; internal green checkpoints alone do not close V4A.
-    **Current visual audit actions:** separate dark terrain faces from selective cyan/magenta curve/ridge light; add a
-    luminous irregular shoreline and broken water reflections without reflected land fill; replace dotted water with
-    directional ripples/sheens driven by the original waves; retain an enclosed lake and foreground continuing to the
-    card bottom; give the optional sun vibrant colour/emission and keep a navy sky with sparse stars and broken clouds.
-    Capture the actual editable preset and production quiet/onset/sustained motion after these corrections; stills and
-    green engineering tests do not establish fidelity. Refresh the stale Guided Setup mode artwork from accepted pixels.
+**Neon Lake open work after operator image review (2026-10-14):** The new screenshot
+confirms the existing mountain skyline and lake outline are good, Settings no longer crashes,
+and Starscape Beat is visible. Do **not** claim the distant horizon or musical glow
+reactivity accepted merely because the previous source tests passed. Keep Preset 1's
+artistic appearance protected while allowing deliberate canonical schema cleanup.
+
+**Operator size-specific correction (2026-10-14; do not conflate these failures):**
+- **LARGE card sizes:** The only disappointingly weak glows are **Starscape/Starfield**
+  (including at maximum Star Glow) and the **audio-driven Moon/Sun halo pulse**. The ordinary
+  Moon/Sun halo appearance is already good; its *reactive modulation* lacks perceptible gain.
+  Other terrain/shore/sky glow is **not** generally underpowered at large sizes. Correct only
+  the relevant star brightness/shape and celestial reaction, never global glow gain.
+- **SMALL card sizes:** Vertices and bloom **crowd and compound** as the rendering is condensed.
+  Nearby vertex marks visually merge, while overlapping glow footprints obscure detail. This
+  is **excessive screen-space overlap/density**, not a request for brighter glow or more points.
+  Adapt effective vertex spacing/LOD, marker size and bloom footprint/coverage to physical
+  card pixels and DPR, keeping independent features distinguishable and the terrain appearance
+  coherent. Do not indiscriminately increase intensity at small sizes.
+
+- [ ] **Horizon rendering and visual acceptance.** The far-right/top-right detached
+  magenta/blue line or flattened oval is **still present in the operator's latest image**;
+  earlier sky-alpha, distant brightness floor and cloud-strip fixes were insufficient.
+  Preserve the **accepted depth-tested near mountain skyline** and lake shoreline, but
+  diagnose the distant extension using actual projected/depth-tested surface visibility.
+  The distant contour must belong to the *real visible terrain/sky silhouette*, not a
+  remote mesh edge, isolated elevated ribbon, scanline, repeat/extrusion artifact or
+  a separate parallel fake horizon. Fade the real outer surface and outline together,
+  including Vertices + Glass, without a card-wide alpha seam or showing wallpaper
+  through opaque mountains. Capture comparable low/high-angle, zoom and aspect images;
+  close on **agent review of actual rendered pixels or explicit operator acceptance**,
+  never GLSL compilation, structural unit tests or a guessed brightness tweak.
+- [ ] **Celestial and Starscape musical glow refinement (large-card weakness only).**
+  At **LARGE card sizes**, Starscape/Starfield beat glows are useful but too faint even with
+  Star Glow Intensity/Reactivity at maximum. The 0.28 onset-entry floor remains restrictive.
+  Revisit the existing onset admission gate (no new detector), preserve three spaced stars
+  and gentle release, and make maximum star intensity unmistakably stronger with a
+  **restrained star-shaped core/rays**, not a broad washed-out bloom. Moon/Sun's *passive*
+  halo already looks good; only **musical pulse reactivity** is too weak, even at maximum.
+  Give transient/midband-driven brightening an obvious yet controlled attack and soft settle,
+  without bass/transient washout or lighting discontinuities. **Do not boost other terrain,
+  shoreline, or global glow** to fix these two large-card-specific shortcomings. Preserve
+  GL/scene/audio owners, conditional Glow Settings, opt-in/dormancy and logical clock.
+  Validate with fixed clips and the real-music evidence path below; operator image/video
+  acceptance remains required for both star intensity and celestial modulation.
+- [ ] **Small-card resize/DPR legibility: overlapping glow and crowded vertices.** At
+  **SMALL card sizes**, the problem is **compounded/overlapping bloom and overly dense
+  screen-space vertex marks**, not weak glow. Glows and points condense into the same
+  small pixel regions, merging terrain detail into an unreadable field. Adapt bloom
+  *footprint*/coverage, effective mesh/point LOD, anti-aliased marker size and minimum
+  visible point separation to actual card pixel dimensions and DPR 1/1.25/1.5/2. Maintain
+  reasonable feature isolation rather than applying a blanket glow increase or changing
+  the authored density settings. At larger sizes retain existing general terrain/shore
+  glow levels and vertex detail; the weak large-card stars/celestial pulse have their
+  *own separate item above*. Keep Glass and Vertices on the same terrain/depth authority;
+  no per-frame mesh rebuild, independent displacement/simulation owner, or dormant cost.
+  Validate extreme small/large cards, aspect ratios and both displays, preserving CUSTOM
+  geometry SSOT and the authored Preset 1 appearance.
+- [ ] **Terrain reactivity rework.** Current terrain motion is mostly mild uniform swelling.
+  Rework meaningful musical structure, including differentiated bands/transients and
+  sustained passages, without jelly hills or bass washing everything out. Retain the
+  existing eight growth envelopes and DSP/shaper authority unless an evidence-backed
+  refactor replaces them cleanly. Preserve the exact authored Preset 1 terrain/appearance
+  unless a separate artistic change is approved. Validate deterministic clips and the
+  operator's **real-music recordings** at
+  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
+  A local agent may execute real-music replays; no new per-frame allocation, timers,
+  environment-variable mutation or unrelated-mode cost. Require physical reaction review.
+
+The completed implementation trail, rejected experiments and previously detailed V4A
+checklists are archived in `Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md`.
+The durable technical contract remains `Docs/Reference/Neon_Lake_Basin.md`. Do not reopen
+accepted architecture or settings simply because old historical checkboxes were unchecked.
+
 - [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
@@ -202,6 +205,17 @@ Fidelity. This is a bordered 3D mode whose camera moves inside the card, with sp
 shared materials, gloss/reflection, shadows, glow, quality tiers and orbit. Read fixed musical loudness, never add dynamic
 floors. Aim for sustained-loud-passage drift/speed and response at least as good as Bubble without changing Bubble itself.
 
+**Framed 3D camera rule, reusable for ALL future bordered 3D Visualizers (operator 2026-10-14):**
+Adopt Neon Lake's **bounded internal camera orbit system as the shared capability pattern**, not its landscape-specific
+15–52 degree tilt or +/-36 degree swivel numbers. Each mode declares its own safe turn/tilt/swivel and centre-of-interest
+bounds; held WASD and Alt+left-drag clamp through one live view-pose owner instead of unrestricted wrapping. Alt+right
+may pan *within* composition-safe limits; Alt+wheel zoom remains available without revealing near-plane geometry edges
+or letting required content disappear. The ordinary outer widget card, border, viewport and Edit/CUSTOM layout geometry
+never move when the internal camera moves. Saved camera pose is separate from art presets and not copied between modes.
+Fit/near-plane clipping, changing aspect/DPR and small-card legibility must be tested; avoid competing camera authorities,
+new timers, global changes to unframed Sphere/Extruded Spectrum, or any dormant renderer cost. Extruded Bubble **must**
+use this mode-owned bounded/framed orbit contract from its first implementation.
+
 - [ ] **EB1 — Visual target and baseline.** Capture frozen-settings Bubble readings on representative recorded quiet,
   transient and sustained-loud passages; define static/moving targets for depth, overlap, lighting and bordered framing.
   Establish CPU/GPU/reference-resolution measurements and acceptance comparisons before renderer implementation.
@@ -209,8 +223,10 @@ floors. Aim for sustained-loud-passage drift/speed and response at least as good
   a mode-owned projection without a second clock/capture/DSP owner. Identify exactly which state remains shared and what
   depth-only data is derived. Prove original Bubble readings unchanged and inactive mode import/allocation neutrality.
 - [ ] **EB3 — Minimal bordered 3D renderer.** Start with instanced lit bubble geometry, depth and card clipping in the
-  existing Quick scene. Define perspective camera, border-safe orbit, CUSTOM viewport versus visual-scale intent and
-  projection-derived Edit bounds. Test resizing, orbit, display transfer, clipping and context retirement; no second window.
+  existing Quick scene. Implement the reusable **bounded framed-camera** pattern above with Bubble-specific safe
+  orbit/pan/zoom constraints, then define perspective fit, CUSTOM viewport versus visual-scale intent and
+  projection-derived Edit bounds. Test extreme zoom/turn/tilt, resizing, mixed DPR, display transfer, near-plane
+  clipping and context retirement; no second window or camera authority.
 - [ ] **EB4 — Appearance and quality.** Add shared gloss/reflection/glow as opt-in measured increments; real shadows use
   G2 when ready, and transparency uses G3 only if needed. Do not block the minimal renderer on all future facilities or
   duplicate missing primitives locally. Each tier bounds instances/geometry/attachments and releases resources at park.

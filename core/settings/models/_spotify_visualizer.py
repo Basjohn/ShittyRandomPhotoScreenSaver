@@ -1312,7 +1312,9 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+        from core.settings.visualizer_settings_contract import migrate_retired_neon_surface_style
+        _raw = migrate_retired_neon_surface_style(data, prefix=prefix)
+        _raw = migrate_legacy_sphere_finish_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_sphere_control_keys(_raw, prefix=prefix)
         _raw = strip_retired_visualizer_settings(_raw, prefix=prefix)
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)

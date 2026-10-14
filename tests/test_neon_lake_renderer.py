@@ -403,3 +403,246 @@ def test_actual_neon_qsg_pixels_respect_card_interior_and_rounded_corners(nested
     assert report['rounded_corner_pixels'] > 0 and report['release_count'] > 0
     if nested:
         assert report['incoming_scissor'] is True
+
+
+def _wire_frame(snapshot, style, **parameters):
+    state = snapshot.logical.mode_state
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state,
+        parameters={**dict(state.parameters), 'shockwave_grid_wire_display': style, **parameters})))
+
+
+def test_retained_surface_styles_and_point_mesh_lifecycle(target):
+    capture, host = target
+    snapshot = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=False,
+                         shockwave_grid_floor=0., shockwave_grid_water_reflection=0.)
+    assert snapshot.logical.mode_state.parameters['shockwave_grid_wire_display'] == 'Vertices'
+    vertices = capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    assert renderer._points_cells is not None and renderer._points_data is not None
+    glass = capture.render(host, _wire_frame(snapshot, 'Glass'))
+    assert renderer._points_cells is None and renderer._points_data is None
+    mixed = capture.render(host, _wire_frame(snapshot, 'Glass + Vertices'))
+    assert renderer._points_cells is not None and renderer._points_data is not None
+    for a, b in ((vertices, glass), (vertices, mixed), (glass, mixed)):
+        assert np.count_nonzero(np.max(np.abs(a-b), axis=2) > 8) > 100
+    host.release_resources()
+    assert not renderer.has_resources and renderer._points_cells is None and not renderer._resources._meshes
+
+
+@pytest.mark.parametrize('style', ['Vertices', 'Glass + Vertices'])
+def test_warmed_vertex_frames_reuse_static_resources_and_target(target, monkeypatch, style):
+    from rendering.quick.scene3d import resources
+    capture, host = target
+    snapshot = _wire_frame(_snapshot(shockwave_grid_glow=0.), style)
+    capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    points = renderer._points_data
+    allocation, names = renderer._target.allocation, dict(renderer._target._names)
+    uploads = renderer._heightfield.uploads
+    def forbidden(*args, **kwargs):
+        pytest.fail('warmed vertex frame allocated/uploaded static resources')
+    monkeypatch.setattr(resources, 'compile_program', forbidden)
+    monkeypatch.setattr(resources, 'compile_compute_program', forbidden)
+    for name in ('glCreateProgram', 'glCreateShader', 'glCreateTextures', 'glCreateBuffers',
+                 'glCreateVertexArrays', 'glCreateFramebuffers', 'glTextureStorage2D',
+                 'glTextureStorage2DMultisample', 'glNamedBufferStorage', 'glTextureSubImage2D'):
+        monkeypatch.setattr(gl, name, forbidden)
+    for frame in (snapshot, _pose(snapshot), snapshot):
+        capture.render(host, frame)
+        assert renderer._points_data == points
+        assert renderer._target.allocation == allocation and renderer._target._names == names
+        assert renderer._heightfield.uploads == uploads
+
+
+def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_edges_retires_it(target):
+    from rendering.gl_programs.neon_lake_basin_mesh import basin_mesh_points, basin_mesh_vertices, BASIN_OVERSCAN
+    capture, host = target
+    snapshot = _snapshot(shockwave_grid_glow=0.)
+    for tier, density in (('High', 0.), ('High', 1.), ('Performance', 1.), ('KAK', 0.)):
+        capture.render(host, _wire_frame(snapshot, 'Vertices', scene3d_detail=tier,
+                                        shockwave_grid_density=density))
+        renderer = host._implementations['shockwave_grid']
+        columns, rows = renderer._points_cells
+        keys = [key for key in renderer._resources._meshes if key.startswith('basin vertices ')]
+        assert len(keys) == 1
+        assert columns >= (12+40*density)*1.5 and rows >= 12+40*density
+        assert columns <= np.ceil(192*np.sqrt(1.10)) and rows <= np.ceil(128*np.sqrt(1.10))
+        assert renderer._points_cells == renderer._mesh_cells
+        assert renderer._points_data[1] == len(basin_mesh_points((columns, rows)))//2
+        packed = np.array(basin_mesh_points((columns, rows))).reshape(-1, 2)
+        triangles = np.array(basin_mesh_vertices((columns, rows))).reshape(-1, 2)
+        assert len(np.unique(packed, axis=0)) == len(packed)
+        assert set(map(tuple, packed)) <= set(map(tuple, triangles))
+        assert packed[:, 1].min() == -BASIN_OVERSCAN[2]
+        assert packed[:, 1].max() == 1.0 + BASIN_OVERSCAN[3]
+        assert packed[:, 0].min() == -BASIN_OVERSCAN[0]
+        assert packed[:, 0].max() == 1.0 + BASIN_OVERSCAN[1]
+    capture.render(host, _wire_frame(snapshot, 'Vertices', scene3d_detail='KAK'))
+    assert renderer._points_cells is None and renderer._points_data is None
+    assert not any(key.startswith('basin vertices ') for key in renderer._resources._meshes)
+
+
+@pytest.mark.parametrize('initial_enabled,fail', [(False, False), (True, False), (False, True), (True, True)])
+def test_point_draw_restores_inherited_size_and_depth_state_even_on_error(target, monkeypatch, initial_enabled, fail):
+    capture, host = target
+    snapshot = _wire_frame(_snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=False,
+                                    shockwave_grid_water_reflection=0.), 'Glass + Vertices')
+    capture.render(host, snapshot)
+    inherited_depth = gl.GL_GREATER
+    gl.glDepthFunc(inherited_depth)
+    (gl.glEnable if initial_enabled else gl.glDisable)(gl.GL_PROGRAM_POINT_SIZE)
+    actual_draw = gl.glDrawArrays
+    draws = []
+    def draw(mode, first, count):
+        if mode == gl.GL_POINTS:
+            assert gl.glIsEnabled(gl.GL_PROGRAM_POINT_SIZE)
+            assert int(gl.glGetIntegerv(gl.GL_DEPTH_FUNC)) == gl.GL_LEQUAL
+            draws.append(count)
+            if fail:
+                raise RuntimeError('injected point draw failure')
+        return actual_draw(mode, first, count)
+    monkeypatch.setattr(gl, 'glDrawArrays', draw)
+    try:
+        if fail:
+            with pytest.raises(RuntimeError, match='injected point draw failure'):
+                capture.render(host, snapshot)
+        else:
+            capture.render(host, snapshot)
+        assert draws
+        assert bool(gl.glIsEnabled(gl.GL_PROGRAM_POINT_SIZE)) == initial_enabled
+        assert int(gl.glGetIntegerv(gl.GL_DEPTH_FUNC)) == inherited_depth
+    finally:
+        gl.glDepthFunc(gl.GL_LESS)
+        gl.glDisable(gl.GL_PROGRAM_POINT_SIZE)
+
+
+def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
+    capture, host = target
+    snapshot = _wire_frame(_snapshot(scene3d_detail='KAK', shockwave_grid_glow=0.,
+        shockwave_grid_sky_enabled=False, shockwave_grid_density=0., shockwave_grid_floor=0.,
+        shockwave_grid_water_reflection=0., shockwave_grid_terrain_reactivity=0.,
+        shockwave_grid_terrain_detail=0., shockwave_grid_line_color=[255, 255, 255, 255]), 'Vertices')
+    state = snapshot.logical.mode_state
+    terrain = dict(state.parameters['shockwave_grid_terrain'])
+    terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
+                                                  'heights': [.5] * terrain['size'] ** 2}), maximum=.5)
+    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
+    capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    from rendering.quick.visualizer.implementations.shockwave_grid import _UNIFORMS
+    point_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointPx']
+    uniform = gl.glUniform1f
+    def magnify(location, value):
+        # Observe the same production gl_PointCoord coverage at enough pixels
+        # to discriminate rounded marks from squares; no substitute shader.
+        return uniform(location, 9. if location == point_uniform else value)
+    monkeypatch.setattr(gl, 'glUniform1f', magnify)
+    actual_draw = gl.glDrawArrays
+    columns, rows = renderer._points_cells
+    def separated_points(mode, first, count):
+        if mode == gl.GL_POINTS:
+            # Select well separated indices from the actual uploaded lattice.
+            # The full triangle surface and shared displacement remain intact.
+            for row in range(3, rows-2, 7):
+                for column in range(4, columns-3, 7):
+                    # Magnified discs cross adjacent triangle depth slopes;
+                    # shape observation excludes that unrelated occlusion.
+                    gl.glDisable(gl.GL_DEPTH_TEST)
+                    try:
+                        actual_draw(mode, (row+1)*(columns+1)+column, 1)
+                    finally:
+                        gl.glEnable(gl.GL_DEPTH_TEST)
+            return
+        return actual_draw(mode, first, count)
+    monkeypatch.setattr(gl, 'glDrawArrays', separated_points)
+    pixels = capture.render(host, snapshot)
+    alpha = pixels[..., 3]
+    candidates = np.argwhere(alpha > 250)
+    assert len(candidates) > 20
+    rounded = 0
+    for y, x in candidates:
+        if y < 5 or x < 5 or y+5 >= H or x+5 >= W:
+            continue
+        # A 9px circular marker has an opaque centre but all diagonal 4px
+        # offsets are outside its circle. A square fragment covers those.
+        corners = alpha[np.array([y-4, y-4, y+4, y+4]), np.array([x-4, x+4, x-4, x+4])]
+        axes = alpha[np.array([y-4, y+4, y, y]), np.array([x, x, x-4, x+4])]
+        if np.min(axes) > 0 and np.max(corners) == 0:
+            rounded += 1
+    assert rounded >= 5
+
+
+def test_reflected_point_marks_survive_the_depth_writing_water_surface(target, monkeypatch):
+    capture, host = target
+    snapshot = _wire_frame(_snapshot(scene3d_detail='Performance', shockwave_grid_glow=0.,
+        shockwave_grid_sky_enabled=False, shockwave_grid_floor=.25, shockwave_grid_tilt=.6,
+        shockwave_grid_water_reflection=1., shockwave_grid_terrain_detail=0.), 'Vertices')
+    state = snapshot.logical.mode_state
+    size = 9
+    heights = [(.6 if row >= 4 else 0.) for row in range(size) for column in range(size)]
+    terrain = {'size': size, 'maximum': .6,
+               'data': heightfield_surface_bytes({'size': size, 'heights': heights})}
+    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
+    normal = capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    actual = renderer._draw_points
+    calls = []
+    def no_reflection(uniforms, points, pass_id, **kwargs):
+        calls.append(pass_id)
+        if pass_id != 0:
+            actual(uniforms, points, pass_id, **kwargs)
+    monkeypatch.setattr(renderer, '_draw_points', no_reflection)
+    omitted = capture.render(host, snapshot)
+    assert sorted(calls) == [0, 1]
+    changed = np.max(np.abs(normal-omitted), axis=2) > 3
+    assert np.count_nonzero(changed) > 20  # Reflection is visible through real water/depth.
+
+
+@pytest.mark.parametrize('surface', ['curved', 'wavy'])
+def test_direct_point_samples_survive_depth_on_the_shared_displaced_surface(target, monkeypatch, surface):
+    capture, host = target
+    snapshot = _wire_frame(_snapshot(scene3d_detail='Performance', shockwave_grid_glow=0.,
+        shockwave_grid_sky_enabled=False, shockwave_grid_floor=.25,
+        shockwave_grid_water_reflection=0., shockwave_grid_terrain_detail=1.,
+        shockwave_grid_wave_height=1., shockwave_grid_water_detail=1.,
+        shockwave_grid_terrain_height=.12), 'Vertices')
+    state = snapshot.logical.mode_state
+    size = 9
+    heights = [(.15+.55*(.5+.5*np.sin(column*1.7+row*.9)) if surface == 'curved' else 0.)
+               for row in range(size) for column in range(size)]
+    terrain = {'size': size, 'maximum': max(heights),
+               'data': heightfield_surface_bytes({'size': size, 'heights': heights})}
+    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state,
+        parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain},
+        events=tuple((.1+i*.09, 0., -1.2, 2.) for i in range(16)))))
+    capture.render(host, snapshot)
+    renderer = host._implementations['shockwave_grid']
+    actual = renderer._draw_points
+    counts = []
+    query = int(np.asarray(gl.glGenQueries(1)).reshape(-1)[0])
+    def counted(uniforms, points, pass_id):
+        gl.glBeginQuery(gl.GL_SAMPLES_PASSED, query)
+        try:
+            actual(uniforms, points, pass_id)
+        finally:
+            gl.glEndQuery(gl.GL_SAMPLES_PASSED)
+        counts.append(int(gl.glGetQueryObjectuiv(query, gl.GL_QUERY_RESULT)))
+    monkeypatch.setattr(renderer, '_draw_points', counted)
+    try:
+        capture.render(host, snapshot)
+        depth_visible = counts[-1]
+        def without_depth(uniforms, points, pass_id):
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            try:
+                counted(uniforms, points, pass_id)
+            finally:
+                gl.glEnable(gl.GL_DEPTH_TEST)
+        monkeypatch.setattr(renderer, '_draw_points', without_depth)
+        capture.render(host, snapshot)
+        full_coverage = counts[-1]
+        assert full_coverage > 100
+        assert depth_visible > full_coverage * .40
+    finally:
+        gl.glDeleteQueries(1, [query])

@@ -75,7 +75,8 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
     @retirement_fenced
     def advance_terrain_growth(self, bars, *, now_ts: float, playing: bool,
                                identity: tuple[int, int, int], source_identity: tuple[int, int],
-                               attack: float, release: float, enabled: bool = True) -> TerrainGrowthResolved | None:
+                               attack: float, release: float, enabled: bool = True,
+                               musical_gain: float = 1.0) -> TerrainGrowthResolved | None:
         """Eight spatial envelopes on the capture clock; no paused Spectrum idle music.
 
         Spatial means integrate overlapping bar intervals, including profiles shorter
@@ -103,8 +104,11 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
             self._terrain_identity = token
             self._terrain_last_ts = now
             return TerrainGrowthResolved(self._terrain_growth, previous != self._terrain_growth, False)
+        musical_gain = float(musical_gain)
+        if not math.isfinite(musical_gain) or not 0.0 <= musical_gain <= 1.0:
+            raise ValueError("terrain growth musical gain must be finite within 0..1")
         targets = [0.0] * 8
-        if playing and bars:
+        if playing and musical_gain > 0.0 and bars:
             count = len(bars)
             for region in range(8):
                 lo, hi = region * count / 8.0, (region + 1) * count / 8.0
@@ -113,7 +117,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
                     level = float(bars[index])
                     if not math.isfinite(level):
                         raise ValueError("terrain growth bars must be finite")
-                    targets[region] += max(0.0, min(1.0, level)) * overlap / (hi - lo)
+                    targets[region] += musical_gain * max(0.0, min(1.0, level)) * overlap / (hi - lo)
         targets = tuple(old if target > 0.0 and abs(target - old) < 0.015 else target
                         for old, target in zip(self._terrain_targets, targets))
         dt = 0.0 if self._terrain_last_ts is None else max(0.0, now - self._terrain_last_ts)

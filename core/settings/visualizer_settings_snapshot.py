@@ -246,6 +246,8 @@ def normalize_visualizer_section_mapping(
         migrated.pop(retired_key, None)
         migrated.pop(f"{prefix}.{retired_key}", None)
     migrated = _forward_migrate_alias_keys(migrated, prefix=prefix)
+    from core.settings.visualizer_settings_contract import migrate_retired_neon_surface_style
+    migrated = migrate_retired_neon_surface_style(migrated, prefix=prefix)
     migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
     migrated = migrate_profile_lender_owned_settings(migrated, prefix=prefix)

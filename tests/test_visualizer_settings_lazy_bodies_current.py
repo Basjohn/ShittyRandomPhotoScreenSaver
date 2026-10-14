@@ -126,7 +126,7 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     # participation explicitly in its own Appearance bucket.
     expected_buckets = {
         "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["3D Effects"]),
-        "shockwave_grid": (["Terrain", "Appearance", "Waves"], ["Frequency Response", "Render"]),
+        "shockwave_grid": (["Terrain", "Appearance", "Waves"], ["Frequency Response", "Render", "Sky", "Celestial"]),
         "sphere": (["Frequency Zones", "Appearance", "Particle Flow"], ["Reactivity", "Rotation", "Effects"]),
     }
     presentation_controls = {
