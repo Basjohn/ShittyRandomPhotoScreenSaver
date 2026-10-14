@@ -204,6 +204,55 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   migration checkpoint, confirm caller absence and forward-strip it at canonical input/save boundaries without linking
   the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
+
+### SC4. Just Make It Work Pools | provider selection, independently scoped
+
+**Do not infer completion from discovery:** The existing Just Make It Work action currently replaces the wallpaper
+feed URL list with four fixed entries and Guided Setup calls that same action. Pool UI, provider rotation and new NASA
+selection have not yet been implemented. Technical design, site validation and acceptance gates live in
+`Docs/Reference/Wallpaper_Pool_Selection.md`. Scope as separately authorized source work, not an implicit blocker
+of §0 Neon Lake → Bubble migration → shared 3D → Extruded Bubble. Retain SC1–SC3 and the §5 wallpaper-RSS
+runtime-replacement audit as independent work.
+
+- [ ] **SC4.1 — Source eligibility and exact resolution.** Verify current public listing, metadata and original-image
+  access with bounded live requests for each candidate. Wallhaven's public JSON API is already the implemented
+  feed. Group NASA Sun/Mars/Solar System/Universe behind one `Space` choice, rather than exposing each as an
+  individual consumer-facing NASA checkbox; replace the current NASA-wide Image of the Day and legacy JPL listing
+  in the curated choice. NASA's Solar System is a *group* of several official Photojournal topic feeds, not an
+  assumed single URL. Keep Minitokyo experimental until anonymous original access, site availability, permission
+  and respectful request costs can actually be demonstrated. Consider Konachan.net (wallpaper-oriented SFW), then
+  Safebooru/Zerochan with stricter admission; include Yande.re and E-Shuushuu in comparison with stronger SFW,
+  wallpaper and API-access caveats. Distinguish published API documentation from **actual, authorized, successful
+  original-image retrieval**; no board is a public default until bounded live probes pass.
+- [ ] **SC4.2 — One provider-selection authority, no new shuffle.** Create a canonical typed selection for named
+  Just Make It Work Pools, including **named Wallhaven thematic search pools** rather than its three coarse
+  General/Anime/People flags as user-facing choices. Give the entire popup **one global discovery-order preference**
+  (Random, Latest, Popular, Today/Week/Month/Year), translated only for providers with real support; unsupported
+  providers keep their native discovery order with no simulated ranking or second shuffle. Define stable, validated
+  provider query templates and a bounded number of distinct feed documents **per acquisition pass**, rather than
+  fetching a document for every checked search. Existing wallpaper coordinator,
+  conditional-request/backoff, image-attempt, per-host pacing, session-replacement, cache and display-size header
+  admission remain owners. Source sorting filters what the RSS wallpaper pool may discover; the final wallpaper
+  rotation and display shuffle remain entirely in the existing engine. Persist fair pool rotation/retry without
+  creating a scheduler, timer, competing shuffle or per-feed continuous worker. Prove behavior with pool=full,
+  offline source, 429/backoff, settings restart and zero active displays.
+- [ ] **SC4.3 — Shared themed popup and Guided Setup.** Existing **Just Make It Work** buttons in Sources Settings and
+  Guided Setup invoke the *same* popup, Save/Cancel and settings owner. Popup title `Just Make It Work Pools`;
+  source-family groups with **Wallhaven themed-search checkboxes** (Nature & Landscapes, Space, Cities &
+  Architecture, Fantasy, Science Fiction, Cyberpunk, Abstract, Minimalism, Anime Scenery, Dark Wallpapers),
+  one NASA Space checkbox (the four subject families), and optional approved board pools. Offer **one discovery-order
+  selector at popup level**, not per Wallhaven/source group. Keep `purity=100` and coarse category bits as adapter
+  internals only, and keep provider-specific ranking semantics out of the wallpaper shuffle. Use the
+  established StyledPopup/shared dark-glass theme, sizing, keyboard, scrolling and bucket components. Guided Setup
+  must keep its draft/Finish/Skip lifecycle and readiness authoritative and must not silently overwrite custom feed
+  authoring when toggling pool availability. Validate fresh, existing-custom, empty and disabled-feed states, and
+  source-list add/remove/edit across both surfaces.
+- [ ] **SC4.4 — Safe migration, metadata and physical acceptance.** Migrate the existing curated NASA/Wallhaven URL
+  entries into selected pool identities at canonical persisted-input boundaries once, without repeated legacy
+  branches; never misclassify user-authored custom URLs as curated. Preserve independently authored RSS/Atom/JSON
+  feeds, folders, source ratio, cache and nonblocking 3D roadmap. Use test-owned configs for persistence/selection
+  and fake feed documents for fair per-pass admission, backed by opt-in provider probes and operator review.
+
 ## 4. Graphics decomposition | after original Bubble spec-migration closure
 
 **Dependency, not a parallel workstream:** §2A Neon Lake closure -> original Bubble V5 parity/spec closure ->
