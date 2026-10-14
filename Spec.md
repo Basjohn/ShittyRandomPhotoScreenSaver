@@ -281,6 +281,22 @@ Cheap/import-safe pure math, immutable types, tiny contracts/helpers and canonic
 eager when their cost is effectively nil and doing so prevents duplication. Dormancy protects meaningful work/resources;
 it is not a requirement to hide zero-cost helpers behind artificial import machinery.
 
+**Framed 3D Visualizer camera is a reusable opt-in capability, not a separate camera system per mode.**
+Neon Lake establishes the accepted direction: fixed ordinary card/border, bounded orbit/pan/zoom *inside* its
+clipped viewport, one canonical persisted presentation-view owner separate from artistic presets and Edit/CUSTOM
+stage geometry, near-plane-safe projection and composition-aware limits. §4A's FC gate consolidates that existing
+capability before Extruded Bubble. Individual framed modes choose their own safe bounds/pivot/fit; this does not
+change the unframed Sphere or Extruded Spectrum controls. Do not clone Neon Lake's special-case bounds or create
+an independent controller, gesture timer, view-pose persistence schema or per-mode GPU camera owner. Large and small
+card pixels/DPR require deliberate fit, LOD and glow-footprint validation, not a global bloom boost.
+
+**Consumer-driven prerequisite sequence:** finish Neon Lake's visual/replay acceptance and temporary experimental
+presets, migrate the *original* Bubble under the typed Settings spec with full fixed-recording fidelity, then prove
+G0, G1, FC, G3A and the measured G2/G3B subset called for by real Extruded Bubble materials before implementing
+its renderer. All shared work stays import-safe/dormant for nonconsumers, while G4 ribbons and G5 volumes are
+not blanket prerequisites. `Current_Plan.md` owns the live checkboxes and completion order; the reusable contracts
+live in `Docs/Reference/Scene3D_Resources.md` and `Docs/Reference/Visualizer_Reference.md`.
+
 Future 3D modes/effects should therefore begin by inventorying the files above, then add the smallest missing substrate
 needed by the real vertical feature. Do not cargo-cult Block Spins' transition-specific projection/math, and do not distort
 an existing helper merely to claim reuse.

@@ -644,6 +644,18 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   These are mode-specific view settings, excluded from curated art presets and Custom art snapshots. Applying art
   cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
   stage geometry, with no camera authority.
+- **Reusable framed 3D camera contract (planned consolidation):** Neon Lake's working internal-camera
+  input and canonical presentation pose are the reference for **all future bordered 3D Visualizers**, including
+  Extruded Bubble, Cubes, Aurora, Ember Swarm and Waveform Ribbon. Promote its capability into the existing
+  descriptor/view-orbit/scene-transform owners under §4A FC *before* building another mode; do not duplicate
+  the renderer's bounds/pan logic or add a second camera store. A framed mode supplies a declared pivot, fit,
+  safe turn/tilt limits, bounded internal pan/zoom and valid near-plane/content coverage for its own material.
+  Persisted view state remains presentation-only and mode-specific, excluded from presets/CUSTOM layout geometry.
+  Use card-interior clipping and the existing gesture/input ownership. Explicit capability gating protects
+  unframed Sphere and Extruded Spectrum's original free-orbit policy. Prove Neon Lake parity, both displays,
+  minimum/maximum card size, aspect/DPR, dormant-zero-cost and resize legibility before reusing the capability.
+  `Docs/Reference/Scene3D_Resources.md` defines the required depth/transparency/shadow prerequisites for
+  a framed transparent 3D consumer; `Current_Plan.md` owns their implementation order.
 - **Framed scene exception:** Neon Lake Basin additionally declares `scene_transform_settings` for scene scale and
   pan X/Y. Its complete five-key view pose persists independently of art and layout Save/Cancel. WASD and Alt+left
   orbit inside the card; Alt+right pans inside it; Alt+wheel scales about the interior centre, using either Qt wheel
