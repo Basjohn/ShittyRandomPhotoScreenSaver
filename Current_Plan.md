@@ -6,10 +6,15 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current authorization:** continue the live plan in order, 2026-10-13. §1/§2 are source-complete; §2A migration is active.
-Continue between green mode checkpoints without another routine stop. Graphics, media production and operator builds
-follow their listed dependencies. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work; reserve one High
-Astra agent for visual parity audits after very significant work.
+**Current execution order (operator-authorized):** (1) finish Neon Lake visual corrections, real-music
+reactivity investigation and any justified improvements, then deliver **six disposable experimental presets** and
+close its V4A gate; (2) migrate **original Bubble** with proven response/render parity and close the entire Visualizer
+Settings-spec migration; (3) prove the reusable **framed-camera, attachment/depth, transparent-compositing, shadow
+and visually justified optics primitives** in §4A; (4) implement Extruded Bubble on those already-proven facilities.
+Release media/cleanup (§3), unrelated deferred graphics, and operator builds are not implicit blockers or reasons to
+start Extruded Bubble early. Continue between green checkpoints without routine stops, but do not skip each stage's
+specific physical or recorded-audio evidence. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work;
+reserve one High Astra agent for visual parity audits after very significant work.
 
 **Accepted by the operator, 2026-10-12:** Oscilloscope is fully validated; all landed transitions and Foundry tool buttons
 are accepted. Dev Curve currently has no observed issue; its earlier replay-floor investigation is closed. Do not reopen
@@ -35,7 +40,7 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | final Neon Lake acceptance, then Bubble
+## 2A. Visualizer spec migration | finish Neon Lake, then original Bubble V5
 
 Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated.
 Neon Lake (`shockwave_grid`) now has its spec-owned Settings, framed camera, authored terrain,
@@ -48,8 +53,11 @@ three stars and gentle decay unchanged. No new DSP, timers or polling.
 **Neon Lake open work after operator image review (2026-10-14):** The new screenshot
 confirms the existing mountain skyline and lake outline are good, Settings no longer crashes,
 and Starscape Beat is visible. Do **not** claim the distant horizon or musical glow
-reactivity accepted merely because the previous source tests passed. Keep Preset 1's
-artistic appearance protected while allowing deliberate canonical schema cleanup.
+reactivity accepted merely because the previous source tests passed. Use the **current
+operator-authored Preset 1** as the present visual comparison, not a protected or fixed
+artistic artifact. It may be freely edited by the operator at any time; approved schema
+migrations preserve the latest authored choices unless the operator explicitly requests a
+change. Never restore an older copy or pin artistic values/hashes as test expectations.
 
 **Operator size-specific correction (2026-10-14; do not conflate these failures):**
 - **LARGE card sizes:** The only disappointingly weak glows are **Starscape/Starfield**
@@ -101,24 +109,51 @@ artistic appearance protected while allowing deliberate canonical schema cleanup
   *own separate item above*. Keep Glass and Vertices on the same terrain/depth authority;
   no per-frame mesh rebuild, independent displacement/simulation owner, or dormant cost.
   Validate extreme small/large cards, aspect ratios and both displays, preserving CUSTOM
-  geometry SSOT and the authored Preset 1 appearance.
+  geometry SSOT and the operator's current authored values (which remain freely editable).
 - [ ] **Terrain reactivity rework.** Current terrain motion is mostly mild uniform swelling.
   Rework meaningful musical structure, including differentiated bands/transients and
   sustained passages, without jelly hills or bass washing everything out. Retain the
   existing eight growth envelopes and DSP/shaper authority unless an evidence-backed
-  refactor replaces them cleanly. Preserve the exact authored Preset 1 terrain/appearance
-  unless a separate artistic change is approved. Validate deterministic clips and the
+  refactor replaces them cleanly. Preserve whatever Preset 1 terrain/appearance the operator
+  has authored **at the time of the change**, unless a separate artistic edit is approved;
+  do not freeze an older baseline or treat these numbers as regression oracles. Validate deterministic clips and the
   operator's **real-music recordings** at
   `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
   A local agent may execute real-music replays; no new per-frame allocation, timers,
   environment-variable mutation or unrelated-mode cost. Require physical reaction review.
+
+- [ ] **Neon Lake reactivity audit and evidence-led improvements.** After the visual corrections above,
+  have a local agent replay deterministic quiet/onset/sustained/busy clips **and real music** from
+  `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. Compare actual
+  audible events, raw source/band/onset levels, eight terrain-growth envelopes, water events, star admissions,
+  celestial halo output and screen-visible result at low/high reactivity. Identify missed attacks, saturated
+  responses, bass/transient washout, flat sustained passages and delayed release. Improve only evidenced
+  weaknesses, re-run the same clips, document before/after measurements and capture actual motion (not just
+  static shader checks). Use the existing DSP/shaper and logical clock; preserve shared consumers and unrelated
+  modes. This is an **explicit closure gate** in addition to the terrain, star and celestial items above; do
+  not declare Neon complete simply because tests report valid values.
+- [ ] **Six disposable experimental Neon Lake presets, then V4A closure.** Create **six NEW editable experimental
+  presets** exploring materially distinct scene compositions/surface/response balances, with low/high music
+  captures and canonical Settings round-trip. They are **temporary candidates**, not approved final art:
+  the operator may reject all six without reopening accepted renderer architecture. **All presets, including
+  Preset 1 and the six experiments, are operator-authored and freely mutable at any time.** Use the current
+  Preset 1 only as the present visual comparison, not a locked identity, frozen copy or fixed test oracle.
+  Creating experiments must not silently overwrite any existing operator-authored slot or discard its current
+  edits; intentionally authorized schema migrations may update authored files while preserving the operator's
+  latest artistic intent. Never pin preset values, visuals or hashes in regression tests. Keep Custom distinct,
+  keep camera/view pose out of art presets, and update the one canonical slot catalog/selection/migration
+  together. The six additions are experimental candidates, not immutable snapshots.
+  Close Neon Lake only when the four remaining visual/reactivity/size tasks above and the recorded-audio review
+  have physical/agent-image acceptance, source regressions pass, and six experiments have been delivered and
+  inspected as experiments. Their eventual aesthetic rejection is not a blocker to structural closure.
 
 The completed implementation trail, rejected experiments and previously detailed V4A
 checklists are archived in `Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md`.
 The durable technical contract remains `Docs/Reference/Neon_Lake_Basin.md`. Do not reopen
 accepted architecture or settings simply because old historical checkboxes were unchecked.
 
-- [ ] **V5 — Bubble last.** Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
+- [ ] **V5 — original Bubble, immediately after Neon Lake closure and BEFORE shared-primitive/Extruded Bubble work.**
+  Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
   authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
@@ -130,12 +165,19 @@ accepted architecture or settings simply because old historical checkboxes were 
   atomically; do not invent controls in the currently empty Layout bucket or introduce Spectrum shaping. Prove real-body
   round-trip, Swirl/gradient migration, one application per consumer, dormancy and fixed-clip full-output equality.
 
-Each slice ends in focused proof, refreshed owner docs and a checkpoint before starting the next mode. New modes use the
-spec from their first implementation. Graphics implementation follows §4 after this migration and bounded side work;
-the specifically authorized Neon Lake Basin conversion is already included in V4A and is not a second §4 project.
+- [ ] **Close the Settings-spec migration as a separate gate.** Verify all registered original Visualizer modes,
+  including Bubble, use the single typed spec and canonical defaults without a parallel model/builder/applier
+  authority; compare Bubble visual/physical audio replay against its frozen baseline and confirm dormant-mode
+  neutrality and persisted Custom/preset parity. Record complete mode coverage, not only passing schema tests.
 
-## 3. Release media and bounded source cleanup | Subsequent work
+Each slice ends in focused proof, refreshed owner docs and a checkpoint before the next. New modes use the spec from
+first implementation. **Do not start the shared-primitive programme or Extruded Bubble until original Bubble V5
+and the spec-migration gate are closed.** Neon Lake conversion is already in V4A, not a duplicate §4 project.
 
+## 3. Release media and bounded source cleanup | Independent, nonblocking work
+
+This section is **not** a dependency between Bubble V5 and the shared-architecture gate in §4; perform it at a
+stable checkpoint or when separately authorized, without delaying or bypassing the explicit §0 order.
 The release capture tool is already landed. `Docs/Reference/Release_Media.md` is the single source for input paths,
 encoding and manifest policy: genuine UsuScene1–4 originals, transition loops at 480 px wide / 24 fps / authored speed,
 high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and normal Godzips.
@@ -162,77 +204,103 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   migration checkpoint, confirm caller absence and forward-strip it at canonical input/save boundaries without linking
   the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
-## 4. Graphics decomposition | After migration and bounded side work
+## 4. Graphics decomposition | after original Bubble spec-migration closure
 
-Extruded Bubble is the next proposed mode after migration/side work, following the operator's explicit “after migration”
-direction. The other mode order is Particle Field → Terrain/Skyline/Tunnel → Waveform Ribbon → Deformable Blob Sphere.
-Build only required/proposed primitive slices in the order below; primitive proof does not require inventing a shipping
-consumer. Usu runtime remains deferred; its existing plan is `Docs/Future_Work/Usu_Moonscape.md`, not a second queue.
+**Dependency, not a parallel workstream:** §2A Neon Lake closure -> original Bubble V5 parity/spec closure ->
+§4A preflight/shared substrate acceptance -> §4B Extruded Bubble. **No EB2/EB3 renderer work before G0,
+G1, framed-camera sharing, G3's depth-aware transparent compositor and G2's justified shadow foundation
+are proved.** An EB visual target may inform G0's requirements, but EB production implementation begins only
+when the shared-gate checklist is complete. Do not build speculative full optics, particle or volume engines.
 
-### 4A. Shared facilities — inventory, dependencies and acceptance
+Other admitted mode order remains Reactive Particle Field -> Terrain/Skyline/Tunnel -> Waveform Ribbon ->
+Deformable Blob Sphere. Usu remains deferred under `Docs/Future_Work/Usu_Moonscape.md`; a foundation can be
+proven without admitting its downstream consumer. `Docs/Reference/Scene3D_Resources.md` defines the shared
+contracts, ownership and measurement requirements. The source remains the implementation authority.
 
-`Docs/Reference/Scene3D_Resources.md` owns implemented resource contracts. Existing stream rings, compute/population,
-particle sprite/streak draw helpers, scene targets, bloom, trails, edge/propagation fields and planar directional shadow
-helpers must be reused, not rebuilt. Their presence does not prove general collision, ribbons, volumetric simulation,
-real shadow maps or order-independent transparency already exist.
+### 4A. Shared facilities | required pre-Extruded Bubble gates
 
-- [ ] **G0 — Establish exact delta and measurements.** Before each primitive, record current callers/resources and the
-  smallest missing contract. Run `tools/overhead_baseline.py` before/after shared edits and compare deterministic GL/Python
-  call counts plus control-relative CPU/GPU measures. Existing unrelated consumers must compile/pay for no added feature.
-  Extensions use opt-in shader variants/functions and demand-created resources; retire at park/context destruction.
-- [ ] **G1 / S17 — Attachments and temporal ownership.** Specify normal/material/depth/history formats, resolution,
-  allocation keys, clears, reuse and invalidation for resize/context/generation changes. Implement only demanded
-  attachments. Prove disabled paths allocate nothing and reactivation cannot sample stale history.
-- [ ] **G2 / S25 — Real shadow maps (the one shared shadow task).** Use one fitted directional depth map with bounded
-  soft PCF, bias and caster/receiver contracts; depend on G1 depth ownership. Test known occluder/receiver pixels,
-  light/camera changes, resize and retirement, with per-tier measurements. S17 and Usu S25 refer to this same owner;
-  it must not reactivate the rejected Extruded cast-shadow path implicitly.
-- [ ] **G3 / S17 — Transparency and optics.** Separate weighted blended OIT/depth-aware transparency from refraction.
-  Prove compositing/depth restoration first; then thickness/depth refraction, Fresnel, rough transmission and restrained
-  dispersion as independently selectable features. GTAO requires a justified visual target and its own measured slice.
-- [ ] **G4 / S18 — Particle extensions.** Extend existing CompactedPopulation and sprite/streak helpers with reusable
-  ribbons and bounded lifetime/capacity/indirect draw contracts. Add collision/OIT only after demonstrated need and G3
-  where applicable. Prove deterministic admission/retirement and zero work for inactive emitters.
-- [ ] **G5 / S18 — Lightning, then volumes.** Lightning first gets a bounded procedural geometry/lighting contract and
-  independent render/cost proof. Smoke/fog/fire follow as reduced-resolution volumes: separate allocation, advection,
-  vorticity, depth raymarch and temporal reprojection slices. Define history reset and quality ceilings before combining
-  them. No always-running simulation or permanent volume targets.
+Reusable scene GPU facilities remain opt-in within the retained Qt Quick Scene3D owner. Reuse current mesh,
+instancing, stream rings, compute/population, emission, bloom, trails, GGX/Fresnel materials, and optional planar
+shadow helpers; inventory before adding anything. **Primitive green means measured actual GPU pixels, GL state,
+resize/retirement and dormant-zero-cost tests**, not only shader compilation or a source-string assertion.
 
-### 4B. Extruded Bubble — bounded implementation slices
+- [ ] **G0 — Inventory, target contract and baselines (first).** Inventory renderer owners, existing primitives,
+  cost and validation gaps, and approved Extruded Bubble depth/overlap/translucency/shadow goals *without starting
+  EB implementation*. Record current CPU/GPU, GL calls, memory and dual-1440p/card-size baselines. Run
+  `tools/overhead_baseline.py` before/after every shared change. Do not implement a primitive whose missing
+  capability cannot be demonstrated; existing modes must not load/allocate the optional extension.
+- [ ] **G1 / S17 — Attachments, depth and temporal ownership.** Define required normal/material/depth/history
+  attachment formats, targets, clears, reuse, size keys, context and generation invalidation, multisample resolve,
+  near-plane/depth tests, transparent versus opaque ordering and inherited GL-state restoration. Prove actual
+  backdrop/card alpha pixels (including glass, star/celestial occlusion), mixed-DPR resize and no stale-history
+  sampling. Implement only demanded targets and release them at park/context teardown. G1 precedes G2 and G3.
+- [ ] **FC — Promote Neon Lake's bounded framed camera into ONE shared opt-in capability.** Neon Lake is the
+  reference for **internal** WASD/Alt-left orbit, Alt-right pan, Alt-wheel zoom, retained border/card clipping,
+  camera/view-pose persistence outside art and layout, composition-aware limits and homogeneous near-plane safety.
+  Consolidate *existing* descriptor/view-orbit/scene-transform/projection helpers, not a new pose store, clock,
+  controller or universal orbit policy. Each **framed 3D Visualizer** declares its own safe bounds, fit, pivot and
+  content envelope; Neon Lake's landscape angles are not defaults for bubbles, ribbons or cubes. Exclude current
+  unframed Sphere/Extruded Spectrum from forced clamping. Prove identical Neon Lake input/visual behavior after
+  sharing, retained card/Edit/CUSTOM SSOT, persistence, no exposure of world edges, small-card/DPR adaptation,
+  multi-display view isolation and dormant-zero-cost. Record reusable contract in `Docs/Reference/Visualizer_Reference.md`.
+- [ ] **G3A / S17 — Shared depth-aware transparency and compositing (before EB renderer).** Provide a proven
+  opt-in weighted-blended OIT or equivalently correct bounded order-independent layering for overlapping transparent
+  bubble surfaces; keep depth, opaque objects, overlay-card alpha, emission/bloom and GL state coherent. Compare
+  overlapping spheres in opposite draw orders, near-plane/camera crossings, depth-tested backgrounds, resize,
+  context loss and performance tiers. **Do not fall back to locally sorted, manually composited EB-only glass**
+  or duplicate SceneTargets. Existing GGX/Fresnel material helpers remain authoritative.
+- [ ] **G2 / S25 — Shared real shadow-map foundation.** After G1, prove one fitted directional depth map with
+  bounded soft PCF/bias, caster/receiver admission, resizing, lazy allocation/teardown and tier-specific GPU cost
+  on a test scene. This is the *same* shadow foundation referenced by Usu S25; do not resurrect the rejected
+  Extruded Spectrum cast-shadow experiment. Extruded Bubble uses it only where EB's approved receiver/lighting
+  target demonstrably improves; absence of a receiver is not permission to invent one.
+- [ ] **G3B / S17 — Measured optical enhancements before EB if its target needs them.** After G3A,
+  evaluate bubble-shell Fresnel/rough transmission, thickness/depth-aware refraction and restrained dispersion
+  against actual overlapping-bubble target images. Prove only the useful variants as reusable primitives **before**
+  EB3/EB4; explicitly record which are unnecessary and leave them deferred, rather than inventing an EB-local
+  replacement or building a general optics stack without a consumer. GTAO is not implicitly admitted.
+- [ ] **Shared-gate closure before Extruded Bubble.** Real-driver pixel/reference tests, dual-display and
+  extreme size/DPR/zoom cases, owner-state restoration under failure, warmed-demand paths, disabled-feature
+  allocations, resource retirement and measured before/after CPU/GPU cost all pass. Update Spec/Scene3D/Visualizer
+  reference and TestSuite contracts. Only then begin EB1/EB2. Do not require unrelated G4/G5 primitives.
 
-Reuse Bubble's logical simulation/reaction authority; the original Bubble remains unchanged under Bubble Temporal
-Fidelity. This is a bordered 3D mode whose camera moves inside the card, with spec-owned Settings and gradual use of
-shared materials, gloss/reflection, shadows, glow, quality tiers and orbit. Read fixed musical loudness, never add dynamic
-floors. Aim for sustained-loud-passage drift/speed and response at least as good as Bubble without changing Bubble itself.
+**Later demand-driven foundation (not prerequisites for Extruded Bubble):**
 
-**Framed 3D camera rule, reusable for ALL future bordered 3D Visualizers (operator 2026-10-14):**
-Adopt Neon Lake's **bounded internal camera orbit system as the shared capability pattern**, not its landscape-specific
-15–52 degree tilt or +/-36 degree swivel numbers. Each mode declares its own safe turn/tilt/swivel and centre-of-interest
-bounds; held WASD and Alt+left-drag clamp through one live view-pose owner instead of unrestricted wrapping. Alt+right
-may pan *within* composition-safe limits; Alt+wheel zoom remains available without revealing near-plane geometry edges
-or letting required content disappear. The ordinary outer widget card, border, viewport and Edit/CUSTOM layout geometry
-never move when the internal camera moves. Saved camera pose is separate from art presets and not copied between modes.
-Fit/near-plane clipping, changing aspect/DPR and small-card legibility must be tested; avoid competing camera authorities,
-new timers, global changes to unframed Sphere/Extruded Spectrum, or any dormant renderer cost. Extruded Bubble **must**
-use this mode-owned bounded/framed orbit contract from its first implementation.
+- [ ] **G4 / S18 — Particle/ribbon extensions.** Extend existing CompactedPopulation and sprite/streak helpers
+  only when a chosen mode needs ribbons, bounded lifetimes, collision or indirect draws. Retain deterministic
+  admission and retirement; use G3A for transparency when appropriate. If EB target *specifically* needs trails,
+  promote only the needed small G4 primitive into its shared preflight, not a parallel EB-owned implementation.
+- [ ] **G5 / S18 — Lightning, then volumes.** Bounded procedural geometry/light first; reduced-resolution
+  smoke/fog/fire, advection and reprojection only after an actual admitted consumer and independent cost/quality
+  evidence. No permanent volume targets or separate cadence.
 
-- [ ] **EB1 — Visual target and baseline.** Capture frozen-settings Bubble readings on representative recorded quiet,
-  transient and sustained-loud passages; define static/moving targets for depth, overlap, lighting and bordered framing.
-  Establish CPU/GPU/reference-resolution measurements and acceptance comparisons before renderer implementation.
-- [ ] **EB2 — Admission and logical frame contract.** Declare the mode/spec/capabilities; reuse existing logical state or
-  a mode-owned projection without a second clock/capture/DSP owner. Identify exactly which state remains shared and what
-  depth-only data is derived. Prove original Bubble readings unchanged and inactive mode import/allocation neutrality.
-- [ ] **EB3 — Minimal bordered 3D renderer.** Start with instanced lit bubble geometry, depth and card clipping in the
-  existing Quick scene. Implement the reusable **bounded framed-camera** pattern above with Bubble-specific safe
-  orbit/pan/zoom constraints, then define perspective fit, CUSTOM viewport versus visual-scale intent and
-  projection-derived Edit bounds. Test extreme zoom/turn/tilt, resizing, mixed DPR, display transfer, near-plane
-  clipping and context retirement; no second window or camera authority.
-- [ ] **EB4 — Appearance and quality.** Add shared gloss/reflection/glow as opt-in measured increments; real shadows use
-  G2 when ready, and transparency uses G3 only if needed. Do not block the minimal renderer on all future facilities or
-  duplicate missing primitives locally. Each tier bounds instances/geometry/attachments and releases resources at park.
-- [ ] **EB5 — Reaction/customization and acceptance.** Expose spec-owned controls/presets after the frame contract is
-  stable. Validate sustained loud passages and onset/quiet behavior on fixed recordings, rerun Bubble parity, and review
-  real outputs on both displays before seeking targeted operator acceptance. Generate its release showcase when stable.
+### 4B. Extruded Bubble | begins only after §4A shared-gate closure
+
+Extruded Bubble is a **bordered/framed internal 3D** successor that reuses the original Bubble logical
+simulation/reactivity rather than modifying it. Read current fixed loudness; never add independent floors,
+clocks, DSP, polling or renderer-owned simulation. Preserve original Bubble Temporal Fidelity and distinct
+mode/preset/CUSTOM authorities. Use §4A's shared FC camera, G1 targets, G3A compositor and applicable
+G2/G3B facilities **from the initial renderer**, not as deferred post-launch rewrites.
+
+- [ ] **EB1 — Concrete visual target and measured comparison.** With foundation green, capture representative
+  quiet/transient/sustained-loud Bubble replay and define static/motion bubble depth, translucency, overlap,
+  lighting, bloom and framed-camera goals. Distinguish useful G2 shadow receivers and optional G3B optics from
+  merely decorative demand; do not expand the shared architecture without evidence.
+- [ ] **EB2 — Descriptor, spec and frame admission.** Declare one canonical mode/capability and presentation
+  Settings path; consume Bubble logical state or a clearly mode-owned projection, not a second clock/capture/DSP.
+  Assert original Bubble replay equality and zero inactive import/GL/resource work.
+- [ ] **EB3 — Bordered 3D renderer on proven primitives.** Instanced geometry, correct overlapping transparency,
+  depth/card clipping, lighting/materials and **shared FC bounded orbit/pan/zoom** with Bubble-specific limits.
+  The outer card, Edit/CUSTOM rectangle and independent camera view pose never become competing geometry authorities.
+  Verify perspective fit, near clipping, glass layering, small/large card/DPR, dual displays and context retirement.
+- [ ] **EB4 — Material and quality shaping.** Tune useful, already-proven shared reflection/Fresnel, refraction,
+  glow, and G2 shadows when visually justified. Tier-bounded instances/targets and first-frame warm admission;
+  do not add an EB-specific OIT, shadow, new SceneTarget or orbit implementation to compensate for a weak shared
+  primitive. New genuinely needed substrate goes back through a measured §4A gate.
+- [ ] **EB5 — Reactivity, presets and physical acceptance.** Author spec-owned controls and experimental art,
+  compare recorded quiet/onset/sustained passages with original Bubble baseline, and verify both displays,
+  aspect/DPR, frame timing, latency, dormancy and audio-reactive fidelity before operator acceptance. Capture
+  release media only after renderer and musical behavior are stable.
 
 ### 4C. Remaining modes and character/world substrate
 
@@ -247,9 +315,11 @@ use this mode-owned bounded/framed orbit contract from its first implementation.
   harness before combining; no physics engine or separate animation clock.
 - [ ] **S24:** opt-in felt/sheen and bounded fuzz shells with emitted-light tips; prove unchanged existing shader variants
   and tier-specific cost. **S25:** reuse G2, never a duplicate shadow implementation.
-- [ ] **S27 → S26:** prove independent perspective/orbit camera, then seeded sphere/crater/star geometry and logical
-  travel. Preserve the existing photo-plane camera. Asset/rig/clip acceptance stays with the existing Usu plan and local
-  asset README; do not admit the deferred full Usu mode merely because a foundation is ready.
+- [ ] **S27 → S26:** prove 3D world-view/projection distinct from the existing photo-plane camera, then
+  seeded sphere/crater/star geometry and logical travel. Reuse §4A FC's view/orbit/input/persistence authority
+  **where the scene is a bordered Visualizer**; a deliberately unframed/world-travel camera may have different
+  projection and motion semantics, but not a duplicate framed-camera controller. Asset/rig/clip acceptance
+  stays with the existing Usu plan and local asset README; foundations do not admit the deferred full mode.
 - [ ] **Combinations only after component proof:** electrical terrain, smoke-lit fracture, ember/dust destruction,
   refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL. Choose one promoted effect at a time.
 

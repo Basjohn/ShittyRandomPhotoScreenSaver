@@ -70,7 +70,11 @@ Derivation must continue through the whole oracle: expected loop totals, release
 
 ### Curated presets and other authored assets
 
-A behavior/parser/render test must not depend on `preset_1_whatever.json` containing today's exact artistic choices unless the shipped preset itself is the subject under test.
+No behavior/parser/render test may pin the artistic contents of `preset_1_whatever.json` or any
+other curated preset, **even when auditing that shipped preset**. The asset itself may be tested
+for schema, canonical slot/index ownership, input admission, parsed values, round-trip and
+preservation of the operator's current edits. Such an audit does not authorize asserting a fixed
+artistic number, hash, visual snapshot or restoring a previous authored version.
 
 Use one of these instead:
 

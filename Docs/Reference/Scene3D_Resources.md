@@ -8,6 +8,37 @@ operations require the validated OpenGL 4.6 context. PyOpenGL DSA creation calls
 
 Early E8 receiver attempts produced triangular near-footprint casts or a corner-only sliver even at long distance. A translated top cap is **not** the requested cast: any future operator-approved design must sweep from the bar base footprint toward the shifted upper silhouette, stay visible without gigantic side smear, and respect screen-edge clipping and overflow without shrinking the authored Spectrum geometry. These experiments remain rejected/disabled; see `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md` for the full negative history. Sphere's turn/tilt/box and Edit cage share the live Scene3D pose authority, not preset-managed camera copies. The E8-era Python 3.13 sequencing and two-original WebP paths were superseded and are **not** current product instructions.
 
+## Shared framed-camera and transparent-scene admission contract
+
+The **implemented Neon Lake internal view** establishes the behavior to generalize, not a new camera subsystem.
+Before Extruded Bubble, §4A FC must promote the existing `view_orbit_settings`, optional
+`scene_transform_settings`, gesture admission and projection/fit helpers into one opt-in **framed 3D camera
+capability**. The outer retained card and CUSTOM stage remain fixed, while its content orbits/pans/zooms inside
+CARD_INTERIOR. Mode declarations supply bounds, pivot, pan/zoom safety, fit and near-plane behavior; do **not**
+globalize landscape angles, wrap bounded modes, give future modes copied camera controllers or change unframed 3D
+behavior. Save camera view under the existing presentation authority, not the art presets or layout profile.
+
+Before a consumer with overlapping translucent geometry, prove these **separate, lazy shared primitives**:
+
+- **G1 attachments/depth:** context-local normal/material/depth/history only where used; exact target/format,
+  clear/resolve/state, resize and context-lifetime ownership. Render-to-card alpha, sky/foreground occlusion,
+  translucent depth ordering and GL-state restoration are validated on real pixels.
+- **G3A transparent compositor:** opt-in order-independent blending for multiple translucent surfaces, correct
+  opaque/depth interaction and emitted-light resolve. Rendering order is an explicit contract; do not transplant
+  Neon Lake's special-case glass logic into another mode or substitute an EB-only transparency path.
+- **G2 fitted real shadow maps:** one shared directional caster/receiver/depth-map owner with measured tiers,
+  independently proved after G1. This does **not** authorize reenabling the rejected Extruded Spectrum shadow.
+- **G3B optics:** opt-in, target-justified Fresnel/rough transmission, thickness/refraction and restrained
+  dispersion, following G3A. Existing material math should be reused; any omitted feature remains deferred,
+  not a silent EB-local implementation.
+
+G0 measures the exact existing delta before these additions. Their opt-in allocations, shaders and per-frame work
+must be absent for all inactive consumers. Validate opposite-order overlapping sphere renders, near-plane crossings,
+window/card resize and mixed DPR, alpha/depth/bloom agreement, context-loss/retirement, dual-display and
+CPU/GPU budgets. Shared primitives may be proved by small test scenes without shipping a fake consumer. G4 particle
+ribbons and G5 volumes are demand-driven separate gates. `Current_Plan.md` §4A is the live implementation checklist;
+`Docs/Reference/Visualizer_Reference.md` owns visible/view-pose semantics.
+
 ## Static meshes and per-draw image bindings
 
 `MeshResources` owns named programs, uniform locations and static interleaved meshes. A mesh's VAO and VBO use DSA

@@ -41,6 +41,32 @@ The independently runnable Neon mesh/projection regression avoids the shared fix
 This command has no environment-variable manipulation. It validates pure mesh/projection
 geometry only, not Qt/OpenGL pixels, visual acceptance or full suite status.
 
+## Visualizer migration and framed-3D proof gates
+
+Original Bubble V5 is a **parity migration**, not a new reactivity version: save an operator-independent
+frozen-settings baseline, use synthetic fixtures for durable behavior tests and validate real Bubble music
+recordings for physical fidelity. No curated preset values become frozen oracles. Close Settings-spec coverage
+for all original Visualizers before commencing shared 3D-primitive work.
+
+Neon Lake closes only after actual rendered horizon/depth and size/DPR evidence; improved star/celestial response,
+terrain reactivity and visual timing must be checked on both synthetic replay and the operator's real-music
+recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. The local
+agent may run these replays and compare low/high signal, transient and sustained passages. Six new disposable
+experiment presets must round-trip through canonical schema without silently replacing the operator's
+current Preset 1 edits. All preset values, including those in Preset 1, are freely operator-editable
+and must not become test assertions about fixed artistic data.
+Preset experiment aesthetic rejection does not redefine the mode's behavioral regression contract.
+
+The shared pre-Extruded Bubble gate requires real GL/reference-pixel tests for G1 attachments/depth, FC framed
+camera (including comparison against existing Neon Lake), G3A overlapping translucent spheres in different
+render orders, G2 shadow-map caster/receiver, and any chosen G3B optics; measure CPU/GPU cost and memory,
+GL state on success/failure, context retirement, card resize/aspect/DPR and dormant-mode neutrality. Test
+actual overlay alpha/near-plane occlusion and multi-display framing. A passing offline shader compile or
+an attractive static mock cannot close these gates. The subsequent EB renderer must consume **these** primitives
+rather than maintain duplicate view/transparency/shadow code. Only relevant targeted tests run after a change;
+operator physical acceptance remains a distinct check. Do not introduce environment-variable mutation or
+runtime Settings exposure into test setup.
+
 ## 1.1 Test durability and authority hygiene
 
 Tests are strict about product contracts, not accidental copies of today's authored data. Mutable defaults, extensible registry membership/cardinality and curated preset payloads remain owned by their canonical source. Authored Markdown explains contracts and is never a proxy runtime oracle. Behavior tests derive expectations from the owning source or use self-owned fixtures; exact literal pins remain appropriate when the literal itself is a protocol, compatibility, golden, geometry, ownership or negative-control invariant. The blocking audit follows canonical-default aliases transitively so an intermediate `widgets = defaults[...]` assignment cannot hide a copied authored value.

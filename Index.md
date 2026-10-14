@@ -78,7 +78,9 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
 | Neon Lake Basin framing, terrain authoring, migration and renderer; live fidelity work | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A V4A |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
-| active 3D scene foundation plan / live slices | `Current_Plan.md` |
+| Active sequence: Neon Lake audio/visual closure → Bubble V5 parity/spec close → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
+| Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
+| Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |

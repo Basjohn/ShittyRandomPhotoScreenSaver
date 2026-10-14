@@ -51,8 +51,10 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
   and lies down across a round moon under a starscape, with orbit framing and optional fuzz-tip bloom. Plan, behaviour,
   reactivity contract, required architecture and gates: `Docs/Future_Work/Usu_Moonscape.md` (supersedes the 2026-10-02
   snapshot); its remaining Blender authoring work is in `Docs/Future_Work/Usu_Blender_Work.md`. Its missing shared foundations (asset pipeline, skinning, animation graph, secondary motion, felt/fuzz material,
-  shadow maps, sphere world/starscape, orbit camera) are listed as S19–S27 in `Current_Plan.md` §4 and are to be side-built by
-  transitions/Visualizer consumers first; the mode itself stays deferred until they are accepted.
+  shadow maps, sphere world/starscape, world-view projection) are listed as S19–S27 in `Current_Plan.md` §4 and are to be side-built by
+  transitions/Visualizer consumers first; a bordered Visualizer consumes the shared §4A framed-camera capability,
+  rather than inventing its own camera input authority. The Usu mode itself stays deferred until the relevant
+  shared foundations are accepted.
 
 ## Rejected Extruded cast shadows (deferred)
 

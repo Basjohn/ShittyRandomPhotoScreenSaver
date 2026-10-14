@@ -19,6 +19,23 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
       still an absolute gate. Derived declaration membership is immutable/cached; configuration-owned bundles stay off
       per-frame rebuild paths. Recommended slider marks never supply defaults.
 
+## New bordered 3D Visualizers | shared-camera / graphics preflight
+
+- [ ] Original Bubble has completed V5 typed-spec migration and frozen-musical/visual parity **before**
+  starting the Extruded Bubble implementation; do not treat it as an upgrade to the original Bubble mode.
+- [ ] §4A G0/G1/FC/G3A and required G2/G3B proof are complete **before EB2/EB3**, including real GL pixels,
+  opacity/depth, state restoration, measured cost, resize, retirement and dormant-zero-allocation evidence.
+- [ ] Bordered/`CARD_INTERIOR` 3D modes use the **shared opt-in Neon Lake-derived bounded internal camera**,
+  with per-mode turn/tilt/pivot and bounded scene pan/zoom, not copied camera input/controllers/pose stores.
+  Validate homogeneous near-plane clipping and scene visibility at all admitted extremes.
+- [ ] Saved view pose stays in canonical presentation settings, isolated from mode presets and CUSTOM geometry;
+  the physical widget card/frame never rotates, pans or scales with its internal scene.
+- [ ] Unframed Sphere/Extruded Spectrum retain their existing orbit semantics and mode-local layout profiles.
+- [ ] Framed glass/translucent objects use shared G3A order-independent composite; G2 shadow and G3B optics
+  are reused where warranted, never re-created locally. All additional resources are lazily acquired/retired.
+- [ ] Small card and large card tests include DPR-aware vertex/marker density, bloom footprint, overlap,
+  opacity/occlusion, dual-display and accepted existing mode behavior. Shader compilation alone is not proof.
+
 ## 1. Read first
 
 - `Docs/Guardrails/Visualizer_Presentation.md`
@@ -42,6 +59,7 @@ When changing mode registry, mode enablement, mode cycling or the current Visual
 - [ ] Common registry imports remain light; disabled heavy implementation modules are fresh-process dormant.
 - [ ] Existing mode-specific branches that encode real physics/render semantics were not generified merely to make the registry look uniform.
 - [ ] The existing preset slider and mode-level `Custom` system are preserved. Do not confuse mode preset Custom with global layout CUSTOM.
+- [ ] Treat **every** preset as operator-authored, freely editable data, regardless of slot number or visual acceptance. Never freeze today's contents into test goldens, restore an older copy or silently overwrite current edits during schema migration or experimental preset generation. Use test-owned fixtures for exact behavior assertions.
 - [ ] The global CUSTOM three-entry contract remains untouched: persisted/effective Custom, live Edit Layout start, and number-key saved-layout load all keep authored stacking/Media↔Visualizer adjacency dormant.
 - [ ] Media dependency remains one-way admission. If Media is disabled, the Visualizers tab greys out with `Enable Media In Widgets`; it must not auto-enable or own Media.
 - [ ] Before/after evidence covers canonical + wide + tall geometry for every affected mode. Registry/UI refactoring is never permission to retune scaling/reactivity.

@@ -3,7 +3,19 @@
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID, settings prefix and layout profile remain
 `shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. Visual fidelity and musical acceptance remain live work in
 `Current_Plan.md` §2A V4A. The supplied low/high mock in
-`Docs/Future_Work/Additional_Future_Transitions_Package.zip` remains the visual target.
+`Docs/Future_Work/Additional_Future_Transitions_Package.zip` is concept provenance, **not** the
+accepted artistic reference. The **operator's current** Preset 1 is the working visual comparison,
+not a frozen baseline; the operator may change it whenever desired.
+
+Neon Lake is the **reference implementation** for a reusable **framed 3D internal-camera** contract,
+not a permit to copy its special-case view code into each future mode. The shared opt-in capability is a
+§4A prerequisite for Extruded Bubble and other framed 3D visualizers. Preserve this mode's authored
+landscape angles, existing Settings/presentation pose and card/CUSTOM behavior when promoting the common
+input/bounds/projection ownership; other modes supply their own bounds and visual target. Current acceptance
+and experimental preset closure are tracked only in `Current_Plan.md` §2A; the existing Preset 1 remains the
+working visual reference while six new experimental presets are temporary and may all be rejected.
+Every preset remains operator-editable, including Preset 1 and all six experiments. Audio reactivity
+review includes deterministic and operator real-music recordings and precedes mode closure.
 
 ## Card, scene pose and input
 
@@ -87,9 +99,10 @@ band so a crest meets the solid shore continuously. The texture uploads only cha
 unpack/texture/sampler state. Allocation/deletion failures stay loud and owned for retry.
 It creates no clock or global texture cache.
 
-The existing Scene3D bendable mesh samples an opt-in positive cubic B-spline surface. The wire paths are continuous
-curved surface coordinates and height contours, not the tessellation's straight triangle edges. Cubic smoothing cannot
-overshoot its local control-height range; authored bilinear zero remains the water-classification authority.
+The existing Scene3D bendable mesh samples an opt-in positive cubic B-spline surface, and its
+height/vertex coordinates are shared across triangles and points. The three present-day surface
+styles do not enable general-purpose wire edges. Cubic smoothing cannot overshoot its local
+control-height range; authored bilinear zero remains the water-classification authority.
 The mode-owned terrain lattice now overscans all four authored edges, with geometrically growing
 cell width away from the authored 0..1 sub-lattice. `neon_lake_basin_mesh.py` generates both triangles and actual
 point markers from exactly the same axis coordinates, keeping the edited interior topology untouched. A
@@ -116,7 +129,7 @@ through the normal mode owner; unchanged shared consumers acquire no heightfield
 Glass uses the shared Scene3D GGX/Fresnel material helpers. Vertex normals are central derivatives of the same
 `basinSurface` displacement (cubic land, static detail, growth, old waves and bank taper), interpolated across the
 surface. Four extra evaluations occur only for nonzero Glass strength/tint alpha on direct surface triangles;
-ordinary wires, point markers and mirrored wire passes do not evaluate them. Five bounded reflected directions
+ordinary point markers and mirrored passes do not evaluate them. Five bounded reflected directions
 sample the authored sky and actual ray-hit Sun/Moon; roughness widens them. This is a procedural scene-environment
 approximation, not photo capture, refraction or a new reflection target. Neon environment radiance supplies restrained
 grazing highlights; optional body lighting uses the same material and coarse heightfield occlusion.
@@ -125,7 +138,11 @@ The existing `sun_enabled` key gates the selected Sun or Moon independently from
 bands; Moon adds authored phase and restrained procedural craters. Both have separate RGBA. XYZ and radius are art:
 X is in basin half-widths and Y/Z/radius in scene units. Optional orbit is off by default, analytic on the existing logical
 animation time around `(0, 0, -1.2)`; speed is revolutions/second. It does not affect the five camera keys or outer geometry.
-The complete landscape establishes depth **before** sky colour or celestial body. The sky background draws only at the far depth wherever terrain did not write nearer depth, so stars cannot bleed through translucent/glass terrain. Surface colour then uses the same prepass depth and continues to retain its translucent material appearance. Sun/Moon draw **after** surface colour with LEQUAL and actual ray-sphere hit depth; only the camera-front visible fragments pass, and bodies behind terrain are occluded. The old GREATER rear-body transmission path is retired. No additional depth target, authority, or timer is created. Reflected body hits still use authored land-volume approximation; direct on-card visibility is determined by the real overscanned landscape depth. When orbit brings the camera inside or extremely close to the analytic ray-sphere body, its *camera-visible draw* smoothly fades out before it becomes a screen-filling disc. The world position, orbit, material/environment reflection queries, and illumination are unchanged. No new sphere mesh or timer is introduced. The distant continuation is a visual surface, not a second authored occlusion volume.
+The sky background is drawn continuously first, then the terrain's **real depth-only pass** erases
+sky colour/emission in proportion to the same surface coverage/fade. Subsequent surface/sky-body
+passes use that terrain depth, so distant stars or Moon/Sun are occluded by foreground land
+without creating a separate card-wide alpha band. The translucent/glass surface retains its
+material appearance while **opaque terrain coverage** blocks the sky behind it. Sun/Moon draw **after** surface colour with LEQUAL and actual ray-sphere hit depth; only the camera-front visible fragments pass, and bodies behind terrain are occluded. The old GREATER rear-body transmission path is retired. No additional depth target, authority, or timer is created. Reflected body hits still use authored land-volume approximation; direct on-card visibility is determined by the real overscanned landscape depth. When orbit brings the camera inside or extremely close to the analytic ray-sphere body, its *camera-visible draw* smoothly fades out before it becomes a screen-filling disc. The world position, orbit, material/environment reflection queries, and illumination are unchanged. No new sphere mesh or timer is introduced. The distant continuation is a visual surface, not a second authored occlusion volume.
 
 Optional rays use `heightfield_volume_glsl.py` single scattering over the same world-space basin and authored body.
 The existing sky program/quad and SceneTarget are reused after geometry; no volume texture, timer or simulation is
@@ -135,148 +152,100 @@ step. High/Balanced/Performance/KAK use 12/8/6/4 view steps (at most 60 height s
 approximation may miss thin ridges between taps and uses a bilinear land-height bound rather than exact shadow maps.
 Those limitations are explicit; no hidden high-tap or screen-space fallback is installed.
 
-The protected curated Preset 1 remains independently editable, with its file preserved byte-for-byte through this repair. Presets 2/3 are retired with explicit GODZIP debris records; future artistic presets are operator work and never frozen into test goldens. View pose is separate from artistic presets. Custom remains available.
+Every curated preset is operator-authored, independently editable and mutable without restriction,
+including Preset 1 and all future experiments. The current Preset 1 serves as the present visual
+comparison **only**, never a locked baseline or a golden sequence of colours, heights, values, images
+or bytes. The shipped catalog currently contains only this preset plus Custom. Before V4A closure,
+six additional, explicitly experimental and operator-rejectable presets must be authored using
+canonical schema. Creating them may not silently overwrite the operator's latest authored Preset 1
+or any other slot; an explicitly authorized schema migration may legitimately modify preset files
+while retaining current artistic intent. Camera pose remains excluded from art presets. Behavioral
+and visual regression tests use independent, test-owned settings, never mutable curated art.
 
 Focused regression inventory lives in `Docs/TestSuite.md`. The pre-replacement render-cost baseline is
 `tools/baselines/overhead/2026-10-13_000e222e.json`; current comparative cost and visual acceptance remain in the live plan.
 
 
-## Continuous sky, depth-mask fade and optional glow (2026-10-14)
+## Continuous sky, terrain visibility and conditional Glow Settings
 
-The sky paints continuously across the whole card before terrain depth admission. The depth-only terrain pass subtracts the existing sky/emission by the same `basinDistanceFade` coverage used for the surface. This keeps the wallpaper/sky alpha transition smooth at extended terrain, while near fully covered terrain erases remote stars and body light. It does not create a second target, control mesh, timer or opacity authority. Sun/Moon pass later against the actual shared depth and the existing camera-proximity culling; the accepted depth-tested terrain skyline remains a distinct physical silhouette. A faint extra rear-terrain contribution is provisional until visible GPU proof.
+The sky paints continuously across the framed card. The depth-only terrain prepass subtracts
+sky/emission according to `basinDistanceFade` coverage, and body visibility is tested against
+the **same** actual terrain depth. The landscape, vertices, glass, sky and celestial body must
+share one opacity/depth truth. A detached horizontal alpha strip, background wallpaper showing
+through opaque mountains or far geometry glowing after its surface faded is a regression.
+No second render target, geometry authority, body mesh, timer or opacity control is admitted.
 
-The advanced Glow bucket owns existing **Surface Glow** (emission), **Ridge Light Response** (musical ridge lighting), **Celestial Halo** with Intensity/Reactivity, **Light Rays** with Ray Strength/Colour, and **Starscape Beat** with Star Glow Intensity/Reactivity. These are a UX regrouping of existing keys, not new presentation, DSP, default or preset authorities. Sky owns atmospheric and base star colour; Celestial owns body appearance, pose and orbit; Render owns water reflectivity; Waves owns Water Detail and Water Flow. The timing-only advanced `terrain_motion` bucket is labelled **Growth Timing** without changing its canonical key. When Sky or the celestial body is disabled, their dependent Glow rows hide; switching them back on exposes the exact retained values. The generic spec `when` condition evaluator now accepts conjunctions of declared controls and evaluates them on load as well as live. The Glow bucket stays closed by default. Celestial halo is enabled by default; Starscape Beat remains opt-in. The halo draws from the same analytic sphere (not a second disc) and responds moderately to already captured midband presence and onset envelopes; it is **not isolated vocal detection**. Beat-star positions come from the established panorama cells, select up to three spaced stars per admitted event, decay on the same logical frame clock and use no extra audio or render owners. Star halo evaluation is spatially culled when possible. The initial .85 strong-beat filter was too restrictive; after the operator accepted the actual star glows, the admitted onset threshold was reduced from .35 by 20% to **.28**. This only changes admission: three star positions, their gentle fade and existing ring timing remain unchanged.
+The advanced Glow bucket owns **Surface Glow**, **Ridge Light Response**, **Celestial Halo** with
+Intensity/Reactivity, **Light Rays** with Ray Strength/Colour, and **Starscape Beat** with Star
+Glow Intensity/Reactivity. Sky owns atmosphere/base stars; Celestial owns the body appearance,
+pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; Growth Timing
+(`terrain_motion`) owns the existing timing rows. Spec-owned conditional controls remain
+hidden when their prerequisites are disabled, retain their saved value while hidden, and
+reappear on re-enablement. The Glow bucket is closed by default. The passive celestial halo
+is enabled by default, while Starscape Beat is opt-in.
 
-The celestial orbit-speed authored slider now admits 0..0.025 revolutions/s, not the old 0..0.15. Existing saved out-of-range settings are admitted through the one canonical typed spec; curated Preset 1 is unchanged. Nothing about glow values is a fixed golden preset target. Physical GPU validation remains required to ensure the sky seam is gone, the horizon detail is tasteful and the glow is visible without flare or dual-display regression.
+Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
+projected framed sky**, select three spaced star cells per admitted event, and decay on the
+single logical frame clock. The current onset floor is **0.28** (canonical source authority).
+Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
+introducing a new vocal detector. The orbit-speed setting admits 0..0.025 revolutions/s.
+Nothing about these authored settings creates new per-frame Settings polling or new DSP.
+At **large** cards only star-peak brightness/shape and Moon/Sun **reactive modulation**
+need greater expressiveness: passive Moon halo and unrelated terrain/shoreline glow must
+remain at their existing strength. At **small** cards crowded vertices/overlapping bloom
+need pixel/DPR-aware density, size and emission footprint, never a blanket glow increase.
+The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` §2A.
 
-## Landscape camera and skyline correction (2026-10-13, awaiting operator validation)
+## Landscape camera, clipping and terrain skyline
 
-The Shockwave view keys retain the sole presentation-spec authority, but this framed landscape now
-admits turn -0.20..0.20 (roughly +/-36 degrees) and tilt 0.17..0.58 (roughly 15..52 degrees).
-WASD and Alt+left-drag saturate at those limits rather than wrapping; other Scene3D modes keep
-their original orbit behavior. Internal pan is admitted jointly with scene scale through the
-existing presentation configuration path, so gesture, zoom and reload apply the same bounds;
-its current conservative basin reference is (0.5, 0.68) in scene-interior fractions, kept
-inside the central 0.08..0.92 view. This bound needs operator verification for extreme
-custom terrain/zoom, and may be refined without adding competing geometry/preset authorities.
-The card and authored terrain are unchanged.
+The framed landscape admits canonical turn **-0.20..0.20** (roughly ±36°) and tilt
+**0.17..0.58** (roughly 15°..52°). WASD and Alt+left-drag saturate rather than wrap;
+Alt+right pan is bounded against scale to retain a composed portion of the basin (current
+reference anchor `(0.5, 0.68)` within central `0.08..0.92` fractions). Alt+wheel scales
+only the inner scene, preserving the outer bordered card and Edit/CUSTOM authority.
+These **landscape-specific values are not reusable defaults**. §4A FC must share the
+underlying bounded-camera capability for future framed 3D modes, with per-mode declared
+limits and composition targets. Framed camera pose remains independent of art presets.
 
-**Overscan near-plane correction:** the broad continuation necessarily contains lattice
-vertices at/behind the viewer at some permitted poses. Its vertex shader must emit a true
-homogeneous perspective position, with the camera-distance numerator never divided before
-hardware clipping. `basinClip` uses the same field/fit/pan/scale mapping as the unchanged
-inner-scene projection while supplying `clip.w=(camera-viewZ)/camera` and a coherent
-near/far depth. Moon/Sun body depth uses the same mapping so the existing body depth prepass
-and transparent scene composition remain coherent. Geometry/Glass/Vertices share the same
-position and depth; there is no second renderer or mesh. The front continuation now also
-fades before the camera-side skirt endpoint so the near-clipped ground cannot hide the
-lake. A real Windows GPU check is REQUIRED after the reported catastrophic diagonal sheets
-in the previous 2026-10-13 handoff. A GLSL compilation or static test is not visual proof.
+The overscanned surface can cross the camera near plane under admitted views. Its shader
+emits a homogeneous clip position and relies on hardware clipping rather than dividing
+before clipping. Surface triangles, glass normals, point markers, skyline and celestial
+hit-depth must agree with the same projection/scene pose, including extreme zoom/aspect.
+Foreground continuation fades before near-camera cutoffs; no second mesh or renderer is
+permitted to hide holes.
 
-The land-facing fragment now includes an optional-on-existing-controls, thin grazing-angle
-contour on visible raised terrain, tinted from `shockwave_grid_crest_color` and gently driven
-by the existing ridge audio energy and `shockwave_grid_glow` emission. This is a projected
-silhouette approximation, not a guaranteed one-pixel binary sky/terrain mask; whether it
-traces all desired far hills without internal highlight clutter requires real rendered review.
-The original lake shoreline remains independent.
+The **main mountain skyline** uses depth-tested land geometry offset narrowly in
+screen space against the real surface depth; water is excluded and its **lake shoreline**
+is independent. Do not reintroduce projected highest-column scans, grazing-angle paint,
+general wire edges, billboard strips or a separate remote rim. The **distant** horizon
+must be derived from *visible* far terrain/surface and fade out with it. A detached
+magenta/blue ring, floating oval, flattened extension, wallpaper-alpha seam or remote
+geometry edge is not an acceptable skyline. Compare physical GPU frames from multiple
+camera angles, zoom scales, card aspect ratios and Glass+Vertices surfaces. Maintain the
+accepted mountain and lake contours while repairing the far-right horizon. Compilation
+alone cannot establish visual correctness; approval requires agent review of rendered
+pixels or operator acceptance.
 
-**Operator direction:** Preset 1 is the only useful current visual starting point. Do not
-regenerate or retune it. Additional simplification of Surface Style/other controls, possibly
-retiring interior wire edges in favour of the lake and skyline contours, is a separate future
-slice and is NOT implemented by this correction. No GPU parity or 3D Detail cost claim is
-made until Windows GL/dual-display tests run.
+## Runtime lifetime, tests and acceptance
 
+Settings opens only after the active Qt Quick display generation retires. The RUN GC policy
+must thaw an active frozen generation at the stop boundary and only permit a GC sweep after
+Qt, GL and thread roots have drained, while keeping the strict Python-owner destruction
+barrier. A Settings -> Neon Lake activation -> Settings sequence must retire cleanly,
+including after the generation would have been frozen; do not introduce a mode-specific
+Settings-timer or a bypass for the display owner. See `Docs/TestSuite.md` for the maintained
+proof inventory and `Docs/Audits/Neon_Lake_Settings_And_Settings_Handoff_2026-10-13.md`
+for diagnostic history.
 
-## Operator check: 2026-10-13 second photographic pass
-
-The operator confirmed the original catastrophic perspective sheeting was repaired and the
-main endless landscape and bounded camera now work, subject to a narrow corner coverage gap
-at an oblique angle. A follow-up source slice increases left/front overscan, moves the front
-visibility fade outward, and makes remote continuation relax towards rolling terrain instead
-of indefinitely copying tall border hills. Same GPU mesh/point lattice and renderer owner.
-
-The operator requested a few degrees more flattening/upward look: the canonical Neon-only
-minimum tilt is now 0.17 (15.3 degrees), with existing maximum, turn and pan unchanged.
-This is a bounded camera range, **not** an assertion that every card scale or edited
-terrain can never expose sky at its boundary. Physical verification remains required.
-
-The skyline from the first slice barely appeared. The follow-up strengthens the high-land
-view-grazing response but it remains a shader-side **rim approximation**, not an exact
-screen-space terrain-versus-sky contour. Do not mark the final clean single-stroke skyline
-accepted or retire this requirement without operator inspection. Do not respond by adding
-mesh-triangle edges or a new setting category.
-
-Shader compilation/link errors are already raised by the GL program owner. A proposed
-future `--shaders` diagnostic mode should be opt-in, context-local, event-driven (compile/
-link, GPU API debug messages, program labels/admission and once-per-transition state),
-with bounded sidecar output and no GL polling/readback or per-frame debug overhead. It
-cannot discover an artistically incorrect, successfully compiled shader from logs alone.
-
-## 2026-10-13 follow-up, awaiting operator render proof
-
-- The **projected-column skyline attempt was physically rejected** on `image(20261013-215744).png`: its maximum-per-column logic produced disconnected magenta horizontal boxes unrelated to the actual terrain/sky silhouette. Superseding repair draws the same terrain triangles as a thin screen-space upward offset (1.8 physical pixels), biased behind the real surface in the original depth buffer. Water is excluded by its existing authored-zero classification. There are no scan columns, extra mesh, or mesh-triangle edge lines. This new edge is still **operator-unvalidated** at multiple angles and must not be marked accepted simply because the shader compiles.
-- Distant land now descends from the authored boundary over a shorter UV transition into low procedurally varied terrain, reducing the visibly repeated border hills. The 0..1 authored heights and water ownership remain untouched.
-- Sun/Moon receives a small analytic exterior halo in its existing depth-tested sky/body pass, with a modest response to the already captured spectrum midband (not a new voice detector). Position, lighting, scene reflections and near-camera body visibility culling keep one authority.
-- Primary controls retain the real land-growth strength; Rise/Settle timers live under Advanced Growth Timing (unchanged `terrain_motion` bucket key). Wire Density is now Surface Detail, Terrain Lines is Shoreline Colour, Surface Fill is Base Opacity. Distinct DSP and colour owners remain independent. The seven surface style combinations and generalized mesh wires are retired; old values are rewritten only by canonical persisted-input/preset forward migration, not by a permanent runtime Choice normalizer.
-- **Preset 1 is the only protected and shipped curated Neon Lake preset.** Slots 2 and 3 are retired explicitly by manifest debris instructions. The Custom slot remains supported; a previous selection index 1 is indistinguishable from the newly compacted Custom index 1 without version metadata, so older selections should be manually reselected if necessary. No old authored preset values are frozen into tests.
-
-## 2026-10-13 late follow-up: sky occlusion, star accents and editor brush (awaiting operator pixels)
-
-- **Settings crash from `logs6a63dcda0b6.zip`:** the advanced `terrain_motion` bucket was added to the spec but missing from canonical `ui.visualizer_bucket_states`; this produced `KeyError: 'shockwave_grid:terrain_motion'`. Add the closed-by-default key to the sole UI defaults authority, not a fallback that hides future declaration mistakes. Focused test now checks that all declared Neon buckets exist in canonical defaults.
-- **Thick-glass terrain occlusion:** sky is now drawn against a depth-only prepass of the same landscape in all sky/body-enabled cases; no Sun/Moon or stars through hills. The prior GREATER pass drew distant body behind foreground geometry, so it was removed. The optional halo remains the existing analytic body effect, subject to the same depth.
-- **Skyline:** the previous max-projection line strip is removed. A land-only screen-space silhouette uses the same displaced surface mesh with depth test; the lake has its independent shoreline. This is a physical rewrite, NOT operator acceptance.
-- **Starscape Beat:** one opt-in checkbox under Glow (moved from Sky in the 2026-10-14 UX regrouping) (default OFF, preserving Preset 1). The existing Shockwave onset ring selects three spread-out panoramic stars per admitted powerful event, at most two concurrent hits, with smooth decay over about 1.75 seconds; no new DSP, clock, timer, burst owner, or global consumer work. Glow uses the sky emission attachment, not a screen-positioned particle. Appearance on real music must be checked by the operator.
-- **Terrain brush:** the painted falloff and cursor preview now share a circle measured against the shorter physical canvas dimension. The saved N×N heightfield representation, Undo/Redo and Save/Cancel remain unchanged.
-- **Retired Edges values:** forward migration runs on persisted settings and saved preset ingestion; the canonical live Surface Style Choice accepts only the three supported styles. Legacy strings are not read by the live mode shader or Setting spec. No other mode gets migration logic.
-- **Verification:** pure-Python tests, shader compile/link and uniform checks performed without environment-variable mutation. Windows GL pixel proof and workload/dual-display acceptance remain outstanding.
-
-## 2026-10-14 diagnostic lifecycle, visible beat stars and horizon (pending Windows validation)
-
-The Settings dialog is built only after Quick display retirement. Diagnostic log
-`logs6a63dcda0b9.zip` establishes two very different outcomes: the initial
-Settings handoff completed before the 45-second RUN `gc.freeze()`, while the
-second one failed after the frozen live generation had activated Neon Lake.
-The existing RUN GC policy's frozen cycles could not be collected before the
-strict destruction barrier; the previous policy stop/unfreeze was too late (at
-application exit). The same GC-policy owner now thaws on stop, and authorizes
-**one collection after every Qt/GL/thread root is gone** if outstanding Python
-owners survive. This is not per-frame GC, not a barrier bypass, and not a second
-retirement authority. A later Settings transition cannot re-freeze the newly
-constructed generation; the startup 45-second shot is gated on actual RUN state.
-Physical repeated pause/activate/return testing remains mandatory.
-
-The opt-in beat-star cells now sample exact world rays from the existing framed
-view matrix's CPU-equivalent scalar parameters (fit, orbit, internal scale/pan,
-card aspect). Three spatially separated visible sky sectors select nearby bright
-stars from the unchanged panorama. They remain true panoramic stars, retaining
-existing onset-ring animation; no extra buffers, analysis owners or timers. The
-initial diagnostic Settings snapshot had Starscape Beat disabled; later edits
-might have changed it, so this log alone is **not** proof either way about the
-activated mode's enable gate. To validate on Windows, activate the
-checkbox under Glow and compare at strength/reactivity 1.0 against strong real
-onsets from the existing operator recordings.
-
-The earlier latitude-dependent sky-alpha band was physically rejected: it created
-an independent, ruler-straight wallpaper-opacity boundary. Sky coverage is now
-uniform across its own scene; only its *colour* has a dusk gradient. Terrain
-coverage/fade remains the one geometry authority. The distant skyline must no
-longer override that fade by inventing emissive geometry after terrain vanishes.
-Three extremely thin cloud-latitude strokes are also replaced with broken,
-undulating wisps, without additional noise textures or timers. The accepted
-foreground mountain contour is unchanged; the authored 0..1 terrain remains
-unmodified. The complete horizon remains **unaccepted pending actual render-image
-inspection by an agent or the operator**.
-
-## 2026-10-14 latest operator checkpoint (two open items only)
-
-Operator confirms the frozen-runtime Settings crash no longer reproduces, the
-Starscape Beat glows are visually good, and the main terrain silhouette is accepted.
-Beat entry floor is lowered 20% (.35 → .28) without changing emission/decay or the
-underlying shared onset stream. The sky's latitude-alpha transition and the
-artificial far-outline radiance floor, both capable of constructing false or
-partial horizon lines, were removed. Narrow unbroken cloud bands are now broken
-up along their authored sky coordinates. These are source repairs **not visual
-proof**: rendered horizon acceptance remains open. The only other open Neon Lake
-item is the terrain-reactivity redesign, with real-music recordings and the
-mode-owned DSP boundaries preserved. See `Current_Plan.md` §2A for the two active
-checks and the archived historical checklist for all earlier work.
+Neon Lake completion requires image/physical review of actual distant horizon, size/DPR,
+large-card glow/beat response and meaningful terrain reactivity; deterministic replay and
+operator real-music recordings must show appropriate transient, vocal/midband and sustained
+behavior with no bass washout. The operator's recordings are at
+`F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
+A local agent may run real-music replays and compare before/after clips. Six new experimental
+editable presets must be delivered without silently replacing the operator's current Preset 1 edits; their eventual aesthetic
+rejection does not invalidate verified implementation contracts. The live checklists and
+closure criteria live **only** in `Current_Plan.md` §2A, not a second checklist here.
+Rejected attempts and old checkpoint evidence belong in
+`Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md` and Historical Bugs,
+not in this live behavior reference.
