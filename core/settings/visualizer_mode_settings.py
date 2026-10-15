@@ -522,7 +522,7 @@ _SHOCKWAVE_GRID = ModeSettings(
                when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True)),
                enabled_when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True))),
         Toggle("shockwave_grid_starscape_beat", "Starscape Beat:",
-               "On stronger admitted beats, briefly brighten four widely separated stars across the sky. Gentle decay; no separate DSP clock.",
+               "On stronger admitted beats, briefly brighten three widely separated stars across the sky. Gentle decay; no separate DSP clock.",
                bucket="glow", when=("shockwave_grid_sky_enabled", True), enabled_when=("shockwave_grid_sky_enabled", True)),
         Slider("shockwave_grid_star_glow_strength", "Star Glow Intensity:", 0.0, 2.0,
                "Brightened stars on admitted strong beats.", bucket="glow",

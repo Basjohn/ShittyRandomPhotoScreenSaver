@@ -109,8 +109,13 @@ height/bank-distance storage; Neon uses the latter as one representation. The di
 configuration, leaving exact authored-zero water ownership unchanged. Water displacement tapers over a narrow bank
 band so a crest meets the solid shore continuously. The mode binds a half-cell
 bank band (`0.5/min(cells)`): nearby water retains attack/release motion and is fully
-reactive by the next mesh cell, while the exact bank stays stationary. A broad
-multi-cell attenuation strip is not part of the shoreline contract.
+reactive by the next mesh cell. Conservative zero-distance junctions are refined
+locally against the real bilinear-positive support rather than leaving whole water cells flat.
+The rendered shoreline follows the existing cubic `.018` contour, beyond the square
+zero-height control cells: the same water waves and detail fade through that already
+water-coloured shallow fringe, reaching zero at the visible contour. Authored height data
+and exact-zero membership are unchanged; dry land and its growth behavior are unchanged.
+A broad multi-cell attenuation strip is not part of the shoreline contract.
 The texture uploads only changed authored data and fences
 unpack/texture/sampler state. Allocation/deletion failures stay loud and owned for retry.
 It creates no clock or global texture cache.
@@ -135,7 +140,7 @@ on the existing logical clock. Water uses travelling crests and echo rings, with
 overlap. Land has eight separate mode-owned growth envelopes with authored rise/settle times, static surface detail
 and frequency-driven lighting. Its targets use the existing passage ramp and musical level/presence gate, independently
 of water-onset admission and unchanged Spectrum bars. Silence releases growth even if source bars remain retained.
-Growth=0 freezes land geometry while its light can still react. The renderer consumes
+Growth=0 freezes dry land geometry while its light can still react; the shallow wet fringe keeps its water waves. The renderer consumes
 immutable growth values; it does not simulate them. Disabled movement discards envelope work; re-enabling starts from
 zero on the existing capture clock. Sky, celestial body and bloom remain optional. All context-local resources retire
 through the normal mode owner; unchanged shared consumers acquire no heightfield work.
@@ -249,12 +254,18 @@ outer rim only. Fixed angular slots fade additional marks smoothly during resize
 there is no second mesh, surface lattice, phase or glow owner.
 
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
-projected framed sky**, select four spaced star cells per admitted event, and decay on the
+projected framed sky**, select three spaced star cells per admitted event, and decay on the
 single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).
 Selection spans upper, middle and lower sky bands with event-driven horizontal/vertical
 strata, rather than a shallow row near the card's top. Two recent events retain at
-most eight cells. Canonical camera/fit inputs are required; there is no alternate
+most six cells. Release uses the existing curve at 60% of its former fade rate
+(`1.75/0.6` seconds). Up to three candidates per star prefer clear sky around the
+visible body and authored terrain; coarse terrain checks are bounded and cached by
+star/view/terrain, independent of event age. This admission preference creates no depth readback.
+Canonical camera/fit inputs are required; there is no alternate
 tilt-only projection. Terrain and solid celestial coverage still mask hidden stars.
+The terrain coverage pass erases both sky colour and star emission, so transparent
+terrain materials cannot leave hidden stars feeding bloom.
 Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
 introducing a new vocal detector. A smooth bounded drive retains pulse contrast at
 high Reactivity instead of pinning most musical frames at a hard gain ceiling.

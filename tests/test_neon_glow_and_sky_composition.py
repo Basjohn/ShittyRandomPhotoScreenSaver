@@ -65,7 +65,7 @@ def test_sky_is_composited_first_then_subtracted_by_exact_terrain_coverage():
 def test_midstrength_beat_now_selects_actual_visible_panorama_star_cells():
     events=((0.08,0.25,-0.3,.55),)
     cells=_framed_stars(events,.35,.07)
-    assert len(cells)==4
+    assert len(cells)==3
     assert all(0.0<c[2]<=1.0 for c in cells)
     assert abs(cells[0][0]-cells[1][0])>25
     assert not _framed_stars(((0.08,0.25,-0.3,.2),),.35,.07)

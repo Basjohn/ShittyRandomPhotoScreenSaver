@@ -90,7 +90,7 @@ uniform float uSkyStrength;
 uniform vec4 uStarColor;
 uniform vec2 uStarGlow; // intensity and response for selected beat stars
 uniform int uBeatStarCount;
-uniform vec4 uBeatStarCells[8];  // panorama star-grid x/y, fade strength
+uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
 uniform vec4 uCloudColor;
 uniform vec4 uHorizonColor;
 
@@ -350,10 +350,10 @@ float basinBeatStarLight(vec3 ray,vec2 glow) {
     vec2 grid=vec2(atan(ray.x,-ray.z),asin(clamp(ray.y,-1.0,1.0)))*420.0;
     float light=0.0;
     vec2 pixelScale=max(fwidth(grid),vec2(1e-4));
-    for (int i=0; i<8; ++i) {
+    for (int i=0; i<6; ++i) {
         if (i>=uBeatStarCount) break;
         // Cull far cells before costly halo math. This is an opt-in effect,
-        // and only four (occasionally eight) small star regions participate.
+        // and only three (occasionally six) small star regions participate.
         vec2 difference=grid-uBeatStarCells[i].xy-0.5;
         if (any(greaterThan(abs(difference),vec2(1.0)+6.0*pixelScale))) continue;
         // Actual panorama cells, with a several-pixel halo and a restrained

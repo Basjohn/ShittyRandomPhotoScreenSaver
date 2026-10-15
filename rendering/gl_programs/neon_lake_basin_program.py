@@ -1,9 +1,9 @@
 """Framed basin projection and terrain/water shaders over shared Scene3D owners.
 
-Authored base height alone classifies water. Audio changes water height and light;
-solid land has a small bounded lift, never the water's travelling displacement.
+Authored base height alone classifies water. Its travelling waves join the visible
+shore through the shallow fringe; dry land retains its independent bounded lift.
 The fit is static for authored terrain/view and the final scene pose acts only in
-the card interior. No audio-dependent framing or geometry is involved.
+the card interior. Audio cannot change framing or target sizing.
 """
 from __future__ import annotations
 
@@ -134,6 +134,7 @@ vec4 basinClip(vec3 world) {
 """
 
 _TERRAIN = """
+const float BASIN_SHORE_HEIGHT=0.018;
 uniform sampler2D uTerrain;
 uniform int uTerrainSize;
 uniform vec3 uLand; // height, restrained reactivity, static detail
@@ -222,6 +223,24 @@ float basinLandHeight(vec2 uv,float base,float curved) {
     float distance=max(0.0,basinOutside(uv)-0.20);
     return height-0.38*distance*distance;
 }
+float basinBankDistance(vec2 uv) {
+    float cached=sceneHeightfieldBankDistance(uTerrain,uTerrainSize,uv);
+    if (cached>=uWaterBankBand) return cached;
+    // Interpolated conservative distances can be zero across an entire water
+    // cell at a concave bank junction. Resolve only this narrow band against
+    // the actual bilinear-positive support, not its expanded control samples.
+    vec2 p=uv*float(uTerrainSize-1);
+    ivec2 cell=ivec2(floor(p));
+    float distance=1.0;
+    for (int y=-1;y<=2;++y) for (int x=-1;x<=2;++x) {
+        ivec2 site=clamp(cell+ivec2(x,y),ivec2(0),ivec2(uTerrainSize-1));
+        if (texelFetch(uTerrain,site,0).r>0.0) {
+            vec2 delta=max(abs(p-vec2(site))-1.0,vec2(0.0));
+            distance=min(distance,length(delta)/float(uTerrainSize-1));
+        }
+    }
+    return distance;
+}
 vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) {
     vec2 p = vec2((uv.x*2.0 - 1.0)*uHalfWidth, -uv.y*SHOCKWAVE_DEPTH);
     float base = basinBase(uv);
@@ -230,13 +249,20 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     crest = min(wave.y, 2.5);
     energy = basinEnergy(uv)*(1.0-smoothstep(0.0,0.55,outer));
     float height;
-    curved=0.0;
-    if (sceneHeightfieldWater(base)) {
-        float bank=smoothstep(0.0,uWaterBankBand,sceneHeightfieldBankDistance(uTerrain,uTerrainSize,uv));
-        height = bank*(0.18*tanh(wave.x/0.18) + 0.0025*uWaterDetail*sin(15.0*p.x + 18.0*p.y + uTime));
+    // The visible shoreline is the existing .018 cubic contour, beyond the
+    // square bilinear-zero cells. Join waves through that already water-coloured
+    // shallow fringe instead of stopping at a jagged control-cell boundary.
+    // Deep water is farther than the cubic support, so needs no cubic sampling.
+    bool water=sceneHeightfieldWater(base);
+    curved=water && sceneHeightfieldBankDistance(uTerrain,uTerrainSize,uv)>=1.0/float(uTerrainSize-1)
+           ? 0.0 : basinCurve(uv);
+    float wet=outer<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,curved) : 0.0;
+    float ripple=0.18*tanh(wave.x/0.18)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
+    if (water) {
+        float bank=smoothstep(0.0,uWaterBankBand,basinBankDistance(uv));
+        height = max(bank,wet)*ripple;
     } else {
-        curved=basinCurve(uv);
-        height = basinLandHeight(uv,base,curved);
+        height = basinLandHeight(uv,base,curved)+wet*ripple;
     }
     return vec3(p.x, height, p.y);
 }
@@ -310,7 +336,7 @@ float basinShoreLight(vec2 uv, float base, float curved) {
     // outside it can cross the visual shore band without containing water.
     if (sceneHeightfieldWater(base) || any(lessThan(uv,vec2(0.0)))
         || any(greaterThan(uv,vec2(1.0)))) return 0.0;
-    float distance=abs(curved-0.018)/max(fwidth(curved),0.0001);
+    float distance=abs(curved-BASIN_SHORE_HEIGHT)/max(fwidth(curved),0.0001);
     return (1.0-smoothstep(0.45,1.15,distance))
            +0.12*exp(-pow(distance/2.8,2.0));
 }
@@ -362,7 +388,7 @@ void main() {
         // precisely the surface's fading coverage, while writing real depth.
         // The renderer sets a temporary destination-only blend for this pass.
         FragColor=vec4(0.0,0.0,0.0,distanceFade);
-        Emission=vec4(0.0);
+        Emission=vec4(0.0,0.0,0.0,distanceFade);
         return;
     }
     // Classification is sampled again at the fragment: interpolated displaced
@@ -416,7 +442,9 @@ void main() {
     vec3 waterFill=uWaterColor.rgb*(0.60+0.10*light);
     vec3 landFill=uTerrainFillColor.rgb+palette*(0.025+0.055*light);
     vec3 fill=water ? waterFill : mix(waterFill,landFill,shore);
-    if (water) {
+    float wetShore=basinOutside(vUv)<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,vCurvedBase) : 0.0;
+    float waterCoverage=water ? 1.0 : wetShore;
+    if (waterCoverage>0.0) {
         vec2 curveUv=vUv+vec2(0.0,uScroll/SHOCKWAVE_DEPTH);
         float waveWire=sceneHeightfieldWaterCurves(curveUv,vWorld.y,uCurveCells,uEdgePx);
         float ripple=(vWorld.z+uScroll)*26.0+0.35*sin(vWorld.x*5.0)+vWorld.y*9.0;
@@ -424,13 +452,13 @@ void main() {
         float sheen=1.0-smoothstep(0.0,0.65*uEdgePx,distance);
         float curveCoverage=waveWire*(0.11+0.55*min(crest,1.5));
         float sheenCoverage=sheen*(0.12+0.16*crest)*uWaterDetail;
-        line=1.0-(1.0-curveCoverage)*(1.0-sheenCoverage);
+        line=(1.0-(1.0-curveCoverage)*(1.0-sheenCoverage))*waterCoverage;
     }
     float ridgeWeight=clamp(base*0.8+0.2*light+0.15*sin(vWorld.x*7.0+vWorld.z*5.0),0.0,1.0);
     vec3 wire=palette*(water ? 0.65+0.55*crest : 0.65+0.2*ridgeWeight+1.65*vEnergy*ridgeWeight);
     // General land/water mesh wires are retired, but independently composed
     // travelling water accents remain. The lake perimeter is separate below.
-    if (!water) line=0.0;
+    if (waterCoverage<=0.0) line=0.0;
     if (uPass == 0) {
         // Reflection has no land fill. Broken horizontal water bands split
         // the mirrored wires into trails instead of accumulated opaque slabs.

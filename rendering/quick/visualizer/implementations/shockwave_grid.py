@@ -201,6 +201,7 @@ class QuickShockwaveGridRenderer:
         for uniform,key in (("uSunColor","sun_color"),("uMoonColor","moon_color"),("uSkyColor","sky_color"),
                             ("uStarColor","star_color"),("uCloudColor","cloud_color"),("uHorizonColor","horizon_color")):
             gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
+        return position
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -247,7 +248,7 @@ class QuickShockwaveGridRenderer:
                 sky_vao, sky_count = r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
                 gl.glUseProgram(sky)
                 self._bind_view(sky_uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
-                self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
+                body_position = self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
                 gl.glUniform1f(sky_uniforms["uMidband"],midband)
                 gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
                                int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices"))))
@@ -267,6 +268,13 @@ class QuickShockwaveGridRenderer:
                           float(parameter(parameters,"shockwave_grid_scene_pan_x")),
                           float(parameter(parameters,"shockwave_grid_scene_pan_y"))),
                     aspect=field[2]/field[3],
+                    terrain=(terrain["size"],terrain["data"],half_width,
+                             float(parameter(parameters,"shockwave_grid_terrain_height"))),
+                    body=(*body_position,float(parameter(parameters,"shockwave_grid_sun_size")))
+                         if bool(parameter(parameters,"shockwave_grid_sun_enabled"))
+                         and rgba(parameter(parameters,"shockwave_grid_"+
+                             ("moon_color" if str(parameter(parameters,"shockwave_grid_sun_mode"))=="Moon" else "sun_color")))[3]>0.0
+                         else None,
                 ) if bool(parameter(parameters, "shockwave_grid_starscape_beat")) else ()
                 gl.glUniform1i(sky_uniforms["uBeatStarCount"], len(star_bursts))
                 if star_bursts:

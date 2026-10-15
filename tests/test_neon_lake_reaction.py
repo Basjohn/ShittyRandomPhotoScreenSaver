@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from OpenGL import GL as gl
 
-from rendering.gl_programs.heightfield import heightfield_bytes, heightfield_surface_bytes, normalize_heightfield, sample_heightfield
+from rendering.gl_programs.heightfield import heightfield_bytes, heightfield_surface_bytes, normalize_heightfield, sample_heightfield, sample_heightfield_curve
 from rendering.gl_programs.neon_lake_basin_program import NEON_VERTEX_SOURCE
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, shockwave_height,
@@ -130,13 +130,16 @@ def test_gpu_water_membership_is_authored_and_both_materials_stay_bounded(surfac
     sustained = surface.draw(events, level=1.0, detail=1.0, water_detail=1.0, time=1.0)
     bases = np.asarray([[sample_heightfield(before, x / 64.0, y / 64.0) for x in range(65)] for y in range(65)])
     water = bases == 0.0
+    curves=np.asarray([[sample_heightfield_curve(before,x/64.,y/64.) for x in range(65)] for y in range(65)])
+    dry_land=(~water)&(curves>=.0181)
     assert water.any() and (~water).any()
     for result in (quiet, onset, sustained):
         assert np.array_equal(result[..., 1], water.astype(np.float32))
         assert np.isfinite(result).all()
         assert np.max(np.abs(result[..., 0][water])) <= 0.1825 + 2e-6
-        # The independent land envelope supplies at most 25% geometric growth.
-        ratio = result[..., 0][~water] / quiet[..., 0][~water]
+        # Dry land retains its independent <=25% growth envelope. The shallow
+        # water-coloured fringe below the visible shore carries water waves.
+        ratio = result[..., 0][dry_land] / quiet[..., 0][dry_land]
         assert ratio.min() >= 1.0 - 2e-6 and ratio.max() <= 1.25 + 2e-6
     assert np.max(np.abs(sustained[..., 0][water] - quiet[..., 0][water])) > 0.01
     assert np.max(sustained[..., 0][~water] - quiet[..., 0][~water]) > 0.01
@@ -168,6 +171,8 @@ def test_zero_terrain_movement_freezes_geometry_while_ridge_energy_still_respond
     quiet = surface.draw(movement=0.0, detail=1.0, time=0.0)
     active = surface.draw([(0.4, -0.8, -1.2, 2.0)], level=1.0, movement=0.0, detail=1.0, time=10.0)
     land = quiet[..., 1] == 0.0
+    curves=np.asarray([[sample_heightfield_curve(surface.terrain,x/64.,y/64.) for x in range(65)] for y in range(65)])
+    land &= curves>=.0181
     assert np.array_equal(quiet[..., 0][land], active[..., 0][land])
     assert np.max(quiet[..., 2][land]) == 0.0
     assert np.min(active[..., 2][land]) > 0.9
@@ -175,15 +180,68 @@ def test_zero_terrain_movement_freezes_geometry_while_ridge_energy_still_respond
     assert np.max(np.abs(active[..., 0][~land] - quiet[..., 0][~land])) > 0.001
 
 
-def test_water_displacement_meets_zero_bank_without_moving_authored_membership(surface):
+def test_water_reaches_past_the_control_cell_edge_without_changing_authored_membership(surface):
     active = surface.draw([(0.4, -0.8, -1.2, 2.0)], water_detail=1.0, time=1.0)
     quiet = surface.draw()
-    # This field's last zero column is u=.5; positive land starts immediately
-    # beyond it. A wave must meet that bank rather than expose a vertical wall.
+    # The control-cell edge is not the visible cubic shore. The wet fringe
+    # joins it; dry/steep portions of this same bank remain anchored.
     assert np.array_equal(active[..., 1], quiet[..., 1])
-    assert np.max(np.abs(active[:, 32, 0])) == 0.0
-    assert np.max(np.abs(active[:, 30, 0])) < np.max(np.abs(active[:, 27, 0]))
+    assert np.max(np.abs(active[:, 32, 0])) > 0.0001
+    assert np.max(np.abs(active[10:-10, 32, 0])) == 0.0
     assert np.max(np.abs(active[:, 27, 0])) > 0.01
+
+
+def test_concave_shore_junction_has_no_dead_water_cell(qt_app):
+    # Positive sites on opposite corners make every conservative distance
+    # sample around this all-zero cell vanish, despite its open water interior.
+    heights=[0.0]*25
+    heights[1*5+1]=.6
+    heights[4*5+4]=.6
+    probe=_SurfaceProbe(normalize_heightfield({'version':1,'size':5,'heights':heights}))
+    try:
+        rect=(.5,.5,.75,.75)
+        events=[(.4,.1,-1.2,2.)]
+        active=probe.draw(events,uv_rect=rect,bank_band=.01)
+        untapered=probe.draw(events,uv_rect=rect,bank_band=1e-6)
+        assert np.all(active[...,1]==1.)
+        assert np.max(np.abs(active[8:-8,8:-8,0]))>.01
+        assert np.allclose(active[8:-8,8:-8,0],untapered[8:-8,8:-8,0],atol=2e-6)
+        assert np.isfinite(active).all()
+    finally:
+        probe.close()
+
+
+def test_shallow_water_fringe_joins_the_visible_cubic_shore_and_leaves_dry_land_static(qt_app):
+    terrain=normalize_heightfield({'version':1,'size':5,'heights':[0.,0.,0.,.01,.05]*5})
+    # Locate the existing rendered .018 contour independently of mesh cells.
+    low,high=.5,1.
+    for _ in range(45):
+        middle=(low+high)/2
+        if sample_heightfield_curve(terrain,middle,.5)<.018:
+            low=middle
+        else:
+            high=middle
+    edge=(low+high)/2
+    probe=_SurfaceProbe(terrain)
+    try:
+        events=[(.4,0.,-1.2,2.)]
+        rect=(.49,0.,edge,1.)
+        quiet=probe.draw(movement=0.,uv_rect=rect)
+        active=probe.draw(events,movement=0.,uv_rect=rect)
+        delta=np.abs(active[...,0]-quiet[...,0])
+        # Substantial real wave motion continues into positive, visibly wet
+        # authored cells. The outer visible shore and dry terrain do not move.
+        positive=active[...,1]==0.
+        assert np.max(delta[positive])>.01
+        assert np.max(delta[:,-1])<1e-6
+        dry=dict(movement=0.,uv_rect=(edge+.01,0.,1.,1.))
+        assert np.array_equal(probe.draw(events,**dry)[...,0],probe.draw(**dry)[...,0])
+        # A close view of the old square zero/nonzero boundary has no height step.
+        near=probe.draw(events,movement=0.,uv_rect=(.499,0.,.501,1.))
+        assert np.max(np.abs(near[:,33,0]-near[:,31,0]))<.001
+        assert terrain['heights']==[0.,0.,0.,.01,.05]*5
+    finally:
+        probe.close()
 
 
 @pytest.mark.parametrize("quality", ["High", "Balanced", "Performance", "KAK"])
@@ -215,7 +273,9 @@ def test_nearshore_water_follows_wave_attack_and_release_without_a_flat_strip(su
         # how much motion should be present.
         untapered = surface.draw(events, uv_rect=uv_rect, bank_band=1e-6)
         assert np.array_equal(active[..., 1], quiet[..., 1])
-        assert np.max(np.abs(active[:, -1, 0])) == 0.0
+        # Dry/steep banks stay pinned; the low wet fringe continues towards
+        # the visible curved shore instead of stopping at the square cell edge.
+        assert np.max(np.abs(active[10:-10, -1, 0])) == 0.0
         for column, minimum_share in ((48, 0.65), (32, 0.95)):
             reference = np.max(np.abs(untapered[:, column, 0]))
             assert reference > 0.01

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from rendering.gl_programs.neon_starscape import (
     STARSCAPE_BEAT_MIN_STRENGTH,
+    STARSCAPE_BEAT_RELEASE,
     starscape_beat_cells,
 )
 
@@ -21,8 +22,8 @@ def test_starscape_entry_floor_is_exactly_thirtysix_percent_lower_than_035():
     below = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH - 0.001),)
     at = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH),)
     assert _framed_stars(below, 0.3, 0.1) == ()
-    assert len(_framed_stars(at, 0.3, 0.1)) == 4
-    assert len(_framed_stars(((1.75, 0.2, -0.5, 1.0),), 0.3, 0.1)) == 0
+    assert len(_framed_stars(at, 0.3, 0.1)) == 3
+    assert len(_framed_stars(((STARSCAPE_BEAT_RELEASE, 0.2, -0.5, 1.0),), 0.3, 0.1)) == 0
 
 
 def test_sky_opacity_has_no_independent_angular_cut_and_outline_never_revives_faded_ground():
