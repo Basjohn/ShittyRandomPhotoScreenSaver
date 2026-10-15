@@ -104,9 +104,20 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
 
-- [ ] **Deferred Neon terrain deformation — future, nonblocking; not for this run.** Design proper
-  spatial terrain deformation/reactivity as separate future work. Preserve the currently accepted
-  appearance and timing until that task is explicitly resumed; do not implement it during Bubble migration.
+- [ ] **NT — Neon terrain reaction and editor (operator-authorized 2026-10-16; supersedes the deferred item).**
+  - NT1 editor: Raise/Lower/Flatten strength applies per unit of stroke length (mouse speed and dab spacing do not
+    change the result) on a cubic slider curve; a Falloff slider (flat core, smooth skirt, cursor shows both);
+    Flatten approaches its height gradually with falloff and snaps only at 100%; Lower never reaches water (only
+    the Water brush authors exact zero).
+  - NT2 reaction: its own **Terrain Reaction** bucket (React to Music toggle, **off by default, presets choose**;
+    Strength, Swell, Pulses, Peaks, Motion Speed, Rise, Settle); replaces Waves' Terrain Growth and the Growth
+    Timing bucket (old values migrate). Real deformation inside the one height owner (`basinLandHeight`), zero at
+    water so the shoreline never moves. Operator: organic movement through the ground that reshapes it from the
+    music temporarily matters most; the present swell is weak ("piss"), Swell is the least wanted of the three.
+    Height-band frequency mapping (not screen columns); per-band shares x musical weight with a novelty emphasis,
+    soft limit and share cap so bass cannot pin or drown it; prove on loud/bass-heavy recordings.
+  - NT3 glow: Beat Star glow colour tweakable in Settings; water face-edge lines glowable with their own glow colour.
+  - NT4 presets: replace Neon presets 4 onward with up to 10 new varied originals (operator prunes).
 
 ### SC4. Just Make It Work Pools | provider selection, independently scoped
 
