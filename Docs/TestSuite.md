@@ -41,6 +41,13 @@ The independently runnable Neon mesh/projection regression avoids the shared fix
 This command has no environment-variable manipulation. It validates pure mesh/projection
 geometry only, not Qt/OpenGL pixels, visual acceptance or full suite status.
 
+Focused GL tests that own their storage and lifetimes may explicitly load
+`-p tools.pytest_qt_noenv --noconftest`. This supplies only `qt_app` via public Qt APIs;
+it does not supply the ordinary suite's storage, QML or runtime cleanup fixtures.
+`tests/test_neon_presentation.py` checks item-matrix physical pixel mapping across
+window sizes/DPR and executes the production shoreline helper on real GL: continued
+land cannot emit a false lake contour, while authored shoreline admission remains.
+
 ## Visualizer migration and framed-3D proof gates
 
 Original Bubble V5 is a **parity migration**, not a new reactivity version: save an operator-independent

@@ -1,9 +1,9 @@
 # Neon Lake V4A historical checkpoints (superseded)
 
-This is an archival copy of the earlier `Current_Plan.md` Neon Lake implementation/checkpoint
-notes before the operator closed all but two active Neon Lake actions on 2026-10-14.
+This is an archival copy of earlier `Current_Plan.md` Neon Lake implementation/checkpoint
+notes, retained as historical evidence.
 The checkboxes and acceptance requests below are **historical**, not live action items.
-The current two-item scope is solely in `Current_Plan.md` §2A; authoritative
+The current scope is solely in `Current_Plan.md` §2A; authoritative
 implementation contracts remain in `Docs/Reference/Neon_Lake_Basin.md`.
 
 ---

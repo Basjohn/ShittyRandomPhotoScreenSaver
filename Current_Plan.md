@@ -72,18 +72,10 @@ change. Never restore an older copy or pin artistic values/hashes as test expect
   card pixels and DPR, keeping independent features distinguishable and the terrain appearance
   coherent. Do not indiscriminately increase intensity at small sizes.
 
-- [ ] **Horizon rendering and visual acceptance.** The far-right/top-right detached
-  magenta/blue line or flattened oval is **still present in the operator's latest image**;
-  earlier sky-alpha, distant brightness floor and cloud-strip fixes were insufficient.
-  Preserve the **accepted depth-tested near mountain skyline** and lake shoreline, but
-  diagnose the distant extension using actual projected/depth-tested surface visibility.
-  The distant contour must belong to the *real visible terrain/sky silhouette*, not a
-  remote mesh edge, isolated elevated ribbon, scanline, repeat/extrusion artifact or
-  a separate parallel fake horizon. Fade the real outer surface and outline together,
-  including Vertices + Glass, without a card-wide alpha seam or showing wallpaper
-  through opaque mountains. Capture comparable low/high-angle, zoom and aspect images;
-  close on **agent review of actual rendered pixels or explicit operator acceptance**,
-  never GLSL compilation, structural unit tests or a guessed brightness tweak.
+The detached distant oval is closed by actual GPU image review: shoreline emission now
+belongs only to authored water/land boundaries, while the accepted mountain silhouette
+and near lake contour remain intact. Whole-window/card point-width amplification is
+also corrected; residual physical-size/DPR density and bloom acceptance remains below.
 - [~] **Moon halo integration, idle presence and non-tube shape — Awaiting Validation.**
   The current Moon texture/body is promising but still reads as an isolated sphere rather
   than a luminous part of Neon Lake's visual language. Keep the manually authored Moon Phase

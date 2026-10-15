@@ -24,6 +24,17 @@ def basin_camera(half_width: float, maximum: float) -> float:
     return max(3.0, 1.25 * math.sqrt(half_width ** 2 + (SHOCKWAVE_DEPTH / 2) ** 2 + maximum ** 2))
 
 
+def basin_pixel_scale(matrix, viewport) -> float:
+    """Physical pixels per item unit, from Quick's actual affine item transform.
+
+    The viewport belongs to the whole window, not the framed card. Dividing
+    that window's width by the card width makes marks grow as a card shrinks.
+    Area scale also preserves uniform marks under a rotated item transform.
+    """
+    determinant = matrix[0] * matrix[5] - matrix[1] * matrix[4]
+    return math.sqrt(abs(determinant) * viewport[2] * viewport[3]) / (2.0 * abs(matrix[15]))
+
+
 def basin_project(point, tilt, turn, camera):
     return scene3d_orbit_project(point,tilt,turn,camera=camera,pivot=(0.0,0.0,-0.5*SHOCKWAVE_DEPTH))
 
@@ -290,9 +301,21 @@ void main() {
 """
 )
 
+_SHORELINE_GLSL = """
+float basinShoreLight(vec2 uv, float base, float curved) {
+    // Only the authored domain can contain a lake. The positive rolling land
+    // outside it can cross the visual shore band without containing water.
+    if (sceneHeightfieldWater(base) || any(lessThan(uv,vec2(0.0)))
+        || any(greaterThan(uv,vec2(1.0)))) return 0.0;
+    float distance=abs(curved-0.018)/max(fwidth(curved),0.0001);
+    return (1.0-smoothstep(0.45,1.15,distance))
+           +0.12*exp(-pow(distance/2.8,2.0));
+}
+"""
+
 NEON_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_VOLUME_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY
+    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_VOLUME_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + _SHORELINE_GLSL
     + """
 in vec3 vWorld;
 in vec2 vUv;
@@ -364,10 +387,7 @@ void main() {
         return;
     }
     float shore=smoothstep(0.0,0.055,base);
-    float shoreDistance=abs(vCurvedBase-0.018)/max(fwidth(vCurvedBase),0.0001);
-    float shoreLight=(1.0-smoothstep(0.45,1.15,shoreDistance))
-                    +0.12*exp(-pow(shoreDistance/2.8,2.0));
-    shoreLight*=water ? 0.0 : 1.0;
+    float shoreLight=basinShoreLight(vUv,base,vCurvedBase);
     float line=sceneHeightfieldCurveWire(vUv,vCurvedBase,uCurveCells,uEdgePx)*shore;
     float crest = clamp(vCrest,0.0,2.5);
     vec3 palette = mix(uLineColor.rgb,uCrestColor.rgb,clamp((water ? crest*0.6 :
