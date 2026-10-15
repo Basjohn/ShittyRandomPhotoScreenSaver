@@ -1,4 +1,4 @@
-"""Neon final-two-item checkpoint: terrain-owned horizon and easier star admission.
+"""Neon terrain-owned horizon and star admission contracts.
 
 No mutable presets, environment variables, Qt renderer, or GL context required.
 """
@@ -12,8 +12,8 @@ from rendering.gl_programs.neon_starscape import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_starscape_entry_floor_is_exactly_twenty_percent_lower():
-    assert abs(STARSCAPE_BEAT_MIN_STRENGTH - 0.28) < 1e-12
+def test_starscape_entry_floor_is_exactly_thirtysix_percent_lower_than_035():
+    assert abs(STARSCAPE_BEAT_MIN_STRENGTH - 0.224) < 1e-12
     below = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH - 0.001),)
     at = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH),)
     assert starscape_beat_cells(below, 0.3, 0.1) == ()
@@ -28,6 +28,8 @@ def test_sky_opacity_has_no_independent_angular_cut_and_outline_never_revives_fa
     assert 'float alpha = clamp(uSkyColor.a * uSkyStrength, 0.0, 1.0);' in sky
     assert 'float horizonAtmosphere' not in sky
     assert 'float broken = smoothstep(0.33, 0.66, gaps);' in sky
+    assert 'float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;' in sky
+    assert 'float starVisibility=1.0-basinCelestialSkyMask(eye,ray);' in land
     assert 'vContourFade=basinDistanceFade(aUv);' in land
     assert 'vContourFade=max(' not in land
     assert 'float alpha=uCrestColor.a*vContourFade;' in land

@@ -135,7 +135,29 @@ approximation, not photo capture, refraction or a new reflection target. Neon en
 grazing highlights; optional body lighting uses the same material and coarse heightfield occlusion.
 
 The existing `sun_enabled` key gates the selected Sun or Moon independently from sky intensity. Sun keeps vibrant
-bands; Moon adds authored phase and restrained procedural craters. Both have separate RGBA. XYZ and radius are art:
+bands; Moon uses authored phase and a deterministic 3-D spherical lunar surface with
+large basaltic maria, granular highlands and sparse crater bowls/rims. The 3-D sampling
+must not introduce longitude seams, rectangular stamp repetition or camera-dependent
+surface drift. The shadowed face may remain very faintly visible as earthshine, but
+contributes no Moon bloom. The Moon Phase slider (0..1) is operator-authored art, not real-world ephemeris,
+local clock, calendar date, or orbital position. Its direction is resolved relative
+to the viewing basis, so moving the scene or camera does not silently change a
+selected waxing/waning crescent into another phase. 0/1 is New, .125 waxing
+crescent, .25 first quarter, .5 Full, .75 last quarter and .875 waning crescent.
+The Moon's 3-D crater/maria albedo remains sampled in world space and is never
+an alternate phase owner. Optional orbital motion moves only the body, not the phase.
+
+The illuminated disc is **ordinary albedo colour**, not blanket glow emission.
+A very narrow illuminated *inner outer-limb* band and an analytic exterior halo
+supply the rim emission, both gated by that one phase terminator. The centre of
+even a Full Moon produces no Moon bloom; the dark face can retain faint,
+non-emissive earthshine and the unlit limb emits nothing. Thin waxing and waning
+crescents must each remain visible and glow solely along their lit arc, not as
+an indiscriminate circular aura. GPU tests must distinguish face colour from
+emission and cover New, thin/wide crescents both ways, quarters, gibbous and Full.
+Neither effect changes orbit timing, reflection/light sampling, the shared
+celestial body, Sun presentation, or authored controls.
+Both bodies have separate RGBA. XYZ and radius are art:
 X is in basin half-widths and Y/Z/radius in scene units. Optional orbit is off by default, analytic on the existing logical
 animation time around `(0, 0, -1.2)`; speed is revolutions/second. It does not affect the five camera keys or outer geometry.
 The sky background is drawn continuously first, then the terrain's **real depth-only pass** erases
@@ -182,19 +204,35 @@ pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; 
 (`terrain_motion`) owns the existing timing rows. Spec-owned conditional controls remain
 hidden when their prerequisites are disabled, retain their saved value while hidden, and
 reappear on re-enablement. The Glow bucket is closed by default. The passive celestial halo
-is enabled by default, while Starscape Beat is opt-in.
+is enabled by default, while Starscape Beat is opt-in. A potential sparse celestial
+rim-vertex overlay is only an operator-review candidate, not an existing control or
+an accepted reason to add surface-wide lattice/microrelief costs.
 
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
 projected framed sky**, select three spaced star cells per admitted event, and decay on the
-single logical frame clock. The current onset floor is **0.28** (canonical source authority).
+single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).
 Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
-introducing a new vocal detector. The orbit-speed setting admits 0..0.025 revolutions/s.
+introducing a new vocal detector. Beat stars and their bloom are suppressed behind the
+Moon/Sun disc so the body fully owns its coverage, and the Moon's lit-face lift remains a
+small same-colour feather near the illuminated rim rather than whole-disc emission. The orbit-speed setting admits 0..0.025 revolutions/s.
 Nothing about these authored settings creates new per-frame Settings polling or new DSP.
 At **large** cards only star-peak brightness/shape and Moon/Sun **reactive modulation**
 need greater expressiveness: passive Moon halo and unrelated terrain/shoreline glow must
 remain at their existing strength. At **small** cards crowded vertices/overlapping bloom
-need pixel/DPR-aware density, size and emission footprint, never a blanket glow increase.
+need physical viewport/DPR-aware effective bloom footprint, antialiased point size, spacing
+and effective LOD, **never a blanket glow increase or edits to authored preset values**.
+The viewport-scaling behavior must derive from the actual card/render-target dimensions
+within the existing SceneTarget and mode-owned presentation path, maintain continuous
+results across resize/zoom/aspect, preserve canonical glow/density input authority and
+avoid per-frame mesh rebuilds or unrelated-mode costs. `Current_Plan.md` §2A contains
+mutable operator-provided size examples and hands-on GPU visual acceptance criteria.
 The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` §2A.
+The live checklist now treats Moon idle integration, Moon/Sun beat presence, celestial
+star-occlusion and Starscape Beat visibility as separate **Awaiting Validation** acceptance
+items. A separate experimental candidate also remains open: a **default-OFF Celestial Rim
+Vertices** toggle may place sparse glowing points only on the illuminated outer rim of Moon
+and Sun, but must never replace the ordinary Moon body/halo or create a second celestial
+authority.
 
 ## Landscape camera, clipping and terrain skyline
 

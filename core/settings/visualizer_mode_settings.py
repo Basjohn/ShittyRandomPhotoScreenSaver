@@ -510,7 +510,10 @@ _SHOCKWAVE_GRID = ModeSettings(
                when=("shockwave_grid_sun_mode", "Sun"), enabled_when=_BASIN_BODY),
         Colour("shockwave_grid_moon_color", "Moon Colour:", "Choose Moon Colour", bucket="celestial",
                when=("shockwave_grid_sun_mode", "Moon"), enabled_when=_BASIN_BODY),
-        Slider("shockwave_grid_moon_phase", "Moon Phase:", 0.0, 1.0, bucket="celestial",
+        Slider("shockwave_grid_moon_phase", "Moon Phase:", 0.0, 1.0,
+               "Manually chosen lunar phase: 0/1 New, 0.125 waxing crescent, 0.25 first quarter, "
+               "0.5 Full, 0.75 last quarter, 0.875 waning crescent. Not based on real date, "
+               "time or celestial orbit speed.", bucket="celestial",
                when=("shockwave_grid_sun_mode", "Moon"), enabled_when=_BASIN_BODY),
         Slider("shockwave_grid_sun_x", "Position X:", -2.0, 2.0,
                "Horizontal position in basin half-widths.", bucket="celestial", signed=True, enabled_when=_BASIN_BODY),

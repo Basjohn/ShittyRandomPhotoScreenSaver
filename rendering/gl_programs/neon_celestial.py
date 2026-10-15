@@ -98,63 +98,156 @@ float basinCelestialHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-float basinMoonCraters(vec2 uv) {
-    vec2 grid = uv * vec2(10.0, 7.0);
-    vec2 baseCell = floor(grid);
-    vec2 local = fract(grid);
-    float shade = 1.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 cell = baseCell + vec2(float(x), float(y));
-            vec2 jitter = vec2(
-                basinCelestialHash(cell),
-                basinCelestialHash(cell + vec2(19.17, 7.31))) * 0.54 + 0.23;
-            vec2 delta = vec2(float(x), float(y)) + jitter - local;
-            float seed = basinCelestialHash(cell + vec2(37.2, 11.8));
-            float largeBasin = step(0.86, seed);
-            float craterRadius = mix(mix(0.06, 0.14,
-                                         basinCelestialHash(cell + vec2(7.3, 41.1))),
-                                     mix(0.28, 0.42,
-                                         basinCelestialHash(cell + vec2(5.7, 23.9))),
-                                     largeBasin);
-            float craterEdge = mix(0.022, 0.055, largeBasin);
-            float craterDepth = mix(0.10, 0.045, largeBasin);
-            float angle = atan(delta.y, delta.x);
-            float warp = 1.0 + 0.055 * sin(angle * 3.0 + seed * 6.2831853)
-                       + 0.025 * sin(angle * 5.0 + seed * 11.0);
-            float radial = length(delta) * warp;
-            float bowl = 1.0 - smoothstep(craterRadius - craterEdge,
-                                          craterRadius + craterEdge, radial);
-            float rim = 1.0 - smoothstep(0.0, craterEdge * 0.8,
-                                         abs(radial - craterRadius));
-            float rimHeight = mix(0.012, 0.004, largeBasin);
-            shade = min(shade, 1.0 - craterDepth * bowl + rimHeight * rim);
+// Stable spherical lunar albedo: every feature is sampled in 3-D direction
+// space, never longitude/latitude UV. This prevents meridian seams, polar
+// stretching, and repeated rectangular crater tiles as the camera orbits.
+float basinMoonHash(vec3 cell) {
+    return fract(sin(dot(cell, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+}
+float basinMoonNoise(vec3 p) {
+    vec3 cell=floor(p), f=fract(p);
+    f=f*f*(3.0-2.0*f);
+    float c000=basinMoonHash(cell);
+    float c100=basinMoonHash(cell+vec3(1.0,0.0,0.0));
+    float c010=basinMoonHash(cell+vec3(0.0,1.0,0.0));
+    float c110=basinMoonHash(cell+vec3(1.0,1.0,0.0));
+    float c001=basinMoonHash(cell+vec3(0.0,0.0,1.0));
+    float c101=basinMoonHash(cell+vec3(1.0,0.0,1.0));
+    float c011=basinMoonHash(cell+vec3(0.0,1.0,1.0));
+    float c111=basinMoonHash(cell+vec3(1.0,1.0,1.0));
+    return mix(mix(mix(c000,c100,f.x),mix(c010,c110,f.x),f.y),
+               mix(mix(c001,c101,f.x),mix(c011,c111,f.x),f.y),f.z);
+}
 
-            // A bounded pair of smaller, offset craters gives selected cells a
-            // faint irregular cluster instead of repeating the same stamped disc.
-            float cluster = step(0.45, basinCelestialHash(cell + vec2(13.4, 51.2)))
-                          * (1.0 - largeBasin);
-            if (cluster > 0.5) {
-                float clusterAngle = basinCelestialHash(cell + vec2(4.6, 29.3)) * 6.2831853;
-                vec2 offsetA = vec2(cos(clusterAngle), sin(clusterAngle)) * 0.20;
-                vec2 offsetB = vec2(cos(clusterAngle + 2.15), sin(clusterAngle + 2.15)) * 0.29;
-                float radiusA = mix(0.05, 0.10,
-                                    basinCelestialHash(cell + vec2(31.8, 17.4)));
-                float radiusB = mix(0.045, 0.085,
-                                    basinCelestialHash(cell + vec2(21.6, 43.2)));
-                float craterA = 1.0 - smoothstep(radiusA - 0.018, radiusA + 0.018,
-                                                 length(delta - offsetA));
-                float craterB = 1.0 - smoothstep(radiusB - 0.016, radiusB + 0.016,
-                                                 length(delta - offsetB));
-                shade = min(shade, 1.0 - cluster * (0.055 * craterA + 0.045 * craterB));
+vec3 basinMoonLightDirection(vec3 eye) {
+    // Moon Phase is authored, not a date clock or an orbit-speed derivative.
+    // Resolve its light in the current viewing basis: moving the camera or
+    // orbiting the Moon must not silently turn a selected crescent into a full
+    // Moon. Keep the material's 3-D crater/maria sampling in world space.
+    vec3 towardViewer=normalize(eye-uBodyPosition);
+    vec3 right=cross(vec3(0.0,1.0,0.0),towardViewer);
+    if (dot(right,right)<1e-5) right=cross(vec3(0.0,0.0,1.0),towardViewer);
+    right=normalize(right);
+    float angle=clamp(uMoonPhase,0.0,1.0)*6.28318530718;
+    return normalize(right*sin(angle)-towardViewer*cos(angle));
+}
+float basinMoonIllumination(vec3 normal,vec3 eye) {
+    // Single terminator authority for the lit lunar surface and all halo logic.
+    // Keep crescents thin, but soften the transition so the phase does not read
+    // as a hard mechanical cut.
+    return smoothstep(-0.070,0.055,dot(normal,basinMoonLightDirection(eye)));
+}
+
+float basinMoonSurfaceBrightness(vec3 normal,vec3 eye) {
+    vec3 lightDir=basinMoonLightDirection(eye);
+    float ndl=dot(normal,lightDir);
+    float phase=basinMoonIllumination(normal,eye);
+    float lambert=max(ndl,0.0);
+    // A Moon is not a self-lit disc. Combine a very soft lit-side floor with a
+    // gentle Lambert term and an earthshine hint on the dark hemisphere.
+    float earthshine=(1.0-phase)*(0.010+0.035*pow(max(dot(normal,normalize(eye-uBodyPosition)),0.0),0.7));
+    return clamp(earthshine + (0.17*phase + 0.83*pow(lambert,0.82)),0.0,1.0);
+}
+
+float basinMoonRimIllumination(vec3 eye, vec3 ray) {
+    // The illuminated visible limb, feathered rather than sampled at one hard
+    // tangent point, so crescent and gibbous halo ends taper naturally.
+    vec3 toCentre=uBodyPosition-eye;
+    float distanceToCentre=length(toCentre);
+    if (distanceToCentre<=1e-6) return 0.0;
+    vec3 forward=toCentre/distanceToCentre;
+    float facing=dot(ray,forward);
+    if (facing<=0.0) return 0.0;
+    vec3 radial=ray-forward*facing;
+    float radialLength=length(radial);
+    if (radialLength<=1e-6) return 0.0;
+    vec3 radialDir=radial/radialLength;
+    vec3 normalA=normalize(0.95*radialDir-0.31*forward);
+    vec3 normalB=normalize(0.88*radialDir-0.47*forward);
+    float litA=smoothstep(-0.16,0.08,dot(normalA,basinMoonLightDirection(eye)));
+    float litB=smoothstep(-0.20,0.12,dot(normalB,basinMoonLightDirection(eye)));
+    return clamp(0.70*litA+0.30*litB,0.0,1.0);
+}
+
+float basinMoonInnerRimEmission(vec3 eye,vec3 hitPoint) {
+    vec3 normal=normalize(hitPoint-uBodyPosition);
+    vec3 toEye=normalize(eye-hitPoint);
+    float facing=clamp(dot(normal,toEye),0.0,1.0);
+    // A small same-colour bloom is allowed from the visible lit face, but only
+    // close to the illuminated rim. The centre stays non-emissive.
+    float innerBand=(1.0-smoothstep(0.04,0.34,facing))*(0.56+0.44*(1.0-smoothstep(0.0,0.17,facing)));
+    return innerBand*basinMoonRimIllumination(eye,normalize(hitPoint-eye));
+}
+
+float basinMoonCraters(vec3 normal) {
+    vec3 p=normal*7.6;
+    vec3 cell=floor(p);
+    float shade=1.0, rimLight=0.0;
+    // Impacts remain continuous across the sphere, but stay subordinate to the
+    // broad lunar form instead of reading as a noisy polka-dot field.
+    for (int z=-1; z<=1; ++z) {
+        for (int y=-1; y<=1; ++y) {
+            for (int x=-1; x<=1; ++x) {
+                vec3 c=cell+vec3(float(x),float(y),float(z));
+                float seed=basinMoonHash(c+vec3(11.3,7.1,19.2));
+                if (seed<0.72) continue;
+                vec3 centre=c+vec3(basinMoonHash(c),
+                                   basinMoonHash(c+vec3(17.0,1.0,0.0)),
+                                   basinMoonHash(c+vec3(0.0,23.0,1.0)))*0.55+0.225;
+                float radius=mix(0.12,0.31,basinMoonHash(c+vec3(3.0,5.0,13.0)));
+                float distanceToImpact=length(p-centre);
+                float edge=0.022;
+                float bowl=1.0-smoothstep(radius-edge,radius+edge,distanceToImpact);
+                float rim=1.0-smoothstep(edge,edge+0.050,abs(distanceToImpact-radius));
+                shade=min(shade,1.0-(0.05+0.08*seed)*bowl);
+                rimLight=max(rimLight,rim*(0.012+0.014*seed));
             }
         }
     }
-    return clamp(shade, 0.78, 1.0);
+    return clamp(shade+rimLight,0.78,1.04);
+}
+
+float basinMoonAlbedo(vec3 normal) {
+    // Broad maria remain readable first; finer mottling and crater rims sit on
+    // top as secondary detail, without giant painted blotches.
+    float broad=basinMoonNoise(normal*2.8+vec3(2.3,7.1,1.7));
+    float mottled=basinMoonNoise(normal*6.1+vec3(13.8,2.4,9.3));
+    float maria=smoothstep(0.58,0.74,broad*0.68+mottled*0.32);
+    float fine=basinMoonNoise(normal*17.0+vec3(3.4,5.7,13.2));
+    float rock=(0.88-0.20*maria)*(0.95+0.07*(mottled-0.5)+0.04*(fine-0.5));
+    return clamp(rock*basinMoonCraters(normal),0.42,0.98);
 }
 
 // A nearest positive ray-sphere hit.  ``hitPoint`` is in the caller's shared
 // Scene3D world space and can be projected through that scene's camera for depth.
+float basinCelestialSkyMask(vec3 eye,vec3 worldRay) {
+    if ((uBodyKind != 0 && uBodyKind != 1) || uSunEnabled == 0 || uBodySize <= 0.0) {
+        return 0.0;
+    }
+    // Transparent/near-camera-cull bodies may not carve starless holes in sky.
+    float bodyAlpha=(uBodyKind==1 ? uMoonColor.a : uSunColor.a);
+    if (bodyAlpha<=0.0001) return 0.0;
+    float rayLength=length(worldRay);
+    if (rayLength<=1e-8) return 0.0;
+    vec3 ray=worldRay/rayLength;
+    vec3 offset=eye-uBodyPosition;
+    float halfB=dot(offset,ray);
+    float discriminant=halfB*halfB-(dot(offset,offset)-uBodySize*uBodySize);
+    if (discriminant<0.0) return 0.0;
+    float root=sqrt(max(discriminant,0.0));
+    float distance=-halfB-root;
+    if (distance<=1e-5) distance=-halfB+root;
+    if (distance<=1e-5) return 0.0;
+    vec3 centre=uBodyPosition-eye;
+    float separation=length(centre);
+    vec3 forward=centre/max(separation,1e-5);
+    float facing=dot(ray,forward);
+    float radius=uBodySize/max(separation,1e-5);
+    float normalizedAngle=length(cross(ray,forward))/max(facing*radius,1e-5);
+    float bodyCoverage=basinCameraBodyCoverage(separation,uBodySize);
+    return bodyCoverage*step(0.0,facing)*(1.0-smoothstep(0.998,1.014,normalizedAngle));
+}
+
 vec4 basinCelestial(vec3 eye, vec3 worldRay, out vec3 hitPoint) {
     hitPoint = vec3(0.0);
     if ((uBodyKind != 0 && uBodyKind != 1) || uSunEnabled == 0 || uBodySize <= 0.0) {
@@ -192,16 +285,11 @@ vec4 basinCelestial(vec3 eye, vec3 worldRay, out vec3 hitPoint) {
         return vec4(sun, alpha);
     }
 
-    float longitude = atan(normal.x, normal.z) * 0.15915494309 + 0.5;
-    float latitude = asin(clamp(normal.y, -1.0, 1.0)) * 0.31830988618 + 0.5;
-    vec2 uv = vec2(longitude, latitude);
-    float phaseAngle = clamp(uMoonPhase, 0.0, 1.0) * 6.28318530718;
-    vec3 lightDirection = vec3(sin(phaseAngle), 0.0, -cos(phaseAngle));
-    float illumination = smoothstep(-0.12, 0.16, dot(normal, lightDirection));
-    float craters = basinMoonCraters(uv);
-    float brightness = (0.10 + 0.90 * illumination) * craters;
-    vec3 moon = max(uMoonColor.rgb, vec3(0.0)) * brightness;
-    return vec4(moon, clamp(uMoonColor.a, 0.0, 1.0) * limb);
+    float illumination=basinMoonIllumination(normal,eye);
+    float lunarRock=basinMoonAlbedo(normal);
+    float brightness=basinMoonSurfaceBrightness(normal,eye)*lunarRock;
+    vec3 moon=max(uMoonColor.rgb,vec3(0.0))*brightness;
+    return vec4(moon,clamp(uMoonColor.a,0.0,1.0)*limb);
 }
 
 float basinStarHash(vec2 cell) {
@@ -227,22 +315,26 @@ float basinBeatStarLight(vec3 ray,vec2 glow) {
         // Cull far cells before costly halo math. This is an opt-in effect,
         // and only three (occasionally six) small star regions participate.
         vec2 difference=grid-uBeatStarCells[i].xy-0.5;
-        if (any(greaterThan(abs(difference),vec2(1.0)+5.5*pixelScale))) continue;
-        // Actual panorama cells, with a several-pixel halo. The old equality
-        // check confined everything to one subpixel cell and was invisible.
+        if (any(greaterThan(abs(difference),vec2(1.0)+6.0*pixelScale))) continue;
+        // Actual panorama cells, with a several-pixel halo and a restrained
+        // star-like cross/ray core at strong settings rather than a soft blob.
         vec2 delta=difference/pixelScale;
         float radius=length(delta);
         float core=1.0-smoothstep(0.0,1.35,radius);
-        float halo=1.0-smoothstep(1.0,5.5,radius);
-        float gain=glow.x*(0.50+0.50*clamp(glow.y*uBeatStarCells[i].z*1.8,0.0,1.0));
-        light+=gain*uBeatStarCells[i].z*(1.8*core+0.60*halo);
+        float halo=1.0-smoothstep(1.0,6.0,radius);
+        float cross=(1.0-smoothstep(0.0,0.85,min(abs(delta.x),abs(delta.y))))
+                   *(1.0-smoothstep(1.4,5.8,max(abs(delta.x),abs(delta.y))));
+        float diagonal=(1.0-smoothstep(0.0,0.9,abs(abs(delta.x)-abs(delta.y))))
+                      *(1.0-smoothstep(1.5,5.2,radius));
+        float gain=glow.x*(0.62+0.78*clamp(glow.y*uBeatStarCells[i].z*2.2,0.0,1.0));
+        light+=gain*uBeatStarCells[i].z*(1.70*core+0.72*halo+0.40*cross+0.22*diagonal);
     }
     return light;
 }
 
 // Straight-alpha sky radiance.  The independent enable gate makes the sky
 // transparent when disabled; the Sun/Moon remains a separate body pass.
-vec4 basinSkyBackground(vec3 worldRay) {
+vec4 basinSkyBackground(vec3 worldRay,float starVisibility) {
     if (uSkyEnabled == 0 || uSkyStrength <= 0.0) return vec4(0.0);
     float rayLength = length(worldRay);
     if (rayLength <= 1e-8) return vec4(0.0);
@@ -276,8 +368,8 @@ vec4 basinSkyBackground(vec3 worldRay) {
     colour += max(uCloudColor.rgb, vec3(0.0)) *
               clamp(uCloudColor.a, 0.0, 1.0) * clamp(clouds, 0.0, 1.0);
 
-    float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0);
-    stars += basinBeatStarLight(ray,uStarGlow);
+    float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
+    stars += basinBeatStarLight(ray,uStarGlow) * starVisibility;
     colour += max(uStarColor.rgb, vec3(0.0)) * stars;
     // Keep sky alpha continuous across the camera. The old latitude-based
     // opacity transition created a ruler-straight wallpaper seam unrelated
