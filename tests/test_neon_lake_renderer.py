@@ -530,7 +530,7 @@ def test_two_contexts_keep_neon_resources_independent(qt_app):
         first.close()
 
 
-def _qsg_clip_probe(nested=False):
+def _qsg_clip_probe(nested=False, sky_focus=False):
     """Run the actual production QSG node/clip host in an isolated Qt process."""
     import time
     from PySide6.QtCore import QMetaObject, QTimer, Qt
@@ -559,6 +559,9 @@ def _qsg_clip_probe(nested=False):
         shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0., shadow_offset=(0., 0.),
         shadow_spread=0., shadow_extensions=(0., 0., 0., 0.))
     snapshot = _pose(_snapshot(shockwave_grid_sky_enabled=True), scale=4., pan_x=.9, pan_y=-.9)
+    if sky_focus:
+        snapshot = _pose(snapshot, turn=-.2, tilt=.17, scale=1.90333,
+                         pan_x=.25, pan_y=1.1432654)
     snapshot = replace(snapshot, presentation=presentation)
     telemetry = VisualizerRenderNodeTelemetry()
     captured = {}
@@ -640,10 +643,10 @@ def _qsg_clip_probe(nested=False):
     app.exec()
 
 
-@pytest.mark.parametrize('nested', [False, True])
-def test_actual_neon_qsg_pixels_respect_card_interior_and_rounded_corners(nested):
+@pytest.mark.parametrize('nested,sky_focus', [(False,False),(True,False),(False,True),(True,True)])
+def test_actual_neon_qsg_pixels_respect_card_interior_and_rounded_corners(nested, sky_focus):
     completed = subprocess.run([sys.executable, '-c',
-        f'from tests.test_neon_lake_renderer import _qsg_clip_probe; _qsg_clip_probe(nested={nested})'],
+        f'from tests.test_neon_lake_renderer import _qsg_clip_probe; _qsg_clip_probe(nested={nested},sky_focus={sky_focus})'],
         cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=25)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     report = json.loads(completed.stdout[completed.stdout.index('{'):])

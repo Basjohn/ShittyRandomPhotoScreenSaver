@@ -423,8 +423,9 @@ _SHOCKWAVE_GRID = ModeSettings(
                "Vertical scale of the authored solid land. Authored zero regions remain water.", bucket="terrain"),
         Slider("shockwave_grid_terrain_detail", "Terrain Detail:", 0.0, 1.0,
                "Fine surface definition on solid terrain, without moving its water boundary.", bucket="terrain"),
-        Colour("shockwave_grid_line_color", "Shoreline Colour:", "Choose Shoreline Colour",
-               "Colour used along the lake shore (and remaining water highlights).", bucket="appearance"),
+        Colour("shockwave_grid_line_color", "Ripple / Shore Colour:", "Choose Ripple and Shore Colour",
+               "Base colour of water ripple lines and shoreline accents. Wave crests blend toward Wave / Ridge Glow. "
+               "Alpha controls the ripple lines' opacity.", bucket="appearance"),
         Colour("shockwave_grid_crest_color", "Wave / Ridge Glow:", "Choose Wave and Ridge Glow Colour",
                "Colour of musical water crests and energized terrain ridges, including alpha.",
                bucket="appearance"),

@@ -283,9 +283,27 @@ def test_internal_transform_uses_spec_limits_without_changing_frame(card):
     mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseMove, p + QPointF(10000., -10000.), Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseButtonRelease, p, Qt.MouseButton.RightButton)
-    assert pose(card)['shockwave_grid_scene_pan_x'] == presentation_setting_range('shockwave_grid_scene_pan_x')[1]
-    assert pose(card)['shockwave_grid_scene_pan_y'] == presentation_setting_range('shockwave_grid_scene_pan_y')[0]
+    scale=pose(card)['shockwave_grid_scene_scale']
+    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(.42)
+    assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(.08-(.5+.18*scale))
     wheel(card, p, 12000)
     release_alt(card)
     assert pose(card)['shockwave_grid_scene_scale'] == presentation_setting_range('shockwave_grid_scene_scale')[1]
     assert card.scene.visualizer_item.presentation == presentation
+
+
+def test_native_pan_can_frame_sky_at_the_reported_zoom_and_persist_within_limits(card):
+    from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+    host=card.visualizer.controller.presentation_state
+    transform_visualizer_scene(host,MODE,{'shockwave_grid_scene_scale':1.90333,
+                                         'shockwave_grid_scene_pan_y':.0774006})
+    outer=card.scene.visualizer_item.presentation
+    p=point(card)
+    mouse(card,QEvent.Type.MouseButtonPress,p,Qt.MouseButton.RightButton)
+    mouse(card,QEvent.Type.MouseMove,p+QPointF(0.,10000.),Qt.MouseButton.RightButton)
+    mouse(card,QEvent.Type.MouseButtonRelease,p,Qt.MouseButton.RightButton)
+    live=pose(card)
+    assert live['shockwave_grid_scene_pan_y']==pytest.approx(1.1432654)
+    assert card.settings.get('widgets.spotify_visualizer')['shockwave_grid_scene_pan_y']==pytest.approx(1.1432654)
+    assert card.scene.visualizer_item.presentation==outer
+    assert len(card.writes)==1

@@ -75,6 +75,8 @@ within a mark, never its lattice membership or authored density.
 Tint, strength and roughness rows appear for Glass choices. Roughness is authored within .05.. .5, respecting the
 shared material's .045 numerical floor. Plain vertices expose main/accent RGBA; glass vertices expose outline RGBA.
 Terrain fill, crests, water, sky, stars, clouds, horizon, Sun, Moon and rays retain separate RGBA controls.
+Appearance's **Ripple / Shore Colour** authors the water lines' base colour and alpha;
+crests blend toward **Wave / Ridge Glow**. **Water Colour** owns the underlying fill.
 Compound spec conditions drive row visibility/enablement without a second UI or model table. Vertices are
 unique points on the actual displaced surface lattice, about ten percent denser than the prior point presentation.
 Quality and Surface Detail bound that lattice; points and triangles always share it to avoid hiding points beneath a different approximation. Glass alone creates no point mesh and retires an existing one. Glass + Vertices uses smaller outlined markers to keep the combined picture readable. Reflected marks draw before depth-writing water, direct marks after it; point-size and
@@ -290,8 +292,12 @@ The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` 
 
 The framed landscape admits canonical turn **-0.20..0.20** (roughly ±36°) and tilt
 **0.17..0.58** (roughly 15°..52°). WASD and Alt+left-drag saturate rather than wrap;
-Alt+right pan is bounded against scale to retain a composed portion of the basin (current
-reference anchor `(0.5, 0.68)` within central `0.08..0.92` fractions). Alt+wheel scales
+Alt+right pan is bounded against scale. Horizontal movement retains the central basin reference;
+the downward-looking limit retains the basin's `y=.68` reference at the top margin `.08`.
+The upward-looking limit instead retains upper sky's `y=.12` reference at the bottom
+margin `.92`, allowing the lake below the card when framing the Sun/sky. These are
+composition bounds inside the unchanged `-2..2` pan admission; turn/tilt limits and
+homogeneous/card clipping remain independent protections. Alt+wheel scales
 only the inner scene, preserving the outer bordered card and Edit/CUSTOM authority.
 These **landscape-specific values are not reusable defaults**. §4A FC must share the
 underlying bounded-camera capability for future framed 3D modes, with per-mode declared
