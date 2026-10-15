@@ -244,7 +244,8 @@ vec4 basinVisibleBody(vec3 eye,vec3 ray,out vec3 hitPoint) {{
 vec3 basinVisibleSkyRadiance(vec3 eye,vec3 ray) {{
     vec3 hitPoint;
     vec4 body=basinVisibleBody(eye,ray,hitPoint);
-    return basinCompositeSkyBody(basinSkyBackground(ray),body);
+    float starVisibility=1.0-basinCelestialSkyMask(eye,ray);
+    return basinCompositeSkyBody(basinSkyBackground(ray,starVisibility),body);
 }}
 """
 
@@ -581,29 +582,54 @@ void main() {
         // Analytic screen-angular corona OUTSIDE the sphere. It never creates
         // a second mesh or changes orbital body/light/reflection ownership.
         float normalizedAngle=length(cross(ray,forward))/max(facing*radius,1e-5);
-        float halo=(smoothstep(0.91,1.05,normalizedAngle)
-                   * (1.0-smoothstep(1.06,1.58,normalizedAngle)));
+        // Outer corona around the sphere silhouette. The Moon also gets a very
+        // small same-colour lift just inside the illuminated rim, so the glow
+        // reads as originating from the body rather than a detached tube.
+        float halo=(smoothstep(0.992,1.040,normalizedAngle)
+                   * (1.0-smoothstep(1.032,1.210,normalizedAngle)));
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
-        float response=clamp(0.40*uMidband+0.90*uBeatPulse,0.0,1.0);
-        float haloGain=uCelestialGlow.x*(0.62+0.38*clamp(uCelestialGlow.y*response,0.0,1.0));
-        float haloAlpha=0.23*bodyColour.a*haloGain*halo;
+        float response=pow(clamp(0.22*uMidband+1.35*uBeatPulse,0.0,1.0),0.78);
+        float haloGain=uCelestialGlow.x*(0.54+0.92*clamp(uCelestialGlow.y*response*1.18,0.0,1.0));
+        float moonRimLight=(uBodyKind==1 && halo>0.0)
+                           ? basinMoonRimIllumination(eye,ray) : 1.0;
+        float haloAlpha=(uBodyKind==1)
+                        ? 0.26*bodyColour.a*haloGain*halo*moonRimLight
+                        : 0.23*bodyColour.a*haloGain*halo;
+        float litInnerRim=0.0;
+        float innerHaloAlpha=0.0;
+        if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
+            litInnerRim=basinMoonInnerRimEmission(eye,bodyPoint);
+            innerHaloAlpha=0.115*bodyColour.a*haloGain*litInnerRim*body.a;
+        }
         float alpha=body.a+haloAlpha*(1.0-body.a);
         if (alpha<0.0001) discard;
-        vec3 premult=body.rgb*body.a+bodyColour.rgb*haloAlpha*(1.0-body.a);
+        vec3 premult=body.rgb*body.a
+                    +bodyColour.rgb*(innerHaloAlpha+haloAlpha*(1.0-body.a));
         vec3 colour=premult/max(alpha,1e-5);
         FragColor=vec4(min(colour,vec3(1.0)),alpha);
-        vec3 emission=premult*(uBodyKind==0 ? 0.20 : 0.12);
+        // Sun retains strong emission. The Moon emits only from a narrow band
+        // of the visible lit rim and the feathered corona immediately outside.
+        vec3 emission;
+        if (uBodyKind==1) {
+            emission=bodyColour.rgb*(0.12*innerHaloAlpha + 0.28*haloAlpha*(1.0-body.a));
+        } else {
+            emission=(body.rgb*body.a
+                     +bodyColour.rgb*haloAlpha*(1.0-body.a))*0.20;
+        }
         Emission=vec4(emission,dot(emission,vec3(0.2126,0.7152,0.0722)));
         vec3 position=body.a>0.0001 ? bodyPoint : uBodyPosition;
         gl_FragDepth=clamp(0.5+0.5*basinDepthNdc(sceneOrbitPoint(position,uView,
                      vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH),vec3(0.0)).z),0.0,1.0);
     } else {
-        FragColor=basinSkyBackground(ray);
+        // One celestial coverage evaluation for ordinary stars AND the
+        // independent beat-star emission attachment. No duplicate ray hits.
+        float starVisibility=1.0-basinCelestialSkyMask(eye,ray);
+        FragColor=basinSkyBackground(ray,starVisibility);
         if (FragColor.a<0.0001) discard;
         // Separate small radiance buffer entry for event stars, not the entire
         // sky (which would turn on widespread bloom and flatten the scene).
-        vec3 sparkle=uStarColor.rgb*uStarColor.a*basinBeatStarLight(ray,uStarGlow)*0.60;
+        vec3 sparkle=uStarColor.rgb*uStarColor.a*basinBeatStarLight(ray,uStarGlow)*starVisibility*0.95;
         Emission=vec4(sparkle,dot(sparkle,vec3(0.2126,0.7152,0.0722)));
         gl_FragDepth=0.999999;
     }

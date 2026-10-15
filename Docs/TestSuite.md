@@ -762,17 +762,23 @@ in the musical validation loop alongside test-owned synthetic replay fixtures.
 
 `tests/test_neon_glow_and_sky_composition.py` asserts closed canonical Glow bucket ownership, dependent visibility, conservative celestial orbit headroom, continuous sky-before-depth ordering and matching colour/emission opacity subtraction, plus deterministic, bounded visible panorama beat-star selection. `tests/test_neon_skyline_occlusion_and_starscape.py`, `tests/test_neon_skyline_and_preset_retirement.py` and `tests/test_neon_lake_landscape_extension.py` protect the accepted terrain-triangle skyline, actual continuation lattice and retired Edge styles without freezing operator-authored Preset 1 numbers. These are structural/mathematical tests, not proof of raster alpha correctness or musical presentation. After a GODZIP apply, use the project `.venv` and no environment-variable commands. Windows GPU inspection must include full/partial-alpha background, terrain skyline and rear horizon at low and high tilt, star events against quiet/loud recorded clips, and Sun/Moon halo with and without active audio. Preserve the operator's local real-music recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` alongside synthetic replays.
 
-### 2026-10-14 Neon Lake final two-item checkpoint
+### Neon Lake horizon, sky and celestial acceptance
 
-`tests/test_neon_final_horizon_and_beat_floor.py` proves that the beat-star
-admission floor is **0.28** (20% lower than 0.35), with no new audio detector,
-and that sky alpha and the distant skyline do not use competing artificial
-horizon bands. `tests/test_neon_visible_stars_and_horizon.py` checks the same
-single-source terrain coverage and the unchanged camera-relative star selection.
-Structural checks do **not** certify rendered depth, cloud silhouettes or the
-horizon contour. Only a real image inspected by an agent or explicit operator
-acceptance closes the first of the two live items in `Current_Plan.md` §2A.
-The second remains terrain-musical-response rework, using deterministic fixtures
-and the operator's real-music recordings at
+`tests/test_neon_final_horizon_and_beat_floor.py` checks the source-owned
+Starscape Beat entry floor (**0.224**), which consumes the existing onset ring
+without creating another detector, and protects continuous sky alpha/distant
+terrain fade from rival false-horizon authorities. `tests/test_neon_visible_stars_and_horizon.py`
+checks the same projected-camera star positions; `tests/test_neon_celestial.py`
+exercises sphere/phase/rim physics and the common celestial mask that prevents
+ordinary stars and beat-star emission from appearing through an enabled Moon or
+Sun. Full-New and crescent phases, opposite orientations, and dark-side emission
+remain required GPU image checks. A fully transparent or camera-culled body must
+not leave an empty starless disc, and the body/sky/emission masks must agree.
+
+GPU shader compilation and these structural/unit tests are **not** physical
+acceptance for the horizon, reactive halo, star visibility or tiny-card LOD.
+`Current_Plan.md` §2A is the single live checklist and requires operator/local
+agent image/video approval. Compare silent/onset/sustained clips and the operator's
+real-music recordings at
 `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
 Use the project `.venv`, and never mutate environment variables.

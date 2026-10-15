@@ -4,7 +4,7 @@ from pathlib import Path
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.visualizer_mode_settings import mode_settings, Toggle
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
-from rendering.gl_programs.neon_starscape import starscape_beat_cells
+from rendering.gl_programs.neon_starscape import STARSCAPE_BEAT_MIN_STRENGTH, starscape_beat_cells
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +29,7 @@ def test_three_spaced_stars_per_strong_beat_with_gentle_release():
     assert first==starscape_beat_cells(events,.35,.07)
     later=starscape_beat_cells(((1.5,0.25,-0.63,1.4),),.35,.07)
     assert all(0.0<b[2]<a[2] for a,b in zip(first,later))
-    assert not starscape_beat_cells(((0.01,0.25,-0.63,0.25),),.35,.07)
+    assert not starscape_beat_cells(((0.01,0.25,-0.63,STARSCAPE_BEAT_MIN_STRENGTH-0.001),),.35,.07)
     assert not starscape_beat_cells(((1.76,0.25,-0.63,1.4),),.35,.07)
 
 def test_two_admitted_beats_have_at_most_six_stars():

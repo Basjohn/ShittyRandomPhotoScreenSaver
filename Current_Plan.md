@@ -47,8 +47,8 @@ Neon Lake (`shockwave_grid`) now has its spec-owned Settings, framed camera, aut
 Vertices/Glass parity, one retained Preset 1 plus Custom, and the simplified three-style control
 catalog. The operator has confirmed no Settings crashes in the latest build and accepts the
 main mountain skyline, star-glow appearance and broad terrain continuity. Starscape Beat's
-entry floor was reduced **20%**, from 0.35 to 0.28, with the existing onset/clock authority,
-three stars and gentle decay unchanged. No new DSP, timers or polling.
+entry floor was subsequently eased to **0.224** using the existing onset/clock authority,
+three stars and gentle decay unchanged; visual acceptance remains open. No new DSP, timers or polling.
 
 **Neon Lake open work after operator image review (2026-10-14):** The new screenshot
 confirms the existing mountain skyline and lake outline are good, Settings no longer crashes,
@@ -84,32 +84,100 @@ change. Never restore an older copy or pin artistic values/hashes as test expect
   through opaque mountains. Capture comparable low/high-angle, zoom and aspect images;
   close on **agent review of actual rendered pixels or explicit operator acceptance**,
   never GLSL compilation, structural unit tests or a guessed brightness tweak.
-- [ ] **Celestial and Starscape musical glow refinement (large-card weakness only).**
-  At **LARGE card sizes**, Starscape/Starfield beat glows are useful but too faint even with
-  Star Glow Intensity/Reactivity at maximum. The 0.28 onset-entry floor remains restrictive.
-  Revisit the existing onset admission gate (no new detector), preserve three spaced stars
-  and gentle release, and make maximum star intensity unmistakably stronger with a
-  **restrained star-shaped core/rays**, not a broad washed-out bloom. Moon/Sun's *passive*
-  halo already looks good; only **musical pulse reactivity** is too weak, even at maximum.
-  Give transient/midband-driven brightening an obvious yet controlled attack and soft settle,
-  without bass/transient washout or lighting discontinuities. **Do not boost other terrain,
-  shoreline, or global glow** to fix these two large-card-specific shortcomings. Preserve
-  GL/scene/audio owners, conditional Glow Settings, opt-in/dormancy and logical clock.
-  Validate with fixed clips and the real-music evidence path below; operator image/video
-  acceptance remains required for both star intensity and celestial modulation.
-- [ ] **Small-card resize/DPR legibility: overlapping glow and crowded vertices.** At
-  **SMALL card sizes**, the problem is **compounded/overlapping bloom and overly dense
-  screen-space vertex marks**, not weak glow. Glows and points condense into the same
-  small pixel regions, merging terrain detail into an unreadable field. Adapt bloom
-  *footprint*/coverage, effective mesh/point LOD, anti-aliased marker size and minimum
-  visible point separation to actual card pixel dimensions and DPR 1/1.25/1.5/2. Maintain
-  reasonable feature isolation rather than applying a blanket glow increase or changing
-  the authored density settings. At larger sizes retain existing general terrain/shore
-  glow levels and vertex detail; the weak large-card stars/celestial pulse have their
-  *own separate item above*. Keep Glass and Vertices on the same terrain/depth authority;
-  no per-frame mesh rebuild, independent displacement/simulation owner, or dormant cost.
-  Validate extreme small/large cards, aspect ratios and both displays, preserving CUSTOM
-  geometry SSOT and the operator's current authored values (which remain freely editable).
+- [~] **Moon halo integration, idle presence and non-tube shape — Awaiting Validation.**
+  The current Moon texture/body is promising but still reads as an isolated sphere rather
+  than a luminous part of Neon Lake's visual language. Keep the manually authored Moon Phase
+  and single celestial shader authority, but reshape the halo so idle state has enough
+  presence to belong in-scene without becoming a neon tube. The visible lit face may carry
+  only a **slight same-colour feather**, which should build naturally into a softer exterior
+  bloom just outside the illuminated rim. The dark hemisphere must never emit, but may retain
+  restrained non-emissive earthshine. The body centre must not become a lamp blob at Full
+  Moon. Validate using actual rendered pixels/diagnostic images and operator or local-agent
+  review; do not close on source inspection, shader compilation or unit tests alone.
+- [~] **Moon/Sun musical pulse presence (large-card weakness only) — Awaiting Validation.**
+  Large cards still report weak celestial musical life even with maximum reactivity. Improve
+  transient/midband-driven brightening so the Moon/Sun gain an obvious yet controlled pulse,
+  without washing out the whole scene, flattening the lit face or boosting unrelated terrain,
+  shoreline or global glow. Preserve existing DSP ownership, logical clock, dormancy and Glow
+  bucket conditioning. Date/time and orbit still do **not** choose Moon phase.
+- [~] **Celestial-body star occlusion — Awaiting Validation.**
+  The Moon/Sun must fully own their screen coverage. Ordinary stars and beat-star glow must
+  not punch bright points, black dots or other specks through the disc. Verify this with
+  actual images/video, including cases where a bright beat star sits directly behind a New or
+  Crescent Moon. Preserve a single depth/coverage authority rather than layering ad hoc masks.
+- [~] **Starscape Beat admission and peak visibility — Awaiting Validation.**
+  Implemented for the current pass, but **not accepted yet**: Starscape/Starfield beat entry
+  is eased **another 20%** (0.28 -> **0.224**) using the same existing onset authority,
+  keeping three spaced stars and gentle release. Maximum star output is intentionally stronger,
+  with a **restrained star-shaped core/rays** rather than a washed-out bloom. Validate that
+  entry is easier, peak glow is unmistakably more visible at maximum settings and the result
+  still reads as elegant sky activity rather than a christmas-light spray. Use fixed clips and
+  the real-music evidence path below.
+- [ ] **Experimental optional Celestial Rim Vertices (default OFF).**
+  Add a strictly optional, default-OFF **Celestial Rim Vertices** toggle as an experiment only,
+  not as a crutch for the normal Moon. If enabled, it may place sparse antialiased glowing
+  point marks along the **illuminated outer rim** of Moon and Sun so the body can optionally
+  borrow some of Neon Lake's vertex language. Never create a full surface lattice, a second
+  sphere/geometry, separate phase logic, separate glow authority or always-on vertex treatment.
+  The standard textured Moon must still look good with this option OFF. Any Moon microrelief/
+  bump-mapping follow-up remains optional and must be justified physically first; Sun is plasma,
+  not lunar rock, so do not blindly share a bump treatment.
+  Seek operator approval for a new setting/schema before implementing this candidate.
+- [ ] **Viewport-size/DPR adaptive glow and vertex legibility — local-agent implementation + physical acceptance.**
+  The same authored Neon Lake preset can look excellent at one framed-card size and disastrously
+  overbloomed/overcrowded at another. **This is a render-presentation scaling defect, not an
+  artistic-preset defect.** A local Windows agent must implement effective physical-viewport
+  scaling for glow footprint/coverage and point/vertex appearance and validate actual GPU
+  captures with the operator or a local agent with visual access. At **small cards**, overlapping
+  glows compound and dense marks merge; at **large cards**, existing general surface/lake/sky
+  glow must retain presence, while specifically weak Starscape peaks and Moon/Sun *musical pulse*
+  stay separate acceptance tasks above. Never globally increase glow to solve small-card issues.
+
+  **Two observed, mutable calibration examples (NOT presets to copy, rewrite or assert):**
+  - **Preset 1 (Synthwave), approx. 2100x1200 widget viewport:** Saved Surface Glow
+    `shockwave_grid_glow=0.55`, Vertex Density `density=0.55`, Glass Strength `0.55`, Water
+    Reflection `0.77`, Light Rays Strength `0.50`, Horizon `0.68`, Sky Strength `0.80`.
+    Its saved payload **omits** Celestial Halo Intensity/Reactivity and Starscape Glow
+    Intensity/Reactivity; the present canonical default values are **1.0 each**, which must
+    be resolved through the spec/default authority rather than treated as authored zero.
+  - **Operator-supplied Preset 2 (Example), approx. 1300x750 widget viewport:** Saved Surface
+    Glow `0.29`, Vertex Density `0.55`, Glass Strength `0.55`, Water Reflection `0.77`, Light
+    Rays Strength `0.31`, Horizon `0.45`, Sky Strength `0.90`; Celestial Halo enabled with
+    Intensity `0.66` / Reactivity `1.54`; Starscape Beat enabled with Star Glow Intensity
+    `1.23` / Reactivity `1.91`. Both examples use **Glass + Vertices** and the same saved
+    vertex/accent/outline RGBA colours. Preset 2 is a diagnostic export supplied separately,
+    **not an instruction to install it or replace an operator slot**.
+  - Sizes are reported widget dimensions, not proven physical pixels; the agent must measure
+    the actual render-target dimensions and DPR (including supersampling/MSAA as relevant).
+    These two observations are **guides to the size sensitivity**, not a two-point glow formula,
+    not a fixed 1300/2100 breakpoint, not approved artistic defaults and **never golden tests**.
+    Both presets remain freely editable; the current operator-authored versions always win.
+
+  **Implementation and visual acceptance checklist (all remain open):**
+  - [ ] Inspect existing scene-target bloom/compositing and mode-owned point shader contracts;
+    distinguish **emission radiance/strength**, bloom blur radius/footprint in physical pixels,
+    coverage/overlap, antialiasing and effective visible vertex count. Do not collapse them into
+    one multiplier or a second Settings/preset owner.
+  - [ ] Derive bounded smooth **effective presentation scale** from the actual framed content
+    viewport in physical pixels and DPR, with aspect, internal zoom and the shared scene fit
+    accounted for. Control bloom spread/energy conservatively and apply marker size, antialiasing,
+    separation and LOD only where useful; preserve authored `glow` and `density` as semantic
+    inputs. Keep land, water, shoreline, Glass and Vertices on their existing shared geometry,
+    depth and DSP/simulation authorities; do not fake missing vertices by overwriting user data.
+  - [ ] Resize a **single unchanged** authored configuration live between **1300x750** and
+    **2100x1200**, plus substantially smaller/large, narrow/tall and zoomed/rotated framed
+    cards. Check both Preset 1 and the separately supplied Preset 2 export *as editable current
+    examples*. At comparable DPR and authored values, no blown-out point carpet at the smaller
+    size, no underlit/diffuse loss at the larger size, no popping at size thresholds. Check
+    DPR **1/1.25/1.5/2**, both displays, idle/beat/sustained passages, Glass-only, Vertices-only
+    and Glass + Vertices. Capture matched before/after real GPU frames and moving clips.
+  - [ ] Prove resize/reopen/dormancy ownership: Qt Quick scheduling remains sovereign; no new
+    polling/timers, per-frame static geometry/resource rebuilding, surprise extra render targets,
+    duplicate bloom owner or unrelated-mode cost. GPU work should scale predictably with viewport
+    size, without stalling dual-1440p presentations. Tests use **synthetic test-owned configs**
+    for invariants, never freeze mutable artistic values or preset bytes. Use explicit project-venv
+    test commands and **no environment-variable mutation**. Mark complete only after actual
+    operator or local-agent image and performance acceptance.
 - [ ] **Terrain reactivity rework.** Current terrain motion is mostly mild uniform swelling.
   Rework meaningful musical structure, including differentiated bands/transients and
   sustained passages, without jelly hills or bass washing everything out. Retain the
@@ -143,8 +211,9 @@ change. Never restore an older copy or pin artistic values/hashes as test expect
   latest artistic intent. Never pin preset values, visuals or hashes in regression tests. Keep Custom distinct,
   keep camera/view pose out of art presets, and update the one canonical slot catalog/selection/migration
   together. The six additions are experimental candidates, not immutable snapshots.
-  Close Neon Lake only when the four remaining visual/reactivity/size tasks above and the recorded-audio review
-  have physical/agent-image acceptance, source regressions pass, and six experiments have been delivered and
+  Close Neon Lake only when **all live visual/reactivity/viewport tasks above**, including the
+  optional default-OFF rim-vertices experimental decision, and the recorded-audio review
+  have their specified agent/operator acceptance, source regressions pass, and six experiments have been delivered and
   inspected as experiments. Their eventual aesthetic rejection is not a blocker to structural closure.
 
 The completed implementation trail, rejected experiments and previously detailed V4A

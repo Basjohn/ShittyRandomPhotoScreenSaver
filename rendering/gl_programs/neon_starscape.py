@@ -3,9 +3,9 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-# Twenty percent lower than the operator-accepted 0.35 entry floor.
+# Twenty percent easier again than the prior 0.28 floor: 0.35 * 0.64 = 0.224.
 # Only existing admitted onset records participate, never a second detector.
-STARSCAPE_BEAT_MIN_STRENGTH = 0.35 * 0.80
+STARSCAPE_BEAT_MIN_STRENGTH = 0.35 * 0.64
 
 def _star_hash(x: int, y: int) -> float:
     value = math.sin(float(x) * 41.37 + float(y) * 289.13) * 24634.6345
