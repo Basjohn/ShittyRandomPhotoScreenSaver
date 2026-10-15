@@ -119,6 +119,10 @@ def test_terrain_editor_reuses_dark_glass_palette_without_changing_water_ownersh
                   '_GRID_MAJOR_COLOR = QColor(255, 255, 255, 35)',
                   '_BORDER_COLOR = QColor(255, 255, 255, 60)'):
         assert token in source and token in shape
-    assert 'value = 0.0  # water is authored zero' in source
+    from ui.tabs.media.terrain_editor import apply_brush
+
+    # Water stays exact authored zero; no other brush reaches it from land.
+    assert apply_brush(0.4, "Water", 1.0, 1.0, 1.0, 0.0) == 0.0
+    assert apply_brush(0.4, "Lower", 1.0, 100.0, 1.0, 0.0) > 0.0
     assert 'self.terrain_changed.emit(self.get_heightfield())' in source
     assert 'self._cancel_stroke()' in source
