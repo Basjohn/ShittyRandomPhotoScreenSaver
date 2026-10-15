@@ -72,10 +72,14 @@ change. Never restore an older copy or pin artistic values/hashes as test expect
   card pixels and DPR, keeping independent features distinguishable and the terrain appearance
   coherent. Do not indiscriminately increase intensity at small sizes.
 
-The detached distant oval is closed by actual GPU image review: shoreline emission now
-belongs only to authored water/land boundaries, while the accepted mountain silhouette
-and near lake contour remain intact. Whole-window/card point-width amplification is
-also corrected; residual physical-size/DPR density and bloom acceptance remains below.
+The false distant oval is removed; shoreline emission belongs only to authored lake
+boundaries. Whole-window/card point-width amplification is corrected. The operator
+clarified that oval removal alone does not close the horizon gate:
+- [ ] **Continuous distant horizon and low celestial-body occlusion.** Continue the same
+  real terrain to its visible horizon, keep distant land coverage/depth while fading
+  detail, preserve the accepted mountain/lake contours, and inspect low/default/high
+  angle, zoom, aspect and both turn limits. Low Moon/Sun must be partially obscured
+  by that land boundary. Require actual GPU pixels and the single Astra visual audit.
 - [~] **Moon halo integration, idle presence and non-tube shape — Awaiting Validation.**
   The current Moon texture/body is promising but still reads as an isolated sphere rather
   than a luminous part of Neon Lake's visual language. Keep the manually authored Moon Phase
@@ -114,7 +118,8 @@ also corrected; residual physical-size/DPR density and bloom acceptance remains 
   The standard textured Moon must still look good with this option OFF. Any Moon microrelief/
   bump-mapping follow-up remains optional and must be justified physically first; Sun is plasma,
   not lunar rock, so do not blindly share a bump treatment.
-  Seek operator approval for a new setting/schema before implementing this candidate.
+  The operator approved the default-OFF setting/schema on 2026-10-15; implement and
+  validate it without making the ordinary Moon depend on the experiment.
 - [ ] **Viewport-size/DPR adaptive glow and vertex legibility — local-agent implementation + physical acceptance.**
   The same authored Neon Lake preset can look excellent at one framed-card size and disastrously
   overbloomed/overcrowded at another. **This is a render-presentation scaling defect, not an
@@ -170,11 +175,12 @@ also corrected; residual physical-size/DPR density and bloom acceptance remains 
     for invariants, never freeze mutable artistic values or preset bytes. Use explicit project-venv
     test commands and **no environment-variable mutation**. Mark complete only after actual
     operator or local-agent image and performance acceptance.
-- [ ] **Terrain reactivity rework.** Current terrain motion is mostly mild uniform swelling.
-  Rework meaningful musical structure, including differentiated bands/transients and
-  sustained passages, without jelly hills or bass washing everything out. Retain the
-  existing eight growth envelopes and DSP/shaper authority unless an evidence-backed
-  refactor replaces them cleanly. Preserve whatever Preset 1 terrain/appearance the operator
+- [~] **Terrain reactivity rework — source implemented, Awaiting Validation.** Eight
+  preallocated, atomically committed regional contrast factors now condition the existing
+  shaped targets without another FFT, raw-spectrum copy, clock or per-frame container.
+  Review actual quiet/onset/sustained real-music motion for differentiated response,
+  restrained bass and non-jelly land; retain the existing growth timing and shaper authority.
+  Preserve whatever Preset 1 terrain/appearance the operator
   has authored **at the time of the change**, unless a separate artistic edit is approved;
   do not freeze an older baseline or treat these numbers as regression oracles. Validate deterministic clips and the
   operator's **real-music recordings** at

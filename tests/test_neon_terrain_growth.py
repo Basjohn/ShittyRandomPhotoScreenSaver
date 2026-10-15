@@ -152,6 +152,7 @@ def test_real_family_capture_uses_resolved_bars_and_marks_growth_only_updates(mo
     monkeypatch.setattr(capture, '_base_extras', lambda *args: {})
     reads = []
     engine = SimpleNamespace(get_onset_events=lambda serial: (),
+        get_neon_terrain_contrast=lambda: SimpleNamespace(apply_to=lambda targets: None),
         get_musical_intensity=lambda: (reads.append('intensity'), 1.0)[1],
         get_musical_level=lambda: (reads.append('level'), (8.5, 1.0))[1])
     def context(now, **kwargs):

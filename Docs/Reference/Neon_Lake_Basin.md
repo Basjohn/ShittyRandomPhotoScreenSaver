@@ -130,6 +130,14 @@ immutable growth values; it does not simulate them. Disabled movement discards e
 zero on the existing capture clock. Sky, celestial body and bloom remain optional. All context-local resources retire
 through the normal mode owner; unchanged shared consumers acquire no heightfield work.
 
+Active terrain growth also consumes eight mode-local spectral contrast factors. Verified
+audio commit derives shaped-bar-weighted soft raw-magnitude contrast before its private
+FFT storage is reused; an activation-owned lock publishes the preallocated slots together.
+Logical capture applies them to its existing region targets. Authored zero/mirrored shape,
+passage/presence gating and envelope timing remain authoritative. There is no extra FFT,
+full raw-spectrum tuple publication or per-frame container, and other modes do not enable
+this consumer. A failed input leaves the preceding committed factors intact and fails loudly.
+
 ## Glass, celestial body and light
 
 Glass uses the shared Scene3D GGX/Fresnel material helpers. Vertex normals are central derivatives of the same

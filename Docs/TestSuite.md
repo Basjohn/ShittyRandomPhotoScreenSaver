@@ -47,6 +47,9 @@ it does not supply the ordinary suite's storage, QML or runtime cleanup fixtures
 `tests/test_neon_presentation.py` checks item-matrix physical pixel mapping across
 window sizes/DPR and executes the production shoreline helper on real GL: continued
 land cannot emit a false lake contour, while authored shoreline admission remains.
+`tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
+verified source admission, atomic commit/capture, invalid-input transactionality and
+active-Neon-only demand. These source tests do not establish musical-motion acceptance.
 
 ## Visualizer migration and framed-3D proof gates
 

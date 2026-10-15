@@ -76,7 +76,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
     def advance_terrain_growth(self, bars, *, now_ts: float, playing: bool,
                                identity: tuple[int, int, int], source_identity: tuple[int, int],
                                attack: float, release: float, enabled: bool = True,
-                               musical_gain: float = 1.0) -> TerrainGrowthResolved | None:
+                               musical_gain: float = 1.0, contrast=None) -> TerrainGrowthResolved | None:
         """Eight spatial envelopes on the capture clock; no paused Spectrum idle music.
 
         Spatial means integrate overlapping bar intervals, including profiles shorter
@@ -118,6 +118,8 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
                     if not math.isfinite(level):
                         raise ValueError("terrain growth bars must be finite")
                     targets[region] += musical_gain * max(0.0, min(1.0, level)) * overlap / (hi - lo)
+        if contrast is not None and playing and musical_gain > 0.0:
+            contrast.apply_to(targets)
         targets = tuple(old if target > 0.0 and abs(target - old) < 0.015 else target
                         for old, target in zip(self._terrain_targets, targets))
         dt = 0.0 if self._terrain_last_ts is None else max(0.0, now - self._terrain_last_ts)
