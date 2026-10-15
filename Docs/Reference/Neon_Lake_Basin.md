@@ -58,7 +58,7 @@ The five view fields have no Settings body rows. Surface Style admits only three
 | Glass | Reflective continuous terrain and water |
 | Glass + Vertices | Glass with outlined surface markers |
 
-General-purpose mesh-edge wires are retired in the Settings surface selector. The lake shoreline is separately composited; a revised skyline pass now uses shifted copies of the actual land triangles against the landscape depth buffer instead of guessed highest points in projected columns. Retired surface-style strings are converted only during forward input/preset migration; the typed live spec/runtime admits **Vertices, Glass, Glass + Vertices** and nothing else. Only the curated Preset 1 remains shipped; Presets 2/3 are explicit GODZIP debris, not alternate future art targets.
+General-purpose mesh-edge wires are retired in the Settings surface selector. The lake shoreline is separately composited; a revised skyline pass now uses shifted copies of the actual land triangles against the landscape depth buffer instead of guessed highest points in projected columns. Retired surface-style strings are converted only during forward input/preset migration; the typed live spec/runtime admits **Vertices, Glass, Glass + Vertices** and nothing else. Retired Presets 2/3 remain explicit GODZIP debris; new experimental files use later authored ordinals rather than replacing those files.
 
 Shoreline highlights are admitted only within the authored 0..1 terrain domain;
 positive continued land cannot become a second lake by crossing a smoothed height
@@ -189,13 +189,17 @@ approximation may miss thin ridges between taps and uses a bilinear land-height 
 Those limitations are explicit; no hidden high-tap or screen-space fallback is installed.
 
 Every curated preset is operator-authored, independently editable and mutable without restriction,
-including Preset 1 and all future experiments. The current Preset 1 serves as the present visual
+including Preset 1 and all experiments. The current Preset 1 serves as the present visual
 comparison **only**, never a locked baseline or a golden sequence of colours, heights, values, images
-or bytes. The shipped catalog currently contains only this preset plus Custom. Before V4A closure,
-six additional, explicitly experimental and operator-rejectable presets must be authored using
-canonical schema. Creating them may not silently overwrite the operator's latest authored Preset 1
-or any other slot; an explicitly authorized schema migration may legitimately modify preset files
-while retaining current artistic intent. Camera pose remains excluded from art presets. Behavioral
+or bytes. Six disposable experimental candidates explore distinct terrain, colour, surface and response
+balances in authored files 4–9. The active authored directory owns the catalog; the source shipping
+manifest lists packaging assets without overriding user additions or deletions. Runtime
+positions compact those sparse authored ordinals, with Custom always trailing. Schema 12 moves the
+historical schema-11 Custom index 1 to the current trailing Custom before default/lender/preset
+resolution; older retired nonzero selections also retain live art as Custom. The independent Custom
+snapshot and current authored values survive. No runtime heuristic reinterprets a new experiment as
+historical Custom. Preset creation never overwrites another slot; an explicitly authorized schema
+migration may update files while retaining current artistic intent. Camera pose remains excluded from art presets. Behavioral
 and visual regression tests use independent, test-owned settings, never mutable curated art.
 
 Focused regression inventory lives in `Docs/TestSuite.md`. The pre-replacement render-cost baseline is

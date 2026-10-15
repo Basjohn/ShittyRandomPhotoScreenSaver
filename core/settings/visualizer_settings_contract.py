@@ -791,3 +791,28 @@ def migrate_retired_neon_surface_style(data, *, prefix="widgets.spotify_visualiz
         if key in result:
             result[key] = mapped.get(result[key], result[key])
     return result
+
+
+def migrate_neon_experimental_catalog_selection(data, *, schema_version: int,
+                                              prefix="widgets.spotify_visualizer"):
+    """Move historical Neon Custom/retired selections before catalog expansion.
+
+    Schema 11 shipped one art slot followed by Custom at index 1. Earlier
+    nonzero slots are retired art/Custom, never identities of new experiments.
+    Live artistic settings and the independent Custom cache remain untouched.
+    This belongs at persisted schema admission, never normal runtime lookup.
+    """
+    result = dict(data)
+    if schema_version >= 12:
+        return result
+    from core.settings.visualizer_presets import get_custom_preset_index
+    for key in ("preset_shockwave_grid", f"{prefix}.preset_shockwave_grid"):
+        if key not in result:
+            continue
+        try:
+            selected = int(result[key])
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (schema_version == 11 and selected == 1) or (schema_version < 11 and selected > 0):
+            result[key] = get_custom_preset_index("shockwave_grid")
+    return result

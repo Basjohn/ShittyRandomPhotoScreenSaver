@@ -28,12 +28,12 @@ def test_neon_surface_choice_has_only_retained_styles_and_forward_only_migration
         assert choice.admit(style,"Vertices")==style
 
 
-def test_only_authored_neon_preset_one_and_custom_remain():
+def test_neon_disk_catalog_compacts_authored_slots_and_keeps_custom_distinct():
     presets=get_presets("shockwave_grid")
-    assert len(presets)==2 and not presets[0].is_custom and presets[1].is_custom
-    assert get_custom_preset_index("shockwave_grid")==1
+    assert presets and presets[-1].is_custom and all(not p.is_custom for p in presets[:-1])
+    assert get_custom_preset_index("shockwave_grid")==len(presets)-1
     root=Path(__file__).resolve().parents[1]/"presets"/"visualizer_modes"/"shockwave_grid"
-    assert [file.name for file in sorted(root.glob("preset_*.json"))]==["preset_1_synthwave.json"]
+    assert len(list(root.glob("preset_*.json")))==len(presets)-1
 
 
 
