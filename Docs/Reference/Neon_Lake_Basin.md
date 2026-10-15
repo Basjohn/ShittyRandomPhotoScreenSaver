@@ -65,6 +65,12 @@ positive continued land cannot become a second lake by crossing a smoothed heigh
 band. Point/edge pixel mapping uses Quick's actual item matrix and render viewport,
 never whole-window width divided by card width. Embedding a card in a larger window
 must not inflate its points or water-detail strokes.
+Every visible authored lattice point retains its opacity and emission; viewport size,
+perspective or DPR must not randomly thin the population. Point diameter follows the
+actual item's pixel scale, preserving apparent size across DPR. Glass + Vertices fills
+tiny marker cores and smoothly admits an interior hole only at 3..5 physical pixels,
+where an outlined marker has enough samples to remain visible. This changes coverage
+within a mark, never its lattice membership or authored density.
 
 Tint, strength and roughness rows appear for Glass choices. Roughness is authored within .05.. .5, respecting the
 shared material's .045 numerical floor. Plain vertices expose main/accent RGBA; glass vertices expose outline RGBA.
@@ -101,7 +107,11 @@ their bytes once at configuration. Captures retain that same payload by identity
 they do not copy or pack the control grid. A shared lazy `HeightfieldTexture` supports R32F heights or explicit RG32F
 height/bank-distance storage; Neon uses the latter as one representation. The distance transform is derived once at
 configuration, leaving exact authored-zero water ownership unchanged. Water displacement tapers over a narrow bank
-band so a crest meets the solid shore continuously. The texture uploads only changed authored data and fences
+band so a crest meets the solid shore continuously. The mode binds a half-cell
+bank band (`0.5/min(cells)`): nearby water retains attack/release motion and is fully
+reactive by the next mesh cell, while the exact bank stays stationary. A broad
+multi-cell attenuation strip is not part of the shoreline contract.
+The texture uploads only changed authored data and fences
 unpack/texture/sampler state. Allocation/deletion failures stay loud and owned for retry.
 It creates no clock or global texture cache.
 
@@ -169,6 +179,10 @@ The whole Moon surface supplies soft emission following its actual lit/shaded
 albedo: strong on the bright face and faint on the shaded hemisphere. Rim-only
 emission was explicitly rejected as tube-like. A subordinate inner feather and
 analytic exterior halo blend that broad source into the surrounding scene.
+The ordinary exterior halo surrounds the full silhouette at every phase, including
+the shaded limb and New Moon. Phase only gates the lunar surface lighting, the
+subordinate illuminated inner feather and optional illuminated rim vertices; it must
+not cut away any part of the ordinary surrounding corona.
 Celestial Halo gates this emission, while its Intensity/Reactivity remain the
 single glow authority. Preserve face/shadow contrast and subtle detail rather
 than replacing the body with a uniform light blob. A bounded surface gain retains
@@ -235,8 +249,12 @@ outer rim only. Fixed angular slots fade additional marks smoothly during resize
 there is no second mesh, surface lattice, phase or glow owner.
 
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
-projected framed sky**, select three spaced star cells per admitted event, and decay on the
+projected framed sky**, select four spaced star cells per admitted event, and decay on the
 single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).
+Selection spans upper, middle and lower sky bands with event-driven horizontal/vertical
+strata, rather than a shallow row near the card's top. Two recent events retain at
+most eight cells. Canonical camera/fit inputs are required; there is no alternate
+tilt-only projection. Terrain and solid celestial coverage still mask hidden stars.
 Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
 introducing a new vocal detector. A smooth bounded drive retains pulse contrast at
 high Reactivity instead of pinning most musical frames at a hard gain ceiling.
@@ -248,8 +266,8 @@ Nothing about these authored settings creates new per-frame Settings polling or 
 At **large** cards star-peak brightness/shape and Moon/Sun **reactive modulation**
 need clear presence without amplifying unrelated terrain/shoreline glow.
 At **small** cards crowded vertices/overlapping bloom
-need physical viewport/DPR-aware effective bloom footprint, antialiased point size, spacing
-and effective LOD, **never a blanket glow increase or edits to authored preset values**.
+need physical viewport/DPR-aware antialiased point coverage and readable glow,
+**never random population thinning, a blanket glow increase or edits to authored preset values**.
 The viewport-scaling behavior must derive from the actual card/render-target dimensions
 within the existing SceneTarget and mode-owned presentation path, maintain continuous
 results across resize/zoom/aspect, preserve canonical glow/density input authority and

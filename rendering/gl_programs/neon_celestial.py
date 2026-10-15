@@ -90,7 +90,7 @@ uniform float uSkyStrength;
 uniform vec4 uStarColor;
 uniform vec2 uStarGlow; // intensity and response for selected beat stars
 uniform int uBeatStarCount;
-uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
+uniform vec4 uBeatStarCells[8];  // panorama star-grid x/y, fade strength
 uniform vec4 uCloudColor;
 uniform vec4 uHorizonColor;
 
@@ -132,7 +132,8 @@ vec3 basinMoonLightDirection(vec3 eye) {
     return normalize(right*sin(angle)-towardViewer*cos(angle));
 }
 float basinMoonIllumination(vec3 normal,vec3 eye) {
-    // Single terminator authority for the lit lunar surface and all halo logic.
+    // Single terminator authority for the lit lunar surface, inner feather and
+    // optional illuminated rim marks. The ordinary exterior halo is phase-free.
     // Keep crescents thin, but soften the transition so the phase does not read
     // as a hard mechanical cut.
     return smoothstep(0.0,0.055,dot(normal,basinMoonLightDirection(eye)));
@@ -349,10 +350,10 @@ float basinBeatStarLight(vec3 ray,vec2 glow) {
     vec2 grid=vec2(atan(ray.x,-ray.z),asin(clamp(ray.y,-1.0,1.0)))*420.0;
     float light=0.0;
     vec2 pixelScale=max(fwidth(grid),vec2(1e-4));
-    for (int i=0; i<6; ++i) {
+    for (int i=0; i<8; ++i) {
         if (i>=uBeatStarCount) break;
         // Cull far cells before costly halo math. This is an opt-in effect,
-        // and only three (occasionally six) small star regions participate.
+        // and only four (occasionally eight) small star regions participate.
         vec2 difference=grid-uBeatStarCells[i].xy-0.5;
         if (any(greaterThan(abs(difference),vec2(1.0)+6.0*pixelScale))) continue;
         // Actual panorama cells, with a several-pixel halo and a restrained

@@ -47,11 +47,11 @@ def _visible_star_cell(x: float, y: float, tilt: float, turn: float,
 
 
 def starscape_beat_cells(events, tilt: float, turn: float, *,
-                         camera: float | None = None,
-                         fit: tuple[float, float] | None = None,
+                         camera: float,
+                         fit: tuple[float, float],
                          pose: tuple[float, float, float] = (1.0,0.0,0.0),
                          aspect: float = 1.7) -> tuple[tuple[float, ...], ...]:
-    """Three distant existing celestial star-cells per recent powerful onset.
+    """Four spaced existing celestial star-cells per recent powerful onset.
 
     Derived from the existing bounded onset ring/clock. Nothing is persisted or
     recomputed by a background owner, and disabled mode does no work at all.
@@ -62,22 +62,18 @@ def starscape_beat_cells(events, tilt: float, turn: float, *,
         if not (0.0 <= age < 1.75 and strength >= STARSCAPE_BEAT_MIN_STRENGTH):
             continue
         seed = int(abs(x * 8219.0 + z * 3191.0) * 1871.0)
-        for i in range(3):
-            # Three distinct visible sky sectors at a shallow top margin.
-            # Use the real sky ray for this pose, not a tilt-only estimate.
-            x = (0.20,0.50,0.80)[i] + (((seed >> (i*4)) & 15)-7.5)*0.005
-            y = 0.07 + (((seed >> (i*3+1)) & 7))*0.007
-            if camera is not None and fit is not None:
-                lon, lat = _visible_star_cell(x,y,tilt,turn,camera,fit,pose,aspect)
-            else:
-                # Backward-compatible standalone / unavailable-fit fallback.
-                longitude=turn+(i-1)*0.22
-                latitude=-tilt+0.13
-                lon,lat=round(longitude*420),round(latitude*420)
+        for i in range(4):
+            # Stratify across the full framed sky's height as well as width.
+            # The old y=.07..119 range could never choose middle/lower stars.
+            # Rotate the vertical strata per event so no column owns a band.
+            x = (0.14,0.38,0.62,0.86)[i] + (((seed >> (i*4)) & 15)-7.5)*0.005
+            band = (i + (seed & 3)) % 4
+            y = (0.08,0.15,0.215,0.28)[band] + (((seed >> (i*3+1)) & 7)-3.5)*0.004
+            lon, lat = _visible_star_cell(x,y,tilt,turn,camera,fit,pose,aspect)
             cx, cy = _nearby_bright_star(lon,lat)
             intensity = min(1.0, strength * 0.95) * max(0.0, 1.0 - (age / 1.75)**2)**2
             bursts.append((float(cx), float(cy), float(intensity), 0.0))
-        if len(bursts) >= 6:
+        if len(bursts) >= 8:
             break
     return tuple(bursts)
 

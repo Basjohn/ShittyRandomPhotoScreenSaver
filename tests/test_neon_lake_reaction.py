@@ -35,9 +35,11 @@ class _SurfaceProbe:
         declarations = NEON_VERTEX_SOURCE.partition("out vec3 vWorld;")[0]
         declarations = declarations.replace("layout(location=0) in vec2 aUv;", "")
         fragment = declarations + f"""
+        uniform vec4 uProbeUvRect;
         out vec4 FragColor;
         void main() {{
-            vec2 uv = (gl_FragCoord.xy - vec2(0.5)) / {self.SIZE - 1}.0;
+            vec2 uv = mix(uProbeUvRect.xy, uProbeUvRect.zw,
+                          (gl_FragCoord.xy - vec2(0.5)) / {self.SIZE - 1}.0);
             float crest, energy, curved;
             vec3 surface = basinSurface(uv, crest, energy, curved);
             FragColor = vec4(surface.y, sceneHeightfieldWater(basinBase(uv)) ? 1.0 : 0.0, energy, crest);
@@ -53,7 +55,8 @@ class _SurfaceProbe:
         gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, self.target, 0)
         assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
 
-    def draw(self, events=(), *, level=0.0, movement=1.0, detail=0.0, water_detail=0.0, time=0.0):
+    def draw(self, events=(), *, level=0.0, movement=1.0, detail=0.0, water_detail=0.0, time=0.0,
+             bank_band=0.04, uv_rect=(0.0, 0.0, 1.0, 1.0)):
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
         gl.glViewport(0, 0, self.SIZE, self.SIZE)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -75,7 +78,8 @@ class _SurfaceProbe:
         gl.glUniform1fv(uniform("uTerrainGrowth"),8,np.asarray([level]*8,dtype=np.float32))
         gl.glUniform1f(uniform("uTime"), time)
         gl.glUniform1f(uniform("uWaterDetail"), water_detail)
-        gl.glUniform1f(uniform("uWaterBankBand"), 0.04)
+        gl.glUniform1f(uniform("uWaterBankBand"), bank_band)
+        gl.glUniform4f(uniform("uProbeUvRect"), *uv_rect)
         records = [{"age": age, "x": x, "z": z, "strength": strength} for age, x, z, strength in events]
         payload = SHOCKWAVE_EVENTS.pack(records or [{"age": 0.0, "x": 0.0, "z": 0.0, "strength": 0.0}])
         gl.glBindVertexArray(self.vao)
@@ -180,3 +184,47 @@ def test_water_displacement_meets_zero_bank_without_moving_authored_membership(s
     assert np.max(np.abs(active[:, 32, 0])) == 0.0
     assert np.max(np.abs(active[:, 30, 0])) < np.max(np.abs(active[:, 27, 0]))
     assert np.max(np.abs(active[:, 27, 0])) > 0.01
+
+
+@pytest.mark.parametrize("quality", ["High", "Balanced", "Performance", "KAK"])
+@pytest.mark.parametrize("style", ["Glass", "Glass + Vertices"])
+def test_nearshore_water_follows_wave_attack_and_release_without_a_flat_strip(surface, quality, style):
+    from rendering.quick.visualizer.implementations.shockwave_grid import (
+        basin_water_bank_band, shockwave_quality,
+    )
+
+    cells = shockwave_quality({
+        "scene3d_detail": quality, "shockwave_grid_glow": 0.5,
+        "shockwave_grid_wire_display": style, "shockwave_grid_density": 0.45,
+    })[2]
+    # Magnify only the last two water-side columns (the denser mesh axis).
+    # This exercises the real packed bank channel and production basinSurface,
+    # without a screenshot or
+    # mesh-density-dependent raster sample accidentally skipping the near bank.
+    uv_rect = (0.5 - 2.0 / cells[0], 0.0, 0.5, 1.0)
+    draw = dict(uv_rect=uv_rect, bank_band=basin_water_bank_band(cells))
+    quiet = surface.draw(**draw)
+    assert np.max(np.abs(quiet[..., 0])) == 0.0
+    assert np.all(quiet[..., 1] == 1.0)
+    peaks = []
+    for age in (0.12, 0.4, 1.4):
+        events = [(age, 0.0, -1.2, 2.0)]
+        active = surface.draw(events, **draw)
+        # An infinitesimal bank band retains this exact wave at every sampled
+        # water point except the shoreline itself; no CPU wave mirror decides
+        # how much motion should be present.
+        untapered = surface.draw(events, uv_rect=uv_rect, bank_band=1e-6)
+        assert np.array_equal(active[..., 1], quiet[..., 1])
+        assert np.max(np.abs(active[:, -1, 0])) == 0.0
+        for column, minimum_share in ((48, 0.65), (32, 0.95)):
+            reference = np.max(np.abs(untapered[:, column, 0]))
+            assert reference > 0.01
+            share = np.max(np.abs(active[:, column, 0])) / reference
+            assert share >= minimum_share, (quality, style, age, column, share)
+        # Two mesh cells away is ordinary reactive water, with no gain change.
+        assert np.allclose(active[:, 0, 0], untapered[:, 0, 0], atol=2e-6)
+        peaks.append(float(np.max(np.abs(active[..., 0]))))
+    assert peaks[-1] < 0.5 * max(peaks[:2])
+    birth = surface.draw([(0.0, 0.0, -1.2, 2.0)], **draw)
+    assert np.max(np.abs(birth[..., 0])) == 0.0
+    assert np.array_equal(surface.draw(**draw)[..., 0], quiet[..., 0])
