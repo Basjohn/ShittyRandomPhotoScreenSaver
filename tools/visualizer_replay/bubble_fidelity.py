@@ -16,7 +16,7 @@ from unittest.mock import patch
 from .driver import replay_clip
 
 
-def replay_bubbles(clip, *, settings=None):
+def replay_bubbles(clip, *, settings=None, snapshots_at=()):
     from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation, BubbleState
 
     observations, identities, resolved_settings = [], {}, {}
@@ -54,7 +54,7 @@ def replay_bubbles(clip, *, settings=None):
         resolved_settings.update(asdict(controller.settings_model))
 
     with patch.object(BubbleSimulation, "snapshot", observe), patch.object(driver, "_configure", configure_and_record):
-        result = replay_clip(clip, "bubble", settings=settings)
+        result = replay_clip(clip, "bubble", settings=settings, snapshots_at=snapshots_at)
     if len(observations) != len(clip.frames):
         raise RuntimeError("Bubble replay did not observe exactly one snapshot per input frame")
     return result, observations, resolved_settings

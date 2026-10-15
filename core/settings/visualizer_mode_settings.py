@@ -80,8 +80,9 @@ class Slider:
     ``signed`` shows a plus sign for nonnegative values. ``source`` delegates consumption to the
     existing descriptor source-profile projection; it creates no private logical/renderer value.
     ``availability`` optionally names an import-safe capability flag and its disabled tooltip.
-    ``truncate`` retains a body's existing position conversion; ``admission_high`` preserves a
-    wider saved/runtime range than the authoring slider offers."""
+    ``truncate`` retains a body's existing position and integer conversion. Admission bounds
+    preserve a wider stored domain than the slider; runtime bounds independently retain existing
+    consumer caps. ``display_multiplier`` changes only the label's units."""
 
     key: str
     label: str
@@ -106,18 +107,28 @@ class Slider:
     enabled_when: EnabledWhen = ()
     recommended: float | None = None
     runtime_strict: bool = False
+    admission_low: float | None = None
+    runtime_low: float | None = None
+    runtime_high: float | None = None
+    display_multiplier: float = 1.0
 
     def position(self, value: object) -> int:
         number = float(value) * self.scale
         return int(number) if self.truncate else round(number)
 
-    def admit(self, value: object, default: object) -> float | int:
+    def _admit_bounds(self, value: object, default: object, low: float, high: float) -> float | int:
         number = _finite(value)
         if number is None:
             number = float(default)
+        number = max(float(low), min(float(high), number))
+        if self.integer:
+            return int(number) if self.truncate else int(round(number))
+        return number
+
+    def admit(self, value: object, default: object) -> float | int:
+        low = self.low if self.admission_low is None else self.admission_low
         high = self.high if self.admission_high is None else self.admission_high
-        number = max(float(self.low), min(float(high), number))
-        return int(round(number)) if self.integer else number
+        return self._admit_bounds(value, default, low, high)
 
     def coerce(self, value: object) -> float | int:
         return int(value) if self.integer else float(value)
@@ -131,20 +142,25 @@ class Slider:
             if not math.isfinite(number):
                 raise ValueError(f"{self.key} must be finite")
             value = number
-        return self.admit(value, default)
+        low = self.low if self.admission_low is None else self.admission_low
+        high = self.high if self.admission_high is None else self.admission_high
+        return self._admit_bounds(value, default,
+                                  low if self.runtime_low is None else self.runtime_low,
+                                  high if self.runtime_high is None else self.runtime_high)
 
     def text(self, position: int) -> str:
         """The value label for a slider position."""
         if self.percent:
             return f"{round(position * 100 / self.scale)}%"
         sign = "+" if self.signed else ""
-        return f"{position / self.scale:{sign}.{self.decimals}f}{self.suffix}"
+        return f"{position / self.scale * self.display_multiplier:{sign}.{self.decimals}f}{self.suffix}"
 
 
 @dataclass(frozen=True)
 class Toggle:
     """A checkbox; ``text`` is the checkbox's own words, ``label`` its row label (none: the checkbox
-    stands alone across the bucket). ``row_group`` places toggles together in one aligned row."""
+    stands alone across the bucket). ``row_group`` places toggles together in one aligned row.
+    ``also_presentation`` lets a logical setting feed both existing consumers from one intent."""
 
     key: str
     label: str
@@ -161,6 +177,7 @@ class Toggle:
     input_aliases: tuple[str, ...] = ()
     enabled_when: EnabledWhen = ()
     runtime_bool: bool = False
+    also_presentation: bool = False
 
     def admit(self, value: object, default: object) -> bool:
         if isinstance(value, bool):
@@ -183,7 +200,8 @@ class Toggle:
 @dataclass(frozen=True)
 class Choice:
     """A drop-down of fixed labels; an unknown stored value becomes the default. It persists the
-    label, or its position among ``choices`` when ``indexed`` (a number outside them is clamped in)."""
+    label, or its position among ``choices`` when ``indexed`` (a number outside them is clamped in).
+    Optional ``labels`` display friendly text while ``choices`` remain the persisted values."""
 
     key: str
     label: str
@@ -206,6 +224,8 @@ class Choice:
     ingress_strict: bool = False
     normalizer: str = ""
     uppercase: bool = False
+    labels: tuple[str, ...] = ()
+    size_variant: str = ""
 
     def _normalize(self, value: object) -> object:
         if self.normalizer:
@@ -339,7 +359,8 @@ class ModeSettings:
 
     @cached_property
     def _presentation_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if not control.logical and not control.source
+        return tuple(control for control in self.controls
+                     if (not control.logical or getattr(control, "also_presentation", False)) and not control.source
                      and not getattr(control, "authoring", False))
 
     def logical_controls(self) -> tuple[Control, ...]:
@@ -501,7 +522,7 @@ _SHOCKWAVE_GRID = ModeSettings(
                when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True)),
                enabled_when=(_BASIN_BODY, ("shockwave_grid_sun_rays_enabled", True))),
         Toggle("shockwave_grid_starscape_beat", "Starscape Beat:",
-               "On stronger admitted beats, briefly brighten three widely separated stars. Gentle decay; no separate DSP clock.",
+               "On stronger admitted beats, briefly brighten four widely separated stars across the sky. Gentle decay; no separate DSP clock.",
                bucket="glow", when=("shockwave_grid_sky_enabled", True), enabled_when=("shockwave_grid_sky_enabled", True)),
         Slider("shockwave_grid_star_glow_strength", "Star Glow Intensity:", 0.0, 2.0,
                "Brightened stars on admitted strong beats.", bucket="glow",
@@ -1049,7 +1070,137 @@ _SPHERE = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE)
+
+def _bubble_choice(value: object) -> str:
+    return str(value).strip().lower()
+
+
+def _bubble_stream_direction(value: object) -> str:
+    value = _bubble_choice(value)
+    return "top_right" if value == "diagonal" else value
+
+
+_BUBBLE = ModeSettings(
+    "bubble",
+    buckets=(
+        Bucket("appearance", "Appearance", "Bubble shading, gradient direction, and color styling still apply when hidden."),
+        Bucket("motion", "Motion", "Streaming, drift, swirl, and motion-tail controls still apply when hidden."),
+        Bucket("bounce", "Bounce", "Adjust collision rebound probability and speed by bubble class."),
+        Bucket("reactivity", "Reactivity", "Audio-driven pulse behavior still applies when hidden.", advanced=True),
+        Bucket("population", "Population", "Bubble counts, size limits, and lifecycle controls still apply when hidden.", advanced=True),
+        Bucket("layout", "Layout", "Card sizing still applies when hidden.", advanced=True),
+        Bucket("ghost", "Ghost", "Bubble ghosting still applies when hidden.", advanced=True),
+    ),
+    entries=(
+        Choice("bubble_specular_direction", "Specular Direction:",
+               ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right"),
+               bucket="appearance", size_variant="mini",
+               labels=("Top", "Bottom", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right"),
+               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_specular_direction"),
+        Choice("bubble_gradient_direction", "Gradient Direction:",
+               ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right",
+                "center_out", "center_out_reverse"), bucket="appearance", size_variant="mini",
+               labels=("Top", "Bottom", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right",
+                       "Center Out", "Center Out Reverse"),
+               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_gradient_direction"),
+        Colour("bubble_outline_color", "Outline Colour:", "Choose Bubble Outline Color", bucket="appearance"),
+        Colour("bubble_specular_color", "Specular Colour:", "Choose Bubble Specular Color", bucket="appearance"),
+        Colour("bubble_gradient_light", "Gradient Light:", "Choose Bubble Gradient Light", bucket="appearance"),
+        Colour("bubble_gradient_dark", "Gradient Dark:", "Choose Bubble Gradient Dark", bucket="appearance"),
+        Colour("bubble_pop_color", "Pop Colour:", "Choose Bubble Pop Color", bucket="appearance"),
+        Choice("bubble_stream_direction", "Stream Direction:",
+               ("none", "up", "down", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right", "random"),
+               bucket="motion", logical=True,
+               labels=("None", "Up", "Down", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right", "Random"),
+               normalizer="core.settings.visualizer_mode_settings:_bubble_stream_direction"),
+        Slider("bubble_stream_constant_speed", "Stream Constant Speed:", 0.0, 2.0, bucket="motion",
+               logical=True, percent=True, tick=25, truncate=True),
+        Slider("bubble_stream_speed_cap", "Stream Speed Cap:", 0.5, 4.0, bucket="motion",
+               logical=True, percent=True, tick=25, truncate=True, admission_low=0.1),
+        Slider("bubble_stream_reactivity", "Stream Reactivity:", 0.0, 2.0, bucket="motion",
+               logical=True, percent=True, tick=50, truncate=True, runtime_high=1.25),
+        Slider("bubble_rotation_amount", "Rotation Amount:", 0.0, 1.0, bucket="motion",
+               logical=True, percent=True, truncate=True),
+        Slider("bubble_drift_amount", "Drift Amount:", 0.0, 1.0, bucket="motion",
+               logical=True, percent=True, truncate=True),
+        Toggle("bubble_group_drift", "Group Drift:", "Enable", bucket="motion", logical=True,
+               tooltip="Uses one shared drift carrier for non-swirl Bubble drift modes, while still "
+                       "keeping per-bubble force variation so the field moves together without becoming robotic."),
+        Slider("bubble_drift_speed", "Drift Speed:", 0.0, 1.0, bucket="motion",
+               logical=True, percent=True, truncate=True),
+        Slider("bubble_drift_frequency", "Drift Frequency:", 0.0, 1.0, bucket="motion",
+               logical=True, percent=True, truncate=True),
+        Choice("bubble_drift_direction", "",
+               ("none", "left", "right", "diagonal", "swish_horizontal", "swish_vertical", "random", "swirl_cw", "swirl_ccw"),
+               logical=True,
+               labels=("None", "Left", "Right", "Diagonal", "Swish (Horizontal)", "Swish (Vertical)", "Random",
+                       "Clockwise", "Counter-Clockwise"),
+               normalizer="core.settings.visualizer_mode_settings:_bubble_choice"),
+        Custom("swirl", "motion", "ui.tabs.media.bubble_builder:build_bubble_swirl",
+               "ui.tabs.media.bubble_builder:load_bubble_swirl", "ui.tabs.media.bubble_builder:collect_bubble_swirl"),
+        Slider("bubble_trail_strength", "Tail Length:", 0.0, 1.5, bucket="motion",
+               logical=True, percent=True, tick=10, truncate=True,
+               tooltip="How long the motion tail stretches behind each bubble (0 = off)."),
+        Slider("bubble_tail_opacity", "Tail Opacity:", 0.0, 0.85, bucket="motion",
+               percent=True, tick=5, truncate=True,
+               tooltip="Maximum opacity of the tail gradient (0 = off). Always somewhat translucent."),
+        Slider("bubble_bounce_big_pct", "Big Bounce Chance:", 0, 100, bucket="bounce",
+               logical=True, scale=1, integer=True, decimals=0, suffix="%", tick=10, truncate=True),
+        Slider("bubble_bounce_small_pct", "Small Bounce Chance:", 0, 100, bucket="bounce",
+               logical=True, scale=1, integer=True, decimals=0, suffix="%", tick=10, truncate=True),
+        Slider("bubble_bounce_big_speed", "Big Bounce Speed:", 0.0, 2.0, bucket="bounce",
+               logical=True, suffix="x", tick=10, truncate=True),
+        Slider("bubble_bounce_small_speed", "Small Bounce Speed:", 0.0, 2.0, bucket="bounce",
+               logical=True, suffix="x", tick=10, truncate=True),
+        Toggle("bubble_bounce_same_only", "Collision Filter:", "Same Bubbles Bounce Only",
+               bucket="bounce", logical=True),
+        Choice("bubble_collision_pop_mode", "Pop on Collision:", ("off", "one", "all"),
+               bucket="bounce", logical=True, size_variant="mini", labels=("Off", "One Bubble", "All Bubbles"),
+               normalizer="core.settings.visualizer_mode_settings:_bubble_choice"),
+        Slider("bubble_big_bass_pulse", "Big Bubble Bass Pulse:", 0.0, 2.0, bucket="reactivity",
+               logical=True, percent=True, tick=50, truncate=True, runtime_high=1.0),
+        Slider("bubble_small_freq_pulse", "Small Bubble Freq Pulse:", 0.0, 2.0, bucket="reactivity",
+               logical=True, percent=True, tick=50, truncate=True, runtime_high=1.0),
+        Slider("bubble_big_visual_smoothing", "Hero Visual Smoothing:", 0.0, 1.0, bucket="reactivity",
+               logical=True, percent=True, tick=10, truncate=True,
+               tooltip="Display-only smoothing for big/hero bubble size. Lower = rawer motion, higher = softer visual settling. "
+                       "Does not smooth the audio signal or Bubble loud-path authority."),
+        Slider("bubble_big_size_max", "Big Bubble Size:", 0.010, 0.060, bucket="population",
+               logical=True, scale=1000, decimals=0, tick=10, truncate=True, display_multiplier=1000,
+               tooltip="Base starting radius for big bubbles. Actual size varies ±40% around this value."),
+        Slider("bubble_small_size_max", "Small Bubble Size:", 0.004, 0.030, bucket="population",
+               logical=True, scale=1000, decimals=0, tick=5, truncate=True, display_multiplier=1000,
+               tooltip="Base starting radius for small bubbles. Actual size varies ±45% around this value."),
+        Slider("bubble_big_specular_max_size", "Specular Max Size:", 0.5, 5.0, bucket="population",
+               logical=True, decimals=1, suffix="x", tick=50, truncate=True,
+               tooltip="Maximum specular highlight scale for big bubbles. "
+                       "Caps pulse-driven specular growth so highlights stay visually sane at large radii."),
+        Slider("bubble_big_size_clamp", "Max Pulse Clamp:", 1.5, 8.0, bucket="population",
+               logical=True, decimals=1, suffix="x", tick=50, truncate=True,
+               tooltip="Maximum pulse multiplier for big bubbles. Caps how large a bubble can grow "
+                       "during bass hits (e.g. 4.0x = bubble can grow up to 4× its base radius)."),
+        Slider("bubble_big_contraction_bias", "Contraction Bias:", 0.0, 1.0, bucket="population",
+               logical=True, percent=True, tick=10, truncate=True, admission_high=2.0,
+               tooltip="How much big bubbles shrink during quiet passages. "
+                       "100% = no contraction (default). Lower values make bubbles visibly breathe."),
+        Slider("bubble_big_count", "Big Bubbles:", 0, 30, bucket="population",
+               logical=True, scale=1, integer=True, decimals=0, truncate=True),
+        Slider("bubble_small_count", "Small Bubbles:", 5, 80, bucket="population",
+               logical=True, scale=1, integer=True, decimals=0, truncate=True),
+        Slider("bubble_surface_reach", "Surface Reach:", 0.0, 1.0, bucket="population",
+               logical=True, percent=True, truncate=True),
+        Toggle("bubble_ghosting_enabled", "", "Enable Ghosting", bucket="ghost",
+               logical=True, also_presentation=True, row_group="enable",
+               tooltip="Show a fading afterimage trail behind moving bubbles."),
+        Slider("bubble_ghost_alpha", "Ghost Opacity:", 0.0, 1.0, bucket="ghost",
+               percent=True, tick=5, truncate=True, when=("bubble_ghosting_enabled", True)),
+        Slider("bubble_ghost_decay", "Ghost Decay:", 0.1, 1.0, bucket="ghost",
+               suffix="x", tick=5, bottom_padding=12, when=("bubble_ghosting_enabled", True)),
+    ),
+)
+
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 _CONTROLS = tuple(control for spec in _SPECS for control in spec.controls)
 

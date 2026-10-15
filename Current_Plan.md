@@ -7,7 +7,7 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 ## 0. Execution order and accepted baseline
 
 **Current execution order (operator-authorized):** Neon Lake's visual correction checkpoint is complete;
-(1) migrate **original Bubble** with proven response/render parity and close the entire Visualizer
+(1) finish **original Bubble's physical replay acceptance** and close the entire Visualizer
 Settings-spec migration; (2) prove the reusable **framed-camera, attachment/depth, transparent-compositing, shadow
 and visually justified optics primitives** in §4A; (3) implement Extruded Bubble on those already-proven facilities.
 Release media/cleanup (§3), unrelated deferred graphics, and operator builds are not implicit blockers or reasons to
@@ -39,9 +39,9 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | original Bubble V5
+## 2A. Visualizer spec migration | source complete, Awaiting Validation
 
-Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated.
+Every registered original mode now uses the typed body spec, including original Bubble.
 Neon Lake's current appearance is operator-accepted. The final shore-response and
 four-star spread corrections have focused GPU/native-music proof and the single
 Astra visual audit. Its durable contract is `Docs/Reference/Neon_Lake_Basin.md`;
@@ -52,27 +52,22 @@ population thinning or retune accepted art without a new operator issue.
 
 The operator explicitly authorized proceeding to original Bubble after the shore/star
 fixes. Proper terrain deformation is deferred, nonblocking and excluded from this run
-(§3). Physical-display/audible acceptance is a nonblocking follow-up under §5.
+(§3). Neon's physical-display/audible follow-up is nonblocking under §5.
 
-- [ ] **V5 — original Bubble, immediately after Neon Lake closure and BEFORE shared-primitive/Extruded Bubble work.**
-  - [ ] Save a fresh frozen-settings recorded-clip baseline with clip/settings provenance and full-output fingerprints.
-    The old `logs/bubble_readings_baseline.json` is absent; do not invent/reuse an unverified baseline.
-  - [ ] Migrate the settings owners atomically, preserving the consumer/range contracts below.
-  - [ ] Prove fixed-clip full-output equality, real-body UI round-trip and dormant-mode neutrality, then compare
-  `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. All readings remain x1.00 unless a separately
-  authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
-  Preserve the one-key Swirl composite, versioned gradient-direction input migration, live ghost conditions and external
-  Rainbow/Bar Appearance/Technical owners. Declare current UI/storage versus runtime range differences explicitly:
-  stream reactivity and pulse controls have tighter runtime caps, stream-speed minimum differs, and contraction admits
-  a wider runtime range than its slider. Preserve current hydration quantization and the actual simulation/render
-  consumers of ghost enablement, with one canonical authored intent. Retire promoted model/binding/applier tables
-  atomically; do not invent controls in the currently empty Layout bucket or introduce Spectrum shaping. Prove real-body
-  round-trip, Swirl/gradient migration, one application per consumer, dormancy and fixed-clip full-output equality.
+Bubble's model/builder/binding/applier duplication is retired. Complete native-output fingerprints and GPU stills
+match the independent pre-migration baseline; real-body Custom/Swirl/gradient/ghost and dormant-lifecycle checks pass.
+Durable bounds/consumer ownership live in `Docs/Reference/Visualizer_Reference.md` → Settings declarations;
+test and parity-tool routing lives in `Docs/TestSuite.md` and `Docs/Reference/Harness_Index.md`.
 
-- [ ] **Close the Settings-spec migration as a separate gate.** Verify all registered original Visualizer modes,
-  including Bubble, use the single typed spec and canonical defaults without a parallel model/builder/applier
-  authority; compare Bubble visual/physical audio replay against its frozen baseline and confirm dormant-mode
-  neutrality and persisted Custom/preset parity. Record complete mode coverage, not only passing schema tests.
+- [ ] **V5 physical replay — Awaiting Validation.** During active music, compare original Bubble with its
+  frozen baseline on the physical Windows/Qt/OpenGL presentation path: quiet drift, sharp hits, sustained loud
+  expansion, tails/ghosts, Settings/Custom switching and both displays. Record the clip/passage and any cadence,
+  latency or feel difference. Retained evidence is `logs/bubble_v5_before_20261015` and
+  `logs/bubble_v5_after_20261015`; full fingerprints are exact across all four recordings and GPU pairs.
+  Offline equality does not establish audible timing. Do not retune DSP to mask presentation faults.
+- [ ] **Close the Settings-spec migration gate after that physical acceptance.** Registry-wide source, real-body
+  persistence/conditions and dormant-mode proof are complete; record the remaining physical verdict, then proceed
+  directly to §4A G0. No shared-primitive or Extruded Bubble implementation before this gate closes.
 
 Each slice ends in focused proof, refreshed owner docs and a checkpoint before the next. New modes use the spec from
 first implementation. **Do not start the shared-primitive programme or Extruded Bubble until original Bubble V5

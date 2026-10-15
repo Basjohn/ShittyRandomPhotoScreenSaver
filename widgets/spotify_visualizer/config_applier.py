@@ -13,10 +13,6 @@ from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
-from core.settings.bubble_gradient_semantics import (
-    normalize_bubble_gradient_direction,
-    normalize_bubble_specular_direction,
-)
 from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
 from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_fields
 
@@ -82,97 +78,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             key: getattr(host, f"_{key}")
             for key in _SPHERE_PARAMETER_KEYS
         })
-    if 'bubble_big_bass_pulse' in kwargs:
-        host._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
-    if 'bubble_small_freq_pulse' in kwargs:
-        host._bubble_small_freq_pulse = max(0.0, min(1.0, float(kwargs['bubble_small_freq_pulse'])))
-    if 'bubble_stream_direction' in kwargs:
-        val = str(kwargs['bubble_stream_direction']).lower()
-        if val == 'diagonal':
-            val = 'top_right'
-        if val not in (
-            'none',
-            'up',
-            'down',
-            'left',
-            'right',
-            'top_left',
-            'top_right',
-            'bottom_left',
-            'bottom_right',
-            'random',
-        ):
-            val = str(_visualizer_default('bubble_stream_direction')).lower()
-        host._bubble_stream_direction = val
-    if 'bubble_stream_constant_speed' in kwargs:
-        host._bubble_stream_constant_speed = max(
-            0.0, min(2.0, float(kwargs['bubble_stream_constant_speed']))
-        )
-    if 'bubble_stream_speed_cap' in kwargs:
-        host._bubble_stream_speed_cap = max(
-            0.1, min(4.0, float(kwargs['bubble_stream_speed_cap']))
-        )
-    if 'bubble_stream_reactivity' in kwargs:
-        host._bubble_stream_reactivity = max(0.0, min(1.25, float(kwargs['bubble_stream_reactivity'])))
-    if 'bubble_rotation_amount' in kwargs:
-        host._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
-    if 'bubble_drift_amount' in kwargs:
-        host._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
-    if 'bubble_group_drift' in kwargs:
-        host._bubble_group_drift = bool(kwargs['bubble_group_drift'])
-    if 'bubble_drift_speed' in kwargs:
-        host._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
-    if 'bubble_drift_frequency' in kwargs:
-        host._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
-    if 'bubble_drift_direction' in kwargs:
-        val = str(kwargs['bubble_drift_direction']).lower()
-        valid_dirs = (
-            'none', 'left', 'right', 'diagonal',
-            'swish_horizontal', 'swish_vertical',
-            'swirl_cw', 'swirl_ccw', 'random'
-        )
-        if val not in valid_dirs:
-            val = str(_visualizer_default('bubble_drift_direction')).lower()
-        host._bubble_drift_direction = val
-    if 'bubble_big_count' in kwargs:
-        host._bubble_big_count = max(0, min(30, int(kwargs['bubble_big_count'])))
-    if 'bubble_small_count' in kwargs:
-        host._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
-    if 'bubble_surface_reach' in kwargs:
-        host._bubble_surface_reach = max(0.0, min(1.0, float(kwargs['bubble_surface_reach'])))
-    if 'bubble_bounce_big_pct' in kwargs:
-        host._bubble_bounce_big_pct = max(0, min(100, int(kwargs['bubble_bounce_big_pct'])))
-    if 'bubble_bounce_small_pct' in kwargs:
-        host._bubble_bounce_small_pct = max(0, min(100, int(kwargs['bubble_bounce_small_pct'])))
-    if 'bubble_bounce_big_speed' in kwargs:
-        host._bubble_bounce_big_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_big_speed'])))
-    if 'bubble_bounce_small_speed' in kwargs:
-        host._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
-    if 'bubble_bounce_same_only' in kwargs:
-        host._bubble_bounce_same_only = bool(kwargs['bubble_bounce_same_only'])
-    if 'bubble_collision_pop_mode' in kwargs:
-        mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
-        if mode not in {"off", "one", "all"}:
-            mode = str(_visualizer_default('bubble_collision_pop_mode')).strip().lower()
-        host._bubble_collision_pop_mode = mode
-    if 'bubble_big_size_max' in kwargs:
-        host._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
-    if 'bubble_small_size_max' in kwargs:
-        host._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
-    if 'bubble_big_visual_smoothing' in kwargs:
-        host._bubble_big_visual_smoothing = max(
-            0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing']))
-        )
-    if 'bubble_big_contraction_bias' in kwargs:
-        host._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
-    if 'bubble_big_size_clamp' in kwargs:
-        host._bubble_big_size_clamp = max(1.5, min(8.0, float(kwargs['bubble_big_size_clamp'])))
-    if 'bubble_big_specular_max_size' in kwargs:
-        host._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
-    if 'bubble_trail_strength' in kwargs:
-        host._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
-    if 'bubble_ghosting_enabled' in kwargs:
-        host._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
 
     # Spectrum smoothing remains with its existing Custom/logical owner.
     if 'spectrum_visual_smoothing_enabled' in kwargs:
@@ -330,39 +235,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     elif 'rainbow_speed' in kwargs:
         host._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
 
-    # --- Bubble renderer styling -------------------------------------
-    if 'bubble_ghosting_enabled' in kwargs:
-        host._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
-    if 'bubble_ghost_alpha' in kwargs:
-        host._bubble_ghost_alpha = max(0.0, min(1.0, float(kwargs['bubble_ghost_alpha'])))
-    if 'bubble_ghost_decay' in kwargs:
-        host._bubble_ghost_decay = max(0.1, min(1.0, float(kwargs['bubble_ghost_decay'])))
-    if 'bubble_outline_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_outline_color'])
-        if c is not None:
-            host._bubble_outline_color = c
-    if 'bubble_specular_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_specular_color'])
-        if c is not None:
-            host._bubble_specular_color = c
-    if 'bubble_gradient_light' in kwargs:
-        c = _color_or_none(kwargs['bubble_gradient_light'])
-        if c is not None:
-            host._bubble_gradient_light = c
-    if 'bubble_gradient_dark' in kwargs:
-        c = _color_or_none(kwargs['bubble_gradient_dark'])
-        if c is not None:
-            host._bubble_gradient_dark = c
-    if 'bubble_pop_color' in kwargs:
-        c = _color_or_none(kwargs['bubble_pop_color'])
-        if c is not None:
-            host._bubble_pop_color = c
-    if 'bubble_specular_direction' in kwargs:
-        host._bubble_specular_direction = normalize_bubble_specular_direction(kwargs['bubble_specular_direction'])
-    if 'bubble_gradient_direction' in kwargs:
-        host._bubble_gradient_direction = normalize_bubble_gradient_direction(kwargs['bubble_gradient_direction'])
-    if 'bubble_tail_opacity' in kwargs:
-        host._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
     if 'scene3d_detail' in kwargs:
         from rendering.gl_programs.scene3d import scene3d_detail
@@ -371,8 +243,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
 
     # --- Spec'd modes' renderer-only controls (core/settings/visualizer_mode_settings.py) ---
     _apply_spec_controls(host, kwargs, logical=False)
-
-
 
 
 def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) -> None:
@@ -481,9 +351,6 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['sine_displacement'] = pres._sine_displacement
 
 
-
-
-
 def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     """Attach Sine's line-mode visual parameters.
 
@@ -554,27 +421,3 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
         # Ensure fallback travel is actually visible at idle without becoming
         # distractingly fast for quiet/paused scenes.
         extra['line_speed'] = max(0.22, float(extra['line_speed']))
-
-
-
-
-def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach only GL-safe Bubble extras.
-
-    Renderer colours/directions/tail read from the presentation owner; the
-    simulation arrays/counts read from the authored logical host.
-    """
-    pres = _presentation_source(widget)
-    extra['bubble_outline_color'] = pres._bubble_outline_color
-    extra['bubble_specular_color'] = pres._bubble_specular_color
-    extra['bubble_gradient_light'] = pres._bubble_gradient_light
-    extra['bubble_gradient_dark'] = pres._bubble_gradient_dark
-    extra['bubble_pop_color'] = pres._bubble_pop_color
-    extra['bubble_specular_direction'] = pres._bubble_specular_direction
-    extra['bubble_gradient_direction'] = pres._bubble_gradient_direction
-    extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
-    extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
-    extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
-    extra['bubble_trail_strength'] = widget._bubble_trail_strength
-    extra['bubble_tail_opacity'] = pres._bubble_tail_opacity
-    extra['bubble_count'] = widget._bubble_count

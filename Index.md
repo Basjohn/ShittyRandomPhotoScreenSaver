@@ -78,7 +78,8 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
-| Active sequence: original Bubble V5 parity/spec close → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
+| Original Bubble typed Settings, full-output replay parity and remaining physical gate | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Current_Plan.md` §2A |
+| Active sequence: Bubble physical/spec gate → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |

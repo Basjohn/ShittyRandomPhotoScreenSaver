@@ -10,7 +10,6 @@ from rendering.gl_programs.heightfield import normalize_heightfield
 from core.settings.bubble_gradient_semantics import (
     CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
     get_bubble_gradient_semantics_version,
-    normalize_bubble_specular_direction,
     resolve_bubble_gradient_direction,
 )
 from core.settings.visualizer_mode_registry import (
@@ -184,47 +183,6 @@ _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "sine_line6_shift": float,
 }
 
-_BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "bubble_big_bass_pulse": float,
-    "bubble_small_freq_pulse": float,
-    "bubble_stream_direction": lambda value: value,
-    "bubble_stream_constant_speed": float,
-    "bubble_stream_speed_cap": float,
-    "bubble_stream_reactivity": float,
-    "bubble_rotation_amount": float,
-    "bubble_drift_amount": float,
-    "bubble_group_drift": bool,
-    "bubble_drift_speed": float,
-    "bubble_drift_frequency": float,
-    "bubble_drift_direction": lambda value: value,
-    "bubble_big_count": int,
-    "bubble_small_count": int,
-    "bubble_surface_reach": float,
-    "bubble_bounce_big_pct": int,
-    "bubble_bounce_small_pct": int,
-    "bubble_bounce_big_speed": float,
-    "bubble_bounce_small_speed": float,
-    "bubble_bounce_same_only": bool,
-    "bubble_collision_pop_mode": str,
-    "bubble_outline_color": list,
-    "bubble_specular_color": list,
-    "bubble_gradient_light": list,
-    "bubble_gradient_dark": list,
-    "bubble_pop_color": list,
-    "bubble_specular_direction": lambda value: value,
-    "bubble_gradient_direction": lambda value: value,
-    "bubble_big_size_max": float,
-    "bubble_small_size_max": float,
-    "bubble_big_visual_smoothing": float,
-    "bubble_big_contraction_bias": float,
-    "bubble_big_size_clamp": float,
-    "bubble_big_specular_max_size": float,
-    "bubble_trail_strength": float,
-    "bubble_tail_opacity": float,
-    "bubble_ghosting_enabled": bool,
-    "bubble_ghost_alpha": float,
-    "bubble_ghost_decay": float,
-}
 
 _CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'enabled': bool,
@@ -243,42 +201,6 @@ _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_notch_positions_mirrored': list,
 }
 
-_BUBBLE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    'bubble_big_bass_pulse': float,
-    'bubble_small_freq_pulse': float,
-    'bubble_stream_direction': str,
-    'bubble_stream_reactivity': float,
-    'bubble_rotation_amount': float,
-    'bubble_drift_amount': float,
-    'bubble_group_drift': bool,
-    'bubble_drift_speed': float,
-    'bubble_drift_frequency': float,
-    'bubble_drift_direction': str,
-    'bubble_big_count': int,
-    'bubble_small_count': int,
-    'bubble_surface_reach': float,
-    'bubble_bounce_big_pct': int,
-    'bubble_bounce_small_pct': int,
-    'bubble_bounce_big_speed': float,
-    'bubble_bounce_small_speed': float,
-    'bubble_bounce_same_only': bool,
-    'bubble_outline_color': list,
-    'bubble_specular_color': list,
-    'bubble_gradient_light': list,
-    'bubble_gradient_dark': list,
-    'bubble_pop_color': list,
-    'bubble_big_size_max': float,
-    'bubble_small_size_max': float,
-    'bubble_big_visual_smoothing': float,
-    'bubble_big_contraction_bias': float,
-    'bubble_big_size_clamp': float,
-    'bubble_big_specular_max_size': float,
-    'bubble_trail_strength': float,
-    'bubble_tail_opacity': float,
-    'bubble_ghosting_enabled': bool,
-    'bubble_ghost_alpha': float,
-    'bubble_ghost_decay': float,
-}
 
 _SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sine_ghost_line2_enabled': bool,
@@ -496,6 +418,14 @@ def _build_visualizer_model_kwargs(
     ) -> Dict[str, Any]:
     """Build the shared constructor payload for visualizer ingestion paths."""
 
+    def read_typed_value(key: str, fallback: Any) -> Any:
+        value = read_value(key, fallback)
+        if key == "bubble_gradient_direction":
+            return resolve_bubble_gradient_direction(
+                value, semantics_version=bubble_gradient_semantics_version, default=fallback,
+            )
+        return value
+
     data = _build_visualizer_core_kwargs(
         read_value,
         active_mode=active_mode,
@@ -507,14 +437,10 @@ def _build_visualizer_model_kwargs(
         data,
         _build_visualizer_spectrum_kwargs(read_value),
         _build_visualizer_sine_kwargs(read_value),
-        _build_visualizer_bubble_kwargs(
-            read_value,
-            bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-        ),
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
-        _build_spec_kwargs(read_value),
+        _build_spec_kwargs(read_typed_value),
         {"shockwave_grid_terrain": read_value("shockwave_grid_terrain", _visualizer_default("shockwave_grid_terrain"))},
         preset_kwargs,
     )
@@ -584,31 +510,6 @@ def _build_visualizer_sine_kwargs(
     return _build_read_value_map(read_value, _SINE_BUILD_SPECS)
 
 
-def _build_visualizer_bubble_kwargs(
-    read_value: Callable[[str, Any], Any],
-    *,
-    bubble_gradient_semantics_version: int,
-) -> Dict[str, Any]:
-    data = _build_read_value_map(read_value, _BUBBLE_BUILD_SPECS)
-    data["bubble_stream_constant_speed"] = float(
-        read_value("bubble_stream_constant_speed", _visualizer_default("bubble_stream_constant_speed"))
-    )
-    data["bubble_stream_speed_cap"] = float(
-        read_value("bubble_stream_speed_cap", _visualizer_default("bubble_stream_speed_cap"))
-    )
-    data["bubble_collision_pop_mode"] = str(
-        read_value("bubble_collision_pop_mode", _visualizer_default("bubble_collision_pop_mode"))
-    ).strip().lower()
-    data["bubble_specular_direction"] = normalize_bubble_specular_direction(
-        read_value("bubble_specular_direction", _visualizer_default("bubble_specular_direction"))
-    )
-    default_gradient_direction = str(_visualizer_default("bubble_gradient_direction"))
-    data["bubble_gradient_direction"] = resolve_bubble_gradient_direction(
-        read_value("bubble_gradient_direction", default_gradient_direction),
-        semantics_version=bubble_gradient_semantics_version,
-        default=default_gradient_direction,
-    )
-    return data
 
 
 def _build_visualizer_devcurve_kwargs(
@@ -1024,46 +925,6 @@ class SpotifyVisualizerSettings:
     sine_line6_shift: float = field(default_factory=lambda: _visualizer_default('sine_line6_shift'))  # legacy, hidden
     rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('rainbow_enabled'))
     rainbow_speed: float = field(default_factory=lambda: _visualizer_default('rainbow_speed'))
-    # Bubble visualizer
-    bubble_big_bass_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_big_bass_pulse'))
-    bubble_small_freq_pulse: float = field(default_factory=lambda: _visualizer_default('bubble_small_freq_pulse'))
-    bubble_stream_direction: str = field(default_factory=lambda: _visualizer_default('bubble_stream_direction'))
-    bubble_stream_constant_speed: float = field(default_factory=lambda: _visualizer_default('bubble_stream_constant_speed'))
-    bubble_stream_speed_cap: float = field(default_factory=lambda: _visualizer_default('bubble_stream_speed_cap'))
-    bubble_stream_reactivity: float = field(default_factory=lambda: _visualizer_default('bubble_stream_reactivity'))
-    bubble_rotation_amount: float = field(default_factory=lambda: _visualizer_default('bubble_rotation_amount'))
-    bubble_drift_amount: float = field(default_factory=lambda: _visualizer_default('bubble_drift_amount'))
-    bubble_group_drift: bool = field(default_factory=lambda: _visualizer_default('bubble_group_drift'))
-    bubble_drift_speed: float = field(default_factory=lambda: _visualizer_default('bubble_drift_speed'))
-    bubble_drift_frequency: float = field(default_factory=lambda: _visualizer_default('bubble_drift_frequency'))
-    bubble_drift_direction: str = field(default_factory=lambda: _visualizer_default('bubble_drift_direction'))  # none/left/right/diagonal/swish_{horizontal,vertical}/swirl_{cw,ccw}/random
-    bubble_big_count: int = field(default_factory=lambda: _visualizer_default('bubble_big_count'))
-    bubble_small_count: int = field(default_factory=lambda: _visualizer_default('bubble_small_count'))
-    bubble_surface_reach: float = field(default_factory=lambda: _visualizer_default('bubble_surface_reach'))
-    bubble_bounce_big_pct: int = field(default_factory=lambda: _visualizer_default('bubble_bounce_big_pct'))
-    bubble_bounce_small_pct: int = field(default_factory=lambda: _visualizer_default('bubble_bounce_small_pct'))
-    bubble_bounce_big_speed: float = field(default_factory=lambda: _visualizer_default('bubble_bounce_big_speed'))
-    bubble_bounce_small_speed: float = field(default_factory=lambda: _visualizer_default('bubble_bounce_small_speed'))
-    bubble_bounce_same_only: bool = field(default_factory=lambda: _visualizer_default('bubble_bounce_same_only'))
-    bubble_collision_pop_mode: str = field(default_factory=lambda: _visualizer_default('bubble_collision_pop_mode'))  # off/one/all
-    bubble_outline_color: Any = field(default_factory=lambda: _visualizer_default('bubble_outline_color'))
-    bubble_specular_color: Any = field(default_factory=lambda: _visualizer_default('bubble_specular_color'))
-    bubble_gradient_light: Any = field(default_factory=lambda: _visualizer_default('bubble_gradient_light'))
-    bubble_gradient_dark: Any = field(default_factory=lambda: _visualizer_default('bubble_gradient_dark'))
-    bubble_pop_color: Any = field(default_factory=lambda: _visualizer_default('bubble_pop_color'))
-    bubble_specular_direction: str = field(default_factory=lambda: _visualizer_default('bubble_specular_direction'))  # top/bottom/left/right + diagonals
-    bubble_gradient_direction: str = field(default_factory=lambda: _visualizer_default('bubble_gradient_direction'))  # gradient vector independent of specular highlight
-    bubble_big_size_max: float = field(default_factory=lambda: _visualizer_default('bubble_big_size_max'))
-    bubble_small_size_max: float = field(default_factory=lambda: _visualizer_default('bubble_small_size_max'))
-    bubble_big_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('bubble_big_visual_smoothing'))
-    bubble_big_contraction_bias: float = field(default_factory=lambda: _visualizer_default('bubble_big_contraction_bias'))
-    bubble_big_size_clamp: float = field(default_factory=lambda: _visualizer_default('bubble_big_size_clamp'))
-    bubble_big_specular_max_size: float = field(default_factory=lambda: _visualizer_default('bubble_big_specular_max_size'))
-    bubble_tail_opacity: float = field(default_factory=lambda: _visualizer_default('bubble_tail_opacity'))
-    bubble_trail_strength: float = field(default_factory=lambda: _visualizer_default('bubble_trail_strength'))
-    bubble_ghosting_enabled: bool = field(default_factory=lambda: _visualizer_default('bubble_ghosting_enabled'))
-    bubble_ghost_alpha: float = field(default_factory=lambda: _visualizer_default('bubble_ghost_alpha'))
-    bubble_ghost_decay: float = field(default_factory=lambda: _visualizer_default('bubble_ghost_decay'))
     sine_line_dim: bool = field(default_factory=lambda: _visualizer_default('sine_line_dim'))
     # Dev Curve visualizer
     devcurve_active_layer: str = field(default_factory=lambda: _visualizer_default('devcurve_active_layer'))
@@ -1125,7 +986,6 @@ class SpotifyVisualizerSettings:
     def __post_init__(self):
         self._apply_core_visual_defaults()
         self._apply_sine_defaults()
-        self._apply_bubble_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
         self.shockwave_grid_terrain = normalize_heightfield(self.shockwave_grid_terrain)
@@ -1170,8 +1030,6 @@ class SpotifyVisualizerSettings:
     def _apply_sine_defaults(self) -> None:
         _apply_canonical_list_defaults(self, _SINE_SERIALIZERS)
 
-    def _apply_bubble_defaults(self) -> None:
-        _apply_canonical_list_defaults(self, _BUBBLE_SERIALIZERS)
 
     def _apply_devcurve_defaults(self) -> None:
         _apply_canonical_list_defaults(self, _DEVCURVE_SERIALIZERS)
@@ -1388,9 +1246,7 @@ class SpotifyVisualizerSettings:
         return _serialize_prefixed_fields(self, prefix, _SINE_SERIALIZERS)
 
     def _serialize_bubble_settings(self, prefix: str) -> Dict[str, Any]:
-        data = _serialize_prefixed_fields(self, prefix, _BUBBLE_SERIALIZERS)
-        data[f"{prefix}.bubble_gradient_semantics_version"] = CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION
-        return data
+        return {f"{prefix}.bubble_gradient_semantics_version": CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION}
 
     def _serialize_preset_indices(self, prefix: str) -> Dict[str, int]:
         return {

@@ -75,6 +75,18 @@ frozen-settings baseline, use synthetic fixtures for durable behavior tests and 
 recordings for physical fidelity. No curated preset values become frozen oracles. Close Settings-spec coverage
 for all original Visualizers before commencing shared 3D-primitive work.
 
+`test_visualizer_mode_settings_spec.py` requires exact coverage of every registered original mode and exercises
+their real lazy Settings bodies, canonical model/default admission, conditional rows and actual consumer routes.
+`test_bubble_spec_ui.py` replaces the retired fake-widget Bubble binding checks with real-body tests for all nine
+drift/Swirl choices, silent hydration, one-time gradient migration, ghost conditions, labels/quantization and external
+accessory ownership. `test_bubble_spec_runtime.py` counts one application per existing consumer and checks stored
+versus runtime bounds. `test_bubble_parity_capture.py` proves full replay observation is non-mutating and detects
+trail, extra, protected-event and fade differences that position-only comparisons miss.
+`tools.visualizer_replay.bubble_parity` saves native-recording full-frame fingerprints, source/settings provenance
+and actual GPU stills, then fails on drift against a separately saved frozen-settings run. This is deterministic
+output evidence, not physical display cadence or audible latency. Existing lazy-body/preset/resource checks retain
+zero unopened bodies, canonical Custom saves and reusable renderer data ownership.
+
 Neon Lake closes only after actual rendered horizon/depth and size/DPR evidence; improved star/celestial response,
 terrain reactivity and visual timing must be checked on both synthetic replay and the operator's real-music
 recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. The local

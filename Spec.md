@@ -618,11 +618,14 @@ The currently curated Sphere presentation examples include **Glass Current** (Pr
 
 ## Visualizer Settings declarations
 
-Migrated modes declare their controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
+Every registered original mode declares its body controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.
 Bespoke shape/layer editors remain Custom entries at their existing owner. Reference → Settings declarations describes
 the boundaries, including descriptor source-profile projection, runtime aliases, authoring-only metadata and conditional
 availability. A declaration migration preserves rendering, saved intent, explicit runtime failure contracts and musical response.
+Bubble keeps one persisted drift/Swirl choice, one versioned gradient-direction input migration and one ghost-enable
+intent feeding both existing consumers. Slider, stored and runtime bounds are distinct declarations where required;
+the precise Bubble ranges and external accessory owners live in Reference → Settings declarations.
 
 ## Visualizer preset catalogue ownership
 

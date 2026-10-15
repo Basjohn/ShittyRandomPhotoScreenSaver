@@ -813,9 +813,6 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
 
     cfg = config or {}
 
-    def _sync(btn_attr, color_attr):
-        _apply_vis_color_to_button(tab, btn_attr, color_attr)
-
     if mode_id == "spectrum":
         load_spectrum_mode_settings(tab, cfg)
     elif mode_id == "oscilloscope":
@@ -823,7 +820,7 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     elif mode_id == "sine_wave":
         load_sine_wave_mode_settings(tab, cfg)
     elif mode_id == "bubble":
-        load_bubble_mode_settings(tab, cfg, sync_color_button=_sync)
+        load_bubble_mode_settings(tab, cfg)
     elif mode_id == "devcurve":
         load_devcurve_mode_settings(tab, cfg)
     elif mode_id == "sphere":
