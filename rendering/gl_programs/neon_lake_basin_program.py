@@ -383,6 +383,8 @@ uniform vec4 uVertexOutlineColor;
 uniform vec4 uGlassTint;
 uniform vec2 uGlass; // strength, roughness
 uniform float uLightStrength;
+uniform vec4 uWaterLineGlowColor; // the water lines' glow colour; alpha mixes it in over their ripple palette
+uniform float uWaterLineGlow;     // their glow, relative to the shared surface glow
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 void main() {
     float detailFade=basinDetailFade(vUv);
@@ -476,7 +478,8 @@ void main() {
         if (alpha < 0.002) discard;
         vec3 reflected=wire*1.6+palette*shoreLight;
         FragColor=vec4(reflected,alpha);
-        Emission=sceneEmission(reflected*alpha*uGlow*0.45);
+        vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
+        Emission=sceneEmission((lineGlow*1.6+palette*shoreLight)*alpha*uGlow*0.45);
         return;
     }
     // The original event crest illuminates curved water detail. Keep troughs
@@ -532,7 +535,9 @@ void main() {
     premult=premult*(1.0-shoreAlpha)+shoreColour*shoreAlpha;
     alpha=alpha*(1.0-shoreAlpha)+shoreAlpha;
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
-    Emission=sceneEmission((wire*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
+    // Only water carries lines here; their glow takes its own colour and strength.
+    vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
+    Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
                            +fill*fillAlpha*glassWeight*0.12)*uGlow*distanceFade*detailFade);
 }
 """
@@ -723,7 +728,7 @@ void main() {
         if (FragColor.a<0.0001) discard;
         // Separate small radiance buffer entry for event stars, not the entire
         // sky (which would turn on widespread bloom and flatten the scene).
-        vec3 sparkle=uStarColor.rgb*uStarColor.a*basinBeatStarLight(ray,uStarGlow)*starVisibility*0.95;
+        vec3 sparkle=basinBeatStarColour()*uStarColor.a*basinBeatStarLight(ray,uStarGlow)*starVisibility*0.95;
         Emission=vec4(sparkle,dot(sparkle,vec3(0.2126,0.7152,0.0722)));
         gl_FragDepth=0.999999;
     }

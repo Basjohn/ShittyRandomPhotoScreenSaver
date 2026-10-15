@@ -13,14 +13,15 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
     controls = {entry.key: entry for entry in spec.controls}
     expected = {
         "glow": (
-            "glow", "horizon", "celestial_glow_enabled", "celestial_glow_strength",
-            "celestial_glow_reactivity", "sun_rays_enabled", "sun_rays_strength",
-            "sun_rays_color", "starscape_beat", "star_glow_strength", "star_glow_reactivity",
+            "glow", "water_line_glow_color", "water_line_glow", "horizon", "celestial_glow_enabled",
+            "celestial_glow_strength", "celestial_glow_reactivity", "celestial_rim_vertices", "sun_rays_enabled",
+            "sun_rays_strength", "sun_rays_color", "starscape_beat", "star_glow_strength", "star_glow_reactivity",
+            "star_glow_color",
         ),
         "waves": ("water_detail", "wave_height", "wave_speed", "terrain_reactivity", "scroll", "idle"),
         "render": ("wire_display", "glass_tint", "glass_strength", "glass_roughness",
                    "vertex_color", "vertex_accent_color", "vertex_outline_color", "density",
-                   "water_reflection", "floor"),
+                   "water_reflection", "horizon_thickness", "floor"),
     }
     for bucket, suffixes in expected.items():
         assert [entry.key for entry in spec.controls if entry.bucket == bucket] == [

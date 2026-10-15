@@ -129,7 +129,7 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
     def draw(*, mode, kind=0, sun_enabled=1, phase=0.5, sky_enabled=0,
              sky_strength=0.75, ray=(0.0, 0.0, -1.0), size=(1, 1),
              star_alpha=None, cloud_alpha=None, horizon_alpha=None, eye_override=None,
-             star_count=0, body_alpha=None):
+             star_count=0, body_alpha=None, star_glow=(0.0, 0.0, 0.0, 0.0)):
         gl.glUseProgram(program)
         gl.glUniform3f(gl.glGetUniformLocation(program, "uEye"), *(eye if eye_override is None else eye_override))
         gl.glUniform3f(gl.glGetUniformLocation(program, "uWorldRay"), *ray)
@@ -142,6 +142,7 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
                        *moon_colour[:3],moon_colour[3] if body_alpha is None else body_alpha)
         gl.glUniform1i(gl.glGetUniformLocation(program, "uBeatStarCount"), star_count)
         gl.glUniform2f(gl.glGetUniformLocation(program, "uStarGlow"), 2.0, 2.0)
+        gl.glUniform4f(gl.glGetUniformLocation(program, "uStarGlowColor"), *star_glow)
         gl.glUniform4fv(gl.glGetUniformLocation(program, "uBeatStarCells[0]"), 1,
                         np.array([-0.5,-0.5,1.0,0.0], dtype=np.float32))
         gl.glUniform1f(gl.glGetUniformLocation(program, "uMoonPhase"), phase)
@@ -235,6 +236,18 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         clear_sky_baseline=draw(mode=1,kind=1,phase=0.25,sky_enabled=1,
                                 star_count=0,sun_enabled=0)
         assert clear_sky_beat[:3].mean()>clear_sky_baseline[:3].mean()+0.1
+        # Beat stars light up in the Stars colour until Star Glow Colour's alpha mixes its own in.
+        added = clear_sky_beat[:3] - clear_sky_baseline[:3]
+        assert added / added.max() == pytest.approx(np.array(star_colour[:3]) / max(star_colour[:3]), abs=2e-4)
+        red = (1.0, 0.1, 0.05)
+        def beat_light(alpha):
+            beat = draw(mode=1, kind=1, phase=0.25, sky_enabled=1, star_count=1, sun_enabled=0,
+                        star_glow=(*red, alpha))
+            return beat[:3] - clear_sky_baseline[:3]
+        assert beat_light(0.0) == pytest.approx(added, abs=1e-6)
+        full = beat_light(1.0)
+        assert full / full.max() == pytest.approx(np.array(red), abs=2e-4)
+        assert beat_light(0.5) == pytest.approx(0.5 * (added + full), abs=2e-5)
         assert moon_sky_beat[:3]-moon_sky_baseline[:3] == pytest.approx(
             (clear_sky_beat[:3]-clear_sky_baseline[:3])*(1.-moon_colour[3]),abs=2e-5)
         moon_new = draw(mode=0, kind=1, sun_enabled=1, phase=0.0)
