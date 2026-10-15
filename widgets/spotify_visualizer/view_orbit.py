@@ -105,18 +105,21 @@ def _turn_for_mode(mode_id: str, key: str, value: float) -> float:
 
 
 def _bounded_basin_pose(scale: float, pan_x: float, pan_y: float) -> tuple[float, float]:
-    """Keep a central authored-basin reference within the framed viewport.
+    """Retain basin/sky overlap without forcing the lake to stay central.
 
     The scene is scaled about the interior centre. Pan bounds therefore depend
-    on zoom; fixed pan +/- limits alone let a zoom gesture lose the entire lake.
+    on zoom. Looking down keeps the basin reference in view; looking up may
+    move it below the card while retaining an upper-sky reference. Keeping the
+    same lake anchor central in both directions prevented framing the Sun.
     This is mode-only presentation admission, not editor/card geometry.
     """
     anchor_x, anchor_y = 0.50, 0.68
     left, right = 0.08, 0.92
     projected_x = 0.5 + (anchor_x - 0.5) * scale
     projected_y = 0.5 + (anchor_y - 0.5) * scale
+    projected_sky_y = 0.5 + (0.12 - 0.5) * scale
     return (max(left-projected_x, min(right-projected_x, pan_x)),
-            max(left-projected_y, min(right-projected_y, pan_y)))
+            max(left-projected_y, min(right-projected_sky_y, pan_y)))
 
 
 def orbit_motion_values(motion: ViewOrbitMotion, now: float) -> Dict[str, float]:

@@ -67,6 +67,9 @@ stationary visible cubic shore. Dry land stays unchanged. The beat-star projecti
 three deterministic spaced cells across upper/middle/lower sky, slower release, bounded
 body/terrain avoidance and at most two events. The renderer tests also force a star behind
 transparent terrain: both colour and emission vanish; restoring the old emission blend leaks it.
+Framed input/orbit tests cover zoom-aware sky-facing pan, persisted gesture settlement and
+unchanged card geometry; actual QSG pixel checks cover the expanded sky view with rounded
+card clipping and nested parent scissor still enforced.
 `tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
 verified source admission, atomic commit/capture, invalid-input transactionality and
 active-Neon-only demand. These source tests do not establish musical-motion acceptance.

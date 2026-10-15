@@ -133,8 +133,13 @@ vec4 basinClip(vec3 world) {
 }
 """
 
-_TERRAIN = """
-const float BASIN_SHORE_HEIGHT=0.018;
+_SHORE_HEIGHT_GLSL = """
+#ifndef BASIN_SHORE_HEIGHT
+#define BASIN_SHORE_HEIGHT 0.018
+#endif
+"""
+
+_TERRAIN = _SHORE_HEIGHT_GLSL + """
 uniform sampler2D uTerrain;
 uniform int uTerrainSize;
 uniform vec3 uLand; // height, restrained reactivity, static detail
@@ -330,7 +335,7 @@ void main() {
 """
 )
 
-_SHORELINE_GLSL = """
+_SHORELINE_GLSL = _SHORE_HEIGHT_GLSL + """
 float basinShoreLight(vec2 uv, float base, float curved) {
     // Only the authored domain can contain a lake. The positive rolling land
     // outside it can cross the visual shore band without containing water.

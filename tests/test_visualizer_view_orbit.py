@@ -18,6 +18,7 @@ from widgets.spotify_visualizer.view_orbit import (
     orbit_visualizer_view,
     view_orbit_settings,
     view_orbit_values,
+    view_pose_values,
 )
 
 _DEFAULTS = get_raw_default_settings()["widgets"]["spotify_visualizer"]
@@ -104,14 +105,45 @@ def test_neon_lake_pan_bound_reapplies_on_zoom_and_configuration_reload():
     host = _host()
     mode = "shockwave_grid"
     pose = transform_visualizer_scene(host, mode, {
+        "shockwave_grid_scene_scale": 1.,
         "shockwave_grid_scene_pan_x": 2.0, "shockwave_grid_scene_pan_y": 2.0})
     assert pose["shockwave_grid_scene_pan_x"] == pytest.approx(.42)
-    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.24)
+    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.80)
     pose = transform_visualizer_scene(host, mode, {"shockwave_grid_scene_scale": 4.0})
-    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(-.30)
+    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.80)
     apply_presentation_vis_mode_kwargs(host, {"shockwave_grid_scene_scale": 4.0,
                                              "shockwave_grid_scene_pan_y": -2.0})
     assert host._shockwave_grid_scene_pan_y == pytest.approx(-1.14)
+
+
+@pytest.mark.parametrize('scale',[.25,.65,1.,1.90333,4.])
+def test_neon_sky_framing_is_reachable_but_pan_and_orbit_remain_bounded(scale):
+    from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+    host=_host()
+    sky=transform_visualizer_scene(host,'shockwave_grid',{
+        'shockwave_grid_scene_scale':scale,'shockwave_grid_scene_pan_x':100.,
+        'shockwave_grid_scene_pan_y':100.})
+    assert sky['shockwave_grid_scene_pan_x']==pytest.approx(.42)
+    assert sky['shockwave_grid_scene_pan_y']==pytest.approx(.92-(.5-.38*scale))
+    ground=transform_visualizer_scene(host,'shockwave_grid',{'shockwave_grid_scene_pan_y':-100.})
+    assert ground['shockwave_grid_scene_pan_y']==pytest.approx(.08-(.5+.18*scale))
+    # Looking up keeps upper sky in the card; looking down retains the basin.
+    assert .5+(.12-.5)*scale+sky['shockwave_grid_scene_pan_y']==pytest.approx(.92)
+    assert .5+(.68-.5)*scale+ground['shockwave_grid_scene_pan_y']==pytest.approx(.08)
+
+
+def test_neon_run_tail_camera_can_pan_higher_without_changing_rotation_or_zoom():
+    from widgets.spotify_visualizer.view_orbit import transform_visualizer_scene
+    host=_host()
+    initial={'shockwave_grid_scene_scale':1.90333,'shockwave_grid_scene_pan_x':-.0114366764,
+             'shockwave_grid_scene_pan_y':.0774006}
+    transform_visualizer_scene(host,'shockwave_grid',initial)
+    original=view_pose_values(host,'shockwave_grid')
+    moved=transform_visualizer_scene(host,'shockwave_grid',{'shockwave_grid_scene_pan_y':.65})
+    assert moved['shockwave_grid_scene_pan_y']==pytest.approx(.65)
+    for key,value in original.items():
+        if key!='shockwave_grid_scene_pan_y':
+            assert moved[key]==value
 
 
 def test_a_mode_without_a_view_ignores_orbiting():
