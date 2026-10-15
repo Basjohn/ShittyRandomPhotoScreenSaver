@@ -1061,6 +1061,16 @@ class _PreviewOnsets:
 
     def __init__(self) -> None:
         self.onsets: list = []
+        self._neon_contrast = None
+
+    def get_neon_terrain_contrast(self):
+        """Explicit synthetic contrast for this fixed authored-audio fixture."""
+        if self._neon_contrast is None:
+            from widgets.spotify_visualizer.neon_terrain_contrast import NeonTerrainContrast
+            self._neon_contrast = NeonTerrainContrast()
+            spectrum = self.get_pre_agc_analysis_spectrum()
+            self._neon_contrast.publish(spectrum, (1.0,) * len(spectrum), mirrored=True)
+        return self._neon_contrast
 
     def publish(self, timestamp: float, kind: str, magnitude: float, presence: float) -> None:
         from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS, MusicalOnset

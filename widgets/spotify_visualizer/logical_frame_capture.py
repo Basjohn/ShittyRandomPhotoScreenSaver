@@ -357,7 +357,11 @@ def _capture_shockwave_grid(
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
     growth_enabled = float(parameters["shockwave_grid_terrain_reactivity"]) > 0.0
     growth_gain = 0.0
+    growth_contrast = None
     if growth_enabled:
+        growth_contrast = engine.get_neon_terrain_contrast()
+        if growth_contrast is None:
+            raise RuntimeError("Neon terrain growth has no configured contrast source")
         loudness, presence = engine.get_musical_level()
         growth_gain = passage_ramp(intensity, 0.15) * musical_weight(loudness, presence)
     captured = _capture_spectrum_family(
@@ -383,6 +387,7 @@ def _capture_shockwave_grid(
         release=float(parameters["shockwave_grid_terrain_growth_release"]),
         enabled=growth_enabled,
         musical_gain=growth_gain,
+        contrast=growth_contrast,
     )
     if growth is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
         return None

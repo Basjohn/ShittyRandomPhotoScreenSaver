@@ -98,7 +98,7 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
     calls = {}
     engine = SimpleNamespace(**{
         name: (lambda value, key=name: calls.setdefault(key, []).append(value))
-        for name in ("set_spectrum_shaping_enabled", "set_spectrum_mirrored", "set_spectrum_shape_nodes",
+        for name in ("set_neon_terrain_contrast_enabled", "set_spectrum_shaping_enabled", "set_spectrum_mirrored", "set_spectrum_shape_nodes",
                      "set_notch_positions", "set_spectrum_shape_config", "set_drop_speed")
     })
     assert apply_engine_vis_mode_kwargs(engine, projected)
