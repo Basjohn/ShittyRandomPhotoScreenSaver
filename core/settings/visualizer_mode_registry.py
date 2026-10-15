@@ -397,10 +397,11 @@ def get_visualizer_geometry_kind(mode_id: str) -> str:
 
 
 def get_visualizer_view_pose_keys(mode_id: str) -> tuple[str, ...]:
-    """Mode-owned persistent view pose, deliberately outside all preset ownership.
+    """The one mode-owned persistent live pose, separate from preset artwork.
 
     View authoring persists in the live mode-scoped visualizer settings, never
-    inside curated or Custom preset snapshots or CUSTOM stage rectangles.
+    inside curated or Custom artwork snapshots or CUSTOM stage rectangles.
+    Optional framed-preset starting_view metadata may seed these same keys once.
     """
     descriptor = get_visualizer_mode_descriptor(mode_id)
     return tuple((*descriptor.view_orbit_settings, *descriptor.scene_transform_settings))

@@ -70,6 +70,10 @@ transparent terrain: both colour and emission vanish; restoring the old emission
 Framed input/orbit tests cover zoom-aware sky-facing pan, persisted gesture settlement and
 unchanged card geometry; actual QSG pixel checks cover the expanded sky view with rounded
 card clipping and nested parent scissor still enforced.
+`test_visualizer_preset_starting_view.py` crosses actual Save Preset As file output, catalogue/override parsing,
+repair preservation, runtime cycling, the presentation applier and real Settings selection. It requires complete
+finite framed-only camera metadata, rejects malformed files loudly, preserves adjusted views through ordinary
+hydration, and keeps pose leaves out of artwork/Custom snapshots. All art inputs and output paths are test-owned.
 `tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
 verified source admission, atomic commit/capture, invalid-input transactionality and
 active-Neon-only demand. These source tests do not establish musical-motion acceptance.

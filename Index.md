@@ -81,6 +81,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Original Bubble typed Settings, full-output replay parity and remaining physical gate | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Current_Plan.md` §2A |
 | Active sequence: Bubble physical/spec gate → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
+| Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |

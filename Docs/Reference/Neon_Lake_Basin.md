@@ -39,6 +39,10 @@ The descriptor's `view_orbit_settings` and optional `scene_transform_settings` s
 The existing view owner settles and persists it once through canonical Settings, independently from curated art presets,
 Custom art snapshots, layout Save/Cancel and SST geometry. A pan gesture uses a press-time baseline; scaling rebases
 that baseline. Scene settlement does not cancel held WASD. Dormant input does not poll Settings.
+Framed presets can additionally supply optional `starting_view` metadata to seed these same live keys on explicit
+preset selection. Save Preset As captures it by default, outside the artwork snapshot; ordinary reloads and restarts
+retain the adjusted live view. Validation/selection/repair behavior is owned by the Visualizer reference's
+**Framed preset starting views** contract. Existing art files are not rewritten automatically.
 
 Edit selection remains the fixed card rectangle. The internal eight-point guide and pivot use the same `basin_fit` /
 `basin_item_point` projection as rendering and clamp to the card interior. They remain paint, never geometry authorities.
@@ -301,7 +305,7 @@ homogeneous/card clipping remain independent protections. Alt+wheel scales
 only the inner scene, preserving the outer bordered card and Edit/CUSTOM authority.
 These **landscape-specific values are not reusable defaults**. §4A FC must share the
 underlying bounded-camera capability for future framed 3D modes, with per-mode declared
-limits and composition targets. Framed camera pose remains independent of art presets.
+limits and composition targets. The live camera remains separately owned; preset starting metadata is only a seed.
 
 The overscanned surface can cross the camera near plane under admitted views. Its shader
 emits a homogeneous clip position and relies on hardware clipping rather than dividing

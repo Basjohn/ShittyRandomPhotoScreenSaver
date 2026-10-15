@@ -283,8 +283,10 @@ it is not a requirement to hide zero-cost helpers behind artificial import machi
 
 **Framed 3D Visualizer camera is a reusable opt-in capability, not a separate camera system per mode.**
 Neon Lake establishes the accepted direction: fixed ordinary card/border, bounded orbit/pan/zoom *inside* its
-clipped viewport, one canonical persisted presentation-view owner separate from artistic presets and Edit/CUSTOM
-stage geometry, near-plane-safe projection and composition-aware limits. §4A's FC gate consolidates that existing
+clipped viewport, one canonical persisted presentation-view owner separate from artwork and Edit/CUSTOM
+stage geometry, near-plane-safe projection and composition-aware limits. Framed presets may supply validated
+starting-view metadata to that owner on explicit preset selection; ordinary hydration/resume preserves the live pose.
+§4A's FC gate consolidates that existing
 capability before Extruded Bubble. Individual framed modes choose their own safe bounds/pivot/fit; this does not
 change the unframed Sphere or Extruded Spectrum controls. Do not clone Neon Lake's special-case bounds or create
 an independent controller, gesture timer, view-pose persistence schema or per-mode GPU camera owner. Large and small
@@ -539,6 +541,8 @@ Neon Lake Basin uses this presentation contract; `Docs/Reference/Neon_Lake_Basin
 The existing 3D controls retain their bindings: WASD and Alt+left-drag orbit, Alt+right-drag moves, and Alt+scroll scales.
 For framed 3D modes these operations affect internal scene turn/tilt/pan/scale only; they never change the outer card's
 geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
+Save Preset As can capture the settled pose as optional `starting_view` metadata, outside its artwork snapshot;
+it is an activation input, never a second persistent live camera or renderer override.
 
 Every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
 

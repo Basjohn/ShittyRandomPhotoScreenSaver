@@ -14,6 +14,7 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
+    apply_preset_starting_view,
     build_normalized_custom_snapshot,
     get_custom_preset_index,
     get_preset_count,
@@ -96,6 +97,7 @@ def resolve_next_visualizer_runtime_preset(
             deepcopy(candidate),
         )
         restore_visualizer_snapshot(mode_key, candidate, applied)
+        candidate = apply_preset_starting_view(mode_key, target_index, candidate)
 
     candidate["mode"] = mode_key
     candidate[get_preset_key(mode_key)] = target_index
