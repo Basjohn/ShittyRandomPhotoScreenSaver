@@ -88,6 +88,8 @@ uniform int uSkyEnabled;
 uniform vec4 uSkyColor;
 uniform float uSkyStrength;
 uniform vec4 uStarColor;
+uniform vec4 uStarGlowColor; // beat stars' colour; alpha mixes it in over the star colour
+vec3 basinBeatStarColour() { return mix(uStarColor.rgb, uStarGlowColor.rgb, clamp(uStarGlowColor.a, 0.0, 1.0)); }
 uniform vec2 uStarGlow; // intensity and response for selected beat stars
 uniform int uBeatStarCount;
 uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
@@ -409,8 +411,8 @@ vec4 basinSkyBackground(vec3 worldRay,float starVisibility) {
               clamp(uCloudColor.a, 0.0, 1.0) * clamp(clouds, 0.0, 1.0);
 
     float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
-    stars += basinBeatStarLight(ray,uStarGlow) * starVisibility;
     colour += max(uStarColor.rgb, vec3(0.0)) * stars;
+    colour += max(basinBeatStarColour(), vec3(0.0)) * basinBeatStarLight(ray,uStarGlow) * starVisibility;
     // Keep sky alpha continuous across the camera. The old latitude-based
     // opacity transition created a ruler-straight wallpaper seam unrelated
     // to the terrain skyline, especially when the distant skirt faded out.

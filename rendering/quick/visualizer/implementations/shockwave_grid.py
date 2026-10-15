@@ -40,13 +40,15 @@ from .spectrum import prepare_spectrum_shader_levels
 _EVENT_BINDING, _HEIGHT_UNIT = 3, 4
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uScenePose")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
-                     "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uCloudColor","uHorizonColor")
+                     "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
+                     "uCloudColor","uHorizonColor")
 _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells", "uTerrainGrowth",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
+    "uWaterLineGlowColor","uWaterLineGlow",
 ) + _CELESTIAL_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uHalfWidth","uTerrain","uTerrainSize","uLandHeight","uVolumeStrength","uVolumeColour","uVolumeSteps","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
@@ -199,7 +201,8 @@ class QuickShockwaveGridRenderer:
         gl.glUniform1i(uniforms["uSkyEnabled"],int(bool(parameter(parameters,"shockwave_grid_sky_enabled"))))
         gl.glUniform1f(uniforms["uSkyStrength"],float(parameter(parameters,"shockwave_grid_sky_strength")))
         for uniform,key in (("uSunColor","sun_color"),("uMoonColor","moon_color"),("uSkyColor","sky_color"),
-                            ("uStarColor","star_color"),("uCloudColor","cloud_color"),("uHorizonColor","horizon_color")):
+                            ("uStarColor","star_color"),("uStarGlowColor","star_glow_color"),
+                            ("uCloudColor","cloud_color"),("uHorizonColor","horizon_color")):
             gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
         return position
 
@@ -305,6 +308,8 @@ class QuickShockwaveGridRenderer:
                 gl.glUniform4f(uniforms[uniform], *rgba(parameter(parameters, "shockwave_grid_" + key)))
             gl.glUniform1f(uniforms["uFloor"], float(parameter(parameters, "shockwave_grid_floor")))
             gl.glUniform1f(uniforms["uGlow"], glow)
+            gl.glUniform4f(uniforms["uWaterLineGlowColor"], *rgba(parameter(parameters, "shockwave_grid_water_line_glow_color")))
+            gl.glUniform1f(uniforms["uWaterLineGlow"], float(parameter(parameters, "shockwave_grid_water_line_glow")))
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))

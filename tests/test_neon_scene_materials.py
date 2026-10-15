@@ -65,6 +65,9 @@ def _body(**parameters):
     return _base(shockwave_grid_wire_display='Vertices', shockwave_grid_sky_enabled=False,
         shockwave_grid_sun_enabled=True, shockwave_grid_floor=0.,
         shockwave_grid_line_color=[0, 0, 0, 0], shockwave_grid_crest_color=[0, 0, 0, 0],
+        # Vertices have their own colours, and the skyline its own thickness.
+        shockwave_grid_vertex_color=[0, 0, 0, 0], shockwave_grid_vertex_accent_color=[0, 0, 0, 0],
+        shockwave_grid_vertex_outline_color=[0, 0, 0, 0], shockwave_grid_horizon_thickness=0.,
         **parameters)
 
 
