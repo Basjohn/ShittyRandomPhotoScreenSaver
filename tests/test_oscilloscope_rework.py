@@ -569,8 +569,21 @@ def _rotation_snapshot(quarters, *, diagonal=False):
     return replace(snapshot, logical=replace(snapshot.logical, mode_state=state), presentation=presentation)
 
 
+def _trace_overrun(snapshot):
+    """How far the renderer runs the Trace past the item's edges: its beam reach plus two pixels."""
+    from rendering.quick.visualizer.implementations import oscilloscope as renderer
+
+    presentation, state = snapshot.presentation, snapshot.logical.mode_state
+    flare = float(state.flare) * float(state.parameters["osc_flare"])
+    core = (0.5 * float(state.parameters["osc_beam_width"]) * float(presentation.uniform_visual_scale)
+            * (1.0 + renderer._FLARE_WIDTH * flare))
+    return core + 4.0 / max(0.5, float(presentation.dpr))
+
+
 def _expected_rotated_segment(quarters, *, diagonal=False):
-    """Independent quarter-turn oracle; only the unrotated beam layout is shared with production."""
+    """Independent quarter-turn oracle; only the unrotated beam layout is shared with production.
+    The Trace runs past the item's edges along its own axis, so the drawn segment is the laid-out
+    one cut at those edges (the card's clip cuts it the same way in the product)."""
     from rendering.quick.visualizer.implementations.oscilloscope import oscilloscope_layout
 
     width, height = _ROTATION_SIZE
@@ -582,10 +595,14 @@ def _expected_rotated_segment(quarters, *, diagonal=False):
         (height - y - ch, x, ch, cw),
     )[quarters]
     lx, ly, lw, lh = logical_rect
-    scale, _ = oscilloscope_layout(logical_rect, "Trace")
-    endpoints = np.array([[-1.0, -1.0], [1.0, 1.0]] if diagonal else [[-1.0, 0.25], [1.0, 0.25]])
-    logical = (lx + lw / 2, ly + lh / 2) + endpoints * (scale[0], -scale[1])
     oriented_w, oriented_h = (height, width) if quarters % 2 else (width, height)
+    scale, _ = oscilloscope_layout(logical_rect, "Trace", oriented_w,
+                                   _trace_overrun(_rotation_snapshot(quarters, diagonal=diagonal)))
+    endpoints = np.array([[-1.0, -1.0], [1.0, 1.0]] if diagonal else [[-1.0, 0.25], [1.0, 0.25]])
+    start, end = (lx + lw / 2, ly + lh / 2) + endpoints * (scale[0], -scale[1])
+    assert start[0] < 0.0 and end[0] > oriented_w, "the trace's ends lie past both item edges"
+    cut = [(edge - start[0]) / (end[0] - start[0]) for edge in (0.0, oriented_w)]
+    logical = np.array([start + fraction * (end - start) for fraction in cut])
     px, py = logical.T
     if quarters == 1:
         return np.column_stack((oriented_h - py, px))
@@ -614,11 +631,15 @@ def _assert_beam_follows_segment(pixels, expected):
     probes = start + np.linspace(0.0, 1.0, 25)[:, None] * direction
     nearest = np.linalg.norm(probes[:, None, :] - centres[None, :, :], axis=2).min(axis=1)
     assert nearest.max() < 1.1, "beam does not cover the expected physical segment"
-    ys, xs = np.nonzero(pixels[..., 3])
-    x, y, width, height = _ROTATION_CONTENT_RECT
-    assert xs.min() >= x and xs.max() < x + width
-    assert ys.min() >= y and ys.max() < y + height
-    assert not pixels[[0, -1]].any() and not pixels[:, [0, -1]].any()
+    # The segment is cut at two opposite item edges: the beam reaches both (under the card's border
+    # in the product), and touches neither of the other two.
+    item_width, item_height = _ROTATION_SIZE
+    horizontal = abs(direction[0]) * item_height > abs(direction[1]) * item_width
+    lit = pixels[..., 3] > 0
+    reached = (lit[:, 0].any(), lit[:, -1].any()) if horizontal else (lit[0].any(), lit[-1].any())
+    untouched = (lit[0].any(), lit[-1].any()) if horizontal else (lit[:, 0].any(), lit[:, -1].any())
+    assert all(reached), "the trace must reach the item's edges along its axis"
+    assert not any(untouched)
 
 
 def _assert_rotated_flat_beam(pixels, quarters):
