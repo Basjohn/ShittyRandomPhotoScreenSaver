@@ -15,6 +15,13 @@ explicitly requests it.
 
 ## 1. Targeted tests first
 
+**Neon Lake GPU comparison:** `& ".\.venv\Scripts\python.exe" tools/neon_lake_capture.py --output logs/neon_review --suite`
+captures current Preset 1 through the production render host, including admitted camera,
+size, embedded-card and DPR views. `--set KEY=JSON` overrides memory only; `--size`,
+`--dpr` and `--window` select logical card, physical mapping and whole-window viewport.
+PNG/JSON pairs record actual GL pixels and effective settings/target dimensions.
+These are comparison artifacts, not artistic goldens or real-music/physical-window proof.
+
 For retained ordinary Edit changes, the shared native painter test (`tests/test_qtquick_child_mapped_geometry.py`) covers clipped/applied transforms and repeated family-owned normalization values. Combine it with the specific family scene tests (Clock, System Stats, Friend Pulse, Weather, Achievement Pulse or Abandonment Issues) and the import-free lifetime/paint source contracts. Stable role identity and real painted bounds must both pass; a green source scan cannot certify native gesture responsiveness.
 
 Ordinary widget pixels and resize geometry: `python -m tools.ordinary_widget_resize_capture

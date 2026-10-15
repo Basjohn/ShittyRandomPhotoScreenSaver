@@ -17,7 +17,7 @@ from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
     NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE, NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE,
     NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
-    basin_camera, basin_fit, basin_bounds,
+    basin_camera, basin_fit, basin_bounds, basin_pixel_scale,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
@@ -293,7 +293,7 @@ class QuickShockwaveGridRenderer:
                 gl.glUniform4f(uniforms[uniform], *rgba(parameter(parameters, "shockwave_grid_" + key)))
             gl.glUniform1f(uniforms["uFloor"], float(parameter(parameters, "shockwave_grid_floor")))
             gl.glUniform1f(uniforms["uGlow"], glow)
-            gl.glUniform1f(uniforms["uEdgePx"], 0.75 * frame.viewport[2]/frame.logical_size[0])
+            gl.glUniform1f(uniforms["uEdgePx"], 0.75 * basin_pixel_scale(frame.matrix_values, frame.viewport))
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
             gl.glUniform1i(uniforms["uWireDisplay"],style)
             gl.glUniform1i(uniforms["uMarks"],0)
@@ -412,7 +412,7 @@ class QuickShockwaveGridRenderer:
             if points:
                 gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
                 diameter=1.9 if style&4 else (2.1 if style==2 else 1.7)
-                gl.glUniform1f(uniforms["uPointPx"],diameter*frame.viewport[2]/frame.logical_size[0])
+                gl.glUniform1f(uniforms["uPointPx"],diameter*basin_pixel_scale(frame.matrix_values, frame.viewport))
             if reflections:
                 if depth_prepared:
                     # Mirrors are composed below the later visible surface,

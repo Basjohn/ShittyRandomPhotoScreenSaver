@@ -60,6 +60,12 @@ The five view fields have no Settings body rows. Surface Style admits only three
 
 General-purpose mesh-edge wires are retired in the Settings surface selector. The lake shoreline is separately composited; a revised skyline pass now uses shifted copies of the actual land triangles against the landscape depth buffer instead of guessed highest points in projected columns. Retired surface-style strings are converted only during forward input/preset migration; the typed live spec/runtime admits **Vertices, Glass, Glass + Vertices** and nothing else. Only the curated Preset 1 remains shipped; Presets 2/3 are explicit GODZIP debris, not alternate future art targets.
 
+Shoreline highlights are admitted only within the authored 0..1 terrain domain;
+positive continued land cannot become a second lake by crossing a smoothed height
+band. Point/edge pixel mapping uses Quick's actual item matrix and render viewport,
+never whole-window width divided by card width. Embedding a card in a larger window
+must not inflate its points or water-detail strokes.
+
 Tint, strength and roughness rows appear for Glass choices. Roughness is authored within .05.. .5, respecting the
 shared material's .045 numerical floor. Plain vertices expose main/accent RGBA; glass vertices expose outline RGBA.
 Terrain fill, crests, water, sky, stars, clouds, horizon, Sun, Moon and rays retain separate RGBA controls.
