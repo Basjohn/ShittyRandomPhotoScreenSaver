@@ -627,6 +627,8 @@ availability. A declaration migration preserves rendering, saved intent, explici
 ## Visualizer preset catalogue ownership
 
 Per-mode visualizer preset JSON files are **user-authored state**. Users may add arbitrary counts, delete presets down to one survivor, and leave sparse authored numbers such as `1, 5, 20`. Runtime compacts whatever authored presets exist into slider positions plus trailing Custom without renaming/deleting their files. Edit Preset resolves the real backing file; Save Preset As chooses a non-colliding authored number. Shipped preset manifests may support packaging/reconciliation but are never runtime authority over the user catalogue, and startup must never require authored numbers to be contiguous.
+
+A shipped catalog expansion that moves the trailing Custom position must migrate historical persisted selection before default, lender or preset overlays can reinterpret it as newly authored art. Preserve live artistic values and the independent Custom snapshot; a versioned input migration must not become a runtime selection heuristic.
 Frozen Standard, Media Center **and Diagnostic** share the **same** `%ProgramData%\SRPSS\presets\visualizer_modes` curated directory and `%ProgramData%\SRPSS\presets\visualizer_mode_overrides` explicit-override directory. Diagnostic is a logging/build profile, never a separate curated-preset authority; it must not select or migrate old `diagnostic-onefile` preset copies. Source/dev mode retains repository preset resolution. Do not alter, normalize or silently replace operator-authored JSON when enforcing path parity.
 
 ## Visualizer interactions

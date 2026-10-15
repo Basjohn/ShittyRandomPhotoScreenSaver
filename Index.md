@@ -76,7 +76,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
-| Neon Lake Basin framing, terrain authoring, migration and renderer; live fidelity work | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A V4A |
+| Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer; live fidelity work | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A V4A |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | Active sequence: Neon Lake audio/visual closure → Bubble V5 parity/spec close → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |

@@ -816,7 +816,7 @@ class TestSettingsManagerDefaults:
             assert payload["extruded_spectrum_sensitivity"] == pytest.approx(0.97)
             assert payload["extruded_spectrum_lane_transient_mix"] == pytest.approx(0.9)
             assert payload["extruded_spectrum_ghost_alpha"] == pytest.approx(0.17)
-        assert reloaded._settings.metadata().get("visualizer_schema_version") == 11
+        assert reloaded._settings.metadata().get("visualizer_schema_version") == SettingsManager._VISUALIZER_SCHEMA_VERSION
 
     def test_visualizer_schema_migration_nests_flat_custom_cache(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "flat_visualizer_custom_cache"

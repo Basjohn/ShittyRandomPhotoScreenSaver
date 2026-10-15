@@ -198,9 +198,10 @@ clarified that oval removal alone does not close the horizon gate:
   static shader checks). Use the existing DSP/shaper and logical clock; preserve shared consumers and unrelated
   modes. This is an **explicit closure gate** in addition to the terrain, star and celestial items above; do
   not declare Neon complete simply because tests report valid values.
-- [ ] **Six disposable experimental Neon Lake presets, then V4A closure.** Create **six NEW editable experimental
-  presets** exploring materially distinct scene compositions/surface/response balances, with low/high music
-  captures and canonical Settings round-trip. They are **temporary candidates**, not approved final art:
+- [~] **Six disposable experimental Neon Lake presets — delivered; inspection/closure pending.** Inspect the
+  six new editable source candidates in authored slots 4–9, their low/high native-music captures and
+  canonical Settings round-trip. Refresh Moon captures after its selected material change. They are
+  **temporary candidates**, not approved final art:
   the operator may reject all six without reopening accepted renderer architecture. **All presets, including
   Preset 1 and the six experiments, are operator-authored and freely mutable at any time.** Use the current
   Preset 1 only as the present visual comparison, not a locked identity, frozen copy or fixed test oracle.

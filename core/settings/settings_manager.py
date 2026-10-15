@@ -78,7 +78,7 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 11
+    _VISUALIZER_SCHEMA_VERSION = 12
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -687,6 +687,9 @@ class SettingsManager(QObject):
                     if schema_version < 11:
                         from core.settings.visualizer_settings_contract import repair_schema10_extruded_owned_profile
                         source_vis = repair_schema10_extruded_owned_profile(source_vis)
+                    if schema_version < 12:
+                        from core.settings.visualizer_settings_contract import migrate_neon_experimental_catalog_selection
+                        source_vis = migrate_neon_experimental_catalog_selection(source_vis, schema_version=schema_version)
                     normalized_vis = normalize_visualizer_section_mapping(
                         source_vis,
                         apply_preset_overlay=False,
@@ -800,6 +803,13 @@ class SettingsManager(QObject):
                             repaired = repair_schema10_extruded_owned_profile(section_dict)
                             if repaired != section_dict:
                                 section_dict = repaired
+                                changed = True
+                        if self._visualizer_schema_version() < 12:
+                            from core.settings.visualizer_settings_contract import migrate_neon_experimental_catalog_selection
+                            remapped = migrate_neon_experimental_catalog_selection(
+                                section_dict, schema_version=self._visualizer_schema_version())
+                            if remapped != section_dict:
+                                section_dict = remapped
                                 changed = True
                         # Promote remaining persisted lender values before canonical
                         # default fill can mask which owned keys were absent.
