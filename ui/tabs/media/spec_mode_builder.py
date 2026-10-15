@@ -143,7 +143,9 @@ def _current_value(tab, control):
         return widget.isChecked()
     if isinstance(control, Slider):
         return control.admit(widget.value() / control.scale, control.low)
-    return widget.currentIndex() if control.indexed else widget.currentText()
+    if control.indexed:
+        return widget.currentIndex()
+    return widget.currentData() if control.labels else widget.currentText()
 
 
 def _row(layout, label: str):
@@ -203,10 +205,19 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         widget.setChecked(control.admit(default, default))
         bind_setting_signal(tab, widget.toggled, auto_switch=auto_switch)
     else:
-        widget = StyledComboBox(size_variant="compact") if control.compact else StyledComboBox()
-        widget.addItems(list(control.choices))
+        widget = StyledComboBox(size_variant=control.size_variant or ("compact" if control.compact else "regular"))
+        if control.labels:
+            if len(control.labels) != len(control.choices):
+                raise ValueError(f"{control.key} choice labels must match its values")
+            for label, value in zip(control.labels, control.choices):
+                widget.addItem(label, value)
+        else:
+            widget.addItems(list(control.choices))
         if control.indexed:
             widget.setCurrentIndex(control.admit(default, default))
+            bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)
+        elif control.labels:
+            widget.setCurrentIndex(widget.findData(control.admit(default, default)))
             bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)
         else:
             widget.setCurrentText(control.admit(default, default))
@@ -264,6 +275,8 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
                 widget.setChecked(value)
             elif entry.indexed:
                 widget.setCurrentIndex(value)
+            elif entry.labels:
+                widget.setCurrentIndex(widget.findData(value))
             else:
                 widget.setCurrentText(value)
         finally:

@@ -26,6 +26,22 @@ DEFAULTS = require_canonical_default("widgets.spotify_visualizer")
 BUCKET_STATES = require_canonical_default("ui.visualizer_bucket_states")
 
 
+def test_every_registered_original_mode_has_one_typed_settings_spec():
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+    assert {spec.mode_id for spec in SPECS} == set(VISUALIZER_MODE_IDS)
+
+
+@pytest.fixture
+def settings_manager(qt_app, tmp_path):
+    """Public test-owned storage; this module also runs without the global conftest."""
+    from core.settings.settings_manager import SettingsManager
+    manager = SettingsManager(organization="SRPSSFocusedTests",
+                              application=f"ModeSpec_{tmp_path.name}",
+                              storage_base_dir=tmp_path)
+    yield manager
+    assert manager.flush(timeout=5.0)
+
+
 def _different(control, value):
     if isinstance(control, Slider):
         return control.high if value != control.high else control.low
@@ -64,6 +80,9 @@ def test_a_spec_is_a_registered_mode_and_owns_canonical_keys(spec):
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.mode_id)
 def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
     wild = {}
+    if spec.mode_id == "bubble":
+        from core.settings.bubble_gradient_semantics import CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION
+        wild["bubble_gradient_semantics_version"] = CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION
     for control in spec.controls:
         if isinstance(control, Slider):
             wild[control.key] = control.high + 100.0
@@ -113,7 +132,11 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
         owner, other = (logical, presentation) if control.logical else (presentation, logical)
         attr = control_runtime_attr(control)
         assert getattr(owner, attr) == control_runtime_value(control, control.admit_runtime(DEFAULTS[control.key], DEFAULTS[control.key]))
-        assert not hasattr(other, attr), control.key
+        if getattr(control, "also_presentation", False):
+            assert control.logical
+            assert getattr(other, attr) == getattr(owner, attr), control.key
+        else:
+            assert not hasattr(other, attr), control.key
     parameters = spec_mode_parameters(presentation, spec.mode_id)
     assert set(parameters) == {control.key for control in spec.presentation_controls()}
 
@@ -216,9 +239,14 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
                 wanted[control.key] = _different(control, widget.currentIndex())
                 widget.setCurrentIndex(wanted[control.key])
             else:
-                assert [widget.itemText(i) for i in range(widget.count())] == list(control.choices)
-                wanted[control.key] = _different(control, widget.currentText())
-                widget.setCurrentText(wanted[control.key])
+                assert [widget.itemText(i) for i in range(widget.count())] == list(control.labels or control.choices)
+                current = widget.currentData() if control.labels else widget.currentText()
+                wanted[control.key] = _different(control, current)
+                if control.labels:
+                    assert [widget.itemData(i) for i in range(widget.count())] == list(control.choices)
+                    widget.setCurrentIndex(widget.findData(wanted[control.key]))
+                else:
+                    widget.setCurrentText(wanted[control.key])
         tab._save_settings_now()   # the edits' own saves are debounced
         section = settings_manager.get("widgets", {})["spotify_visualizer"]
         for key, value in wanted.items():
@@ -243,7 +271,8 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
             elif control.indexed:
                 shown = getattr(reloaded, control.key).currentIndex()
             else:
-                shown = getattr(reloaded, control.key).currentText()
+                widget = getattr(reloaded, control.key)
+                shown = widget.currentData() if control.labels else widget.currentText()
             assert shown == pytest.approx(wanted[control.key]), control.key
     finally:
         reloaded.deleteLater()
@@ -284,28 +313,37 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
     try:
         tab._select_mode_page(mode)
         rows = getattr(tab, f"_{spec.prefix}_rows")
-        for control in (control for control in spec.controls if control.when):
-            key, value = control.when
-            condition = spec.control(key)
-            switch = getattr(tab, key)
-            accepted = value[0] if isinstance(value, tuple) else value
+        def set_condition(condition, value):
+            switch = getattr(tab, condition.key)
             if isinstance(condition, Toggle):
-                rejected = not accepted
-                set_value = switch.setChecked
+                switch.setChecked(value)
+            elif condition.indexed:
+                switch.setCurrentIndex(value)
+            elif condition.labels:
+                switch.setCurrentIndex(switch.findData(value))
             else:
-                assert isinstance(condition, Choice)
-                admitted = value if isinstance(value, tuple) else (value,)
-                rejected = next(option for option in condition.choices if option not in admitted)
-                set_value = switch.setCurrentText
-            set_value(accepted)
+                switch.setCurrentText(value)
+
+        for control in (control for control in spec.controls if control.when):
+            terms = (control.when,) if isinstance(control.when[0], str) else control.when
+            accepted = {key: value[0] if isinstance(value, tuple) else value for key, value in terms}
+            for key, value in accepted.items():
+                set_condition(spec.control(key), value)
             assert not rows[control.key].isHidden(), control.key
-            set_value(rejected)
-            assert rows[control.key].isHidden(), control.key
-            # A load blocks the switch's signals; the condition still follows the loaded value.
-            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: accepted})
-            assert not rows[control.key].isHidden(), control.key
-            load_spec_mode_settings(tab, mode, {**DEFAULTS, key: rejected})
-            assert rows[control.key].isHidden(), control.key
+            for key, value in terms:
+                condition = spec.control(key)
+                if isinstance(condition, Toggle):
+                    rejected = not accepted[key]
+                else:
+                    admitted = value if isinstance(value, tuple) else (value,)
+                    rejected = next(option for option in condition.choices if option not in admitted)
+                set_condition(condition, rejected)
+                assert rows[control.key].isHidden(), control.key
+                # Loading blocks signals; every AND predicate must still be applied.
+                load_spec_mode_settings(tab, mode, {**DEFAULTS, **accepted, key: rejected})
+                assert rows[control.key].isHidden(), control.key
+                load_spec_mode_settings(tab, mode, {**DEFAULTS, **accepted})
+                assert not rows[control.key].isHidden(), control.key
         for control in spec.controls:
             if isinstance(control, Toggle) and control.bucket and not control.label and not control.row_group:
                 assert rows[control.key] is getattr(tab, control.key), "a label-less toggle stands alone"

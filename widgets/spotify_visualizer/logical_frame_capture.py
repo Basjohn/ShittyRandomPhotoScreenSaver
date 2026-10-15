@@ -734,21 +734,16 @@ def _capture_sine(
     )
 
 
-_BUBBLE_ARRAY_FIELDS = {
-    "bubble_pos_data",
-    "bubble_extra_data",
-    "bubble_trail_data",
-    "bubble_count",
-}
-
-
 def _capture_bubble(
     widget: Any,
     engine: Any,
     _context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "bubble", engine)
-    config_applier._append_bubble_visual_extras(extra, widget)
+    extra.update(config_applier.spec_mode_parameters(config_applier._presentation_source(widget), "bubble"))
+    # Tail history is a logical input also consumed by rendering; arrays/count
+    # already come from the retained frame runtime below, never a second copy.
+    extra["bubble_trail_strength"] = widget._bubble_trail_strength
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Bubble logical capture requires its runtime controller")
@@ -794,7 +789,6 @@ def _capture_bubble(
                     for name, value in extra.items()
                     if not name.startswith("_quick_")
                 },
-                omit=_BUBBLE_ARRAY_FIELDS,
             ),
         ),
         extra,

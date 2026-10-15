@@ -18,7 +18,7 @@ metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own t
 
 ### Settings declarations
 
-`core/settings/visualizer_mode_settings.py` owns each migrated mode's control declarations; `iter_mode_settings()` is
+`core/settings/visualizer_mode_settings.py` owns every registered original mode's body declarations; `iter_mode_settings()` is
 the membership authority. Canonical defaults and editable presets own values. The model, appliers and lazy body use
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
@@ -48,6 +48,23 @@ Finish and combined RGBA/alpha controls remain Custom hooks. `enabled_when` disa
 latent values; it cannot override an unavailable capability. Recommended slider marks remain UI guidance. Trusted runtime
 admission retains Sphere's explicit errors for malformed values and its direction normalization. Derived control/consumer
 memberships are cached as immutable declaration data, so frame extraction adds no recurring membership allocation.
+
+Bubble's body settings use that same spec for model fields, admission, serialization, lazy controls and existing
+logical/presentation consumers. Drift plus Swirl is a Custom projection of the single `bubble_drift_direction` key;
+it creates no persisted Swirl toggle. The core gradient semantic resolver promotes old directions once at model/UI
+ingress, and collection/serialization stamps the current version. Ghost enablement feeds both existing consumers
+once, while opacity/decay remain presentation-owned and tail length remains logical-owned. Rainbow, Bar Appearance
+and Technical keep their external owners; the existing Layout bucket has no body controls.
+
+Bubble preserves its distinct domains: pulse sliders/storage span `0..2` but runtime caps at `1`; stream reactivity
+spans `0..2` with runtime cap `1.25`; stream-speed cap authors `0.5..4` while storage/runtime admit `0.1..4`;
+contraction authors `0..1` while storage/runtime admit `0..2`. UI hydration retains truncating slider conversion,
+except Ghost Decay's existing rounding; integral population/probability ingress truncates. Friendly choice labels
+persist canonical codes, and size labels retain their existing thousandths units. Other invalid/out-of-domain
+imports are repaired by the canonical typed spec rather than retained in a second permissive Bubble model path.
+This declaration migration does not change simulation, renderer equations, audio analysis or cadence. Full-output
+native replay/GPU comparison is routed through `Docs/Reference/Harness_Index.md`; audible/physical timing remains
+subject to Bubble Temporal Fidelity.
 
 ### Spectrum-family ghost and rainbow ownership
 

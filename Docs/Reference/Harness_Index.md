@@ -15,6 +15,11 @@ explicitly requests it.
 
 ## 1. Targeted tests first
 
+**Original Bubble settings parity:** `python -m tools.visualizer_replay.bubble_parity --output logs/bubble_before --gpu`
+captures full native-clip logical/presentation/physics records, source/settings provenance and GPU stills
+using frozen test settings. Run again with a new `--output` and `--compare logs/bubble_before` after migration.
+It fails on full-frame, resolved-settings or GPU drift; it does not establish live cadence or audible timing.
+
 **Neon Lake GPU comparison:** `& ".\.venv\Scripts\python.exe" tools/neon_lake_capture.py --output logs/neon_review --suite`
 captures current Preset 1 through the production render host, including admitted camera,
 size, embedded-card and DPR views. `--set KEY=JSON` overrides memory only; `--size`,
