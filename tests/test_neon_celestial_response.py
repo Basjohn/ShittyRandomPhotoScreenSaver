@@ -10,6 +10,57 @@ from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from tools.transition_contact_sheet import TransitionCapture
 
 
+@pytest.mark.qt
+def test_production_moon_exterior_halo_surrounds_every_phase(qt_app):
+    """Observe the actual pre-bloom corona, so face spill cannot hide a missing side."""
+    from tests.test_neon_lake_renderer import _snapshot, _wire_frame, _resolved_emission_pixels
+    from tests.test_qtquick_extruded_spectrum import _Target, W, H
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+
+    capture, host = _Target(), QuickVisualizerRenderHost()
+    base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
+                     shockwave_grid_sun_y=3., shockwave_grid_sun_z=-6., shockwave_grid_sun_size=.45,
+                     shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
+                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
+                     shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
+                     shockwave_grid_moon_color=[190,220,255,255],
+                     shockwave_grid_celestial_glow_strength=1.,
+                     shockwave_grid_celestial_glow_reactivity=0., shockwave_grid_celestial_rim_vertices=False,
+                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    try:
+        def draw(phase, halo, enabled=True):
+            colour = capture.render(host, _wire_frame(base, 'Vertices',
+                shockwave_grid_moon_phase=phase, shockwave_grid_sun_enabled=enabled,
+                shockwave_grid_celestial_glow_enabled=halo))
+            return colour, _resolved_emission_pixels(host._implementations['shockwave_grid'])
+
+        absent, _ = draw(.5, False, False)
+        full, _ = draw(.5, False)
+        y, x = np.nonzero(np.max(np.abs(full-absent),axis=2)>8)
+        assert len(x)>30
+        cx, cy = .5*(x.min()+x.max()), .5*(y.min()+y.max())
+        rx, ry = .5*(x.max()-x.min()+1), .5*(y.max()-y.min()+1)
+        yy, xx = np.mgrid[:H,:W]
+        radius = np.sqrt(((xx-cx)/rx)**2+((yy-cy)/ry)**2)
+        annulus = (radius>1.06) & (radius<1.18)
+        quadrants = [annulus & (xx>=cx) & (yy>=cy), annulus & (xx<cx) & (yy>=cy),
+                     annulus & (xx<cx) & (yy<cy), annulus & (xx>=cx) & (yy<cy)]
+        assert all(np.count_nonzero(part)>5 for part in quadrants)
+        for phase in (0., .025, .25, .5, .75, .975):
+            _, off = draw(phase, False)
+            _, on = draw(phase, True)
+            corona = np.mean(on[...,:3]-off[...,:3],axis=2)
+            assert np.isfinite(corona).all()
+            # Every exterior quadrant needs its own source emission. An
+            # illuminated-only halo has an empty hemisphere at quarter/New.
+            means = [float(np.mean(corona[part])) for part in quadrants]
+            assert min(means)>1e-4, (phase,means)
+    finally:
+        host.release_resources()
+        capture.close()
+
+
 def test_rim_experiment_has_one_default_off_typed_settings_roundtrip():
     key='shockwave_grid_celestial_rim_vertices'
     assert DEFAULT_SETTINGS['widgets']['spotify_visualizer'][key] is False

@@ -12,13 +12,17 @@ from rendering.gl_programs.neon_starscape import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _framed_stars(events, tilt, turn):
+    return starscape_beat_cells(events,tilt,turn,camera=3.5,fit=(.7,1.1))
+
+
 def test_starscape_entry_floor_is_exactly_thirtysix_percent_lower_than_035():
     assert abs(STARSCAPE_BEAT_MIN_STRENGTH - 0.224) < 1e-12
     below = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH - 0.001),)
     at = ((0.2, 0.2, -0.5, STARSCAPE_BEAT_MIN_STRENGTH),)
-    assert starscape_beat_cells(below, 0.3, 0.1) == ()
-    assert len(starscape_beat_cells(at, 0.3, 0.1)) == 3
-    assert len(starscape_beat_cells(((1.75, 0.2, -0.5, 1.0),), 0.3, 0.1)) == 0
+    assert _framed_stars(below, 0.3, 0.1) == ()
+    assert len(_framed_stars(at, 0.3, 0.1)) == 4
+    assert len(_framed_stars(((1.75, 0.2, -0.5, 1.0),), 0.3, 0.1)) == 0
 
 
 def test_sky_opacity_has_no_independent_angular_cut_and_outline_never_revives_faded_ground():

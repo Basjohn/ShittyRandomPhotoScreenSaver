@@ -23,7 +23,7 @@ from rendering.gl_programs.neon_celestial import basin_body_position
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_QUALITY_STEPS
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_EVENTS, SHOCKWAVE_DEPTH, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
+    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, shockwave_half_width,
     shockwave_idle, shockwave_wave_speed,
 )
@@ -45,7 +45,7 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells", "uTerrainGrowth",
-    "uWireDisplay", "uMarks", "uPointPx", "uPointSpacing","uTerrainFillColor","uVertexColor","uVertexAccentColor",
+    "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
 ) + _CELESTIAL_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
@@ -68,6 +68,11 @@ def shockwave_quality(parameters) -> tuple[int, float, tuple[int, int]]:
         # lattice rather than introducing a second approximation/depth owner.
         cells=tuple(round(value*math.sqrt(1.10)) for value in cells)
     return detail.overlay_samples, glow, cells
+
+
+def basin_water_bank_band(cells: tuple[int, int]) -> float:
+    """Join the bank within one mesh cell without flattening a broad water strip."""
+    return 0.5/min(cells)
 
 
 class QuickShockwaveGridRenderer:
@@ -316,7 +321,7 @@ class QuickShockwaveGridRenderer:
                            float(parameter(parameters, "shockwave_grid_terrain_detail")))
             gl.glUniform1f(uniforms["uTime"], float(mode_state.animation_time))
             gl.glUniform1f(uniforms["uWaterDetail"], float(parameter(parameters, "shockwave_grid_water_detail")))
-            gl.glUniform1f(uniforms["uWaterBankBand"], 2.5/min(cells))
+            gl.glUniform1f(uniforms["uWaterBankBand"], basin_water_bank_band(cells))
             reflection = float(parameter(parameters, "shockwave_grid_water_reflection"))
             gl.glUniform1f(uniforms["uReflection"], reflection)
             gl.glBindVertexArray(vao)
@@ -414,15 +419,10 @@ class QuickShockwaveGridRenderer:
             if points:
                 gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
                 diameter=1.9 if style&4 else (2.1 if style==2 else 1.7)
-                gl.glUniform1f(uniforms["uPointPx"],diameter)
-                parameters=frame.snapshot.logical.mode_state.parameters
-                field=frame.logical_content_rect
-                half_width=shockwave_half_width(field[2]/field[3])
-                tilt=SHOCKWAVE_MAX_TILT*float(parameter(parameters,"shockwave_grid_tilt"))
-                world_area=(2.0*half_width/cells[0])*(SHOCKWAVE_DEPTH/cells[1])*max(math.sin(tilt),0.12)
-                pixels=self._fit[0]*field[3]*float(parameter(parameters,"shockwave_grid_scene_scale"))
-                pixels*=basin_pixel_scale(frame.matrix_values,frame.viewport)
-                gl.glUniform1f(uniforms["uPointSpacing"],math.sqrt(world_area)*pixels)
+                # Keep every authored mark. The item's actual projection owns
+                # physical scaling; whole-window/card ratios and population
+                # culling cannot thin the field or erase its emission.
+                gl.glUniform1f(uniforms["uPointPx"],diameter*basin_pixel_scale(frame.matrix_values,frame.viewport))
             if reflections:
                 if depth_prepared:
                     # Mirrors are composed below the later visible surface,

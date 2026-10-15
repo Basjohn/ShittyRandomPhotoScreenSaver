@@ -6,11 +6,10 @@ Do not copy this checklist into another plan. Close landed slices here; retain o
 
 ## 0. Execution order and accepted baseline
 
-**Current execution order (operator-authorized):** (1) finish Neon Lake visual corrections, real-music
-reactivity investigation and any justified improvements, then deliver **six disposable experimental presets** and
-close its V4A gate; (2) migrate **original Bubble** with proven response/render parity and close the entire Visualizer
-Settings-spec migration; (3) prove the reusable **framed-camera, attachment/depth, transparent-compositing, shadow
-and visually justified optics primitives** in §4A; (4) implement Extruded Bubble on those already-proven facilities.
+**Current execution order (operator-authorized):** Neon Lake's visual correction checkpoint is complete;
+(1) migrate **original Bubble** with proven response/render parity and close the entire Visualizer
+Settings-spec migration; (2) prove the reusable **framed-camera, attachment/depth, transparent-compositing, shadow
+and visually justified optics primitives** in §4A; (3) implement Extruded Bubble on those already-proven facilities.
 Release media/cleanup (§3), unrelated deferred graphics, and operator builds are not implicit blockers or reasons to
 start Extruded Bubble early. Continue between green checkpoints without routine stops, but do not skip each stage's
 specific physical or recorded-audio evidence. Use reviewed Luna xHigh/Max or Sol 6.1 Medium agents for bounded work;
@@ -40,83 +39,27 @@ Terminal failure, queued NEWS settlement, cache-first admission and text/artwork
 existing owners. Provider backoff remains an absolute floor for manual requests. Durable behavior and regression inventory
 live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairness remains only the §5 Awaiting Logs item.
 
-## 2A. Visualizer spec migration | finish Neon Lake, then original Bubble V5
+## 2A. Visualizer spec migration | original Bubble V5
 
 Oscilloscope, Sine Waves, Dev Curve, Extruded Spectrum, Spectrum and Voxel Sphere are migrated.
-Neon Lake (`shockwave_grid`) has spec-owned Settings, framed authored terrain,
-three retained surface styles, editable Preset 1, six disposable experiments (slots 4–9)
-and trailing Custom. Settings crashes are operator-cleared. Durable behavior lives in
-`Docs/Reference/Neon_Lake_Basin.md`; regression inventory is in `Docs/TestSuite.md`.
-The implementation trail is historicalised in
-`Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md` and source control.
+Neon Lake's current appearance is operator-accepted. The final shore-response and
+four-star spread corrections have focused GPU/native-music proof and the single
+Astra visual audit. Its durable contract is `Docs/Reference/Neon_Lake_Basin.md`;
+regression inventory is `Docs/TestSuite.md`. Six disposable experiments are delivered
+and inspected, freely editable/rejectable. Preserve the accepted curved horizon,
+complete vertex field, full 360-degree Moon halo and shaded hemisphere. Do not resume
+population thinning or retune accepted art without a new operator issue.
 
-**Accepted horizon:** preserve the continuous curved horizon, near mountain skyline
-and lake contours. Horizon highlight inherits editable Ridge/Shore Colour and has
-independent physical-pixel thickness. The shared terrain depth obscures low Sun/Moon.
-
-**Current Moon direction:** the operator rejected the contour/map treatment, supplied
-a clean luminous reference, restored the shaded hemisphere for 3-D form, and explicitly
-required the WHOLE shape to glow. The current bright face and faint shaded side both
-supply emission; the rim is subordinate. Preserve authored phase/colour and the one
-celestial/glow owner. Do not reopen another style without operator input.
-
-- [~] **Moon presentation — Awaiting Validation.** Source and actual GPU phase checks
-  cover New, .025/.975 thin crescents, quarters, gibbous and Full; glow OFF preserves
-  albedo and removes emission. Review the latest whole-surface result at ordinary
-  authored settings and maximum glow, including face detail/contrast. The single Astra
-  audit accepts phase/coherence and the bounded full-Moon headroom correction;
-  operator taste acceptance remains distinct from source and rendered-frame proof.
-- [~] **Viewport/DPR presentation — source implemented, Awaiting Validation.** Physical
-  point sizing and smooth population coverage remove embedded-card amplification and
-  small-card point carpets without rebuilding geometry or changing authored density/glow.
-  Actual GPU small/medium/large, embedded, DPR 1/1.25/1.5/2 and continuous-resize evidence exists.
-  Complete both physical displays and dual-1440p motion/cost
-  acceptance, including Glass, Vertices and Glass + Vertices, narrow/tall cards,
-  tilt/turn/zoom limits, idle/onset/sustained passages and reopen/dormancy. Preserve
-  large-card surface/shore glow; do not introduce a global glow increase. Current
-  operator-authored Preset 1 and the separately supplied Preset 2 export are mutable
-  calibration examples, never golden art or permission to overwrite a slot.
-- [~] **Celestial/star reaction — source implemented, Awaiting Validation.** Bounded
-  midband/onset halo gain retains musical contrast at high reactivity. Solid Sun/Moon
-  coverage blocks ordinary and beat stars on both lit and shaded sides; disabled,
-  transparent or camera-culled bodies leave no starless hole. Starscape Beat uses the
-  existing 0.224 onset floor, three spaced stars and gentle decay. Review low/high
-  real-music motion for obvious controlled celestial pulses and elegant visible star
-  peaks, without washing out lunar detail or boosting unrelated terrain/shore glow.
-- [~] **Optional Celestial Rim Vertices — implemented, Awaiting Validation.** The operator
-  approved this default-OFF experiment. Sparse antialiased marks follow only the
-  illuminated outer rim on the existing analytic body; fixed angular slots fade their
-  population through resize. Inspect thin crescents and continuous resize. The ordinary
-  Moon must remain coherent with the experiment OFF; no second sphere, surface lattice,
-  phase owner, glow authority, DSP or clock.
-- [~] **Terrain/recorded-audio acceptance — Awaiting Validation.** Eight preallocated
-  regional contrast factors condition existing shaped targets; native-music measurements
-  show better regional differentiation and less saturation. Actual quiet/busy motion
-  captures exist. Compare audible events against raw bands/onsets, regional growth,
-  water events, star admissions and celestial output for missed attacks, delayed release,
-  sustained flattening and bass/transient washout. Require actual reaction/timing review;
-  silent GIFs and source tests do not close this gate. Use the existing recordings at
-  `logs/visualizer_recordings`; retain shaper, attack/release and logical-clock ownership.
-- [~] **Six disposable experiments — delivered and agent-inspected; final art optional.**
-  Slots 4–9 have canonical round-trip proof, quiet/busy native-music captures and refreshed
-  Moon stills. Select/refine or reject them freely. They are editable candidates
-  and may all be rejected without reopening accepted renderer architecture. Preserve all
-  existing operator slots and latest art; keep camera pose out of presets and Custom
-  selection distinct. Never freeze preset bytes, hashes or artistic values in tests.
-  Violet/Solar Salt Flats/Deep Tide currently crop the body's upper edge, and
-  Glacier/Solar have pronounced staircase shoreline fragments; resolve these
-  candidate appearance choices when selecting/refining final art.
-
-Close Neon V4A only after the specified visual/reactivity/viewport and recorded-audio
-acceptance, six-experiment inspection and focused source regressions. Do not start
-Bubble merely because the automated tests pass. Use the project `.venv`, explicit
-CLI/test-owned storage and no environment-variable mutation. No new timers, polling,
-per-frame static resource rebuilding, duplicate bloom or unrelated-mode cost.
+The operator explicitly authorized proceeding to original Bubble after the shore/star
+fixes. Proper terrain deformation is deferred, nonblocking and excluded from this run
+(§3). Physical-display/audible acceptance is a nonblocking follow-up under §5.
 
 - [ ] **V5 — original Bubble, immediately after Neon Lake closure and BEFORE shared-primitive/Extruded Bubble work.**
-  Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
-  `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
-  `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
+  - [ ] Save a fresh frozen-settings recorded-clip baseline with clip/settings provenance and full-output fingerprints.
+    The old `logs/bubble_readings_baseline.json` is absent; do not invent/reuse an unverified baseline.
+  - [ ] Migrate the settings owners atomically, preserving the consumer/range contracts below.
+  - [ ] Prove fixed-clip full-output equality, real-body UI round-trip and dormant-mode neutrality, then compare
+  `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. All readings remain x1.00 unless a separately
   authorized reaction change is intended. Do not use mutable curated presets as goldens or compensate with DSP retuning.
   Preserve the one-key Swirl composite, versioned gradient-direction input migration, live ghost conditions and external
   Rainbow/Bar Appearance/Technical owners. Declare current UI/storage versus runtime range differences explicitly:
@@ -165,6 +108,14 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   migration checkpoint, confirm caller absence and forward-strip it at canonical input/save boundaries without linking
   the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
+
+- [ ] **Deferred Neon terrain deformation — future, nonblocking; not for this run.** Design proper
+  spatial terrain deformation/reactivity as separate future work. Preserve the currently accepted
+  appearance and timing until that task is explicitly resumed; do not implement it during Bubble migration.
+- [ ] **Conservative bank-distance junctions — future, nonblocking.** The packed distance field can
+  leave isolated fully-water junction cells at zero distance (3 of 1472 current Preset 1 water cells;
+  mutable art, not a test oracle). Investigate a finer boundary-distance representation only for a
+  reproduced residual dead junction. The broad shoreline strip is fixed without changing classification.
 
 ### SC4. Just Make It Work Pools | provider selection, independently scoped
 
@@ -334,6 +285,13 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   refractive glass lit by bolts, volumetric shockwaves and photo-colour IBL. Choose one promoted effect at a time.
 
 ## 5. Nonblocking watchlist and operator-owned evidence
+
+- [ ] **Neon installed/display/audio — Awaiting Validation when convenient, nonblocking.** During
+  ordinary use check both physical displays, mixed DPR, resize/reopen and audible reaction timing.
+  The operator accepted current visuals and authorized Bubble continuation; no new build/log request
+  or additional art tuning is required solely to close this observation. Experimental preset body
+  cropping/shoreline stair fragments remain optional candidate-art refinement, not renderer blockers.
+
 
 These items never hold source work waiting for a diagnostic build. Observe during normal use or an operator-chosen
 build/capture; reopen only from the listed symptom/evidence. Record Awaiting Logs/Validation without turning it into

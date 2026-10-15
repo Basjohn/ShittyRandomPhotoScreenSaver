@@ -218,13 +218,14 @@ def test_horizon_thickness_and_inherited_crest_colour_reach_real_gpu_pixels(targ
     assert float(np.mean(blue[added, 2]-thick[added, 2])) > 20
 
 
-def _resolved_emission_pixels(renderer):
+def _resolved_emission_pixels(renderer, width=W, height=H):
     """Actual production MRT radiance, before bloom can conceal or spread invalid values."""
-    width, height, _samples = renderer._target.allocation
-    pixels = np.empty((height, width, 4), dtype=np.float32)
-    gl.glGetTextureImage(renderer._target._names['emission_resolve'], 0,
+    allocated_width, allocated_height, samples = renderer._target.allocation
+    pixels = np.empty((allocated_height, allocated_width, 4), dtype=np.float32)
+    texture = renderer._target._names['emission_resolve' if samples > 1 else 'emission']
+    gl.glGetTextureImage(texture, 0,
                          gl.GL_RGBA, gl.GL_FLOAT, pixels.nbytes, pixels)
-    return pixels[:H, :W][::-1].copy()
+    return pixels[:height, :width][::-1].copy()
 
 
 def test_production_moon_whole_surface_emission_follows_phase_glow_and_pulse(target):
@@ -698,42 +699,96 @@ def test_same_physical_card_pixels_survive_embedding_in_a_larger_viewport(qt_app
 
 
 @pytest.mark.parametrize('style', ['Vertices', 'Glass + Vertices'])
-def test_equal_physical_card_pixels_match_across_logical_size_and_dpr(qt_app, style):
-    """DPR cannot change marker population/diameter or glow on an equal physical surface."""
+@pytest.mark.parametrize('dpr', [1.,1.25,1.5,2.])
+def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app, monkeypatch, style, dpr):
+    """Every selected real lattice point survives normal sizing and subpixel raster phases."""
     from tools.transition_contact_sheet import TransitionCapture
     from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
     from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+    from rendering.gl_programs.neon_lake_basin_mesh import basin_lattice
+    from rendering.gl_programs.neon_lake_basin_program import basin_item_point, SHOCKWAVE_DEPTH
+    from rendering.gl_programs.heightfield import sample_heightfield_curve
 
-    base = _wire_frame(_snapshot(shockwave_grid_glow=.55), style)
-    pixel_w, pixel_h = 2*W, 2*H
-    images = []
-    for logical_w, logical_h in ((W, H), (2*W, 2*H)):
-        # Geometry comes from the production resolver. Zero chrome/inset isolates
-        # the equal physical scene from intentionally logical-pixel card borders.
-        presentation = resolve_visualizer_presentation(
-            policy=get_visualizer_presentation_policy('shockwave_grid'),
-            display_size=(logical_w, logical_h), viewport_extent=(logical_w, logical_h),
-            border_width=0., corner_radius=0., content_inset=0., background_color=(0,0,0,0),
-            border_color=(0,0,0,0), shadow_enabled=False, shadow_color=(0,0,0,0), shadow_blur=0.,
-            shadow_offset=(0.,0.), shadow_spread=0., shadow_extensions=(0.,0.,0.,0.))
-        capture, host = TransitionCapture(pixel_w, pixel_h), QuickVisualizerRenderHost()
-        try:
+    width,height = 640,400
+    pixel_w,pixel_h = round(width*dpr),round(height*dpr)
+    grid = {'size':5,'heights':[.25+.12*((x+2*y)%5)/4 for y in range(5) for x in range(5)]}
+    base = _wire_frame(_snapshot(scene3d_detail='Balanced',shockwave_grid_density=0.,shockwave_grid_glow=.55,
+        shockwave_grid_sun_enabled=False,shockwave_grid_sky_enabled=False,shockwave_grid_water_reflection=0.,
+        shockwave_grid_floor=0.,shockwave_grid_glass_strength=0.,shockwave_grid_terrain_reactivity=0.,
+        shockwave_grid_terrain_detail=0.,shockwave_grid_scene_scale=.65,shockwave_grid_scene_pan_y=0.,
+        shockwave_grid_line_color=[0,0,0,0],shockwave_grid_crest_color=[0,0,0,0],
+        shockwave_grid_terrain_fill_color=[0,0,0,255],
+        shockwave_grid_vertex_color=[255,255,255,255],shockwave_grid_vertex_accent_color=[255,255,255,255],
+        shockwave_grid_vertex_outline_color=[255,255,255,255]),style)
+    state = base.logical.mode_state
+    terrain = {**dict(state.parameters['shockwave_grid_terrain']), 'size':grid['size'],
+               'data':heightfield_surface_bytes(grid),'maximum':max(grid['heights'])}
+    base = _wire_frame(base,style,shockwave_grid_terrain=terrain)
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy('shockwave_grid'),
+        display_size=(width,height),viewport_extent=(width,height),
+        border_width=0.,corner_radius=0.,content_inset=0.,background_color=(0,0,0,0),
+        border_color=(0,0,0,0),shadow_enabled=False,shadow_color=(0,0,0,0),shadow_blur=0.,
+        shadow_offset=(0.,0.),shadow_spread=0.,shadow_extensions=(0.,0.,0.,0.))
+    snapshot = replace(base,presentation=presentation)
+    capture,host = TransitionCapture(pixel_w,pixel_h),QuickVisualizerRenderHost()
+    try:
+        matrix = (2/width,0,0,0,0,-2/height,0,0,0,0,1,0,-1,1,0,1)
+        def render(matrix):
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
             gl.glDisable(gl.GL_SCISSOR_TEST)
             gl.glDepthMask(gl.GL_TRUE)
-            gl.glClearColor(.1,.12,.16,1.)
+            gl.glClearColor(0.,0.,0.,0.)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-            matrix = (2/logical_w,0,0,0,0,-2/logical_h,0,0,0,0,1,0,-1,1,0,1)
-            host.render(snapshot=replace(base,presentation=presentation), viewport=(0,0,pixel_w,pixel_h),
-                        logical_size=(float(logical_w),float(logical_h)), matrix_values=matrix)
+            host.render(snapshot=snapshot,viewport=(0,0,pixel_w,pixel_h),
+                        logical_size=(float(width),float(height)),matrix_values=matrix)
+            renderer = host._implementations['shockwave_grid']
+            # Resolve actual scene colour before bloom, so a neighbouring
+            # glow cannot pass the body's separate coverage observation.
+            gl.glNamedFramebufferReadBuffer(renderer._target._names['fbo'],gl.GL_COLOR_ATTACHMENT0)
+            gl.glBlitNamedFramebuffer(renderer._target._names['fbo'],capture.fbo,
+                0,0,pixel_w,pixel_h,0,0,pixel_w,pixel_h,gl.GL_COLOR_BUFFER_BIT,gl.GL_NEAREST)
+            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER,capture.fbo)
             pixels = gl.glReadPixels(0,0,pixel_w,pixel_h,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE)
-            images.append(np.frombuffer(bytes(pixels),dtype=np.uint8).reshape(pixel_h,pixel_w,4).astype(np.int16))
-        finally:
-            host.release_resources()
-            capture.close()
-    assert float(np.max(np.abs(images[0]-images[1]),axis=2).mean()) < .3
-    radiance = [float(image[...,:3].sum()) for image in images]
-    assert abs(radiance[0]-radiance[1])/radiance[0] < .003
+            return (np.frombuffer(bytes(pixels),dtype=np.uint8).reshape(pixel_h,pixel_w,4)[::-1].astype(np.int16),
+                    _resolved_emission_pixels(renderer,pixel_w,pixel_h))
+        render(matrix)
+        renderer = host._implementations['shockwave_grid']
+        frame = QuickVisualizerRenderFrame(snapshot,(0,0,pixel_w,pixel_h),(width,height),matrix,host._quad_vao)
+        field,half_width,tilt,turn,maximum = renderer._view(frame,base.logical.mode_state.parameters)
+        xs,ys = basin_lattice(renderer._points_cells)
+        selected = [(min(range(len(xs)),key=lambda i:abs(xs[i]-u)),
+                     min(range(len(ys)),key=lambda i:abs(ys[i]-v))) for u,v in ((.25,.2),(.5,.5),(.75,.8))]
+        index = [None]
+        actual_draw = gl.glDrawArrays
+        def one_point(mode,first,count):
+            if mode!=gl.GL_POINTS:
+                return actual_draw(mode,first,count)
+            if index[0] is not None:
+                gl.glDisable(gl.GL_DEPTH_TEST)
+                try:return actual_draw(mode,index[0],1)
+                finally:gl.glEnable(gl.GL_DEPTH_TEST)
+        monkeypatch.setattr(gl,'glDrawArrays',one_point)
+        for phase in (0.,.25,.5,.75):
+            shifted = (*matrix[:12],matrix[12]+2*phase/pixel_w,matrix[13]-2*phase/pixel_h,*matrix[14:])
+            index[0] = None
+            empty_colour,empty_emission = render(shifted)
+            for column,row in selected:
+                index[0] = row*len(xs)+column
+                colour,emission = render(shifted)
+                u,v = xs[column],ys[row]
+                world = ((2*u-1)*half_width,sample_heightfield_curve(grid,u,v)*state.parameters['shockwave_grid_terrain_height'],-v*SHOCKWAVE_DEPTH)
+                x,y = basin_item_point(world,field,renderer._fit,tilt,turn,half_width,maximum,.65,(0.,0.))
+                px,py = round(x*dpr+phase),round(y*dpr+phase)
+                roi = np.s_[py-5:py+6,px-5:px+6,:3]
+                assert np.max(np.abs(colour-empty_colour)[roi])>8,(style,dpr,phase,u,v,(px,py),
+                    np.unravel_index(np.abs(colour-empty_colour)[...,:3].argmax(),colour[...,:3].shape),
+                    np.max(np.abs(colour-empty_colour)))
+                assert np.max(np.abs(emission-empty_emission)[roi])>1e-4,(style,dpr,phase,u,v)
+    finally:
+        host.release_resources()
+        capture.close()
 
 
 def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_glass_retires_it(target):
@@ -811,13 +866,12 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
     from rendering.quick.visualizer.implementations.shockwave_grid import _UNIFORMS, NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE
     basin_program = renderer._resources.program('basin', NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
     point_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointPx']
-    spacing_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointSpacing']
     uniform = gl.glUniform1f
     def magnify(location, value):
         # Observe the same production gl_PointCoord coverage at enough pixels
         # to discriminate rounded marks from squares; no substitute shader.
         if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == basin_program:
-            value = 13. if location == point_uniform else 1000. if location == spacing_uniform else value
+            value = 13. if location == point_uniform else value
         return uniform(location, value)
     monkeypatch.setattr(gl, 'glUniform1f', magnify)
     actual_draw = gl.glDrawArrays
@@ -839,8 +893,6 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
             observed = np.zeros(1, dtype=np.float32)
             gl.glGetUniformfv(basin_program, point_uniform, observed)
             assert observed[0] == 13.
-            gl.glGetUniformfv(basin_program, spacing_uniform, observed)
-            assert observed[0] == 1000.
             # Select well separated indices from the actual uploaded lattice.
             # The full triangle surface and shared displacement remain intact.
             for row in selected_rows:

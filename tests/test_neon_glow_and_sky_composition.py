@@ -8,6 +8,10 @@ from rendering.gl_programs.neon_starscape import starscape_beat_cells
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def _framed_stars(events, tilt, turn):
+    return starscape_beat_cells(events,tilt,turn,camera=3.5,fit=(.7,1.1))
+
+
 def test_one_glow_bucket_has_canonical_closed_default_and_distinct_controls():
     spec=require_mode_settings('shockwave_grid')
     controls={control.key:control for control in spec.entries if hasattr(control,'key')}
@@ -60,10 +64,9 @@ def test_sky_is_composited_first_then_subtracted_by_exact_terrain_coverage():
 
 def test_midstrength_beat_now_selects_actual_visible_panorama_star_cells():
     events=((0.08,0.25,-0.3,.55),)
-    cells=starscape_beat_cells(events,.35,.07)
-    assert len(cells)==3
+    cells=_framed_stars(events,.35,.07)
+    assert len(cells)==4
     assert all(0.0<c[2]<=1.0 for c in cells)
-    assert abs(cells[0][0]-cells[1][0])>65
-    assert all(abs(c[1] / 420.0 - (-.35+.13))<.1 for c in cells)
-    assert not starscape_beat_cells(((0.08,0.25,-0.3,.2),),.35,.07)
-    assert all(b[2]<a[2] for a,b in zip(cells,starscape_beat_cells(((1.2,.25,-.3,.55),),.35,.07)))
+    assert abs(cells[0][0]-cells[1][0])>25
+    assert not _framed_stars(((0.08,0.25,-0.3,.2),),.35,.07)
+    assert all(b[2]<a[2] for a,b in zip(cells,_framed_stars(((1.2,.25,-.3,.55),),.35,.07)))

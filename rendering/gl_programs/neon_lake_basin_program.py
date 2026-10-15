@@ -145,7 +145,6 @@ uniform float uTerrainGrowth[8];
 uniform int uMarks; // surface or unique displaced vertices
 uniform int uDepthOnly; // shared surface depth prepass for celestial transmission
 uniform float uPointPx;
-uniform float uPointSpacing;
 // The artist owns only 0..1. Continue that exact boundary into deterministic
 // land rather than indefinitely clamping a last row of hills (or water).
 float basinOutside(vec2 uv) {
@@ -274,7 +273,6 @@ out float vCrest;
 out float vEnergy;
 out float vCurvedBase;
 out vec3 vSurfaceNormal;
-out float vMarkOpacity;
 uniform int uSmoothGlass;
 void main() {
     vec3 world = basinSurface(aUv, vCrest, vEnergy, vCurvedBase);
@@ -300,17 +298,7 @@ void main() {
     vUv = aUv;
     vec4 clip = basinClip(world);
     if (uMarks == 1) clip.z -= 0.0001*clip.w;
-    vMarkOpacity=1.0;
     gl_PointSize=uPointPx;
-    if (uMarks==1) {
-        // Same lattice/depth, with smooth physical-pixel population coverage.
-        // Stable UV ranks fade a subset instead of rebuilding a resize mesh.
-        float spacing=uPointSpacing/max(abs(clip.w),0.25);
-        float occupancy=clamp(spacing*spacing/(2.75*2.75),0.0,1.0);
-        float rank=0.08+0.84*fract(sin(dot(aUv,vec2(127.1,311.7)))*43758.5453);
-        vMarkOpacity=smoothstep(rank-0.08,rank+0.08,occupancy);
-        gl_PointSize=min(uPointPx,max(1.1,0.70*spacing));
-    }
     gl_Position = clip;
 }
 """
@@ -347,7 +335,6 @@ in float vCrest;
 in float vEnergy;
 in float vCurvedBase;
 in vec3 vSurfaceNormal;
-in float vMarkOpacity;
 uniform vec4 uLineColor;
 uniform vec4 uCrestColor;
 uniform vec4 uWaterColor;
@@ -398,8 +385,12 @@ void main() {
     if (uMarks == 1) {
         float radius=length(gl_PointCoord-0.5);
         float coverage=1.0-smoothstep(0.25,0.5,radius);
-        if ((uWireDisplay&4)!=0) coverage*=smoothstep(0.18,0.28,radius);
-        coverage*=vMarkOpacity;
+        if ((uWireDisplay&4)!=0) {
+            // A subpixel hole can remove the entire small marker. Fill its
+            // core smoothly until the outlined shape has enough real pixels.
+            float outline=smoothstep(0.18,0.28,radius);
+            coverage*=mix(1.0,outline,smoothstep(3.0,5.0,uPointPx));
+        }
         if (coverage<0.01) discard;
         vec4 pointColour=mix(uVertexColor,uVertexAccentColor,clamp(water ? vCrest*0.6 :
                          0.45+0.35*sin(vWorld.x*3.0+vWorld.z*2.0)+base*0.25,0.0,1.0));
@@ -644,11 +635,10 @@ void main() {
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
         float haloGain=basinCelestialHaloGain(uCelestialGlow,uMidband,uBeatPulse);
-        float moonRimLight=(uBodyKind==1 && halo>0.0)
-                           ? basinMoonRimIllumination(eye,ray) : 1.0;
-        float haloAlpha=(uBodyKind==1)
-                        ? 0.26*bodyColour.a*haloGain*halo*moonRimLight
-                        : 0.23*bodyColour.a*haloGain*halo;
+        // The ordinary halo surrounds the ENTIRE silhouette, including the
+        // Moon's shaded side. Phase gates the surface and optional rim marks,
+        // never the surrounding glow.
+        float haloAlpha=(uBodyKind==1 ? 0.26 : 0.23)*bodyColour.a*haloGain*halo;
         float rimMarks=0.0;
         if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
             rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;
