@@ -35,6 +35,7 @@ from core.settings.visualizer_presets import (
     MODE_KEY_PREFIXES,
     VISUALIZER_CUSTOM_STORAGE_KEY,
     apply_preset_to_config,
+    apply_preset_starting_view,
     build_normalized_custom_snapshot,
     extract_visualizer_snapshot,
     get_custom_preset_index,
@@ -256,6 +257,7 @@ class VisualizerSettingsContextMixin:
         existing_vis = existing_widgets.get("spotify_visualizer", {})
         if not isinstance(existing_vis, dict):
             existing_vis = {}
+        previous_vis = dict(existing_vis)
 
         if hydrated:
             if isinstance(section_result, Mapping):
@@ -276,6 +278,10 @@ class VisualizerSettingsContextMixin:
             current_vis_mode, spotify_vis_config
         )
         current_custom_index = get_custom_preset_index(current_vis_mode)
+        if (hydrated and current_preset_index != current_custom_index
+                and current_preset_index != self._resolve_visualizer_preset_index(current_vis_mode, previous_vis)):
+            spotify_vis_config = apply_preset_starting_view(current_vis_mode, current_preset_index, spotify_vis_config)
+            existing_widgets["spotify_visualizer"] = spotify_vis_config
         if hydrated and current_preset_index == current_custom_index:
             snapshot = self._extract_visualizer_snapshot(
                 current_vis_mode, spotify_vis_config
@@ -549,6 +555,11 @@ class VisualizerSettingsContextMixin:
                 },
             },
         }
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor, get_visualizer_view_pose_keys
+        if get_visualizer_mode_descriptor(mode_key).scene_transform_settings:
+            from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
+            payload["starting_view"] = validate_visualizer_starting_view(
+                mode_key, {key: normalized_live[key] for key in get_visualizer_view_pose_keys(mode_key)})
         return payload
 
     @staticmethod

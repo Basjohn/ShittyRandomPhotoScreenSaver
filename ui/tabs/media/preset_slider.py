@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QDialog,
     QFileDialog,
+    QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
@@ -176,6 +177,17 @@ class VisualizerPresetSlider(QWidget):
         row.addWidget(self._custom_action_btn)
 
         layout.addLayout(row)
+        self._include_starting_view = None
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        if get_visualizer_mode_descriptor(self._mode).scene_transform_settings:
+            self._include_starting_view = QCheckBox("Include current camera view when saving", self)
+            self._include_starting_view.setProperty("circleIndicator", True)
+            self._include_starting_view.setChecked(True)
+            self._include_starting_view.setToolTip(
+                "Save the settled orbit, zoom and pan as this preset's starting view. "
+                "Camera adjustments remain live settings; they never rewrite a preset automatically.")
+            self._include_starting_view.hide()
+            layout.addWidget(self._include_starting_view)
 
     # ------------------------------------------------------------------
     # Public API
@@ -262,6 +274,8 @@ class VisualizerPresetSlider(QWidget):
     def _update_advanced_visibility(self) -> None:
         idx = self._slider.value()
         is_custom = idx == self._custom_index
+        if self._include_starting_view is not None:
+            self._include_starting_view.setVisible(is_custom)
         if self._advanced_container is not None:
             self._advanced_container.setVisible(is_custom)
         if self._technical_container is not None:
@@ -335,7 +349,12 @@ class VisualizerPresetSlider(QWidget):
         if tab is None or not hasattr(tab, "build_visualizer_preset_payload"):
             return
 
+        flush = getattr(tab, "flush_pending_changes", None)
+        if callable(flush):
+            flush()
         payload = tab.build_visualizer_preset_payload(self._mode)
+        if self._include_starting_view is not None and not self._include_starting_view.isChecked():
+            payload.pop("starting_view", None)
         if not payload:
             StyledPopup(
                 tab,

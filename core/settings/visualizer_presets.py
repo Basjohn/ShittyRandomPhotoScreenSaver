@@ -262,6 +262,11 @@ def resolve_visualizer_activation_payload(
     normalized_live["mode"] = mode_key
     preset_index = resolve_preset_index_from_mapping(mode_key, normalized_live, prefix=prefix)
     resolved_config = apply_preset_to_config(mode_key, preset_index, dict(normalized_live))
+    view_keys = get_visualizer_view_pose_keys(mode_key)
+    if view_keys and not any(key in source or f"{prefix}.{key}" in source for key in view_keys):
+        # Only genuinely absent live poses seed from preset metadata. Complete
+        # Settings/restart/configure inputs retain the saved live view exactly.
+        resolved_config = apply_preset_starting_view(mode_key, preset_index, resolved_config)
     resolved_config = apply_lender_presets_to_config(mode_key, resolved_config, prefix=prefix)
     resolved_config["mode"] = mode_key
     resolved_config = normalize_visualizer_section_mapping(
@@ -338,6 +343,7 @@ class VisualizerPreset:
     description: str
     settings: Dict[str, Any] = field(default_factory=dict)
     is_custom: bool = False
+    starting_view: Dict[str, float] | None = None
 
 
 def _custom_preset() -> VisualizerPreset:
@@ -656,7 +662,12 @@ def _parse_preset_payload(
         return None
 
     description = payload.get("description") or "Imported preset"
-    preset = VisualizerPreset(name=name, description=description, settings=combined)
+    starting_view = None
+    if "starting_view" in payload:
+        from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
+        starting_view = validate_visualizer_starting_view(mode, payload["starting_view"])
+    preset = VisualizerPreset(name=name, description=description, settings=combined,
+                             starting_view=starting_view)
     return index, preset
 
 
@@ -931,6 +942,8 @@ def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
             name=curated_base.name,
             description=curated_base.description,
             settings=dict(override.settings),
+            starting_view=deepcopy(override.starting_view if override.starting_view is not None
+                                   else curated_base.starting_view),
         )
 
     source_paths = _LOADED_SOURCE_PATHS.get(mode, {})
@@ -1050,10 +1063,34 @@ def get_preset_settings(mode: str, index: int) -> Dict[str, Any]:
     if not 0 <= index < len(presets):
         raise IndexError(f"visualizer preset index out of range for {mode}: {index}")
     # Old curated JSON may carry tilt/turn: treat it as inert legacy metadata.
-    # No preset, including externally authored/imported ones, may author view pose.
+    # Artwork never supplies live pose leaves. Optional starting_view metadata
+    # enters only through the explicit selection/absent-view activation seam.
     view_keys = frozenset(get_visualizer_view_pose_keys(mode))
     return {key: deepcopy(value) for key, value in presets[index].settings.items()
             if key not in view_keys}
+
+
+def apply_preset_starting_view(mode: str, index: int, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Seed the ONE live pose on explicit preset selection, never ordinary hydration.
+
+    Missing optional metadata selects canonical mode defaults. Custom art and
+    unframed modes preserve the current view. Nothing is cached or written here.
+    """
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    if not get_visualizer_mode_descriptor(mode).scene_transform_settings or index == get_custom_preset_index(mode):
+        return config
+    from core.settings.visualizer_view_orbit import (
+        resolve_visualizer_view_orbit, validate_visualizer_starting_view,
+    )
+    if not 0 <= index < get_preset_count(mode):
+        raise IndexError(f"visualizer preset index out of range for {mode}: {index}")
+    preset = get_presets(mode)[index]
+    values = preset.starting_view
+    if values is None:
+        values = {key: require_canonical_default(f"widgets.spotify_visualizer.{key}")
+                  for key in get_visualizer_view_pose_keys(mode)}
+    values = validate_visualizer_starting_view(mode, values)
+    return resolve_visualizer_view_orbit(config, {}, mode=mode, values=values)[0]
 
 
 def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dict[str, Any]:

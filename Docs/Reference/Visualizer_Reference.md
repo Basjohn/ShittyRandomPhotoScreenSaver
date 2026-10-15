@@ -658,8 +658,8 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   `view_orbit_settings`. W/A/S/D holds one immutable `ViewOrbitMotion`; the logical capture evaluates it at its own
   timestamp, independent of OS key repeat. Alt+left-drag uses the same orbit owner. The GUI owner settles the reached
   view once through canonical Settings when the gesture finishes or the owner retires; ordinary frames write nothing.
-  These are mode-specific view settings, excluded from curated art presets and Custom art snapshots. Applying art
-  cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
+  These are mode-specific live view settings, excluded from curated artwork and Custom art snapshots. Ordinary art
+  hydration cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
   stage geometry, with no camera authority.
 - **Reusable framed 3D camera contract (planned consolidation):** Neon Lake's working internal-camera
   input and canonical presentation pose are the reference for **all future bordered 3D Visualizers**, including
@@ -667,7 +667,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   descriptor/view-orbit/scene-transform owners under §4A FC *before* building another mode; do not duplicate
   the renderer's bounds/pan logic or add a second camera store. A framed mode supplies a declared pivot, fit,
   safe turn/tilt limits, bounded internal pan/zoom and valid near-plane/content coverage for its own material.
-  Persisted view state remains presentation-only and mode-specific, excluded from presets/CUSTOM layout geometry.
+  Persisted live view state remains presentation-only and mode-specific, excluded from artwork/CUSTOM layout geometry.
   Use card-interior clipping and the existing gesture/input ownership. Explicit capability gating protects
   unframed Sphere and Extruded Spectrum's original free-orbit policy. Prove Neon Lake parity, both displays,
   minimum/maximum card size, aspect/DPR, dormant-zero-cost and resize legibility before reusing the capability.
@@ -678,6 +678,17 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   orbit inside the card; Alt+right pans inside it; Alt+wheel scales about the interior centre, using either Qt wheel
   axis. They never move/resize the card or alter its viewport, in ordinary interaction or Edit. See
   [Neon Lake Basin](Neon_Lake_Basin.md) for admission, persistence and clipping.
+- **Framed preset starting views:** optional top-level `starting_view` JSON metadata contains exactly the mode's
+  descriptor-declared pose keys. `core/settings/visualizer_view_orbit.py` validates complete finite numeric values
+  against the same typed controls; malformed, foreign, missing or out-of-range leaves reject the record loudly.
+  The existing live-view owner applies a starting pose once on a changed Settings preset selection or runtime cycle.
+  Missing optional metadata means canonical mode defaults on that selection. A raw activation with no live pose
+  also seeds it; complete Settings hydration, restart, mode reentry and ordinary saves preserve the current pose.
+  Custom artwork retains the live view and never caches a separate camera. Save Preset As offers **Include current
+  camera view when saving**, checked initially for framed modes only, and exports the settled Settings pose outside
+  the artwork snapshot. Ordinary orbit gestures never rewrite a preset. Explicit override and repair/reindex tooling
+  preserve valid starting metadata. Existing preset files need no automatic rewrite, and old camera leaves embedded
+  in artwork remain inert. There is no preset-camera cache, timer, renderer lookup or additional layout authority.
 - **Whole-stage gestures:** for unframed 3D modes, Alt+right and Alt+wheel retain the existing direct CUSTOM
   move/resize transaction outside Edit. Press-time move origins rebase to the current rectangle after scaling; wheel
   scaling preserves the stage centre subject to display-edge clamping. One completed gesture commits through the

@@ -454,6 +454,9 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
     """Rebuild a lean preset payload containing only sanitized visualizer settings."""
 
     lean: Dict[str, Any] = {}
+    if "starting_view" in payload:
+        from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
+        lean["starting_view"] = validate_visualizer_starting_view(mode, payload["starting_view"])
     for meta_key in ("name", "description", "preset_index"):
         value = payload.get(meta_key)
         if value is None:
