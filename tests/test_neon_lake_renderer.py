@@ -169,6 +169,205 @@ def test_actual_sun_toggle_preserves_sky_and_sky_strength_does_not_fade_sun(targ
     assert np.max(sun_only[centre, 2]) > 100
 
 
+@pytest.mark.parametrize('body', ['Moon', 'Sun'])
+def test_real_land_depth_masks_low_celestial_disc_and_halo(target, body):
+    """A celestial background body cannot paint a disc or halo through the land."""
+    capture, host = target
+    base = _snapshot(shockwave_grid_sun_mode=body, shockwave_grid_moon_phase=.5,
+                     shockwave_grid_sky_enabled=True,
+                     shockwave_grid_sun_x=1.05, shockwave_grid_sun_size=.3,
+                     shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
+                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
+                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    state = base.logical.mode_state
+    terrain = dict(state.parameters['shockwave_grid_terrain'])
+    terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
+                                                  'heights': [.8] * terrain['size'] ** 2}), maximum=.8)
+    base = replace(base, logical=replace(base.logical, mode_state=replace(
+        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
+
+    def pair(y, z):
+        frames = [_wire_frame(base, 'Vertices', shockwave_grid_sun_enabled=enabled,
+                              shockwave_grid_sun_y=y, shockwave_grid_sun_z=z) for enabled in (False, True)]
+        return [capture.render(host, frame) for frame in frames]
+
+    absent, above = pair(3., -6.)
+    assert np.count_nonzero(np.max(np.abs(above-absent), axis=2) > 8) > 30
+    absent, below = pair(.1, -2.)
+    assert np.max(np.abs(below-absent)) <= 2
+
+
+def test_horizon_thickness_and_inherited_crest_colour_reach_real_gpu_pixels(target):
+    """The authored far contour width and existing crest RGBA reach its visible silhouette."""
+    capture, host = target
+    base = _snapshot(shockwave_grid_sun_enabled=False, shockwave_grid_glow=0.,
+                     shockwave_grid_water_reflection=0., shockwave_grid_tilt=.17,
+                     shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    def image(width, colour):
+        return capture.render(host, _wire_frame(base, 'Vertices', shockwave_grid_horizon_thickness=width,
+                                               shockwave_grid_crest_color=colour))
+    red = [255, 0, 0, 255]
+    thin, thick = image(0., red), image(4., red)
+    # Only width changes here: derive the real contour's added coverage from
+    # rendered pixels rather than pinning operator art or guessing a horizon row.
+    added = (thick[..., 0]-thin[..., 0] > 12)
+    assert np.count_nonzero(added) > 50
+    blue = image(4., [0, 0, 255, 255])
+    assert float(np.mean(thick[added, 0]-blue[added, 0])) > 20
+    assert float(np.mean(blue[added, 2]-thick[added, 2])) > 20
+
+
+def _resolved_emission_pixels(renderer):
+    """Actual production MRT radiance, before bloom can conceal or spread invalid values."""
+    width, height, _samples = renderer._target.allocation
+    pixels = np.empty((height, width, 4), dtype=np.float32)
+    gl.glGetTextureImage(renderer._target._names['emission_resolve'], 0,
+                         gl.GL_RGBA, gl.GL_FLOAT, pixels.nbytes, pixels)
+    return pixels[:H, :W][::-1].copy()
+
+
+def test_production_moon_whole_surface_emission_follows_phase_glow_and_pulse(target):
+    """Actual MRT output glows across the bright body and faint shaded hemisphere."""
+    capture, host = target
+    base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
+                     shockwave_grid_sun_y=3., shockwave_grid_sun_z=-6., shockwave_grid_sun_size=.45,
+                     shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
+                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
+                     shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
+                     shockwave_grid_moon_color=[190,210,255,255],
+                     shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=1.,
+                     shockwave_grid_celestial_glow_reactivity=0., shockwave_grid_celestial_rim_vertices=False,
+                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    def draw(phase, enabled=True, halo=True, pulse=False):
+        frame = _wire_frame(base, 'Vertices', shockwave_grid_moon_phase=phase,
+                            shockwave_grid_sun_enabled=enabled,
+                            shockwave_grid_celestial_glow_enabled=halo,
+                            shockwave_grid_celestial_glow_reactivity=2. if pulse else 0.)
+        if pulse:
+            frame = replace(frame, logical=replace(frame.logical, mode_state=replace(
+                frame.logical.mode_state, events=((0.,0.,0.,1.),))))
+        colour = capture.render(host, frame)
+        emitted = _resolved_emission_pixels(host._implementations['shockwave_grid'])
+        assert np.isfinite(emitted).all()
+        return colour, emitted
+
+    absent_colour, absent_emission = draw(.5, False)
+    full_colour, full_emission = draw(.5)
+    body = np.max(np.abs(full_colour-absent_colour), axis=2) > 20
+    y, x = np.nonzero(body)
+    assert len(x) > 30  # Positive control: an actual visible full Moon was drawn.
+    cx, cy = .5*(x.min()+x.max()), .5*(y.min()+y.max())
+    radius = .5*min(x.max()-x.min(), y.max()-y.min())
+    yy, xx = np.ogrid[:H, :W]
+    centre = (xx-cx)**2+(yy-cy)**2 < (.20*radius)**2
+    assert np.count_nonzero(centre) >= 5
+    full_surface = float(np.mean((full_emission-absent_emission)[centre,:3]))
+    new_colour, new_emission = draw(0.)
+    assert np.count_nonzero(np.max(np.abs(new_colour-absent_colour),axis=2)>2) > 20
+    shaded_surface = float(np.mean((new_emission-absent_emission)[centre,:3]))
+    assert full_surface > shaded_surface*4. > 0.
+    unlit_colour, unlit_emission = draw(.5,halo=False)
+    assert np.count_nonzero(np.max(np.abs(unlit_colour-absent_colour),axis=2)>8) > 30
+    assert np.max(np.abs(unlit_emission-absent_emission)) < 1e-3
+    _, pulsed_emission = draw(.5,pulse=True)
+    pulsed_surface = float(np.mean((pulsed_emission-absent_emission)[centre,:3]))
+    assert full_surface*1.05 < pulsed_surface < full_surface*4.5
+    for phase in (.075, .125, .25, .375, .625, .75, .875, .925, 1.):
+        draw(phase)
+
+
+def test_maximum_moon_response_preserves_bright_face_ldr_headroom(target):
+    """A bright test-owned Moon must keep its face below sustained RGB white clipping."""
+    capture, host = target
+    base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
+                     shockwave_grid_sun_y=3., shockwave_grid_sun_z=-6., shockwave_grid_sun_size=.45,
+                     shockwave_grid_moon_phase=.5, shockwave_grid_moon_color=[225,240,255,255],
+                     shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
+                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
+                     shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
+                     shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
+                     shockwave_grid_celestial_glow_reactivity=2., shockwave_grid_celestial_rim_vertices=False,
+                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    base = replace(base, logical=replace(base.logical, mode_state=replace(
+        base.logical.mode_state, events=((0.,0.,0.,1.),))))
+    absent = capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=False))
+    albedo = capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=True,
+                                            shockwave_grid_celestial_glow_enabled=False))
+    # Derive the real body from Glow OFF, so changing a bloom footprint cannot
+    # move or inflate this face observation region.
+    mask = np.max(np.abs(albedo-absent),axis=2)>30
+    y,x = np.nonzero(mask)
+    assert len(x)>30
+    cx,cy = .5*(x.min()+x.max()),.5*(y.min()+y.max())
+    radius = .5*min(x.max()-x.min(),y.max()-y.min())
+    yy,xx = np.ogrid[:H,:W]
+    core = (xx-cx)**2+(yy-cy)**2 < (.35*radius)**2
+    assert np.count_nonzero(core)>10
+    assert float(np.mean(np.all(albedo[core,:3]>=250,axis=1))) < .05
+    shown = capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=True))
+    assert float(np.mean(np.all(shown[core,:3]>=250,axis=1))) < .05
+
+
+def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target, monkeypatch):
+    """A real beat star cannot punch through the solid Moon at any phase."""
+    import math
+    from rendering.quick.visualizer.implementations.shockwave_grid import (
+        NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE, _SKY_UNIFORMS)
+
+    capture, host = target
+    base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
+                     shockwave_grid_sun_y=3., shockwave_grid_sun_z=-6., shockwave_grid_sun_size=.45,
+                     shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
+                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
+                     shockwave_grid_star_color=[255,255,255,0], shockwave_grid_star_glow_strength=2.,
+                     shockwave_grid_star_glow_reactivity=2., shockwave_grid_celestial_glow_enabled=False,
+                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+    capture.render(host, base)
+    renderer = host._implementations['shockwave_grid']
+    program = renderer._resources.program('sky', NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
+    uniforms = renderer._resources.uniforms('sky', _SKY_UNIFORMS)
+    camera, view, position = np.zeros(1,np.float32), np.zeros(2,np.float32), np.zeros(3,np.float32)
+    gl.glGetUniformfv(program,uniforms['uCamera'],camera)
+    gl.glGetUniformfv(program,uniforms['uView'],view)
+    gl.glGetUniformfv(program,uniforms['uBodyPosition'],position)
+    # Use the same production basin pivot/depth, not a hand-positioned screen dot.
+    from rendering.gl_programs.neon_lake_basin_program import SHOCKWAVE_DEPTH
+    eye = np.array([0.,camera[0]*math.sin(view[0]),camera[0]*math.cos(view[0])-.5*SHOCKWAVE_DEPTH])
+    ray = position-eye
+    ray /= np.linalg.norm(ray)
+    def cell_at(offset):
+        offset_ray = ray+np.array([offset*.45/np.linalg.norm(position-eye),0.,0.])
+        offset_ray /= np.linalg.norm(offset_ray)
+        return np.array([math.floor(math.atan2(offset_ray[0],-offset_ray[2])*420.),
+                         math.floor(math.asin(offset_ray[1])*420.),1.,0.],dtype=np.float32)
+    cell = [cell_at(0.)]
+    draw_count, draw_cells = gl.glUniform1i, gl.glUniform4fv
+    enabled = [False]
+    def star_count(location,value):
+        if location == uniforms['uBeatStarCount'] and int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == program:
+            draw_cells(uniforms['uBeatStarCells'],1,cell[0])
+            value = int(enabled[0])
+        return draw_count(location,value)
+    monkeypatch.setattr(gl,'glUniform1i',star_count)
+    def image(body,phase,star):
+        enabled[0] = star
+        return capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=body,
+                                               shockwave_grid_moon_phase=phase))
+    for offset in (-.65,.65):
+        cell[0] = cell_at(offset)
+        absent, bright = image(False,0.,False), image(False,0.,True)
+        star_pixels = np.max(np.abs(bright-absent),axis=2) > 30
+        assert np.count_nonzero(star_pixels) > 5
+        for phase in (0.,.25,.75):
+            without, with_star = image(True,phase,False), image(True,phase,True)
+            difference = np.max(np.abs(with_star-without),axis=2)
+            assert np.max(difference[star_pixels]) <= 2
+
+
 def test_maximum_water_highlights_have_bounded_float_coverage(target, monkeypatch):
     from rendering.quick.scene3d.target import SceneTarget
     from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_MAX_STRENGTH
@@ -454,7 +653,90 @@ def test_warmed_vertex_frames_reuse_static_resources_and_target(target, monkeypa
         assert renderer._heightfield.uploads == uploads
 
 
-def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_edges_retires_it(target):
+@pytest.mark.parametrize('style', ['Vertices', 'Glass + Vertices'])
+@pytest.mark.parametrize('dpr', [1, 2])
+def test_same_physical_card_pixels_survive_embedding_in_a_larger_viewport(qt_app, style, dpr):
+    """Window extent cannot magnify marks/curves or change bloom on an unchanged card."""
+    from tools.transition_contact_sheet import TransitionCapture
+
+    snapshot = _wire_frame(_snapshot(shockwave_grid_glow=.55), style)
+    card_w, card_h = W * dpr, H * dpr
+    images = []
+    for window_factor in (1, 2):
+        pixel_w, pixel_h = card_w * window_factor, card_h * window_factor
+        capture = TransitionCapture(pixel_w, pixel_h)
+        host = QuickVisualizerRenderHost()
+        try:
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glClearColor(.1, .12, .16, 1.)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+            # Item-local W x H maps to the same physical size in both windows.
+            # The matrix translation centres it at integer physical coordinates.
+            matrix = (2 / (W * window_factor), 0, 0, 0,
+                      0, -2 / (H * window_factor), 0, 0, 0, 0, 1, 0,
+                      -1 / window_factor, 1 / window_factor, 0, 1)
+            host.render(snapshot=snapshot, viewport=(0, 0, pixel_w, pixel_h),
+                        logical_size=(float(W), float(H)), matrix_values=matrix)
+            pixels = gl.glReadPixels(0, 0, pixel_w, pixel_h, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+            rgba = np.frombuffer(bytes(pixels), dtype=np.uint8).reshape(pixel_h, pixel_w, 4)[::-1]
+            x, y = (pixel_w - card_w) // 2, (pixel_h - card_h) // 2
+            images.append(rgba[y:y+card_h, x:x+card_w].astype(np.int16))
+        finally:
+            host.release_resources()
+            capture.close()
+    assert np.count_nonzero(images[0][..., :3] > 60) > 100
+    delta = np.max(np.abs(images[0] - images[1]), axis=2)
+    # NDC translation changes float rounding at individual MSAA edge samples.
+    # Bound total error and emitted picture energy, rather than requiring the
+    # brightest individual edge sample to match bit-for-bit. Doubling marker
+    # diameter through the old whole-window scale fails both bounds.
+    assert float(delta.mean()) < .3
+    radiance = [float(image[..., :3].sum()) for image in images]
+    assert abs(radiance[0] - radiance[1]) / radiance[0] < .003
+
+
+@pytest.mark.parametrize('style', ['Vertices', 'Glass + Vertices'])
+def test_equal_physical_card_pixels_match_across_logical_size_and_dpr(qt_app, style):
+    """DPR cannot change marker population/diameter or glow on an equal physical surface."""
+    from tools.transition_contact_sheet import TransitionCapture
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+
+    base = _wire_frame(_snapshot(shockwave_grid_glow=.55), style)
+    pixel_w, pixel_h = 2*W, 2*H
+    images = []
+    for logical_w, logical_h in ((W, H), (2*W, 2*H)):
+        # Geometry comes from the production resolver. Zero chrome/inset isolates
+        # the equal physical scene from intentionally logical-pixel card borders.
+        presentation = resolve_visualizer_presentation(
+            policy=get_visualizer_presentation_policy('shockwave_grid'),
+            display_size=(logical_w, logical_h), viewport_extent=(logical_w, logical_h),
+            border_width=0., corner_radius=0., content_inset=0., background_color=(0,0,0,0),
+            border_color=(0,0,0,0), shadow_enabled=False, shadow_color=(0,0,0,0), shadow_blur=0.,
+            shadow_offset=(0.,0.), shadow_spread=0., shadow_extensions=(0.,0.,0.,0.))
+        capture, host = TransitionCapture(pixel_w, pixel_h), QuickVisualizerRenderHost()
+        try:
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glClearColor(.1,.12,.16,1.)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+            matrix = (2/logical_w,0,0,0,0,-2/logical_h,0,0,0,0,1,0,-1,1,0,1)
+            host.render(snapshot=replace(base,presentation=presentation), viewport=(0,0,pixel_w,pixel_h),
+                        logical_size=(float(logical_w),float(logical_h)), matrix_values=matrix)
+            pixels = gl.glReadPixels(0,0,pixel_w,pixel_h,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE)
+            images.append(np.frombuffer(bytes(pixels),dtype=np.uint8).reshape(pixel_h,pixel_w,4).astype(np.int16))
+        finally:
+            host.release_resources()
+            capture.close()
+    assert float(np.max(np.abs(images[0]-images[1]),axis=2).mean()) < .3
+    radiance = [float(image[...,:3].sum()) for image in images]
+    assert abs(radiance[0]-radiance[1])/radiance[0] < .003
+
+
+def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_glass_retires_it(target):
     from rendering.gl_programs.neon_lake_basin_mesh import basin_mesh_points, basin_mesh_vertices, BASIN_OVERSCAN
     capture, host = target
     snapshot = _snapshot(shockwave_grid_glow=0.)
@@ -477,7 +759,7 @@ def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_edges_retires_
         assert packed[:, 1].max() == 1.0 + BASIN_OVERSCAN[3]
         assert packed[:, 0].min() == -BASIN_OVERSCAN[0]
         assert packed[:, 0].max() == 1.0 + BASIN_OVERSCAN[1]
-    capture.render(host, _wire_frame(snapshot, 'Vertices', scene3d_detail='KAK'))
+    capture.render(host, _wire_frame(snapshot, 'Glass', scene3d_detail='KAK'))
     assert renderer._points_cells is None and renderer._points_data is None
     assert not any(key.startswith('basin vertices ') for key in renderer._resources._meshes)
 
@@ -520,55 +802,72 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
     capture, host = target
     snapshot = _wire_frame(_snapshot(scene3d_detail='KAK', shockwave_grid_glow=0.,
         shockwave_grid_sky_enabled=False, shockwave_grid_density=0., shockwave_grid_floor=0.,
+        shockwave_grid_sun_enabled=False,
+        shockwave_grid_scene_scale=.65, shockwave_grid_scene_pan_y=0.,
         shockwave_grid_water_reflection=0., shockwave_grid_terrain_reactivity=0.,
         shockwave_grid_terrain_detail=0., shockwave_grid_line_color=[255, 255, 255, 255]), 'Vertices')
-    state = snapshot.logical.mode_state
-    terrain = dict(state.parameters['shockwave_grid_terrain'])
-    terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
-                                                  'heights': [.5] * terrain['size'] ** 2}), maximum=.5)
-    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
-        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
     capture.render(host, snapshot)
     renderer = host._implementations['shockwave_grid']
-    from rendering.quick.visualizer.implementations.shockwave_grid import _UNIFORMS
+    from rendering.quick.visualizer.implementations.shockwave_grid import _UNIFORMS, NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE
+    basin_program = renderer._resources.program('basin', NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
     point_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointPx']
+    spacing_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointSpacing']
     uniform = gl.glUniform1f
     def magnify(location, value):
         # Observe the same production gl_PointCoord coverage at enough pixels
         # to discriminate rounded marks from squares; no substitute shader.
-        return uniform(location, 9. if location == point_uniform else value)
+        if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == basin_program:
+            value = 13. if location == point_uniform else 1000. if location == spacing_uniform else value
+        return uniform(location, value)
     monkeypatch.setattr(gl, 'glUniform1f', magnify)
     actual_draw = gl.glDrawArrays
-    columns, rows = renderer._points_cells
+    from rendering.gl_programs.neon_lake_basin_mesh import basin_lattice
+    xs, ys = basin_lattice(renderer._points_cells)
+    # Overscan adds nonuniform rows/columns around the authored sub-lattice.
+    # Observe authored points with enough projected separation for magnified discs.
+    selected_columns = [i for i, u in enumerate(xs) if .1 < u < .9][::14]
+    authored_rows = [i for i, v in enumerate(ys) if .1 < v < .9]
+    selected_rows = [authored_rows[0], authored_rows[-1]]
+    # Opaque terrain coverage now legitimately fills the alpha channel beneath
+    # marks. Subtract the same production surface without marks to isolate their
+    # raster coverage instead of confusing terrain alpha with point shape.
+    monkeypatch.setattr(gl, 'glDrawArrays', lambda mode, first, count:
+                        None if mode == gl.GL_POINTS else actual_draw(mode, first, count))
+    without_points = capture.render(host, snapshot)
     def separated_points(mode, first, count):
         if mode == gl.GL_POINTS:
+            observed = np.zeros(1, dtype=np.float32)
+            gl.glGetUniformfv(basin_program, point_uniform, observed)
+            assert observed[0] == 13.
+            gl.glGetUniformfv(basin_program, spacing_uniform, observed)
+            assert observed[0] == 1000.
             # Select well separated indices from the actual uploaded lattice.
             # The full triangle surface and shared displacement remain intact.
-            for row in range(3, rows-2, 7):
-                for column in range(4, columns-3, 7):
+            for row in selected_rows:
+                for column in selected_columns:
                     # Magnified discs cross adjacent triangle depth slopes;
                     # shape observation excludes that unrelated occlusion.
                     gl.glDisable(gl.GL_DEPTH_TEST)
                     try:
-                        actual_draw(mode, (row+1)*(columns+1)+column, 1)
+                        actual_draw(mode, row*len(xs)+column, 1)
                     finally:
                         gl.glEnable(gl.GL_DEPTH_TEST)
             return
         return actual_draw(mode, first, count)
     monkeypatch.setattr(gl, 'glDrawArrays', separated_points)
     pixels = capture.render(host, snapshot)
-    alpha = pixels[..., 3]
-    candidates = np.argwhere(alpha > 250)
-    assert len(candidates) > 20
+    coverage = np.max(np.abs(pixels[..., :3] - without_points[..., :3]), axis=2)
+    candidates = np.argwhere(coverage > 30)
+    assert len(candidates) > 20, (coverage.max(), selected_columns, selected_rows)
     rounded = 0
     for y, x in candidates:
-        if y < 5 or x < 5 or y+5 >= H or x+5 >= W:
+        if y < 6 or x < 6 or y+6 >= H or x+6 >= W:
             continue
-        # A 9px circular marker has an opaque centre but all diagonal 4px
+        # A 13px circular marker has an opaque centre but all diagonal 5px
         # offsets are outside its circle. A square fragment covers those.
-        corners = alpha[np.array([y-4, y-4, y+4, y+4]), np.array([x-4, x+4, x-4, x+4])]
-        axes = alpha[np.array([y-4, y+4, y, y]), np.array([x, x, x-4, x+4])]
-        if np.min(axes) > 0 and np.max(corners) == 0:
+        corners = coverage[np.array([y-5, y-5, y+5, y+5]), np.array([x-5, x+5, x-5, x+5])]
+        axes = coverage[np.array([y-4, y+4, y, y]), np.array([x, x, x-4, x+4])]
+        if np.min(axes) > 0 and np.max(corners) <= 1:
             rounded += 1
     assert rounded >= 5
 

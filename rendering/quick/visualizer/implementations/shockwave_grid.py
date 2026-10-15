@@ -23,7 +23,7 @@ from rendering.gl_programs.neon_celestial import basin_body_position
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_QUALITY_STEPS
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
+    SHOCKWAVE_EVENTS, SHOCKWAVE_DEPTH, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, shockwave_half_width,
     shockwave_idle, shockwave_wave_speed,
 )
@@ -45,14 +45,14 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells", "uTerrainGrowth",
-    "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
+    "uWireDisplay", "uMarks", "uPointPx", "uPointSpacing","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
 ) + _CELESTIAL_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
-    "uSkyPass","uHalfWidth","uTerrain","uTerrainSize","uLand","uTerrainGrowth","uLandHeight","uVolumeStrength","uVolumeColour","uVolumeSteps","uMidband", "uBeatPulse", "uCelestialGlow", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
+    "uSkyPass","uHalfWidth","uTerrain","uTerrainSize","uLandHeight","uVolumeStrength","uVolumeColour","uVolumeSteps","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uTerrainGrowth",
-    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc")
+    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness")
 
 
 
@@ -244,6 +244,8 @@ class QuickShockwaveGridRenderer:
                 self._bind_view(sky_uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
                 self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
                 gl.glUniform1f(sky_uniforms["uMidband"],midband)
+                gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
+                               int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices"))))
                 gl.glUniform1f(sky_uniforms["uBeatPulse"],beat_pulse)
                 gl.glUniform2f(sky_uniforms["uCelestialGlow"],
                                float(parameter(parameters,"shockwave_grid_celestial_glow_strength"))
@@ -268,9 +270,6 @@ class QuickShockwaveGridRenderer:
                 gl.glUniform1f(sky_uniforms["uHalfWidth"],half_width)
                 gl.glUniform1i(sky_uniforms["uTerrain"],_HEIGHT_UNIT)
                 gl.glUniform1i(sky_uniforms["uTerrainSize"],terrain["size"])
-                gl.glUniform3f(sky_uniforms["uLand"],float(parameter(parameters,"shockwave_grid_terrain_height")),
-                               float(parameter(parameters,"shockwave_grid_terrain_reactivity")),float(parameter(parameters,"shockwave_grid_terrain_detail")))
-                gl.glUniform1fv(sky_uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
                 # Sky is composited AFTER a depth-only terrain admission. Otherwise
                 # transparent/glass terrain lets distant stars bleed through land.
             gl.glUseProgram(program)
@@ -293,7 +292,8 @@ class QuickShockwaveGridRenderer:
                 gl.glUniform4f(uniforms[uniform], *rgba(parameter(parameters, "shockwave_grid_" + key)))
             gl.glUniform1f(uniforms["uFloor"], float(parameter(parameters, "shockwave_grid_floor")))
             gl.glUniform1f(uniforms["uGlow"], glow)
-            gl.glUniform1f(uniforms["uEdgePx"], 0.75 * basin_pixel_scale(frame.matrix_values, frame.viewport))
+            # fwidth already measures physical fragments, including DPR/MSAA.
+            gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
             gl.glUniform1i(uniforms["uWireDisplay"],style)
             gl.glUniform1i(uniforms["uMarks"],0)
@@ -367,7 +367,9 @@ class QuickShockwaveGridRenderer:
                                    *rgba(parameter(parameters,"shockwave_grid_crest_color")))
                     gl.glUniform1f(skyline_uniforms["uGlow"],glow)
                     gl.glUniform1f(skyline_uniforms["uMidband"],midband)
-                    gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 * 1.8 / max(frame.viewport[3],1))
+                    gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 / max(frame.viewport[3],1))
+                    gl.glUniform1f(skyline_uniforms["uHorizonThickness"],
+                                   float(parameter(parameters,"shockwave_grid_horizon_thickness")))
                     gl.glEnable(gl.GL_DEPTH_TEST)
                     gl.glDepthFunc(gl.GL_LEQUAL)
                     gl.glDepthMask(gl.GL_FALSE)
@@ -412,7 +414,15 @@ class QuickShockwaveGridRenderer:
             if points:
                 gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
                 diameter=1.9 if style&4 else (2.1 if style==2 else 1.7)
-                gl.glUniform1f(uniforms["uPointPx"],diameter*basin_pixel_scale(frame.matrix_values, frame.viewport))
+                gl.glUniform1f(uniforms["uPointPx"],diameter)
+                parameters=frame.snapshot.logical.mode_state.parameters
+                field=frame.logical_content_rect
+                half_width=shockwave_half_width(field[2]/field[3])
+                tilt=SHOCKWAVE_MAX_TILT*float(parameter(parameters,"shockwave_grid_tilt"))
+                world_area=(2.0*half_width/cells[0])*(SHOCKWAVE_DEPTH/cells[1])*max(math.sin(tilt),0.12)
+                pixels=self._fit[0]*field[3]*float(parameter(parameters,"shockwave_grid_scene_scale"))
+                pixels*=basin_pixel_scale(frame.matrix_values,frame.viewport)
+                gl.glUniform1f(uniforms["uPointSpacing"],math.sqrt(world_area)*pixels)
             if reflections:
                 if depth_prepared:
                     # Mirrors are composed below the later visible surface,

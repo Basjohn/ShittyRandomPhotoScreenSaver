@@ -117,12 +117,6 @@ vec3 basinUnview(vec3 p) {
 // Keep the numerator linear in view position and let GL clip at the near plane.
 const float BASIN_NEAR = 0.12;
 float basinFar() { return max(48.0, 20.0*uCamera); }
-float basinDepthNdc(float viewZ) {
-    float farPlane=basinFar();
-    float distance=uCamera-viewZ;
-    return (farPlane+BASIN_NEAR)/(farPlane-BASIN_NEAR)
-           - (2.0*farPlane*BASIN_NEAR)/((farPlane-BASIN_NEAR)*max(distance,0.00001));
-}
 vec4 basinClip(vec3 world) {
     vec3 view=sceneOrbitPoint(world,uView,vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH),vec3(0.0));
     float distance=uCamera-view.z;
@@ -151,6 +145,7 @@ uniform float uTerrainGrowth[8];
 uniform int uMarks; // surface or unique displaced vertices
 uniform int uDepthOnly; // shared surface depth prepass for celestial transmission
 uniform float uPointPx;
+uniform float uPointSpacing;
 // The artist owns only 0..1. Continue that exact boundary into deterministic
 // land rather than indefinitely clamping a last row of hills (or water).
 float basinOutside(vec2 uv) {
@@ -178,7 +173,8 @@ float basinContinuation(vec2 uv) {
                             +0.040*sin(1.1*uv.y-2.3*uv.x);
     // The boundary and its derivative are exact at distance zero; well away
     // from it the surface turns into subdued rolling ground, never a wall.
-    return max(0.025,mix(boundary+nearSlope,backgroundHeight,descent));
+    float rolling=max(0.025,mix(boundary+nearSlope,backgroundHeight,descent));
+    return mix(rolling,0.065,smoothstep(1.1,2.2,distance));
 }
 float basinBase(vec2 uv) {
     return basinOutside(uv)<1e-6 ? sceneHeightfield(uTerrain,uTerrainSize,uv)
@@ -189,14 +185,17 @@ float basinCurve(vec2 uv) {
     vec2 edge=clamp(uv,vec2(0.0),vec2(1.0));
     // Exactly continuous with the cubic surface at the editor boundary.
     float boundary=sceneHeightfieldCurve(uTerrain,uTerrainSize,edge);
-    return max(0.0,boundary+basinContinuation(uv)-sceneHeightfield(uTerrain,uTerrainSize,edge));
+    float continued=max(0.0,boundary+basinContinuation(uv)-sceneHeightfield(uTerrain,uTerrainSize,edge));
+    return mix(continued,0.065,smoothstep(1.1,2.2,basinOutside(uv)));
+}
+float basinDetailFade(vec2 uv) {
+    return 1.0-smoothstep(0.95,1.90,basinOutside(uv));
 }
 float basinDistanceFade(vec2 uv) {
-    // The final mesh boundary is invisible. Colour and emission fade together.
-    // Fade the camera-facing skirt before it approaches the near plane, too.
-    float radial=1.0-smoothstep(0.95,1.90,basinOutside(uv));
+    // Distant LAND keeps coverage/depth to its real curved horizon. Only detail fades.
+    // Retain the camera-facing skirt fade before near-plane clipping.
     float foreground=1.0-smoothstep(0.87,1.30,max(0.0,-uv.y));
-    return radial*foreground;
+    return foreground;
 }
 float basinDetail(vec2 p) {
     // Fixed spatial detail: never animated or driven by audio.
@@ -216,8 +215,13 @@ float basinGrowth(vec2 uv) {
 }
 float basinLandHeight(vec2 uv,float base,float curved) {
     vec2 p=vec2((uv.x*2.0-1.0)*uHalfWidth,-uv.y*SHOCKWAVE_DEPTH);
-    return curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.z*basinDetail(p))
-           *(1.0+0.25*uLand.y*basinGrowth(uv));
+    float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.z*basinDetail(p))
+                 *(1.0+0.25*uLand.y*basinGrowth(uv));
+    // A shallow convex distant world produces a real terrain/sky tangency,
+    // rather than an exposed remote mesh edge or an infinitely flat plane.
+    // The authored basin and its immediate continuation are untouched.
+    float distance=max(0.0,basinOutside(uv)-0.20);
+    return height-0.38*distance*distance;
 }
 vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) {
     vec2 p = vec2((uv.x*2.0 - 1.0)*uHalfWidth, -uv.y*SHOCKWAVE_DEPTH);
@@ -270,6 +274,7 @@ out float vCrest;
 out float vEnergy;
 out float vCurvedBase;
 out vec3 vSurfaceNormal;
+out float vMarkOpacity;
 uniform int uSmoothGlass;
 void main() {
     vec3 world = basinSurface(aUv, vCrest, vEnergy, vCurvedBase);
@@ -295,7 +300,17 @@ void main() {
     vUv = aUv;
     vec4 clip = basinClip(world);
     if (uMarks == 1) clip.z -= 0.0001*clip.w;
+    vMarkOpacity=1.0;
     gl_PointSize=uPointPx;
+    if (uMarks==1) {
+        // Same lattice/depth, with smooth physical-pixel population coverage.
+        // Stable UV ranks fade a subset instead of rebuilding a resize mesh.
+        float spacing=uPointSpacing/max(abs(clip.w),0.25);
+        float occupancy=clamp(spacing*spacing/(2.75*2.75),0.0,1.0);
+        float rank=0.08+0.84*fract(sin(dot(aUv,vec2(127.1,311.7)))*43758.5453);
+        vMarkOpacity=smoothstep(rank-0.08,rank+0.08,occupancy);
+        gl_PointSize=min(uPointPx,max(1.1,0.70*spacing));
+    }
     gl_Position = clip;
 }
 """
@@ -313,9 +328,18 @@ float basinShoreLight(vec2 uv, float base, float curved) {
 }
 """
 
+_SURFACE_NORMAL_GLSL = """
+vec3 basinSurfaceNormal(vec3 areaNormal) {
+    // At a grazing/degenerate raster derivative the oriented area is zero.
+    // normalize(0) is undefined: one NaN emission texel polluted every bloom
+    // level. Its zero-area limit contributes no directional lighting.
+    return areaNormal*inversesqrt(max(dot(areaNormal,areaNormal),1e-20));
+}
+"""
+
 NEON_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_VOLUME_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + _SHORELINE_GLSL
+    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_VOLUME_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + _SHORELINE_GLSL + _SURFACE_NORMAL_GLSL
     + """
 in vec3 vWorld;
 in vec2 vUv;
@@ -323,6 +347,7 @@ in float vCrest;
 in float vEnergy;
 in float vCurvedBase;
 in vec3 vSurfaceNormal;
+in float vMarkOpacity;
 uniform vec4 uLineColor;
 uniform vec4 uCrestColor;
 uniform vec4 uWaterColor;
@@ -342,6 +367,7 @@ uniform vec2 uGlass; // strength, roughness
 uniform float uLightStrength;
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 void main() {
+    float detailFade=basinDetailFade(vUv);
     float distanceFade=basinDistanceFade(vUv);
     if (distanceFade<0.001) discard;
     if (uDepthOnly==1) {
@@ -373,6 +399,7 @@ void main() {
         float radius=length(gl_PointCoord-0.5);
         float coverage=1.0-smoothstep(0.25,0.5,radius);
         if ((uWireDisplay&4)!=0) coverage*=smoothstep(0.18,0.28,radius);
+        coverage*=vMarkOpacity;
         if (coverage<0.01) discard;
         vec4 pointColour=mix(uVertexColor,uVertexAccentColor,clamp(water ? vCrest*0.6 :
                          0.45+0.35*sin(vWorld.x*3.0+vWorld.z*2.0)+base*0.25,0.0,1.0));
@@ -381,7 +408,7 @@ void main() {
         float gain=water ? 0.65+0.4*vCrest : 0.65+vEnergy*clamp(base+0.15,0.0,1.0);
         if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)
                            *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.4));
-        float alpha=coverage*pointColour.a*distanceFade;
+        float alpha=coverage*pointColour.a*distanceFade*detailFade;
         FragColor=vec4(min(palette*gain,vec3(1.0)),alpha);
         Emission=sceneEmission(palette*gain*alpha*uGlow);
         return;
@@ -393,7 +420,7 @@ void main() {
     vec3 palette = mix(uLineColor.rgb,uCrestColor.rgb,clamp((water ? crest*0.6 :
                       0.45+0.35*sin(vWorld.x*3.0+vWorld.z*2.0)+base*0.25),0.0,1.0));
     float glassWeight=(uWireDisplay&4)!=0 ? uGlass.x*uGlassTint.a : 0.0;
-    vec3 n = glassWeight>0.0 ? normalize(vSurfaceNormal) : normalize(cross(dFdx(vWorld),dFdy(vWorld)));
+    vec3 n = basinSurfaceNormal(glassWeight>0.0 ? vSurfaceNormal : cross(dFdx(vWorld),dFdy(vWorld)));
     float light = 0.3 + 0.7*abs(dot(n,normalize(vec3(-0.4,1.0,0.5))));
     vec3 waterFill=uWaterColor.rgb*(0.60+0.10*light);
     vec3 landFill=uTerrainFillColor.rgb+palette*(0.025+0.055*light);
@@ -461,10 +488,13 @@ void main() {
         fill=mix(fill,glass,glassWeight);
         fillAlpha=max(fillAlpha,glassWeight*0.85);
     }
-    // Emphasise camera-facing, high-land tangencies without drawing the
-    // tessellation or internal wire edges. The previous 0.015..0.075 band
-    // vanished entirely at practical raster resolutions in vertex styles.
-    // This is still a surface-rim approximation, NOT a depth-derived exact
+    // The same continuous surface settles into opaque atmospheric land at
+    // its far horizon. Keep depth/coverage while fading detail and glow.
+    if (!water) {
+        vec3 distant=uSkyColor.rgb*(0.65+0.08*uSkyStrength)+uTerrainFillColor.rgb*0.08;
+        fill=mix(distant,fill,detailFade);
+        fillAlpha=mix(1.0,fillAlpha,detailFade);
+    }
     // No normal/grazing skyline approximation: it lit broad internal slopes,
     // not the visible terrain/sky boundary. Skyline now has its own thin pass.
     float lineAlpha=line*uLineColor.a;
@@ -479,7 +509,7 @@ void main() {
     alpha=alpha*(1.0-shoreAlpha)+shoreAlpha;
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
     Emission=sceneEmission((wire*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
-                           +fill*fillAlpha*glassWeight*0.12)*uGlow*distanceFade);
+                           +fill*fillAlpha*glassWeight*0.12)*uGlow*distanceFade*detailFade);
 }
 """
 )
@@ -497,16 +527,18 @@ out vec2 vUv;
 out float vContourFade;
 out float vTerrainBase;
 uniform float uOutlineLiftNdc; // physical-pixel lift, supplied by renderer viewport
+uniform float uHorizonThickness;
 void main() {
     float crest, energy, curved;
     float base=basinBase(aUv);
     float smoothed=basinCurve(aUv);
     vec3 world=vec3((aUv.x*2.0-1.0)*uHalfWidth,
-                    base>0.025 ? basinLandHeight(aUv,base,smoothed) : 0.0,
+                    sceneHeightfieldWater(base) ? 0.0 : basinLandHeight(aUv,base,smoothed),
                     -aUv.y*SHOCKWAVE_DEPTH);
     vec4 clip=basinClip(world);
-    clip.y+=uOutlineLiftNdc*clip.w;
-    clip.z+=0.0012*clip.w; // farther than the original surface, never an internal paint layer
+    float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)));
+    clip.y+=uOutlineLiftNdc*width*clip.w;
+    clip.z+=0.0012*clip.w; // farther than the same real surface, never internal paint
     gl_Position=clip;
     vUv=aUv;
     vTerrainBase=base;
@@ -533,7 +565,8 @@ void main() {
     // Water boundary is handled by its own existing shoreline, not this pass.
     // The border extension must use its true continued land classification,
     // not a clamp to an unrelated authored edge row.
-    if (vTerrainBase<0.035 || vContourFade<0.005) discard;
+    bool outside=any(lessThan(vUv,vec2(0.0))) || any(greaterThan(vUv,vec2(1.0)));
+    if ((!outside && vTerrainBase<0.035) || vContourFade<0.005) discard;
     float alpha=uCrestColor.a*vContourFade;
     vec3 colour=min(uCrestColor.rgb*(0.78+0.16*clamp(uMidband,0.0,1.0)),vec3(1.0));
     FragColor=vec4(colour,alpha);
@@ -567,6 +600,7 @@ uniform int uVolumeSteps;
 uniform float uMidband; // existing spectrum midband, no new DSP owner
 uniform float uBeatPulse;
 uniform vec2 uCelestialGlow; // brightness, musical response
+uniform int uCelestialRimVertices;
 void main() {
     vec2 item=uField.xy+vUv*uField.zw;
     vec2 centre=uField.xy+0.5*uField.zw;
@@ -592,7 +626,7 @@ void main() {
         float cameraCoverage=basinCameraBodyCoverage(length(eye-uBodyPosition),uBodySize);
         if (cameraCoverage<=0.0001) discard;
         vec3 bodyPoint;
-        vec4 body=basinVisibleBody(eye,ray,bodyPoint);
+        vec4 body=basinCelestial(eye,ray,bodyPoint);
         body.a*=cameraCoverage;
         vec3 centre=uBodyPosition-eye;
         float separation=length(centre);
@@ -605,17 +639,24 @@ void main() {
         // Outer corona around the sphere silhouette. The Moon also gets a very
         // small same-colour lift just inside the illuminated rim, so the glow
         // reads as originating from the body rather than a detached tube.
-        float halo=(smoothstep(0.992,1.040,normalizedAngle)
-                   * (1.0-smoothstep(1.032,1.210,normalizedAngle)));
+        float halo=smoothstep(0.965,1.015,normalizedAngle)
+                   *exp(-pow(max(0.0,normalizedAngle-1.005)/0.115,2.0));
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
-        float response=pow(clamp(0.22*uMidband+1.35*uBeatPulse,0.0,1.0),0.78);
-        float haloGain=uCelestialGlow.x*(0.54+0.92*clamp(uCelestialGlow.y*response*1.18,0.0,1.0));
+        float haloGain=basinCelestialHaloGain(uCelestialGlow,uMidband,uBeatPulse);
         float moonRimLight=(uBodyKind==1 && halo>0.0)
                            ? basinMoonRimIllumination(eye,ray) : 1.0;
         float haloAlpha=(uBodyKind==1)
                         ? 0.26*bodyColour.a*haloGain*halo*moonRimLight
                         : 0.23*bodyColour.a*haloGain*halo;
+        float rimMarks=0.0;
+        if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
+            rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;
+            haloAlpha+=0.24*bodyColour.a*haloGain*rimMarks;
+        }
+        // Intensity and optional rim rewards may overlap; alpha remains a
+        // coverage value even at maximum settings, never extrapolated blending.
+        haloAlpha=min(haloAlpha,0.98);
         float litInnerRim=0.0;
         float innerHaloAlpha=0.0;
         if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
@@ -625,22 +666,32 @@ void main() {
         float alpha=body.a+haloAlpha*(1.0-body.a);
         if (alpha<0.0001) discard;
         vec3 premult=body.rgb*body.a
-                    +bodyColour.rgb*(innerHaloAlpha+haloAlpha*(1.0-body.a));
+                    +bodyColour.rgb*(innerHaloAlpha+haloAlpha*(1.0-body.a)
+                                     +0.16*haloGain*rimMarks*body.a*bodyColour.a);
         vec3 colour=premult/max(alpha,1e-5);
         FragColor=vec4(min(colour,vec3(1.0)),alpha);
-        // Sun retains strong emission. The Moon emits only from a narrow band
-        // of the visible lit rim and the feathered corona immediately outside.
+        // The whole lunar surface emits softly, following its lit/shaded
+        // albedo. A rim-only emitter read as a detached glowing tube. Keep
+        // the boundary subordinate to this broad source and preserve texture.
         vec3 emission;
         if (uBodyKind==1) {
-            emission=bodyColour.rgb*(0.12*innerHaloAlpha + 0.28*haloAlpha*(1.0-body.a));
+            // Bound surface radiance before shared bloom: linear gain clipped
+            // the bright face white through loud passages at maximum settings.
+            // The exterior halo keeps its stronger musical response.
+            float surfaceGain=0.04*haloGain/(1.0+0.8*haloGain);
+            emission=body.rgb*body.a*surfaceGain
+                     +bodyColour.rgb*(0.06*innerHaloAlpha + 0.20*haloAlpha*(1.0-body.a)
+                                      +0.18*haloGain*rimMarks*body.a*bodyColour.a);
         } else {
             emission=(body.rgb*body.a
-                     +bodyColour.rgb*haloAlpha*(1.0-body.a))*0.20;
+                     +bodyColour.rgb*(haloAlpha*(1.0-body.a)
+                                      +0.9*haloGain*rimMarks*body.a*bodyColour.a))*0.20;
         }
         Emission=vec4(emission,dot(emission,vec3(0.2126,0.7152,0.0722)));
-        vec3 position=body.a>0.0001 ? bodyPoint : uBodyPosition;
-        gl_FragDepth=clamp(0.5+0.5*basinDepthNdc(sceneOrbitPoint(position,uView,
-                     vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH),vec3(0.0)).z),0.0,1.0);
+        // Sun/Moon are celestial background. Their authored analytic sphere
+        // still supplies apparent pose, phase, reflection and illumination,
+        // but the SAME land depth owns their visible horizon/sky coverage.
+        gl_FragDepth=1.0;
     } else {
         // One celestial coverage evaluation for ordinary stars AND the
         // independent beat-star emission attachment. No duplicate ray hits.

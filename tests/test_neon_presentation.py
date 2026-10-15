@@ -3,7 +3,21 @@ import math
 
 import pytest
 
-from rendering.gl_programs.neon_lake_basin_program import basin_pixel_scale, _SHORELINE_GLSL
+from rendering.gl_programs.neon_lake_basin_program import basin_pixel_scale, _SHORELINE_GLSL, _SURFACE_NORMAL_GLSL
+
+
+def test_horizon_width_is_one_canonical_editable_render_control():
+    from dataclasses import asdict
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_mode_settings import require_mode_settings, Slider
+
+    key='shockwave_grid_horizon_thickness'
+    control=next(c for c in require_mode_settings('shockwave_grid').entries if getattr(c,'key',None)==key)
+    assert isinstance(control,Slider) and control.bucket=='render'
+    for width in (0.0, .7, 1.8, 4.0):
+        model=SpotifyVisualizerSettings.from_mapping({key:width},apply_preset_overlay=False,resolve_preset_indices=False)
+        assert asdict(model)[key] == pytest.approx(width)
+        assert asdict(SpotifyVisualizerSettings.from_mapping(asdict(model),apply_preset_overlay=False,resolve_preset_indices=False))[key] == pytest.approx(width)
 
 
 @pytest.mark.parametrize("dpr", [1.0, 1.25, 1.5, 2.0])
@@ -35,5 +49,21 @@ def test_actual_shoreline_glsl_rejects_off_editor_land_but_preserves_authored_sh
                            samples, declarations=HEIGHTFIELD_GLSL + _SHORELINE_GLSL)[:, 0]
         assert min(values[:3]) > 1.0
         assert max(values[3:]) == 0.0
+    finally:
+        probe.close()
+
+
+def test_gl_zero_area_normal_stays_finite_before_emission_and_bloom(qt_app):
+    import numpy as np
+    from tests.test_scene3d_glsl_mirrors import _GlslProbe
+
+    probe=_GlslProbe()
+    try:
+        values=probe.run("FragColor=vec4(basinSurfaceNormal(arg(0).xyz),1.0);",
+                         [[(0.,0.,0.)],[(0.,2.,0.)],[(1e-30,0.,0.)]],
+                         declarations=_SURFACE_NORMAL_GLSL)
+        assert np.isfinite(values).all()
+        assert values[0,:3] == pytest.approx((0.,0.,0.))
+        assert values[1,:3] == pytest.approx((0.,1.,0.))
     finally:
         probe.close()

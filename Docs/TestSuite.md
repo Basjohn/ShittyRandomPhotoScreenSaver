@@ -45,8 +45,17 @@ Focused GL tests that own their storage and lifetimes may explicitly load
 `-p tools.pytest_qt_noenv --noconftest`. This supplies only `qt_app` via public Qt APIs;
 it does not supply the ordinary suite's storage, QML or runtime cleanup fixtures.
 `tests/test_neon_presentation.py` checks item-matrix physical pixel mapping across
-window sizes/DPR and executes the production shoreline helper on real GL: continued
-land cannot emit a false lake contour, while authored shoreline admission remains.
+window sizes/DPR and executes the production shoreline and normal helpers on real GL:
+continued land cannot emit a false lake contour, authored shoreline admission remains,
+and zero-area derivatives cannot seed NaN emission and a black bloom rectangle.
+`tests/test_neon_lake_renderer.py` checks actual GPU point shape and embedded-card/DPR
+mapping, inherited horizon colour and independent thickness, low-body terrain occlusion,
+solid phase coverage and finite whole-Moon surface emission. Synthetic fixtures distinguish
+faint New from bright Full and require Halo OFF to remove emission without removing albedo.
+The composed bright-face check covers maximum glow/reactivity with test-owned art,
+so a finite MRT value alone cannot conceal a white-clipped Moon after bloom.
+`tests/test_neon_celestial_response.py` checks the default-OFF rim experiment's canonical
+round-trip and real-GL bounded halo response, zero-reactivity stability and phase-limited marks.
 `tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
 verified source admission, atomic commit/capture, invalid-input transactionality and
 active-Neon-only demand. These source tests do not establish musical-motion acceptance.

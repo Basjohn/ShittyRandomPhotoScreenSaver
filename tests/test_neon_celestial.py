@@ -58,8 +58,8 @@ void main() {{
         FragColor=vec4(vec3(basinMoonAlbedo(normalize(ray))),1.0);
     }}
     else if (uProbeMode == 8) {{
-        // Exact production helper: Moon glow emission exists only at the
-        // outer illuminated lunar limb, not over the lit face.
+        // Exact production inner-rim component; whole-surface emission is
+        // separately covered through the production host's MRT attachment.
         float inner=body.a>0.0001 ? basinMoonInnerRimEmission(uEye,hitPoint) : 0.0;
         FragColor=vec4(inner,inner,inner,1.0);
     }}
@@ -216,29 +216,32 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         assert np.allclose(moon_hidden_reflection[:3], np.zeros(3), atol=0.0)
         assert moon_hidden_sky_reflection[:3] == pytest.approx(
             moon_hidden_sky[:3] * moon_hidden_sky[3], abs=3e-6)
-        # The celestial body blocks BOTH ordinary and beat stars. The alpha
-        # of an intentionally hidden body does not create an empty sky hole.
-        moon_mask=draw(mode=9,kind=1,phase=0.25)
+        # The solid Moon, including its dim shaded hemisphere, blocks stars.
+        moon_mask=draw(mode=9,kind=1,phase=0.5)
         moon_mask_transparent=draw(mode=9,kind=1,phase=0.25,body_alpha=0.0)
         moon_mask_disabled=draw(mode=9,kind=1,phase=0.25,sun_enabled=0)
         moon_mask_miss=draw(mode=9,kind=1,phase=0.25,ray=(1.0,0.0,-1.0))
-        assert moon_mask[0] > 0.95
+        assert moon_mask[0] == pytest.approx(moon_colour[3],abs=2e-6)
         assert moon_mask_transparent[0] == 0.0
         assert moon_mask_disabled[0] == 0.0
         assert moon_mask_miss[0] == 0.0
-        moon_sky_baseline=draw(mode=1,kind=1,phase=0.25,sky_enabled=1,star_count=0)
-        moon_sky_beat=draw(mode=1,kind=1,phase=0.25,sky_enabled=1,star_count=1)
-        assert np.allclose(moon_sky_baseline, moon_sky_beat, atol=1e-5)
+        assert draw(mode=9,kind=1,phase=0.0)[0] == pytest.approx(moon_colour[3],abs=2e-6)
+        assert draw(mode=9,kind=1,phase=0.25,ray=(.10,0.,-1.))[0] == pytest.approx(moon_colour[3],abs=2e-6)
+        assert draw(mode=9,kind=1,phase=0.25,ray=(-.10,0.,-1.))[0] == pytest.approx(moon_colour[3],abs=2e-6)
+        moon_sky_baseline=draw(mode=1,kind=1,phase=0.5,sky_enabled=1,star_count=0)
+        moon_sky_beat=draw(mode=1,kind=1,phase=0.5,sky_enabled=1,star_count=1)
         clear_sky_beat=draw(mode=1,kind=1,phase=0.25,sky_enabled=1,
                             star_count=1,sun_enabled=0)
         clear_sky_baseline=draw(mode=1,kind=1,phase=0.25,sky_enabled=1,
                                 star_count=0,sun_enabled=0)
         assert clear_sky_beat[:3].mean()>clear_sky_baseline[:3].mean()+0.1
+        assert moon_sky_beat[:3]-moon_sky_baseline[:3] == pytest.approx(
+            (clear_sky_beat[:3]-clear_sky_baseline[:3])*(1.-moon_colour[3]),abs=2e-5)
         moon_new = draw(mode=0, kind=1, sun_enabled=1, phase=0.0)
         moon_full = draw(mode=0, kind=1, sun_enabled=1, phase=0.5)
-        assert moon_new[3] == pytest.approx(moon_colour[3], abs=2e-6)
+        assert moon_new[3] == pytest.approx(moon_colour[3],abs=2e-6)
         assert moon_full[3] == pytest.approx(moon_colour[3], abs=2e-6)
-        assert moon_full[:3].mean() > moon_new[:3].mean() * 4.0
+        assert moon_full[:3].mean() > moon_new[:3].mean()*4.
         assert moon_full[1] / moon_full[0] == pytest.approx(
             moon_colour[1] / moon_colour[0], abs=2e-6)
         assert np.isfinite(moon_new).all() and np.isfinite(moon_full).all()
@@ -249,7 +252,7 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         side_ray=(-2.0,0.0,-3.2)
         moon_new_side=draw(mode=0,kind=1,phase=0.0,ray=side_ray,eye_override=side_eye)
         moon_full_side=draw(mode=0,kind=1,phase=0.5,ray=side_ray,eye_override=side_eye)
-        assert moon_full_side[:3].mean()>moon_new_side[:3].mean()*4.0
+        assert moon_full_side[:3].mean()*moon_full_side[3]>moon_new_side[:3].mean()*moon_new_side[3]
 
         moon_size = (64, 64)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA32F, *moon_size, 0,
@@ -262,13 +265,15 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         moon_core = nx * nx + ny * ny < 0.62 * 0.62
         crater_values = moon_surface[..., 0][moon_core] / moon_colour[0]
         assert np.isfinite(crater_values).all()
-        # This is a procedural moon, not a visual golden. Demand real regional
-        # variance from basaltic maria and impact bowls without pinning any
-        # authored palette or individual crater placement.
-        assert 0.08 < float(np.ptp(crater_values)) < 0.70
+        # The accepted clean bright Moon has only restrained relief. Do not
+        # demand the rejected contour map or pin an artistic contrast level.
+        assert np.all((crater_values>=0.) & (crater_values<=1.))
+        relief = [draw(mode=7,kind=1,ray=(u,v,-1.))[0]
+                  for u in (-.8,-.4,0.,.4,.8) for v in (-.5,0.,.5)]
+        assert 1e-4 < float(np.ptp(relief)) < .25
 
         # Rim lighting shares the surface phase direction, so a waxing Moon
-        # glows on the lit limb only; new Moon has no halo and full Moon has
+        # lights the lit limb only; new Moon has no rim glow and full Moon has
         # illuminated rim in both directions. Test the GPU function directly.
         right = (0.18, 0.0, -1.0)
         left = (-0.18, 0.0, -1.0)
@@ -280,7 +285,7 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         full_left = draw(mode=6, kind=1, phase=0.5, ray=left)
         assert new_right[0] < 0.01 and new_left[0] < 0.01
         assert waxing_right[0] > 0.85 and waxing_left[0] < 0.15
-        assert full_right[0] > 0.85 and full_left[0] > 0.85
+        assert full_right[0] > 0.5 and full_left[0] == pytest.approx(full_right[0],abs=2e-6)
 
         # Actual crescents (not just quarters) and opposite phase orientation.
         # The brightness/halo may change artistically, but the direction of
@@ -289,17 +294,17 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         thin_waxing_left = draw(mode=0, kind=1, phase=0.075, ray=(-0.139,0.0,-1.0))
         thin_waning_left = draw(mode=0, kind=1, phase=0.925, ray=(-0.139,0.0,-1.0))
         thin_waning_right = draw(mode=0, kind=1, phase=0.925, ray=(0.139,0.0,-1.0))
-        assert thin_waxing_right[:3].mean() > thin_waxing_left[:3].mean()*2.0
-        assert thin_waning_left[:3].mean() > thin_waning_right[:3].mean()*2.0
+        assert thin_waxing_right[:3].mean() > thin_waxing_left[:3].mean()*2.
+        assert thin_waning_left[:3].mean() > thin_waning_right[:3].mean()*2.
 
-        # A full Moon's albedo is visible in the centre, but NOT emissive.
-        # The only emissive part of the lunar face is its extremely narrow
-        # illuminated edge; dark-side rim emission also remains suppressed.
+        # The inner-rim component stays at the illuminated edge. The total
+        # production Moon also emits across its surface; this helper isolates
+        # the subordinate rim so it cannot spread into a second face layer.
         core = draw(mode=8, kind=1, phase=0.5, ray=(0.0,0.0,-1.0))
         full_inner_edge = draw(mode=8, kind=1, phase=0.5, ray=(0.141,0.0,-1.0))
         dark_inner_edge = draw(mode=8, kind=1, phase=0.0, ray=(0.141,0.0,-1.0))
         assert core[0] < 1e-5
-        assert full_inner_edge[0] > 0.40
+        assert 0.1 < full_inner_edge[0] <= 1.0
         assert dark_inner_edge[0] < 0.01
 
         # Spherical 3-D material sampling is seamless across the old longitude
