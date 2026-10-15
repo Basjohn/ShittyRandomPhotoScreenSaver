@@ -724,7 +724,9 @@ renderer `rendering/quick/visualizer/implementations/oscilloscope.py`.
   idle waveform is drawn; replay serves a recording's full capture history (`tools/music_recorder.py` clips).
 - **Picture:** Trace (a triggered sweep: a rising zero crossing of the smoothed signal chosen among the recent ones
   as the one that best continues the previous trace, so a steady tone stands still; spans longer than the trace's 384
-  points draw each bin's low and high in time order, never an aliased subsample), Ring (the trace clockwise around a
+  points draw each bin's low and high in time order, never an aliased subsample; the sweep runs past both item
+  edges along its axis, so the card's inner clip cuts it under the border rather than it stopping short, while the
+  graticule keeps the screen's margin), Ring (the trace clockwise around a
   circle, ends eased to the circle) or Phase (the signal against itself Phase Delay later, turned 45 degrees, its
   narrow axis widened toward the other's spread: shape only). Detail low-passes the drawn audio (about 1.5 kHz at 0,
   every sample at 1); Gain scales the DC-free signal on a fixed scale with a tanh soft limit (nothing learned from

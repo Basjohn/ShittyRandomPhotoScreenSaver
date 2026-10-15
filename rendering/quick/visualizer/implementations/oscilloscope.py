@@ -49,12 +49,20 @@ _FLARE_WIDTH = 0.9            # how much a full flare widens the beam (share of 
 _GLOW_LIGHT = 1.8             # the light a beam pixel sends to the bloom (a thin beam needs plenty)
 
 
-def oscilloscope_layout(field, display: str) -> tuple[tuple[float, float], float]:
-    """(logical px per unit along x and y, the drawing's length in px) for a content ``field``."""
-    _x, _y, width, height = (float(value) for value in field)
+def oscilloscope_layout(field, display: str, item_width: float | None = None,
+                        overrun: float = 0.0) -> tuple[tuple[float, float], float]:
+    """(logical px per unit along x and y, the drawing's length in px) for a content ``field``.
+
+    Given the item's width (in the field's oriented space), the Trace runs ``overrun`` px past both
+    of its edges, so the card's clip cuts it under the border instead of the trace ending short of it."""
+    x, _y, width, height = (float(value) for value in field)
     pad = _PADDING * min(width, height)
     if display == "Trace":
-        scale = (max(1.0, width * 0.5 - pad), max(1.0, (height * 0.5 - pad) * _TRACE_HEIGHT))
+        half = width * 0.5 - pad
+        if item_width is not None:
+            centre = x + 0.5 * width
+            half = max(centre, float(item_width) - centre) + float(overrun)
+        scale = (max(1.0, half), max(1.0, (height * 0.5 - pad) * _TRACE_HEIGHT))
         return scale, 2.0 * scale[0]
     radius = max(1.0, min(width, height) * 0.5 - pad)
     length = 2.0 * math.pi * RING_RADIUS * radius if display == "Ring" else 2.0 * radius
@@ -129,7 +137,6 @@ class QuickOscilloscopeRenderer:
             return
         parameters = state.parameters
         display = str(parameter(parameters, "osc_display"))
-        scale, length = oscilloscope_layout(field, display)
         visual_scale = float(presentation.uniform_visual_scale)
         flare = float(state.flare) * float(parameter(parameters, "osc_flare"))
         pulse = float(parameter(parameters, "osc_pulse"))
@@ -137,6 +144,9 @@ class QuickOscilloscopeRenderer:
         glow = float(parameter(parameters, "osc_glow"))
         core = 0.5 * float(parameter(parameters, "osc_beam_width")) * visual_scale * (1.0 + _FLARE_WIDTH * flare)
         pixel = 1.0 / max(0.5, float(presentation.dpr))
+        reach = core + 2.0 * pixel
+        # The Trace's ends (and their round caps) lie past the item's edges, under the card's clip.
+        scale, length = oscilloscope_layout(field, display, frame.oriented_logical_size[0], reach + 2.0 * pixel)
         beam = rgba(parameter(parameters, "osc_beam_color"))[:3]
         spectral = float(parameter(parameters, "osc_spectral"))
         if spectral > 0.0:
@@ -164,7 +174,7 @@ class QuickOscilloscopeRenderer:
                     uniforms = r.uniforms("graticule", _GRATICULE_UNIFORMS)
                     gl.glUseProgram(program)
                     gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-                    gl.glUniform4f(uniforms["uField"], *self._graticule_field(field, scale))
+                    gl.glUniform4f(uniforms["uField"], *self._graticule_field(field, scale, display))
                     gl.glUniform4f(uniforms["uColour"], *rgba(parameter(parameters, "osc_graticule_color")))
                     gl.glUniform1i(uniforms["uStyle"], _GRATICULE_STYLES[graticule])
                     gl.glUniform2f(uniforms["uDivisions"], *((10.0, 8.0) if display == "Trace" else (8.0, 8.0)))
@@ -177,7 +187,7 @@ class QuickOscilloscopeRenderer:
                 gl.glUniform2f(beam_uniforms["uScale"], *scale)
                 gl.glUniform1i(beam_uniforms["uPoints"], points)
                 gl.glUniform1fv(beam_uniforms["uAlpha"], MAX_TRACES, alphas)
-                gl.glUniform1f(beam_uniforms["uReach"], core + 2.0 * pixel)
+                gl.glUniform1f(beam_uniforms["uReach"], reach)
                 gl.glUniform1f(beam_uniforms["uCore"], core)
                 gl.glUniform1f(beam_uniforms["uPixel"], pixel)
                 gl.glUniform3f(beam_uniforms["uBeam"], *beam)
@@ -202,8 +212,11 @@ class QuickOscilloscopeRenderer:
                 _restore_blend(inherited)
 
     @staticmethod
-    def _graticule_field(field, scale) -> tuple[float, float, float, float]:
-        """The graticule covers the drawing's extent, centred in the field."""
+    def _graticule_field(field, scale, display) -> tuple[float, float, float, float]:
+        """The graticule covers the scope's screen, centred in the field (the Trace itself runs on
+        under the card's border; its screen keeps the field's margin)."""
+        if display == "Trace":
+            scale = (oscilloscope_layout(field, display)[0][0], scale[1])
         centre_x, centre_y = field[0] + 0.5 * field[2], field[1] + 0.5 * field[3]
         return centre_x - scale[0], centre_y - scale[1], 2.0 * scale[0], 2.0 * scale[1]
 
