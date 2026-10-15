@@ -369,6 +369,57 @@ def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target,
             assert np.max(difference[star_pixels]) <= 2
 
 
+def test_terrain_erases_beat_star_colour_and_emission_even_with_transparent_material(target, monkeypatch):
+    import math
+    from contextlib import contextmanager
+    from rendering.quick.visualizer.implementations import shockwave_grid as module
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
+
+    capture,host=target
+    terrain={'size':5,'maximum':.6,
+             'data':heightfield_surface_bytes({'size':5,'heights':[.6]*25})}
+    base=_wire_frame(_snapshot(shockwave_grid_terrain=terrain,
+        shockwave_grid_sun_enabled=False,shockwave_grid_water_reflection=0.,
+        shockwave_grid_glow=.8,shockwave_grid_starscape_beat=True,
+        shockwave_grid_star_color=[255,255,255,255],shockwave_grid_star_glow_strength=2.,
+        shockwave_grid_star_glow_reactivity=2.,shockwave_grid_floor=0.,
+        shockwave_grid_glass_strength=0.,shockwave_grid_crest_color=[0,0,0,0],
+        shockwave_grid_tilt=.3,shockwave_grid_turn=0.),'Glass')
+    capture.render(host,base)
+    renderer=host._implementations['shockwave_grid']
+    half_width=module.shockwave_half_width(W/H)
+    maximum=.6*float(dict(base.logical.mode_state.parameters)['shockwave_grid_terrain_height'])*1.5
+    camera=module.basin_camera(half_width,maximum)
+    tilt=.3*module.SHOCKWAVE_MAX_TILT
+    eye=np.array([0.,camera*math.sin(tilt),camera*math.cos(tilt)-.5*SHOCKWAVE_DEPTH])
+    # Aim a real sky star at a point below the authored solid surface.
+    ray=np.array([0.,0.,-.5*SHOCKWAVE_DEPTH])-eye
+    ray/=np.linalg.norm(ray)
+    cell=(math.floor(math.atan2(ray[0],-ray[2])*420),math.floor(math.asin(ray[1])*420),1.,0.)
+    enabled=[False]
+    monkeypatch.setattr(module,'starscape_beat_cells',lambda *a,**kw:(cell,) if enabled[0] else ())
+    def draw(star):
+        enabled[0]=star
+        colour=capture.render(host,base)
+        return colour,_resolved_emission_pixels(renderer)
+    absent,off=draw(False)
+    shown,on=draw(True)
+    assert np.max(np.abs(on[...,:3]-off[...,:3]))<1e-4
+    assert np.max(np.abs(shown-absent))<=1
+    actual=module._terrain_sky_occlusion_blend
+    @contextmanager
+    def leaking_emission(emission):
+        # Reproduce the old missing source alpha on the emission output:
+        # colour erases correctly, while additive glow survives the surface.
+        with actual(emission):
+            if emission:
+                gl.glBlendFuncSeparatei(1,gl.GL_ZERO,gl.GL_ONE,gl.GL_ZERO,gl.GL_ONE)
+            yield
+    monkeypatch.setattr(module,'_terrain_sky_occlusion_blend',leaking_emission)
+    _,leaked=draw(True)
+    assert np.max(leaked[...,:3]-off[...,:3])>.1
+
+
 def test_maximum_water_highlights_have_bounded_float_coverage(target, monkeypatch):
     from rendering.quick.scene3d.target import SceneTarget
     from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_MAX_STRENGTH

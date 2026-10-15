@@ -61,9 +61,12 @@ round-trip and real-GL bounded halo response, zero-reactivity stability and phas
 Its production exterior-annulus check requires source emission in all four quadrants
 at New, thin crescents, quarters and Full, separately from illuminated-only rim marks.
 `tests/test_neon_lake_reaction.py` checks nearby water attack/release against the same
-untapered production wave at each quality/style, with a stationary exact bank and
-unchanged classification/interior response. The beat-star projection tests require
-four deterministic spaced cells across upper/middle/lower sky and at most two events.
+untapered production wave at each quality/style, with unchanged authored membership/interior
+response, moving concave water junctions and continuity through the shallow fringe to the
+stationary visible cubic shore. Dry land stays unchanged. The beat-star projection tests require
+three deterministic spaced cells across upper/middle/lower sky, slower release, bounded
+body/terrain avoidance and at most two events. The renderer tests also force a star behind
+transparent terrain: both colour and emission vanish; restoring the old emission blend leaks it.
 `tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
 verified source admission, atomic commit/capture, invalid-input transactionality and
 active-Neon-only demand. These source tests do not establish musical-motion acceptance.

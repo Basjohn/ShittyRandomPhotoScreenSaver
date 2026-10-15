@@ -43,7 +43,7 @@ live in `Docs/Reference/Feeds.md` and `Docs/TestSuite.md`; real contention/fairn
 
 Every registered original mode now uses the typed body spec, including original Bubble.
 Neon Lake's current appearance is operator-accepted. The final shore-response and
-four-star spread corrections have focused GPU/native-music proof and the single
+star-spread corrections have focused GPU/native-music proof and the single
 Astra visual audit. Its durable contract is `Docs/Reference/Neon_Lake_Basin.md`;
 regression inventory is `Docs/TestSuite.md`. Six disposable experiments are delivered
 and inspected, freely editable/rejectable. Preserve the accepted curved horizon,
@@ -107,10 +107,6 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
 - [ ] **Deferred Neon terrain deformation — future, nonblocking; not for this run.** Design proper
   spatial terrain deformation/reactivity as separate future work. Preserve the currently accepted
   appearance and timing until that task is explicitly resumed; do not implement it during Bubble migration.
-- [ ] **Conservative bank-distance junctions — future, nonblocking.** The packed distance field can
-  leave isolated fully-water junction cells at zero distance (3 of 1472 current Preset 1 water cells;
-  mutable art, not a test oracle). Investigate a finer boundary-distance representation only for a
-  reproduced residual dead junction. The broad shoreline strip is fixed without changing classification.
 
 ### SC4. Just Make It Work Pools | provider selection, independently scoped
 

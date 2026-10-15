@@ -4,7 +4,7 @@ from pathlib import Path
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.visualizer_mode_settings import mode_settings, Toggle
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
-from rendering.gl_programs.neon_starscape import STARSCAPE_BEAT_MIN_STRENGTH, starscape_beat_cells
+from rendering.gl_programs.neon_starscape import STARSCAPE_BEAT_MIN_STRENGTH, STARSCAPE_BEAT_RELEASE, starscape_beat_cells
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,10 +23,10 @@ def test_starscape_beat_is_opt_in_canonical_spec_value():
     assert any(isinstance(item,Toggle) and item.key == "shockwave_grid_starscape_beat" for item in entries)
     assert DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["shockwave_grid_starscape_beat"] is False
 
-def test_four_spaced_stars_per_strong_beat_with_gentle_release():
+def test_three_spaced_stars_per_strong_beat_with_slower_release():
     events = ((0.05,0.25,-0.63,1.4),)
     first=_framed_stars(events,.35,.07)
-    assert len(first)==4
+    assert len(first)==3
     assert all(a[2]>0 for a in first)
     assert abs(first[0][0]-first[1][0])>25
     assert abs(first[1][0]-first[2][0])>25
@@ -34,11 +34,16 @@ def test_four_spaced_stars_per_strong_beat_with_gentle_release():
     later=_framed_stars(((1.5,0.25,-0.63,1.4),),.35,.07)
     assert all(0.0<b[2]<a[2] for a,b in zip(first,later))
     assert not _framed_stars(((0.01,0.25,-0.63,STARSCAPE_BEAT_MIN_STRENGTH-0.001),),.35,.07)
-    assert not _framed_stars(((1.76,0.25,-0.63,1.4),),.35,.07)
+    assert _framed_stars(((1.76,0.25,-0.63,1.4),),.35,.07)
+    assert not _framed_stars(((STARSCAPE_BEAT_RELEASE,0.25,-0.63,1.4),),.35,.07)
+    # A 40% lower fade rate preserves the old curve at age / .6.
+    age = .9
+    slowed = _framed_stars(((age/.6,.25,-.63,1.4),),.35,.07)
+    assert abs(slowed[0][2]-(1-(age/1.75)**2)**2)<1e-12
 
-def test_two_admitted_beats_have_at_most_eight_stars():
+def test_two_admitted_beats_have_at_most_six_stars():
     events=((0.5,0.2,-0.7,1.2),(0.1,0.7,-0.4,1.3))
-    assert len(_framed_stars(events,.30,.08))==8
+    assert len(_framed_stars(events,.30,.08))==6
 
 def test_thick_glass_sky_and_body_use_existing_depth_surface():
     renderer=(ROOT/"rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()
