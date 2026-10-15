@@ -20,7 +20,13 @@ captures current Preset 1 through the production render host, including admitted
 size, embedded-card and DPR views. `--set KEY=JSON` overrides memory only; `--size`,
 `--dpr` and `--window` select logical card, physical mapping and whole-window viewport.
 PNG/JSON pairs record actual GL pixels and effective settings/target dimensions.
-These are comparison artifacts, not artistic goldens or real-music/physical-window proof.
+`--clip PATH --start SECONDS --duration SECONDS --fps FPS --gif` replays native PCM
+through the existing music source into one retained production host. `--resize` with
+`--resize-smooth` exercises continuous card resize; metadata records scene/resource
+identity and upload counts. GIFs are silent; they do not establish audible timing or
+physical-window acceptance. Captures are comparison artifacts, never artistic goldens.
+Use `--all-frames` for lossless RGB PNGs and `--rgb-roi x0,y0,x1,y1` for normalized
+region measurements before GIF palette quantization; GIF colour bands are not material evidence.
 
 For retained ordinary Edit changes, the shared native painter test (`tests/test_qtquick_child_mapped_geometry.py`) covers clipped/applied transforms and repeated family-owned normalization values. Combine it with the specific family scene tests (Clock, System Stats, Friend Pulse, Weather, Achievement Pulse or Abandonment Issues) and the import-free lifetime/paint source contracts. Stable role identity and real painted bounds must both pass; a green source scan cannot certify native gesture responsiveness.
 

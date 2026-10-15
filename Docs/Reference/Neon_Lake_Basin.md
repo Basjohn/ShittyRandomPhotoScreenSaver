@@ -112,8 +112,8 @@ control-height range; authored bilinear zero remains the water-classification au
 The mode-owned terrain lattice now overscans all four authored edges, with geometrically growing
 cell width away from the authored 0..1 sub-lattice. `neon_lake_basin_mesh.py` generates both triangles and actual
 point markers from exactly the same axis coordinates, keeping the edited interior topology untouched. A
-shader-side, deterministic land continuation joins the authored boundary, lets steep near-edge ridges settle toward subdued distant rolling ground rather than extruding indefinitely, and fades diffuse, emission,
-reflection and vertices into the sky before the finite outer edge. Off-editor continuation is not another
+shader-side, deterministic land continuation joins the authored boundary, lets steep near-edge ridges settle into a shallow convex distant world rather than extruding indefinitely, and fades detail/emission/vertices while retaining
+opaque land/depth up to its real terrain/sky tangency. The finite outer mesh edge stays behind nearer land, not a painted horizon. Off-editor continuation is not another
 terrain editor or an infinitely repeating tile; it never creates an additional authored lake. Distant
 coverage and performance, including unusual zoom/card aspects, remain operator/GPU acceptance items.
 An authored tier change replaces the one active mesh; ordinary frames allocate/rebuild nothing. Authored patch
@@ -147,13 +147,17 @@ ordinary point markers and mirrored passes do not evaluate them. Five bounded re
 sample the authored sky and actual ray-hit Sun/Moon; roughness widens them. This is a procedural scene-environment
 approximation, not photo capture, refraction or a new reflection target. Neon environment radiance supplies restrained
 grazing highlights; optional body lighting uses the same material and coarse heightfield occlusion.
+Zero-area raster normals use a finite zero-direction limit. Bare `normalize(0)`
+can introduce one NaN emission texel that expands into a black bloom rectangle;
+normalizing the geometric area safely prevents contamination at its source.
 
 The existing `sun_enabled` key gates the selected Sun or Moon independently from sky intensity. Sun keeps vibrant
 bands; Moon uses authored phase and a deterministic 3-D spherical lunar surface with
-large basaltic maria, granular highlands and sparse crater bowls/rims. The 3-D sampling
+subtle lunar flecks and restrained crater relief on a bright smooth face. The 3-D sampling
 must not introduce longitude seams, rectangular stamp repetition or camera-dependent
-surface drift. The shadowed face may remain very faintly visible as earthshine, but
-contributes no Moon bloom. The Moon Phase slider (0..1) is operator-authored art, not real-world ephemeris,
+surface drift. The solid shaded hemisphere retains faint earthshine for
+3-D form; the rejected contour-map presentation is not an alternate runtime style.
+The Moon Phase slider (0..1) is operator-authored art, not real-world ephemeris,
 local clock, calendar date, or orbital position. Its direction is resolved relative
 to the viewing basis, so moving the scene or camera does not silently change a
 selected waxing/waning crescent into another phase. 0/1 is New, .125 waxing
@@ -161,14 +165,17 @@ crescent, .25 first quarter, .5 Full, .75 last quarter and .875 waning crescent.
 The Moon's 3-D crater/maria albedo remains sampled in world space and is never
 an alternate phase owner. Optional orbital motion moves only the body, not the phase.
 
-The illuminated disc is **ordinary albedo colour**, not blanket glow emission.
-A very narrow illuminated *inner outer-limb* band and an analytic exterior halo
-supply the rim emission, both gated by that one phase terminator. The centre of
-even a Full Moon produces no Moon bloom; the dark face can retain faint,
-non-emissive earthshine and the unlit limb emits nothing. Thin waxing and waning
-crescents must each remain visible and glow solely along their lit arc, not as
-an indiscriminate circular aura. GPU tests must distinguish face colour from
-emission and cover New, thin/wide crescents both ways, quarters, gibbous and Full.
+The whole Moon surface supplies soft emission following its actual lit/shaded
+albedo: strong on the bright face and faint on the shaded hemisphere. Rim-only
+emission was explicitly rejected as tube-like. A subordinate inner feather and
+analytic exterior halo blend that broad source into the surrounding scene.
+Celestial Halo gates this emission, while its Intensity/Reactivity remain the
+single glow authority. Preserve face/shadow contrast and subtle detail rather
+than replacing the body with a uniform light blob. A bounded surface gain retains
+headroom through maximum reactive bloom; the exterior halo keeps its musical response.
+GPU tests distinguish colour
+and emission, require positive surface emission, and cover New, thin/wide
+crescents both ways, quarters, gibbous and Full.
 Neither effect changes orbit timing, reflection/light sampling, the shared
 celestial body, Sun presentation, or authored controls.
 Both bodies have separate RGBA. XYZ and radius are art:
@@ -178,7 +185,7 @@ The sky background is drawn continuously first, then the terrain's **real depth-
 sky colour/emission in proportion to the same surface coverage/fade. Subsequent surface/sky-body
 passes use that terrain depth, so distant stars or Moon/Sun are occluded by foreground land
 without creating a separate card-wide alpha band. The translucent/glass surface retains its
-material appearance while **opaque terrain coverage** blocks the sky behind it. Sun/Moon draw **after** surface colour with LEQUAL and actual ray-sphere hit depth; only the camera-front visible fragments pass, and bodies behind terrain are occluded. The old GREATER rear-body transmission path is retired. No additional depth target, authority, or timer is created. Reflected body hits still use authored land-volume approximation; direct on-card visibility is determined by the real overscanned landscape depth. When orbit brings the camera inside or extremely close to the analytic ray-sphere body, its *camera-visible draw* smoothly fades out before it becomes a screen-filling disc. The world position, orbit, material/environment reflection queries, and illumination are unchanged. No new sphere mesh or timer is introduced. The distant continuation is a visual surface, not a second authored occlusion volume.
+material appearance while **opaque terrain coverage** blocks the sky behind it. Sun/Moon draw **after** surface colour as celestial background with LEQUAL at far depth, so the same terrain depth clips both body and halo at the horizon. Their analytic sphere retains authored apparent pose, phase, orbit, reflection and illumination; direct presentation no longer places an astronomical body in front of distant land merely because its artistic XYZ is nearby. No additional depth target, mask or timer is created. Reflected body hits retain the authored land-volume approximation. Near-camera visible-body attenuation still prevents an enormous disc without changing world lighting or orbit.
 
 Optional rays use `heightfield_volume_glsl.py` single scattering over the same world-space basin and authored body.
 The existing sky program/quad and SceneTarget are reused after geometry; no volume texture, timer or simulation is
@@ -222,21 +229,25 @@ pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; 
 (`terrain_motion`) owns the existing timing rows. Spec-owned conditional controls remain
 hidden when their prerequisites are disabled, retain their saved value while hidden, and
 reappear on re-enablement. The Glow bucket is closed by default. The passive celestial halo
-is enabled by default, while Starscape Beat is opt-in. A potential sparse celestial
-rim-vertex overlay is only an operator-review candidate, not an existing control or
-an accepted reason to add surface-wide lattice/microrelief costs.
+is enabled by default, while Starscape Beat is opt-in. The optional Celestial Rim
+Vertices experiment is default OFF and uses sparse antialiased marks on the lit
+outer rim only. Fixed angular slots fade additional marks smoothly during resize;
+there is no second mesh, surface lattice, phase or glow owner.
 
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
 projected framed sky**, select three spaced star cells per admitted event, and decay on the
 single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).
 Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
-introducing a new vocal detector. Beat stars and their bloom are suppressed behind the
-Moon/Sun disc so the body fully owns its coverage, and the Moon's lit-face lift remains a
-small same-colour feather near the illuminated rim rather than whole-disc emission. The orbit-speed setting admits 0..0.025 revolutions/s.
+introducing a new vocal detector. A smooth bounded drive retains pulse contrast at
+high Reactivity instead of pinning most musical frames at a hard gain ceiling.
+Beat stars and their bloom are suppressed behind the solid Sun/Moon disc, including
+the Moon's shaded hemisphere, using its same analytic limb coverage. Hidden/transparent
+bodies do not carve starless holes. Whole-surface Moon emission follows its
+lit/shaded albedo, with a subordinate same-colour rim feather. The orbit-speed setting admits 0..0.025 revolutions/s.
 Nothing about these authored settings creates new per-frame Settings polling or new DSP.
-At **large** cards only star-peak brightness/shape and Moon/Sun **reactive modulation**
-need greater expressiveness: passive Moon halo and unrelated terrain/shoreline glow must
-remain at their existing strength. At **small** cards crowded vertices/overlapping bloom
+At **large** cards star-peak brightness/shape and Moon/Sun **reactive modulation**
+need clear presence without amplifying unrelated terrain/shoreline glow.
+At **small** cards crowded vertices/overlapping bloom
 need physical viewport/DPR-aware effective bloom footprint, antialiased point size, spacing
 and effective LOD, **never a blanket glow increase or edits to authored preset values**.
 The viewport-scaling behavior must derive from the actual card/render-target dimensions
@@ -245,12 +256,6 @@ results across resize/zoom/aspect, preserve canonical glow/density input authori
 avoid per-frame mesh rebuilds or unrelated-mode costs. `Current_Plan.md` §2A contains
 mutable operator-provided size examples and hands-on GPU visual acceptance criteria.
 The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` §2A.
-The live checklist now treats Moon idle integration, Moon/Sun beat presence, celestial
-star-occlusion and Starscape Beat visibility as separate **Awaiting Validation** acceptance
-items. A separate experimental candidate also remains open: a **default-OFF Celestial Rim
-Vertices** toggle may place sparse glowing points only on the illuminated outer rim of Moon
-and Sun, but must never replace the ordinary Moon body/halo or create a second celestial
-authority.
 
 ## Landscape camera, clipping and terrain skyline
 
@@ -266,7 +271,7 @@ limits and composition targets. Framed camera pose remains independent of art pr
 The overscanned surface can cross the camera near plane under admitted views. Its shader
 emits a homogeneous clip position and relies on hardware clipping rather than dividing
 before clipping. Surface triangles, glass normals, point markers, skyline and celestial
-hit-depth must agree with the same projection/scene pose, including extreme zoom/aspect.
+apparent position must agree with the same projection/scene pose, including extreme zoom/aspect.
 Foreground continuation fades before near-camera cutoffs; no second mesh or renderer is
 permitted to hide holes.
 
@@ -274,7 +279,10 @@ The **main mountain skyline** uses depth-tested land geometry offset narrowly in
 screen space against the real surface depth; water is excluded and its **lake shoreline**
 is independent. Do not reintroduce projected highest-column scans, grazing-angle paint,
 general wire edges, billboard strips or a separate remote rim. The **distant** horizon
-must be derived from *visible* far terrain/surface and fade out with it. A detached
+is the tangency of the same convex distant terrain. Its highlight inherits the
+editable Ridge/Shore Colour and has a physical-pixel Horizon Thickness control;
+zero hides the highlight while retaining land/body occlusion. Detail and emission
+fade before the finite outer edge, but distant coverage/depth remain. A detached
 magenta/blue ring, floating oval, flattened extension, wallpaper-alpha seam or remote
 geometry edge is not an acceptable skyline. Compare physical GPU frames from multiple
 camera angles, zoom scales, card aspect ratios and Glass+Vertices surfaces. Maintain the

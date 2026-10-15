@@ -43,7 +43,7 @@ def test_skyline_renders_actual_terrain_triangles_without_projected_column_maxim
     shader = (root / "rendering/gl_programs/neon_lake_basin_program.py").read_text()
     renderer = (root / "rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()
     assert "basinLandHeight(aUv,base,smoothed)" in shader
-    assert "clip.y+=uOutlineLiftNdc*clip.w" in shader
+    assert "clip.y+=uOutlineLiftNdc*width*clip.w" in shader
     assert "clip.z+=0.0012*clip.w" in shader
     assert "vTerrainBase<0.035" in shader  # true continued land, no lake-edge duplication
     assert "bestScreen" not in shader

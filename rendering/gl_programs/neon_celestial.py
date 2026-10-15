@@ -135,18 +135,17 @@ float basinMoonIllumination(vec3 normal,vec3 eye) {
     // Single terminator authority for the lit lunar surface and all halo logic.
     // Keep crescents thin, but soften the transition so the phase does not read
     // as a hard mechanical cut.
-    return smoothstep(-0.070,0.055,dot(normal,basinMoonLightDirection(eye)));
+    return smoothstep(0.0,0.055,dot(normal,basinMoonLightDirection(eye)));
 }
 
 float basinMoonSurfaceBrightness(vec3 normal,vec3 eye) {
     vec3 lightDir=basinMoonLightDirection(eye);
     float ndl=dot(normal,lightDir);
-    float phase=basinMoonIllumination(normal,eye);
     float lambert=max(ndl,0.0);
-    // A Moon is not a self-lit disc. Combine a very soft lit-side floor with a
-    // gentle Lambert term and an earthshine hint on the dark hemisphere.
-    float earthshine=(1.0-phase)*(0.010+0.035*pow(max(dot(normal,normalize(eye-uBodyPosition)),0.0),0.7));
-    return clamp(earthshine + (0.17*phase + 0.83*pow(lambert,0.82)),0.0,1.0);
+    // A bright lunar face with restrained relief. The shaded hemisphere is
+    // retained below as dim earthshine for a solid 3-D body. Surface emission
+    // follows the resulting albedo in the celestial presentation pass.
+    return 0.82+0.18*pow(lambert,0.70);
 }
 
 float basinMoonRimIllumination(vec3 eye, vec3 ray) {
@@ -162,10 +161,10 @@ float basinMoonRimIllumination(vec3 eye, vec3 ray) {
     float radialLength=length(radial);
     if (radialLength<=1e-6) return 0.0;
     vec3 radialDir=radial/radialLength;
-    vec3 normalA=normalize(0.95*radialDir-0.31*forward);
-    vec3 normalB=normalize(0.88*radialDir-0.47*forward);
-    float litA=smoothstep(-0.16,0.08,dot(normalA,basinMoonLightDirection(eye)));
-    float litB=smoothstep(-0.20,0.12,dot(normalB,basinMoonLightDirection(eye)));
+    vec3 normalA=normalize(radialDir-0.03*forward);
+    vec3 normalB=normalize(radialDir-0.10*forward);
+    float litA=smoothstep(0.0,0.06,dot(normalA,basinMoonLightDirection(eye)));
+    float litB=smoothstep(0.0,0.08,dot(normalB,basinMoonLightDirection(eye)));
     return clamp(0.70*litA+0.30*litB,0.0,1.0);
 }
 
@@ -173,10 +172,44 @@ float basinMoonInnerRimEmission(vec3 eye,vec3 hitPoint) {
     vec3 normal=normalize(hitPoint-uBodyPosition);
     vec3 toEye=normalize(eye-hitPoint);
     float facing=clamp(dot(normal,toEye),0.0,1.0);
-    // A small same-colour bloom is allowed from the visible lit face, but only
-    // close to the illuminated rim. The centre stays non-emissive.
+    // This subordinate feather stays near the illuminated rim; whole-surface
+    // emission is supplied separately by the celestial presentation pass.
     float innerBand=(1.0-smoothstep(0.04,0.34,facing))*(0.56+0.44*(1.0-smoothstep(0.0,0.17,facing)));
     return innerBand*basinMoonRimIllumination(eye,normalize(hitPoint-eye));
+}
+
+float basinCelestialHaloGain(vec2 glow,float midband,float beatPulse) {
+    // Preserve acoustic headroom before applying authored Reactivity. A hard
+    // clamp after Reactivity pinned real music at its ceiling for most frames.
+    float drive=0.22*max(midband,0.0)+1.35*max(beatPulse,0.0);
+    float response=drive/(0.45+drive);
+    return max(glow.x,0.0)*(0.54+0.92*clamp(glow.y,0.0,2.0)*response);
+}
+
+float basinCelestialRimMarks(vec3 eye,vec3 ray,float normalizedAngle) {
+    // Sparse screen-antialiased marks on the same analytic outer silhouette.
+    // This helper is evaluated only for the optional experiment, never a mesh.
+    vec3 forward=normalize(uBodyPosition-eye);
+    vec3 right=cross(vec3(0.0,1.0,0.0),forward);
+    if (dot(right,right)<1e-5) right=cross(vec3(0.0,0.0,1.0),forward);
+    right=normalize(right);
+    vec3 up=cross(forward,right);
+    float angle=atan(dot(ray,up),dot(ray,right));
+    float radialPixel=max(length(vec2(dFdx(normalizedAngle),dFdy(normalizedAngle))),1e-5);
+    float circumference=6.28318530718/radialPixel;
+    // Fixed angular slots: resizing fades additional marks into place rather
+    // than moving every mark whenever an integer population changes.
+    float desired=clamp(circumference/24.0,8.0,32.0);
+    float sector=6.28318530718/32.0;
+    float index=floor((angle+0.5*sector)/sector);
+    float membership=mod(index,4.0)==0.0 ? 1.0 :
+                     (mod(index,2.0)==0.0 ? smoothstep(8.0,16.0,desired)
+                                          : smoothstep(16.0,32.0,desired));
+    float tangent=abs(mod(angle+0.5*sector,sector)-0.5*sector)/radialPixel;
+    float radial=(normalizedAngle-1.0)/radialPixel;
+    float mark=1.0-smoothstep(0.65,1.65,length(vec2(tangent,radial)));
+    float lit=uBodyKind==1 ? basinMoonRimIllumination(eye,ray) : 1.0;
+    return mark*lit*membership;
 }
 
 float basinMoonCraters(vec3 normal) {
@@ -208,14 +241,12 @@ float basinMoonCraters(vec3 normal) {
 }
 
 float basinMoonAlbedo(vec3 normal) {
-    // Broad maria remain readable first; finer mottling and crater rims sit on
-    // top as secondary detail, without giant painted blotches.
+    // Subtle, world-stable lunar detail stays subordinate to the luminous
+    // silhouette. No map islands, contour print or repeated surface lattice.
     float broad=basinMoonNoise(normal*2.8+vec3(2.3,7.1,1.7));
     float mottled=basinMoonNoise(normal*6.1+vec3(13.8,2.4,9.3));
-    float maria=smoothstep(0.58,0.74,broad*0.68+mottled*0.32);
-    float fine=basinMoonNoise(normal*17.0+vec3(3.4,5.7,13.2));
-    float rock=(0.88-0.20*maria)*(0.95+0.07*(mottled-0.5)+0.04*(fine-0.5));
-    return clamp(rock*basinMoonCraters(normal),0.42,0.98);
+    return (0.97-0.045*broad-0.020*mottled)
+           *(0.96+0.04*basinMoonCraters(normal));
 }
 
 // A nearest positive ray-sphere hit.  ``hitPoint`` is in the caller's shared
@@ -245,6 +276,13 @@ float basinCelestialSkyMask(vec3 eye,vec3 worldRay) {
     float radius=uBodySize/max(separation,1e-5);
     float normalizedAngle=length(cross(ray,forward))/max(facing*radius,1e-5);
     float bodyCoverage=basinCameraBodyCoverage(separation,uBodySize);
+    if (uBodyKind==1) {
+        // The Moon is a solid 3-D body, including its dim shaded hemisphere.
+        // Its exact antialiased disc coverage also owns star suppression.
+        vec3 normal=(eye+ray*distance-uBodyPosition)/uBodySize;
+        float limb=smoothstep(0.015,0.10,max(dot(normal,-ray),0.0));
+        return bodyCoverage*bodyAlpha*limb;
+    }
     return bodyCoverage*step(0.0,facing)*(1.0-smoothstep(0.998,1.014,normalizedAngle));
 }
 
@@ -287,7 +325,8 @@ vec4 basinCelestial(vec3 eye, vec3 worldRay, out vec3 hitPoint) {
 
     float illumination=basinMoonIllumination(normal,eye);
     float lunarRock=basinMoonAlbedo(normal);
-    float brightness=basinMoonSurfaceBrightness(normal,eye)*lunarRock;
+    float earthshine=0.018+0.020*pow(max(dot(normal,-ray),0.0),0.7);
+    float brightness=mix(earthshine,basinMoonSurfaceBrightness(normal,eye)*lunarRock,illumination);
     vec3 moon=max(uMoonColor.rgb,vec3(0.0))*brightness;
     return vec4(moon,clamp(uMoonColor.a,0.0,1.0)*limb);
 }
