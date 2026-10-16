@@ -506,6 +506,12 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   feeds the analysis spectrum and asks for no music when the land cannot move. `tests/test_neon_lake_reaction.py` GL
   probe: the reaction reshapes dry land both up and down while water, its membership and the shoreline stay exact, and
   dry land stays within the floor share and the bounded lift.
+- `tests/test_scene3d_sky.py`, `tests/test_neon_sky_effects.py` — the shared sky library's noise and octave sums equal
+  their CPU mirrors on the GPU (negative cells included, a drifted mirror caught); clouds follow coverage and opacity,
+  stay premultiplied and off the ground, drift moves them and the light side shades them; the nebula is additive,
+  two-coloured and linear in intensity. Through the production renderer, clouds and nebula change the sky only when
+  on and nothing without a sky, their other settings alone change nothing, and each moves over the animation clock
+  only while its drift is set (water motion held still so drift is the only clock-driven change).
 - `tests/test_neon_water_line_glow.py` — production GL: the water lines' glow rises with Water Line Glow strength,
   turns to its colour at full alpha and keeps the ripple colours at alpha 0, and nothing glows while Surface Glow is
   zero (frames compared within the renderer's own one-level draw-to-draw variation). `tests/test_neon_celestial.py`

@@ -69,26 +69,30 @@ float skyFbm3(vec3 p, int octaves, uint seed) {
     }
     return sum / total;
 }
-// cloud: coverage, softness, scale, opacity (all 0..1). shade/light: the dark and lit colours.
-vec4 skyClouds(vec3 ray, vec3 toLight, vec4 cloud, vec2 drift, vec3 shade, vec3 light, uint seed) {
+// cloud: coverage, softness, scale, opacity (all 0..1). shade/light: the dark and lit colours. octaves: the
+// detail (5 for a visible sky; 2 is enough for a reflection, which roughness blurs anyway).
+vec4 skyClouds(vec3 ray, vec3 toLight, vec4 cloud, vec2 drift, vec3 shade, vec3 light, uint seed, int octaves) {
     if (ray.y <= 0.02 || cloud.w <= 0.0 || cloud.x <= 0.0) return vec4(0.0);
-    vec2 p = ray.xz / ray.y * mix(0.35, 1.6, cloud.z) + drift;
-    float n = skyFbm2(p, 5, seed);
-    float threshold = 1.0 - cloud.x;
+    // A sky plane, flattened near the horizon so far clouds stay readable instead of shrinking to specks.
+    vec2 p = ray.xz / (ray.y + 0.12) * mix(0.35, 1.6, cloud.z) + drift;
+    float n = skyFbm2(p, octaves, seed);
+    // Octave sums gather around 0.5: coverage spans the range they actually take.
+    float threshold = mix(0.72, 0.32, cloud.x);
     float density = smoothstep(threshold, threshold + mix(0.03, 0.4, cloud.y), n);
     if (density <= 0.0) return vec4(0.0);
     vec2 towardLight = toLight.xz / max(length(toLight.xz), 1e-4);
-    float ahead = skyFbm2(p + towardLight * 0.09, 3, seed);
+    float ahead = skyFbm2(p + towardLight * 0.09, max(1, octaves - 2), seed);
     float lit = clamp(0.55 + (n - ahead) * 5.0, 0.0, 1.0);
-    float alpha = density * cloud.w * smoothstep(0.02, 0.2, ray.y);
+    float alpha = density * cloud.w * smoothstep(0.0, 0.08, ray.y);
     return vec4(mix(shade, light, lit) * alpha, alpha);
 }
-// nebula: intensity, scale (0..1). Two colours wind through each other.
-vec3 skyNebula(vec3 ray, vec3 first, vec3 second, vec2 nebula, uint seed) {
+// nebula: intensity, scale (0..1). Two colours wind through each other. octaves: as for the clouds
+// (4 for a visible sky).
+vec3 skyNebula(vec3 ray, vec3 first, vec3 second, vec2 nebula, uint seed, int octaves) {
     if (nebula.x <= 0.0) return vec3(0.0);
     vec3 p = ray * mix(1.2, 4.5, nebula.y);
-    float body = skyFbm3(p, 4, seed);
-    float mixer = skyFbm3(p * 2.1 + vec3(7.3, 1.9, 4.4), 3, seed + 11u);
+    float body = skyFbm3(p, octaves, seed);
+    float mixer = skyFbm3(p * 2.1 + vec3(7.3, 1.9, 4.4), max(1, octaves - 2), seed + 11u);
     float wisp = smoothstep(0.42, 0.82, body);
     return mix(first, second, mixer) * wisp * nebula.x * (0.6 + 0.4 * mixer);
 }

@@ -374,6 +374,12 @@ def _capture_shockwave_grid(
                            or (parameters["shockwave_grid_sun_enabled"]
                                and parameters["shockwave_grid_sun_orbit_enabled"]
                                and float(parameters["shockwave_grid_sun_orbit_speed"]) > 0.0)
+                           or (parameters["shockwave_grid_sky_enabled"]
+                               and parameters["shockwave_grid_volumetric_clouds"]
+                               and float(parameters["shockwave_grid_cloud_drift"]) > 0.0)
+                           or (parameters["shockwave_grid_sky_enabled"]
+                               and parameters["shockwave_grid_nebula_enabled"]
+                               and float(parameters["shockwave_grid_nebula_drift"]) > 0.0)
                            or (reaction_enabled and runtime.terrain_reaction_pending)),
         frame_fields={"events": events},
     )

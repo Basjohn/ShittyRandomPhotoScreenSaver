@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.scene3d_sky import SCENE3D_SKY_GLSL
+
 
 def basin_body_position(
     x: float,
@@ -70,7 +72,7 @@ def basin_body_camera_coverage(camera_distance: float, body_radius: float) -> fl
     return 1.0 - t*t*(3.0 - 2.0*t)
 
 
-NEON_CELESTIAL_GLSL = r"""
+NEON_CELESTIAL_GLSL = SCENE3D_SKY_GLSL + r"""
 uniform vec3 uBodyPosition;
 uniform float uBodySize;
 uniform int uBodyKind;              // 0 Sun, 1 Moon
@@ -95,6 +97,12 @@ uniform int uBeatStarCount;
 uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
 uniform vec4 uCloudColor;
 uniform vec4 uHorizonColor;
+uniform vec4 uClouds;      // volumetric clouds: coverage, softness, scale, opacity (opacity 0 = off)
+uniform vec2 uCloudDrift;  // their drift so far, on the scene's animation clock
+uniform vec2 uNebula;      // intensity (0 = off), scale
+uniform float uNebulaTurn; // its slow turn about the vertical so far, on the scene's animation clock
+uniform vec4 uNebulaColorA;
+uniform vec4 uNebulaColorB;
 
 float basinCelestialHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -376,7 +384,9 @@ float basinBeatStarLight(vec3 ray,vec2 glow) {
 
 // Straight-alpha sky radiance.  The independent enable gate makes the sky
 // transparent when disabled; the Sun/Moon remains a separate body pass.
-vec4 basinSkyBackground(vec3 worldRay,float starVisibility) {
+// detail: the clouds' and nebula's octaves are full for the visible sky (1) and two for reflections (0),
+// which glass samples five times per fragment and roughness blurs anyway.
+vec4 basinSkyBackground(vec3 worldRay,float starVisibility,int detail) {
     if (uSkyEnabled == 0 || uSkyStrength <= 0.0) return vec4(0.0);
     float rayLength = length(worldRay);
     if (rayLength <= 1e-8) return vec4(0.0);
@@ -407,12 +417,28 @@ vec4 basinSkyBackground(vec3 worldRay,float starVisibility) {
         float density = 0.5 + 0.5 * sin(ray.y * 170.0 + longitude * 7.0);
         clouds += shape * broken * density;
     }
-    colour += max(uCloudColor.rgb, vec3(0.0)) *
-              clamp(uCloudColor.a, 0.0, 1.0) * clamp(clouds, 0.0, 1.0);
+    // Volumetric clouds replace the thin bands.
+    if (uClouds.w <= 0.0)
+        colour += max(uCloudColor.rgb, vec3(0.0)) *
+                  clamp(uCloudColor.a, 0.0, 1.0) * clamp(clouds, 0.0, 1.0);
+    vec3 nebulaRay = vec3(ray.x * cos(uNebulaTurn) - ray.z * sin(uNebulaTurn), ray.y,
+                          ray.x * sin(uNebulaTurn) + ray.z * cos(uNebulaTurn));
+    colour += skyNebula(nebulaRay, uNebulaColorA.rgb * uNebulaColorA.a, uNebulaColorB.rgb * uNebulaColorB.a, uNebula, 29u,
+                        detail == 1 ? 4 : 2);
 
     float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
     colour += max(uStarColor.rgb, vec3(0.0)) * stars;
     colour += max(basinBeatStarColour(), vec3(0.0)) * basinBeatStarLight(ray,uStarGlow) * starVisibility;
+    if (uClouds.w > 0.0) {
+        // Lit from the body's side; a dimmer, cooler underside. Clouds pass in front of the stars.
+        vec3 bodyColour = uSunEnabled == 1 ? (uBodyKind == 0 ? uSunColor.rgb : uMoonColor.rgb) : uCloudColor.rgb;
+        vec3 lit = mix(uCloudColor.rgb, bodyColour, 0.6);
+        vec3 shade = uCloudColor.rgb * 0.55 + max(uSkyColor.rgb, vec3(0.0)) * 0.3;
+        vec4 cloud = skyClouds(ray, normalize(uBodyPosition + vec3(0.0, 1e-3, 0.0)),
+                               vec4(uClouds.xyz, uClouds.w * clamp(uCloudColor.a, 0.0, 1.0)), uCloudDrift,
+                               shade, lit, 17u, detail == 1 ? 5 : 2);
+        colour = colour * (1.0 - cloud.a) + cloud.rgb;
+    }
     // Keep sky alpha continuous across the camera. The old latitude-based
     // opacity transition created a ruler-straight wallpaper seam unrelated
     // to the terrain skyline, especially when the distant skirt faded out.

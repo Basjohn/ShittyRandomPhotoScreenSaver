@@ -56,7 +56,7 @@ def _rays(rng, count, *, up=True):
 def _clouds(probe, rays, cloud, drift=(0.0, 0.0), light=(1.0, 0.3, 0.0)):
     body = ("vec4 a = arg(0); FragColor = skyClouds(a.xyz, vec3(" + ",".join(map(str, light)) + "), vec4("
             + ",".join(map(str, cloud)) + "), vec2(" + ",".join(map(str, drift)) + "), vec3(0.1, 0.12, 0.2), "
-            "vec3(1.0, 0.9, 0.8), 3u);")
+            "vec3(1.0, 0.9, 0.8), 3u, 5);")
     return probe.run(body, [[r] for r in rays], DECL)
 
 
@@ -94,7 +94,7 @@ def test_nebula_is_additive_two_coloured_light_that_its_intensity_scales(probe):
 
     def nebula(intensity, scale=0.5):
         return probe.run("vec4 a = arg(0); FragColor = vec4(skyNebula(a.xyz, vec3(1.0, 0.1, 0.4), vec3(0.1, 0.4, 1.0), "
-                         f"vec2({intensity}, {scale}), 5u), 1.0);", [[r] for r in rays], DECL)[:, :3]
+                         f"vec2({intensity}, {scale}), 5u, 4), 1.0);", [[r] for r in rays], DECL)[:, :3]
     off, half, full = nebula(0.0), nebula(0.5), nebula(1.0)
     assert np.all(off == 0.0)
     assert np.allclose(half, 0.5 * full, atol=1e-6)
