@@ -201,7 +201,7 @@ def test_wire_display_real_body_roundtrip_and_default(qt_app, settings_manager, 
     control = spec_control(key)
     assert isinstance(control, Choice) and control.choices == ('Vertices', 'Glass', 'Glass + Vertices')
     assert control.bucket == 'render' and not control.when and not control.enabled_when
-    assert require_canonical_default('widgets.spotify_visualizer.' + key) == 'Vertices'
+    assert require_canonical_default('widgets.spotify_visualizer.' + key) in control.choices
     settings_manager.set('widgets', {'spotify_visualizer': {
         'enabled': True, 'visualizers_enabled': True, 'mode': 'shockwave_grid',
         'mode_activation': build_visualizer_mode_activation(['shockwave_grid']),

@@ -247,9 +247,13 @@ share one opacity/depth truth. A detached horizontal alpha strip, background wal
 through opaque mountains or far geometry glowing after its surface faded is a regression.
 No second render target, geometry authority, body mesh, timer or opacity control is admitted.
 
-The advanced Glow bucket owns **Surface Glow**, **Ridge Light Response**, **Celestial Halo** with
-Intensity/Reactivity, **Light Rays** with Ray Strength/Colour, and **Starscape Beat** with Star
-Glow Intensity/Reactivity. Sky owns atmosphere/base stars; Celestial owns the body appearance,
+The advanced Glow bucket owns **Surface Glow** (with **Water Line Glow** colour and strength), **Ridge
+Light Response**, **Celestial Halo** with Intensity/Reactivity, **Light Rays** with Ray Strength/Colour,
+and **Starscape Beat** with Star Glow Intensity/Reactivity/Colour. Both glow colours mix in by their
+alpha, so alpha 0 is the earlier look: the water lines' emission moves from their ripple palette toward
+Water Line Glow, scaled by its strength (1 is the shared Surface Glow, and nothing glows while Surface Glow
+is zero); beat stars move from the Stars colour toward Star Glow Colour, in the sky and in their emission,
+with their brightness still from Star Glow Intensity. Sky owns atmosphere/base stars; Celestial owns the body appearance,
 pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; Growth Timing
 (`terrain_motion`) owns the existing timing rows. Spec-owned conditional controls remain
 hidden when their prerequisites are disabled, retain their saved value while hidden, and

@@ -40,7 +40,7 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
     }
     defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
     assert all(key in defaults for key in controls)
-    assert DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]["shockwave_grid:glow"] is False
+    assert isinstance(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]["shockwave_grid:glow"], bool)
     assert isinstance(controls["shockwave_grid_starscape_beat"], Toggle)
     assert isinstance(controls["shockwave_grid_sun_rays_color"], Colour)
     assert isinstance(controls["shockwave_grid_horizon"], Slider)

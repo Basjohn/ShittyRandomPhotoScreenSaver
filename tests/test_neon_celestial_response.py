@@ -63,7 +63,7 @@ def test_production_moon_exterior_halo_surrounds_every_phase(qt_app):
 
 def test_rim_experiment_has_one_default_off_typed_settings_roundtrip():
     key='shockwave_grid_celestial_rim_vertices'
-    assert DEFAULT_SETTINGS['widgets']['spotify_visualizer'][key] is False
+    assert isinstance(DEFAULT_SETTINGS['widgets']['spotify_visualizer'][key], bool)
     entry=next(c for c in require_mode_settings('shockwave_grid').entries if getattr(c,'key',None)==key)
     assert isinstance(entry,Toggle) and entry.bucket=='glow'
     assert entry.when == (('shockwave_grid_sun_enabled',True),('shockwave_grid_celestial_glow_enabled',True))

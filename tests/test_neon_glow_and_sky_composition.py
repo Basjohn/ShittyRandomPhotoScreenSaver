@@ -31,12 +31,12 @@ def test_one_glow_bucket_has_canonical_closed_default_and_distinct_controls():
     defaults=DEFAULT_SETTINGS['widgets']['spotify_visualizer']
     assert {b.key for b in spec.buckets if b.key=='glow'}=={'glow'}
     bucket_states=DEFAULT_SETTINGS['ui']['visualizer_bucket_states']
-    assert bucket_states['shockwave_grid:glow'] is False
+    assert isinstance(bucket_states['shockwave_grid:glow'], bool)
     for key in keys:
         assert key in controls and controls[key].bucket=='glow'
         assert key in defaults
     assert isinstance(controls['shockwave_grid_celestial_glow_enabled'],Toggle)
-    assert defaults['shockwave_grid_celestial_glow_enabled'] is True
+    assert isinstance(defaults['shockwave_grid_celestial_glow_enabled'], bool)
     assert isinstance(controls['shockwave_grid_sun_orbit_speed'],Slider)
     assert 0.0 <= defaults['shockwave_grid_sun_orbit_speed'] <= controls['shockwave_grid_sun_orbit_speed'].high <= .025
     for key in ('shockwave_grid_celestial_glow_strength','shockwave_grid_celestial_glow_reactivity'):

@@ -502,6 +502,10 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   These establish source contracts; the mock's artistic values and physical musical feel are separate acceptance.
 - `tests/test_neon_terrain_growth.py` — capture-clock attack/release, spatial regions, musical quiet/loud weighting,
   silence despite retained bars, no invisible growth work, generation/retirement fences and unchanged water events.
+- `tests/test_neon_water_line_glow.py` — production GL: the water lines' glow rises with Water Line Glow strength,
+  turns to its colour at full alpha and keeps the ripple colours at alpha 0, and nothing glows while Surface Glow is
+  zero (frames compared within the renderer's own one-level draw-to-draw variation). `tests/test_neon_celestial.py`
+  also holds beat stars to the Stars colour at Star Glow Colour alpha 0, to that colour at alpha 1, linearly between.
 - `tests/test_neon_celestial.py`, `tests/test_heightfield_volume.py`, `tests/test_neon_scene_materials.py` — actual GL
   Sun/Moon colour/phase, logical-clock orbit, bounded premultiplied scattering, controlled world-height falloff and land
   occlusion; all seven surface styles and authored material colours, no warm static allocation, and actual QSG glass/ray
