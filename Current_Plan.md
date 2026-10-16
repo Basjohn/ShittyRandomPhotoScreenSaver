@@ -123,8 +123,9 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   - NT5 (after the reaction pass; operator 2026-10-16): optional, adjustable **volumetric clouds**, **light rays you
     can actually see** (present but render invisible today) and **nebulas** — none reactive. Build whatever shared
     3D architecture they need properly (that is the goal), proved on its own harness, dormant when off.
-  - NT6: clean up the Neon Lake Settings body UX (operator: "very messy"): bucket order and grouping, conditional
-    rows, labels/tooltips, the long Glow bucket; follow the existing bucket conventions.
+  - NT6 (source landed 2026-10-16, Awaiting Validation): the Neon body is regrouped by what each control touches —
+    Terrain, Water, Terrain Reaction, then Surface, Sky, Sun & Moon, Glow, Frequency Response — with glows beside
+    what they light; keys unchanged. Further polish only on the operator's notes.
 - [ ] **Pre-existing reds outside Neon (found 2026-10-16 by the impacted run, red at clean HEAD 07fd2e20).**
   test_3d_curated_preset_ownership (24), test_defaults_schema_authority (12; `ast.literal_eval` meets the
   `basin_profile()` call in default_settings), test_default_settings_editor (7, same cause), test_defaults_projection

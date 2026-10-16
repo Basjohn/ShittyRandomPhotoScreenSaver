@@ -50,10 +50,14 @@ Edit selection remains the fixed card rectangle. The internal eight-point guide 
 ## Authoring and migration
 
 `core/settings/visualizer_mode_settings.py` owns typed controls, ranges, defaults admission, UI buckets, conditions and
-presentation/source projections. `core/settings/default_settings.py` owns default values. Primary Terrain contains the
-bespoke lazy editor; Appearance and Waves contain the distinct material/reaction controls. Advanced Frequency Response
-preserves the consumed old nodes, notches, lanes and smoothing; those audio coordinates are never relabelled as terrain.
-Advanced Render supplies surface style, reflectivity and opacity; Waves owns water surface detail and flow. Sky, Celestial and Glow are separate advanced buckets.
+presentation/source projections. `core/settings/default_settings.py` owns default values. The body is grouped by what
+each control touches (2026-10-16): **Terrain** (the bespoke lazy editor, Height, Detail, Terrain Fill), **Water** (the
+lake's water/ripple/crest colours, musical waves, detail, flow, idle swell and reflection) and **Terrain Reaction**,
+then advanced **Surface** (style, glass, vertex colours, density, base opacity, horizon line), **Sky** (atmosphere,
+clouds, stars and Starscape Beat with its star glow), **Sun & Moon** (body, placement, orbit, halo, rim vertices,
+light rays), **Glow** (Surface Glow, Ridge Light Response, Water Line Glow) and **Frequency Response** last, which
+preserves the consumed old nodes, notches, lanes and smoothing; those audio coordinates are never relabelled as
+terrain. Keys never moved with the regrouping.
 The five view fields have no Settings body rows. Surface Style admits only three present-day choices through the one typed spec and preset projection; `neon_lake_basin_options.py` owns their immutable choice/bit domain:
 
 | Style | Surface presentation |
@@ -263,15 +267,13 @@ share one opacity/depth truth. A detached horizontal alpha strip, background wal
 through opaque mountains or far geometry glowing after its surface faded is a regression.
 No second render target, geometry authority, body mesh, timer or opacity control is admitted.
 
-The advanced Glow bucket owns **Surface Glow** (with **Water Line Glow** colour and strength), **Ridge
-Light Response**, **Celestial Halo** with Intensity/Reactivity, **Light Rays** with Ray Strength/Colour,
-and **Starscape Beat** with Star Glow Intensity/Reactivity/Colour. Both glow colours mix in by their
+Glow controls sit beside what they light: **Surface Glow**, **Ridge Light Response** and **Water Line Glow**
+(colour and strength) under Glow; **Celestial Halo** (Intensity/Reactivity) and **Light Rays** (Strength/Colour)
+under Sun & Moon; **Starscape Beat** with Star Glow Intensity/Reactivity/Colour under Sky. Both glow colours mix in by their
 alpha, so alpha 0 is the earlier look: the water lines' emission moves from their ripple palette toward
 Water Line Glow, scaled by its strength (1 is the shared Surface Glow, and nothing glows while Surface Glow
 is zero); beat stars move from the Stars colour toward Star Glow Colour, in the sky and in their emission,
-with their brightness still from Star Glow Intensity. Sky owns atmosphere/base stars; Celestial owns the body appearance,
-pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; Terrain Reaction owns the land's
-musical reshaping and its timing. Spec-owned conditional controls remain
+with their brightness still from Star Glow Intensity. Spec-owned conditional controls remain
 hidden when their prerequisites are disabled, retain their saved value while hidden, and
 reappear on re-enablement. The Glow bucket is closed by default. The passive celestial halo
 is enabled by default, while Starscape Beat is opt-in. The optional Celestial Rim
