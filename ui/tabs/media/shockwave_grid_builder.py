@@ -58,6 +58,45 @@ def build_response_section(tab, response) -> None:
     )
 
 
+def build_reaction_shaper_section(tab, layout) -> None:
+    """The shared shape editor along the land's height: where the music reshapes it, and which
+    part of the spectrum moves which elevation. Shown with React to Music."""
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+
+    default = tab._widget_default("spotify_visualizer", "shockwave_grid_terrain_shaper")
+    host = QWidget()
+    column = QVBoxLayout(host)
+    column.setContentsMargins(0, 0, 0, 0)
+    hint = QLabel("Left: shoreline. Right: summits. The curve sets how much each height moves; drag the "
+                  "lane labels to choose which part of the spectrum moves which height, and the top arrows "
+                  "for each lane's strength.")
+    hint.setWordWrap(True)
+    column.addWidget(hint)
+    editor = SpectrumShapeEditor(
+        parent=None, mirrored=False, default_nodes=default["nodes"],
+        default_notches_mirrored=default["notches"], default_notches_linear=default["notches"],
+        default_lane_strengths_mirrored=default["lanes"], default_lane_strengths_linear=default["lanes"])
+    editor.setToolTip("Left-click: add node (max 5)\nRight-click node: remove\nDrag node: how much each "
+                      "height moves\nDrag bottom labels: which lane moves which height\nDrag top arrows: "
+                      "each lane's strength")
+
+    def changed(*_args) -> None:
+        tab._force_visualizer_preset_to_custom("shockwave_grid")
+        tab._save_settings()
+
+    for signal in (editor.nodes_changed, editor.notch_positions_changed, editor.lane_strengths_changed):
+        signal.connect(changed)
+    column.addWidget(editor)
+    layout.addWidget(host)
+    tab.shockwave_grid_terrain_shaper_editor = editor
+    tab._shockwave_grid_terrain_shaper_host = host
+    toggle = tab.shockwave_grid_terrain_reaction_enabled
+    toggle.toggled.connect(host.setVisible)
+    host.setVisible(toggle.isChecked())
+
+
 def build_smoothing_section(tab, response) -> None:
     from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
     build_spectrum_smoothing_controls(tab, response, mode_key="shockwave_grid")

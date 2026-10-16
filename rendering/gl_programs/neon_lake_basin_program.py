@@ -13,6 +13,7 @@ import struct
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
+from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL, scene3d_orbit_project
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL,
@@ -139,15 +140,14 @@ _SHORE_HEIGHT_GLSL = """
 #endif
 """
 
-_TERRAIN = _SHORE_HEIGHT_GLSL + """
+_TERRAIN = _SHORE_HEIGHT_GLSL + REACTION_GLSL + """
 uniform sampler2D uTerrain;
 uniform int uTerrainSize;
-uniform vec3 uLand; // height, restrained reactivity, static detail
+uniform vec2 uLand; // height, static detail
 uniform float uTime;
 uniform float uWaterDetail;
 uniform float uWaterBankBand;
 uniform int uPass; // 0 reflected land, 1 complete surface
-uniform float uTerrainGrowth[8];
 uniform int uMarks; // surface or unique displaced vertices
 uniform int uDepthOnly; // shared surface depth prepass for celestial transmission
 uniform float uPointPx;
@@ -213,15 +213,13 @@ float basinEnergy(vec2 uv) {
     float level=mix(uBars[i0],uBars[i1],fract(f));
     return clamp(pow(clamp(level,0.0,1.0),1.15)*clamp(uHeightScale,1.0,1.85),0.0,1.0)*uHorizon/0.6;
 }
-float basinGrowth(vec2 uv) {
-    float f=clamp(uv.x*8.0-0.5,0.0,7.0);
-    int i0=clamp(int(floor(f)),0,7),i1=min(i0+1,7);
-    return mix(uTerrainGrowth[i0],uTerrainGrowth[i1],fract(f));
-}
 float basinLandHeight(vec2 uv,float base,float curved) {
     vec2 p=vec2((uv.x*2.0-1.0)*uHalfWidth,-uv.y*SHOCKWAVE_DEPTH);
-    float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.z*basinDetail(p))
-                 *(1.0+0.25*uLand.y*basinGrowth(uv));
+    float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.y*basinDetail(p));
+    // Terrain Reaction reshapes the land by the music: zero at the shore, never below a floor
+    // share of its authored height, faded with the distant continuation's detail.
+    float land=smoothstep(0.0,0.08,base)*basinDetailFade(uv);
+    height=max(height+uLand.x*basinReaction(uv,base,p,land),REACTION_FLOOR*height);
     // A shallow convex distant world produces a real terrain/sky tangency,
     // rather than an exposed remote mesh edge or an infinitely flat plane.
     // The authored basin and its immediate continuation are untouched.

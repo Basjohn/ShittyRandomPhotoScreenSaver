@@ -203,21 +203,6 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         bars = compute_bars_from_samples(self._replay_compute_state, self._replay_history_array[-block:])
         return list(bars) if isinstance(bars, list) else None
 
-    def _publish_neon_terrain_contrast(self, worker_state, bars) -> None:
-        """Same derived publication, from replay's owned FFT or recorded raw lane."""
-        contrast = self._neon_terrain_contrast
-        if contrast is None:
-            return
-        if self._replay_compute_state is not None:
-            state = self._replay_compute_state
-            spectrum = state._freq_values
-            spectrum = () if spectrum is None else spectrum
-        elif self._replay_real is not None:
-            spectrum = self._replay_real.analysis_spectrum
-        else:
-            raise RuntimeError("Neon contrast replay requires real-scale analysis")
-        contrast.publish(spectrum, bars, mirrored=bool(self._audio_worker._spectrum_mirrored))
-
     def get_pre_agc_energy_bands(self) -> EnergyBands:
         return self._replay_pre_agc
 

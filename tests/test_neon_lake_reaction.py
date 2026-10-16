@@ -74,8 +74,17 @@ class _SurfaceProbe:
         gl.glUniform1f(uniform("uHeightScale"), 1.85)
         gl.glUniform1i(uniform("uBarCount"), 2)
         gl.glUniform1fv(uniform("uBars"), 2, np.asarray([level, level], dtype=np.float32))
-        gl.glUniform3f(uniform("uLand"), 1.5, movement, detail)
-        gl.glUniform1fv(uniform("uTerrainGrowth"),8,np.asarray([level]*8,dtype=np.float32))
+        gl.glUniform2f(uniform("uLand"), 1.5, detail)
+        # Terrain Reaction: ``movement`` is its strength (0 = off), ``level`` every lane's drive.
+        from core.settings.default_contract import require_canonical_default
+        from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES, bake_terrain_shaper
+        tables = bake_terrain_shaper(require_canonical_default("widgets.spotify_visualizer.shockwave_grid_terrain_shaper"))
+        gl.glUniform4f(uniform("uReaction"), movement, 1.0, 1.0, 0.0)
+        gl.glUniform1fv(uniform("uReactionBands"), 5, np.asarray([level] * 5, dtype=np.float32))
+        gl.glUniform1f(uniform("uReactionPhase"), 0.0)
+        gl.glUniform1f(uniform("uReactionMaximum"), max(self.terrain["heights"]))
+        for name, key in (("uReactionLane", "lane"), ("uReactionWeight", "weight"), ("uReactionBias", "bias")):
+            gl.glUniform1fv(uniform(name), REACTION_SAMPLES, np.asarray(tables[key], dtype=np.float32))
         gl.glUniform1f(uniform("uTime"), time)
         gl.glUniform1f(uniform("uWaterDetail"), water_detail)
         gl.glUniform1f(uniform("uWaterBankBand"), bank_band)
@@ -137,10 +146,13 @@ def test_gpu_water_membership_is_authored_and_both_materials_stay_bounded(surfac
         assert np.array_equal(result[..., 1], water.astype(np.float32))
         assert np.isfinite(result).all()
         assert np.max(np.abs(result[..., 0][water])) <= 0.1825 + 2e-6
-        # Dry land retains its independent <=25% growth envelope. The shallow
-        # water-coloured fringe below the visible shore carries water waves.
+        # Terrain Reaction reshapes dry land both ways, bounded: never below its floor share of the
+        # authored height, never above the largest lift (three parts at full drive and strength).
+        # The shallow water-coloured fringe below the visible shore carries water waves.
+        from rendering.gl_programs.neon_terrain_reaction import REACTION_FLOOR, REACTION_HEIGHT
         ratio = result[..., 0][dry_land] / quiet[..., 0][dry_land]
-        assert ratio.min() >= 1.0 - 2e-6 and ratio.max() <= 1.25 + 2e-6
+        lift = result[..., 0][dry_land] - quiet[..., 0][dry_land]
+        assert ratio.min() >= REACTION_FLOOR - 2e-6 and lift.max() <= 1.5 * REACTION_HEIGHT * 3.0 + 2e-6
     assert np.max(np.abs(sustained[..., 0][water] - quiet[..., 0][water])) > 0.01
     assert np.max(sustained[..., 0][~water] - quiet[..., 0][~water]) > 0.01
     assert surface.terrain == before and heightfield_bytes(surface.terrain) == packed
@@ -288,3 +300,30 @@ def test_nearshore_water_follows_wave_attack_and_release_without_a_flat_strip(su
     birth = surface.draw([(0.0, 0.0, -1.2, 2.0)], **draw)
     assert np.max(np.abs(birth[..., 0])) == 0.0
     assert np.array_equal(surface.draw(**draw)[..., 0], quiet[..., 0])
+
+
+def test_terrain_reaction_reshapes_dry_land_both_ways_and_leaves_water_and_shore_alone(qt_app):
+    # A broad island in a ring of water, so the reshaping has room to rise in some places and sink in others.
+    size = 9
+    heights = []
+    for y in range(size):
+        for x in range(size):
+            distance = max(abs(x - 4), abs(y - 4))
+            heights.append(0.0 if distance >= 4 else round(1.0 - 0.2 * distance, 3))
+    probe = _SurfaceProbe(normalize_heightfield({"version": 1, "size": size, "heights": heights}))
+    try:
+        events = [(0.6, 0.0, -1.0, 1.5)]
+        off = probe.draw(events, level=1.0, movement=0.0)
+        rest = probe.draw(events, level=0.0, movement=0.0)
+        on = probe.draw(events, level=1.0, movement=1.0)
+        water = off[..., 1] == 1.0
+        # Off, the music moves no land (only the water's own waves differ by nothing here).
+        assert np.array_equal(off[..., 0][~water], rest[..., 0][~water])
+        # On, the land changes shape: some places rise and others sink.
+        change = on[..., 0] - off[..., 0]
+        assert (change[~water] > 1e-3).any() and (change[~water] < -1e-3).any()
+        # Water and its membership are untouched; the shoreline does not move.
+        assert np.array_equal(on[..., 1], off[..., 1])
+        assert np.array_equal(on[..., 0][water], off[..., 0][water])
+    finally:
+        probe.close()

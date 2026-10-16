@@ -18,7 +18,9 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
             "sun_rays_strength", "sun_rays_color", "starscape_beat", "star_glow_strength", "star_glow_reactivity",
             "star_glow_color",
         ),
-        "waves": ("water_detail", "wave_height", "wave_speed", "terrain_reactivity", "scroll", "idle"),
+        "waves": ("water_detail", "wave_height", "wave_speed", "scroll", "idle"),
+        "reaction": ("terrain_reaction_enabled", "terrain_reaction_strength", "terrain_pulses", "terrain_peaks",
+                     "terrain_swell", "terrain_motion_speed", "terrain_growth_attack", "terrain_growth_release"),
         "render": ("wire_display", "glass_tint", "glass_strength", "glass_roughness",
                    "vertex_color", "vertex_accent_color", "vertex_outline_color", "density",
                    "water_reflection", "horizon_thickness", "floor"),
@@ -44,7 +46,8 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
     assert isinstance(controls["shockwave_grid_starscape_beat"], Toggle)
     assert isinstance(controls["shockwave_grid_sun_rays_color"], Colour)
     assert isinstance(controls["shockwave_grid_horizon"], Slider)
-    assert spec.bucket("terrain_motion").title == "Growth Timing"
+    assert spec.bucket("reaction").title == "Terrain Reaction" and not spec.bucket("reaction").advanced
+    assert isinstance(controls["shockwave_grid_terrain_reaction_enabled"], Toggle)
 
 
 def test_visibility_requires_all_parents_without_changing_stored_controls():

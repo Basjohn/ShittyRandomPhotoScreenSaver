@@ -181,6 +181,15 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
                 "maximum": max(terrain["heights"]),
             })
             host._shockwave_grid_terrain_signature = signature
+    if "shockwave_grid_terrain_shaper" in kwargs:
+        from rendering.gl_programs.neon_terrain_reaction import bake_terrain_shaper, normalize_terrain_shaper
+
+        shaper = normalize_terrain_shaper(kwargs["shockwave_grid_terrain_shaper"],
+                                          _visualizer_default("shockwave_grid_terrain_shaper"))
+        signature = repr(shaper)
+        if signature != getattr(host, "_shockwave_grid_terrain_shaper_signature", None):
+            host._shockwave_grid_terrain_shaper = freeze_render_fields(bake_terrain_shaper(shaper))
+            host._shockwave_grid_terrain_shaper_signature = signature
     if 'bar_fill_color' in kwargs:
         c = _color_or_none(kwargs['bar_fill_color'])
         if c is not None:
@@ -299,6 +308,7 @@ def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[
     pres = _presentation_source(widget)
     values = spec_mode_parameters(pres, "shockwave_grid")
     values["shockwave_grid_terrain"] = pres._shockwave_grid_terrain
+    values["shockwave_grid_terrain_shaper"] = pres._shockwave_grid_terrain_shaper
     values["scene3d_detail"] = str(pres._scene3d_detail)
     if now_ts is not None:
         from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion

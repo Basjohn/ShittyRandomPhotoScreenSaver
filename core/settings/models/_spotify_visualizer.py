@@ -442,6 +442,8 @@ def _build_visualizer_model_kwargs(
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
         _build_spec_kwargs(read_typed_value),
         {"shockwave_grid_terrain": read_value("shockwave_grid_terrain", _visualizer_default("shockwave_grid_terrain"))},
+        {"shockwave_grid_terrain_shaper": read_value("shockwave_grid_terrain_shaper",
+                                                     _visualizer_default("shockwave_grid_terrain_shaper"))},
         preset_kwargs,
     )
 
@@ -888,6 +890,8 @@ class SpotifyVisualizerSettings:
     extruded_spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('extruded_spectrum_visual_smoothing'))
     extruded_spectrum_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('extruded_spectrum_solid_bar_hysteresis_enabled'))
     shockwave_grid_terrain: dict = field(default_factory=lambda: deepcopy(_visualizer_default("shockwave_grid_terrain")))
+    shockwave_grid_terrain_shaper: dict = field(
+        default_factory=lambda: deepcopy(_visualizer_default("shockwave_grid_terrain_shaper")))
     shockwave_grid_mirrored: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_mirrored'))
     shockwave_grid_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('shockwave_grid_shape_nodes'))
     shockwave_grid_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('shockwave_grid_notch_positions_mirrored'))
@@ -989,6 +993,9 @@ class SpotifyVisualizerSettings:
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
         self.shockwave_grid_terrain = normalize_heightfield(self.shockwave_grid_terrain)
+        from rendering.gl_programs.neon_terrain_reaction import normalize_terrain_shaper
+        self.shockwave_grid_terrain_shaper = normalize_terrain_shaper(
+            self.shockwave_grid_terrain_shaper, _visualizer_default("shockwave_grid_terrain_shaper"))
         self._apply_spectrum_source_profile_defaults('extruded_spectrum')
         self._apply_spectrum_source_profile_defaults('shockwave_grid')
         for control in spec_controls():
@@ -1231,6 +1238,7 @@ class SpotifyVisualizerSettings:
             _serialize_prefixed_fields(self, prefix, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
             _serialize_prefixed_fields(self, prefix, _SPEC_SERIALIZERS),
             {f"{prefix}.shockwave_grid_terrain": deepcopy(self.shockwave_grid_terrain)},
+            {f"{prefix}.shockwave_grid_terrain_shaper": deepcopy(self.shockwave_grid_terrain_shaper)},
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
             self._serialize_transient_mix_settings(prefix),

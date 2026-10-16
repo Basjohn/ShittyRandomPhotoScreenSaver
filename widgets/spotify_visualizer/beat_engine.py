@@ -221,7 +221,6 @@ class _SpotifyBeatEngine(QObject):
         # must not pay a per-frame tuple-allocation cost when nobody consumes it.
         self._pre_agc_analysis_spectrum: tuple[float, ...] = ()
         self._pre_agc_analysis_spectrum_requested: bool = False
-        self._neon_terrain_contrast = None
         # Paused idle waveform *samples* are drawn only by Oscilloscope. The
         # logical step declares the active mode's demand before each tick; the
         # default keeps synthesizing for any caller that never declares it.
@@ -569,31 +568,6 @@ class _SpotifyBeatEngine(QObject):
         self.cancel_pending_compute_tasks()
         self._audio_worker.set_spectrum_shaping_enabled(enabled)
         self._invalidate_analysis_compute_state()
-
-    def set_neon_terrain_contrast_enabled(self, enabled: bool) -> None:
-        """Allocate the eight-region consumer only at its configuration edge."""
-        if bool(enabled) == (self._neon_terrain_contrast is not None):
-            return
-        self.cancel_pending_compute_tasks()
-        if enabled:
-            from widgets.spotify_visualizer.neon_terrain_contrast import NeonTerrainContrast
-            self._neon_terrain_contrast = NeonTerrainContrast()
-        else:
-            self._neon_terrain_contrast = None
-
-    def get_neon_terrain_contrast(self):
-        """The stable activation-owned slot reader, never raw mutable FFT data."""
-        return self._neon_terrain_contrast
-
-    def _publish_neon_terrain_contrast(self, worker_state, bars) -> None:
-        contrast = self._neon_terrain_contrast
-        if contrast is None:
-            return
-        if worker_state is None:
-            raise RuntimeError("enabled Neon terrain contrast requires verified analysis state")
-        spectrum = worker_state._freq_values
-        contrast.publish(() if spectrum is None else spectrum, bars,
-                         mirrored=bool(worker_state._spectrum_mirrored))
 
     def set_spectrum_shape_config(self, config) -> None:
         self._audio_worker.set_spectrum_shape_config(config)
@@ -1125,10 +1099,6 @@ class _SpotifyBeatEngine(QObject):
         if activation_id != self._activation_id:
             return False
 
-        if self._neon_terrain_contrast is not None:
-            # The next serial compute job starts only after this commit. Read
-            # its private FFT bins now, publishing eight derived scalars only.
-            self._publish_neon_terrain_contrast(worker_state, smoothed_bars)
         if worker_state is not None:
             self._publish_pre_agc_analysis_spectrum_if_requested(worker_state)
             try:

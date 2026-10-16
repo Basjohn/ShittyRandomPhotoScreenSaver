@@ -74,9 +74,6 @@ card clipping and nested parent scissor still enforced.
 repair preservation, runtime cycling, the presentation applier and real Settings selection. It requires complete
 finite framed-only camera metadata, rejects malformed files loudly, preserves adjusted views through ordinary
 hydration, and keeps pose leaves out of artwork/Custom snapshots. All art inputs and output paths are test-owned.
-`tests/test_neon_terrain_contrast.py` protects authored-zero and mirrored weighting,
-verified source admission, atomic commit/capture, invalid-input transactionality and
-active-Neon-only demand. These source tests do not establish musical-motion acceptance.
 
 ## Visualizer migration and framed-3D proof gates
 
@@ -500,8 +497,15 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   reflection ordering, round-marker pixels and inherited state restoration; float attachment probes expose unbounded
   coverage before an 8-bit target could hide it.
   These establish source contracts; the mock's artistic values and physical musical feel are separate acceptance.
-- `tests/test_neon_terrain_growth.py` — capture-clock attack/release, spatial regions, musical quiet/loud weighting,
-  silence despite retained bars, no invisible growth work, generation/retirement fences and unchanged water events.
+- `tests/test_neon_terrain_reaction.py` — Terrain Reaction: lane energies cover the spectrum in frequency order at any
+  band count; drives start at rest, stay bounded and ignore capture partitioning; a sustained wall of bass settles to its
+  capped share and a rising lane over it takes the lead; rise/settle/repeat/pause; the phase wanders only while the music
+  drives it (faster with Motion Speed, held in silence); resets on generation/source/clock/retirement; disabled reads
+  no spectrum and resumes from rest; typed frames bound and detach the drives; the shaper is admitted part by part and
+  baked into elevation tables (lanes shoreline to summit, weight = curve x lane strength, bias = curve); the capture
+  feeds the analysis spectrum and asks for no music when the land cannot move. `tests/test_neon_lake_reaction.py` GL
+  probe: the reaction reshapes dry land both up and down while water, its membership and the shoreline stay exact, and
+  dry land stays within the floor share and the bounded lift.
 - `tests/test_neon_water_line_glow.py` — production GL: the water lines' glow rises with Water Line Glow strength,
   turns to its colour at full alpha and keeps the ripple colours at alpha 0, and nothing glows while Surface Glow is
   zero (frames compared within the renderer's own one-level draw-to-draw variation). `tests/test_neon_celestial.py`

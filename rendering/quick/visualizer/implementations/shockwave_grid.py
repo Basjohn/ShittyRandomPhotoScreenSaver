@@ -20,6 +20,7 @@ from rendering.gl_programs.neon_lake_basin_program import (
     basin_camera, basin_fit, basin_bounds, basin_pixel_scale,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position
+from rendering.gl_programs.neon_terrain_reaction import REACTION_HEIGHT, REACTION_SAMPLES
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_QUALITY_STEPS
 from rendering.gl_programs.shockwave_grid_program import (
@@ -39,22 +40,24 @@ from .spectrum import prepare_spectrum_shader_levels
 
 _EVENT_BINDING, _HEIGHT_UNIT = 3, 4
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uScenePose")
+_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLane",
+                      "uReactionWeight", "uReactionBias")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor")
 _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
-    "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells", "uTerrainGrowth",
+    "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
     "uWaterLineGlowColor","uWaterLineGlow",
-) + _CELESTIAL_UNIFORMS
+) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uHalfWidth","uTerrain","uTerrainSize","uLandHeight","uVolumeStrength","uVolumeColour","uVolumeSteps","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
-    "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uTerrainGrowth",
-    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness")
+    "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
+    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness") + _REACTION_UNIFORMS
 
 
 
@@ -187,6 +190,18 @@ class QuickShockwaveGridRenderer:
                        float(parameter(parameters, "shockwave_grid_scene_scale")),
                        float(parameter(parameters, "shockwave_grid_scene_pan_x")),
                        float(parameter(parameters, "shockwave_grid_scene_pan_y")))
+
+    @staticmethod
+    def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
+        """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase and
+        the shaper's baked elevation tables (strength 0 turns the shader's reaction off)."""
+        gl.glUniform4f(uniforms["uReaction"], *_reaction_vector(parameters))
+        gl.glUniform1fv(uniforms["uReactionBands"], len(mode_state.terrain_bands), mode_state.terrain_bands)
+        gl.glUniform1f(uniforms["uReactionPhase"], float(mode_state.terrain_phase))
+        gl.glUniform1f(uniforms["uReactionMaximum"], float(terrain["maximum"]))
+        tables = parameter(parameters, "shockwave_grid_terrain_shaper")
+        for name, key in (("uReactionLane", "lane"), ("uReactionWeight", "weight"), ("uReactionBias", "bias")):
+            gl.glUniform1fv(uniforms[name], REACTION_SAMPLES, tables[key])
 
     @staticmethod
     def _bind_celestial(uniforms,parameters,half_width,animation_time):
@@ -326,11 +341,10 @@ class QuickShockwaveGridRenderer:
                            and rgba(parameter(parameters,"shockwave_grid_glass_tint"))[3]>0.0))
             light_strength=float(parameter(parameters,"shockwave_grid_sun_rays_strength")) if _rays_admitted(parameters) else 0.0
             gl.glUniform1f(uniforms["uLightStrength"],light_strength)
-            gl.glUniform1fv(uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
+            self._bind_reaction(uniforms, parameters, mode_state, terrain)
             gl.glUniform1i(uniforms["uTerrain"], _HEIGHT_UNIT)
             gl.glUniform1i(uniforms["uTerrainSize"], terrain["size"])
-            gl.glUniform3f(uniforms["uLand"], float(parameter(parameters, "shockwave_grid_terrain_height")),
-                           float(parameter(parameters, "shockwave_grid_terrain_reactivity")),
+            gl.glUniform2f(uniforms["uLand"], float(parameter(parameters, "shockwave_grid_terrain_height")),
                            float(parameter(parameters, "shockwave_grid_terrain_detail")))
             gl.glUniform1f(uniforms["uTime"], float(mode_state.animation_time))
             gl.glUniform1f(uniforms["uWaterDetail"], float(parameter(parameters, "shockwave_grid_water_detail")))
@@ -376,11 +390,11 @@ class QuickShockwaveGridRenderer:
                     gl.glUniform1f(skyline_uniforms["uHalfWidth"],half_width)
                     gl.glUniform1i(skyline_uniforms["uTerrain"],_HEIGHT_UNIT)
                     gl.glUniform1i(skyline_uniforms["uTerrainSize"],terrain["size"])
-                    gl.glUniform3f(skyline_uniforms["uLand"],
+                    gl.glUniform2f(skyline_uniforms["uLand"],
                                    float(parameter(parameters,"shockwave_grid_terrain_height")),
-                                   float(parameter(parameters,"shockwave_grid_terrain_reactivity")),
                                    float(parameter(parameters,"shockwave_grid_terrain_detail")))
-                    gl.glUniform1fv(skyline_uniforms["uTerrainGrowth"],8,mode_state.terrain_growth)
+                    gl.glUniform1i(skyline_uniforms["uEventCount"],len(events))
+                    self._bind_reaction(skyline_uniforms, parameters, mode_state, terrain)
                     gl.glUniform4f(skyline_uniforms["uCrestColor"],
                                    *rgba(parameter(parameters,"shockwave_grid_crest_color")))
                     gl.glUniform1f(skyline_uniforms["uGlow"],glow)
@@ -410,8 +424,9 @@ class QuickShockwaveGridRenderer:
                         gl.glUniform1i(sky_uniforms["uTerrain"],_HEIGHT_UNIT)
                         gl.glUniform1i(sky_uniforms["uTerrainSize"],terrain["size"])
                         height=float(parameter(parameters,"shockwave_grid_terrain_height"))
-                        movement=float(parameter(parameters,"shockwave_grid_terrain_reactivity"))
-                        gl.glUniform1f(sky_uniforms["uLandHeight"],height*(1.0+0.25*movement*max(mode_state.terrain_growth))/1.25)
+                        # A bound fixed by the settings, never pumped by the music.
+                        reach=REACTION_HEIGHT*_reaction_vector(parameters)[0]*3.0
+                        gl.glUniform1f(sky_uniforms["uLandHeight"],height*(1.0+reach)/1.25)
                         gl.glUniform1f(sky_uniforms["uVolumeStrength"],light_strength)
                         colour=rgba(parameter(parameters,"shockwave_grid_sun_rays_color"))
                         body_alpha=rgba(parameter(parameters,"shockwave_grid_"+("sun_color" if str(parameter(parameters,"shockwave_grid_sun_mode"))=="Sun" else "moon_color")))[3]
@@ -500,6 +515,14 @@ def _point_key(cells: tuple[int, int]) -> str:
 
 def _wire_display(parameters):
     return BASIN_SURFACE_STYLES[str(parameter(parameters,"shockwave_grid_wire_display"))]
+
+
+def _reaction_vector(parameters) -> tuple[float, float, float, float]:
+    """(strength, peaks, pulses, swell); strength 0 while React to Music is off."""
+    enabled = bool(parameter(parameters, "shockwave_grid_terrain_reaction_enabled"))
+    strength = float(parameter(parameters, "shockwave_grid_terrain_reaction_strength")) if enabled else 0.0
+    return (strength, *(float(parameter(parameters, f"shockwave_grid_terrain_{part}"))
+                        for part in ("peaks", "pulses", "swell")))
 
 
 def _sky_admitted(parameters):

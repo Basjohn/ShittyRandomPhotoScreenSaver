@@ -23,6 +23,34 @@ def collect_terrain_section(tab) -> dict:
     return {"shockwave_grid_terrain": tab.shockwave_grid_terrain_editor.get_heightfield()}
 
 
+def load_reaction_shaper_section(tab, config) -> None:
+    from rendering.gl_programs.neon_terrain_reaction import normalize_terrain_shaper
+
+    key = "shockwave_grid_terrain_shaper"
+    default = tab._widget_default("spotify_visualizer", key)
+    shaper = normalize_terrain_shaper(config.get(key, default), default)
+    editor = tab.shockwave_grid_terrain_shaper_editor
+    blocker = QSignalBlocker(editor)
+    try:
+        editor.set_nodes(shaper["nodes"])
+        editor.set_notch_positions(shaper["notches"], mirrored=False)
+        editor.set_lane_strengths(shaper["lanes"], mirrored=False)
+    finally:
+        del blocker
+    enabled = config.get("shockwave_grid_terrain_reaction_enabled",
+                         tab._widget_default("spotify_visualizer", "shockwave_grid_terrain_reaction_enabled"))
+    tab._shockwave_grid_terrain_shaper_host.setVisible(bool(enabled))
+
+
+def collect_reaction_shaper_section(tab) -> dict:
+    editor = tab.shockwave_grid_terrain_shaper_editor
+    return {"shockwave_grid_terrain_shaper": {
+        "nodes": editor.get_nodes(),
+        "notches": editor.get_notch_positions(),
+        "lanes": editor.get_lane_strengths(mirrored=False),
+    }}
+
+
 def load_response_section(tab, config) -> None:
     def value(suffix):
         key = f"shockwave_grid_{suffix}"

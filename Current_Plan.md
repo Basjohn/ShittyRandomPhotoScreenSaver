@@ -109,7 +109,9 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
     change the result) on a cubic slider curve; a Falloff slider (flat core, smooth skirt, cursor shows both);
     Flatten approaches its height gradually with falloff and snaps only at 100%; Lower never reaches water (only
     the Water brush authors exact zero).
-  - NT2 reaction: its own **Terrain Reaction** bucket (React to Music toggle, **off by default, presets choose**;
+  - NT2 reaction (source landed 2026-10-16; the operator suggested the shape editor as the bias, now the shaper
+    along the land's height; real-music drives measured: no lane pinned, bass leads 15-41% on bass-heavy tracks;
+    Awaiting Validation on the physical display): its own **Terrain Reaction** bucket (React to Music toggle, **off by default, presets choose**;
     Strength, Swell, Pulses, Peaks, Motion Speed, Rise, Settle); replaces Waves' Terrain Growth and the Growth
     Timing bucket (old values migrate). Real deformation inside the one height owner (`basinLandHeight`), zero at
     water so the shoreline never moves. Operator: organic movement through the ground that reshapes it from the
@@ -118,6 +120,20 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
     soft limit and share cap so bass cannot pin or drown it; prove on loud/bass-heavy recordings.
   - NT3 glow: Beat Star glow colour tweakable in Settings; water face-edge lines glowable with their own glow colour.
   - NT4 presets: replace Neon presets 4 onward with up to 10 new varied originals (operator prunes).
+  - NT5 (after the reaction pass; operator 2026-10-16): optional, adjustable **volumetric clouds**, **light rays you
+    can actually see** (present but render invisible today) and **nebulas** — none reactive. Build whatever shared
+    3D architecture they need properly (that is the goal), proved on its own harness, dormant when off.
+  - NT6: clean up the Neon Lake Settings body UX (operator: "very messy"): bucket order and grouping, conditional
+    rows, labels/tooltips, the long Glow bucket; follow the existing bucket conventions.
+- [ ] **Pre-existing reds outside Neon (found 2026-10-16 by the impacted run, red at clean HEAD 07fd2e20).**
+  test_3d_curated_preset_ownership (24), test_defaults_schema_authority (12; `ast.literal_eval` meets the
+  `basin_profile()` call in default_settings), test_default_settings_editor (7, same cause), test_defaults_projection
+  (2), test_engine_lifecycle (1), test_image_prefetch_transport (6), test_qt611_shader_admission (1),
+  test_qtquick_visualizer_all_five_owner_chain (7), test_qtquick_visualizer_fade_authority (1), test_scene3d_foundation
+  (1), test_scene3d_quality_settings (5), test_sphere_shared_scene3d_projection (1), test_theme_defaults_authority (2),
+  test_transition_distribution (3), test_visualizer_3d_reach (1), test_visualizer_custom_route_contract (1),
+  test_visualizer_edit_content_envelope (13), test_visualizer_presentation_orientation (1). Triage each: stale test vs
+  real defect; preset-reading assertions go (presets are authored).
 - [ ] **Stale Neon material tests (found 2026-10-16, red at HEAD).** 11 cases in `tests/test_neon_scene_materials.py`
   (rear body through zero-alpha/water/glass x8, translucent body over terrain x2, body depth occluded by terrain) find
   no visible Sun/Moon in their reference render: they predate the celestial-background model (body drawn after
