@@ -224,7 +224,7 @@ def _reaction_parameters(**changes):
             "shockwave_grid_terrain_peaks": 0.7, "shockwave_grid_terrain_pulses": 0.8,
             "shockwave_grid_terrain_swell": 0.0, "shockwave_grid_terrain_motion_speed": 0.5,
             "shockwave_grid_terrain_growth_attack": 0.35, "shockwave_grid_terrain_growth_release": 1.2,
-            **changes}
+            "shockwave_grid_sky_enabled": False, **changes}
 
 
 def test_capture_feeds_the_analysis_spectrum_and_reads_nothing_when_off(monkeypatch):

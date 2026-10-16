@@ -394,6 +394,9 @@ _BASIN_PLAIN_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items()
 _BASIN_GLASS_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&6==6)
 _BASIN_BODY = ("shockwave_grid_sun_enabled", True)
 _TERRAIN_REACTION = ("shockwave_grid_terrain_reaction_enabled", True)
+_SKY = ("shockwave_grid_sky_enabled", True)
+_CLOUDS = (_SKY, ("shockwave_grid_volumetric_clouds", True))
+_NEBULA = (_SKY, ("shockwave_grid_nebula_enabled", True))
 
 
 _SHOCKWAVE_GRID = ModeSettings(
@@ -500,6 +503,32 @@ _SHOCKWAVE_GRID = ModeSettings(
                enabled_when=("shockwave_grid_sky_enabled", True)),
         Colour("shockwave_grid_star_color", "Stars:", "Choose Star Colour", bucket="sky",
                enabled_when=("shockwave_grid_sky_enabled", True)),
+        Toggle("shockwave_grid_volumetric_clouds", "Volumetric Clouds:", "Draw lit, drifting clouds",
+               "Soft clouds across the sky, lit from the Sun or Moon's side and drifting slowly. They replace the "
+               "thin cloud bands and take the Cloud Colour.", bucket="sky", when=_SKY, enabled_when=_SKY),
+        Slider("shockwave_grid_cloud_coverage", "Cloud Coverage:", 0.0, 1.0, "How much of the sky the clouds cover.",
+               bucket="sky", when=_CLOUDS, enabled_when=_CLOUDS),
+        Slider("shockwave_grid_cloud_softness", "Cloud Softness:", 0.0, 1.0,
+               "Crisp-edged clouds at 0, soft wispy ones at 1.", bucket="sky", when=_CLOUDS, enabled_when=_CLOUDS),
+        Slider("shockwave_grid_cloud_scale", "Cloud Size:", 0.0, 1.0, "Large, near clouds at 0; small, far ones at 1.",
+               bucket="sky", when=_CLOUDS, enabled_when=_CLOUDS),
+        Slider("shockwave_grid_cloud_opacity", "Cloud Opacity:", 0.0, 1.0, "How solid the clouds are.",
+               bucket="sky", when=_CLOUDS, enabled_when=_CLOUDS),
+        Slider("shockwave_grid_cloud_drift", "Cloud Drift:", 0.0, 1.0, "How fast the clouds drift; 0 holds them still.",
+               bucket="sky", when=_CLOUDS, enabled_when=_CLOUDS),
+        Toggle("shockwave_grid_nebula_enabled", "Nebula:", "Paint a nebula into the sky",
+               "Wisps of two colours behind the stars.", bucket="sky", when=_SKY, enabled_when=_SKY),
+        Slider("shockwave_grid_nebula_intensity", "Nebula Intensity:", 0.0, 1.0, "How bright the nebula is.",
+               bucket="sky", when=_NEBULA, enabled_when=_NEBULA),
+        Slider("shockwave_grid_nebula_scale", "Nebula Detail:", 0.0, 1.0, "Broad clouds of colour at 0, fine wisps at 1.",
+               bucket="sky", when=_NEBULA, enabled_when=_NEBULA),
+        Slider("shockwave_grid_nebula_drift", "Nebula Drift:", 0.0, 1.0,
+               "How fast the nebula turns slowly across the sky; 0 holds it still.", bucket="sky", when=_NEBULA,
+               enabled_when=_NEBULA),
+        Colour("shockwave_grid_nebula_color_a", "Nebula Colour:", "Choose Nebula Colour",
+               "The nebula's first colour.", bucket="sky", when=_NEBULA, enabled_when=_NEBULA),
+        Colour("shockwave_grid_nebula_color_b", "Nebula Second Colour:", "Choose Nebula Second Colour",
+               "The colour that winds through the first.", bucket="sky", when=_NEBULA, enabled_when=_NEBULA),
         Toggle("shockwave_grid_starscape_beat", "Starscape Beat:",
                "On stronger admitted beats, briefly brighten three widely separated stars across the sky. Gentle decay; no separate DSP clock.",
                bucket="sky", when=("shockwave_grid_sky_enabled", True), enabled_when=("shockwave_grid_sky_enabled", True)),

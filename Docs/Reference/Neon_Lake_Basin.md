@@ -281,6 +281,21 @@ Vertices experiment is default OFF and uses sparse antialiased marks on the lit
 outer rim only. Fixed angular slots fade additional marks smoothly during resize;
 there is no second mesh, surface lattice, phase or glow owner.
 
+### Clouds and nebula (2026-10-17)
+
+Both are optional, non-reactive and live in the Sky bucket under the sky toggle; with the sky off they draw nothing.
+They come from the shared sky library `rendering/gl_programs/scene3d_sky.py` (lattice noise and octave sums on the
+Scene3D integer hash, `skyClouds`, `skyNebula`, each with a CPU mirror proved equal on the GPU), so another 3D mode can
+take the same sky without copying it. **Volumetric Clouds** replace the flat cloud bands while on: Coverage, Softness,
+Scale, Opacity and Drift, shaded from the Cloud colour toward the Sun/Moon side with a cheap look-ahead toward the
+light. **Nebula** adds two-coloured emission light (Intensity, Scale, Drift, Nebula Colour A/B) behind the clouds.
+Drift is the shared animation clock only: cloud drift slides the cloud plane, nebula drift turns the nebula about the
+vertical; at zero the sky is still, and no drift asks for frames on its own. The visible sky takes the full octave
+counts; reflections, which glass samples several times per fragment and roughness blurs, take two octaves through the
+same functions (`basinSkyBackground(..., detail)`). Measured at 684×418 with GL_TIME_ELAPSED (GPU shared with other
+work): plain 0.256 ms, clouds 0.288, nebula 0.322, both 0.357 ms median per frame; full-octave reflections had cost
+1.128 ms for both. No new render target, pass, timer or texture is admitted.
+
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
 projected framed sky**, select three spaced star cells per admitted event, and decay on the
 single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).

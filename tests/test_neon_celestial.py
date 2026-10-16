@@ -43,7 +43,7 @@ void main() {{
     vec3 hitPoint;
     vec4 body = basinCelestial(uEye, ray, hitPoint);
     float starVisibility=1.0-basinCelestialSkyMask(uEye,normalize(ray));
-    vec4 sky = basinSkyBackground(ray,starVisibility);
+    vec4 sky = basinSkyBackground(ray,starVisibility,1);
     vec3 radiance = basinCompositeSkyBody(sky, body);
     if (uProbeMode == 0) FragColor = body;
     else if (uProbeMode == 1) FragColor = sky;

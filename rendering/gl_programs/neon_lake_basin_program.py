@@ -288,7 +288,7 @@ vec3 basinVisibleSkyRadiance(vec3 eye,vec3 ray) {{
     vec3 hitPoint;
     vec4 body=basinVisibleBody(eye,ray,hitPoint);
     float starVisibility=1.0-basinCelestialSkyMask(eye,ray);
-    return basinCompositeSkyBody(basinSkyBackground(ray,starVisibility),body);
+    return basinCompositeSkyBody(basinSkyBackground(ray,starVisibility,0),body);
 }}
 """
 
@@ -722,7 +722,7 @@ void main() {
         // One celestial coverage evaluation for ordinary stars AND the
         // independent beat-star emission attachment. No duplicate ray hits.
         float starVisibility=1.0-basinCelestialSkyMask(eye,ray);
-        FragColor=basinSkyBackground(ray,starVisibility);
+        FragColor=basinSkyBackground(ray,starVisibility,1);
         if (FragColor.a<0.0001) discard;
         // Separate small radiance buffer entry for event stars, not the entire
         // sky (which would turn on widespread bloom and flatten the scene).

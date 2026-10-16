@@ -44,7 +44,7 @@ _REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactio
                       "uReactionWeight", "uReactionBias")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
-                     "uCloudColor","uHorizonColor")
+                     "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
 _UNIFORMS = _VIEW_UNIFORMS + (
     "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
@@ -217,8 +217,20 @@ class QuickShockwaveGridRenderer:
         gl.glUniform1f(uniforms["uSkyStrength"],float(parameter(parameters,"shockwave_grid_sky_strength")))
         for uniform,key in (("uSunColor","sun_color"),("uMoonColor","moon_color"),("uSkyColor","sky_color"),
                             ("uStarColor","star_color"),("uStarGlowColor","star_glow_color"),
-                            ("uCloudColor","cloud_color"),("uHorizonColor","horizon_color")):
+                            ("uCloudColor","cloud_color"),("uHorizonColor","horizon_color"),
+                            ("uNebulaColorA","nebula_color_a"),("uNebulaColorB","nebula_color_b")):
             gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
+        clouds=bool(parameter(parameters,"shockwave_grid_volumetric_clouds"))
+        gl.glUniform4f(uniforms["uClouds"],*(float(parameter(parameters,"shockwave_grid_cloud_"+part))
+                                             for part in ("coverage","softness","scale")),
+                       float(parameter(parameters,"shockwave_grid_cloud_opacity")) if clouds else 0.0)
+        drift=0.03*float(parameter(parameters,"shockwave_grid_cloud_drift"))*float(animation_time)
+        gl.glUniform2f(uniforms["uCloudDrift"],drift,0.37*drift)
+        gl.glUniform2f(uniforms["uNebula"],float(parameter(parameters,"shockwave_grid_nebula_intensity"))
+                       if bool(parameter(parameters,"shockwave_grid_nebula_enabled")) else 0.0,
+                       float(parameter(parameters,"shockwave_grid_nebula_scale")))
+        gl.glUniform1f(uniforms["uNebulaTurn"],0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))
+                       *float(animation_time))
         return position
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
