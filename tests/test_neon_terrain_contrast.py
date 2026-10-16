@@ -76,7 +76,8 @@ def test_slot_snapshot_cannot_mix_analysis_and_logical_threads():
 
 def test_mode_policy_is_dormant_for_other_modes_and_disabled_growth():
     model = asdict(SpotifyVisualizerSettings())
-    for mode in ('spectrum','extruded_spectrum','sphere','bubble','devcurve','oscilloscope'):
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+    for mode in (mode for mode in VISUALIZER_MODE_IDS if mode != 'shockwave_grid'):
         assert resolve_mode_source_config(mode,model)['_source_neon_terrain_contrast_enabled'] is False
     assert resolve_mode_source_config('shockwave_grid',model)['_source_neon_terrain_contrast_enabled'] is True
     model['shockwave_grid_terrain_reactivity']=0.

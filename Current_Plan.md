@@ -118,6 +118,11 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
     soft limit and share cap so bass cannot pin or drown it; prove on loud/bass-heavy recordings.
   - NT3 glow: Beat Star glow colour tweakable in Settings; water face-edge lines glowable with their own glow colour.
   - NT4 presets: replace Neon presets 4 onward with up to 10 new varied originals (operator prunes).
+- [ ] **Stale Neon material tests (found 2026-10-16, red at HEAD).** 11 cases in `tests/test_neon_scene_materials.py`
+  (rear body through zero-alpha/water/glass x8, translucent body over terrain x2, body depth occluded by terrain) find
+  no visible Sun/Moon in their reference render: they predate the celestial-background model (body drawn after
+  surface colour at far depth, clipped by terrain depth). Rewrite each to protect the current documented behaviour
+  with a genuinely visible body, or report a real product defect. The helper already hides vertices/skyline.
 
 ### SC4. Just Make It Work Pools | provider selection, independently scoped
 

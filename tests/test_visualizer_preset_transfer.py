@@ -121,7 +121,11 @@ def test_loose_json_import_infers_mode_and_replaces_matching_slot(tmp_path: Path
         encoding="utf-8",
     )
     loose = tmp_path / "preset_1_fresh.json"
-    loose.write_text(json.dumps(_preset_payload("bubble", 0, value=4.0)), encoding="utf-8")
+    # A value Bubble's spec admits unchanged (an out-of-range one would read back clamped).
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    control = require_mode_settings("bubble").control("bubble_big_size_max")
+    fresh = control.low + 0.75 * (control.high - control.low)
+    loose.write_text(json.dumps(_preset_payload("bubble", 0, value=fresh)), encoding="utf-8")
 
     # See folder-import note: reload_presets() rebuilds every mode and requires
     # >=1 authored preset per mode, so let it read the real complete shipped tree.
@@ -132,7 +136,7 @@ def test_loose_json_import_infers_mode_and_replaces_matching_slot(tmp_path: Path
     imported = mode_dir / "preset_1_fresh.json"
     assert imported.exists()
     payload = json.loads(imported.read_text(encoding="utf-8"))
-    assert payload["snapshot"]["widgets"]["spotify_visualizer"]["bubble_big_size_max"] == 4.0
+    assert payload["snapshot"]["widgets"]["spotify_visualizer"]["bubble_big_size_max"] == pytest.approx(fresh)
     assert (mode_dir / "preset_2_keep.json").exists()
     assert load_curated_visualizer_preset_manifest(target_root) == {
         "bubble/preset_1_fresh.json",

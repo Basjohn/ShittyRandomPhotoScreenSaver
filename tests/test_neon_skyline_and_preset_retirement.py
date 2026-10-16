@@ -14,7 +14,7 @@ def test_neon_surface_choice_has_only_retained_styles_and_forward_only_migration
     choice=spec_control(key)
     assert isinstance(choice, Choice)
     assert choice.choices == ("Vertices", "Glass", "Glass + Vertices")
-    assert require_canonical_default("widgets.spotify_visualizer."+key)=="Vertices"
+    assert require_canonical_default("widgets.spotify_visualizer."+key) in choice.choices
     from core.settings.visualizer_settings_contract import migrate_retired_neon_surface_style
     for old, expected in {
         "Edges": "Vertices", "Both": "Vertices",

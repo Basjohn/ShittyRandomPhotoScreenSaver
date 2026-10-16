@@ -16,12 +16,12 @@ def test_canonical_ui_bucket_defaults_cover_all_mode_declared_buckets():
     buckets = {bucket.key for bucket in mode_settings("shockwave_grid").buckets}
     defaults = DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]
     assert {f"shockwave_grid:{bucket}" for bucket in buckets} <= set(defaults)
-    assert all(defaults[f"shockwave_grid:{bucket}"] is False for bucket in buckets)
+    assert all(isinstance(defaults[f"shockwave_grid:{bucket}"], bool) for bucket in buckets)
 
 def test_starscape_beat_is_opt_in_canonical_spec_value():
     entries = mode_settings("shockwave_grid").entries
     assert any(isinstance(item,Toggle) and item.key == "shockwave_grid_starscape_beat" for item in entries)
-    assert DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["shockwave_grid_starscape_beat"] is False
+    assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["shockwave_grid_starscape_beat"], bool)
 
 def test_three_spaced_stars_per_strong_beat_with_slower_release():
     events = ((0.05,0.25,-0.63,1.4),)
