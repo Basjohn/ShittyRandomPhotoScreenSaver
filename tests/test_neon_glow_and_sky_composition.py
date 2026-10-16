@@ -15,25 +15,28 @@ def _framed_stars(events, tilt, turn):
 def test_one_glow_bucket_has_canonical_closed_default_and_distinct_controls():
     spec=require_mode_settings('shockwave_grid')
     controls={control.key:control for control in spec.entries if hasattr(control,'key')}
+    # Each glow lives beside what it lights: surface glow under Glow, beat stars under Sky, halo and rays
+    # under Sun & Moon.
     keys={
-        'shockwave_grid_glow',
-        'shockwave_grid_celestial_glow_enabled',
-        'shockwave_grid_celestial_glow_strength',
-        'shockwave_grid_celestial_glow_reactivity',
-        'shockwave_grid_star_glow_strength',
-        'shockwave_grid_star_glow_reactivity',
-        'shockwave_grid_horizon',
-        'shockwave_grid_starscape_beat',
-        'shockwave_grid_sun_rays_enabled',
-        'shockwave_grid_sun_rays_strength',
-        'shockwave_grid_sun_rays_color',
+        'shockwave_grid_glow': 'glow',
+        'shockwave_grid_horizon': 'glow',
+        'shockwave_grid_water_line_glow': 'glow',
+        'shockwave_grid_celestial_glow_enabled': 'celestial',
+        'shockwave_grid_celestial_glow_strength': 'celestial',
+        'shockwave_grid_celestial_glow_reactivity': 'celestial',
+        'shockwave_grid_sun_rays_enabled': 'celestial',
+        'shockwave_grid_sun_rays_strength': 'celestial',
+        'shockwave_grid_sun_rays_color': 'celestial',
+        'shockwave_grid_starscape_beat': 'sky',
+        'shockwave_grid_star_glow_strength': 'sky',
+        'shockwave_grid_star_glow_reactivity': 'sky',
     }
     defaults=DEFAULT_SETTINGS['widgets']['spotify_visualizer']
     assert {b.key for b in spec.buckets if b.key=='glow'}=={'glow'}
     bucket_states=DEFAULT_SETTINGS['ui']['visualizer_bucket_states']
     assert isinstance(bucket_states['shockwave_grid:glow'], bool)
-    for key in keys:
-        assert key in controls and controls[key].bucket=='glow'
+    for key, bucket in keys.items():
+        assert key in controls and controls[key].bucket==bucket, key
         assert key in defaults
     assert isinstance(controls['shockwave_grid_celestial_glow_enabled'],Toggle)
     assert isinstance(defaults['shockwave_grid_celestial_glow_enabled'], bool)

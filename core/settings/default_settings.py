@@ -264,7 +264,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                      'extruded_spectrum:effects': False,
                                      'extruded_spectrum:response': False,
                                      'extruded_spectrum:shape': False,
-                                     'shockwave_grid:appearance': False,
                                      'shockwave_grid:terrain': False,
                                      'shockwave_grid:reaction': False,
                                      'shockwave_grid:render': False,

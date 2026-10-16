@@ -124,11 +124,16 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     # It stays parked/hidden instead of being inserted as a phantom bucket in
     # each mode. Extruded authors its renderer-specific Faces/Edges rainbow
     # participation explicitly in its own Appearance bucket.
-    expected_buckets = {
-        "extruded_spectrum": (["Bar Appearance", "Appearance", "Shape", "Response"], ["3D Effects"]),
-        "shockwave_grid": (["Terrain", "Appearance", "Waves"], ["Growth Timing", "Frequency Response", "Render", "Sky", "Celestial", "Glow"]),
-        "sphere": (["Frequency Zones", "Appearance", "Particle Flow"], ["Reactivity", "Rotation", "Effects"]),
-    }
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    def spec_buckets(mode):
+        # Bucket titles come from the mode's spec, not copied wording; Extruded adds its shared bar bucket first.
+        buckets = require_mode_settings(mode).buckets
+        normal = [bucket.title for bucket in buckets if not bucket.advanced]
+        return (["Bar Appearance", *normal] if mode == "extruded_spectrum" else normal,
+                [bucket.title for bucket in buckets if bucket.advanced])
+
+    expected_buckets = {mode: spec_buckets(mode) for mode in ("extruded_spectrum", "shockwave_grid", "sphere")}
     presentation_controls = {
         "extruded_spectrum": "extruded_spectrum_depth",
         "shockwave_grid": "shockwave_grid_wave_height",

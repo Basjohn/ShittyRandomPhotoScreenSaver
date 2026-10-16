@@ -65,7 +65,7 @@ def test_rim_experiment_has_one_default_off_typed_settings_roundtrip():
     key='shockwave_grid_celestial_rim_vertices'
     assert isinstance(DEFAULT_SETTINGS['widgets']['spotify_visualizer'][key], bool)
     entry=next(c for c in require_mode_settings('shockwave_grid').entries if getattr(c,'key',None)==key)
-    assert isinstance(entry,Toggle) and entry.bucket=='glow'
+    assert isinstance(entry,Toggle) and entry.bucket=='celestial'
     assert entry.when == (('shockwave_grid_sun_enabled',True),('shockwave_grid_celestial_glow_enabled',True))
     for enabled in (False,True):
         model=SpotifyVisualizerSettings.from_mapping({key:enabled},apply_preset_overlay=False,resolve_preset_indices=False)
