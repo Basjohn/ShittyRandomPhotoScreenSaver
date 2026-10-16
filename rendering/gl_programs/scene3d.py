@@ -158,21 +158,29 @@ vec2 sceneVelocity(vec4 clipNow, vec4 clipPrevious, vec2 viewportPixels) {
 }
 """
 
+# The shared integer lattice hash, include-guarded so a shader may take it alone (the sky library) or with the
+# whole library without defining it twice.
+SCENE3D_HASH_GLSL = """
+#ifndef SCENE3D_HASH_GLSL
+#define SCENE3D_HASH_GLSL
+// Integer lattice hash: identical on every GPU and exact for any seed (R-94).
+uint sceneMix(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+float sceneRandom(uint key, uint salt, uint seed) {
+    return float(sceneMix(key * 0x9e3779b9u ^ sceneMix(seed * 0x85ebca6bu + salt))) * (1.0 / 4294967295.0);
+}
+#endif
+"""
+
 SCENE3D_GLSL = f"""
 const float SCENE_CAMERA = {SCENE3D_CAMERA:.6f};
 const float SCENE_NEAR = {SCENE3D_NEAR:.6f};
 const float SCENE_FAR = {SCENE3D_FAR:.6f};
 const vec3 SCENE_KEY = vec3({SCENE3D_KEY_LIGHT[0]:.6f}, {SCENE3D_KEY_LIGHT[1]:.6f}, {SCENE3D_KEY_LIGHT[2]:.6f});
 
-// Integer lattice hash: identical on every GPU and exact for any seed (R-94).
-uint sceneMix(uint x) {{
-    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
-    return x;
-}}
-float sceneRandom(uint key, uint salt, uint seed) {{
-    return float(sceneMix(key * 0x9e3779b9u ^ sceneMix(seed * 0x85ebca6bu + salt))) * (1.0 / 4294967295.0);
-}}
-
+{SCENE3D_HASH_GLSL}
 vec3 sceneRotate(vec3 p, vec3 axis, float angle) {{
     float c = cos(angle), s = sin(angle);
     return p * c + cross(axis, p) * s + axis * dot(axis, p) * (1.0 - c);
