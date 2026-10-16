@@ -5,11 +5,15 @@ exactly here on the CPU (checked on the GPU by ``tests/test_scene3d_sky.py``). T
 functions of a view ray and their parameters: a mode includes ``SCENE3D_SKY_GLSL`` and calls them from
 its own sky shading, so they cost nothing where a mode does not call them and need no resources.
 
-* ``skyNoise2``/``skyFbm2``, ``skyNoise3``/``skyFbm3`` -- smooth lattice noise and its octave sums, 0..1.
+* ``skyNoise2``/``skyFbm2``, ``skyNoise3``/``skyFbm3`` -- smooth lattice noise and its octave sums, 0..1. Each
+  octave is turned against the last, so the lattice's axes never line up into blocks.
 * ``skyClouds`` -- clouds on a distant sky plane, thick where drifting noise passes the coverage
   threshold, lit from the light's side by comparing the noise a step toward the light (a cheap
   self-shadow), thinning toward the horizon; premultiplied colour and alpha.
-* ``skyNebula`` -- two-colour wisps of 3D noise over the sky directions; additive light.
+* ``skyNebula`` -- emission nebulae in regions of the sky with dark space between them: warped, billowing gas
+  that burns from a rim colour to a core colour toward white at its densest, bright ridged filaments, and dust
+  lanes that absorb what lies behind. Additive light plus that absorption, and how deep in a nebula the ray is
+  (for a caller's denser, tinted star field there).
 """
 from __future__ import annotations
 
@@ -54,7 +58,7 @@ float skyFbm2(vec2 p, int octaves, uint seed) {
     for (int i = 0; i < octaves; ++i) {
         sum += amplitude * skyNoise2(p, seed + uint(i));
         total += amplitude;
-        p = p * 2.03 + vec2(17.1, 9.4);
+        p = mat2(0.8, 0.6, -0.6, 0.8) * p * 2.03 + vec2(17.1, 9.4);
         amplitude *= 0.5;
     }
     return sum / total;
@@ -64,7 +68,7 @@ float skyFbm3(vec3 p, int octaves, uint seed) {
     for (int i = 0; i < octaves; ++i) {
         sum += amplitude * skyNoise3(p, seed + uint(i));
         total += amplitude;
-        p = p * 2.03 + vec3(17.1, 9.4, 4.7);
+        p = mat3(0.00, -0.80, -0.60, 0.80, 0.36, -0.48, 0.60, -0.48, 0.64) * p * 2.03 + vec3(17.1, 9.4, 4.7);
         amplitude *= 0.5;
     }
     return sum / total;
@@ -86,15 +90,42 @@ vec4 skyClouds(vec3 ray, vec3 toLight, vec4 cloud, vec2 drift, vec3 shade, vec3 
     float alpha = density * cloud.w * smoothstep(0.0, 0.08, ray.y);
     return vec4(mix(shade, light, lit) * alpha, alpha);
 }
-// nebula: intensity, scale (0..1). Two colours wind through each other. octaves: as for the clouds
-// (4 for a visible sky).
-vec3 skyNebula(vec3 ray, vec3 first, vec3 second, vec2 nebula, uint seed, int octaves) {
-    if (nebula.x <= 0.0) return vec3(0.0);
-    vec3 p = ray * mix(1.2, 4.5, nebula.y);
-    float body = skyFbm3(p, octaves, seed);
-    float mixer = skyFbm3(p * 2.1 + vec3(7.3, 1.9, 4.4), max(1, octaves - 2), seed + 11u);
-    float wisp = smoothstep(0.42, 0.82, body);
-    return mix(first, second, mixer) * wisp * nebula.x * (0.6 + 0.4 * mixer);
+// nebula: intensity, scale, filaments, dust (0..1). rim: the outer gas and its filaments; core: the dense heart,
+// which burns toward white. focus: a unit direction the gas gathers around and thins away from (zero: anywhere).
+// octaves: as for the clouds (5 for a visible sky). At 2 or fewer (a reflection, which roughness blurs) only the
+// gas's broad body and colour are drawn: no warp, filaments or dust. Returns additive light (rgb) and the dust's
+// absorption of whatever lies behind (a); region is how deep in a nebula the ray is.
+vec4 skyNebula(vec3 ray, vec3 rim, vec3 core, vec4 nebula, vec3 focus, uint seed, int octaves, out float region) {
+    region = 0.0;
+    if (nebula.x <= 0.0) return vec4(0.0);
+    vec3 p = ray * mix(0.9, 3.2, nebula.y);
+    // Bodies of gas with dark space between them, ragged at their edges, rather than a fill.
+    float gather = 0.3 * dot(ray, focus) - 0.12 * length(focus);
+    region = smoothstep(0.47, 0.76, skyFbm3(p * 0.5 + vec3(3.1, 7.7, 1.3), min(octaves, 3), seed + 40u) + gather);
+    if (region <= 0.0) return vec4(0.0);
+    if (octaves <= 2) {
+        float broad = smoothstep(0.32, 0.80, skyFbm3(p * 1.4, octaves, seed) * (0.35 + 0.85 * region));
+        vec3 glow = mix(rim, core, smoothstep(0.30, 1.0, broad)) * broad * mix(0.85, 0.3, nebula.z);
+        return vec4(glow / (1.0 + 0.6 * max(max(glow.r, glow.g), glow.b)) * nebula.x, 0.0);
+    }
+    // Warped so the gas billows and folds instead of sitting on the lattice.
+    vec3 warp = vec3(skyNoise3(p * 1.2, seed + 3u), skyNoise3(p * 1.2 + vec3(5.2, 1.3, 2.8), seed + 4u),
+                     skyNoise3(p * 1.2 + vec3(9.1, 4.4, 7.6), seed + 5u)) - 0.5;
+    vec3 q = p + warp * 1.6;
+    float body = smoothstep(0.32, 0.80, skyFbm3(q * 1.4, octaves, seed) * (0.35 + 0.85 * region));
+    // Filaments: thin bright ridges where a second sum crosses its middle, sharper as they rise.
+    float strand = 1.0 - abs(2.0 * skyFbm3(q * 2.2 + vec3(1.7), max(1, octaves - 1), seed + 7u) - 1.0);
+    strand = pow(strand, mix(3.0, 14.0, nebula.z)) * smoothstep(0.0, 0.5, region);
+    float dust = nebula.w <= 0.0 ? 0.0
+               : smoothstep(0.46, 0.64, skyFbm3(q * 2.8 + vec3(4.3, 2.1, 8.8), 3, seed + 13u))
+                 * nebula.w * smoothstep(0.0, 0.4, region);
+    float heat = smoothstep(0.30, 1.0, body);
+    vec3 light = mix(rim, core, heat) * body * mix(0.85, 0.3, nebula.z)
+               + mix(rim, core, heat * 0.5) * strand * mix(0.25, 0.9, nebula.z)
+               + mix(core, vec3(1.0), 0.4) * heat * heat * heat * 0.6;
+    // Highlights roll off instead of clipping into flat plateaus.
+    light /= 1.0 + 0.6 * max(max(light.r, light.g), light.b);
+    return vec4(light * (1.0 - dust * 0.95) * nebula.x, dust * 0.9 * min(1.0, nebula.x * 2.0));
 }
 #endif
 """
@@ -147,7 +178,8 @@ def sky_fbm2(x: float, y: float, octaves: int, seed: int) -> float:
     for octave in range(octaves):
         total += amplitude * sky_noise2(x, y, seed + octave)
         amplitude_sum += amplitude
-        x, y = x * 2.03 + 17.1, y * 2.03 + 9.4
+        # GLSL mat2(a, b, c, d) is column-major: columns (a, b) and (c, d).
+        x, y = (0.8 * x - 0.6 * y) * 2.03 + 17.1, (0.6 * x + 0.8 * y) * 2.03 + 9.4
         amplitude *= 0.5
     return total / amplitude_sum
 
@@ -159,7 +191,9 @@ def sky_fbm3(x: float, y: float, z: float, octaves: int, seed: int) -> float:
     for octave in range(octaves):
         total += amplitude * sky_noise3(x, y, z, seed + octave)
         amplitude_sum += amplitude
-        x, y, z = x * 2.03 + 17.1, y * 2.03 + 9.4, z * 2.03 + 4.7
+        x, y, z = ((0.00 * x + 0.80 * y + 0.60 * z) * 2.03 + 17.1,
+                   (-0.80 * x + 0.36 * y - 0.48 * z) * 2.03 + 9.4,
+                   (-0.60 * x - 0.48 * y + 0.64 * z) * 2.03 + 4.7)
         amplitude *= 0.5
     return total / amplitude_sum
 

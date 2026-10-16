@@ -123,6 +123,11 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   - NT5 (after the reaction pass; operator 2026-10-16): optional, adjustable **volumetric clouds**, **light rays you
     can actually see** (present but render invisible today) and **nebulas** — none reactive. Build whatever shared
     3D architecture they need properly (that is the goal), proved on its own harness, dormant when off.
+    Clouds, nebula (rebuilt after the operator's reference photos: regions, rim/core colour, filaments, dust,
+    position) and their drift, plus starburst beat stars with Star Size and a swell-in, landed 2026-10-17
+    (Awaiting Validation). Remaining: visible **light rays** (a shared Scene3D light-shaft post pass from the
+    Sun/Moon's screen position, its own composite variant so off stays pixel-identical; Ray Length; retire the
+    invisible volume haze pass), then the new Neon presets reworked to use clouds, nebula, rays and beat stars.
   - NT6 (source landed 2026-10-16, Awaiting Validation): the Neon body is regrouped by what each control touches —
     Terrain, Water, Terrain Reaction, then Surface, Sky, Sun & Moon, Glow, Frequency Response — with glows beside
     what they light; keys unchanged. Further polish only on the operator's notes.
@@ -133,7 +138,9 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs and
   test_qtquick_visualizer_all_five_owner_chain (7), test_qtquick_visualizer_fade_authority (1), test_scene3d_foundation
   (1), test_scene3d_quality_settings (5), test_sphere_shared_scene3d_projection (1), test_theme_defaults_authority (2),
   test_transition_distribution (3), test_visualizer_3d_reach (1), test_visualizer_custom_route_contract (1),
-  test_visualizer_edit_content_envelope (13), test_visualizer_presentation_orientation (1). Triage each: stale test vs
+  test_visualizer_edit_content_envelope (13), test_visualizer_presentation_orientation (1); also (2026-10-17)
+  test_visualizer_runtime_controller (1, shell policy CARD vs expected FRAMELESS) and
+  test_visualizer_settings_body_transaction_contract (1, pins the pre-NT6 Neon bucket set). Triage each: stale test vs
   real defect; preset-reading assertions go (presets are authored).
 - [ ] **Stale Neon material tests (found 2026-10-16, red at HEAD).** 11 cases in `tests/test_neon_scene_materials.py`
   (rear body through zero-alpha/water/glass x8, translucent body over terrain x2, body depth occluded by terrain) find

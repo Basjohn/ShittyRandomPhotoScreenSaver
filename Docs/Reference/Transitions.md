@@ -404,6 +404,21 @@ Each foundation slice adds what it learned here.
 - Tools that measure cost must run as production does: `tools/visualizer_cost_probe.py` now turns per-call GL
   error checking off first; per-call error checks materially distort CPU timing.
 
+**Sky effects (Neon Lake clouds, nebula, beat stars, 2026-10-17)**
+- Design a sky effect in a full-sky scratch view first, then judge it on the card: a nebula that filled the lab frame
+  showed only a ragged edge in the card's narrow sky. Gather such effects toward the sky a mode actually frames (a
+  focus direction) and give authors a position, instead of hoping a region falls in view.
+- Value noise shows its lattice as axis-aligned blocks once highlights clip into plateaus: turn each octave against
+  the last and roll highlights off; never clip an emission field flat.
+- Reflections are where sky cost hides: glass samples the sky five times per water fragment, so a full nebula there
+  cost five times its visible sky (0.86 ms against 0.36 at 684x418). Reflections take a broad version through the
+  same function (fewer octaves, no warp, filaments or dust).
+- An effect that reaches beyond its own point (a starburst's spikes) needs its occlusion judged at its source, not
+  per pixel, or spikes from a star hidden behind the Moon reach out past the limb; take the lesser of the source's and
+  the pixel's visibility, and own it in one place so it is never applied twice.
+- Star bursts read like the reference only with a tiny intense core, long thin spikes and a broad faint halo; a fat
+  core plus a wide sheath saturates into a white blob under bloom.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

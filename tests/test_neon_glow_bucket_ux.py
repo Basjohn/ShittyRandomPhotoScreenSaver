@@ -33,7 +33,8 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
         "shockwave_grid_star_glow_color", "shockwave_grid_volumetric_clouds", "shockwave_grid_cloud_coverage",
         "shockwave_grid_cloud_softness", "shockwave_grid_cloud_scale", "shockwave_grid_cloud_opacity",
         "shockwave_grid_cloud_drift", "shockwave_grid_nebula_enabled", "shockwave_grid_nebula_intensity",
-        "shockwave_grid_nebula_scale", "shockwave_grid_nebula_drift", "shockwave_grid_nebula_color_a", "shockwave_grid_nebula_color_b",
+        "shockwave_grid_nebula_scale", "shockwave_grid_nebula_drift", "shockwave_grid_nebula_filaments",
+        "shockwave_grid_nebula_dust", "shockwave_grid_nebula_position", "shockwave_grid_star_size", "shockwave_grid_nebula_color_a", "shockwave_grid_nebula_color_b",
     }
     assert {entry.key for entry in spec.controls if entry.bucket == "celestial"} == {
         "shockwave_grid_sun_enabled", "shockwave_grid_sun_mode", "shockwave_grid_sun_color",

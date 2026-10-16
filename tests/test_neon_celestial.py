@@ -43,7 +43,7 @@ void main() {{
     vec3 hitPoint;
     vec4 body = basinCelestial(uEye, ray, hitPoint);
     float starVisibility=1.0-basinCelestialSkyMask(uEye,normalize(ray));
-    vec4 sky = basinSkyBackground(ray,starVisibility,1);
+    vec4 sky = basinSkyBackground(uEye,ray,starVisibility,1);
     vec3 radiance = basinCompositeSkyBody(sky, body);
     if (uProbeMode == 0) FragColor = body;
     else if (uProbeMode == 1) FragColor = sky;
@@ -141,7 +141,7 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         gl.glUniform4f(gl.glGetUniformLocation(program, "uMoonColor"),
                        *moon_colour[:3],moon_colour[3] if body_alpha is None else body_alpha)
         gl.glUniform1i(gl.glGetUniformLocation(program, "uBeatStarCount"), star_count)
-        gl.glUniform2f(gl.glGetUniformLocation(program, "uStarGlow"), 2.0, 2.0)
+        gl.glUniform3f(gl.glGetUniformLocation(program, "uStarGlow"), 2.0, 2.0, 0.5)
         gl.glUniform4f(gl.glGetUniformLocation(program, "uStarGlowColor"), *star_glow)
         gl.glUniform4fv(gl.glGetUniformLocation(program, "uBeatStarCells[0]"), 1,
                         np.array([-0.5,-0.5,1.0,0.0], dtype=np.float32))
