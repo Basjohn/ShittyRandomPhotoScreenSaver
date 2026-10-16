@@ -189,7 +189,7 @@ def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window,
                 animation.append(image)
             state = snapshot.logical.mode_state
             records.append({"source_index": index, "source_time_s": times[index], "logical_size": size,
-                            "events": list(state.events), "terrain_growth": list(state.terrain_growth),
+                            "events": list(state.events), "terrain_bands": list(state.terrain_bands), "terrain_phase": state.terrain_phase,
                             "animation_time": state.animation_time,
                             "bars_mean": sum(snapshot.logical.common.bars)/max(1, len(snapshot.logical.common.bars)),
                             "scene_allocation": renderer._target.allocation,

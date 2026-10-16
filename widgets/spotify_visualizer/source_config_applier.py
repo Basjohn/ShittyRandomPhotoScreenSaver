@@ -99,10 +99,6 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 
     descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
-    terrain_contrast_enabled = (
-        descriptor.mode_id == "shockwave_grid"
-        and float(kwargs.get("shockwave_grid_terrain_reactivity", _canonical("shockwave_grid_terrain_reactivity"))) > 0.0
-    )
     owns_spectrum_shaper = (
         descriptor.mode_id == "spectrum"
         or bool(descriptor.spectrum_shape_controls)
@@ -135,11 +131,9 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
                 kwargs.get(notch_key), _canonical(notch_key), minimum=3
             )
         resolved["_source_spectrum_shaping_enabled"] = False
-        resolved["_source_neon_terrain_contrast_enabled"] = False
         resolved["_source_analysis_notches"] = analysis_notches
         return resolved
     resolved = {**kwargs, "_source_spectrum_shaping_enabled": True}
-    resolved["_source_neon_terrain_contrast_enabled"] = terrain_contrast_enabled
     for suffix in SPECTRUM_SOURCE_SUFFIXES:
         owned_key = f"{descriptor.mode_id}_{suffix}"
         if owned_key in kwargs:
@@ -179,10 +173,6 @@ def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool
 
     if not isinstance(kwargs, Mapping):
         raise TypeError("visualizer source config must be a mapping")
-    if "_source_neon_terrain_contrast_enabled" in kwargs:
-        _require_engine_method(engine, "set_neon_terrain_contrast_enabled")(
-            kwargs["_source_neon_terrain_contrast_enabled"] is True
-        )
     if "_source_spectrum_shaping_enabled" in kwargs:
         # Mode-owned, explicit policy on the ONE shared BeatEngine. The engine
         # fences detached compute snapshots when this policy changes.

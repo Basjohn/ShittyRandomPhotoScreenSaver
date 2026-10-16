@@ -355,15 +355,16 @@ def _capture_shockwave_grid(
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
-    growth_enabled = float(parameters["shockwave_grid_terrain_reactivity"]) > 0.0
-    growth_gain = 0.0
-    growth_contrast = None
-    if growth_enabled:
-        growth_contrast = engine.get_neon_terrain_contrast()
-        if growth_contrast is None:
-            raise RuntimeError("Neon terrain growth has no configured contrast source")
+    reaction_enabled = (bool(parameters["shockwave_grid_terrain_reaction_enabled"])
+                        and float(parameters["shockwave_grid_terrain_reaction_strength"]) > 0.0
+                        and any(float(parameters[f"shockwave_grid_terrain_{part}"]) > 0.0
+                                for part in ("peaks", "pulses", "swell")))
+    reaction_gain = 0.0
+    reaction_spectrum = ()
+    if reaction_enabled:
         loudness, presence = engine.get_musical_level()
-        growth_gain = passage_ramp(intensity, 0.15) * musical_weight(loudness, presence)
+        reaction_gain = passage_ramp(intensity, 0.15) * musical_weight(loudness, presence)
+        reaction_spectrum = engine.get_pre_agc_analysis_spectrum()
     captured = _capture_spectrum_family(
         widget, engine, context, mode_id="shockwave_grid", frame_type=ShockwaveGridFrame,
         extra_parameters=parameters,
@@ -373,26 +374,26 @@ def _capture_shockwave_grid(
                            or (parameters["shockwave_grid_sun_enabled"]
                                and parameters["shockwave_grid_sun_orbit_enabled"]
                                and float(parameters["shockwave_grid_sun_orbit_speed"]) > 0.0)
-                           or (growth_enabled and runtime.terrain_growth_pending)),
+                           or (reaction_enabled and runtime.terrain_reaction_pending)),
         frame_fields={"events": events},
     )
     if captured is None:
         return None
     frame, extra = captured
-    growth = runtime.advance_terrain_growth(
-        extra["_quick_resolved_bars"], now_ts=context.now_ts, playing=context.playing,
+    reaction = runtime.advance_terrain_reaction(
+        reaction_spectrum, now_ts=context.now_ts, playing=context.playing,
         identity=(context.runtime_generation, context.engine_generation, context.activation_id),
         source_identity=(context.source_generation, context.source_activation_id),
         attack=float(parameters["shockwave_grid_terrain_growth_attack"]),
         release=float(parameters["shockwave_grid_terrain_growth_release"]),
-        enabled=growth_enabled,
-        musical_gain=growth_gain,
-        contrast=growth_contrast,
+        motion_speed=float(parameters["shockwave_grid_terrain_motion_speed"]),
+        enabled=reaction_enabled,
+        musical_gain=reaction_gain,
     )
-    if growth is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
+    if reaction is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
         return None
-    extra["_quick_mode_changed"] = bool(extra.get("_quick_mode_changed", False) or growth.changed)
-    return replace(frame, terrain_growth=growth.values), extra
+    extra["_quick_mode_changed"] = bool(extra.get("_quick_mode_changed", False) or reaction.changed)
+    return replace(frame, terrain_bands=reaction.bands, terrain_phase=reaction.phase), extra
 
 
 def _capture_spectrum_family(

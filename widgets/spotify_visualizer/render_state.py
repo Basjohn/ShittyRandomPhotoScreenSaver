@@ -314,14 +314,20 @@ class ShockwaveGridFrame(SpectrumFrame):
     aged on the logical clock at capture, oldest first, at most ``SHOCKWAVE_CAPACITY``."""
 
     events: tuple[tuple[float, float, float, float], ...] = ()
-    terrain_growth: tuple[float, ...] = (0.0,) * 8
+    # Terrain Reaction: the eased drive (0..1) of each shaper lane (Bass .. Treble) and the landforms' wander.
+    terrain_bands: tuple[float, ...] = (0.0,) * 5
+    terrain_phase: float = 0.0
 
     def __post_init__(self) -> None:
         SpectrumFrame.__post_init__(self)
-        growth = _float_tuple(self.terrain_growth, name="terrain growth")
-        if len(growth) != 8 or any(value < 0.0 or value > 1.0 for value in growth):
-            raise ValueError("terrain growth requires eight values within 0..1")
-        object.__setattr__(self, "terrain_growth", growth)
+        bands = _float_tuple(self.terrain_bands, name="terrain bands")
+        if len(bands) != 5 or any(value < 0.0 or value > 1.0 for value in bands):
+            raise ValueError("terrain reaction requires five lane drives within 0..1")
+        object.__setattr__(self, "terrain_bands", bands)
+        phase = float(self.terrain_phase)
+        if not math.isfinite(phase):
+            raise ValueError("terrain reaction phase must be finite")
+        object.__setattr__(self, "terrain_phase", phase)
 
     @property
     def mode_id(self) -> str:

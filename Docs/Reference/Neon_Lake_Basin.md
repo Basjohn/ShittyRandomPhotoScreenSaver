@@ -143,21 +143,37 @@ Audio cannot pump the fit, resize the target or move the water boundary.
 
 The preserved Shockwave onset ring admits each serial once, spaces events by passage intensity, caps capacity and ages
 on the existing logical clock. Water uses travelling crests and echo rings, with bounded displacement even when events
-overlap. Land has eight separate mode-owned growth envelopes with authored rise/settle times, static surface detail
-and frequency-driven lighting. Its targets use the existing passage ramp and musical level/presence gate, independently
-of water-onset admission and unchanged Spectrum bars. Silence releases growth even if source bars remain retained.
-Growth=0 freezes dry land geometry while its light can still react; the shallow wet fringe keeps its water waves. The renderer consumes
-immutable growth values; it does not simulate them. Disabled movement discards envelope work; re-enabling starts from
-zero on the existing capture clock. Sky, celestial body and bloom remain optional. All context-local resources retire
+overlap. Dry land keeps static surface detail and frequency-driven lighting, and optionally reshapes with the
+music (Terrain Reaction, below). Sky, celestial body and bloom remain optional. All context-local resources retire
 through the normal mode owner; unchanged shared consumers acquire no heightfield work.
 
-Active terrain growth also consumes eight mode-local spectral contrast factors. Verified
-audio commit derives shaped-bar-weighted soft raw-magnitude contrast before its private
-FFT storage is reused; an activation-owned lock publishes the preallocated slots together.
-Logical capture applies them to its existing region targets. Authored zero/mirrored shape,
-passage/presence gating and envelope timing remain authoritative. There is no extra FFT,
-full raw-spectrum tuple publication or per-frame container, and other modes do not enable
-this consumer. A failed input leaves the preceding committed factors intact and fails loudly.
+### Terrain Reaction (2026-10-16; replaces Growth and its eight-region contrast consumer)
+
+Its own **Terrain Reaction** bucket: **React to Music** (off by default; presets choose), **Strength** (a share of
+Terrain Height), three amounts — **Pulses** (each admitted onset sends a broad ground roll through the land from its
+origin, heave then softer sink, `tanh`-bounded when hits overlap), **Peaks** (landforms answer their lane of the
+spectrum with signed patterns, so some places rise and others sink and the land changes shape) and **Swell** (a broad
+slow rise and fall) — the **shaper**, **Motion Speed**, **Rise** and **Settle**. The shaper is the shared shape editor
+laid along the land's height, shoreline (left) to the authored summit (right): its curve is how strongly each
+elevation deforms (it biases all three amounts), its notches split that axis into five frequency lanes (Bass ..
+Treble: which part of the spectrum moves which elevation) and its arrows weight each lane. It is stored as one record
+(`shockwave_grid_terrain_shaper`: nodes, notches, lanes; admitted part by part in
+`rendering/gl_programs/neon_terrain_reaction.py`) and baked once per change into 32-sample elevation tables.
+
+Logically, the analysis spectrum (log-spaced, low to high, already published for other consumers) splits into five
+lane energies by equal stretches. Each lane's drive is mostly how far it rises above its own recent level (a 4 s
+follower; a relative envelope, not a noise floor) and a little its capped share of the whole, times the existing
+passage-ramp x musical-weight gate; Rise/Settle ease it on the capture clock. A sustained wall of bass settles to a
+modest share and a rising lane over it takes the lead, so no band pins or drowns the land. The landforms' wander phase
+advances only with the music's drive (Motion Speed sets its rate): silence holds the land still. Disabled, nothing is
+read or kept and re-enabling starts from rest; generation/source/clock changes and retirement reset it.
+
+The deformation lives in the single height owner (`basinLandHeight`), so vertices, glass normals (central
+differences), flat-shaded normals, the skyline pass, the depth prepass and body visibility all follow it; the
+skyline is given the event count it needs for Pulses. It is zero on water and fades in over the shore band, so the
+water boundary never moves; it fades with the distant continuation's detail; land never sinks below 30% of its
+authored height and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
+settings (never pumped by audio). The renderer only uploads amounts, five drives, the phase and the baked tables.
 
 ## Glass, celestial body and light
 
@@ -254,8 +270,8 @@ alpha, so alpha 0 is the earlier look: the water lines' emission moves from thei
 Water Line Glow, scaled by its strength (1 is the shared Surface Glow, and nothing glows while Surface Glow
 is zero); beat stars move from the Stars colour toward Star Glow Colour, in the sky and in their emission,
 with their brightness still from Star Glow Intensity. Sky owns atmosphere/base stars; Celestial owns the body appearance,
-pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; Growth Timing
-(`terrain_motion`) owns the existing timing rows. Spec-owned conditional controls remain
+pose and orbit; Render owns water reflection; Waves owns Water Detail and Flow; Terrain Reaction owns the land's
+musical reshaping and its timing. Spec-owned conditional controls remain
 hidden when their prerequisites are disabled, retain their saved value while hidden, and
 reappear on re-enablement. The Glow bucket is closed by default. The passive celestial halo
 is enabled by default, while Starscape Beat is opt-in. The optional Celestial Rim

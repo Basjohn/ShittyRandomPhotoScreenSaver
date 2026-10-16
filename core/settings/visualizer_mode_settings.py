@@ -393,6 +393,7 @@ _BASIN_GLASS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bit
 _BASIN_PLAIN_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&2 and not bits&4)
 _BASIN_GLASS_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&6==6)
 _BASIN_BODY = ("shockwave_grid_sun_enabled", True)
+_TERRAIN_REACTION = ("shockwave_grid_terrain_reaction_enabled", True)
 
 
 _SHOCKWAVE_GRID = ModeSettings(
@@ -401,10 +402,10 @@ _SHOCKWAVE_GRID = ModeSettings(
         Bucket("terrain", "Terrain", "Raise mountains and islands; exact base-level regions are the lake's water."),
         Bucket("appearance", "Appearance",
                "Terrain and water colours, including the shared wave/ridge highlight colour and alpha."),
-        Bucket("waves", "Waves",
-               "Water height, motion, flow and idle swell; land growth is a separate musical response."),
-        Bucket("terrain_motion", "Growth Timing",
-               "Rise and settle times for the Terrain Growth control under Waves.", advanced=True),
+        Bucket("waves", "Waves", "Water height, motion, flow and idle swell."),
+        Bucket("reaction", "Terrain Reaction",
+               "Let the music reshape the land for a moment: ground waves from each hit, landforms that rise "
+               "and sink with their part of the spectrum, and an optional slow swell. The shoreline never moves."),
         Bucket("response", "Frequency Response",
                "This independent audio profile routes frequency lanes into water and ridge energy; it does not author terrain.",
                advanced=True),
@@ -438,16 +439,37 @@ _SHOCKWAVE_GRID = ModeSettings(
                "How high musical waves lift the water surface.", bucket="waves"),
         Slider("shockwave_grid_wave_speed", "Wave Speed:", 0.0, 1.0,
                "How fast musical waves propagate across the water.", bucket="waves"),
-        Slider("shockwave_grid_terrain_reactivity", "Terrain Growth:", 0.0, 1.0,
-               "Strength of the land's own gradual musical growth, independent of travelling water waves.", bucket="waves"),
-        Slider("shockwave_grid_terrain_growth_attack", "Growth Rise:", 0.08, 2.0,
-               "Seconds for solid land to grow toward the musical body.", bucket="terrain_motion", suffix="s"),
-        Slider("shockwave_grid_terrain_growth_release", "Growth Settle:", 0.2, 4.0,
-               "Seconds for solid land to settle after the musical body recedes.", bucket="terrain_motion", suffix="s"),
+
         Slider("shockwave_grid_scroll", "Water Flow:", 0.0, 1.0,
                "Slow surface flow across the water, without moving authored terrain.", bucket="waves"),
         Slider("shockwave_grid_idle", "Idle Swell:", 0.0, 1.0,
                "Subtle water swell between musical waves.", bucket="waves"),
+        Toggle("shockwave_grid_terrain_reaction_enabled", "React to Music:", "Reshape the land with the music",
+               "Off keeps the land exactly as authored, with no reaction work at all.", bucket="reaction"),
+        Slider("shockwave_grid_terrain_reaction_strength", "Strength:", 0.0, 1.0,
+               "How far the land moves, as a share of Terrain Height.", bucket="reaction",
+               when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_pulses", "Pulses:", 0.0, 1.0,
+               "Ground waves: each hit sends a broad roll through the land, rising and sinking as it passes.",
+               bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_peaks", "Peaks:", 0.0, 1.0,
+               "Landforms answer their part of the spectrum: bass heaves the low ground, mids roll the slopes, "
+               "treble lifts the peaks. Each part is weighed by its share and its change, so no one band drowns "
+               "the rest.", bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_swell", "Swell:", 0.0, 1.0,
+               "A broad, slow rise and fall across the whole land.", bucket="reaction", when=_TERRAIN_REACTION),
+        Custom("terrain_shaper", "reaction", "ui.tabs.media.shockwave_grid_builder:build_reaction_shaper_section",
+               "ui.tabs.media.shockwave_grid_settings_binding:load_reaction_shaper_section",
+               "ui.tabs.media.shockwave_grid_settings_binding:collect_reaction_shaper_section",
+               keys=("shockwave_grid_terrain_shaper",)),
+        Slider("shockwave_grid_terrain_motion_speed", "Motion Speed:", 0.0, 1.0,
+               "How quickly the reshaping wanders while the music plays; it holds still in silence.",
+               bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_growth_attack", "Rise:", 0.08, 2.0,
+               "Seconds for the land to answer the music.", bucket="reaction", suffix="s", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_growth_release", "Settle:", 0.2, 4.0,
+               "Seconds for the land to settle back after the music eases.", bucket="reaction", suffix="s",
+               when=_TERRAIN_REACTION),
         Custom("shape", "response", build="ui.tabs.media.shockwave_grid_builder:build_response_section",
                load="ui.tabs.media.shockwave_grid_settings_binding:load_response_section",
                collect="ui.tabs.media.shockwave_grid_settings_binding:collect_response_section",

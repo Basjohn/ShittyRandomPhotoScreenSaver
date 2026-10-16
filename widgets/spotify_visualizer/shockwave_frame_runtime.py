@@ -34,11 +34,35 @@ from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRunti
 _Event = tuple[float, float, float, float]
 
 
+# Terrain Reaction. Each lane's drive is mostly how far its energy rises above its own recent level
+# (novelty) and a little its share of the whole (so a lane only ever claims its part), times the
+# music's weight; a sustained wall of bass settles to a modest steady drive instead of pinning.
+REACTION_SLOW_TAU = 4.0       # seconds: a lane's recent level
+REACTION_SUSTAIN = 0.3        # the share part's weight
+REACTION_NOVELTY = 0.7        # the rise part's weight
+REACTION_NOVELTY_GAIN = 2.4
+REACTION_MOTION = (0.15, 1.35)   # phase units per second at Motion Speed 0 and 1, at full drive
+
+
 @dataclass(frozen=True, slots=True)
-class TerrainGrowthResolved:
-    values: tuple[float, ...]
+class TerrainReactionResolved:
+    bands: tuple[float, ...]
+    phase: float
     changed: bool
     pending: bool
+
+
+def reaction_lane_targets(energies, recent, musical_gain: float) -> tuple[float, ...]:
+    """Each lane's drive target (0..1) from its energy, its recent level and the music's weight."""
+    total = sum(energies)
+    lanes = len(energies)
+    targets = []
+    for energy, level in zip(energies, recent):
+        share = energy / total if total > 1e-9 else 0.0
+        rise = max(0.0, energy / (level + 0.05) - 1.0)
+        drive = REACTION_SUSTAIN * min(1.0, lanes * share) + REACTION_NOVELTY * math.tanh(REACTION_NOVELTY_GAIN * rise)
+        targets.append(max(0.0, min(1.0, musical_gain * drive)))
+    return tuple(targets)
 
 
 class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
@@ -50,7 +74,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._event_serial = 0
         self._onset_serial = 0
         self._last_event_ts = float("-inf")
-        self._reset_terrain_growth()
+        self._reset_terrain_reaction()
 
     def reset(self) -> None:
         super().reset()
@@ -58,84 +82,86 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._event_serial = 0
         self._onset_serial = 0
         self._last_event_ts = float("-inf")
-        self._reset_terrain_growth()
+        self._reset_terrain_reaction()
 
-    def _reset_terrain_growth(self) -> None:
-        self._terrain_growth = (0.0,) * 8
-        self._terrain_targets = (0.0,) * 8
+    def _reset_terrain_reaction(self) -> None:
+        from rendering.gl_programs.neon_terrain_reaction import REACTION_LANES
+
+        lanes = len(REACTION_LANES)
+        self._terrain_bands = (0.0,) * lanes
+        self._terrain_recent: tuple[float, ...] | None = None
+        self._terrain_phase = 0.0
         self._terrain_last_ts = None
         self._terrain_identity = None
-        self._terrain_growth_pending = False
+        self._terrain_pending = False
 
     @property
-    def terrain_growth_pending(self) -> bool:
-        """A real unfinished growth/release step needs the existing logical wake owner."""
-        return self._terrain_growth_pending
+    def terrain_reaction_pending(self) -> bool:
+        """An unfinished rise/settle or a wandering phase needs the existing logical wake owner."""
+        return self._terrain_pending
 
     @retirement_fenced
-    def advance_terrain_growth(self, bars, *, now_ts: float, playing: bool,
-                               identity: tuple[int, int, int], source_identity: tuple[int, int],
-                               attack: float, release: float, enabled: bool = True,
-                               musical_gain: float = 1.0, contrast=None) -> TerrainGrowthResolved | None:
-        """Eight spatial envelopes on the capture clock; no paused Spectrum idle music.
+    def advance_terrain_reaction(self, spectrum, *, now_ts: float, playing: bool,
+                                 identity: tuple[int, int, int], source_identity: tuple[int, int],
+                                 attack: float, release: float, motion_speed: float, enabled: bool = True,
+                                 musical_gain: float = 1.0) -> TerrainReactionResolved | None:
+        """Five lane drives eased on the capture clock, and the landforms' wander phase.
 
-        Spatial means integrate overlapping bar intervals, including profiles shorter
-        than eight bars. Target hysteresis retains tiny fluctuations; exponential
-        attack/release remains independent of event ages and capture partitioning.
+        The phase advances only while the music drives the land, so silence holds the land still.
+        Disabled, nothing is kept or computed; re-enabling starts from rest.
         """
+        from rendering.gl_programs.neon_terrain_reaction import reaction_band_energies
+
         now = float(now_ts)
         if not math.isfinite(now):
-            raise ValueError("terrain growth capture time must be finite")
+            raise ValueError("terrain reaction capture time must be finite")
+        previous = (self._terrain_bands, self._terrain_phase)
         if not enabled:
-            # Movement=0 makes envelopes invisible. Drop their targets/time rather
-            # than doing hidden musical work or resuming with accumulated growth.
-            # The setting edge itself publishes the visible geometry change.
             if self._terrain_last_ts is not None:
-                self._reset_terrain_growth()
-            return TerrainGrowthResolved(self._terrain_growth, False, False)
+                self._reset_terrain_reaction()
+            return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, False, False)
         source_ready = (source_identity == identity[1:] and all(value >= 0 for value in identity))
         token = (identity, source_identity)
-        previous = self._terrain_growth
         if token != self._terrain_identity or (self._terrain_last_ts is not None and now < self._terrain_last_ts):
-            self._reset_terrain_growth()
+            self._reset_terrain_reaction()
             self._terrain_identity = token
         if not source_ready:
-            self._reset_terrain_growth()
+            self._reset_terrain_reaction()
             self._terrain_identity = token
             self._terrain_last_ts = now
-            return TerrainGrowthResolved(self._terrain_growth, previous != self._terrain_growth, False)
+            changed = previous != (self._terrain_bands, self._terrain_phase)
+            return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, changed, False)
         musical_gain = float(musical_gain)
         if not math.isfinite(musical_gain) or not 0.0 <= musical_gain <= 1.0:
-            raise ValueError("terrain growth musical gain must be finite within 0..1")
-        targets = [0.0] * 8
-        if playing and musical_gain > 0.0 and bars:
-            count = len(bars)
-            for region in range(8):
-                lo, hi = region * count / 8.0, (region + 1) * count / 8.0
-                for index in range(math.floor(lo), min(count, math.ceil(hi))):
-                    overlap = max(0.0, min(hi, index + 1) - max(lo, index))
-                    level = float(bars[index])
-                    if not math.isfinite(level):
-                        raise ValueError("terrain growth bars must be finite")
-                    targets[region] += musical_gain * max(0.0, min(1.0, level)) * overlap / (hi - lo)
-        if contrast is not None and playing and musical_gain > 0.0:
-            contrast.apply_to(targets)
-        targets = tuple(old if target > 0.0 and abs(target - old) < 0.015 else target
-                        for old, target in zip(self._terrain_targets, targets))
+            raise ValueError("terrain reaction musical gain must be finite within 0..1")
+        attack, release, speed = float(attack), float(release), float(motion_speed)
+        if not all(math.isfinite(v) for v in (attack, release, speed)) or attack <= 0.0 or release <= 0.0:
+            raise ValueError("terrain reaction rise/settle must be finite positive seconds")
         dt = 0.0 if self._terrain_last_ts is None else max(0.0, now - self._terrain_last_ts)
-        attack, release = float(attack), float(release)
-        if not math.isfinite(attack) or not math.isfinite(release) or attack <= 0.0 or release <= 0.0:
-            raise ValueError("terrain growth attack/release must be finite positive seconds")
-        values = []
-        for value, target in zip(self._terrain_growth, targets):
+        energies = reaction_band_energies(spectrum) if playing else (0.0,) * len(self._terrain_bands)
+        if any(not math.isfinite(value) for value in energies):
+            raise ValueError("terrain reaction spectrum must be finite")
+        if self._terrain_recent is None:
+            self._terrain_recent = energies
+        targets = reaction_lane_targets(energies, self._terrain_recent, musical_gain if playing else 0.0)
+        if dt > 0.0:
+            keep = math.exp(-dt / REACTION_SLOW_TAU)
+            self._terrain_recent = tuple(level * keep + energy * (1.0 - keep)
+                                         for level, energy in zip(self._terrain_recent, energies))
+        bands = []
+        for value, target in zip(self._terrain_bands, targets):
             tau = attack if target > value else release
-            advanced = target + (value - target) * math.exp(-dt / tau)
-            values.append(target if dt > 0.0 and abs(advanced - target) < 0.0001 else advanced)
-        self._terrain_growth = tuple(values)
-        self._terrain_targets = targets
+            advanced = target + (value - target) * math.exp(-dt / tau) if dt > 0.0 else value
+            bands.append(target if dt > 0.0 and abs(advanced - target) < 0.0001 else advanced)
+        drive = sum(bands) / len(bands)
+        low, high = REACTION_MOTION
+        rate = (low + (high - low) * max(0.0, min(1.0, speed))) * drive
+        self._terrain_phase = math.fmod(self._terrain_phase + dt * rate, 1000.0 * math.pi)
+        self._terrain_bands = tuple(bands)
         self._terrain_last_ts = now
-        self._terrain_growth_pending = any(abs(a - b) >= 0.0001 for a, b in zip(values, targets))
-        return TerrainGrowthResolved(self._terrain_growth, previous != self._terrain_growth, self._terrain_growth_pending)
+        self._terrain_pending = rate > 0.0 or any(abs(a - b) >= 0.0001 for a, b in zip(bands, targets))
+        changed = previous != (self._terrain_bands, self._terrain_phase)
+        return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, changed, self._terrain_pending)
 
     @property
     def onset_serial(self) -> int:
