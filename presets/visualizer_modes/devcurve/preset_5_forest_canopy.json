@@ -1,0 +1,200 @@
+{
+  "mode": "devcurve",
+  "name": "Preset 5 (Forest Canopy)",
+  "preset_index": 4,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "devcurve",
+  "description": "Greens from deep pine to fresh leaf rolling over each other.",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "devcurve_active_layer": "transients",
+        "devcurve_layer_bass_shape_nodes": [
+          [
+            0.0,
+            0.34
+          ],
+          [
+            0.25,
+            0.52
+          ],
+          [
+            0.5,
+            0.36
+          ],
+          [
+            0.75,
+            0.52
+          ],
+          [
+            1.0,
+            0.34
+          ]
+        ],
+        "devcurve_layer_vocals_shape_nodes": [
+          [
+            0.0,
+            0.2
+          ],
+          [
+            0.5,
+            0.28
+          ],
+          [
+            1.0,
+            0.2
+          ]
+        ],
+        "devcurve_layer_mids_shape_nodes": [
+          [
+            0.0,
+            0.26
+          ],
+          [
+            0.3,
+            0.38
+          ],
+          [
+            0.7,
+            0.38
+          ],
+          [
+            1.0,
+            0.26
+          ]
+        ],
+        "devcurve_layer_transients_shape_nodes": [
+          [
+            0.0,
+            0.08
+          ],
+          [
+            0.5,
+            0.12
+          ],
+          [
+            1.0,
+            0.08
+          ]
+        ],
+        "devcurve_base_level": 0.3,
+        "devcurve_motion_power": 1.5,
+        "devcurve_idle_motion": 0.28,
+        "devcurve_idle_speed": 0.07,
+        "devcurve_smoothness": 0.5,
+        "devcurve_layer_bass_enabled": true,
+        "devcurve_layer_bass_color": [
+          10,
+          50,
+          25,
+          230
+        ],
+        "devcurve_layer_bass_alpha": 0.95,
+        "devcurve_layer_bass_power": 2.2,
+        "devcurve_layer_bass_offset": 0.0,
+        "devcurve_layer_bass_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_bass_outline_width": 0.006,
+        "devcurve_layer_bass_order": 1,
+        "devcurve_layer_vocals_enabled": true,
+        "devcurve_layer_vocals_color": [
+          100,
+          180,
+          80,
+          220
+        ],
+        "devcurve_layer_vocals_alpha": 0.8,
+        "devcurve_layer_vocals_power": 2.2,
+        "devcurve_layer_vocals_offset": 0.035,
+        "devcurve_layer_vocals_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_vocals_outline_width": 0.006,
+        "devcurve_layer_vocals_order": 3,
+        "devcurve_layer_mids_enabled": true,
+        "devcurve_layer_mids_color": [
+          40,
+          110,
+          50,
+          220
+        ],
+        "devcurve_layer_mids_alpha": 0.75,
+        "devcurve_layer_mids_power": 1.5,
+        "devcurve_layer_mids_offset": 0.02,
+        "devcurve_layer_mids_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_mids_outline_width": 0.006,
+        "devcurve_layer_mids_order": 2,
+        "devcurve_layer_transients_enabled": true,
+        "devcurve_layer_transients_color": [
+          190,
+          240,
+          140,
+          230
+        ],
+        "devcurve_layer_transients_alpha": 0.4,
+        "devcurve_layer_transients_power": 1.6,
+        "devcurve_layer_transients_offset": 0.05,
+        "devcurve_layer_transients_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_transients_outline_width": 0.006,
+        "devcurve_layer_transients_order": 4,
+        "devcurve_ghosting_enabled": true,
+        "devcurve_ghost_alpha": 0.65,
+        "devcurve_ghost_decay": 0.4,
+        "devcurve_foreground_shadow_enabled": true,
+        "devcurve_foreground_shadow_alpha": 0.45,
+        "devcurve_foreground_shadow_darken": 0.9,
+        "devcurve_foreground_shadow_offset": 0.2,
+        "devcurve_foreground_specular_enabled": true,
+        "devcurve_foreground_specular_alpha": 0.99,
+        "devcurve_foreground_specular_width": 0.055,
+        "devcurve_foreground_specular_offset": 0.07,
+        "devcurve_foreground_specular_crest_bias": 1.76,
+        "devcurve_bar_fill_color": [
+          12,
+          12,
+          12,
+          230
+        ],
+        "devcurve_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_bar_border_opacity": 1.0,
+        "devcurve_dynamic_floor": true,
+        "devcurve_manual_floor": 0.15,
+        "devcurve_dynamic_range_enabled": false,
+        "devcurve_agc_strength": 0.14,
+        "devcurve_input_gain": 1.1,
+        "devcurve_kick_lane_gain": 1.0,
+        "devcurve_transient_pulse_gain": 1.0,
+        "devcurve_transient_clamp": 1.61,
+        "devcurve_audio_block_size": 256,
+        "devcurve_adaptive_sensitivity": false,
+        "devcurve_sensitivity": 1.35,
+        "devcurve_bar_count": 35,
+        "devcurve_rainbow_enabled": false,
+        "devcurve_rainbow_speed": 0.5,
+        "mode": "devcurve"
+      }
+    }
+  }
+}
