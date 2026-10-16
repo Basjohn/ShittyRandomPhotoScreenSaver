@@ -33,7 +33,7 @@ def test_sky_opacity_has_no_independent_angular_cut_and_outline_never_revives_fa
     assert 'float alpha = clamp(uSkyColor.a * uSkyStrength, 0.0, 1.0);' in sky
     assert 'float horizonAtmosphere' not in sky
     assert 'float broken = smoothstep(0.33, 0.66, gaps);' in sky
-    assert 'float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;' in sky
+    assert 'float stars = basinStarField(ray, region, tone) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;' in sky
     assert 'float starVisibility=1.0-basinCelestialSkyMask(eye,ray);' in land
     assert 'vContourFade=basinDistanceFade(aUv);' in land
     assert 'vContourFade=max(' not in land

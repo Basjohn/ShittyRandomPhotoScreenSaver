@@ -72,4 +72,8 @@ def test_midstrength_beat_now_selects_actual_visible_panorama_star_cells():
     assert all(0.0<c[2]<=1.0 for c in cells)
     assert abs(cells[0][0]-cells[1][0])>25
     assert not _framed_stars(((0.08,0.25,-0.3,.2),),.35,.07)
-    assert all(b[2]<a[2] for a,b in zip(cells,_framed_stars(((1.2,.25,-.3,.55),),.35,.07)))
+    # Stars swell in over the attack, then fade: a younger star is still rising, an older one is past its peak.
+    peak=_framed_stars(((0.3,.25,-.3,.55),),.35,.07)
+    assert all(a[2]<p[2] for a,p in zip(cells,peak))
+    assert all(b[2]<p[2] for p,b in zip(peak,_framed_stars(((1.2,.25,-.3,.55),),.35,.07)))
+    assert _framed_stars(((0.0,.25,-.3,.55),),.35,.07)[0][2]==0.0

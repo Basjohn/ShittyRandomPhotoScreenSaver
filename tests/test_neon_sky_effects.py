@@ -58,3 +58,28 @@ def test_cloud_and_nebula_drift_move_with_the_animation_clock_only_when_set(targ
         capture.render(host, _scene(10.0, **still))
         assert _changed(capture.render(host, _scene(10.0, **still)), capture.render(host, _scene(60.0, **still))) == 0
         assert _changed(capture.render(host, _scene(10.0, **moving)), capture.render(host, _scene(60.0, **moving))) > 200
+
+
+def test_nebula_position_turns_it_around_the_sky(target):
+    capture, host = target
+    on = {"shockwave_grid_nebula_enabled": True, "shockwave_grid_nebula_intensity": 1.0}
+    capture.render(host, _scene(**on))
+    assert _changed(capture.render(host, _scene(**on)),
+                    capture.render(host, _scene(**on, shockwave_grid_nebula_position=0.5))) > 2000
+
+
+def test_beat_stars_burst_larger_with_star_size(target):
+    capture, host = target
+    stars = {"shockwave_grid_starscape_beat": True, "shockwave_grid_star_glow_strength": 1.4}
+
+    def peak(size):
+        frame = _scene(**stars, shockwave_grid_star_size=size)
+        state = frame.logical.mode_state
+        return replace(frame, logical=replace(frame.logical, mode_state=replace(
+            state, events=((0.3, 0.25, -0.3, 1.0),))))
+
+    # The same beat (its water ripples alike); only the stars' bursts differ, reaching further as Star Size rises.
+    capture.render(host, peak(0.0))
+    smallest = capture.render(host, peak(0.0))
+    medium, large = _changed(smallest, capture.render(host, peak(0.5))), _changed(smallest, capture.render(host, peak(1.0)))
+    assert 0 < medium < large and large > 2 * medium

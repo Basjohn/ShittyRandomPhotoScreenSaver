@@ -24,7 +24,7 @@ def test_starscape_beat_is_opt_in_canonical_spec_value():
     assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["shockwave_grid_starscape_beat"], bool)
 
 def test_three_spaced_stars_per_strong_beat_with_slower_release():
-    events = ((0.05,0.25,-0.63,1.4),)
+    events = ((0.3,0.25,-0.63,1.4),)   # past the swell-in (STARSCAPE_BEAT_ATTACK), so later is fading
     first=_framed_stars(events,.35,.07)
     assert len(first)==3
     assert all(a[2]>0 for a in first)

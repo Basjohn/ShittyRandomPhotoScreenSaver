@@ -226,11 +226,12 @@ class QuickShockwaveGridRenderer:
                        float(parameter(parameters,"shockwave_grid_cloud_opacity")) if clouds else 0.0)
         drift=0.03*float(parameter(parameters,"shockwave_grid_cloud_drift"))*float(animation_time)
         gl.glUniform2f(uniforms["uCloudDrift"],drift,0.37*drift)
-        gl.glUniform2f(uniforms["uNebula"],float(parameter(parameters,"shockwave_grid_nebula_intensity"))
+        gl.glUniform4f(uniforms["uNebula"],float(parameter(parameters,"shockwave_grid_nebula_intensity"))
                        if bool(parameter(parameters,"shockwave_grid_nebula_enabled")) else 0.0,
-                       float(parameter(parameters,"shockwave_grid_nebula_scale")))
-        gl.glUniform1f(uniforms["uNebulaTurn"],0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))
-                       *float(animation_time))
+                       *(float(parameter(parameters,"shockwave_grid_nebula_"+part))
+                         for part in ("scale","filaments","dust")))
+        gl.glUniform1f(uniforms["uNebulaTurn"],2.0*math.pi*float(parameter(parameters,"shockwave_grid_nebula_position"))
+                       +0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))*float(animation_time))
         return position
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
@@ -287,9 +288,10 @@ class QuickShockwaveGridRenderer:
                                float(parameter(parameters,"shockwave_grid_celestial_glow_strength"))
                                if bool(parameter(parameters,"shockwave_grid_celestial_glow_enabled")) else 0.0,
                                float(parameter(parameters,"shockwave_grid_celestial_glow_reactivity")))
-                gl.glUniform2f(sky_uniforms["uStarGlow"],
+                gl.glUniform3f(sky_uniforms["uStarGlow"],
                                float(parameter(parameters,"shockwave_grid_star_glow_strength")),
-                               float(parameter(parameters,"shockwave_grid_star_glow_reactivity")))
+                               float(parameter(parameters,"shockwave_grid_star_glow_reactivity")),
+                               float(parameter(parameters,"shockwave_grid_star_size")))
                 star_bursts = starscape_beat_cells(
                     mode_state.events, tilt, turn,
                     camera=basin_camera(half_width, maximum),

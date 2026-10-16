@@ -88,17 +88,42 @@ def test_cloud_light_comes_from_the_light_side(probe):
     assert np.abs(toward[:, :3] - away[:, :3]).max() > 0.05
 
 
-def test_nebula_is_additive_two_coloured_light_that_its_intensity_scales(probe):
-    rng = random.Random(4)
-    rays = [r for r in _rays(rng, 256)] + [r for r in _rays(rng, 128, up=False)]
+def _nebula(probe, rays, nebula, out="vec4(n.rgb, n.a)", focus=(0.0, 0.0, 0.0)):
+    body = ("vec4 a = arg(0); float region; vec4 n = skyNebula(a.xyz, vec3(1.0, 0.1, 0.4), vec3(0.1, 0.4, 1.0), vec4("
+            + ",".join(map(str, nebula)) + "), vec3(" + ",".join(map(str, focus)) + "), 5u, 5, region); FragColor = " + out + ";")
+    return probe.run(body, [[r] for r in rays], DECL)
 
-    def nebula(intensity, scale=0.5):
-        return probe.run("vec4 a = arg(0); FragColor = vec4(skyNebula(a.xyz, vec3(1.0, 0.1, 0.4), vec3(0.1, 0.4, 1.0), "
-                         f"vec2({intensity}, {scale}), 5u, 4), 1.0);", [[r] for r in rays], DECL)[:, :3]
-    off, half, full = nebula(0.0), nebula(0.5), nebula(1.0)
-    assert np.all(off == 0.0)
-    assert np.allclose(half, 0.5 * full, atol=1e-6)
-    assert full.max() > 0.1 and np.all(full >= 0.0)
-    lit = full[full.sum(axis=1) > 0.05]
-    assert (lit[:, 0] > lit[:, 2]).any() and (lit[:, 2] > lit[:, 0]).any(), "both colours show"
-    assert np.abs(nebula(1.0, 0.1) - full).max() > 0.05, "scale changes the pattern"
+
+def test_nebula_is_regions_of_two_coloured_light_that_intensity_scales(probe):
+    rng = random.Random(4)
+    rays = _rays(rng, 768) + _rays(rng, 256, up=False)
+    assert np.all(_nebula(probe, rays, (0.0, 0.5, 0.5, 0.5)) == 0.0)
+    full, half = _nebula(probe, rays, (1.0, 0.5, 0.5, 0.0)), _nebula(probe, rays, (0.5, 0.5, 0.5, 0.0))
+    assert np.allclose(half[:, :3], 0.5 * full[:, :3], atol=1e-6)
+    assert np.all(full >= 0.0) and np.all(full[:, 3] == 0.0), "no dust, nothing absorbed"
+    glow = full[:, :3].sum(axis=1)
+    # Regions of gas with dark space between them, not a fill over the whole sky.
+    assert 0.1 < (glow > 0.02).mean() < 0.8 and (glow == 0.0).mean() > 0.1
+    region = _nebula(probe, rays, (1.0, 0.5, 0.5, 0.0), out="vec4(region)")[:, 0]
+    assert np.all((region >= 0.0) & (region <= 1.0)) and np.all(glow[region == 0.0] == 0.0)
+    lit = full[glow > 0.05]
+    assert (lit[:, 0] > lit[:, 2]).any() and (lit[:, 2] > lit[:, 0]).any(), "rim and core both show"
+    assert np.abs(_nebula(probe, rays, (1.0, 0.1, 0.5, 0.0)) - full).max() > 0.05, "scale changes the pattern"
+    assert np.abs(_nebula(probe, rays, (1.0, 0.5, 1.0, 0.0)) - full).max() > 0.05, "filaments change the gas"
+
+
+def test_nebula_dust_absorbs_and_only_ever_dims(probe):
+    rays = _rays(random.Random(8), 768)
+    clear, dusty = _nebula(probe, rays, (1.0, 0.5, 0.5, 0.0)), _nebula(probe, rays, (1.0, 0.5, 0.5, 1.0))
+    assert dusty[:, 3].max() > 0.3 and np.all((dusty[:, 3] >= 0.0) & (dusty[:, 3] <= 1.0))
+    assert np.all(dusty[:, :3] <= clear[:, :3] + 1e-6)
+    assert (dusty[:, :3].sum(axis=1) < clear[:, :3].sum(axis=1) - 0.02).any()
+
+
+def test_nebula_gathers_around_its_focus(probe):
+    rays = _rays(random.Random(12), 1024) + _rays(random.Random(13), 512, up=False)
+    focus = (0.0, 0.33, -0.944)
+    glow = _nebula(probe, rays, (1.0, 0.5, 0.5, 0.0), focus=focus)[:, :3].sum(axis=1)
+    toward = np.asarray(rays) @ np.asarray(focus)
+    assert glow[toward > 0.6].mean() > 2.0 * glow[toward < -0.6].mean()
+    assert np.all(glow[toward < -0.9] < glow.max()), "and thins away from it"

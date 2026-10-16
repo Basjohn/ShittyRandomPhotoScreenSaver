@@ -288,13 +288,27 @@ They come from the shared sky library `rendering/gl_programs/scene3d_sky.py` (la
 Scene3D integer hash, `skyClouds`, `skyNebula`, each with a CPU mirror proved equal on the GPU), so another 3D mode can
 take the same sky without copying it. **Volumetric Clouds** replace the flat cloud bands while on: Coverage, Softness,
 Scale, Opacity and Drift, shaded from the Cloud colour toward the Sun/Moon side with a cheap look-ahead toward the
-light. **Nebula** adds two-coloured emission light (Intensity, Scale, Drift, Nebula Colour A/B) behind the clouds.
-Drift is the shared animation clock only: cloud drift slides the cloud plane, nebula drift turns the nebula about the
-vertical; at zero the sky is still, and no drift asks for frames on its own. The visible sky takes the full octave
-counts; reflections, which glass samples several times per fragment and roughness blurs, take two octaves through the
-same functions (`basinSkyBackground(..., detail)`). Measured at 684×418 with GL_TIME_ELAPSED (GPU shared with other
-work): plain 0.256 ms, clouds 0.288, nebula 0.322, both 0.357 ms median per frame; full-octave reflections had cost
-1.128 ms for both. No new render target, pass, timer or texture is admitted.
+light. **Nebula** (rebuilt 2026-10-17 after operator reference photographs: the Bubble and Veil nebulae, a
+cyan-cored nebula with red filaments, soft violet star clouds) is emission gas in regions with dark space between
+them, gathered toward the sky the card faces above the far shore: warped, billowing gas that burns from **Nebula Rim
+Colour** to **Nebula Core Colour** and toward white at its densest, ridged bright **Filaments** (soft gas at 0, thin
+strands at 1), and **Dust** lanes that absorb the stars and sky behind them. Intensity, Detail, **Position** (where
+around the sky it sits) and Drift complete it. Highlights roll off rather than clip, and the octave sums turn each
+octave against the last so the lattice never shows as blocks. Inside a nebula the ordinary star field crowds (up to
+three times as many stars) and takes on the nebula's colours. Drift is the shared animation clock only: cloud drift
+slides the cloud plane, nebula drift turns the nebula about the vertical; at zero the sky is still, and no drift asks
+for frames on its own. The visible sky takes the full detail; reflections, which glass samples five times per
+fragment and roughness blurs, take two-octave clouds and only the nebula's broad gas and colour
+(`basinSkyBackground(eye, ray, visibility, detail)`). Measured at 684×418 with GL_TIME_ELAPSED, flushed per frame
+(GPU 74-98% busy with other work, 2760 MHz): plain 0.262 ms, clouds 0.294, nebula 0.361, both 0.405 ms median; the
+nebula with full reflections had cost 0.858 ms. No new render target, pass, timer or texture is admitted.
+
+**Beat stars** peak as diamond starbursts rather than dots: a sharp diamond point, four spikes that taper to nothing
+inside a faint sheath, a soft halo and, toward the top of **Star Size**, four shorter diagonals. Star Size sets how far
+the spikes reach at the peak (a small diamond at 0, about 36 px spikes at 1), and the burst draws back in as the star
+fades. Each star swells in over `STARSCAPE_BEAT_ATTACK` (0.2 s) instead of switching on, so one beat's stars rise while
+the last beat's fade. A burst shows by the lesser of its own star's and the pixel's clearance of the solid Sun/Moon, so
+a hidden star's spikes never reach out past the limb and a visible star's spikes still pass behind the disc.
 
 Beat-star admissions use the existing onset ring, sample panoramic stars within the **actual
 projected framed sky**, select three spaced star cells per admitted event, and decay on the

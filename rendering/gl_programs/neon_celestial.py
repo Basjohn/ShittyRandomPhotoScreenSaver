@@ -92,15 +92,15 @@ uniform float uSkyStrength;
 uniform vec4 uStarColor;
 uniform vec4 uStarGlowColor; // beat stars' colour; alpha mixes it in over the star colour
 vec3 basinBeatStarColour() { return mix(uStarColor.rgb, uStarGlowColor.rgb, clamp(uStarGlowColor.a, 0.0, 1.0)); }
-uniform vec2 uStarGlow; // intensity and response for selected beat stars
+uniform vec3 uStarGlow; // intensity, response and size (0..1) for selected beat stars
 uniform int uBeatStarCount;
 uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
 uniform vec4 uCloudColor;
 uniform vec4 uHorizonColor;
 uniform vec4 uClouds;      // volumetric clouds: coverage, softness, scale, opacity (opacity 0 = off)
 uniform vec2 uCloudDrift;  // their drift so far, on the scene's animation clock
-uniform vec2 uNebula;      // intensity (0 = off), scale
-uniform float uNebulaTurn; // its slow turn about the vertical so far, on the scene's animation clock
+uniform vec4 uNebula;      // intensity (0 = off), scale, filaments, dust
+uniform float uNebulaTurn; // its turn about the vertical: Nebula Position plus its drift on the animation clock
 uniform vec4 uNebulaColorA;
 uniform vec4 uNebulaColorB;
 
@@ -346,38 +346,54 @@ float basinStarHash(vec2 cell) {
     return fract(sin(dot(cell, vec2(41.37, 289.13))) * 24634.6345);
 }
 
-float basinStarField(vec3 ray) {
+// crowd: 0..1, how much denser the field is here (inside a nebula); tone: a per-star 0..1 for tinting.
+float basinStarField(vec3 ray, float crowd, out float tone) {
     vec2 grid = vec2(atan(ray.x, -ray.z), asin(clamp(ray.y, -1.0, 1.0))) * 420.0;
     vec2 cell = floor(grid);
     vec2 pixelDistance = (fract(grid) - 0.5) / max(fwidth(grid), vec2(1e-4));
     float pixelAlpha = 1.0 - smoothstep(0.15, 0.65, length(pixelDistance));
     float aboveHorizon = smoothstep(-0.45, -0.25, ray.y);
-    return step(0.985, basinStarHash(cell)) * pixelAlpha * aboveHorizon;
+    float hash = basinStarHash(cell);
+    tone = fract(hash * 37.0);
+    return step(0.985 - 0.03 * crowd, hash) * pixelAlpha * aboveHorizon;
 }
 
-float basinBeatStarLight(vec3 ray,vec2 glow) {
+// Beat stars peak as diamond starbursts: a sharp diamond point, four spikes that taper to nothing and, toward the
+// largest Star Size, four shorter diagonals. Size (glow.z) sets how far the spikes reach at the peak; as a star
+// fades its burst draws back in with its light. visibility: this pixel's clearance of the solid Sun/Moon. Each
+// burst shows by the lesser of that and its own star's clearance, so a hidden star's spikes never reach out past
+// the limb and a visible star's spikes still pass behind the disc.
+float basinBeatStarLight(vec3 eye,vec3 ray,vec3 glow,float visibility) {
     if (uBeatStarCount<=0) return 0.0;
     vec2 grid=vec2(atan(ray.x,-ray.z),asin(clamp(ray.y,-1.0,1.0)))*420.0;
     float light=0.0;
     vec2 pixelScale=max(fwidth(grid),vec2(1e-4));
+    float size=clamp(glow.z,0.0,1.0);
     for (int i=0; i<6; ++i) {
         if (i>=uBeatStarCount) break;
-        // Cull far cells before costly halo math. This is an opt-in effect,
-        // and only three (occasionally six) small star regions participate.
+        float fade=uBeatStarCells[i].z;
+        float reach=(2.5+34.0*size*size)*(0.4+0.6*fade);   // spike length, pixels
+        // Cull far cells before the burst math: only three (occasionally six) stars take part.
         vec2 difference=grid-uBeatStarCells[i].xy-0.5;
-        if (any(greaterThan(abs(difference),vec2(1.0)+6.0*pixelScale))) continue;
-        // Actual panorama cells, with a several-pixel halo and a restrained
-        // star-like cross/ray core at strong settings rather than a soft blob.
+        if (any(greaterThan(abs(difference),vec2(1.0)+(reach+3.0)*pixelScale))) continue;
         vec2 delta=difference/pixelScale;
-        float radius=length(delta);
-        float core=1.0-smoothstep(0.0,1.35,radius);
-        float halo=1.0-smoothstep(1.0,6.0,radius);
-        float cross=(1.0-smoothstep(0.0,0.85,min(abs(delta.x),abs(delta.y))))
-                   *(1.0-smoothstep(1.4,5.8,max(abs(delta.x),abs(delta.y))));
-        float diagonal=(1.0-smoothstep(0.0,0.9,abs(abs(delta.x)-abs(delta.y))))
-                      *(1.0-smoothstep(1.5,5.2,radius));
-        float gain=glow.x*(0.62+0.78*clamp(glow.y*uBeatStarCells[i].z*2.2,0.0,1.0));
-        light+=gain*uBeatStarCells[i].z*(1.70*core+0.72*halo+0.40*cross+0.22*diagonal);
+        vec2 span=abs(delta);
+        float diamond=1.0-smoothstep(0.0,1.0+0.8*size,span.x+span.y);
+        float halo=exp(-dot(delta,delta)/(3.0+40.0*size*fade));
+        // Each spike: a thin bright line inside a softer sheath of glow, both tapering to nothing.
+        vec2 along=vec2(pow(max(0.0,1.0-span.x/reach),1.3),pow(max(0.0,1.0-span.y/reach),1.3));
+        float spikes=along.x*(exp(-span.y*span.y/0.45)+0.15*exp(-span.y*span.y/2.0))
+                    +along.y*(exp(-span.x*span.x/0.45)+0.15*exp(-span.x*span.x/2.0));
+        vec2 turned=abs(vec2(delta.x+delta.y,delta.x-delta.y))*0.70710678;
+        float diagonalReach=reach*0.45;
+        float diagonals=(pow(max(0.0,1.0-turned.x/diagonalReach),2.5)*exp(-turned.y*turned.y/0.35)
+                        +pow(max(0.0,1.0-turned.y/diagonalReach),2.5)*exp(-turned.x*turned.x/0.35))
+                       *smoothstep(0.4,1.0,size);
+        vec2 centre=(uBeatStarCells[i].xy+0.5)/420.0;
+        float hidden=basinCelestialSkyMask(eye,vec3(sin(centre.x)*cos(centre.y),sin(centre.y),
+                                                    -cos(centre.x)*cos(centre.y)));
+        float gain=glow.x*(0.62+0.78*clamp(glow.y*fade*2.2,0.0,1.0))*min(1.0-hidden,visibility);
+        light+=gain*fade*(1.4*diamond+0.3*halo+1.0*spikes+0.8*diagonals);
     }
     return light;
 }
@@ -386,7 +402,7 @@ float basinBeatStarLight(vec3 ray,vec2 glow) {
 // transparent when disabled; the Sun/Moon remains a separate body pass.
 // detail: the clouds' and nebula's octaves are full for the visible sky (1) and two for reflections (0),
 // which glass samples five times per fragment and roughness blurs anyway.
-vec4 basinSkyBackground(vec3 worldRay,float starVisibility,int detail) {
+vec4 basinSkyBackground(vec3 eye,vec3 worldRay,float starVisibility,int detail) {
     if (uSkyEnabled == 0 || uSkyStrength <= 0.0) return vec4(0.0);
     float rayLength = length(worldRay);
     if (rayLength <= 1e-8) return vec4(0.0);
@@ -423,12 +439,20 @@ vec4 basinSkyBackground(vec3 worldRay,float starVisibility,int detail) {
                   clamp(uCloudColor.a, 0.0, 1.0) * clamp(clouds, 0.0, 1.0);
     vec3 nebulaRay = vec3(ray.x * cos(uNebulaTurn) - ray.z * sin(uNebulaTurn), ray.y,
                           ray.x * sin(uNebulaTurn) + ray.z * cos(uNebulaTurn));
-    colour += skyNebula(nebulaRay, uNebulaColorA.rgb * uNebulaColorA.a, uNebulaColorB.rgb * uNebulaColorB.a, uNebula, 29u,
-                        detail == 1 ? 4 : 2);
+    vec3 rim = max(uNebulaColorA.rgb, vec3(0.0)) * uNebulaColorA.a;
+    vec3 core = max(uNebulaColorB.rgb, vec3(0.0)) * uNebulaColorB.a;
+    float region;
+    // Gathered toward the sky the card faces (above the far shore), then turned by Nebula Position and drift.
+    vec4 nebula = skyNebula(nebulaRay, rim, core, uNebula, vec3(0.0, 0.33, -0.944), 29u, detail == 1 ? 5 : 2,
+                            region);
 
-    float stars = basinStarField(ray) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
-    colour += max(uStarColor.rgb, vec3(0.0)) * stars;
-    colour += max(basinBeatStarColour(), vec3(0.0)) * basinBeatStarLight(ray,uStarGlow) * starVisibility;
+    // Inside a nebula the field crowds and takes on its colours; its dust swallows stars and sky alike.
+    float tone;
+    float stars = basinStarField(ray, region, tone) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
+    vec3 starColour = max(uStarColor.rgb, vec3(0.0));
+    colour += mix(starColour, starColour * (0.55 + 0.9 * mix(rim, core, tone)), region * 0.7) * stars;
+    colour = colour * (1.0 - nebula.a) + nebula.rgb;
+    colour += max(basinBeatStarColour(), vec3(0.0)) * basinBeatStarLight(eye,ray,uStarGlow,starVisibility);
     if (uClouds.w > 0.0) {
         // Lit from the body's side; a dimmer, cooler underside. Clouds pass in front of the stars.
         vec3 bodyColour = uSunEnabled == 1 ? (uBodyKind == 0 ? uSunColor.rgb : uMoonColor.rgb) : uCloudColor.rgb;

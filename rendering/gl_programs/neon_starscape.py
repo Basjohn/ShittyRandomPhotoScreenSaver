@@ -9,6 +9,8 @@ from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
 # Only existing admitted onset records participate, never a second detector.
 STARSCAPE_BEAT_MIN_STRENGTH = 0.35 * 0.64
 STARSCAPE_BEAT_RELEASE = 1.75 / 0.6
+# Beat stars swell in over this long rather than switching on, so one event's stars rise while the last fade.
+STARSCAPE_BEAT_ATTACK = 0.2
 
 
 def _star_ray(cell):
@@ -136,7 +138,9 @@ def starscape_beat_cells(events, tilt: float, turn: float, *,
                 if ((body is None or _body_clear(cell,eye,body))
                         and (terrain is None or _terrain_clear(cell,eye,terrain))):
                     break
-            intensity = min(1.0, strength * 0.95) * max(0.0, 1.0 - (age / STARSCAPE_BEAT_RELEASE)**2)**2
+            rise = min(1.0, age / STARSCAPE_BEAT_ATTACK)
+            intensity = (min(1.0, strength * 0.95) * rise * rise * (3.0 - 2.0 * rise)
+                         * max(0.0, 1.0 - (age / STARSCAPE_BEAT_RELEASE)**2)**2)
             bursts.append((float(cx), float(cy), float(intensity), 0.0))
         if len(bursts) >= 6:
             break
