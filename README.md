@@ -5,7 +5,8 @@
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
-<img width="1608" height="908" alt="SRPSS_Nine_Screens_Showcase_1600w_v2" src="https://github.com/user-attachments/assets/0d328c6d-d6bb-40a1-afe8-6c9629b90510" />
+<img width="1608" height="908" alt="SRPSS_Nine_Screens_Showcase_1600w_Border_FIXED" src="https://github.com/user-attachments/assets/0d80a20c-611b-4ca2-8c78-f6270e2dc662" />
+
 
 
 **It's a random wallpaper screensaver, a multi-monitor display, a widget dashboard, a media controller, gmail notifier, reddit aggrigator, news reader with images, custom rss feed dashboard and a disturbingly configurable audio visualizer.** You can use as much or as little of that as you want. AlsoisbasicallyafuckingcustomopenglengineatthispointtoobecauseIhaveboundaryissuesorsomething.
