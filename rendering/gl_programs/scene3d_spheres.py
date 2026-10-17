@@ -16,6 +16,9 @@ Qt's item matrix).
 * ``sceneSphereCoverage(ray, centre, radius, blur)``: antialiased (or, with ``blur``, softened) silhouette coverage
   from the ray's distance to the centre; 0 outside.
 * ``sceneSphereDepth(point, projection)``: the window depth of a view-space point.
+* ``sceneDefocusRadius(depth, focus, aperture, nearWeight, farWeight)``: the blur (view units at the sphere) for a
+  thin-lens depth of field, weighted separately in front of and behind the focus (deep scenes read best with a long
+  field behind the focus and soft foreground); feed it to ``sceneSphereCorner``/``sceneSphereCoverage``.
 
 CPU mirrors (``scene3d_sphere_corner``, ``scene3d_sphere_ray``) let tests reason about the same geometry.
 """
@@ -53,8 +56,14 @@ float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur) {
     // The ray's distance from the centre, against the radius: one pixel of antialiasing, or the blur's width.
     float along = dot(centre, ray);
     float miss = length(centre - ray * along);
-    float width = max(fwidth(miss), max(blur, 0.0) * 2.0);
+    // fwidth reads the 2x2 neighbours; a neighbour's non-finite value must never leak into this pixel.
+    float derivative = fwidth(miss);
+    if (!(derivative < 1e30)) derivative = 0.0;
+    float width = max(derivative, max(blur, 0.0) * 2.0);
     return clamp((radius + max(blur, 0.0) - miss) / max(width, 1e-6) + 0.5 * step(blur, 0.0), 0.0, 1.0);
+}
+float sceneDefocusRadius(float depth, float focus, float aperture, float nearWeight, float farWeight) {
+    return aperture * (max(focus - depth, 0.0) * nearWeight + max(depth - focus, 0.0) * farWeight);
 }
 float sceneSphereDepth(vec3 point, mat4 projection) {
     vec4 clip = projection * vec4(point, 1.0);

@@ -11,6 +11,11 @@ Import-safe GLSL plus CPU mirrors (no GL), on the shared integer hash.
   Snell's window (incidence below the critical angle, about 48.8 degrees) the sky and a refracted sun glare come
   through, dimmed by the transmission; outside it, the surface is a mirror of the deep below (total internal
   reflection).
+* ``waterWindow(ray, normal, skyward)``: the share of light Snell's window lets through along a rising ray (0
+  outside the window, where the surface mirrors the deep) and the direction it continues above the water, so a
+  consumer lights the window with its own sky (brighter toward the zenith, its sun); ``waterSurfaceFromBelow`` is
+  the same with one flat sky colour.
+* ``waterSunBelow(sun)``: the direction toward the sun as seen from under the water (bent toward the vertical).
 * ``waterMedium(colour, distance, absorption, scatter)``: light crossing ``distance`` of water: absorbed per channel
   (red first) and replaced by the water's in-scattered colour.
 """
@@ -75,11 +80,26 @@ vec3 waterSurfaceFromBelow(vec3 ray, vec3 normal, vec3 sun, vec3 sky, vec3 deep,
     if (dot(out_, out_) < 1e-8) return deep;           // outside Snell's window: a mirror of the deep
     float sinT2 = 1.33 * 1.33 * (1.0 - cosI * cosI);
     float cosT = sqrt(max(1.0 - sinT2, 0.0));
-    float rs = (1.33 * cosI - cosT) / (1.33 * cosI + cosT);
-    float rp = (cosI - 1.33 * cosT) / (cosI + 1.33 * cosT);
+    float rs = (1.33 * cosI - cosT) / max(1.33 * cosI + cosT, 1e-6);
+    float rp = (cosI - 1.33 * cosT) / max(cosI + 1.33 * cosT, 1e-6);
     float transmission = 1.0 - 0.5 * (rs * rs + rp * rp);
     float glare = pow(max(dot(normalize(out_), sun), 0.0), 220.0) * sunPower;
     return mix(deep, sky + vec3(glare), transmission);
+}
+float waterWindow(vec3 ray, vec3 normal, out vec3 skyward) {
+    vec3 out_ = refract(ray, -normal, 1.33);
+    skyward = vec3(0.0, 1.0, 0.0);
+    if (dot(out_, out_) < 1e-8) return 0.0;
+    skyward = normalize(out_);
+    float cosI = clamp(dot(ray, normal), 0.0, 1.0);
+    float sinT2 = 1.33 * 1.33 * (1.0 - cosI * cosI);
+    float cosT = sqrt(max(1.0 - sinT2, 0.0));
+    float rs = (1.33 * cosI - cosT) / max(1.33 * cosI + cosT, 1e-6);
+    float rp = (cosI - 1.33 * cosT) / max(cosI + 1.33 * cosT, 1e-6);
+    return 1.0 - 0.5 * (rs * rs + rp * rp);
+}
+vec3 waterSunBelow(vec3 sun) {
+    return normalize(-refract(-normalize(sun), vec3(0.0, 1.0, 0.0), 1.0 / 1.33));
 }
 vec3 waterMedium(vec3 colour, float distance_, vec3 absorption, vec3 scatter) {
     vec3 kept = exp(-absorption * max(distance_, 0.0));
@@ -136,4 +156,16 @@ def water_caustics(x: float, y: float, t: float) -> float:
     return max(0.0, min(1.0, 0.65 * coarse + 0.45 * fine * (0.4 + 0.6 * coarse)))
 
 
-__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_waves"]
+def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, float]:
+    """CPU mirror of ``waterSunBelow``."""
+    length = math.sqrt(sum(c * c for c in sun))
+    ix, iy, iz = (-c / length for c in sun)
+    eta = 1.0 / WATER_IOR
+    cos_i = -iy
+    k = 1.0 - eta * eta * (1.0 - cos_i * cos_i)
+    bx, by, bz = eta * ix, eta * iy + (eta * cos_i - math.sqrt(k)), eta * iz
+    norm = math.sqrt(bx * bx + by * by + bz * bz)
+    return -bx / norm, -by / norm, -bz / norm
+
+
+__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_sun_below", "water_waves"]

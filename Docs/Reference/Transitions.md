@@ -426,6 +426,26 @@ Each foundation slice adds what it learned here.
 - Post light composited over an overlay must be masked by the scene's own alpha, or it lights the empty card and
   shows the item's rectangle as a frame.
 
+**Transparent spheres and water (Extruded Bubble primitives, 2026-10-17)**
+- One non-finite pixel becomes a black block once bloom spreads it through the half-size levels. Primitives guard
+  every division and never let `fwidth` carry a neighbour's NaN; find the source by painting each suspect term a
+  different colour in the transparent pass.
+- Textures captured from a scene target cover its 64 px bucketed allocation, not the viewport: address them by
+  `gl_FragCoord.xy / allocation`. Projected screen uv sampled the wrong rows and read as flat grey discs.
+- An air sphere's physical total-reflection band covers the outer quarter of its radius and reads as a hoop; bubbles
+  read round and light with a thin-shell band (effective index ~1.15), a clear low-coverage interior over the real
+  scene behind (order-independent, so other bubbles show through), a rim lit from above and dim below, and one crisp
+  key highlight. Grazing reflections see dark water sideways; add the light a rim scatters in.
+- Snell's window lit by one flat sky colour breaks into hard blobs at every ripple's critical angle; a sky that dims
+  toward the horizon, strong distance fog and gentle slopes keep the window a glowing patch with dappled light.
+- Shafts read as beams only when their source is streaky (the window times its caustics, squared) and the light
+  position is the sun as seen under water (refracted), not above it.
+- Depth of field for a deep scene: blur strongly in front of the focus and gently behind; symmetric blur haloed
+  every distant bubble.
+- The whole lab scene (1,081 impostor bubbles, water, shafts, background capture, OIT resolve, bloom) measured
+  0.125 ms GPU at 960x540 with 4x MSAA on an idle RTX 4090: impostors are per-pixel ray-sphere solves inside a
+  silhouette-tight quad, cheaper than meshes; fill rate and shading, not the "ray tracing", set the cost.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

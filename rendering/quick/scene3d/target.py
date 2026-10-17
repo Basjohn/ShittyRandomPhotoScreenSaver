@@ -499,7 +499,9 @@ class SceneTarget:
     def background(self, frame: SceneFrame, resources) -> tuple[int, int]:
         """Capture what has been drawn so far as plain textures (colour, nearest window depth; R32F, the far plane
         without a depth texture), covering the allocation, and carry on drawing into the scene exactly where it
-        was: framebuffer, viewport, colour masks, blend, depth test, program and texture units 0-1 come back."""
+        was: framebuffer, viewport, colour masks, blend, depth test, program and texture units 0-1 come back.
+        The textures cover the whole (64 px bucketed) allocation, not the viewport: a later pass addresses them
+        by its own pixel, ``gl_FragCoord.xy / allocation``, never by projected screen uv."""
         if self._key is None:
             raise RuntimeError(f"{self.label}: background() needs an open scope")
         if not self._names["background_fbo"]:

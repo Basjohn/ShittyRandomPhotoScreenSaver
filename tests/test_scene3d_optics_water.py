@@ -97,3 +97,20 @@ def test_the_medium_fades_toward_the_water_colour_with_distance(probe):
     assert gpu[0][:3] == pytest.approx((1.0, 0.8, 0.6), abs=1e-5)
     assert gpu[1][0] < gpu[1][1] or gpu[1][0] < 1.0                # red goes first
     assert gpu[2][:3] == pytest.approx((0.0, 0.2, 0.3), abs=0.02)
+
+
+def test_the_window_and_the_sun_below_equal_their_mirror_and_their_physics(probe):
+    import pytest as _pytest
+    rows = [[(math.sin(a), math.cos(a), 0.0, 0.0)] for a in (0.0, math.radians(30), math.radians(47), math.radians(60))]
+    gpu = probe.run("vec3 r = arg(0).xyz; vec3 sky; float t = waterWindow(r, vec3(0, 1, 0), sky); FragColor = vec4(sky, t);",
+                    rows, DECL)
+    assert gpu[0][3] == _pytest.approx(1 - ((1.33 - 1) / 2.33) ** 2, abs=1e-4)      # straight up
+    assert gpu[0][3] > gpu[1][3] > gpu[2][3] > 0.0 and gpu[3][3] == 0.0              # dims to the edge, closed past it
+    assert gpu[2][0] > gpu[1][0] > 0.0                                               # leaving ever flatter
+    for sun in ((0.0, 0.62, -1.0), (0.3, 1.0, 0.2), (0.0, 1.0, 0.0)):
+        cpu = water.water_sun_below(sun)
+        got = probe.run(f"FragColor = vec4(waterSunBelow(vec3{sun}), 0.0);", [[(0.0, 0.0, 0.0, 0.0)]], DECL)[0][:3]
+        assert tuple(got) == _pytest.approx(cpu, abs=1e-5)
+        elevation_air = math.atan2(sun[1], math.hypot(sun[0], sun[2]))
+        elevation_water = math.atan2(cpu[1], math.hypot(cpu[0], cpu[2]))
+        assert elevation_water >= elevation_air - 1e-9                              # bent toward the vertical
