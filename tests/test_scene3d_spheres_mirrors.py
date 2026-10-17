@@ -47,3 +47,18 @@ def test_cluster_distance_equals_its_mirror(probe):
                     " FragColor = vec4(sceneClusterDistance(p.xyz, s, 2, p.w), 0.0, 0.0, 0.0);", rows,
                     spheres.SCENE3D_SPHERES_GLSL)
     _check(gpu, cpu, tolerance=2e-5)
+
+
+def test_glint_point_and_starburst_shape(probe):
+    decl = spheres.SCENE3D_SPHERES_GLSL
+    glint = probe.run("FragColor = vec4(sceneSphereGlint(vec3(0.0, 0.0, -5.0), 1.0, vec3(0.0, 0.0, 1.0)), 0.0);",
+                      [[(0.0, 0.0, 0.0, 0.0)]], decl)[0][:3]
+    assert tuple(glint) == pytest.approx((0.0, 0.0, -4.0), abs=1e-5)     # light behind the eye: the nearest point
+    up = probe.run("FragColor = vec4(sceneSphereGlint(vec3(0.0, 0.0, -5.0), 1.0, vec3(0.0, 1.0, 0.0)), 0.0);",
+                   [[(0.0, 0.0, 0.0, 0.0)]], decl)[0][:3]
+    assert up[1] > 0.5 and up[2] > -5.0                                    # light above: on the upper front
+    rows = [[(dx, dy, 20.0, diag)] for dx, dy, diag in ((0, 0, 0), (12, 0, 0), (0, 12, 0), (5, 5, 0), (5, 5, 1), (30, 0, 0))]
+    light = probe.run("vec4 a = arg(0); FragColor = vec4(sceneStarburst(a.xy, a.z, a.w));", rows, decl)[:, 0]
+    assert light[0] > light[1] > 0.1 and light[1] == pytest.approx(light[2], rel=1e-5)   # bright core, equal spikes
+    assert light[4] - light[3] > 0.02                                                     # diagonals only when asked
+    assert light[5] < 0.02                                                               # nothing past the reach

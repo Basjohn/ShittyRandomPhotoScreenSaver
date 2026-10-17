@@ -29,6 +29,11 @@ Import-safe GLSL plus CPU mirrors (no GL), on the shared integer hash.
   where its sunlight crossed the surface (back along ``sunBelow``), and sums that pattern, fading with the depth below
   the surface and the distance from the eye, so beams converge toward the sun in perspective and thin out with depth.
   ``jitter`` (0..1, per pixel) offsets the samples so few steps do not band.
+* ``waterSeabed(p, t, caustics)``: a seabed of rounded pebbles and stone (Voronoi cells shaded as domes, grit from
+  lattice noise) lit by the moving caustic network: returns the lit colour's luminance-free terms (``vec2``: albedo
+  0..1, caustic light 0..1) so a consumer tints them with its own water.
+* ``waterWisps(p, t)``: faint drifting current filaments (silt carried by the water): ridges of warped lattice
+  noise, thin and broken, 0..1; sample it on a few depth layers along a ray for parallax.
 * ``waterMedium(colour, distance, absorption, scatter)``: light crossing ``distance`` of water: absorbed per channel
   (red first) and replaced by the water's in-scattered colour, faded in by the *mean* transmittance: a per-channel
   fade would let the scatter colour's red through where its blue is lost, tilting a glowing medium toward brown.
@@ -42,7 +47,7 @@ from rendering.gl_programs.scene3d import SCENE3D_HASH_GLSL, scene3d_random
 _GOLDEN = 2.39996322972865332
 WATER_IOR = 1.33
 
-from rendering.gl_programs.scene3d_sky import SCENE3D_SKY_GLSL, sky_noise2  # noqa: E402  (lattice noise)
+from rendering.gl_programs.scene3d_sky import SCENE3D_SKY_GLSL, sky_fbm2, sky_noise2  # noqa: E402  (lattice noise)
 
 SCENE3D_WATER_GLSL = SCENE3D_HASH_GLSL + SCENE3D_SKY_GLSL + """
 #ifndef SCENE3D_WATER_GLSL
@@ -170,6 +175,28 @@ float waterShafts(vec3 eye, vec3 ray, float maxDistance, vec3 sunBelow, float su
     }
     return sum * stepLength;
 }
+vec2 waterSeabed(vec2 p, float t, float causticStrength) {
+    // Pebbles: Voronoi cells, each a dome brightest at its centre, with dark gaps; stone grit over everything.
+    ivec2 cell = ivec2(floor(p));
+    float f1 = 9.0, f2 = 9.0;
+    for (int y = -1; y <= 1; ++y)
+        for (int x = -1; x <= 1; ++x) {
+            float d = distance(p, waterCellPoint(cell + ivec2(x, y), 0.0, 83u));
+            if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+        }
+    float dome = smoothstep(0.0, 0.12, f2 - f1) * (1.0 - 0.45 * smoothstep(0.1, 0.6, f1));
+    float grit = skyFbm2(p * 3.7, 3, 89u);
+    float albedo = clamp(0.12 + 0.55 * dome * (0.6 + 0.4 * grit), 0.0, 1.0);
+    float light = waterCaustics(p * 0.35, t) * causticStrength;
+    return vec2(albedo, light);
+}
+float waterWisps(vec2 p, float t) {
+    vec2 warp = vec2(skyFbm2(p * 0.35 + vec2(t * 0.03, 0.0), 3, 101u), skyFbm2(p * 0.35 + vec2(5.2, t * 0.02), 3, 103u));
+    float n = skyFbm2(p * vec2(0.5, 1.6) + (warp - 0.5) * 3.0 + vec2(0.0, -t * 0.05), 4, 107u);
+    float ridge = 1.0 - abs(2.0 * n - 1.0);
+    float broken = smoothstep(0.45, 0.7, skyFbm2(p * 0.22 + vec2(t * 0.01), 2, 109u));
+    return pow(ridge, 10.0) * broken;
+}
 vec3 waterMedium(vec3 colour, float distance_, vec3 absorption, vec3 scatter) {
     vec3 kept = exp(-absorption * max(distance_, 0.0));
     return colour * kept + scatter * (1.0 - dot(kept, vec3(1.0 / 3.0)));
@@ -252,6 +279,39 @@ def water_ripples(x: float, y: float, t: float, footprint: float) -> float:
     return h
 
 
+def _smooth(e0: float, e1: float, v: float) -> float:
+    u = max(0.0, min(1.0, (v - e0) / (e1 - e0)))
+    return u * u * (3.0 - 2.0 * u)
+
+
+def water_seabed(x: float, y: float, t: float, caustic_strength: float) -> tuple[float, float]:
+    """CPU mirror of ``waterSeabed``."""
+    cx, cy = math.floor(x), math.floor(y)
+    f1 = f2 = 9.0
+    for oy in (-1, 0, 1):
+        for ox in (-1, 0, 1):
+            px, py = _cell_point(cx + ox, cy + oy, 0.0, 83)
+            d = math.hypot(x - px, y - py)
+            if d < f1:
+                f1, f2 = d, f1
+            elif d < f2:
+                f2 = d
+    dome = _smooth(0.0, 0.12, f2 - f1) * (1.0 - 0.45 * _smooth(0.1, 0.6, f1))
+    grit = sky_fbm2(x * 3.7, y * 3.7, 3, 89)
+    albedo = max(0.0, min(1.0, 0.12 + 0.55 * dome * (0.6 + 0.4 * grit)))
+    return albedo, water_caustics(x * 0.35, y * 0.35, t) * caustic_strength
+
+
+def water_wisps(x: float, y: float, t: float) -> float:
+    """CPU mirror of ``waterWisps``."""
+    wx = sky_fbm2(x * 0.35 + t * 0.03, y * 0.35, 3, 101)
+    wy = sky_fbm2(x * 0.35 + 5.2, y * 0.35 + t * 0.02, 3, 103)
+    n = sky_fbm2(x * 0.5 + (wx - 0.5) * 3.0, y * 1.6 + (wy - 0.5) * 3.0 - t * 0.05, 4, 107)
+    ridge = 1.0 - abs(2.0 * n - 1.0)
+    broken = _smooth(0.45, 0.7, sky_fbm2(x * 0.22 + t * 0.01, y * 0.22 + t * 0.01, 2, 109))
+    return ridge ** 10.0 * broken
+
+
 def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, float]:
     """CPU mirror of ``waterSunBelow``."""
     length = math.sqrt(sum(c * c for c in sun))
@@ -264,5 +324,6 @@ def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, floa
     return -bx / norm, -by / norm, -bz / norm
 
 
-__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_ripples", "water_shaft_pattern", "water_sun_below",
+__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_ripples", "water_seabed", "water_shaft_pattern",
+           "water_wisps", "water_sun_below",
            "water_waves"]

@@ -148,3 +148,17 @@ def test_ripples_equal_their_mirror_and_flatten_as_the_footprint_grows(probe):
     points = [(rng.uniform(-30, 30), rng.uniform(-30, 30)) for _ in range(400)]
     spread = lambda footprint: np.std([water.water_ripples(x, y, 1.0, footprint) for x, y in points])
     assert spread(0.0) > spread(1.0) > spread(4.0) and spread(10.0) < 1e-9   # detail fades with distance, then gone
+
+
+def test_seabed_and_wisps_equal_their_mirrors_and_their_character(probe):
+    rng = random.Random(31)
+    rows = [[(rng.uniform(-15, 15), rng.uniform(-15, 15), rng.uniform(0, 8), 1.0)] for _ in range(96)]
+    gpu = probe.run("vec4 a = arg(0); FragColor = vec4(waterSeabed(a.xy, a.z, a.w), waterWisps(a.xy, a.z), 0.0);",
+                    rows, DECL)
+    cpu = np.array([(*water.water_seabed(x, y, t, s), water.water_wisps(x, y, t), 0.0) for (x, y, t, s), in rows])
+    assert np.abs(gpu - cpu).max() < 2e-3
+    bed = np.array([water.water_seabed(rng.uniform(0, 30), rng.uniform(0, 30), 2.0, 1.0) for _ in range(1500)])
+    assert bed[:, 0].std() > 0.08 and 0.0 <= bed.min() and bed.max() <= 1.0        # pebbles and gaps, bounded
+    assert water.water_seabed(3.3, 4.4, 2.0, 0.0)[1] == 0.0                          # no caustics when off
+    wisps = np.array([water.water_wisps(rng.uniform(0, 40), rng.uniform(0, 40), 1.0) for _ in range(3000)])
+    assert (wisps < 0.05).mean() > 0.6 and wisps.max() > 0.5                         # thin bright strands, mostly empty
