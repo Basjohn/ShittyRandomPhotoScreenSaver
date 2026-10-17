@@ -440,7 +440,11 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   the value at low reactivity (quiet), the high handle the value at high reactivity (loud), giving a range of
   growth. Extruded Bubble uses it for every bubble count, particle amount and light-ray setting; it is shared, so
   other modes may adopt it. Follow the shared slider's look, keyboard and accessibility patterns; one owner.
-- [ ] **EB5 — Reactivity, presets and physical acceptance.** Author spec-owned controls and experimental art,
+- [ ] **EB5 — Reactivity, presets and physical acceptance.** Carries every reactivity requirement in
+  `Extruded_Bubble_Target.md` §8: the **Fuse / Pop / Bounce triangle** (barycentric node placed by mouse; Big / Small /
+  All checkboxes; unaffected bubbles pass through), EB5a range sliders on every bubble count, particle amount and
+  light-ray setting, and music-reactive shafts (intensity, spread, flicker) beside breathing, speed and drift, all
+  through original Bubble's logical reactivity. Author spec-owned controls and experimental art,
   compare recorded quiet/onset/sustained passages with original Bubble baseline, and verify both displays,
   aspect/DPR, frame timing, latency, dormancy and audio-reactive fidelity before operator acceptance. Capture
   release media only after renderer and musical behavior are stable.
