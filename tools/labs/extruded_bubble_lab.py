@@ -77,13 +77,16 @@ VARIANTS = {
                                  shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0,
                                  mist=0.6, wakes=0.0, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
                                  absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
-    "ExBubble5Cameradown": dict(film=0.9, film_range=(255.0, 345.0), glint_power=60.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
-                                rough=0.05, light_power=1.5, specks=1.0, warm_share=0.85, streak=(0.15, 1.0),
-                                chains=5.0, chain_size=1.0,
-                                deep=(0.07, 0.15, 0.26), water=(0.05, 0.13, 0.24), sky=(0.5, 0.7, 0.9),
-                                shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=0.0,
-                                mist=0.6, wakes=0.0, sparkle=0.7, crisp=1.0, surface=30.0, absorb=(0.1, 0.05, 0.03),
-                                drift=0.15, shaft_y=12.0),
+    "ExBubble5Cameradown": dict(
+        # Looking down into a dark abyss lit from above and behind: deep blue-black, a lighter haze far off.
+        deep=(0.01, 0.04, 0.08), water=(0.03, 0.11, 0.2), sky=(0.45, 0.65, 1.0), shaft=(0.3, 0.55, 0.95),
+        sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, surface=30.0, shaft_y=12.0, absorb=(0.1, 0.05, 0.03),
+        surface_gain=0.6, light_power=0.0, mist=0.4, rays=0.4, glow=0.6, drift=0.15, wisps=0.0, wakes=0.0,
+        # Particulate and streams.
+        specks=0.6, warm_share=0.85, streak=(0.15, 1.0), chains=5.0, chain_size=1.0, mid_count=0.6, sparkle=0.7,
+        # Luminous violet-rimmed glass bubbles with sharp glints.
+        crisp=1.0, rough=0.03, film=1.0, film_range=(255.0, 345.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0,
+        probe_fill=5.0, glint_power=400.0, glint_sharp=600.0, inner_blur=0.15),
 }
 VARIANTS["ExBubble6Diagonal"] = dict(
     # Water and light: near-black teal, orange light from the top-right corner, faint beams.
