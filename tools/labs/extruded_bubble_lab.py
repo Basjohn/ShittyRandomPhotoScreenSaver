@@ -69,7 +69,7 @@ VARIANTS = {
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=120.0, glint_sharp=300.0, probe_fill=0.6, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -86,7 +86,7 @@ VARIANTS = {
         specks=0.6, warm_share=0.85, streak=(0.15, 1.0), chains=5.0, chain_size=1.0, mid_count=0.6, sparkle=0.7,
         # Luminous violet-rimmed glass bubbles with sharp glints.
         crisp=1.0, rough=0.03, film=1.0, film_range=(255.0, 345.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0,
-        probe_fill=5.0, glint_power=400.0, glint_sharp=600.0, inner_blur=0.15),
+        probe_fill=0.6, glint_power=120.0, glint_sharp=600.0, inner_blur=0.15),
 }
 VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     # Water and light: near-black teal, orange light from the top-right corner, faint beams.
@@ -415,6 +415,7 @@ uniform float uShell;            // the glass wall's thickness, a share of the r
 uniform vec3 uIors;              // outside, wall, core
 uniform float uRough;            // the surface's own blur (softly focused scenes)
 uniform float uInnerBlur;
+uniform float uShellMin;         // radius px below which a bubble is one interface
 uniform int uDiag;               // 0 composed; diagnostic views otherwise
 uniform vec3 uLightDir;          // world direction toward the scene's light (as seen under water)
 uniform vec3 uSpecColour;        // the light's colour x strength
@@ -455,7 +456,9 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     vec3 origin = (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
     // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
     // single interface (the film still colours what they mirror).
-    float shell = max(uShell, 1.5 / max(pixels, 1.0));
+    // Below ~uShellMin px the two walls fall within a couple of pixels of each other: one interface (a single thick
+    // bright band, as the mocks draw small bubbles) instead of two concentric hoops.
+    float shell = pixels < uShellMin ? 0.0 : max(uShell, 1.5 / max(pixels, 1.0));
     int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths);
     vec3 light = vec3(0.0);
     float own = 0.0;
@@ -1231,10 +1234,11 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program else 1.0)
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
+        gl.glUniform1f(u("uShellMin"), settings.get("shell_min", 0.0))
         gl.glUniform1i(u("uDiag"), DIAG)
         spec_uniforms(u)
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
-        gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.6))
+        gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.25))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
         gl.glUniform1f(u("uNearLayer"), 1.0 if program == near_program else 0.0)
         gl.glActiveTexture(gl.GL_TEXTURE3)
@@ -1371,9 +1375,10 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1f(v("uShell"), settings.get("shell", 0.1))
                         gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                         gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
+                        gl.glUniform1f(v("uShellMin"), settings.get("shell_min", 0.0))
                         gl.glUniform1i(v("uDiag"), DIAG)
                         spec_uniforms(v)
-                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.6))
+                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.25))
                         gl.glUniform1f(v("uReflect"), 1.0)
                         gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
                         gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
@@ -1392,9 +1397,10 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1f(m("uShell"), settings.get("shell", 0.1))
                     gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                     gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
+                    gl.glUniform1f(m("uShellMin"), settings.get("shell_min", 0.0))
                     gl.glUniform1i(m("uDiag"), DIAG)
                     spec_uniforms(m)
-                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.6))
+                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.25))
                     gl.glUniform1f(m("uReflect"), 1.0)
                     gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
                     gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
