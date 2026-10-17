@@ -415,6 +415,7 @@ uniform float uShell;            // the glass wall's thickness, a share of the r
 uniform vec3 uIors;              // outside, wall, core
 uniform float uRough;            // the surface's own blur (softly focused scenes)
 uniform float uInnerBlur;
+uniform float uEdgeSoft;         // rim-band softening, a share of the radius in pixels
 uniform float uSpeckGlow;        // light a pixel-sized bubble mirrors
 uniform float uReflect;          // reflections' share (near giants: their glass dims what they mirror)
 uniform float uFrameShare;       // what is seen through: the frame (1) or the probe (0)        // blur of the scene seen through a bubble, a share of its radius in pixels
@@ -509,7 +510,10 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
         sum = vec4(0.0);
         for (int i = 0; i < 8; ++i) {
             // Eight points spread over the pixel (a rotated-grid pattern).
-            vec2 o = vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5;
+            // Spread over a few pixels on big bubbles: the core's total-reflection edge is a hard step that the
+            // mocks show as a soft band (a slightly uneven film).
+            vec2 o = (vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5)
+                   * (1.0 + uEdgeSoft * pixels);
             sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur) * 0.125;
         }
     }
@@ -1162,6 +1166,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program else 1.0)
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
+        gl.glUniform1f(u("uEdgeSoft"), settings.get("edge_soft", 0.06))
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
         gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.6))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
@@ -1290,6 +1295,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
                         gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.6))
                         gl.glUniform1f(v("uReflect"), 1.0)
+                        gl.glUniform1f(v("uEdgeSoft"), settings.get("edge_soft", 0.06))
                         gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
                         gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUseProgram(shell)
@@ -1308,6 +1314,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
                     gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.6))
                     gl.glUniform1f(m("uReflect"), 1.0)
+                    gl.glUniform1f(m("uEdgeSoft"), settings.get("edge_soft", 0.06))
                     gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
                     gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
