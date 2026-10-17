@@ -171,15 +171,15 @@
         "shockwave_grid_sun_orbit_speed": 0.001,
         "shockwave_grid_sun_rays_color": [
           255,
-          252,
-          255,
+          220,
+          235,
           255
         ],
         "shockwave_grid_sun_rays_enabled": true,
-        "shockwave_grid_sun_rays_strength": 0.45,
+        "shockwave_grid_sun_rays_strength": 0.5,
         "shockwave_grid_sun_size": 0.16,
-        "shockwave_grid_sun_x": 0.0,
-        "shockwave_grid_sun_y": 1.1,
+        "shockwave_grid_sun_x": 0.15,
+        "shockwave_grid_sun_y": 0.95,
         "shockwave_grid_sun_z": 0.08,
         "shockwave_grid_terrain": {
           "heights": [
@@ -1325,7 +1325,35 @@
         "shockwave_grid_wave_amplitude": 0.75,
         "shockwave_grid_wave_height": 0.5,
         "shockwave_grid_wave_speed": 0.45,
-        "shockwave_grid_wire_display": "Glass"
+        "shockwave_grid_wire_display": "Glass",
+        "shockwave_grid_volumetric_clouds": true,
+        "shockwave_grid_cloud_coverage": 0.35,
+        "shockwave_grid_cloud_drift": 0.2,
+        "shockwave_grid_cloud_softness": 0.55,
+        "shockwave_grid_cloud_scale": 0.5,
+        "shockwave_grid_cloud_opacity": 0.8,
+        "shockwave_grid_nebula_enabled": true,
+        "shockwave_grid_nebula_color_a": [
+          255,
+          120,
+          190,
+          255
+        ],
+        "shockwave_grid_nebula_color_b": [
+          255,
+          220,
+          240,
+          255
+        ],
+        "shockwave_grid_nebula_intensity": 0.5,
+        "shockwave_grid_nebula_filaments": 0.3,
+        "shockwave_grid_nebula_dust": 0.25,
+        "shockwave_grid_nebula_scale": 0.4,
+        "shockwave_grid_nebula_position": 0.0,
+        "shockwave_grid_nebula_drift": 0.03,
+        "shockwave_grid_sun_rays_length": 0.75,
+        "shockwave_grid_sun_rays_spread": 0.45,
+        "shockwave_grid_star_size": 0.6
       }
     }
   },
