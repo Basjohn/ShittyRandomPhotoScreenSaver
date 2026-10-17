@@ -483,6 +483,17 @@ Each foundation slice adds what it learned here.
   before optimising it (the Extruded Bubble probe read 6–10 ms, of which 0.18 ms was GPU work).
 - Change one variable family per checkpoint and re-render every scene: lowering the deep scenes' reflection fill
   fixed giant interiors but dimmed every bead stream, caught only by the all-scene sheet.
+- Light shafts seen toward the sun read as one fan from its vanishing point: shape them by azimuth round the world
+  light axis (world-fixed, so orbit keeps them). A depth march over a surface pattern averages many columns per ray and
+  leaves narrow, disconnected pencils; a few solid wedges are no better. Many fine rays with soft contrast.
+- Find haze by ablation before retuning the suspect: the Extruded Bubble "shaft haze" was surface flecks outside Snell's
+  window, and the grey corners were defocused giants.
+- Measure against the mock in numbers where the eye disagrees with itself: zone brightness relative to the water beside
+  a bubble, open-water colour per region. Mock-driven numbers settled reflection fill and deep-scene water at once.
+- A face-reflection share must not scale the light's own reflection: dimming the mirrored water keeps clear glass, the
+  highlight stays bright.
+- A gather depth of field with fixed taps cannot draw a small bright source as a round disc at a coarse read level;
+  scatter highlights as sprites and gather a clipped copy so light is kept.
 
 ## Operator-triggered appearance review (reference checklist)
 

@@ -170,6 +170,32 @@ checkpoint; every stage compares mock | previous | candidate on all seven scenes
   shafts 0.1–0.5. The probe's 6–10 ms timestamp is the lab's Python GL submission (8.3 ms CPU vs 0.18 ms GPU drain);
   a renderer with cached state would not pay it. The equirect environment pass was dead and is gone.
 
+**Second pass (2026-10-18, operator checkpoint "a long way"; evidence `tmp/release_media/recovery/p6/`, mock | session
+start | now):**
+- Shafts (mocks 1–4): the depth march over a surface pattern averaged many columns along each ray, leaving narrow,
+  separate pencils (operator: "narrow/disconnected"). Now one fan from the sun: many fine and medium rays by azimuth
+  round the world sun axis (fixed in the world through orbit), soft contrast, hanging below the sun, fading by about
+  two thirds down, over a faint march. A first version with a few solid wedges was further from the mocks (operator)
+  and was replaced. The haze between beams was the water surface: ripple flecks far outside Snell's window; the bright
+  surface is now confined to the window (the mocks' bright band ends at its edge, ~41° elevation).
+- Luminous glass (mocks 1–4): measured on the mock 2 card, the mock's rim and inner zones are 2–3x and 1.1–1.9x the
+  water beside them; ours were 1.6x / 1.0x. Reflection fill 0.5 → 2, neighbour glints 2.5 → 10.
+- Face reflection per scene: an air bubble's face mirrors ~2%; the lab's wall index made deep-scene faces milky
+  ("glowing pearls"). Deep scenes and mock 6 now 0.2–0.3, with the light's own reflection kept whole (a faint mirror of
+  a very bright source is still a bright highlight). Mock 6's amber fill was the probe sun's broad secondary lobe.
+- Abyss: caustic veils (the shared caustic cell edges on three depth sheets, drawn out along the stream) and teal
+  water lifted below (open-water colour measured per ninth of the frame). Camera-down gets no veils: its mock's net is
+  the seabed caustic the operator excluded.
+- Mock 6: the smooth backdrop dust glow was the muddy band smear; the bands are now glittering ember streams.
+- Near giants: the defocus layer's fixed taps turned highlights into striped blocks; highlights now become round bokeh
+  discs (shared `DefocusLayer`, regression bar in `test_scene3d_defocus.py`).
+- Codex audit: requested by the operator; the bridge is pinned to a Codex executable an app update removed
+  (`bridge.json` `codex_executable`), so the audit was done here.
+- Still unsolved: mock 3's near giants read as bright crescents, not full soft discs with bead bokeh; the mocks' crisp
+  thin white rim outline (ours a softer band); mocks 1–4 carry denser uniform micro-bead "rain" than the mocks; mock 4's
+  caustic streams and luminous giants; mock 6's embers want a smoky glow beneath them and diagonal strands; mock 1's
+  softer, broader light. No scene is near 1:1 yet.
+
 ## 8. Product requirements recorded from the operator (2026-10-17)
 
 - **Collision behaviour (operator 2026-10-17, supersedes the two-way ratio):** a triangle control with **Fuse**,
