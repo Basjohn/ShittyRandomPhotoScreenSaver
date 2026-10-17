@@ -38,6 +38,10 @@ VARIANTS = {
                       sun=(0.0, 0.8, -1.0), pitch=26.0, exposure=0.95),
     "ExBubble4": dict(deep=(0.003, 0.02, 0.06), water=(0.04, 0.14, 0.28), sky=(0.6, 0.8, 1.0), shaft=(0.4, 0.62, 0.9),
                       sun=(0.15, 0.65, -1.0), pitch=20.0, exposure=1.05),
+    "ExBubble5CameraAbyss": dict(deep=(0.001, 0.006, 0.02), water=(0.01, 0.05, 0.12), sky=(0.4, 0.6, 0.85),
+                                 shaft=(0.3, 0.5, 0.8), sun=(0.6, 0.6, -1.0), pitch=4.0, exposure=1.0, wisps=1.0),
+    "ExBubble5Cameradown": dict(deep=(0.002, 0.012, 0.03), water=(0.02, 0.08, 0.16), sky=(0.5, 0.7, 0.9),
+                                shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=0.4),
 }
 
 COMMON = """
@@ -50,6 +54,8 @@ uniform vec3 uDeep;
 uniform vec3 uWater;
 uniform vec3 uSkyTint;
 uniform vec3 uShaftColour;
+uniform float uWisps;
+const float SEABED_Y = -11.0;
 const float SURFACE_Y = %.3f;
 vec2 equirectUv(vec3 d) { return vec2(atan(d.x, -d.z) / 6.28318530718 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5); }
 vec3 equirectDirection(vec2 uv) {
@@ -89,6 +95,14 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
                 + uShaftColour * (pow(glow, 10.0) * 0.22 + pow(glow, 60.0) * 0.6);
     if (shafts > 0.0)
         medium += mix(uShaftColour, vec3(0.9), 0.35) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
+    if (ray.y < -0.03) {
+        // The seabed: pebbles and stone under the caustic network, fading into the water with distance.
+        float bedDistance = SEABED_Y / ray.y;
+        vec2 bedHit = (ray * bedDistance).xz;
+        vec2 bed = waterSeabed(bedHit * 0.9, uTime, 1.0);
+        vec3 lit = uWater * (0.5 + 1.5 * bed.x) + mix(uShaftColour, vec3(0.7, 0.95, 1.0), 0.4) * bed.y * (0.4 + bed.x) * 1.6;
+        return waterMedium(lit, bedDistance * 1.0, vec3(0.16, 0.065, 0.04), medium);
+    }
     if (ray.y <= 0.015) return medium;
     float distance_ = SURFACE_Y / ray.y;
     vec2 hit = (ray * distance_).xz;
@@ -134,6 +148,16 @@ void main() {
     vec3 ray = uViewToWorld * normalize(vec3(vNdc * uTan, -1.0));
     float shafts = texture(uShafts, gl_FragCoord.xy / uFrameSize).r;
     vec3 colour = basinWater(ray, 1.0, shafts);
+    if (uWisps > 0.0) {
+        float strands = 0.0;
+        for (int i = 0; i < 3; ++i) {
+            float d = 6.0 + 7.0 * float(i);
+            vec3 at = ray * d;
+            strands += waterWisps(vec2(at.x + at.z * 0.3, at.y) * (0.9 - 0.15 * float(i)) + vec2(float(i) * 7.3), uTime)
+                     * exp(-d * 0.06);
+        }
+        colour += mix(uShaftColour, vec3(0.5, 0.8, 1.0), 0.3) * strands * 0.22 * uWisps;
+    }
     FragColor = vec4(colour, 1.0);
     vec3 glow = max(colour - 1.1, 0.0) * 0.4;
     Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
@@ -447,6 +471,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform3f(u("uSun"), *sun)
         gl.glUniform3f(u("uSunBelow"), *sun_below)
         exposure = settings["exposure"]
+        gl.glUniform1f(u("uWisps"), settings.get("wisps", 0.0))
         for name, key in (("uDeep", "deep"), ("uWater", "water"), ("uSkyTint", "sky"), ("uShaftColour", "shaft")):
             gl.glUniform3f(u(name), *(v * exposure for v in settings[key]))
 
@@ -571,7 +596,8 @@ def main():
     gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, env_fbo)
     gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, env, 0)
     half = (W // 2, H // 2)
-    names = list(VARIANTS)
+    only = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--only=")), None)
+    names = [name for name in VARIANTS if only is None or name in only]
     sheet = Image.new("RGB", (W, half[1] * len(names)))
     for row, name in enumerate(names):
         image, gpu, count = render_variant(capture, resources, target, programs, env, env_fbo, VARIANTS[name], 11 + row)
