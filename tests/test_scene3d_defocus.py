@@ -1,0 +1,96 @@
+"""The defocus layer spreads each pixel over its own circle of confusion, keeps the light it carries, leaves sharp
+pixels sharp and hands back the caller's state. Offscreen GL through the transition capture harness; no window."""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+from OpenGL import GL as gl
+
+from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
+from tools.transition_contact_sheet import TransitionCapture
+
+pytestmark = pytest.mark.qt
+
+SIZE = 64
+_POINTS_VERTEX = """#version 460 core
+uniform vec2 uAt[2];
+void main() {
+    gl_PointSize = 1.0;
+    gl_Position = vec4((uAt[gl_VertexID] + 0.5) / 64.0 * 2.0 - 1.0, 0.0, 1.0);
+}
+"""
+_POINTS_FRAGMENT = "#version 460 core\n" + SCENE_DEFOCUS_GLSL + """
+uniform float uCircle[2];
+flat in int vId;
+void main() {
+    // Point 0: bright, far out of focus; point 1: dim and sharp.
+    int id = gl_PrimitiveID;
+    if (id == 0) sceneDefocusWrite(vec3(40.0), 1.0, uCircle[0]);
+    else sceneDefocusWrite(vec3(0.5), 1.0, uCircle[1]);
+}
+"""
+
+
+@pytest.fixture
+def capture(qt_app):
+    result = TransitionCapture(SIZE, SIZE)
+    yield result
+    result.close()
+
+
+def _float_target():
+    texture = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
+    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+    gl.glTexStorage2D(gl.GL_TEXTURE_2D, 1, gl.GL_RGBA32F, SIZE, SIZE)
+    fbo = int(np.asarray(gl.glGenFramebuffers(1)).ravel()[0])
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+    gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
+    return texture, fbo
+
+
+def test_a_point_spreads_over_its_circle_keeping_its_light_and_sharp_pixels_stay(capture):
+    layer = DefocusLayer("defocus test")
+    texture, fbo = _float_target()
+    program = compile_program(_POINTS_VERTEX, _POINTS_FRAGMENT.replace("flat in int vId;\n", ""), label="defocus pts")
+    try:
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glViewport(0, 0, SIZE, SIZE)
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+        layer.begin(SIZE, SIZE)
+        gl.glUseProgram(program)
+        gl.glUniform2fv(gl.glGetUniformLocation(program, "uAt"), 2, [20.0, 30.0, 50.0, 10.0])
+        gl.glUniform1fv(gl.glGetUniformLocation(program, "uCircle"), 2, [8.0, 0.0])
+        gl.glBindVertexArray(capture.vao)
+        gl.glDrawArrays(gl.GL_POINTS, 0, 2)
+        layer.end()
+        # The caller's framebuffer, viewport and blend come back.
+        assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == fbo
+        assert [int(v) for v in gl.glGetIntegerv(gl.GL_VIEWPORT)] == [0, 0, SIZE, SIZE]
+        assert gl.glIsEnabled(gl.GL_BLEND)
+        layer.composite(12.0)
+        pixels = np.frombuffer(bytes(gl.glReadPixels(0, 0, SIZE, SIZE, gl.GL_RGBA, gl.GL_FLOAT)),
+                               dtype=np.float32).reshape(SIZE, SIZE, 4)
+        assert gl.glIsEnabled(gl.GL_BLEND)
+        # The sharp point is exactly where it was.
+        assert pixels[10, 50, 0] == pytest.approx(0.5, abs=1e-3)
+        assert pixels[10, 51, 0] == pytest.approx(0.0, abs=1e-3)
+        # The bright point became an even disc of radius ~8 holding (about) its light.
+        disc = pixels[:, :, 0].copy()
+        disc[10, 50] = 0.0
+        assert disc.sum() == pytest.approx(40.0, rel=0.15)
+        lit = disc > 40.0 / (np.pi * 64.0) * 0.3
+        ys, xs = np.nonzero(lit)
+        radius = np.sqrt((xs - 20) ** 2 + (ys - 30) ** 2).max()
+        assert 6.0 <= radius <= 10.0           # the circle, its edge softened by the read level's texel
+        assert disc[30, 20] > 0.0 and disc[30, 24] > 0.0          # filled, not a ring
+        assert disc[30, 32] == pytest.approx(0.0, abs=1e-6)        # nothing past the circle
+    finally:
+        gl.glDisable(gl.GL_BLEND)
+        layer.release()
+        gl.glDeleteFramebuffers(1, [fbo])
+        gl.glDeleteTextures(1, [texture])
+    assert not layer.has_resources()

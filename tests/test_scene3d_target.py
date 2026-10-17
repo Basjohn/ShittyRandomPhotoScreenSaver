@@ -641,3 +641,41 @@ def test_transparency_allocates_nothing_unless_asked_and_needs_its_scope(capture
     finally:
         target.release()
         resources.release_resources()
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_an_hdr_target_keeps_light_brighter_than_white_and_tone_maps_it_once(capture, samples):
+    from rendering.quick.render.gl_resources import compile_program
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    flat = compile_program(_RECT_VERTEX, _FLAT_FRAGMENT, label="flat")
+    try:
+        card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        with pytest.raises(ValueError):
+            with target.scope(card, samples, resources, hdr=1.0):
+                pass
+        captured = {}
+
+        def draw(values):
+            _clear(capture)
+            with target.scope(card, samples, resources, overlay=1.0, bloom=0.5, hdr=1.0):
+                gl.glBindVertexArray(capture.vao)
+                for x0, value in zip((-1.0, -0.5, 0.0, 0.5), values):
+                    _rect(flat, (x0, -1.0, x0 + 0.5, 1.0), 0.0, (value, value, value, 1.0))
+                colour, _depth = target.background(card, resources)
+                buffer = np.zeros((target.allocation[1], target.allocation[0], 4), dtype=np.float32)
+                gl.glGetTextureImage(colour, 0, gl.GL_RGBA, gl.GL_FLOAT, buffer.nbytes, buffer)
+                captured["background"] = buffer
+            return _read(capture)
+
+        pixels = draw((0.25, 1.0, 3.0, 12.0))
+        row = HEIGHT // 2
+        # Light past white is kept for every pass that reads the scene.
+        assert captured["background"][row, 3 * WIDTH // 4 - 8, 0] == pytest.approx(3.0, abs=0.01)
+        levels = [int(pixels[row, x, 0]) for x in (WIDTH // 8, 3 * WIDTH // 8, 5 * WIDTH // 8, 7 * WIDTH // 8)]
+        # One smooth curve: brighter in stays brighter out, nothing clips below the brightest.
+        assert levels[0] < levels[1] < levels[2] < levels[3] <= 255
+        assert levels[2] < 250
+    finally:
+        gl.glDeleteProgram(flat)
+        target.release()
+        resources.release_resources()

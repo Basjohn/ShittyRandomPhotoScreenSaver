@@ -101,6 +101,13 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
   the abyss and camera-down views (crisp giants with violet rims, sparkle-dense water), wake ribbons, merged doublets
   as the mocks show them, and chains that vary like the mocks'.
 
+- Lab shading rebuilt on real optics (2026-10-17): bubbles traced through a hollow glass shell
+  (`sceneHollowSphereTrace`), every path looked up in a `SceneProbe` of the scene and the captured frame; HDR scene
+  (`hdr=`), near giants in a `DefocusLayer`, 3D particulate drawn into frame and probe, spheres round on screen.
+  Cost: the lab captures a 512 px probe every frame (~6 ms GPU at 1672x941 in total); a renderer would capture it
+  smaller or every few frames. Still far from parity on every mock: shells lack the mocks' busy reflected detail and
+  crisp starburst sparkles, wakes do not read as water traces, mid bubbles are too sparse and too regular.
+
 ## 7. Product requirements recorded from the operator (2026-10-17)
 
 - **Collision behaviour (operator 2026-10-17, supersedes the two-way ratio):** a triangle control with **Fuse**,

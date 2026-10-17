@@ -183,10 +183,21 @@ uniform float uOpacity;
 uniform sampler2D uBloom;
 uniform vec2 uBloomScale;      // 1 / allocation size: the glow covers the allocation at half size
 uniform float uBloomStrength;
+uniform float uHdrExposure;    // > 0: an HDR scene, tone mapped (ACES fit) at this exposure; 0: as drawn
+vec3 sceneToneMap(vec3 x) {
+    x *= uHdrExposure;
+    return clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
 vec4 sceneOverlayBloom(vec4 scene, ivec2 texel) {
     vec3 glow = texture(uBloom, (vec2(texel) + 0.5) * uBloomScale).rgb * uBloomStrength;
     if (scene.a <= 0.0 && max(glow.r, max(glow.g, glow.b)) < 1.0 / 512.0) discard;
-    return vec4((scene.rgb + glow) * uOpacity, scene.a * uOpacity);
+    vec3 light = scene.rgb + glow;
+    if (uHdrExposure > 0.0) {
+        // Tone map the straight colour, so coverage at an overlay's edge is kept.
+        float cover = max(scene.a, 1e-4);
+        light = sceneToneMap(light / cover) * cover;
+    }
+    return vec4(light * uOpacity, scene.a * uOpacity);
 }
 """
 _COMPOSITE_OVERLAY_BLOOM_FRAGMENT = _COMPOSITE_HEADER + "uniform sampler2D uScene;\n" + _OVERLAY_BLOOM_GLSL + """
@@ -398,8 +409,9 @@ class SceneTarget:
     def __init__(self, label: str) -> None:
         self.label = label
         # allocated width, height, requested samples, with motion, with emission, with shafts, with a depth texture,
-        # with order-independent transparency
-        self._key: tuple[int, int, int, bool, bool, bool, bool, bool] | None = None
+        # with order-independent transparency, HDR (half-float colour, background and resolve)
+        self._key: tuple[int, int, int, bool, bool, bool, bool, bool, bool] | None = None
+        self._exposure = 0.0
         self._samples = 0                                # samples allocated (1 = a plain texture)
         # colour / velocity: the scene's attachments (multisampled when _samples > 1);
         # resolve_*: their resolved copies for the post effects.
@@ -432,8 +444,12 @@ class SceneTarget:
     def scope(self, frame: SceneFrame, samples: int, resources,
               rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
               motion_blur: bool = False, overlay: float | None = None, shafts: bool = False,
-              depth_texture: bool = False, oit: bool = False) -> Iterator[None]:
+              depth_texture: bool = False, oit: bool = False, hdr: float | None = None) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
+
+        With ``hdr`` (an exposure, overlay with bloom only) the scene's colour, background capture and resolve are
+        half-float, so light brighter than white is kept for every pass that reads it (refraction, reflection,
+        bloom), and the composite tone maps it (ACES fit) once at that exposure.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
         (see ``post.BloomChain``); the passes must then write alpha deliberately.
@@ -447,9 +463,12 @@ class SceneTarget:
             raise ValueError(f"{self.label}: an overlay scene target has no motion blur")
         if shafts and overlay is None:
             raise ValueError(f"{self.label}: light shafts need an overlay scene target")
+        if hdr is not None and (overlay is None or bloom <= 0.0):
+            raise ValueError(f"{self.label}: an HDR scene target tone maps in its overlay bloom composite")
         self.begin(frame, samples, rect, motion_blur, overlay=overlay,
                    emission=overlay is not None and bloom > 0.0, shafts=shafts, depth_texture=depth_texture,
-                   oit=oit)
+                   oit=oit, hdr=hdr is not None)
+        self._exposure = 0.0 if hdr is None else max(float(hdr), 1e-3)
         try:
             yield
         except BaseException:
@@ -558,7 +577,8 @@ class SceneTarget:
 
     def _allocate_background(self) -> None:
         width, height = self._key[0], self._key[1]
-        self._allocate_plain_texture("background_colour", width, height, gl.GL_RGBA8)
+        self._allocate_plain_texture("background_colour", width, height,
+                                     gl.GL_RGBA16F if self._key[8] else gl.GL_RGBA8)
         self._allocate_plain_texture("background_depth", width, height, gl.GL_R32F)
         for key in ("background_colour", "background_depth"):
             for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
@@ -681,22 +701,23 @@ class SceneTarget:
 
     def warm(self, size: tuple[int, int], samples: int, *, motion_blur: bool = False,
              bloom: bool = False, overlay: bool = False, shafts: bool = False, depth_texture: bool = False,
-             background: bool = False, oit: bool = False) -> bool:
+             background: bool = False, oit: bool = False, hdr: bool = False) -> bool:
         """Allocate ahead, one unit per call, what ``scope`` will use at ``size`` (device
         pixels) with these settings; True once all of it is allocated. ``begin`` reuses it."""
         width, height = (int(value) for value in size)
         samples, motion_blur = max(1, int(samples)), bool(motion_blur)
         emission = bool(overlay and bloom)
         shafts = bool(overlay and shafts)
-        depth_texture, oit = bool(depth_texture), bool(oit)
+        depth_texture, oit, hdr = bool(depth_texture), bool(oit), bool(hdr)
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or key[5] != shafts or key[6] != depth_texture or key[7] != oit
+                or key[5] != shafts or key[6] != depth_texture or key[7] != oit or key[8] != hdr
                 or width > key[0] or height > key[1]):
             self.release()
             self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
                                gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture, oit)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture, oit,
+                           hdr)
             self._commit()
             return False
         allocation = (self._key[0], self._key[1])
@@ -739,7 +760,7 @@ class SceneTarget:
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
               motion_blur: bool = False, overlay: float | None = None, emission: bool = False,
-              shafts: bool = False, depth_texture: bool = False, oit: bool = False) -> None:
+              shafts: bool = False, depth_texture: bool = False, oit: bool = False, hdr: bool = False) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -748,13 +769,15 @@ class SceneTarget:
                            gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
         self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         motion_blur, emission, shafts = bool(motion_blur), bool(emission), bool(shafts)
-        depth_texture, oit = bool(depth_texture), bool(oit)
+        depth_texture, oit, hdr = bool(depth_texture), bool(oit), bool(hdr)
+        self._exposure = 0.0
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or key[5] != shafts or key[6] != depth_texture or key[7] != oit
+                or key[5] != shafts or key[6] != depth_texture or key[7] != oit or key[8] != hdr
                 or width > key[0] or height > key[1]):
             self.release()
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture, oit)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture, oit,
+                           hdr)
         self._rect = (x, y, width, height)
         self._overlay = None if overlay is None else max(0.0, min(1.0, float(overlay)))
         self._inherited_blend = _blend_state() if emission or shafts else None
@@ -923,7 +946,8 @@ class SceneTarget:
             key = "scene_overlay_bloom_samples" if multisampled else "scene_overlay_bloom"
             source = _COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT if multisampled else _COMPOSITE_OVERLAY_BLOOM_FRAGMENT
         program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
-        names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength")
+        names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength",
+                 "uHdrExposure")
         if shafts:
             names += ("uShafts", "uShaftColour")
         uniforms = resources.uniforms(key, names + (("uSceneSamples", "uSamples") if multisampled else ("uScene",)))
@@ -938,6 +962,7 @@ class SceneTarget:
         gl.glUniform1f(uniforms["uOpacity"], self._overlay)
         gl.glUniform2f(uniforms["uBloomScale"], 1.0 / self._key[0], 1.0 / self._key[1])
         gl.glUniform1f(uniforms["uBloomStrength"], float(bloom))
+        gl.glUniform1f(uniforms["uHdrExposure"], self._exposure)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, glow)
         gl.glUniform1i(uniforms["uBloom"], 1)
@@ -1009,7 +1034,7 @@ class SceneTarget:
         """The resolved copies the post effects read (colour, and motion with motion blur)."""
         width, height = self._key[0], self._key[1]
         motion = bool(self._names["velocity"])
-        self._allocate_plain_texture("resolve_texture", width, height, gl.GL_RGBA8)
+        self._allocate_plain_texture("resolve_texture", width, height, gl.GL_RGBA16F if self._key[8] else gl.GL_RGBA8)
         self._names["resolve_fbo"] = _new_framebuffer(f"{self.label} scene resolve")
         gl.glNamedFramebufferTexture(self._names["resolve_fbo"], gl.GL_COLOR_ATTACHMENT0,
                                      self._names["resolve_texture"], 0)
@@ -1055,11 +1080,11 @@ class SceneTarget:
 
     def _allocate(self, width: int, height: int, requested: int, motion_blur: bool = False,
                   emission: bool = False, shafts: bool = False, depth_texture: bool = False,
-                  oit: bool = False) -> None:
+                  oit: bool = False, hdr: bool = False) -> None:
         samples = min(requested, gl_query.get_int(gl.GL_MAX_SAMPLES),
                       gl_query.get_int(gl.GL_MAX_COLOR_TEXTURE_SAMPLES))
         self._names["fbo"] = _new_framebuffer(f"{self.label} scene target")
-        self._allocate_attachment("colour", samples, width, height, gl.GL_RGBA8)
+        self._allocate_attachment("colour", samples, width, height, gl.GL_RGBA16F if hdr else gl.GL_RGBA8)
         if motion_blur:
             self._allocate_attachment("velocity", samples, width, height, gl.GL_RG16F)
         if emission:
@@ -1115,7 +1140,7 @@ class SceneTarget:
             if gl.glCheckNamedFramebufferStatus(fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
                 raise RuntimeError(f"{self.label} transparency incomplete at {width}x{height}x{samples}")
         self._key = (width, height, requested, bool(motion_blur), bool(emission), bool(shafts), bool(depth_texture),
-                     bool(oit))
+                     bool(oit), bool(hdr))
         self._samples = max(1, samples)
 
     def release(self) -> None:
