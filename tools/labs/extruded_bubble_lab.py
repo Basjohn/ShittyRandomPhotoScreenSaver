@@ -69,15 +69,15 @@ VARIANTS = {
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(film=0.9, film_range=(255.0, 345.0), glint_power=120.0, glint_sharp=300.0, probe_fill=6.0, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
-                                 specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chains=4.5, chain_size=1.0,
+                                 specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
                                  deep=(0.004, 0.02, 0.05), water=(0.01, 0.06, 0.14), sky=(0.3, 0.6, 1.0),
                                  shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0,
                                  mist=0.6, wakes=0.0, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
                                  absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
-    "ExBubble5Cameradown": dict(film=0.9, film_range=(255.0, 345.0), glint_power=120.0, glint_sharp=300.0, probe_fill=2.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
+    "ExBubble5Cameradown": dict(film=0.9, film_range=(255.0, 345.0), glint_power=60.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                 rough=0.05, light_power=1.5, specks=1.0, warm_share=0.85, streak=(0.15, 1.0),
                                 chains=5.0, chain_size=1.0,
                                 deep=(0.07, 0.15, 0.26), water=(0.05, 0.13, 0.24), sky=(0.5, 0.7, 0.9),
@@ -433,6 +433,9 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     // Soap-film interference on what the surface mirrors: thickness drifts over the bubble (gravity thins the top),
     // the hue is kept relative (it recolours reflected scene light, never adds light of its own). Per scene.
     vec3 filmHue = vec3(1.0);
+    // Reflections' share: uReflect at the face, full toward the rim (a near giant's face mirrors little).
+    float faceOn = clamp(dot(-rayView, normalize(frontView - sphere.xyz)), 0.0, 1.0);
+    float reflectShare = mix(1.0, uReflect, pow(faceOn, 0.6));
     if (uFilm > 0.0) {
         vec3 local = (frontView - sphere.xyz) / sphere.w;
         float c = clamp(dot(-rayView, normalize(local)), 0.0, 1.0);
@@ -458,8 +461,8 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
         } else {
-            light += paths[i].w * seen * uReflect;
-            own += paths[i].w * uReflect;
+            light += paths[i].w * seen * reflectShare;
+            own += paths[i].w * reflectShare;
         }
     }
     return vec4(light, own);
@@ -846,7 +849,7 @@ void main() {
 
 def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0, travel=None, fizz=1.0,
                particulate_scene=False, chain_scale=1.0, chain_size=1.0, fizz_size=1.0, banded=None, small_count=1.0,
-               columns=None):
+               columns=None, mid_count=1.0):
     if travel is not None:
         travel = np.array(travel, dtype=float) / np.linalg.norm(travel)
         across = np.cross(travel, (0.0, 0.0, 1.0))
@@ -881,7 +884,8 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
         return items, clusters
     # Bubbles by on-screen radius, as the mocks show them: hundreds small, a good number mid, a few large.
     pixel = 2.0 * tan[1] / H
-    bands = ((10, 40.0, 85.0), (26, 18.0, 40.0), (60, 8.0, 18.0), (int(150 * small_count), 2.0, 7.0))
+    bands = ((10, 40.0, 85.0), (int(26 * mid_count), 18.0, 40.0), (int(60 * mid_count), 8.0, 18.0),
+             (int(150 * small_count), 2.0, 7.0))
     placed = []     # (x px, y px, radius px) of the bubbles 8 px and up
     for count, low, high in bands:
         for _ in range(count):
@@ -999,7 +1003,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                                  settings.get("specks", 0.0) > 0.0, settings.get("chains", 1.0),
                                  settings.get("chain_size", 1.0), settings.get("fizz_size", 1.0),
                                  settings if settings.get("banded") else None, settings.get("small_count", 1.0),
-                                 settings.get("columns"))
+                                 settings.get("columns"), settings.get("mid_count", 1.0))
     pdata = particulate(random.Random(seed * 7 + 1), settings)
     # Proxies: each bubble as the probe sees it, its glint toward the light (a small bright point near its surface).
     bubble_rows = np.array([row for row in items if row[5] == 0.0 and row[3] > 0.01], dtype=np.float64)
@@ -1131,8 +1135,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
         gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0))
-        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.4) if program == near_program else 1.0)
-        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.7))
+        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program else 1.0)
+        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
         gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.6))
