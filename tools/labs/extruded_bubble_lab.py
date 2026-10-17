@@ -52,7 +52,7 @@ SURFACE_Y = 9.0
 
 # Per mock: water palette, sun, camera pitch.
 VARIANTS = {
-    "ExBubble1": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
+    "ExBubble1": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
                       chains=3.5, chain_size=1.3,
                       deep=(0.05, 0.08, 0.12), water=(0.2, 0.25, 0.32), sky=(0.85, 0.9, 0.95), shaft=(0.62, 0.67, 0.74),
                       sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032)),
@@ -84,10 +84,13 @@ VARIANTS = {
                                 mist=0.6, wakes=0.8, sparkle=0.7, crisp=1.0, surface=30.0, absorb=(0.1, 0.05, 0.03),
                                 drift=0.15, shaft_y=12.0),
 }
-VARIANTS["ExBubble6Diagonal"] = dict(deep=(0.018, 0.065, 0.085), water=(0.035, 0.1, 0.13), sky=(1.0, 0.55, 0.22),
+VARIANTS["ExBubble6Diagonal"] = dict(deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), banded=True,
+                              speck_warm=(0.9, 0.26, 0.05), hdr_exposure=0.85, band_freq=9.0, sky=(1.0, 0.55, 0.22),
                               shaft=(0.95, 0.45, 0.14), light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), pitch=4.0,
-                              exposure=1.0, surface=60.0, shaft_y=16.0, glow=0.5, rays=0.35, mist=0.6, sparkle=1.5, dust=2.2, sway=0.25, fizz=2.5, ray_focus=1.0, crisp=1.0, light_view=(1.0, 0.68, -1.0), specks=1.0, light_power=8.0, streak=(1.0, -0.3), shell=0.1, iors=(1.0, 1.5, 1.0), warm_share=0.9, lens=1.0,
-                              wakes=0.8, travel=(1.0, -0.3, 0.15), absorb=(0.06, 0.05, 0.05), focus=3.4,
+                              exposure=1.0, surface=60.0, shaft_y=16.0, glow=0.35, rays=0.2, mist=0.6, sparkle=1.5, dust=0.5, sway=0.25, fizz=2.5, ray_focus=1.0, crisp=1.0, light_view=(1.0, 0.68, -1.0), specks=2.5, light_power=0.3, streak=(1.0, -0.3), cloud_contrast=3.0,
+                              cloud_floor=0.03, cloud_glow=1.2, fizz_size=2.0, rough=0.22, inner_blur=0.18, speck_size=1.8, small_count=5.0, shell=0.03, iors=(1.15, 1.6, 1.0), probe_fill=1.2,
+                              glint_power=120.0, glint_sharp=300.0, warm_share=0.9, lens=1.0,
+                              wakes=0.3, travel=(1.0, -0.3, 0.15), absorb=(0.06, 0.05, 0.05), focus=3.4,
                               aperture=1.5)
 
 COMMON = """
@@ -379,16 +382,21 @@ vec4 behindAt(vec3 viewPoint, float blurPx) {
     if (trust <= 0.0) return vec4(0.0);
     px = clamp(px, vec2(0.5), uFrameSize - 0.5);
     if (blurPx < 0.75) return vec4(texture(uBackground, px / uTargetSize).rgb, trust);
+    // A filled disc (golden spiral) rotated per pixel, so sparse bright specks spread to a haze instead of ghosts.
     vec3 sum = vec3(0.0);
-    for (int i = 0; i < 8; ++i) {
-        float a = float(i) * 0.785398 + 0.39;
-        sum += texture(uBackground, (px + vec2(cos(a), sin(a)) * blurPx) / uTargetSize).rgb;
+    float spin = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+    for (int i = 0; i < 16; ++i) {
+        float r = sqrt((float(i) + 0.5) / 16.0) * blurPx;
+        float a = float(i) * 2.39996323 + spin;
+        sum += texture(uBackground, (px + vec2(cos(a), sin(a)) * r) / uTargetSize).rgb;
     }
-    return vec4(sum / 8.0, trust);
+    return vec4(sum / 16.0, trust);
 }
 uniform float uShell;            // the glass wall's thickness, a share of the radius (0: a solid sphere)
 uniform vec3 uIors;              // outside, wall, core
 uniform float uRough;            // the surface's own blur (softly focused scenes)
+uniform float uInnerBlur;
+uniform float uFrameShare;       // what is seen through: the frame (1) or the probe (0)        // blur of the scene seen through a bubble, a share of its radius in pixels
 // A bubble seen along one view ray (view space: the ray, the sphere's centre and radius): the ray traced exactly
 // through the hollow sphere (front reflection, the glass wall with its total internal reflections, the core, the
 // back), every path looked up in the scene itself (the probe; what finally comes out behind, from the captured
@@ -415,8 +423,9 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         if (i >= count) break;
         vec3 seen = sceneProbe(uProbe, uViewToWorld * paths[i].xyz, blur, uProbeLevels);
         if (i == count - 1) {
-            vec4 behind = behindAt(frontView + paths[i].xyz * uBehind, soft * pixels * 0.35);
-            seen = mix(seen, behind.rgb, behind.a);
+            // What is seen through is out of focus inside the bubble (the lens's depth): softened with its size.
+            vec4 behind = behindAt(frontView + paths[i].xyz * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
+            seen = mix(seen, behind.rgb, behind.a * uFrameShare);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
         } else {
@@ -681,6 +690,7 @@ uniform mat4 uProjection;
 uniform float uPixel;                // view units per pixel at unit distance
 uniform vec3 uSunBelow;
 uniform vec3 uLightColour;
+uniform vec3 uSpeckWarm;
 uniform vec3 uWater;
 uniform float uSpecks;
 out vec2 vCorner;
@@ -693,7 +703,7 @@ void main() {
     float drawn = max(aPoint.w, uPixel * depth * 0.75);
     float energy = min((aPoint.w * aPoint.w) / (drawn * drawn), 1.0);
     float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz), uSunBelow), 0.0), 4.0);
-    vec3 tint = aLook.y > 0.5 ? uLightColour : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
+    vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
     vColour = tint * aLook.x * phase * energy * uSpecks;
     vCorner = corner;
     gl_Position = depth > 0.05 ? uProjection * vec4(c + vec3(corner * drawn * 2.0, 0.0), 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
@@ -713,6 +723,18 @@ void main() {
 """
 
 
+def stream_bands(directions, settings):
+    """0..1 density of the streaming bands along world directions (rows of unit vectors)."""
+    along = np.array(settings.get("travel", (0.0, 1.0, 0.0)), dtype=float)
+    along /= np.linalg.norm(along)
+    across = np.cross(along, (0.0, 0.0, 1.0))
+    across = across / np.linalg.norm(across) if np.linalg.norm(across) > 1e-6 else np.array((1.0, 0.0, 0.0))
+    a, b = directions @ across, directions @ along
+    freq = settings.get("band_freq", 9.0)
+    phase = a * freq + 1.4 * np.sin(b * 2.3 + a * 3.0) + 0.8 * np.sin(b * 5.1 - a * 7.0)
+    return np.clip(0.5 + 0.5 * np.sin(phase), 0.0, 1.0)
+
+
 def particulate(rng, settings):
     """Specks in the water all round the eye, gathered in drifting clouds stretched along the streaming direction."""
     count = int(settings.get("specks", 0.0) * 90000)
@@ -727,15 +749,13 @@ def particulate(rng, settings):
     along /= np.linalg.norm(along)
     across = np.cross(along, (0.0, 0.0, 1.0))
     across = across / np.linalg.norm(across) if np.linalg.norm(across) > 1e-6 else np.array((1.0, 0.0, 0.0))
-    a, b = points @ across, points @ along
-    clouds = 0.5 + 0.5 * np.sin(a * 0.55 + 1.6 * np.sin(b * 0.17 + a * 0.05) + 2.0 * np.sin(points[:, 2] * 0.13))
-    clouds = np.clip(clouds, 0.0, 1.0) ** 1.5
-    keep = nrng.random(count * 2) < (0.12 + 0.88 * clouds)
+    clouds = stream_bands(directions, settings) ** settings.get("cloud_contrast", 1.5)
+    keep = nrng.random(count * 2) < (settings.get("cloud_floor", 0.12) + 0.88 * clouds)
     points, distance, clouds = points[keep][:count], distance[keep][:count], clouds[keep][:count]
     n = len(points)
     pixel = 2.0 * math.tan(math.radians(31.0)) / H
-    radius = nrng.uniform(0.25, 1.1, n) ** 1.3 * pixel * distance
-    bright = np.exp(nrng.normal(0.0, 0.7, n)) * (0.35 + 1.3 * clouds)
+    radius = nrng.uniform(0.25, 1.1, n) ** 1.3 * pixel * distance * settings.get("speck_size", 1.0)
+    bright = np.exp(nrng.normal(0.0, 0.7, n)) * (0.35 + settings.get("cloud_glow", 1.3) * clouds)
     warm = (nrng.random(n) < settings.get("warm_share", 0.7)).astype(float)
     return np.column_stack([points, radius, bright, warm, nrng.random(n), np.zeros(n)]).astype(np.float32)
 
@@ -796,7 +816,7 @@ void main() {
 
 
 def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0, travel=None, fizz=1.0,
-               particulate_scene=False, chain_scale=1.0, chain_size=1.0):
+               particulate_scene=False, chain_scale=1.0, chain_size=1.0, fizz_size=1.0, banded=None, small_count=1.0):
     if travel is not None:
         travel = np.array(travel, dtype=float) / np.linalg.norm(travel)
         across = np.cross(travel, (0.0, 0.0, 1.0))
@@ -831,7 +851,7 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
         return items, clusters
     # Bubbles by on-screen radius, as the mocks show them: hundreds small, a good number mid, a few large.
     pixel = 2.0 * tan[1] / H
-    bands = ((10, 40.0, 85.0), (26, 18.0, 40.0), (60, 8.0, 18.0), (150, 2.0, 7.0))
+    bands = ((10, 40.0, 85.0), (26, 18.0, 40.0), (60, 8.0, 18.0), (int(150 * small_count), 2.0, 7.0))
     placed = []     # (x px, y px, radius px) of the bubbles 8 px and up
     for count, low, high in bands:
         for _ in range(count):
@@ -839,6 +859,10 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
                 u, v = rng.uniform(-1.12, 1.12), rng.uniform(-1.1, 1.08)
                 pixels = rng.uniform(low, high)
                 x, y = u * W / 2, v * H / 2
+                if banded is not None:
+                    d = np.array(place(u, v, 1.0))
+                    if rng.random() > 0.1 + 0.9 * float(stream_bands(d[None, :] / np.linalg.norm(d), banded)[0]) ** 2:
+                        continue
                 if low < 8.0 or all((x - a) ** 2 + (y - b) ** 2 > ((pixels + c) * 1.05) ** 2 for a, b, c in placed):
                     break
             if low >= 8.0:
@@ -871,10 +895,10 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
                     if travel is not None:
                         at = (np.array(p) - travel * (r * 0.6 + along) + across * (rng.gauss(0, spread) + math.sin(along / r) * r * 0.3)
                               + np.array((0.0, 0.0, 1.0)) * rng.gauss(0, spread * 0.6))
-                        bubble(tuple(at), r * rng.uniform(0.02, 0.08) * (1.0 - 0.5 * along / (r * 9.0)))
+                        bubble(tuple(at), r * rng.uniform(0.02, 0.08) * fizz_size * (1.0 - 0.5 * along / (r * 9.0)))
                         continue
                     bubble((p[0] + rng.gauss(0, spread) + math.sin(along / r) * r * 0.3 - drift * along, p[1] - r * 0.6 - along,
-                            p[2] + rng.gauss(0, spread * 0.6)), r * rng.uniform(0.02, 0.08) * (1.0 - 0.5 * along / (r * 9.0)))
+                            p[2] + rng.gauss(0, spread * 0.6)), r * rng.uniform(0.02, 0.08) * fizz_size * (1.0 - 0.5 * along / (r * 9.0)))
     # Near, out-of-focus giants at the edges.
     for side, v_low, v_high in ((-1, -0.9, -0.2), (1, -0.9, 0.0), (rng.choice((-1, 1)), 0.3, 0.8)):
         if v_low > 0.0 and rng.random() < 0.5:
@@ -932,7 +956,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
     items, clusters = population(random.Random(seed), view_to_world, tan, settings.get("drift", 0.0), wakes,
                                  settings.get("wakes", 0.0), settings.get("travel"), settings.get("fizz", 1.0),
                                  settings.get("specks", 0.0) > 0.0, settings.get("chains", 1.0),
-                                 settings.get("chain_size", 1.0))
+                                 settings.get("chain_size", 1.0), settings.get("fizz_size", 1.0),
+                                 settings if settings.get("banded") else None, settings.get("small_count", 1.0))
     pdata = particulate(random.Random(seed * 7 + 1), settings)
     # Proxies: each bubble as the probe sees it, its glint toward the light (a small bright point near its surface).
     bubble_rows = np.array([row for row in items if row[5] == 0.0 and row[3] > 0.02], dtype=np.float64)
@@ -1061,8 +1086,10 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
         gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0))
-        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.55))
+        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.3))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
+        gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.06))
+        gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
         gl.glUniform1f(u("uNearLayer"), 1.0 if program == near_program else 0.0)
         gl.glActiveTexture(gl.GL_TEXTURE3)
         gl.glBindTexture(gl.GL_TEXTURE_2D, env)
@@ -1085,6 +1112,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniformMatrix4fv(q("uProjection"), 1, gl.GL_FALSE, proj)
         gl.glUniform1f(q("uPixel"), pixel)
         gl.glUniform1f(q("uSpecks"), 1.0)
+        sky_ = np.array(settings["sky"])
+        gl.glUniform3f(q("uSpeckWarm"), *settings.get("speck_warm", settings.get("light", tuple(sky_ / max(sky_.mean(), 1e-3) * 0.15 + 0.85))))
         blend0 = bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
         depth_mask = bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))
         gl.glEnablei(gl.GL_BLEND, 0)
@@ -1183,6 +1212,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1f(v("uLens"), settings.get("lens", 0.85))
                         gl.glUniform1f(v("uShell"), settings.get("shell", 0.1))
                         gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
+                        gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
+                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.06))
+                        gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUseProgram(shell)
                     gl.glBindVertexArray(vao)
                     if not BACKDROP_ONLY:
@@ -1196,6 +1228,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1f(m("uLens"), settings.get("lens", 0.85))
                     gl.glUniform1f(m("uShell"), settings.get("shell", 0.1))
                     gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
+                    gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
+                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.06))
+                    gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
                     gl.glUniformMatrix4fv(m("uProjection"), 1, gl.GL_FALSE, projection)
                     gl.glUniform1f(m("uPixelSize"), 2.0 * tan_y / H)
