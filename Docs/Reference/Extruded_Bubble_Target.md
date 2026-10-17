@@ -151,6 +151,25 @@ chains, tiny-bead trails, ember particulate/dust in the copper scene, the ripple
 → P3 double rim and curvature → P4 shafts alone → P5 all-scene validation and performance. One variable family per
 checkpoint; every stage compares mock | previous | candidate on all seven scenes plus 1:1 glass crops.
 
+**Stage results (2026-10-18; evidence `tmp/release_media/recovery/`, mock | baseline `e2b12cd3` | candidate):**
+- P1 correctness, landed: C01 rim spread removed (the same-scene A/B showed stippled bands; no cost saving), C03, C04,
+  C05 (clusters shade the union surface; normal diagnostic continuous through the neck), C06 depth writes. Diagnostic
+  views `--diag=1..5`, per-pass GPU timestamps, `--set` same-scene overrides, `--yaw` orbit.
+- Blocker 1 specular: **improved, not accepted.** Analytic finite-area light lobes (core + shoulder, footprint-widened,
+  energy kept) on every mirrored path, world-fixed per scene, inset from grazing; the probe filtered by the tangential
+  footprint (the radial one averaged the hemisphere into the rims). Bubbles now carry highlights toward the light and a
+  second on the far wall; operator called the card sweep "an exceptional step". Still missing: the mocks' many smaller
+  reflected highlights and busy reflected detail inside the wall.
+- Blocker 2 double rim: **partly improved.** Rims vary with the light round the bubble; they are still concentric and
+  too regular; a single interface for small bubbles was tried and rejected (striped marbles).
+- Blocker 3 roundness: **improved.** View-through blur 0.6 → 0.25 radius gives dark, clear interiors with curved light;
+  clusters use the union normal. Giants remain soft; interiors lack the mocks' refracted scene detail.
+- Blocker 4 shafts: **improved for mocks 1–4** (broad soft cones from a lower-frequency source, soft threshold, slow
+  variation); deep scenes keep their beams. The upper frame is hazier than the mocks.
+- Cost (1672x941, 4x MSAA, RTX 4090 at varying clocks): shells 1.2–4.0 ms, clusters 0.2–0.8, near defocus 0.4–1.4,
+  shafts 0.1–0.5. The probe's 6–10 ms timestamp is the lab's Python GL submission (8.3 ms CPU vs 0.18 ms GPU drain);
+  a renderer with cached state would not pay it. The equirect environment pass was dead and is gone.
+
 ## 8. Product requirements recorded from the operator (2026-10-17)
 
 - **Collision behaviour (operator 2026-10-17, supersedes the two-way ratio):** a triangle control with **Fuse**,

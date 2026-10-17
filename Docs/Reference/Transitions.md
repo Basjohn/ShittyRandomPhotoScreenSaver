@@ -471,6 +471,19 @@ Each foundation slice adds what it learned here.
 - A defocused near giant must hide the sharp scene behind it: mostly opaque, filled with a blurred view of the
   captured background, wall and highlight softened. A transparent one shows crisp bubbles through a blurry rim.
 
+- Sub-pixel supersampling must stay inside the pixel. Spreading the rays by the object's size (Extruded Bubble's
+  `uEdgeSoft`) smeared and stippled detail at full cost; derivatives taken after a `discard` came back zero and made
+  an 8-ray loop shade one ray eight times: compute ray offsets analytically.
+- Filter environment lookups on curved mirrors by the tangential footprint (~2 / radius px), not the radial
+  `1 / facing` one; the radial width averages the whole hemisphere into rims and turns them into uniform hoops.
+- Specular from a probe alone loses the light at small sizes; evaluate the scene's light analytically as a finite
+  area source on each mirrored path, widened by the pixel footprint with its energy kept, and fix its direction in
+  world space so highlights survive orbit.
+- GPU timestamps in a Python lab measure submission gaps too: confirm a pass's real cost with CPU submit vs GPU drain
+  before optimising it (the Extruded Bubble probe read 6–10 ms, of which 0.18 ms was GPU work).
+- Change one variable family per checkpoint and re-render every scene: lowering the deep scenes' reflection fill
+  fixed giant interiors but dimmed every bead stream, caught only by the all-scene sheet.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
