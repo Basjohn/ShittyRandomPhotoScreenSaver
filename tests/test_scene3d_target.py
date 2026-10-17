@@ -438,3 +438,115 @@ def test_light_shafts_are_one_transform_of_the_overlay_composite_and_warm_with_t
             assert with_shafts[:len(without)] == without        # frames without a light are covered too
             assert all(program in with_shafts for program in extra)
             assert any(key.startswith("scene_overlay_shafts") for key, *_ in with_shafts)
+
+
+_RECT_VERTEX = """#version 460 core
+uniform vec4 uRect;   // clip-space x0, y0, x1, y1
+uniform float uDepth; // clip-space z
+void main() {
+    vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
+    gl_Position = vec4(mix(uRect.xy, uRect.zw, corner), uDepth, 1.0);
+}
+"""
+_FLAT_FRAGMENT = """#version 460 core
+out vec4 FragColor;
+uniform vec4 uColour;
+void main() { FragColor = uColour; }
+"""
+# Reads the captured background at its own pixel: blue -> red, depth -> green.
+_READ_BACK_FRAGMENT = """#version 460 core
+out vec4 FragColor;
+uniform sampler2D uBackground;
+uniform sampler2D uBackgroundDepth;
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    FragColor = vec4(texelFetch(uBackground, texel, 0).b, texelFetch(uBackgroundDepth, texel, 0).r, 0.0, 1.0);
+}
+"""
+
+
+def _rect(program, rect, depth, colour=None):
+    gl.glUseProgram(program)
+    gl.glUniform4f(gl.glGetUniformLocation(program, "uRect"), *rect)
+    gl.glUniform1f(gl.glGetUniformLocation(program, "uDepth"), depth)
+    if colour is not None:
+        gl.glUniform4f(gl.glGetUniformLocation(program, "uColour"), *colour)
+    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_a_depth_texture_target_draws_the_same_and_its_background_holds_colour_and_nearest_depth(capture, samples):
+    from rendering.quick.render.gl_resources import compile_program
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    flat = compile_program(_RECT_VERTEX, _FLAT_FRAGMENT, label="flat")
+    read_back = compile_program(_RECT_VERTEX, _READ_BACK_FRAGMENT, label="read back")
+    try:
+        card = _card_frame(capture, 40, 20, 120, 80)
+        _clear(capture)
+        with target.scope(card, samples, resources):
+            resources.draw_image(card, capture.textures[0])
+        plain = _read(capture)
+        _clear(capture)
+        with target.scope(card, samples, resources, depth_texture=True):
+            resources.draw_image(card, capture.textures[0])
+        assert np.array_equal(plain, _read(capture))      # the depth texture changes nothing it draws
+        assert target._names["depth_texture"] and not target._names["depth"]
+
+        _clear(capture)
+        with target.scope(card, samples, resources, depth_texture=True):
+            gl.glEnable(gl.GL_DEPTH_TEST)
+            gl.glDepthFunc(gl.GL_LESS)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glBindVertexArray(capture.vao)
+            _rect(flat, (-1.0, -1.0, 0.0, 1.0), -0.6, (1.0, 0.0, 0.0, 1.0))   # left: red, nearer
+            _rect(flat, (-1.0, -1.0, 1.0, 1.0), 0.2, (0.0, 0.0, 1.0, 1.0))    # everywhere else: blue
+            fbo, viewport = (int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)),
+                             tuple(int(v) for v in gl.glGetIntegerv(gl.GL_VIEWPORT)))
+            colour, depth = target.background(card, resources)
+            # Drawing carries on exactly where it was.
+            assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == fbo
+            assert tuple(int(v) for v in gl.glGetIntegerv(gl.GL_VIEWPORT)) == viewport
+            assert bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glUseProgram(read_back)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, colour)
+            gl.glActiveTexture(gl.GL_TEXTURE1)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, depth)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUniform1i(gl.glGetUniformLocation(read_back, "uBackground"), 0)
+            gl.glUniform1i(gl.glGetUniformLocation(read_back, "uBackgroundDepth"), 1)
+            _rect(read_back, (-1.0, -1.0, 1.0, 1.0), 0.0)
+            gl.glActiveTexture(gl.GL_TEXTURE1)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+        pixels = _read(capture)
+        rows = HEIGHT - 20 - 80
+        left, right = pixels[rows + 40, 40 + 20], pixels[rows + 40, 40 + 100]
+        # The window viewport spans the whole capture: x < 0 in clip space is the window's left half (x < 128).
+        assert abs(int(left[0]) - 0) <= 1 and abs(int(left[1]) - round(0.2 * 255)) <= 1     # red, depth 0.2
+        assert abs(int(right[0]) - 255) <= 1 and abs(int(right[1]) - round(0.6 * 255)) <= 1  # blue, depth 0.6
+    finally:
+        gl.glDeleteProgram(flat)
+        gl.glDeleteProgram(read_back)
+        target.release()
+        resources.release_resources()
+    assert not target.has_resources
+
+
+def test_targets_that_ask_for_neither_allocate_no_depth_texture_or_background(capture):
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        _clear(capture)
+        with target.scope(_card_frame(capture, 40, 20, 120, 80), 4, resources):
+            resources.draw_image(_card_frame(capture, 40, 20, 120, 80), capture.textures[0])
+        assert target._names["depth"] and not target._names["depth_texture"]
+        assert not any(target._names[key] for key in ("background_fbo", "background_colour", "background_depth"))
+        # Warming ahead for a background allocates it as one unit, then reports ready.
+        size = (120, 80)
+        assert not target.warm(size, 4, background=True)
+        assert target.warm(size, 4, background=True) and target._names["background_fbo"]
+    finally:
+        target.release()
+        resources.release_resources()
