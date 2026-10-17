@@ -415,7 +415,7 @@ uniform float uShell;            // the glass wall's thickness, a share of the r
 uniform vec3 uIors;              // outside, wall, core
 uniform float uRough;            // the surface's own blur (softly focused scenes)
 uniform float uInnerBlur;
-uniform float uEdgeSoft;         // rim-band softening, a share of the radius in pixels
+uniform int uDiag;               // 0 composed; diagnostic views otherwise
 uniform float uSpeckGlow;        // light a pixel-sized bubble mirrors
 uniform float uReflect;          // reflections' share (near giants: their glass dims what they mirror)
 uniform float uFrameShare;       // what is seen through: the frame (1) or the probe (0)        // blur of the scene seen through a bubble, a share of its radius in pixels
@@ -444,6 +444,7 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths);
     vec3 light = vec3(0.0);
     float own = 0.0;
+    vec3 reflected = vec3(0.0), transmitted = vec3(0.0);
     // Soap-film interference on what the surface mirrors: thickness drifts over the bubble (gravity thins the top),
     // the hue is kept relative (it recolours reflected scene light, never adds light of its own). Per scene.
     vec3 filmHue = vec3(1.0);
@@ -455,12 +456,14 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         float c = clamp(dot(-rayView, normalize(local)), 0.0, 1.0);
         float drift = skyNoise2(local.xy * 2.3 + vec2(sphere.w * 37.0, sphere.x * 11.0), 191u);
         float thickness = mix(uFilmRange.x, uFilmRange.y, clamp(0.5 - 0.4 * local.y + 0.6 * (drift - 0.5), 0.0, 1.0));
-        // Hue from thickness at a fixed angle: at grazing the angle term swings within a pixel (a speckled ring).
-        vec3 film = sceneThinFilm(0.75, thickness, 1.33, 1.0);
+        // Hue at the true incidence; where the angle swings faster than the pixel can hold (the rim of small
+        // bubbles: dc per pixel ~ 1 / (radius px * c)), toward the mean angle so the ring never speckles.
+        float swing = clamp(1.5 / (max(pixels, 1.0) * max(c, 0.05)), 0.0, 1.0);
+        vec3 film = sceneThinFilm(mix(c, 0.7, swing), thickness, 1.33, 1.0);
         vec3 hue = film / max(dot(film, vec3(0.3333)), 1e-3);
         hue.g = min(hue.g, 0.5 * (hue.r + hue.b) + 0.1);
         hue /= max(dot(hue, vec3(0.3333)), 1e-3);
-        filmHue = mix(vec3(1.0), hue, uFilm * smoothstep(0.85, 0.2, c));
+        filmHue = mix(vec3(1.0), hue, uFilm * (1.0 - smoothstep(0.2, 0.85, c)));
     }
     for (int i = 0; i < 8; ++i) {
         if (i >= count) break;
@@ -483,11 +486,17 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             seen = mix(mix(here, seen, 1.0 - uFrameShare), behind.rgb, behind.a * uFrameShare);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
+            transmitted += paths[i].w * seen * uLens;
         } else {
             light += paths[i].w * seen * reflectShare;
             own += paths[i].w * reflectShare;
+            reflected += paths[i].w * seen * reflectShare;
         }
     }
+    if (uDiag == 1) return vec4(reflected, 1.0);
+    if (uDiag == 2) return vec4(transmitted, 1.0);
+    if (uDiag == 3) return vec4(filmHue * 0.5, 1.0);
+    if (uDiag == 4) return vec4(normalize(frontView - sphere.xyz) * 0.5 + 0.5, 1.0);
     return vec4(light, own);
 }
 // A bubble seen along one view ray (view space: the ray, the sphere's centre and radius): the ray traced exactly
@@ -509,14 +518,12 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
     } else {
         sum = vec4(0.0);
         for (int i = 0; i < 8; ++i) {
-            // Eight points spread over the pixel (a rotated-grid pattern).
-            // Spread over a few pixels on big bubbles: the core's total-reflection edge is a hard step that the
-            // mocks show as a soft band (a slightly uneven film).
-            vec2 o = (vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5)
-                   * (1.0 + uEdgeSoft * pixels);
+            // Eight points spread over the pixel (a rotated-grid pattern), never beyond it.
+            vec2 o = vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5;
             sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur) * 0.125;
         }
     }
+    if (uDiag > 0) return vec4(sum.rgb / max(sum.a, 1e-4), 1.0);
     float alpha = clamp(sum.a, 0.0, 1.0);
     return vec4(sum.rgb / max(alpha, 1e-4), alpha);
 }
@@ -562,7 +569,9 @@ void main() {
     }
     vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
     vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
+    gl_FragDepth = sceneSphereDepth(front, uProjection);
     vec4 shaded = shadeBubble(ray, vSphere, pixels, soft, front);
+    if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
     float speck = 1.0 - smoothstep(1.0, 2.5, pixels);
     float centreness = clamp(dot(-ray, normalize(front - vSphere.xyz)), 0.0, 1.0);
     vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
@@ -642,15 +651,20 @@ void main() {
     float pixels = vBound.w / (uPixelSize * max(-point.z, 0.1));
     vec4 clipC = uProjection * vec4(vBound.xyz, 1.0);
     vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
-    // The member sphere this point lies on carries the trace (the neck between members is rare and small).
-    vec4 member = s[0];
+    // The union surface carries the trace: a sphere tangent at this point along the union's own normal, its radius
+    // that of the nearest member (curvature continues smoothly through the neck).
+    float r = s[0].w;
     float nearest = 1e9;
     for (int i = 0; i < 3; ++i) {
         if (i >= int(vInfo.x)) break;
         float gap = abs(distance(point, s[i].xyz) - s[i].w);
-        if (gap < nearest) { nearest = gap; member = s[i]; }
+        if (gap < nearest) { nearest = gap; r = s[i].w; }
     }
-    vec4 shaded = shadeBubble(ray, member, pixels, 0.0, point);
+    vec4 tangent = vec4(point - normal * r, r);
+    float localPixels = r / (uPixelSize * max(-point.z, 0.1));
+    vec4 shaded = shadeBubble(ray, tangent, localPixels, 0.0, point);
+    if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
+    gl_FragDepth = sceneSphereDepth(point, uProjection);
     float alpha = shaded.a * coverage;
     sceneTransparent(shaded.rgb * alpha, alpha, -point.z);
     vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6;
@@ -1010,10 +1024,17 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
 def render_variant(capture, resources, target, programs, env, env_fbo, settings, seed):
     (env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, particle_program,
      near_program, shaft_tex, shaft_fbo) = programs
+    settings = {**settings, **OVERRIDES}
     pitch = math.radians(settings["pitch"])
     c, s = math.cos(pitch), math.sin(pitch)
     view_to_world = (1, 0, 0, 0, c, s, 0, -s, c)
-    world_to_view = (1, 0, 0, 0, c, -s, 0, s, c)
+    if YAW:
+        yaw = math.radians(YAW)
+        ry = np.array(((math.cos(yaw), 0.0, math.sin(yaw)), (0.0, 1.0, 0.0), (-math.sin(yaw), 0.0, math.cos(yaw))))
+        # Columns of view_to_world (row-major tuple read as columns by GL) are the view axes in world space.
+        axes = np.array(view_to_world).reshape(3, 3).T
+        view_to_world = tuple((ry @ axes).T.ravel())
+    world_to_view = tuple(np.array(view_to_world).reshape(3, 3).T.ravel())
     fov = math.radians(62.0)
     tan_y = math.tan(fov / 2)
     tan = (tan_y * W / H, tan_y)
@@ -1166,7 +1187,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program else 1.0)
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
-        gl.glUniform1f(u("uEdgeSoft"), settings.get("edge_soft", 0.06))
+        gl.glUniform1i(u("uDiag"), DIAG)
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
         gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.6))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
@@ -1216,8 +1237,18 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         draw_particulate(world_to_face, True, proj, 2.0 / PROBE.size, with_proxies=True)
 
+    marks = []
+
+    def mark(name):
+        if marks is not None:
+            q = int(np.asarray(gl.glGenQueries(1)).ravel()[0])
+            gl.glQueryCounter(q, gl.GL_TIMESTAMP)
+            marks.append((name, q))
+
     def render():
+        mark("start")
         PROBE.capture(draw_probe_face)
+        mark("probe")
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, env_fbo)
         gl.glViewport(0, 0, ENV_W, ENV_H)
         gl.glDisable(gl.GL_BLEND)
@@ -1242,6 +1273,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
             gl.glUniform2f(gl.glGetUniformLocation(blur_program, "uStep"), *step)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+        mark("env+shafts")
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
         gl.glViewport(0, 0, W, H)
         gl.glClearColor(0.11, 0.11, 0.12, 1.0)
@@ -1259,6 +1291,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
                 draw_particulate(world_to_view, False, projection, 2.0 * tan_y / H)
                 background_tex, _depth = target.background(frame, resources)
+                mark("backdrop+particulate+capture")
                 with target.transparent_writes(frame, resources):
                     common(shell)
                     u = lambda name: gl.glGetUniformLocation(shell, name)
@@ -1293,15 +1326,16 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1f(v("uShell"), settings.get("shell", 0.1))
                         gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                         gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
+                        gl.glUniform1i(v("uDiag"), DIAG)
                         gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.6))
                         gl.glUniform1f(v("uReflect"), 1.0)
-                        gl.glUniform1f(v("uEdgeSoft"), settings.get("edge_soft", 0.06))
                         gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
                         gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUseProgram(shell)
                     gl.glBindVertexArray(vao)
                     if not BACKDROP_ONLY:
                         gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(items))
+                    mark("shells")
                     common(merged)
                     m = lambda name: gl.glGetUniformLocation(merged, name)
                     gl.glUniform1i(m("uProbe"), 6)
@@ -1312,9 +1346,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1f(m("uShell"), settings.get("shell", 0.1))
                     gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                     gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
+                    gl.glUniform1i(m("uDiag"), DIAG)
                     gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.6))
                     gl.glUniform1f(m("uReflect"), 1.0)
-                    gl.glUniform1f(m("uEdgeSoft"), settings.get("edge_soft", 0.06))
                     gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
                     gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
@@ -1327,6 +1361,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform3f(m("uSunScreen"), *sun_screen)
                     gl.glBindVertexArray(cvao)
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(clusters))
+                    mark("clusters")
                     if wakes and not BACKDROP_ONLY:
                         common(ribbon_program)
                         w = lambda name: gl.glGetUniformLocation(ribbon_program, name)
@@ -1342,6 +1377,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glActiveTexture(gl.GL_TEXTURE3)
                     gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
                     gl.glActiveTexture(gl.GL_TEXTURE0)
+                mark("oit resolve")
                 if not BACKDROP_ONLY:
                     NEAR.begin(*target.allocation[:2])
                     bubble_uniforms(near_program, background_tex)
@@ -1350,6 +1386,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(items))
                     NEAR.end()
                     NEAR.composite(settings.get("near_coc", 22.0) * 1.6)
+                    mark("near defocus")
                 if not BACKDROP_ONLY and settings.get("glints", 0.0) > 0.0:
                     blend_on = bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
                     depth_on = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
@@ -1371,16 +1408,30 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, 2 * len(items))
                     (gl.glEnablei if blend_on else gl.glDisablei)(gl.GL_BLEND, 0)
                     (gl.glEnable if depth_on else gl.glDisable)(gl.GL_DEPTH_TEST)
+        mark("bloom+composite")
 
     query = int(np.asarray(gl.glGenQueries(1)).ravel()[0])
     times = []
+    passes = {}
     for index in range(16):
+        marks.clear()
         gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
         render()
         gl.glEndQuery(gl.GL_TIME_ELAPSED)
         gl.glFlush()
         if index:
             times.append(int(np.asarray(gl.glGetQueryObjectuiv(query, gl.GL_QUERY_RESULT)).ravel()[0]) / 1e6)
+            stamps = []
+            for name, q in marks:
+                value = ctypes.c_uint64(0)
+                gl.glGetQueryObjectui64v(q, gl.GL_QUERY_RESULT, ctypes.byref(value))
+                stamps.append((name, int(value.value)))
+            for (_, before), (name, after) in zip(stamps, stamps[1:]):
+                passes.setdefault(name, []).append((after - before) / 1e6)
+        gl.glDeleteQueries(len(marks), [q for _, q in marks])
+    TIMINGS.clear()
+    TIMINGS.update({name: (float(np.median(v)), float(np.percentile(v, 95))) for name, v in passes.items()})
+    TIMINGS["total"] = (float(np.median(times)), float(np.percentile(times, 95)))
     if "--probe-dump" in sys.argv:   # the probe's six faces at full detail, tone-clipped, in a cross
         faces = []
         for face in range(6):
@@ -1409,6 +1460,18 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
 
 PROBE = None
 NEAR = None
+TIMINGS = {}
+TIMING_LOG = {}
+# --set key=value[,key=value]: override every rendered variant (same-scene A/B without editing the variants).
+OVERRIDES = {}
+for _arg in sys.argv:
+    if _arg.startswith("--set="):
+        for _pair in _arg[6:].split(";"):
+            _key, _value = _pair.split("=", 1)
+            OVERRIDES[_key] = eval(_value, {}, {})
+# --yaw=degrees: orbit the camera about the vertical axis (off-axis checks).
+DIAG = next((int(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--diag=")), 0)
+YAW = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--yaw=")), 0.0)
 
 
 def main():
@@ -1471,8 +1534,14 @@ def main():
         mock = Image.open(ROOT / "tmp/Bubbleexamples" / f"{name}.png").convert("RGB").resize(half, Image.LANCZOS)
         sheet.paste(mock, (0, row * half[1]))
         sheet.paste(image.resize(half, Image.LANCZOS), (half[0], row * half[1]))
-        print(f"{name}: GPU median {gpu:.3f} ms, {count} instances ({W}x{H}, 4x MSAA)")
+        print(f"{name}: GPU median {gpu:.3f} ms (p95 {TIMINGS['total'][1]:.3f}), {count} instances ({W}x{H}, 4x MSAA)")
+        print("   " + "  ".join(f"{k} {v[0]:.2f}/{v[1]:.2f}" for k, v in TIMINGS.items() if k != "total"))
+        TIMING_LOG[name] = dict(TIMINGS)
     sheet.save(sys.argv[1])
+    import json
+    Path(sys.argv[1].replace(".png", "_timings.json")).write_text(json.dumps(
+        {"overrides": {k: repr(v) for k, v in OVERRIDES.items()}, "yaw": YAW, "size": [W, H], "msaa": 4,
+         "passes_ms_median_p95": TIMING_LOG}, indent=1), encoding="utf-8")
     PROBE.release()
     NEAR.release()
     target.release()
