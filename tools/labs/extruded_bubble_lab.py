@@ -73,7 +73,7 @@ VARIANTS = {
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
-                                 deep=(0.004, 0.02, 0.05), water=(0.01, 0.06, 0.14), sky=(0.3, 0.6, 1.0),
+                                 deep=(0.016, 0.05, 0.08), water=(0.02, 0.08, 0.13), sky=(0.3, 0.6, 1.0),
                                  shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0,
                                  mist=0.6, wakes=0.0, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
                                  absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
