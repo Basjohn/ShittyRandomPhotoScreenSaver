@@ -52,24 +52,24 @@ SURFACE_Y = 9.0
 
 # Per mock: water palette, sun, camera pitch.
 VARIANTS = {
-    "ExBubble1": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
+    "ExBubble1": dict(shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),
                       sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032), ray_cut=0.08, rays=0.7),
-    "ExBubble2": dict(film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
+    "ExBubble2": dict(ray_cut=0.1, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.022, 0.055, 0.12), water=(0.03, 0.08, 0.16), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
                       sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035), rays=0.7),
-    "ExBubble3": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
+    "ExBubble3": dict(ray_cut=0.1, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
-    "ExBubble4": dict(film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
+    "ExBubble4": dict(ray_cut=0.1, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=120.0, glint_sharp=300.0, probe_fill=0.6, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -86,7 +86,7 @@ VARIANTS = {
         specks=0.6, warm_share=0.85, streak=(0.15, 1.0), chains=5.0, chain_size=1.0, mid_count=0.6, sparkle=0.7,
         # Luminous violet-rimmed glass bubbles with sharp glints.
         crisp=1.0, rough=0.03, film=1.0, film_range=(255.0, 345.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0,
-        probe_fill=0.6, glint_power=120.0, glint_sharp=600.0, inner_blur=0.15),
+        probe_fill=5.0, glint_power=400.0, glint_sharp=600.0, inner_blur=0.15),
 }
 VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     # Water and light: near-black teal, orange light from the top-right corner, faint beams.
@@ -256,7 +256,7 @@ void main() {
                  : texture(uShafts, gl_FragCoord.xy / uFrameSize).r * uRays;
     if (uProbeMode < 0.5) {
         float s = texture(uShafts, gl_FragCoord.xy / uFrameSize).r;
-        shafts = uRays * (s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3);
+        shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
     }
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
     shafts *= mix(1.0, pow(max(dot(ray, uSunBelow), 0.0), 6.0) * 3.0, uRayFocus);
@@ -314,11 +314,35 @@ void main() {
 
 # Volumetric shafts at half resolution, jittered, then blurred: smooth beams without per-pixel grain.
 SHAFT_FRAGMENT = "#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + """
+uniform float uShaftScale;      // source pattern frequency (1: the shared pattern's)
+uniform float uShaftSoft;       // threshold softness 0..1
+float labShaftPattern(vec2 q, float t) {
+    q *= uShaftScale;
+    float a = skyNoise2(q * 2.1 + vec2(t * 0.12, -t * 0.07), 71u);
+    float b = skyNoise2(q * 5.3 + vec2(-t * 0.2, t * 0.15), 73u);
+    float slow = skyNoise2(q * 0.55 + vec2(t * 0.03, 0.0), 79u);
+    float n = a * 0.7 + b * 0.3;
+    float lo = mix(0.58, 0.3, uShaftSoft), hi = mix(0.82, 0.95, uShaftSoft);
+    return smoothstep(lo, hi, n) * (0.45 + 0.9 * slow);
+}
+float labShafts(vec3 ray, float maxDistance, vec3 sunBelow, float surfaceY, float t, int samples, float jitter) {
+    float stepLength = maxDistance / float(samples);
+    vec2 slope = sunBelow.xz / max(sunBelow.y, 0.2);
+    float sum = 0.0;
+    for (int i = 0; i < samples; ++i) {
+        float s = (float(i) + jitter) * stepLength;
+        vec3 p = ray * s;
+        float below = surfaceY - p.y;
+        if (below <= 0.0) break;
+        sum += labShaftPattern(p.xz + slope * below, t) * exp(-below * 0.07) * exp(-s * 0.035);
+    }
+    return sum * stepLength;
+}
 void main() {
     vec3 ray = uViewToWorld * normalize(vec3(vNdc * uTan, -1.0));
     float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     float toward = pow(max(dot(ray, uSunBelow), 0.0), 2.0);
-    FragColor = vec4(waterShafts(vec3(0.0), ray, 45.0, uSunBelow, uShaftY, uTime, 56, jitter) * 0.13 * (0.25 + toward));
+    FragColor = vec4(labShafts(ray, 45.0, uSunBelow, uShaftY, uTime, 40, jitter) * 0.13 * (0.25 + toward));
 }
 """
 BLUR_FRAGMENT = """#version 460 core
@@ -1184,6 +1208,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uDust"), settings.get("dust", 0.0))
         gl.glUniform1f(u("uRayFocus"), settings.get("ray_focus", 0.0))
         gl.glUniform1f(u("uRayCut"), settings.get("ray_cut", 0.25))
+        gl.glUniform1f(u("uShaftScale"), settings.get("shaft_scale", 1.0))
+        gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))
         gl.glUniform1f(u("uGlintPower"), settings.get("glint_power", 0.0))
