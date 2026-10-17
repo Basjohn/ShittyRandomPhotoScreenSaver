@@ -69,7 +69,7 @@ VARIANTS = {
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.1, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=3.0, face_reflect=0.2, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=3.0, face_reflect=0.2, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -561,8 +561,14 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         // Mirrored paths also see the light itself (later bounces inside the wall spread wider).
         // Highlights stay inset from the silhouette (operator): the mirror lobe fades toward grazing, where the rim's
         // own Fresnel band already carries the light.
-        if (i < count - 1) seen = (seen + sceneLightLobe(uViewToWorld * paths[i].xyz, lobeFootprint * (1.0 + float(i)))
-                                         * smoothstep(0.2, 0.5, facingHere) * smoothstep(2.5, 10.0, pixels)) * filmHue;
+        // The light's own reflection is kept whole by the face's reflection share: a faint mirror of a very bright
+        // source is still a bright highlight (only the mirrored water dims).
+        vec3 lobe = vec3(0.0);
+        if (i < count - 1) {
+            lobe = sceneLightLobe(uViewToWorld * paths[i].xyz, lobeFootprint * (1.0 + float(i)))
+                 * smoothstep(0.2, 0.5, facingHere) * smoothstep(2.5, 10.0, pixels) * filmHue;
+            seen *= filmHue;
+        }
         if (i == count - 1) {
             // What is seen through is out of focus inside the bubble (the lens's depth): softened with its size.
             // The frame is read along the smooth lens of the bubble as a whole (refraction through a plain sphere of the
@@ -587,9 +593,9 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             own += paths[i].w * uLens;
             transmitted += paths[i].w * seen * uLens;
         } else {
-            light += paths[i].w * seen * reflectShare;
+            light += paths[i].w * (seen * reflectShare + lobe);
             own += paths[i].w * reflectShare;
-            reflected += paths[i].w * seen * reflectShare;
+            reflected += paths[i].w * (seen * reflectShare + lobe);
         }
     }
     if (uDiag == 1) return vec4(reflected, 1.0);
