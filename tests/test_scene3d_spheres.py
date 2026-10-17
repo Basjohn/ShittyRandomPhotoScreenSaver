@@ -158,3 +158,81 @@ def test_silhouettes_are_exact_at_any_size_and_blur_softens_them(scene):
     partial = lambda image: int(((image > 10) & (image < 245)).sum())
     assert partial(soft) > 4 * partial(sharp) > 0            # a wide soft edge, not a one-pixel one
     assert (soft > 0).sum() > (sharp > 0).sum()              # and reaching further out
+
+
+_CLUSTER_VERTEX = """#version 460 core
+uniform mat4 uProjection;
+uniform vec4 uBound;       // bounding sphere
+out vec3 vView;
+""" + spheres.SCENE3D_SPHERES_GLSL + """
+void main() {
+    vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
+    vView = sceneSphereCorner(uBound.xyz, uBound.w, 0.0, corner);
+    gl_Position = uProjection * vec4(vView, 1.0);
+}
+"""
+_CLUSTER_FRAGMENT = """#version 460 core
+uniform mat4 uProjection;
+uniform vec4 uBound;
+uniform vec4 uSpheres[4];
+uniform int uCount;
+uniform float uBlend;
+in vec3 vView;
+out vec4 FragColor;
+""" + spheres.SCENE3D_SPHERES_GLSL + """
+void main() {
+    vec3 ray = normalize(vView);
+    float tNear, tFar, t, closest;
+    vec3 normal;
+    if (!sceneSphereRay(ray, uBound.xyz, uBound.w, tNear, tFar)) discard;
+    vec4 s[4] = vec4[4](uSpheres[0], uSpheres[1], uSpheres[2], uSpheres[3]);
+    if (!sceneClusterRay(ray, s, uCount, uBlend, tNear, tFar, t, normal, closest)) discard;
+    gl_FragDepth = sceneSphereDepth(ray * t, uProjection);
+    FragColor = vec4(1.0, normal.y * 0.5 + 0.5, 0.0, 1.0);
+}
+"""
+
+
+def _cluster_picture(scene, members, blend):
+    from rendering.quick.render.gl_resources import compile_program
+    program = compile_program(_CLUSTER_VERTEX, _CLUSTER_FRAGMENT, label="cluster test")
+    try:
+        centre = tuple(sum(m[i] for m in members) / len(members) for i in range(3))
+        bound = max(math.dist(centre, m[:3]) + m[3] for m in members) + blend
+        assert scene.capture.context.makeCurrent(scene.capture.surface)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, scene.capture.fbo)
+        gl.glViewport(0, 0, WIDTH, HEIGHT)
+        gl.glClearColor(0, 0, 0, 0)
+        gl.glDepthMask(gl.GL_TRUE)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glUseProgram(program)
+        u = lambda name: gl.glGetUniformLocation(program, name)
+        gl.glUniformMatrix4fv(u("uProjection"), 1, gl.GL_FALSE, _projection())
+        gl.glUniform4f(u("uBound"), *centre, bound)
+        padded = list(members) + [(0.0, 0.0, 0.0, 0.0)] * (4 - len(members))
+        gl.glUniform4fv(u("uSpheres"), 4, [v for m in padded for v in m])
+        gl.glUniform1i(u("uCount"), len(members))
+        gl.glUniform1f(u("uBlend"), blend)
+        gl.glBindVertexArray(scene.capture.vao)
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        raw = gl.glReadPixels(0, 0, WIDTH, HEIGHT, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+        return np.frombuffer(bytes(raw), dtype=np.uint8).reshape(HEIGHT, WIDTH, 4)
+    finally:
+        gl.glDeleteProgram(program)
+
+
+def test_touching_spheres_join_with_a_smooth_neck_and_none_without_a_blend(scene):
+    members = [(-0.55, 0.0, -5.0, 0.75), (0.6, 0.05, -5.0, 0.55)]
+    plain = _cluster_picture(scene, members, 0.0)[..., 0] > 0
+    reference = _cpu_ids([(m[:3], m[3], 0.0) for m in members]) > 0
+    assert (plain != reference).sum() <= max(20, 0.01 * reference.sum())     # no blend: just the two spheres
+    joined = _cluster_picture(scene, members, 0.45)[..., 0] > 0
+    assert (plain & ~joined).sum() <= 10                                     # the neck only adds
+    added = joined & ~plain
+    assert added.sum() > 80, "a neck fills the waist where the spheres meet"
+    # The added pixels lie around the junction, above and below the waist, not elsewhere.
+    ys, xs = np.nonzero(added)
+    junction_x = WIDTH / 2 + (0.0 / 5.0) * WIDTH          # the spheres meet near the image centre column
+    assert abs(xs.mean() - junction_x) < WIDTH * 0.08

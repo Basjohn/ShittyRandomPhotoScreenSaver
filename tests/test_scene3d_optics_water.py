@@ -114,3 +114,25 @@ def test_the_window_and_the_sun_below_equal_their_mirror_and_their_physics(probe
         elevation_air = math.atan2(sun[1], math.hypot(sun[0], sun[2]))
         elevation_water = math.atan2(cpu[1], math.hypot(cpu[0], cpu[2]))
         assert elevation_water >= elevation_air - 1e-9                              # bent toward the vertical
+
+
+def test_volumetric_shafts_follow_the_pattern_converge_on_the_sun_and_fade_with_depth(probe):
+    grid = [(x * 0.37, y * 0.29) for y in range(16) for x in range(16)]
+    gpu = probe.run("vec4 a = arg(0); FragColor = vec4(waterShaftPattern(a.xy, a.z));",
+                    [[(x, y, 2.0, 0.0)] for x, y in grid], DECL)[:, 0]
+    cpu = np.array([water.water_shaft_pattern(x, y, 2.0) for x, y in grid])
+    assert np.abs(gpu - cpu).max() < 1e-4
+    field = np.array([water.water_shaft_pattern(x * 0.13, y * 0.11, 0.0) for y in range(60) for x in range(60)])
+    assert 0.05 < (field > 0.5).mean() < 0.45, "beams with dark water between"
+
+    def shafts(ray, eye=(0.0, 0.0, 0.0)):
+        body = ("vec4 r = arg(0); vec4 e = arg(1); FragColor = vec4(waterShafts(e.xyz, normalize(r.xyz), 30.0,"
+                " normalize(vec3(0.0, 1.0, -0.4)), 6.0, 1.0, 48, 0.5));")
+        return float(probe.run(body, [[(*ray, 0.0), (*eye, 0.0)]], DECL)[0][0])
+    assert shafts((0.0, 1.0, 0.0), eye=(0.0, 7.0, 0.0)) == 0.0               # above the surface: no water to light
+    rng = random.Random(5)
+    # Equal horizontal paths: one just under the surface, one deep below it.
+    rays = [(rng.uniform(-0.4, 0.4), 0.0, -1.0) for _ in range(8)]
+    shallow = [shafts(ray, eye=(0.0, 4.0, 0.0)) for ray in rays]
+    deep = [shafts(ray, eye=(0.0, -20.0, 0.0)) for ray in rays]
+    assert sum(shallow) > 0.0 and sum(deep) < 0.3 * sum(shallow)            # dimmer deep below the surface
