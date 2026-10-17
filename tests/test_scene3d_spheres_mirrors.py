@@ -33,6 +33,31 @@ def test_sphere_ray_and_corner_equal_their_mirrors(probe):
     _check(gpu_corner, cpu_corner, tolerance=2e-4)
 
 
+def test_facing_rays_equal_their_mirror_and_draw_every_sphere_round(probe):
+    import math
+    rng = random.Random(9)
+    rows, cpu = [], []
+    for _ in range(64):
+        centre = (rng.uniform(-6, 6), rng.uniform(-4, 4), rng.uniform(-9, -2))
+        reach = rng.uniform(0.1, 1.0)
+        corner = (rng.uniform(-1, 1), rng.uniform(-1, 1))
+        rows.append([(*centre, reach), (*corner, 0.0, 0.0)])
+        cpu.append((*spheres.scene3d_sphere_facing_ray(centre, reach, corner), 0.0))
+    gpu = probe.run("vec4 s = arg(0); vec4 c = arg(1); FragColor = vec4(sceneSphereFacingRay(s.xyz, s.w, c.xy), 0.0);",
+                    rows, spheres.SCENE3D_SPHERES_GLSL)
+    _check(gpu, cpu, tolerance=2e-4)
+    # Far off axis, every corner direction on the unit circle grazes the sphere: the drawn disc is the silhouette.
+    centre, reach = (5.0, 3.0, -4.0), 0.8
+    for angle in range(0, 360, 30):
+        corner = (math.cos(math.radians(angle)), math.sin(math.radians(angle)))
+        ray = spheres.scene3d_sphere_facing_ray(centre, reach, corner)
+        along = spheres._dot(centre, ray)
+        miss = math.sqrt(max(spheres._dot(centre, centre) - along * along, 0.0))
+        assert miss == pytest.approx(reach, rel=1e-6)
+    assert spheres.scene3d_sphere_facing_ray(centre, reach, (0.0, 0.0)) == pytest.approx(
+        spheres._normalize(centre), abs=1e-9)
+
+
 def test_cluster_distance_equals_its_mirror(probe):
     rng = random.Random(8)
     rows, cpu = [], []

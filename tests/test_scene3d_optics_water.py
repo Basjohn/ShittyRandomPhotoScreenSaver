@@ -48,6 +48,64 @@ def test_refraction_through_an_air_sphere_passes_the_axis_straight_and_spreads_t
     assert 0.0 < bends[0] < bends[1] < bends[2]
 
 
+def test_sphere_paths_equal_their_mirror_and_keep_the_physics(probe):
+    rng = random.Random(3)
+    rows = []
+    for _ in range(96):
+        offset = rng.uniform(0.0, 1.5)
+        turn = rng.uniform(0.0, 2 * math.pi)
+        normal = (math.sin(offset) * math.cos(turn), math.sin(offset) * math.sin(turn), math.cos(offset))
+        rows.append([(0.0, 0.0, -1.0, rng.choice((1.33, 1 / 1.5))), (*normal, 0.0)])
+    body = "vec3 r = arg(0).xyz; vec3 n = arg(1).xyz; vec3 a, b, c; vec3 w = sceneSpherePaths(r, n, arg(0).w, a, b, c);"
+    for index, output in enumerate(("w", "a", "b", "c")):
+        gpu = probe.run(body + f" FragColor = vec4({output}, 0.0);", rows, DECL)
+        cpu = [(*optics.scene3d_sphere_paths(r[:3], n[:3], r[3])[index], 0.0) for r, n in rows]
+        _check(gpu, cpu, tolerance=5e-4)
+    for r, n in rows:
+        weights, reflected, transmitted, bounced = optics.scene3d_sphere_paths(r[:3], n[:3], r[3])
+        assert sum(weights) <= 1.0 + 1e-9
+        incidence = n[2]
+        if r[3] > 1.0 and math.sqrt(1 - incidence * incidence) > 1 / r[3]:
+            assert weights == (1.0, 0.0, 0.0)                    # an air bubble's mirror band
+    # Head on: straight through, reflected straight back, nothing bent.
+    weights, reflected, transmitted, _ = optics.scene3d_sphere_paths((0.0, 0.0, -1.0), (0.0, 0.0, 1.0), 1.33)
+    assert transmitted == pytest.approx((0.0, 0.0, -1.0), abs=1e-9)
+    assert reflected == pytest.approx((0.0, 0.0, 1.0), abs=1e-9)
+    assert weights[1] > 0.95
+
+
+def test_hollow_sphere_trace_equals_its_mirror_and_conserves_light(probe):
+    rng = random.Random(5)
+    rows = []
+    for _ in range(64):
+        x, y = rng.uniform(-0.999, 0.999), 0.0
+        y = rng.uniform(-1.0, 1.0) * math.sqrt(max(0.0, 1.0 - x * x)) * 0.999
+        rows.append([(x, y, 3.0, rng.choice((0.0, 0.85, 0.95))), (1.33, 1.5, 1.0, 0.0)])
+    head = ("vec4 a = arg(0); vec4 paths[8]; int n = sceneHollowSphereTrace(a.xyz, vec3(0.0, 0.0, -1.0), 1.0, a.w,"
+            " arg(1).xyz, paths);")
+    gpu_count = probe.run(head + " FragColor = vec4(float(n), 0.0, 0.0, 0.0);", rows, DECL)
+    cpu = [optics.scene3d_hollow_sphere_trace(r[:3], (0.0, 0.0, -1.0), 1.0, r[3], i[:3]) for r, i in rows]
+    assert [int(round(g[0])) for g in gpu_count] == [len(c) for c in cpu]
+    for index in range(3):
+        gpu = probe.run(head + f" FragColor = paths[{index}];", rows, DECL)
+        expected = [(*c[index][0], c[index][1]) if index < len(c) else (0.0, 0.0, 0.0, 0.0) for c in cpu]
+        _check(gpu, expected, tolerance=2e-3)
+    for paths in cpu:
+        assert sum(w for _, w in paths) <= 1.0 + 1e-6
+    # Matched indices everywhere: the light passes straight through untouched.
+    straight = optics.scene3d_hollow_sphere_trace((0.3, 0.2, 3.0), (0.0, 0.0, -1.0), 1.0, 0.9, (1.0, 1.0, 1.0))
+    assert straight[-1][0] == pytest.approx((0.0, 0.0, -1.0), abs=1e-6) and straight[-1][1] == pytest.approx(1.0)
+    # No core: the first split is a solid sphere's front reflection.
+    solid = optics.scene3d_hollow_sphere_trace((0.4, 0.0, 3.0), (0.0, 0.0, -1.0), 1.0, 0.0, (1.33, 1.5, 1.5))
+    normal = (0.4, 0.0, math.sqrt(1 - 0.16))
+    assert solid[0][1] == pytest.approx(optics.scene3d_sphere_paths((0.0, 0.0, -1.0), normal, 1.33 / 1.5)[0][0], abs=1e-6)
+    # Near the silhouette of a glass shell the light is guided inside the wall: it leaves far from where it would
+    # through solid glass.
+    guided = optics.scene3d_hollow_sphere_trace((0.97, 0.0, 3.0), (0.0, 0.0, -1.0), 1.0, 0.9, (1.0, 1.5, 1.0))
+    through = optics.scene3d_hollow_sphere_trace((0.5, 0.0, 3.0), (0.0, 0.0, -1.0), 1.0, 0.9, (1.0, 1.5, 1.0))
+    assert len(guided) >= 2 and len(through) >= 3
+
+
 def test_waves_have_matching_gradients_and_equal_their_mirror(probe):
     rng = random.Random(7)
     points = [(rng.uniform(-5, 5), rng.uniform(-5, 5), rng.uniform(0, 20)) for _ in range(96)]
