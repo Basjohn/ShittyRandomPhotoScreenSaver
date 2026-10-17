@@ -398,6 +398,29 @@ float basinBeatStarLight(vec3 eye,vec3 ray,vec3 glow,float visibility) {
     return light;
 }
 
+// The light-shaft source (0..1): the Sun/Moon's disc and a soft glow round it that spread (0..1) widens, dimmed
+// by clouds in front of it. The caller's depth test leaves out whatever stands nearer.
+uniform float uShaftSpread;
+float basinShaftSource(vec3 eye, vec3 ray) {
+    if ((uBodyKind != 0 && uBodyKind != 1) || uSunEnabled == 0 || uBodySize <= 0.0) return 0.0;
+    vec3 centre = uBodyPosition - eye;
+    float separation = length(centre);
+    vec3 forward = centre / max(separation, 1e-5);
+    float facing = dot(ray, forward);
+    if (facing <= 0.0) return 0.0;
+    float radius = uBodySize / max(separation, 1e-5);
+    float angle = length(cross(ray, forward)) / max(facing * radius, 1e-5);   // in body radii
+    float width = mix(0.3, 3.0, clamp(uShaftSpread, 0.0, 1.0));
+    float source = max(1.0 - smoothstep(0.92, 1.04, angle), 0.45 * exp(-pow(max(angle - 1.0, 0.0) / width, 2.0)));
+    source *= clamp(uBodyKind == 0 ? uSunColor.a : uMoonColor.a, 0.0, 1.0) * basinCameraBodyCoverage(separation, uBodySize);
+    if (source > 1e-3 && uSkyEnabled != 0 && uClouds.w > 0.0) {
+        vec4 cloud = skyClouds(ray, forward, vec4(uClouds.xyz, uClouds.w * clamp(uCloudColor.a, 0.0, 1.0)),
+                               uCloudDrift, vec3(0.0), vec3(0.0), 17u, 5);
+        source *= 1.0 - cloud.a;
+    }
+    return source;
+}
+
 // Straight-alpha sky radiance.  The independent enable gate makes the sky
 // transparent when disabled; the Sun/Moon remains a separate body pass.
 // detail: the clouds' and nebula's octaves are full for the visible sky (1) and two for reflections (0),

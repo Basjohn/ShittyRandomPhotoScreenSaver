@@ -190,6 +190,21 @@ change. Never restore an older copy or pin artistic values/hashes as test expect
   A local agent may execute real-music replays; no new per-frame allocation, timers,
   environment-variable mutation or unrelated-mode cost. Require physical reaction review.
 
+- [ ] **NT — Neon terrain reaction, sky effects and light rays (operator 2026-10-16/17): Awaiting Validation.**
+  Source landed: Terrain Reaction (shaper-biased real deformation, own bucket), editor falloff, glow colours, the
+  Settings regroup, volumetric clouds, the rebuilt nebula (rim/core, filaments, dust, position, drift), starburst
+  beat stars (Star Size, swell-in, half-speed fade) and visible light rays (shared Scene3D light shafts: Strength,
+  Length, Spread, Colour). Contracts in `Docs/Reference/Neon_Lake_Basin.md`. Open: the operator's look on the
+  physical display; the new Neon presets reworked to use these effects.
+- [ ] **Pre-existing reds (impacted run 2026-10-16/17, red at clean HEAD).** test_3d_curated_preset_ownership,
+  test_defaults_schema_authority / test_default_settings_editor (`ast.literal_eval` meets the `basin_profile()` call),
+  test_defaults_projection, test_engine_lifecycle, test_image_prefetch_transport, test_qt611_shader_admission,
+  test_qtquick_visualizer_all_five_owner_chain, test_qtquick_visualizer_fade_authority, test_scene3d_foundation,
+  test_scene3d_quality_settings, test_sphere_shared_scene3d_projection, test_theme_defaults_authority,
+  test_transition_distribution, test_visualizer_3d_reach, test_visualizer_custom_route_contract,
+  test_visualizer_edit_content_envelope, test_visualizer_presentation_orientation, test_visualizer_runtime_controller,
+  test_visualizer_settings_body_transaction_contract, and 11 stale cases in test_neon_scene_materials (rear/translucent
+  body, body depth: they find no visible Sun/Moon in their reference render). Triage each: stale vs real defect.
 - [ ] **Neon Lake reactivity audit and evidence-led improvements.** After the visual corrections above,
   have a local agent replay deterministic quiet/onset/sustained/busy clips **and real music** from
   `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. Compare actual

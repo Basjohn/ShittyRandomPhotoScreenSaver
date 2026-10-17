@@ -44,6 +44,7 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
         "shockwave_grid_celestial_glow_enabled", "shockwave_grid_celestial_glow_strength",
         "shockwave_grid_celestial_glow_reactivity", "shockwave_grid_celestial_rim_vertices",
         "shockwave_grid_sun_rays_enabled", "shockwave_grid_sun_rays_strength", "shockwave_grid_sun_rays_color",
+        "shockwave_grid_sun_rays_length", "shockwave_grid_sun_rays_spread",
     }
     defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
     assert all(key in defaults for key in controls)

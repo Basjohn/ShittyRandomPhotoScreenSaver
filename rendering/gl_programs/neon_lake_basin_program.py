@@ -12,6 +12,7 @@ import struct
 
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
+from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL as _SKY_HEIGHTFIELD_GLSL
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL, scene3d_orbit_project
@@ -615,15 +616,12 @@ void main() {
 """
 NEON_SKY_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
+    "layout(location=2) out vec4 ShaftSource;\n"
     + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE
-    + HEIGHTFIELD_VOLUME_GLSL + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY
+    + _SKY_HEIGHTFIELD_GLSL + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY
     + """
 in vec2 vUv;
-uniform int uSkyPass; // 0 background, 1 optional volume, 2 depth-tested body
-uniform float uLandHeight;
-uniform float uVolumeStrength;
-uniform vec4 uVolumeColour;
-uniform int uVolumeSteps;
+uniform int uSkyPass; // 0 background, 2 depth-tested body, 3 light-shaft source (depth-tested)
 uniform float uMidband; // existing spectrum midband, no new DSP owner
 uniform float uBeatPulse;
 uniform vec2 uCelestialGlow; // brightness, musical response
@@ -636,13 +634,13 @@ void main() {
                     (uFit.y-(item.y-uField.y)/uField.w)/uFit.x);
     vec3 ray=normalize(basinUnview(vec3(screen,-uCamera)));
     vec3 eye=basinUnview(vec3(0.0,0.0,uCamera))+vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH);
-    if (uSkyPass==1) {
-        vec4 volume=sceneHeightfieldVolume(uBodyPosition,eye,ray,uHalfWidth,SHOCKWAVE_DEPTH,uLandHeight,
-                                          uTerrain,uTerrainSize,uVolumeColour,0.45,0.35,uVolumeStrength,uVolumeSteps);
-        if (volume.a<0.0001) discard;
-        FragColor=vec4(volume.rgb/volume.a,volume.a);
-        vec3 emission=volume.rgb*0.12;
-        Emission=vec4(emission,dot(emission,vec3(0.2126,0.7152,0.0722)));
+    if (uSkyPass==3) {
+        // Only the shaft source is written here (SceneTarget.shaft_writes); at the far plane, so the
+        // terrain and water already drawn leave it out where they stand in front of the light.
+        float source=basinShaftSource(eye,ray);
+        if (source<0.0001) discard;
+        ShaftSource=vec4(source,0.0,0.0,1.0);
+        gl_FragDepth=1.0;
         return;
     }
     if (uSkyPass==2) {
