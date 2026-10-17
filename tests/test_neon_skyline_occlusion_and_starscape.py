@@ -36,14 +36,26 @@ def test_three_spaced_stars_per_strong_beat_with_slower_release():
     assert not _framed_stars(((0.01,0.25,-0.63,STARSCAPE_BEAT_MIN_STRENGTH-0.001),),.35,.07)
     assert _framed_stars(((1.76,0.25,-0.63,1.4),),.35,.07)
     assert not _framed_stars(((STARSCAPE_BEAT_RELEASE,0.25,-0.63,1.4),),.35,.07)
-    # A 40% lower fade rate preserves the old curve at age / .6.
+    # The fade keeps the original curve, slowed: at age / .3 it is where it was at age.
     age = .9
-    slowed = _framed_stars(((age/.6,.25,-.63,1.4),),.35,.07)
+    slowed = _framed_stars(((age/.3,.25,-.63,1.4),),.35,.07)
     assert abs(slowed[0][2]-(1-(age/1.75)**2)**2)<1e-12
+    # The onset ring remembers events for as long as the stars fade.
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_EVENT_MEMORY
+    assert STARSCAPE_BEAT_RELEASE < SHOCKWAVE_EVENT_MEMORY
 
-def test_two_admitted_beats_have_at_most_six_stars():
+def test_each_admitted_beat_has_three_stars_and_older_beats_give_way_gradually():
     events=((0.5,0.2,-0.7,1.2),(0.1,0.7,-0.4,1.3))
     assert len(_framed_stars(events,.30,.08))==6
+    # Four beats keep stars; the oldest fades once three newer beats have theirs, then it is gone.
+    def beats(newest):
+        return tuple((newest+0.4*k,0.1*k,-0.3-0.1*k,1.2) for k in range(5,-1,-1))
+    young = _framed_stars(beats(0.1),.30,.08)
+    assert len(young)==12
+    oldest = [cell[2] for cell in young[9:]]
+    later = [cell[2] for cell in _framed_stars(beats(0.3),.30,.08)[9:]]
+    assert all(b<a for a,b in zip(oldest,later))
+    assert len(_framed_stars(beats(0.7),.30,.08))==9
 
 def test_thick_glass_sky_and_body_use_existing_depth_surface():
     renderer=(ROOT/"rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()

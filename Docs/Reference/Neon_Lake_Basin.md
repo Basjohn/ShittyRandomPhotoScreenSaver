@@ -314,9 +314,11 @@ Beat-star admissions use the existing onset ring, sample panoramic stars within 
 projected framed sky**, select three spaced star cells per admitted event, and decay on the
 single logical frame clock. The current onset floor is **0.224** (another 20% easier than the prior 0.28 floor; canonical source authority).
 Selection spans upper, middle and lower sky bands with event-driven horizontal/vertical
-strata, rather than a shallow row near the card's top. Two recent events retain at
-most six cells. Release uses the existing curve at 60% of its former fade rate
-(`1.75/0.6` seconds). Up to three candidates per star prefer clear sky around the
+strata, rather than a shallow row near the card's top. Up to four recent beats keep their
+three stars (twelve cells); once three newer beats have theirs, an older beat's stars fade over 0.6 s instead of
+vanishing. Release uses the original curve at a third of its first fade rate (`1.75/0.3` seconds, halved again
+2026-10-17). The onset ring remembers events for `SHOCKWAVE_EVENT_MEMORY` (6 s, up to 48) so the stars' tail is
+never cut; the water still draws only its newest 16 events younger than `SHOCKWAVE_LIFETIME`. Up to three candidates per star prefer clear sky around the
 visible body and authored terrain; coarse terrain checks are bounded and cached by
 star/view/terrain, independent of event age. This admission preference creates no depth readback.
 Canonical camera/fit inputs are required; there is no alternate

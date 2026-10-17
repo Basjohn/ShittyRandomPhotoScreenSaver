@@ -9,8 +9,8 @@ from its magnitude, loudness and presence (``shockwave_strength``, its emphasis 
 loudness scale), times the passage's share
 (``shockwave_passage_share``); an onset too weak for a wave makes none. The gap and the share
 both ramp on the passage intensity. Events are aged on the logical clock at capture and dropped after
-``SHOCKWAVE_LIFETIME``; at most ``SHOCKWAVE_CAPACITY`` are held, the oldest giving way. Nothing
-here touches Qt or GL.
+``SHOCKWAVE_EVENT_MEMORY``; at most ``SHOCKWAVE_EVENT_RING`` are held, the oldest giving way (the water draws
+only its newest live ones; Neon's beat stars use the longer tail). Nothing here touches Qt or GL.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ import math
 from dataclasses import dataclass
 
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_CAPACITY,
-    SHOCKWAVE_LIFETIME,
+    SHOCKWAVE_EVENT_MEMORY,
+    SHOCKWAVE_EVENT_RING,
     SHOCKWAVE_MIN_STRENGTH,
     shockwave_gap,
     shockwave_origin,
@@ -195,8 +195,8 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
             self._events.append((birth, x, z, strength))
             self._event_serial += 1
             self._last_event_ts = birth
-        self._events = [event for event in self._events if now - event[0] < SHOCKWAVE_LIFETIME]
-        del self._events[:-SHOCKWAVE_CAPACITY]
+        self._events = [event for event in self._events if now - event[0] < SHOCKWAVE_EVENT_MEMORY]
+        del self._events[:-SHOCKWAVE_EVENT_RING]
         return tuple((now - birth, x, z, s) for birth, x, z, s in self._events)
 
 

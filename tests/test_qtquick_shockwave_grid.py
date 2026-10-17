@@ -17,10 +17,13 @@ import pytest
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_CAPACITY,
     SHOCKWAVE_DEPTH,
+    SHOCKWAVE_EVENT_MEMORY,
+    SHOCKWAVE_EVENT_RING,
     SHOCKWAVE_LIFETIME,
     SHOCKWAVE_MAX_TILT,
     SHOCKWAVE_MAX_TURN,
     SHOCKWAVE_MIN_GAP,
+    shockwave_event_records,
     shockwave_height,
     shockwave_origin,
     shockwave_strength,
@@ -72,13 +75,17 @@ def test_an_event_is_admitted_once_per_onset_spaced_bounded_and_aged():
     bus.onset(10.6)
     assert len(_record(runtime, bus, 10.6, playing=False)) == 2             # paused: not admitted...
     assert len(_record(runtime, bus, 10.7)) == 2                            # ...nor later
-    assert _record(runtime, bus, 10.3 + SHOCKWAVE_LIFETIME + 0.01) == ()    # all expired
+    assert _record(runtime, bus, 10.3 + SHOCKWAVE_EVENT_MEMORY + 0.01) == ()    # all expired
     now = 20.0
-    for _ in range(SHOCKWAVE_CAPACITY + 5):
+    for _ in range(SHOCKWAVE_EVENT_RING + 5):
         bus.onset(now)
         now += SHOCKWAVE_MIN_GAP + 0.01
     events = _record(runtime, bus, now)                                     # read once, after them all
-    assert len(events) == SHOCKWAVE_CAPACITY
+    assert len(events) == min(SHOCKWAVE_EVENT_RING, int(SHOCKWAVE_EVENT_MEMORY / (SHOCKWAVE_MIN_GAP + 0.01)) + 1)
+    # The water draws only its newest live events, however long the ring remembers.
+    records = shockwave_event_records(events, 1.0)
+    assert len(records) == min(SHOCKWAVE_CAPACITY, sum(1 for age, *_ in events if age < SHOCKWAVE_LIFETIME))
+    assert [r["age"] for r in records] == [age for age, *_ in events if age < SHOCKWAVE_LIFETIME][-len(records):]
     assert [age for age, *_ in events] == sorted((age for age, *_ in events), reverse=True)   # oldest first
     # The clock going back (a new activation) starts afresh; a retired runtime authors nothing.
     assert _record(runtime, bus, 1.0) == ()
