@@ -98,13 +98,18 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
 
 ## 7. Product requirements recorded from the operator (2026-10-17)
 
-- **Collisions:** a settable ratio of **merge** (touching bubbles join with a neck, `sceneClusterRay`) versus **pop**
+- **Collision behaviour (operator 2026-10-17, supersedes the two-way ratio):** a triangle control with **Fuse**,
+  **Pop** and **Bounce** at its corners; the node the user places by mouse inside it sets the three ratios
+  (barycentric). Bounce is a gentle elastic push apart. Checkboxes choose whether it applies to **Big**, **Small** or
+  **All** bubbles; bubbles it does not apply to pass through each other freely. Earlier note: a settable ratio of **merge** (touching bubbles join with a neck, `sceneClusterRay`) versus **pop**
   (a very gentle fade out) when bubbles collide; merges must vary (sizes, neck width, orientation, two to four
   members), never one uniform shape.
 - **Trails:** dense wakes of tiny bubbles behind mid and large bubbles that follow the drift.
 - **Reactivity:** light shafts react to the music (intensity, spread or flicker), alongside bubble breathing, speed
   and drift, all through the original Bubble's logical reactivity (BTF), never a second clock or DSP.
 - **Sizes:** strong variation with a slight bias to small bubbles, authored by on-screen size bands.
+- **Camera down:** a darker abyss below, not an ocean floor (operator 2026-10-17); the seabed primitive stays
+  in the library unused by Extruded Bubble.
 - **Look:** parity with all six mocks, judged side by side at full resolution with crops
   (`tools/labs/extruded_bubble_lab.py` renders one variant per mock against it).
 
