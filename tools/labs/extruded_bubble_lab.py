@@ -52,24 +52,24 @@ SURFACE_Y = 9.0
 
 # Per mock: water palette, sun, camera pitch.
 VARIANTS = {
-    "ExBubble1": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
+    "ExBubble1": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),
                       sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032), ray_cut=0.08, rays=0.7),
-    "ExBubble2": dict(film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
+    "ExBubble2": dict(film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.022, 0.055, 0.12), water=(0.03, 0.08, 0.16), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
                       sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035), rays=0.7),
-    "ExBubble3": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
+    "ExBubble3": dict(film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
-    "ExBubble4": dict(film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
+    "ExBubble4": dict(film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=0.5, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -88,7 +88,7 @@ VARIANTS = {
         crisp=1.0, rough=0.03, film=1.0, film_range=(255.0, 345.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0,
         probe_fill=5.0, glint_power=400.0, glint_sharp=600.0, inner_blur=0.15),
 }
-VARIANTS["ExBubble6Diagonal"] = dict(
+VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     # Water and light: near-black teal, orange light from the top-right corner, faint beams.
     deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), sky=(1.0, 0.55, 0.22), shaft=(0.95, 0.45, 0.14),
     light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), light_view=(1.0, 0.68, -1.0), pitch=4.0, exposure=1.0,
@@ -416,6 +416,18 @@ uniform vec3 uIors;              // outside, wall, core
 uniform float uRough;            // the surface's own blur (softly focused scenes)
 uniform float uInnerBlur;
 uniform int uDiag;               // 0 composed; diagnostic views otherwise
+uniform vec3 uLightDir;          // world direction toward the scene's light (as seen under water)
+uniform vec3 uSpecColour;        // the light's colour x strength
+uniform vec3 uSpecShape;
+uniform float uSpecThrough;      // share of the light seen through the lens         // core radius (rad), shoulder radius (rad), shoulder share
+vec3 sceneLightLobe(vec3 dirWorld, float footprint) {
+    float angle = acos(clamp(dot(normalize(dirWorld), uLightDir), -1.0, 1.0));
+    float f2 = footprint * footprint;
+    float core2 = uSpecShape.x * uSpecShape.x, shoulder2 = uSpecShape.y * uSpecShape.y;
+    float core = core2 / (core2 + f2) * exp(-angle * angle / (core2 + f2));
+    float shoulder = shoulder2 / (shoulder2 + f2) * exp(-angle * angle / (shoulder2 + f2));
+    return uSpecColour * (core + uSpecShape.z * shoulder);
+}
 uniform float uSpeckGlow;        // light a pixel-sized bubble mirrors
 uniform float uReflect;          // reflections' share (near giants: their glass dims what they mirror)
 uniform float uFrameShare;       // what is seen through: the frame (1) or the probe (0)        // blur of the scene seen through a bubble, a share of its radius in pixels
@@ -436,6 +448,9 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     float tN, tF;
     sceneSphereRay(rayView, sphere.xyz, sphere.w, tN, tF);
     vec3 frontView = rayView * tN;
+    // A mirror on a sphere turns the view by twice the normal's turn: one pixel spans ~2 / (radius px x facing) rad.
+    float facingHere = max(dot(-rayView, normalize(frontView - sphere.xyz)), 0.15);
+    float lobeFootprint = 2.0 / (max(pixels, 1.0) * facingHere) + soft * 0.6;
     vec4 paths[8];
     vec3 origin = (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
     // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
@@ -468,8 +483,12 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     for (int i = 0; i < 8; ++i) {
         if (i >= count) break;
         // Light bounced inside the wall leaves in directions that swing from pixel to pixel: read it wider.
-        vec3 seen = sceneProbe(uProbe, uViewToWorld * paths[i].xyz, min(blur + 0.12 * float(i), 1.0), uProbeLevels);
-        if (i < count - 1) seen *= filmHue;
+        vec3 seen = sceneProbe(uProbe, uViewToWorld * paths[i].xyz, min(blur + 0.06 * float(i), 1.0), uProbeLevels);
+        // Mirrored paths also see the light itself (later bounces inside the wall spread wider).
+        // Highlights stay inset from the silhouette (operator): the mirror lobe fades toward grazing, where the rim's
+        // own Fresnel band already carries the light.
+        if (i < count - 1) seen = (seen + sceneLightLobe(uViewToWorld * paths[i].xyz, lobeFootprint * (1.0 + float(i)))
+                                         * smoothstep(0.2, 0.5, facingHere) * smoothstep(2.5, 10.0, pixels)) * filmHue;
         if (i == count - 1) {
             // What is seen through is out of focus inside the bubble (the lens's depth): softened with its size.
             // The frame is read along the smooth lens of the bubble as a whole (refraction through a plain sphere of the
@@ -484,6 +503,12 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             // lookups scatter over the screen (speckle). Only the core's gently bent view reads the frame; the rest
             // reads the scene's blurred light round this pixel.
             seen = mix(mix(here, seen, 1.0 - uFrameShare), behind.rgb, behind.a * uFrameShare);
+            // The light itself seen through the bubble's lens: an inset glow where the bending carries the view to it.
+            // Only bubbles big enough to show a lens: on a bead the lens view spans every direction (a uniform glow).
+            // The light through an air bubble (a diverging lens, water to air): it shows inset on the light's own side.
+            vec3 airLens = sceneSphereRefraction(rayView, normalize(frontView - sphere.xyz), uIors.x / uIors.z);
+            seen += sceneLightLobe(uViewToWorld * airLens, lobeFootprint * 1.5) * uSpecThrough
+                  * smoothstep(8.0, 24.0, pixels);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
             transmitted += paths[i].w * seen * uLens;
@@ -506,7 +531,10 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
     // Each pixel sees a cone of directions as wide as the curvature it covers: read the probe at that level.
     float texelAngle = 1.5707963 / float(textureSize(uProbe, 0).x);
     float facing = max(dot(-rayView, normalize(frontView - sphere.xyz)), 0.2);
-    float cone = 2.0 / max(pixels, 1.0) / facing;
+    // The footprint is anisotropic: radially it grows as 1 / facing (handled by the rim's sub-pixel rays),
+    // tangentially it stays ~2 / radius px. Filtering by the radial width averaged the whole hemisphere into every
+    // rim pixel (uniform hoops); the tangential width keeps the mirrored light and dark round the rim.
+    float cone = 2.0 / max(pixels, 1.0) / mix(1.0, facing, 0.25);
     float footprint = log2(max(cone / texelAngle, 1.0)) / max(uProbeLevels - 1.0, 1.0);
     float blur = clamp(footprint + uRough + soft * 0.55, 0.0, 1.0);
     vec4 sum;
@@ -1028,6 +1056,14 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
     pitch = math.radians(settings["pitch"])
     c, s = math.cos(pitch), math.sin(pitch)
     view_to_world = (1, 0, 0, 0, c, s, 0, -s, c)
+    # The specular key: the light as the bubbles' faces meet it. World-fixed (orbits correctly). Default: the
+    # surface's bright window straight overhead; scenes lit from one side give it in view space at the authored
+    # camera ("spec_view"), converted to world once here.
+    if "spec_view" in settings:
+        base = np.array(view_to_world).reshape(3, 3).T
+        spec_dir = base @ (np.array(settings["spec_view"]) / np.linalg.norm(settings["spec_view"]))
+    else:
+        spec_dir = np.array((0.0, 1.0, 0.0))
     if YAW:
         yaw = math.radians(YAW)
         ry = np.array(((math.cos(yaw), 0.0, math.sin(yaw)), (0.0, 1.0, 0.0), (-math.sin(yaw), 0.0, math.cos(yaw))))
@@ -1162,6 +1198,14 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         for name, key in (("uDeep", "deep"), ("uWater", "water"), ("uSkyTint", "sky"), ("uShaftColour", "shaft")):
             gl.glUniform3f(u(name), *(v * exposure for v in settings[key]))
 
+    def spec_uniforms(loc):
+        gl.glUniform3f(loc("uLightDir"), *spec_dir)
+        colour = np.array(settings.get("light", (1.0, 1.0, 1.0))) * settings.get("spec_power", 300.0)
+        gl.glUniform3f(loc("uSpecColour"), *colour)
+        gl.glUniform1f(loc("uSpecThrough"), settings.get("spec_through", 0.4))
+        gl.glUniform3f(loc("uSpecShape"), settings.get("sun_size", 0.05), settings.get("spec_shoulder", 0.25),
+                       settings.get("spec_broad", 0.012))
+
     def bubble_uniforms(program, background_tex):
         common(program)
         u = lambda name: gl.glGetUniformLocation(program, name)
@@ -1188,6 +1232,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
         gl.glUniform1i(u("uDiag"), DIAG)
+        spec_uniforms(u)
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
         gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.6))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
@@ -1327,6 +1372,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                         gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
                         gl.glUniform1i(v("uDiag"), DIAG)
+                        spec_uniforms(v)
                         gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.6))
                         gl.glUniform1f(v("uReflect"), 1.0)
                         gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
@@ -1347,6 +1393,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                     gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
                     gl.glUniform1i(m("uDiag"), DIAG)
+                    spec_uniforms(m)
                     gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.6))
                     gl.glUniform1f(m("uReflect"), 1.0)
                     gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
