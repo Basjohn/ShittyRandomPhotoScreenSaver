@@ -297,6 +297,24 @@ water and bubbles show the scene they sit in (the light, beams, lit particulate)
 there (with a mirrored-face negative control), blur is the same filter across faces and full blur is the hemisphere,
 state and allocation.
 
+## Defocus layer and HDR scenes (§4A, 2026-10-17)
+
+`rendering/quick/scene3d/defocus.py`: `DefocusLayer` is depth of field for objects near the lens. `begin(w, h)`
+binds an RGBA16F premultiplied colour and an RG16F alpha-weighted circle of confusion (both mipmapped); the caller
+draws its near objects sharp with `SCENE_DEFOCUS_GLSL` `sceneDefocusWrite(premultiplied, alpha, cocPixels)`; `end()`
+hands back framebuffer, viewport, blend and depth state; `composite(max_radius)` spreads every pixel evenly over its
+own circle (64 golden-angle taps, each read from the mip level matching the taps' spacing so no source pixel is
+missed, weighted by 1 / its circle's area so light is conserved) and lays the result over the bound framebuffer.
+A near transparent object should write only its own light (reflections), so the scene behind stays visible.
+`test_scene3d_defocus.py`: a bright point becomes an even filled disc of its circle holding its light, a sharp pixel
+stays exactly in place, state comes back, nothing is left after `release`.
+
+`SceneTarget.scope(..., hdr=exposure)` (overlay with bloom only): colour, background capture and resolve are
+half-float, so light brighter than white survives for every pass that reads the scene (refraction, reflection,
+bloom), and the overlay composite tone maps it once (ACES fit) at that exposure to an ordinary display. This is HDR
+rendering, not an HDR display. Without `hdr` everything is as before. `test_scene3d_target.py` proves light past
+white in the background capture and a smooth monotonic tone curve, single- and multisampled.
+
 ## Shared optics and underwater light (§4A G3B, 2026-10-17)
 
 Import-safe GLSL + CPU mirrors, no resources. `scene3d_optics.py`: `sceneFresnelDielectric` (exact unpolarised, total
