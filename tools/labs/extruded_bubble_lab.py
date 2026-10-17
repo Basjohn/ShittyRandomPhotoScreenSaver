@@ -69,7 +69,7 @@ VARIANTS = {
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.1, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=1.0, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.1, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=3.0, face_reflect=0.2, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -79,7 +79,7 @@ VARIANTS = {
                                  absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
     "ExBubble5Cameradown": dict(
         # Looking down into a dark abyss lit from above and behind: deep blue-black, a lighter haze far off.
-        deep=(0.01, 0.04, 0.08), water=(0.03, 0.11, 0.2), sky=(0.45, 0.65, 1.0), shaft=(0.3, 0.55, 0.95),
+        deep=(0.05, 0.12, 0.2), water=(0.03, 0.11, 0.2), sky=(0.45, 0.65, 1.0), shaft=(0.3, 0.55, 0.95), face_reflect=0.25,
         sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, surface=30.0, shaft_y=12.0, absorb=(0.1, 0.05, 0.03),
         surface_gain=0.6, light_power=0.0, mist=0.4, rays=0.4, glow=0.6, drift=0.15, wisps=0.0, wakes=0.0,
         # Particulate and streams.
@@ -1308,7 +1308,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
         gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0))
-        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program else 1.0)
+        # Face reflection share (an air bubble's face mirrors ~2%; the rim carries the reflections): per scene.
+        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program
+                       else settings.get("face_reflect", 1.0))
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
         gl.glUniform1f(u("uShellMin"), settings.get("shell_min", 0.0))
@@ -1451,7 +1453,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1i(v("uDiag"), DIAG)
                         spec_uniforms(v)
                         gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.25))
-                        gl.glUniform1f(v("uReflect"), 1.0)
+                        gl.glUniform1f(v("uReflect"), settings.get("face_reflect", 1.0))
                         gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
                         gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUseProgram(shell)
@@ -1473,7 +1475,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1i(m("uDiag"), DIAG)
                     spec_uniforms(m)
                     gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.25))
-                    gl.glUniform1f(m("uReflect"), 1.0)
+                    gl.glUniform1f(m("uReflect"), settings.get("face_reflect", 1.0))
                     gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
                     gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
