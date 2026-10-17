@@ -398,15 +398,18 @@ vec4 behindAt(vec3 viewPoint, float blurPx) {
     if (trust <= 0.0) return vec4(0.0);
     px = clamp(px, vec2(0.5), uFrameSize - 0.5);
     if (blurPx < 0.75) return vec4(texture(uBackground, px / uTargetSize).rgb, trust);
-    // A filled disc (golden spiral) rotated per pixel, so sparse bright specks spread to a haze instead of ghosts.
+    // A filled disc (golden spiral), each tap itself a small box (2x2 bilinear quad offset), so sparse bright specks
+    // spread to a smooth haze; the same pattern at every pixel (a per-pixel spin read as speckle).
     vec3 sum = vec3(0.0);
-    float spin = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+    float tap = max(blurPx / 4.0, 0.5);
     for (int i = 0; i < 16; ++i) {
         float r = sqrt((float(i) + 0.5) / 16.0) * blurPx;
-        float a = float(i) * 2.39996323 + spin;
-        sum += texture(uBackground, (px + vec2(cos(a), sin(a)) * r) / uTargetSize).rgb;
+        float a = float(i) * 2.39996323;
+        vec2 at = px + vec2(cos(a), sin(a)) * r;
+        sum += texture(uBackground, (at + vec2(-0.5, -0.5) * tap) / uTargetSize).rgb
+             + texture(uBackground, (at + vec2(0.5, 0.5) * tap) / uTargetSize).rgb;
     }
-    return vec4(sum / 16.0, trust);
+    return vec4(sum / 32.0, trust);
 }
 uniform float uShell;            // the glass wall's thickness, a share of the radius (0: a solid sphere)
 uniform vec3 uIors;              // outside, wall, core
@@ -434,6 +437,8 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     vec3 frontView = rayView * tN;
     vec4 paths[8];
     vec3 origin = (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
+    // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
+    // single interface (the film still colours what they mirror).
     float shell = max(uShell, 1.5 / max(pixels, 1.0));
     int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths);
     vec3 light = vec3(0.0);
@@ -449,7 +454,8 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         float c = clamp(dot(-rayView, normalize(local)), 0.0, 1.0);
         float drift = skyNoise2(local.xy * 2.3 + vec2(sphere.w * 37.0, sphere.x * 11.0), 191u);
         float thickness = mix(uFilmRange.x, uFilmRange.y, clamp(0.5 - 0.4 * local.y + 0.6 * (drift - 0.5), 0.0, 1.0));
-        vec3 film = sceneThinFilm(c, thickness, 1.33, 1.0);
+        // Hue from thickness at a fixed angle: at grazing the angle term swings within a pixel (a speckled ring).
+        vec3 film = sceneThinFilm(0.75, thickness, 1.33, 1.0);
         vec3 hue = film / max(dot(film, vec3(0.3333)), 1e-3);
         hue.g = min(hue.g, 0.5 * (hue.r + hue.b) + 0.1);
         hue /= max(dot(hue, vec3(0.3333)), 1e-3);
@@ -457,14 +463,22 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     }
     for (int i = 0; i < 8; ++i) {
         if (i >= count) break;
-        vec3 seen = sceneProbe(uProbe, uViewToWorld * paths[i].xyz, blur, uProbeLevels);
+        // Light bounced inside the wall leaves in directions that swing from pixel to pixel: read it wider.
+        vec3 seen = sceneProbe(uProbe, uViewToWorld * paths[i].xyz, min(blur + 0.12 * float(i), 1.0), uProbeLevels);
         if (i < count - 1) seen *= filmHue;
         if (i == count - 1) {
             // What is seen through is out of focus inside the bubble (the lens's depth): softened with its size.
-            vec4 behind = behindAt(frontView + paths[i].xyz * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
+            // The frame is read along the smooth lens of the bubble as a whole (refraction through a plain sphere of the
+            // outer index): the traced exit through the glass wall swings chaotically near the rim (speckle). The trace
+            // still sets how much light comes through.
+            vec3 lensDir = sceneSphereRefraction(rayView, normalize(frontView - sphere.xyz), 1.0 / uIors.x);
+            vec4 behind = behindAt(frontView + lensDir * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
             // Off the frame's edge the bent view falls back to the scene behind this pixel, never to the probe (its
             // scattered fill lit every bubble at the frame's edge).
             vec3 here = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+            // Light that went through the glass wall leaves in directions that swing from pixel to pixel: its frame
+            // lookups scatter over the screen (speckle). Only the core's gently bent view reads the frame; the rest
+            // reads the scene's blurred light round this pixel.
             seen = mix(mix(here, seen, 1.0 - uFrameShare), behind.rgb, behind.a * uFrameShare);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
@@ -486,15 +500,17 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
     float footprint = log2(max(cone / texelAngle, 1.0)) / max(uProbeLevels - 1.0, 1.0);
     float blur = clamp(footprint + uRough + soft * 0.55, 0.0, 1.0);
     vec4 sum;
-    // Derivatives in uniform control flow (taken inside the branch they were undefined: a dotted rim).
-    vec3 dx = dFdx(rayView), dy = dFdy(rayView);
-    if (facing > 0.55) {
+    // One pixel's step in view directions, analytic (derivatives after the caller's discard are undefined: they
+    // came back zero and every sub-ray was the same ray).
+    vec3 dx = vec3(uPixelSize, 0.0, 0.0) * -rayView.z, dy = vec3(0.0, uPixelSize, 0.0) * -rayView.z;
+    if (facing > 0.55 && pixels > 40.0) {
         sum = shadeBubbleRay(rayView, sphere, pixels, soft, blur);
     } else {
         sum = vec4(0.0);
-        for (int i = 0; i < 4; ++i) {
-            vec2 o = vec2(i == 0 || i == 3 ? -0.25 : 0.25, i < 2 ? -0.25 : 0.25) + vec2(0.125 * float(i == 1) - 0.125 * float(i == 2), 0.0);
-            sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur) * 0.25;
+        for (int i = 0; i < 8; ++i) {
+            // Eight points spread over the pixel (a rotated-grid pattern).
+            vec2 o = vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5;
+            sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur) * 0.125;
         }
     }
     float alpha = clamp(sum.a, 0.0, 1.0);
