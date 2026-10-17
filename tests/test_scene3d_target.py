@@ -421,3 +421,20 @@ def test_an_overlays_bloom_glows_only_from_emitted_light_and_never_darkens(captu
         target.release()
         resources.release_resources()
     assert not target.has_resources
+
+
+def test_light_shafts_are_one_transform_of_the_overlay_composite_and_warm_with_the_target():
+    from rendering.quick.scene3d import target as module
+    from rendering.quick.scene3d.shafts import SHAFT_PROGRAMS, SHAFT_SAMPLES_PROGRAMS
+    for plain, shafted in ((module._COMPOSITE_OVERLAY_BLOOM_FRAGMENT, module._COMPOSITE_OVERLAY_SHAFTS_FRAGMENT),
+                           (module._COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT,
+                            module._COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT)):
+        assert shafted == module._with_shafts(plain) and shafted != plain
+        assert shafted.count("uShafts") == 2 and "* scene.a" in shafted   # rays only where the scene drew
+    for samples, extra in ((1, SHAFT_PROGRAMS), (4, SHAFT_SAMPLES_PROGRAMS)):
+        for bloom in (False, True):
+            without = module.scene_target_programs(samples, bloom, False, overlay=True)
+            with_shafts = module.scene_target_programs(samples, bloom, False, overlay=True, shafts=True)
+            assert with_shafts[:len(without)] == without        # frames without a light are covered too
+            assert all(program in with_shafts for program in extra)
+            assert any(key.startswith("scene_overlay_shafts") for key, *_ in with_shafts)

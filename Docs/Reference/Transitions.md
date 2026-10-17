@@ -418,6 +418,13 @@ Each foundation slice adds what it learned here.
   the pixel's visibility, and own it in one place so it is never applied twice.
 - Star bursts read like the reference only with a tiny intense core, long thin spikes and a broad faint halo; a fat
   core plus a wide sheath saturates into a white blob under bloom.
+- Light shafts need their own source: blurring all emitted light toward the light smears every bright line into
+  rays. A dedicated source attachment written by one depth-tested far-plane pass gets occlusion from the depth buffer
+  for free, with no blend changes in the passes that drew the occluders.
+- A broad bright source glow makes shafts read as one big haze; rays come from what breaks the source (peaks,
+  clouds), so keep the source a disc plus a modest corona and let Spread widen it.
+- Post light composited over an overlay must be masked by the scene's own alpha, or it lights the empty card and
+  shows the item's rectangle as a frame.
 
 ## Operator-triggered appearance review (reference checklist)
 

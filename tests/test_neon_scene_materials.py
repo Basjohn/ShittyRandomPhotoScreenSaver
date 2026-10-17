@@ -113,7 +113,7 @@ def test_orbit_reuses_target_and_disabled_orbit_is_time_invariant(target):
     assert snapshot.presentation == moving.presentation
 
 
-def test_ray_admission_is_event_driven_and_colour_strength_changes_actual_volume(target, monkeypatch):
+def test_ray_admission_is_event_driven_and_colour_strength_change_the_actual_rays(target, monkeypatch):
     capture, host = target
     snapshot = _base(shockwave_grid_wire_display='Glass + Vertices', shockwave_grid_sun_enabled=True)
     capture.render(host, snapshot)
@@ -129,22 +129,27 @@ def test_ray_admission_is_event_driven_and_colour_strength_changes_actual_volume
     monkeypatch.setattr(gl, 'glUniform1i', record)
     names, meshes = dict(renderer._target._names), dict(renderer._resources._meshes)
     disabled = capture.render(host, snapshot)
-    assert 1 not in passes
+    assert 3 not in passes and 1 not in passes
     passes.clear()
     zero = capture.render(host, _change(snapshot, shockwave_grid_sun_rays_enabled=True, shockwave_grid_sun_rays_strength=0.))
-    assert 1 not in passes and np.array_equal(disabled, zero)
+    assert 3 not in passes and np.array_equal(disabled, zero)
+    assert renderer._target._names == names          # rays that cannot show allocate nothing
     passes.clear()
     capture.render(host, _change(snapshot, shockwave_grid_sun_enabled=False,
                                 shockwave_grid_sun_rays_enabled=True, shockwave_grid_sun_rays_strength=1.))
-    assert 1 not in passes
+    assert 3 not in passes
     rays = _change(snapshot, shockwave_grid_sun_rays_enabled=True, shockwave_grid_sun_rays_strength=1.)
     strong = capture.render(host, rays)
-    assert 1 in passes
+    assert 3 in passes and 1 not in passes                 # the shaft source; the old haze pass is gone
     _different(strong, disabled)
-    _different(strong, capture.render(host, _change(rays, shockwave_grid_sun_rays_strength=.15)))
+    for change in ({"shockwave_grid_sun_rays_strength": .15}, {"shockwave_grid_sun_rays_length": .0},
+                   {"shockwave_grid_sun_rays_spread": 1.0}):
+        _different(strong, capture.render(host, _change(rays, **change)))
     _different(capture.render(host, _change(rays, shockwave_grid_sun_rays_color=[255, 15, 20, 255])),
                capture.render(host, _change(rays, shockwave_grid_sun_rays_color=[10, 80, 255, 255])))
-    assert renderer._target._names == names and renderer._resources._meshes == meshes
+    assert renderer._resources._meshes == meshes
+    # Turning the rays off again draws exactly as before they were on.
+    assert np.array_equal(disabled, capture.render(host, snapshot))
 
 
 @pytest.mark.parametrize('style', ['Glass', 'Glass + Vertices'])

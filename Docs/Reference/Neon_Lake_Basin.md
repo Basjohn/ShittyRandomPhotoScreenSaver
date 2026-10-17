@@ -303,6 +303,18 @@ fragment and roughness blurs, take two-octave clouds and only the nebula's broad
 (GPU 74-98% busy with other work, 2760 MHz): plain 0.262 ms, clouds 0.294, nebula 0.361, both 0.405 ms median; the
 nebula with full reflections had cost 0.858 ms. No new render target, pass, timer or texture is admitted.
 
+**Light Rays** (2026-10-17; the invisible heightfield-volume haze pass retired from Neon, the shared primitive
+stays dormant with its own tests) are screen-space light shafts from the shared `rendering/quick/scene3d/shafts.py`.
+With rays admitted (body on, Light Rays on, Ray Strength above 0) the target opens with `shafts=True`; after the body
+pass a sky pass (`uSkyPass==3`) draws the light's source (the disc and a soft glow round it widened by **Ray Spread**,
+dimmed by volumetric clouds in front) into the shaft-source attachment at the far plane, so terrain and water left
+in front leave it out. `_shaft_light` places the body on the card through `basin_item_point` (no light while it is
+behind the camera) and hands the target a `ShaftLight`: reach from **Ray Length** (short beams to the whole card),
+colour from **Ray Colour** times its alpha, Ray Strength and `RAY_GAIN`. The shared pass resolves, gathers twice
+toward the light and the composite adds the rays only where the scene drew. Rays off draw the original programs;
+turning them off again returns the identical picture. Measured at 684×418 (GPU 69-72% busy with other work):
++0.02-0.2 ms median over two runs.
+
 **Beat stars** peak as diamond starbursts rather than dots: a sharp diamond point, four spikes that taper to nothing
 inside a faint sheath, a soft halo and, toward the top of **Star Size**, four shorter diagonals. Star Size sets how far
 the spikes reach at the peak (a small diamond at 0, about 36 px spikes at 1), and the burst draws back in as the star

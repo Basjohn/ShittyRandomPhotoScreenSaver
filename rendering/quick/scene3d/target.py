@@ -31,6 +31,12 @@ shared bloom chain, and the composite lays the scene over what is drawn with its
 premultiplied, under a blend this target sets and restores for that one draw, so the glow
 brightens the backdrop exactly and never darkens it. Without emission writes nothing glows.
 
+With ``shafts`` an overlay target also has a shaft-source attachment (location 2, R16F) for visible light
+rays: the mode draws its light's source into it inside ``shaft_writes()`` (colour and emission are masked
+there), hands the target a ``ShaftLight`` with ``set_shaft_light``, and ``end`` turns the source into rays
+(``shafts.LightShafts``) that the composite adds in their colour. Without a ``ShaftLight`` that frame, or
+without ``shafts``, the target composites exactly as before.
+
 ``scope`` restores Quick's framebuffers, viewport and scissor even when the
 scene raises, so a consumer needs no fence change of its own (the Visualizer
 fence stays as it is: modes that do not use a target pay nothing).
@@ -59,6 +65,7 @@ from rendering.quick import gl_query
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
 from .motion import MOTION_BLUR_PROGRAMS, MotionBlur
 from .post import BLOOM_PROGRAMS, FULLSCREEN_VERTEX_SOURCE, BloomChain
+from .shafts import SHAFT_PROGRAMS, SHAFT_SAMPLES_PROGRAMS, LightShafts, ShaftLight
 
 SCENE_TARGET_BUCKET = 64
 
@@ -140,6 +147,26 @@ void main() {
 }
 """
 
+_SHAFT_GLOW = "    vec3 glow = texture(uBloom, (vec2(texel) + 0.5) * uBloomScale).rgb * uBloomStrength;\n"
+
+
+def _with_shafts(fragment: str) -> str:
+    """The overlay-bloom composite with light shafts added to its glow (the one transform that makes the
+    shafts variants; without shafts the original programs draw, so nothing else changes)."""
+    assert fragment.count(_SHAFT_GLOW) == 1 and fragment.count("vec4 sceneOverlayBloom(") == 1
+    fragment = fragment.replace(
+        "vec4 sceneOverlayBloom(",
+        "uniform sampler2D uShafts;     // half size, like the glow\nuniform vec3 uShaftColour;\n"
+        "vec4 sceneOverlayBloom(")
+    return fragment.replace(_SHAFT_GLOW, _SHAFT_GLOW
+                            # Rays light the air in front of what was drawn, never the empty card around it.
+                            + "    glow += texture(uShafts, (vec2(texel) + 0.5) * uBloomScale).r * uShaftColour"
+                            " * scene.a;\n")
+
+
+_COMPOSITE_OVERLAY_SHAFTS_FRAGMENT = _with_shafts(_COMPOSITE_OVERLAY_BLOOM_FRAGMENT)
+_COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT = _with_shafts(_COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT)
+
 # An overlay: the resolved scene as straight alpha (its colour was blended over transparent
 # black, so it is premultiplied), times the opacity; nothing drawn shows what lies below.
 _OVERLAY_GLSL = """
@@ -186,11 +213,21 @@ void main() {
 
 
 def scene_target_programs(samples: int, bloom: bool, motion: bool,
-                          overlay: bool = False) -> tuple[tuple[str, str, str], ...]:
+                          overlay: bool = False, shafts: bool = False) -> tuple[tuple[str, str, str], ...]:
     """(key, vertex, fragment) of every program ``end`` draws with for this setup, for a gradual
     warm-up. Keep in step with ``end`` (the warm-up bar renders a first frame that must compile
-    nothing)."""
+    nothing). With ``shafts`` (an overlay's light shafts) both the frames with a light and those
+    without are covered."""
     multisampled = int(samples) > 1
+    if overlay and shafts:
+        if motion:
+            raise ValueError("an overlay scene target has no motion blur")
+        programs = list(scene_target_programs(samples, bloom, False, overlay=True))
+        programs.extend(SHAFT_SAMPLES_PROGRAMS if multisampled else SHAFT_PROGRAMS)
+        programs.append(("scene_overlay_shafts_samples", ITEM_QUAD_VERTEX_SOURCE,
+                         _COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT) if multisampled
+                        else ("scene_overlay_shafts", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_SHAFTS_FRAGMENT))
+        return tuple(programs)
     if overlay:
         if motion:
             raise ValueError("an overlay scene target has no motion blur")
@@ -222,13 +259,13 @@ def scene_target_programs(samples: int, bloom: bool, motion: bool,
 
 def warm_run_resources(target: "SceneTarget", trails, size: tuple[int, int] | None, samples: int, *,
                        motion_blur: bool = False, bloom: bool = False, with_trails: bool = False,
-                       overlay: bool = False) -> bool:
+                       overlay: bool = False, shafts: bool = False) -> bool:
     """One step of allocating ahead what a run will allocate at its first frames, for a
     renderer whose scene draws through ``target`` at ``size`` device pixels (and ``trails``
     when on). True once nothing is left, or when the run draws without a target."""
     if size is None or not samples:
         return True
-    if not target.warm(size, samples, motion_blur=motion_blur, bloom=bloom, overlay=overlay):
+    if not target.warm(size, samples, motion_blur=motion_blur, bloom=bloom, overlay=overlay, shafts=shafts):
         return False
     return not with_trails or trails.warm(target)
 
@@ -268,13 +305,14 @@ def _new_framebuffer(label: str) -> int:
 class SceneTarget:
     def __init__(self, label: str) -> None:
         self.label = label
-        # allocated width, height, requested samples, with motion, with emission
-        self._key: tuple[int, int, int, bool, bool] | None = None
+        # allocated width, height, requested samples, with motion, with emission, with shafts
+        self._key: tuple[int, int, int, bool, bool, bool] | None = None
         self._samples = 0                                # samples allocated (1 = a plain texture)
         # colour / velocity: the scene's attachments (multisampled when _samples > 1);
         # resolve_*: their resolved copies for the post effects.
         self._names = {"fbo": 0, "colour": 0, "velocity": 0, "depth": 0, "resolve_fbo": 0, "resolve_texture": 0,
-                       "resolve_velocity": 0, "emission": 0, "emission_resolve_fbo": 0, "emission_resolve": 0}
+                       "resolve_velocity": 0, "emission": 0, "emission_resolve_fbo": 0, "emission_resolve": 0,
+                       "shafts": 0}
         self._inherited = (0, 0)
         self._scissor = False
         self._rect = (0, 0, 0, 0)
@@ -283,10 +321,13 @@ class SceneTarget:
         self._inherited_blend: tuple | None = None
         self._bloom = BloomChain(label)
         self._motion = MotionBlur(label)
+        self._shafts = LightShafts(label)
+        self._shaft_light: ShaftLight | None = None
 
     @property
     def has_resources(self) -> bool:
-        return any(self._names.values()) or self._bloom.has_resources or self._motion.has_resources
+        return (any(self._names.values()) or self._bloom.has_resources or self._motion.has_resources
+                or self._shafts.has_resources)
 
     @property
     def allocation(self) -> tuple[int, int, int] | None:
@@ -296,19 +337,23 @@ class SceneTarget:
     @contextmanager
     def scope(self, frame: SceneFrame, samples: int, resources,
               rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
-              motion_blur: bool = False, overlay: float | None = None) -> Iterator[None]:
+              motion_blur: bool = False, overlay: float | None = None, shafts: bool = False) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
         (see ``post.BloomChain``); the passes must then write alpha deliberately.
         With ``motion_blur`` the passes that move write their screen motion inside
         ``velocity_writes()`` (see ``motion.MotionBlur``). With ``overlay`` (an opacity)
-        the scene is laid over what is already drawn (see the module notes).
+        the scene is laid over what is already drawn (see the module notes). With ``shafts`` (an
+        overlay only) the passes may draw a light's source inside ``shaft_writes()`` and hand its
+        ``ShaftLight`` to ``set_shaft_light`` for visible rays.
         """
         if overlay is not None and motion_blur:
             raise ValueError(f"{self.label}: an overlay scene target has no motion blur")
+        if shafts and overlay is None:
+            raise ValueError(f"{self.label}: light shafts need an overlay scene target")
         self.begin(frame, samples, rect, motion_blur, overlay=overlay,
-                   emission=overlay is not None and bloom > 0.0)
+                   emission=overlay is not None and bloom > 0.0, shafts=shafts)
         try:
             yield
         except BaseException:
@@ -334,6 +379,32 @@ class SceneTarget:
             gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
 
     @contextmanager
+    def shaft_writes(self) -> Iterator[None]:
+        """Let the enclosed passes write only the light-shaft source (location 2; colour and emission are
+        masked, the source overwritten unblended); a no-op without shafts."""
+        if not self._names["shafts"]:
+            yield
+            return
+        prior = [bool(value) for value in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, 1)]
+        blend = bool(gl.glIsEnabledi(gl.GL_BLEND, 2))
+        gl.glColorMaski(0, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+        gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+        gl.glColorMaski(2, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+        gl.glDisablei(gl.GL_BLEND, 2)
+        try:
+            yield
+        finally:
+            gl.glColorMaski(2, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+            gl.glColorMaski(1, *prior)
+            gl.glColorMaski(0, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+            if blend:
+                gl.glEnablei(gl.GL_BLEND, 2)
+
+    def set_shaft_light(self, light: ShaftLight | None) -> None:
+        """This frame's light for the shafts (``None``: no rays this frame); kept until ``end``."""
+        self._shaft_light = light if self._names["shafts"] else None
+
+    @contextmanager
     def velocity_writes(self) -> Iterator[None]:
         """Let the enclosed passes write their screen motion (location 1); a no-op without motion blur."""
         if not self._names["velocity"]:
@@ -346,19 +417,20 @@ class SceneTarget:
             gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
 
     def warm(self, size: tuple[int, int], samples: int, *, motion_blur: bool = False,
-             bloom: bool = False, overlay: bool = False) -> bool:
+             bloom: bool = False, overlay: bool = False, shafts: bool = False) -> bool:
         """Allocate ahead, one unit per call, what ``scope`` will use at ``size`` (device
         pixels) with these settings; True once all of it is allocated. ``begin`` reuses it."""
         width, height = (int(value) for value in size)
         samples, motion_blur = max(1, int(samples)), bool(motion_blur)
         emission = bool(overlay and bloom)
+        shafts = bool(overlay and shafts)
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or width > key[0] or height > key[1]):
+                or key[5] != shafts or width > key[0] or height > key[1]):
             self.release()
             self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
                                gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts)
             self._commit()
             return False
         allocation = (self._key[0], self._key[1])
@@ -372,6 +444,8 @@ class SceneTarget:
         if motion_blur and not self._motion.warm(allocation):
             return False
         if bloom and not self._bloom.warm(allocation):
+            return False
+        if shafts and not self._shafts.warm(allocation):
             return False
         return True
 
@@ -395,7 +469,8 @@ class SceneTarget:
             gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
-              motion_blur: bool = False, overlay: float | None = None, emission: bool = False) -> None:
+              motion_blur: bool = False, overlay: float | None = None, emission: bool = False,
+              shafts: bool = False) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -403,15 +478,16 @@ class SceneTarget:
         self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
                            gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
         self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-        motion_blur, emission = bool(motion_blur), bool(emission)
+        motion_blur, emission, shafts = bool(motion_blur), bool(emission), bool(shafts)
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or width > key[0] or height > key[1]):
+                or key[5] != shafts or width > key[0] or height > key[1]):
             self.release()
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts)
         self._rect = (x, y, width, height)
         self._overlay = None if overlay is None else max(0.0, min(1.0, float(overlay)))
-        self._inherited_blend = _blend_state() if emission else None
+        self._inherited_blend = _blend_state() if emission or shafts else None
+        self._shaft_light = None
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
         gl.glDisable(gl.GL_SCISSOR_TEST)
         clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
@@ -426,6 +502,8 @@ class SceneTarget:
         if self._names["velocity"] or self._names["emission"]:
             # The second attachment is written only inside velocity_writes() / emission_writes().
             gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+        if self._names["shafts"]:
+            gl.glColorMaski(2, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)   # only in shaft_writes()
         vx, vy, vw, vh = frame.viewport
         gl.glViewport(vx - x, vy - y, vw, vh)
 
@@ -448,14 +526,19 @@ class SceneTarget:
                                            frame.quad_vao)
             if bloom > 0.0:
                 glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
-        if self._overlay is not None and self._names["emission"] and bloom > 0.0:
+        light, self._shaft_light = self._shaft_light, None
+        emitting = self._overlay is not None and bool(self._names["emission"]) and bloom > 0.0
+        if emitting or (self._overlay is not None and light is not None):
             try:
                 # The post passes overwrite their targets: no caller blending (handed back below).
                 gl.glDisable(gl.GL_BLEND)
-                emitted = self._resolve_emission(frame, resources) if multisampled else self._names["emission"]
-                glow = self._bloom.apply(emitted, (allocated_width, allocated_height), resources, frame.quad_vao)
+                if emitting:
+                    emitted = self._resolve_emission(frame, resources) if multisampled else self._names["emission"]
+                    glow = self._bloom.apply(emitted, (allocated_width, allocated_height), resources, frame.quad_vao)
+                shafts = self._apply_shafts(frame, resources, light) if light is not None else 0
                 self._restore_inherited(frame)
-                self._composite_overlay_bloom(frame, resources, glow, bloom)
+                self._composite_overlay_bloom(frame, resources, glow or shafts, bloom if emitting else 0.0,
+                                              shafts, light)
             finally:
                 self._restore_inherited_blend()
             return
@@ -541,16 +624,46 @@ class SceneTarget:
             gl.glActiveTexture(gl.GL_TEXTURE0)
         return self._names["resolve_texture"], self._names["resolve_velocity"]
 
-    def _composite_overlay_bloom(self, frame: SceneFrame, resources, glow: int, bloom: float) -> None:
-        """The overlay with its glow added, premultiplied, under a blend set and restored here."""
+    def _apply_shafts(self, frame: SceneFrame, resources, light: ShaftLight) -> int:
+        """Rays from the shaft source toward ``light`` (its item point mapped to the allocation's uv)."""
+        x, y = self._rect[0], self._rect[1]
+        allocated_width, allocated_height = self._key[0], self._key[1]
+        m = frame.matrix_values
+        ix, iy = light.item_point
+        clip = [m[row] * ix + m[4 + row] * iy + m[12 + row] for row in range(4)]
+        w = clip[3] if clip[3] else 1.0
+        vx, vy, vw, vh = frame.viewport
+        px = vx - x + (clip[0] / w + 1.0) * 0.5 * vw
+        py = vy - y + (clip[1] / w + 1.0) * 0.5 * vh
+        return self._shafts.apply(self._names["shafts"], self._samples, (allocated_width, allocated_height),
+                                  (px / allocated_width, py / allocated_height), light.reach, resources,
+                                  frame.quad_vao)
+
+    def _composite_overlay_bloom(self, frame: SceneFrame, resources, glow: int, bloom: float, shafts: int = 0,
+                                 light: ShaftLight | None = None) -> None:
+        """The overlay with its glow (and any light shafts) added, premultiplied, under a blend set and
+        restored here."""
         x, y, width, height = self._rect
         multisampled = self._samples > 1
-        key = "scene_overlay_bloom_samples" if multisampled else "scene_overlay_bloom"
-        program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT
-                                    if multisampled else _COMPOSITE_OVERLAY_BLOOM_FRAGMENT)
+        if shafts:
+            key = "scene_overlay_shafts_samples" if multisampled else "scene_overlay_shafts"
+            source = _COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT if multisampled else _COMPOSITE_OVERLAY_SHAFTS_FRAGMENT
+        else:
+            key = "scene_overlay_bloom_samples" if multisampled else "scene_overlay_bloom"
+            source = _COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT if multisampled else _COMPOSITE_OVERLAY_BLOOM_FRAGMENT
+        program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
         names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength")
+        if shafts:
+            names += ("uShafts", "uShaftColour")
         uniforms = resources.uniforms(key, names + (("uSceneSamples", "uSamples") if multisampled else ("uScene",)))
         gl.glUseProgram(program)
+        prior_unit2 = None
+        if shafts:
+            gl.glActiveTexture(gl.GL_TEXTURE2)
+            prior_unit2 = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, shafts)
+            gl.glUniform1i(uniforms["uShafts"], 2)
+            gl.glUniform3f(uniforms["uShaftColour"], *light.colour)
         gl.glUniform1f(uniforms["uOpacity"], self._overlay)
         gl.glUniform2f(uniforms["uBloomScale"], 1.0 / self._key[0], 1.0 / self._key[1])
         gl.glUniform1f(uniforms["uBloomStrength"], float(bloom))
@@ -578,6 +691,10 @@ class SceneTarget:
         finally:
             if multisampled:
                 gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
+            if prior_unit2 is not None:
+                gl.glActiveTexture(gl.GL_TEXTURE2)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, prior_unit2)
+                gl.glActiveTexture(gl.GL_TEXTURE0)
         self._overlay = None
 
     def _restore_inherited_blend(self) -> None:
@@ -638,6 +755,8 @@ class SceneTarget:
     def _restore_inherited(self, frame: SceneFrame) -> None:
         if self._names["velocity"] or self._names["emission"]:
             gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)   # GL's default
+        if self._names["shafts"]:
+            gl.glColorMaski(2, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
         gl.glViewport(*frame.viewport)
@@ -664,7 +783,7 @@ class SceneTarget:
         self._allocate_plain_texture(key, width, height, internal)
 
     def _allocate(self, width: int, height: int, requested: int, motion_blur: bool = False,
-                  emission: bool = False) -> None:
+                  emission: bool = False, shafts: bool = False) -> None:
         samples = min(requested, gl_query.get_int(gl.GL_MAX_SAMPLES),
                       gl_query.get_int(gl.GL_MAX_COLOR_TEXTURE_SAMPLES))
         self._names["fbo"] = _new_framebuffer(f"{self.label} scene target")
@@ -673,6 +792,8 @@ class SceneTarget:
             self._allocate_attachment("velocity", samples, width, height, gl.GL_RG16F)
         if emission:
             self._allocate_attachment("emission", samples, width, height, gl.GL_RGBA16F)
+        if shafts:
+            self._allocate_attachment("shafts", samples, width, height, gl.GL_R16F)
         name = (ctypes.c_uint * 1)()
         gl.glCreateRenderbuffers(1, name)
         self._names["depth"] = int(name[0])
@@ -684,6 +805,12 @@ class SceneTarget:
         second = self._names["velocity"] or self._names["emission"]
         if second:
             gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_COLOR_ATTACHMENT1, second, 0)
+        if self._names["shafts"]:
+            gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_COLOR_ATTACHMENT2, self._names["shafts"], 0)
+            gl.glNamedFramebufferDrawBuffers(self._names["fbo"], 3, [gl.GL_COLOR_ATTACHMENT0,
+                                              gl.GL_COLOR_ATTACHMENT1 if second else gl.GL_NONE,
+                                              gl.GL_COLOR_ATTACHMENT2])
+        elif second:
             gl.glNamedFramebufferDrawBuffers(self._names["fbo"], 2,
                                               [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
         gl.glNamedFramebufferRenderbuffer(self._names["fbo"], gl.GL_DEPTH_ATTACHMENT,
@@ -691,12 +818,12 @@ class SceneTarget:
         if (gl.glCheckNamedFramebufferStatus(self._names["fbo"], gl.GL_FRAMEBUFFER)
                 != gl.GL_FRAMEBUFFER_COMPLETE):
             raise RuntimeError(f"{self.label} scene target incomplete at {width}x{height}x{samples}")
-        self._key = (width, height, requested, bool(motion_blur), bool(emission))
+        self._key = (width, height, requested, bool(motion_blur), bool(emission), bool(shafts))
         self._samples = max(1, samples)
 
     def release(self) -> None:
         errors: list[str] = []
-        for chain in (self._bloom, self._motion):
+        for chain in (self._bloom, self._motion, self._shafts):
             try:
                 chain.release()
             except Exception as exc:
@@ -712,6 +839,7 @@ class SceneTarget:
             ("emission", lambda name: gl.glDeleteTextures([name])),
             ("emission_resolve_fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
             ("emission_resolve", lambda name: gl.glDeleteTextures([name])),
+            ("shafts", lambda name: gl.glDeleteTextures([name])),
         ):
             name = self._names[key]
             if not name:

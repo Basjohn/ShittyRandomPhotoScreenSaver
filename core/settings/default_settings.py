@@ -1161,6 +1161,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_sun_rays_enabled': False,
                                     'shockwave_grid_sun_rays_strength': 0.3,
                                     'shockwave_grid_sun_rays_color': [255, 110, 200, 255],
+                                    'shockwave_grid_sun_rays_length': 0.65,
+                                    'shockwave_grid_sun_rays_spread': 0.4,
                                     'shockwave_grid_moon_color': [190, 220, 255, 255],
                                     'shockwave_grid_moon_phase': 0.7,
                                     'shockwave_grid_star_color': [166, 204, 255, 255],

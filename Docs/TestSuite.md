@@ -518,6 +518,11 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   `tests/test_neon_skyline_occlusion_and_starscape.py` hold the beat stars' swell-in (zero at the onset, rising to a
   peak, then fading); `tests/test_neon_lake_renderer.py` keeps a star behind the solid Moon from showing any of its
   burst.
+- `tests/test_scene3d_target.py` (light shafts) holds the shafts composite to one transform of the overlay composite
+  that adds rays only where the scene drew, and its program list to a superset of the shafts-off list (frames without
+  a light warmed too). `tests/test_neon_scene_materials.py` drives Neon's rays through production: no source pass
+  and no allocation while rays cannot show (pixel-identical at zero strength), the source pass when on and never the
+  retired haze pass, Strength, Length, Spread and Colour each change the picture, and turning rays off restores it.
 - `tests/test_neon_water_line_glow.py` — production GL: the water lines' glow rises with Water Line Glow strength,
   turns to its colour at full alpha and keeps the ripple colours at alpha 0, and nothing glows while Surface Glow is
   zero (frames compared within the renderer's own one-level draw-to-draw variation). `tests/test_neon_celestial.py`
