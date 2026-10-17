@@ -86,3 +86,5 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
 
 - G1a/G1b (sampleable depth, background capture): landed 2026-10-17 (`SceneTarget(depth_texture=...)`,
   `background()`); see `Scene3D_Resources.md`.
+- G3A (weighted-blended OIT): landed 2026-10-17 (`SceneTarget(oit=True)`, `transparent_writes()`,
+  `SCENE_OIT_GLSL`).
