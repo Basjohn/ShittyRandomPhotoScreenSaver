@@ -92,11 +92,11 @@ VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     # Water and light: near-black teal, orange light from the top-right corner, faint beams.
     deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), sky=(1.0, 0.55, 0.22), shaft=(0.95, 0.45, 0.14),
     light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), light_view=(1.0, 0.68, -1.0), pitch=4.0, exposure=1.0,
-    hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25, ray_focus=1.0, mist=0.6, dust=1.2,
+    hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25, ray_focus=1.0, mist=0.6, dust=0.4,
     light_power=0.15, absorb=(0.06, 0.05, 0.05),
     # Ember particulate in diagonal bands; bubbles streaming with it.
-    specks=1.8, speck_warm=(0.9, 0.26, 0.05), speck_size=1.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
-    band_freq=9.0, cloud_contrast=3.0, cloud_floor=0.03, cloud_glow=0.6, travel=(1.0, -0.3, 0.15), sway=0.25,
+    specks=2.4, speck_warm=(1.0, 0.25, 0.02), speck_size=1.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
+    band_freq=9.0, cloud_contrast=4.0, cloud_floor=0.03, cloud_glow=1.8, travel=(1.0, -0.3, 0.15), sway=0.25,
     fizz=2.5, fizz_size=2.0, small_count=5.0, sparkle=1.5, wakes=0.0, mid_count=1.5,
     # Crisp clear glass bubbles: dark interiors, orange-lit rims and glints.
     crisp=1.0, rough=0.1, inner_blur=0.6, shell=0.03, iors=(1.15, 2.0, 1.0), probe_fill=1.5, face_reflect=0.3, veils=0.35,
