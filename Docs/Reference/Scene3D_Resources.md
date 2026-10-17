@@ -265,6 +265,18 @@ one-workgroup reduction to the largest arrival in a 1x1 texture consumers read w
 (48 passes per step) because the cost depends only on the run's seed and the render's aspect, and dropped at its
 `park()`; nothing exists otherwise. `propagation_reference` is the CPU mirror. First consumer: Capillary Bloom.
 
+## Sphere impostors (§4A, 2026-10-17)
+
+`rendering/gl_programs/scene3d_spheres.py` (import-safe GLSL + CPU mirrors) draws exact spheres from one view-space
+quad per instance: `sceneSphereCorner` sizes the quad to the silhouette cone through the centre
+(`(r + blur) d / sqrt(d^2 - (r + blur)^2)`, collapsed when the eye is inside), `sceneSphereRay` intersects the view
+ray, `sceneSphereCoverage` antialiases the silhouette (or softens it over `blur` for defocus) and `sceneSphereDepth`
+writes the true surface depth, so interpenetrating spheres meet along their real intersection. View space has the eye
+at the origin looking down -z; consumers supply their own placement and projection. No resources: a consumer's own
+instanced draw and program. Proven by `test_scene3d_spheres.py` (GPU id/depth picture equals a CPU ray cast apart
+from under 1% edge pixels, silhouettes within 1% of the analytic area from 1.5 to 0.02 radius, blur widens and softens
+the edge) and `test_scene3d_spheres_mirrors.py` (GLSL equals the mirrors).
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
