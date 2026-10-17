@@ -281,3 +281,24 @@ def test_block_spins_showcases_omit_refraction() -> None:
     variants = {case.variant for case in catalogue() if case.identity == "block_spins"}
     assert variants == {"off", "reflection"}
 
+
+
+def test_visualizer_frames_crop_to_the_union_of_what_any_frame_draws(tmp_path):
+    from PIL import Image
+    from tools.release_media import VISUALIZER_BACKGROUND, content_box
+
+    def frame(name, rect):
+        image = Image.new("RGB", (200, 100), VISUALIZER_BACKGROUND)
+        if rect:
+            image.paste((255, 40, 200), rect)
+        path = tmp_path / name
+        image.save(path)
+        return path
+
+    frames = [frame("a.png", (50, 20, 80, 40)), frame("b.png", (90, 30, 120, 70)), frame("c.png", None)]
+    left, top, right, bottom = content_box(frames, VISUALIZER_BACKGROUND, 0.02)
+    assert (left, top) == (46, 16) and right >= 124 and bottom >= 74          # both frames' content plus 4 px
+    assert (right - left) % 2 == 0 and (bottom - top) % 2 == 0
+    assert content_box([frames[2]], VISUALIZER_BACKGROUND, 0.02) is None      # nothing drawn: no crop
+    edge = content_box([frame("d.png", (0, 0, 10, 10))], VISUALIZER_BACKGROUND, 0.5)
+    assert edge[:2] == (0, 0) and edge[2] <= 200 and edge[3] <= 100           # kept inside the frame
