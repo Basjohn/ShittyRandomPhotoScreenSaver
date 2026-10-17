@@ -455,6 +455,21 @@ Each foundation slice adds what it learned here.
   depth; world-radius distributions made everything mid-sized. Specks need their light kept at sub-pixel sizes.
 - Glassy bubbles in the mocks carry broad white arcs (the lit water reflected along the upper rim, focused
   light inside the lower rim) and a thick bright rim band; small glints alone read as plastic.
+- (Operator, 2026-10-17; supersedes the "broad white arcs" and "one crisp key highlight" notes above.) Build a look
+  as one layered model and match each layer on a pixel-aligned test card: the mock's own subjects at their measured
+  positions and pixel sizes (`extruded_bubble_lab.py --card`), compared with that mock at full zoom. Patching a
+  scaled full-scene sheet term by term piled up conflicting terms (grey caps, sticker bokeh, ring-stack giants).
+- A bubble, as the mocks draw one: lighter than the water everywhere (a faintly milky interior over the scene seen
+  through the lens, a wide luminous glass wall, a rim at least as light as the wall, never a dark edge), soft bright
+  reflections spread along the wall, round soft highlights inset toward the light (about 0.62 of the radius) with a
+  fainter one opposite. Physically mirrored highlights land on a large bubble's silhouette and merge with the edge.
+- Place highlights and sparkles in screen space toward the light's on-screen position. Glints on glass are soft
+  cores with short rays; long four-point star sprites read as stars, not bubbles (operator).
+- Colour comes from the scene (its sky and beam colours and the reflected water), the soap film only modulating in
+  patches with greens folded out. Fixed blue or white constants read wrong across palettes (operator). Every
+  highlight derives from the scene's one light; a fixed secondary light put them on the wrong side (operator).
+- A defocused near giant must hide the sharp scene behind it: mostly opaque, filled with a blurred view of the
+  captured background, wall and highlight softened. A transparent one shows crisp bubbles through a blurry rim.
 
 ## Operator-triggered appearance review (reference checklist)
 

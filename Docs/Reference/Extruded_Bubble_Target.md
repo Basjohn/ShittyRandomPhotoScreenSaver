@@ -95,6 +95,11 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
   were promoted from it. Remaining before EB2/EB3: FC (shared framed camera).
 - G3A (weighted-blended OIT): landed 2026-10-17 (`SceneTarget(oit=True)`, `transparent_writes()`,
   `SCENE_OIT_GLSL`).
+- Lab bubble look (2026-10-17): one layered model (interior through the lens, glass wall, rim, highlights, wall
+  reflections, defocus) tuned on `--card` (mock 2's bubbles at measured positions and sizes) against the mock at full
+  zoom; rising bead chains; scene-derived colour; screen-space highlights and soft sparkles. Not at parity yet:
+  the abyss and camera-down views (crisp giants with violet rims, sparkle-dense water), wake ribbons, merged doublets
+  as the mocks show them, and chains that vary like the mocks'.
 
 ## 7. Product requirements recorded from the operator (2026-10-17)
 
@@ -110,6 +115,8 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
 - **Sizes:** strong variation with a slight bias to small bubbles, authored by on-screen size bands.
 - **Camera down:** a darker abyss below, not an ocean floor (operator 2026-10-17); the seabed primitive stays
   in the library unused by Extruded Bubble.
+- **Highlights and colour (operator 2026-10-17):** highlights sit toward the light and inset from the rim, never
+  merging with the edge; glints read as light on glass, not stars; bubble colour follows the scene's water and light.
 - **Look:** parity with all six mocks, judged side by side at full resolution with crops
   (`tools/labs/extruded_bubble_lab.py` renders one variant per mock against it).
 
