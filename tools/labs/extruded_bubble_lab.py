@@ -96,7 +96,7 @@ VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25, ray_focus=1.0, mist=0.6, dust=0.4,
     light_power=0.15, absorb=(0.06, 0.05, 0.05),
     # Ember particulate in diagonal bands; bubbles streaming with it.
-    specks=2.4, speck_warm=(1.0, 0.25, 0.02), speck_size=1.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
+    specks=2.4, speck_warm=(1.0, 0.25, 0.02), speck_size=1.6, speck_bloom=0.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
     band_freq=9.0, cloud_contrast=4.0, cloud_floor=0.03, cloud_glow=1.8, travel=(1.0, -0.3, 0.15), sway=0.25,
     fizz=2.5, fizz_size=2.0, small_count=5.0, sparkle=1.5, wakes=0.0, mid_count=1.5,
     # Crisp clear glass bubbles: dark interiors, orange-lit rims and glints.
@@ -903,10 +903,13 @@ layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 in vec2 vCorner;
 flat in vec3 vColour;
+uniform float uSpeckBloom;
 void main() {
     float g = exp(-dot(vCorner, vCorner) * 8.0);
     FragColor = vec4(vColour * g * 2.6, 0.0);
-    vec3 glow = max(vColour * g - 1.0, 0.0) * 0.3;
+    // The embers' own light also feeds the bloom: a smoky glow exactly where they gather (mock 6), never a separate
+    // cloud that misses them.
+    vec3 glow = max(vColour * g - 1.0, 0.0) * 0.3 + vColour * g * uSpeckBloom;
     Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
 }
 """
@@ -1355,6 +1358,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniformMatrix4fv(q("uProjection"), 1, gl.GL_FALSE, proj)
         gl.glUniform1f(q("uPixel"), pixel)
         gl.glUniform1f(q("uSpecks"), 1.0)
+        gl.glUniform1f(q("uSpeckBloom"), 0.0 if row_major else settings.get("speck_bloom", 0.0))
         sky_ = np.array(settings["sky"])
         gl.glUniform3f(q("uSpeckWarm"), *settings.get("speck_warm", settings.get("light", tuple(sky_ / max(sky_.mean(), 1e-3) * 0.15 + 0.85))))
         blend0 = bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
