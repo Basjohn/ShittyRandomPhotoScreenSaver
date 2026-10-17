@@ -1,10 +1,8 @@
 {
+  "description": "Pale, broad, slow lines layered like mist over a field.",
   "mode": "sine_wave",
   "name": "Preset 14 (Morning Mist)",
   "preset_index": 13,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "sine_wave",
-  "description": "Pale, broad, slow lines layered like mist over a field.",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -120,7 +118,20 @@
         "sine_wave_adaptive_sensitivity": true,
         "sine_wave_agc_strength": 0.62,
         "sine_wave_audio_block_size": 256,
+        "sine_wave_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "sine_wave_bar_border_opacity": 1.0,
         "sine_wave_bar_count": 40,
+        "sine_wave_bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.5,
@@ -135,21 +146,10 @@
         "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_transient_width_mix": 0.32,
         "sine_wave_travel": 2,
-        "sine_width_reaction": 0.25,
-        "sine_wave_bar_fill_color": [
-          0,
-          0,
-          0,
-          130
-        ],
-        "sine_wave_bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "sine_wave_bar_border_opacity": 1.0
+        "sine_width_reaction": 0.25
       }
     }
-  }
+  },
+  "visualizer_preset_mode": "sine_wave",
+  "visualizer_preset_override": true
 }

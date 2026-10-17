@@ -1,18 +1,14 @@
 {
+  "description": "A dense amber sweep with a long phosphor trail and an analog beam, like an old lab monitor.",
   "mode": "oscilloscope",
   "name": "Preset 4 (Amber Terminal)",
   "preset_index": 3,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "oscilloscope",
-  "description": "A dense amber sweep with a long phosphor trail and an analog beam, like an old lab monitor.",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
         "mode": "oscilloscope",
-        "osc_display": "Trace",
-        "osc_span": 45.0,
-        "osc_gain": 2.2,
-        "osc_delay": 1.2,
+        "osc_afterglow": 0.85,
+        "osc_analog": 0.85,
         "osc_beam_color": [
           255,
           176,
@@ -26,12 +22,12 @@
           255
         ],
         "osc_beam_width": 1.3,
-        "osc_glow": 0.55,
-        "osc_afterglow": 0.85,
-        "osc_analog": 0.85,
-        "osc_spectral": 0.0,
+        "osc_delay": 1.2,
+        "osc_detail": 0.55,
+        "osc_display": "Trace",
         "osc_flare": 0.45,
-        "osc_pulse": 0.5,
+        "osc_gain": 2.2,
+        "osc_glow": 0.55,
         "osc_graticule": "Grid",
         "osc_graticule_color": [
           255,
@@ -39,15 +35,19 @@
           60,
           38
         ],
-        "oscilloscope_bar_count": 32,
-        "oscilloscope_audio_block_size": 256,
+        "osc_pulse": 0.5,
+        "osc_span": 45.0,
+        "osc_spectral": 0.0,
         "oscilloscope_adaptive_sensitivity": true,
-        "oscilloscope_sensitivity": 0.4,
+        "oscilloscope_audio_block_size": 256,
+        "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
-        "oscilloscope_manual_floor": 0.12,
         "oscilloscope_input_gain": 0.78,
-        "osc_detail": 0.55
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_sensitivity": 0.4
       }
     }
-  }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
 }

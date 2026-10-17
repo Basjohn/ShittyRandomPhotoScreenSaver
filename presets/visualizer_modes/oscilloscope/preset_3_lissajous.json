@@ -1,18 +1,14 @@
 {
+  "description": "The X/Y figure: the music against itself a moment later, swirling in gold with a long afterglow.",
   "mode": "oscilloscope",
   "name": "Preset 3 (Lissajous)",
   "preset_index": 2,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "oscilloscope",
-  "description": "The X/Y figure: the music against itself a moment later, swirling in gold with a long afterglow.",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
         "mode": "oscilloscope",
-        "osc_display": "Phase",
-        "osc_span": 26.0,
-        "osc_gain": 2.6,
-        "osc_delay": 2.2,
+        "osc_afterglow": 0.75,
+        "osc_analog": 0.7,
         "osc_beam_color": [
           255,
           205,
@@ -26,12 +22,12 @@
           255
         ],
         "osc_beam_width": 1.4,
-        "osc_glow": 0.6,
-        "osc_afterglow": 0.75,
-        "osc_analog": 0.7,
-        "osc_spectral": 0.0,
+        "osc_delay": 2.2,
+        "osc_detail": 0.25,
+        "osc_display": "Phase",
         "osc_flare": 0.5,
-        "osc_pulse": 0.55,
+        "osc_gain": 2.6,
+        "osc_glow": 0.6,
         "osc_graticule": "Crosshair",
         "osc_graticule_color": [
           255,
@@ -39,15 +35,19 @@
           120,
           40
         ],
-        "oscilloscope_bar_count": 32,
-        "oscilloscope_audio_block_size": 256,
+        "osc_pulse": 0.55,
+        "osc_span": 26.0,
+        "osc_spectral": 0.0,
         "oscilloscope_adaptive_sensitivity": true,
-        "oscilloscope_sensitivity": 0.34,
+        "oscilloscope_audio_block_size": 256,
+        "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
-        "oscilloscope_manual_floor": 0.12,
         "oscilloscope_input_gain": 0.8,
-        "osc_detail": 0.25
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_sensitivity": 0.34
       }
     }
-  }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
 }
