@@ -16,6 +16,12 @@ Import-safe GLSL plus CPU mirrors (no GL), on the shared integer hash.
   consumer lights the window with its own sky (brighter toward the zenith, its sun); ``waterSurfaceFromBelow`` is
   the same with one flat sky colour.
 * ``waterSunBelow(sun)``: the direction toward the sun as seen from under the water (bent toward the vertical).
+* ``waterShaftPattern(q, t)`` / ``waterShafts(eye, ray, maxDistance, sunBelow, surfaceY, t, samples, jitter)``:
+  volumetric god rays. Sunlight crosses the surface where the ripples focus it into beams (the pattern: drifting
+  lattice noise sharpened into thin bright lines, 0..1); ``waterShafts`` marches the view ray, finds for each sample
+  where its sunlight crossed the surface (back along ``sunBelow``), and sums that pattern, fading with the depth below
+  the surface and the distance from the eye, so beams converge toward the sun in perspective and thin out with depth.
+  ``jitter`` (0..1, per pixel) offsets the samples so few steps do not band.
 * ``waterMedium(colour, distance, absorption, scatter)``: light crossing ``distance`` of water: absorbed per channel
   (red first) and replaced by the water's in-scattered colour.
 """
@@ -28,7 +34,9 @@ from rendering.gl_programs.scene3d import SCENE3D_HASH_GLSL, scene3d_random
 _GOLDEN = 2.39996322972865332
 WATER_IOR = 1.33
 
-SCENE3D_WATER_GLSL = SCENE3D_HASH_GLSL + """
+from rendering.gl_programs.scene3d_sky import SCENE3D_SKY_GLSL, sky_noise2  # noqa: E402  (lattice noise)
+
+SCENE3D_WATER_GLSL = SCENE3D_HASH_GLSL + SCENE3D_SKY_GLSL + """
 #ifndef SCENE3D_WATER_GLSL
 #define SCENE3D_WATER_GLSL
 vec3 waterWaves(vec2 p, float t, float choppiness) {
@@ -101,6 +109,26 @@ float waterWindow(vec3 ray, vec3 normal, out vec3 skyward) {
 vec3 waterSunBelow(vec3 sun) {
     return normalize(-refract(-normalize(sun), vec3(0.0, 1.0, 0.0), 1.0 / 1.33));
 }
+float waterShaftPattern(vec2 q, float t) {
+    float a = skyNoise2(q * 0.55 + vec2(t * 0.05, -t * 0.03), 71u);
+    float b = skyNoise2(q * 1.3 + vec2(-t * 0.08, t * 0.06), 73u);
+    float n = a * 0.65 + b * 0.35;
+    return smoothstep(0.58, 0.82, n) + 0.35 * smoothstep(0.7, 0.9, b);
+}
+float waterShafts(vec3 eye, vec3 ray, float maxDistance, vec3 sunBelow, float surfaceY, float t, int samples,
+                  float jitter) {
+    float stepLength = maxDistance / float(samples);
+    vec2 slope = sunBelow.xz / max(sunBelow.y, 0.2);
+    float sum = 0.0;
+    for (int i = 0; i < samples; ++i) {
+        float s = (float(i) + jitter) * stepLength;
+        vec3 p = eye + ray * s;
+        float below = surfaceY - p.y;
+        if (below <= 0.0) break;
+        sum += waterShaftPattern(p.xz + slope * below, t) * exp(-below * 0.07) * exp(-s * 0.035);
+    }
+    return sum * stepLength;
+}
 vec3 waterMedium(vec3 colour, float distance_, vec3 absorption, vec3 scatter) {
     vec3 kept = exp(-absorption * max(distance_, 0.0));
     return colour * kept + scatter * (1.0 - kept);
@@ -156,6 +184,16 @@ def water_caustics(x: float, y: float, t: float) -> float:
     return max(0.0, min(1.0, 0.65 * coarse + 0.45 * fine * (0.4 + 0.6 * coarse)))
 
 
+def water_shaft_pattern(x: float, y: float, t: float) -> float:
+    """CPU mirror of ``waterShaftPattern``."""
+    def smooth(e0, e1, v):
+        u = max(0.0, min(1.0, (v - e0) / (e1 - e0)))
+        return u * u * (3.0 - 2.0 * u)
+    a = sky_noise2(x * 0.55 + t * 0.05, y * 0.55 - t * 0.03, 71)
+    b = sky_noise2(x * 1.3 - t * 0.08, y * 1.3 + t * 0.06, 73)
+    return smooth(0.58, 0.82, a * 0.65 + b * 0.35) + 0.35 * smooth(0.7, 0.9, b)
+
+
 def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, float]:
     """CPU mirror of ``waterSunBelow``."""
     length = math.sqrt(sum(c * c for c in sun))
@@ -168,4 +206,5 @@ def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, floa
     return -bx / norm, -by / norm, -bz / norm
 
 
-__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_sun_below", "water_waves"]
+__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_shaft_pattern", "water_sun_below",
+           "water_waves"]

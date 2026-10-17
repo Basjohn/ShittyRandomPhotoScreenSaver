@@ -20,7 +20,15 @@ Qt's item matrix).
   thin-lens depth of field, weighted separately in front of and behind the focus (deep scenes read best with a long
   field behind the focus and soft foreground); feed it to ``sceneSphereCorner``/``sceneSphereCoverage``.
 
-CPU mirrors (``scene3d_sphere_corner``, ``scene3d_sphere_ray``) let tests reason about the same geometry.
+* ``sceneClusterDistance(p, spheres, count, blend)`` / ``sceneClusterRay(ray, spheres, count, blend, tStart, tEnd,
+  t, normal, closest)``: up to four spheres (view-space centre, radius) joined into one smooth body where they meet,
+  as touching bubbles merge with a neck (polynomial smooth minimum; ``blend`` is the neck's reach in view units, 0
+  keeps plain spheres). The ray is sphere-traced between ``tStart`` and ``tEnd`` (the cluster's bounding sphere,
+  drawn with ``sceneSphereCorner``); the normal comes from the distance field's gradient, and ``closest`` (the
+  smallest distance the ray passed at, over its distance) antialiases the joined silhouette.
+
+CPU mirrors (``scene3d_sphere_corner``, ``scene3d_sphere_ray``, ``scene3d_cluster_distance``) let tests reason about
+the same geometry.
 """
 from __future__ import annotations
 
@@ -64,6 +72,42 @@ float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur) {
 }
 float sceneDefocusRadius(float depth, float focus, float aperture, float nearWeight, float farWeight) {
     return aperture * (max(focus - depth, 0.0) * nearWeight + max(depth - focus, 0.0) * farWeight);
+}
+float sceneSmoothMin(float a, float b, float blend) {
+    if (blend <= 0.0) return min(a, b);
+    float h = max(blend - abs(a - b), 0.0) / blend;
+    return min(a, b) - h * h * blend * 0.25;
+}
+float sceneClusterDistance(vec3 p, vec4 spheres[4], int count, float blend) {
+    float d = length(p - spheres[0].xyz) - spheres[0].w;
+    for (int i = 1; i < 4; ++i) {
+        if (i >= count) break;
+        d = sceneSmoothMin(d, length(p - spheres[i].xyz) - spheres[i].w, blend);
+    }
+    return d;
+}
+bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tStart, float tEnd,
+                     out float t, out vec3 normal, out float closest) {
+    t = max(tStart, 0.0);
+    closest = 1e9;
+    normal = vec3(0.0, 0.0, 1.0);
+    for (int i = 0; i < 64; ++i) {
+        float d = sceneClusterDistance(ray * t, spheres, count, blend);
+        closest = min(closest, d / max(t, 1e-4));
+        if (d < 1e-4 * t) {
+            vec2 e = vec2(1.0, -1.0) * 1e-4 * max(t, 1.0);
+            vec3 p = ray * t;
+            normal = normalize(e.xyy * sceneClusterDistance(p + e.xyy, spheres, count, blend)
+                             + e.yyx * sceneClusterDistance(p + e.yyx, spheres, count, blend)
+                             + e.yxy * sceneClusterDistance(p + e.yxy, spheres, count, blend)
+                             + e.xxx * sceneClusterDistance(p + e.xxx, spheres, count, blend));
+            closest = 0.0;
+            return true;
+        }
+        t += d;
+        if (t > tEnd) break;
+    }
+    return false;
 }
 float sceneSphereDepth(vec3 point, mat4 projection) {
     vec4 clip = projection * vec4(point, 1.0);
@@ -114,4 +158,22 @@ def scene3d_sphere_ray(ray: Vec3, centre: Vec3, radius: float) -> tuple[bool, fl
     return b + h > 0.0, b - h, b + h
 
 
-__all__ = ["SCENE3D_SPHERES_GLSL", "scene3d_sphere_corner", "scene3d_sphere_ray"]
+def scene3d_smooth_min(a: float, b: float, blend: float) -> float:
+    """CPU mirror of ``sceneSmoothMin``."""
+    if blend <= 0.0:
+        return min(a, b)
+    h = max(blend - abs(a - b), 0.0) / blend
+    return min(a, b) - h * h * blend * 0.25
+
+
+def scene3d_cluster_distance(p: Vec3, spheres, blend: float) -> float:
+    """CPU mirror of ``sceneClusterDistance`` (spheres: [(x, y, z, r), ...], up to four)."""
+    distances = [math.sqrt(_dot(_sub(p, s[:3]), _sub(p, s[:3]))) - s[3] for s in spheres]
+    d = distances[0]
+    for other in distances[1:]:
+        d = scene3d_smooth_min(d, other, blend)
+    return d
+
+
+__all__ = ["SCENE3D_SPHERES_GLSL", "scene3d_cluster_distance", "scene3d_smooth_min", "scene3d_sphere_corner",
+           "scene3d_sphere_ray"]
