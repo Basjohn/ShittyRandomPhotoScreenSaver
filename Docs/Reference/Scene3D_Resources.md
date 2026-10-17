@@ -277,6 +277,19 @@ instanced draw and program. Proven by `test_scene3d_spheres.py` (GPU id/depth pi
 from under 1% edge pixels, silhouettes within 1% of the analytic area from 1.5 to 0.02 radius, blur widens and softens
 the edge) and `test_scene3d_spheres_mirrors.py` (GLSL equals the mirrors).
 
+## Shared optics and underwater light (§4A G3B, 2026-10-17)
+
+Import-safe GLSL + CPU mirrors, no resources. `scene3d_optics.py`: `sceneFresnelDielectric` (exact unpolarised, total
+internal reflection past the critical angle), `sceneThinFilm` (two-beam interference with the inner reflection's half
+wave, seven wavelengths folded into RGB) and `sceneSphereRefraction` (in at the front, out at the back of a homogeneous
+sphere). `scene3d_water.py`: `waterWaves`/`waterNormal` (eight golden-angle deep-water waves, height and gradient),
+`waterCaustics` (two layers of moving Voronoi edges on the shared hash), `waterSurfaceFromBelow` (Snell's window with
+transmission and refracted sun glare, a mirror of the deep outside it) and `waterMedium` (per-channel absorption and
+in-scatter). `test_scene3d_optics_water.py` holds each to its mirror and its physics (Fresnel at normal incidence and
+past the critical angle, no colour without a film and shifting fringes with thickness, an air sphere passing the axis
+straight and spreading the rest, wave gradients equal to finite differences, a thin moving caustic network, the sky
+overhead and the deep past the window, the medium's colour with distance).
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the

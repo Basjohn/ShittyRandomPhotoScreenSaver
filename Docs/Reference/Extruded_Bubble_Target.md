@@ -87,5 +87,6 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
 - G1a/G1b (sampleable depth, background capture): landed 2026-10-17 (`SceneTarget(depth_texture=...)`,
   `background()`); see `Scene3D_Resources.md`.
 - Sphere impostors: landed 2026-10-17 (`scene3d_spheres.py`).
+- G3B optics (`scene3d_optics.py`) and the underwater environment library (`scene3d_water.py`): landed 2026-10-17.
 - G3A (weighted-blended OIT): landed 2026-10-17 (`SceneTarget(oit=True)`, `transparent_writes()`,
   `SCENE_OIT_GLSL`).
