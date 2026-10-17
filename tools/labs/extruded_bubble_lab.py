@@ -99,7 +99,8 @@ VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
     band_freq=9.0, cloud_contrast=3.0, cloud_floor=0.03, cloud_glow=0.6, travel=(1.0, -0.3, 0.15), sway=0.25,
     fizz=2.5, fizz_size=2.0, small_count=5.0, sparkle=1.5, wakes=0.0, mid_count=1.5,
     # Crisp clear glass bubbles: dark interiors, orange-lit rims and glints.
-    crisp=1.0, rough=0.1, inner_blur=0.6, shell=0.03, iors=(1.15, 2.0, 1.0), probe_fill=0.4, glint_power=300.0,
+    crisp=1.0, rough=0.1, inner_blur=0.6, shell=0.03, iors=(1.15, 2.0, 1.0), probe_fill=1.5, face_reflect=0.3, veils=0.35,
+    glint_power=300.0,
     glint_sharp=300.0, lens=1.0, focus=3.4, aperture=1.5)
 
 COMMON = """
