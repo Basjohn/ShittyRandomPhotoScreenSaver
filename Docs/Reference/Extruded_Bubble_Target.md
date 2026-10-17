@@ -88,5 +88,10 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
   `background()`); see `Scene3D_Resources.md`.
 - Sphere impostors: landed 2026-10-17 (`scene3d_spheres.py`).
 - G3B optics (`scene3d_optics.py`) and the underwater environment library (`scene3d_water.py`): landed 2026-10-17.
+- Composition lab (scratch, 2026-10-17): every primitive above composed into one underwater scene matched the mocks'
+  structure (round translucent bubbles with rims, highlights and clear interiors; soft near bubbles; micro-bubble
+  columns; streaky god rays from a glowing rippled window) at 0.125 ms GPU (960x540, 4x MSAA, 1,081 bubbles). Its
+  lessons are in `Transitions.md` "3D foundation lessons"; `waterWindow`, `waterSunBelow` and `sceneDefocusRadius`
+  were promoted from it. Remaining before EB2/EB3: FC (shared framed camera).
 - G3A (weighted-blended OIT): landed 2026-10-17 (`SceneTarget(oit=True)`, `transparent_writes()`,
   `SCENE_OIT_GLSL`).

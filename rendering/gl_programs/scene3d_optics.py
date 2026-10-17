@@ -32,8 +32,8 @@ float sceneFresnelDielectric(float cosIncident, float eta) {
     float sinT2 = eta * eta * (1.0 - c * c);
     if (sinT2 >= 1.0) return 1.0;                       // total internal reflection
     float cosT = sqrt(1.0 - sinT2);
-    float rs = (eta * c - cosT) / (eta * c + cosT);
-    float rp = (c - eta * cosT) / (c + eta * cosT);
+    float rs = (eta * c - cosT) / max(eta * c + cosT, 1e-6);
+    float rp = (c - eta * cosT) / max(c + eta * cosT, 1e-6);
     return 0.5 * (rs * rs + rp * rp);
 }
 const float SCENE_FILM_WAVELENGTHS[7] = float[7](%s);
@@ -47,7 +47,7 @@ vec3 sceneThinFilm(float cosIncident, float thicknessNm, float filmIor, float ou
     for (int i = 0; i < 7; ++i) {
         // Path difference 2 n d cos(t); the inner reflection adds half a wave.
         float phase = 6.28318530718 * (2.0 * filmIor * thicknessNm * cosT / SCENE_FILM_WAVELENGTHS[i] + 0.5);
-        float reflectance = 2.0 * r * (1.0 + cos(phase)) / (1.0 + r * r + 2.0 * r * cos(phase));
+        float reflectance = 2.0 * r * (1.0 + cos(phase)) / max(1.0 + r * r + 2.0 * r * cos(phase), 1e-6);
         colour += SCENE_FILM_WEIGHTS[i] * reflectance;
     }
     return colour;
@@ -71,8 +71,8 @@ def scene3d_fresnel_dielectric(cos_incident: float, eta: float) -> float:
     if sin_t2 >= 1.0:
         return 1.0
     cos_t = math.sqrt(1.0 - sin_t2)
-    rs = (eta * c - cos_t) / (eta * c + cos_t)
-    rp = (c - eta * cos_t) / (c + eta * cos_t)
+    rs = (eta * c - cos_t) / max(eta * c + cos_t, 1e-6)
+    rp = (c - eta * cos_t) / max(c + eta * cos_t, 1e-6)
     return 0.5 * (rs * rs + rp * rp)
 
 
@@ -85,7 +85,7 @@ def scene3d_thin_film(cos_incident: float, thickness_nm: float, film_ior: float,
     colour = [0.0, 0.0, 0.0]
     for wavelength, weight in zip(_WAVELENGTHS, _WEIGHTS):
         phase = 2.0 * math.pi * (2.0 * film_ior * thickness_nm * cos_t / wavelength + 0.5)
-        reflectance = 2.0 * r * (1.0 + math.cos(phase)) / (1.0 + r * r + 2.0 * r * math.cos(phase))
+        reflectance = 2.0 * r * (1.0 + math.cos(phase)) / max(1.0 + r * r + 2.0 * r * math.cos(phase), 1e-6)
         for channel in range(3):
             colour[channel] += weight[channel] * reflectance
     return colour[0], colour[1], colour[2]
