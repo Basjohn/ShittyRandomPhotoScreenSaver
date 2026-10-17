@@ -27,6 +27,12 @@ Qt's item matrix).
   drawn with ``sceneSphereCorner``); the normal comes from the distance field's gradient, and ``closest`` (the
   smallest distance the ray passed at, over its distance) antialiases the joined silhouette.
 
+* ``sceneSphereGlint(centre, radius, toLight)``: the view-space point where a sphere mirrors a distant light toward
+  the eye (its normal halfway between the light and the eye), for drawing a glint sprite there.
+* ``sceneStarburst(deltaPixels, reach, diagonals)``: a sparkle's light at an offset in pixels from its centre: a
+  sharp core, four spikes tapering over ``reach`` pixels inside a faint sheath, a soft halo and, with ``diagonals``
+  (0..1), four shorter diagonal spikes. Glints on glass and stars both read as these.
+
 CPU mirrors (``scene3d_sphere_corner``, ``scene3d_sphere_ray``, ``scene3d_cluster_distance``) let tests reason about
 the same geometry.
 """
@@ -108,6 +114,23 @@ bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tS
         if (t > tEnd) break;
     }
     return false;
+}
+vec3 sceneSphereGlint(vec3 centre, float radius, vec3 toLight) {
+    vec3 toEye = normalize(-centre);
+    return centre + normalize(normalize(toLight) + toEye) * radius;
+}
+float sceneStarburst(vec2 deltaPixels, float reach, float diagonals) {
+    vec2 span = abs(deltaPixels);
+    float core = 1.0 - smoothstep(0.0, 1.6, span.x + span.y);
+    float halo = exp(-dot(deltaPixels, deltaPixels) / max(reach * reach * 0.06, 1.0));
+    vec2 along = vec2(pow(max(0.0, 1.0 - span.x / reach), 1.4), pow(max(0.0, 1.0 - span.y / reach), 1.4));
+    float spikes = along.x * (exp(-span.y * span.y / 0.5) + 0.15 * exp(-span.y * span.y / 3.0))
+                 + along.y * (exp(-span.x * span.x / 0.5) + 0.15 * exp(-span.x * span.x / 3.0));
+    vec2 turned = abs(vec2(deltaPixels.x + deltaPixels.y, deltaPixels.x - deltaPixels.y)) * 0.70710678;
+    float short_ = reach * 0.45;
+    float diagonal = (pow(max(0.0, 1.0 - turned.x / short_), 2.0) * exp(-turned.y * turned.y / 0.4)
+                    + pow(max(0.0, 1.0 - turned.y / short_), 2.0) * exp(-turned.x * turned.x / 0.4)) * diagonals;
+    return 1.4 * core + 0.35 * halo + spikes + 0.6 * diagonal;
 }
 float sceneSphereDepth(vec3 point, mat4 projection) {
     vec4 clip = projection * vec4(point, 1.0);
