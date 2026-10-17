@@ -37,6 +37,12 @@ there), hands the target a ``ShaftLight`` with ``set_shaft_light``, and ``end`` 
 (``shafts.LightShafts``) that the composite adds in their colour. Without a ``ShaftLight`` that frame, or
 without ``shafts``, the target composites exactly as before.
 
+With ``depth_texture`` the depth attachment is a texture (DEPTH_COMPONENT32F, multisampled with the colour)
+instead of a renderbuffer, so the scene's depth can be read; ``background()`` then captures, mid-scope, what has been
+drawn so far as plain textures (colour averaged over samples, the nearest depth of each pixel) for later passes to
+sample: transparent surfaces refracting or fading against what is actually behind them. ``background()`` works
+without ``depth_texture`` too (colour only, depth reads as the far plane). Without either, nothing changes.
+
 ``scope`` restores Quick's framebuffers, viewport and scissor even when the
 scene raises, so a consumer needs no fence change of its own (the Visualizer
 fence stays as it is: modes that do not use a target pay nothing).
@@ -191,6 +197,41 @@ void main() {
 }
 """
 
+# What has been drawn so far, captured mid-scope for later passes: colour, and the nearest depth (window depth).
+_BACKGROUND_FRAGMENT = """#version 460 core
+layout(location = 0) out vec4 Colour;
+layout(location = 1) out vec4 Depth;
+uniform sampler2D uColour;
+uniform sampler2D uDepth;
+uniform int uHasDepth;
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    Colour = texelFetch(uColour, texel, 0);
+    Depth = vec4(uHasDepth == 1 ? texelFetch(uDepth, texel, 0).r : 1.0);
+}
+"""
+_BACKGROUND_SAMPLES_FRAGMENT = """#version 460 core
+layout(location = 0) out vec4 Colour;
+layout(location = 1) out vec4 Depth;
+uniform sampler2DMS uColour;
+uniform sampler2DMS uDepth;
+uniform int uSamples;
+uniform int uHasDepth;
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    vec4 sum = vec4(0.0);
+    float nearest = 1.0;
+    for (int i = 0; i < uSamples; ++i) {
+        sum += texelFetch(uColour, texel, i);
+        if (uHasDepth == 1) nearest = min(nearest, texelFetch(uDepth, texel, i).r);
+    }
+    Colour = sum / float(uSamples);
+    Depth = vec4(nearest);
+}
+"""
+BACKGROUND_PROGRAMS = (("scene_background", FULLSCREEN_VERTEX_SOURCE, _BACKGROUND_FRAGMENT),)
+BACKGROUND_SAMPLES_PROGRAMS = (("scene_background_samples", FULLSCREEN_VERTEX_SOURCE, _BACKGROUND_SAMPLES_FRAGMENT),)
+
 # The whole allocation, resolved for the post effects (outside the rect it is cleared black).
 _RESOLVE_FRAGMENT = "#version 460 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
 void main() {
@@ -305,14 +346,15 @@ def _new_framebuffer(label: str) -> int:
 class SceneTarget:
     def __init__(self, label: str) -> None:
         self.label = label
-        # allocated width, height, requested samples, with motion, with emission, with shafts
-        self._key: tuple[int, int, int, bool, bool, bool] | None = None
+        # allocated width, height, requested samples, with motion, with emission, with shafts, with a depth texture
+        self._key: tuple[int, int, int, bool, bool, bool, bool] | None = None
         self._samples = 0                                # samples allocated (1 = a plain texture)
         # colour / velocity: the scene's attachments (multisampled when _samples > 1);
         # resolve_*: their resolved copies for the post effects.
         self._names = {"fbo": 0, "colour": 0, "velocity": 0, "depth": 0, "resolve_fbo": 0, "resolve_texture": 0,
                        "resolve_velocity": 0, "emission": 0, "emission_resolve_fbo": 0, "emission_resolve": 0,
-                       "shafts": 0}
+                       "shafts": 0, "depth_texture": 0, "background_fbo": 0, "background_colour": 0,
+                       "background_depth": 0}
         self._inherited = (0, 0)
         self._scissor = False
         self._rect = (0, 0, 0, 0)
@@ -337,7 +379,8 @@ class SceneTarget:
     @contextmanager
     def scope(self, frame: SceneFrame, samples: int, resources,
               rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
-              motion_blur: bool = False, overlay: float | None = None, shafts: bool = False) -> Iterator[None]:
+              motion_blur: bool = False, overlay: float | None = None, shafts: bool = False,
+              depth_texture: bool = False) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
@@ -353,7 +396,7 @@ class SceneTarget:
         if shafts and overlay is None:
             raise ValueError(f"{self.label}: light shafts need an overlay scene target")
         self.begin(frame, samples, rect, motion_blur, overlay=overlay,
-                   emission=overlay is not None and bloom > 0.0, shafts=shafts)
+                   emission=overlay is not None and bloom > 0.0, shafts=shafts, depth_texture=depth_texture)
         try:
             yield
         except BaseException:
@@ -400,6 +443,82 @@ class SceneTarget:
             if blend:
                 gl.glEnablei(gl.GL_BLEND, 2)
 
+    def background(self, frame: SceneFrame, resources) -> tuple[int, int]:
+        """Capture what has been drawn so far as plain textures (colour, nearest window depth; R32F, the far plane
+        without a depth texture), covering the allocation, and carry on drawing into the scene exactly where it
+        was: framebuffer, viewport, colour masks, blend, depth test, program and texture units 0-1 come back."""
+        if self._key is None:
+            raise RuntimeError(f"{self.label}: background() needs an open scope")
+        if not self._names["background_fbo"]:
+            self._allocate_background()
+        width, height = self._key[0], self._key[1]
+        multisampled = self._samples > 1
+        key, vertex, fragment = (BACKGROUND_SAMPLES_PROGRAMS if multisampled else BACKGROUND_PROGRAMS)[0]
+        program = resources.program(key, vertex, fragment)
+        names = ("uColour", "uDepth", "uHasDepth") + (("uSamples",) if multisampled else ())
+        uniforms = resources.uniforms(key, names)
+        target = gl.GL_TEXTURE_2D_MULTISAMPLE if multisampled else gl.GL_TEXTURE_2D
+        binding = gl.GL_TEXTURE_BINDING_2D_MULTISAMPLE if multisampled else gl.GL_TEXTURE_BINDING_2D
+        prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        prior_active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
+        prior_viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
+        blend, depth_test = gl_query.is_enabled(gl.GL_BLEND), gl_query.is_enabled(gl.GL_DEPTH_TEST)
+        masks = [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in range(2)]
+        units = []
+        for unit in range(2):
+            gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
+            units.append(gl_query.get_int(binding))
+        try:
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["background_fbo"])
+            gl.glViewport(0, 0, width, height)
+            gl.glDisable(gl.GL_BLEND)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            for i in range(2):
+                gl.glColorMaski(i, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+            gl.glUseProgram(program)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glBindTexture(target, self._names["colour"])
+            gl.glActiveTexture(gl.GL_TEXTURE1)
+            gl.glBindTexture(target, self._names["depth_texture"])
+            gl.glUniform1i(uniforms["uColour"], 0)
+            gl.glUniform1i(uniforms["uDepth"], 1)
+            gl.glUniform1i(uniforms["uHasDepth"], 1 if self._names["depth_texture"] else 0)
+            if multisampled:
+                gl.glUniform1i(uniforms["uSamples"], self._samples)
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        finally:
+            for unit in (1, 0):
+                gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
+                gl.glBindTexture(target, units[unit])
+            gl.glActiveTexture(prior_active)
+            gl.glUseProgram(prior_program)
+            for i in range(2):
+                gl.glColorMaski(i, *masks[i])
+            (gl.glEnable if blend else gl.glDisable)(gl.GL_BLEND)
+            (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["fbo"])
+            gl.glViewport(*prior_viewport)
+        return self._names["background_colour"], self._names["background_depth"]
+
+    def _allocate_background(self) -> None:
+        width, height = self._key[0], self._key[1]
+        self._allocate_plain_texture("background_colour", width, height, gl.GL_RGBA8)
+        self._allocate_plain_texture("background_depth", width, height, gl.GL_R32F)
+        for key in ("background_colour", "background_depth"):
+            for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                gl.glTextureParameteri(self._names[key], parameter, gl.GL_LINEAR if key == "background_colour"
+                                       else gl.GL_NEAREST)
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(self._names[key], wrap, gl.GL_CLAMP_TO_EDGE)
+        self._names["background_fbo"] = _new_framebuffer(f"{self.label} background")
+        fbo = self._names["background_fbo"]
+        gl.glNamedFramebufferTexture(fbo, gl.GL_COLOR_ATTACHMENT0, self._names["background_colour"], 0)
+        gl.glNamedFramebufferTexture(fbo, gl.GL_COLOR_ATTACHMENT1, self._names["background_depth"], 0)
+        gl.glNamedFramebufferDrawBuffers(fbo, 2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
+        if gl.glCheckNamedFramebufferStatus(fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+            raise RuntimeError(f"{self.label} background incomplete at {width}x{height}")
+
     def set_shaft_light(self, light: ShaftLight | None) -> None:
         """This frame's light for the shafts (``None``: no rays this frame); kept until ``end``."""
         self._shaft_light = light if self._names["shafts"] else None
@@ -417,20 +536,22 @@ class SceneTarget:
             gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
 
     def warm(self, size: tuple[int, int], samples: int, *, motion_blur: bool = False,
-             bloom: bool = False, overlay: bool = False, shafts: bool = False) -> bool:
+             bloom: bool = False, overlay: bool = False, shafts: bool = False, depth_texture: bool = False,
+             background: bool = False) -> bool:
         """Allocate ahead, one unit per call, what ``scope`` will use at ``size`` (device
         pixels) with these settings; True once all of it is allocated. ``begin`` reuses it."""
         width, height = (int(value) for value in size)
         samples, motion_blur = max(1, int(samples)), bool(motion_blur)
         emission = bool(overlay and bloom)
         shafts = bool(overlay and shafts)
+        depth_texture = bool(depth_texture)
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or key[5] != shafts or width > key[0] or height > key[1]):
+                or key[5] != shafts or key[6] != depth_texture or width > key[0] or height > key[1]):
             self.release()
             self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
                                gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture)
             self._commit()
             return False
         allocation = (self._key[0], self._key[1])
@@ -446,6 +567,9 @@ class SceneTarget:
         if bloom and not self._bloom.warm(allocation):
             return False
         if shafts and not self._shafts.warm(allocation):
+            return False
+        if background and not self._names["background_fbo"]:
+            self._allocate_background()
             return False
         return True
 
@@ -470,7 +594,7 @@ class SceneTarget:
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
               motion_blur: bool = False, overlay: float | None = None, emission: bool = False,
-              shafts: bool = False) -> None:
+              shafts: bool = False, depth_texture: bool = False) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -479,11 +603,12 @@ class SceneTarget:
                            gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
         self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         motion_blur, emission, shafts = bool(motion_blur), bool(emission), bool(shafts)
+        depth_texture = bool(depth_texture)
         key = self._key
         if (key is None or key[2] != samples or key[3] != motion_blur or key[4] != emission
-                or key[5] != shafts or width > key[0] or height > key[1]):
+                or key[5] != shafts or key[6] != depth_texture or width > key[0] or height > key[1]):
             self.release()
-            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur, emission, shafts, depth_texture)
         self._rect = (x, y, width, height)
         self._overlay = None if overlay is None else max(0.0, min(1.0, float(overlay)))
         self._inherited_blend = _blend_state() if emission or shafts else None
@@ -783,7 +908,7 @@ class SceneTarget:
         self._allocate_plain_texture(key, width, height, internal)
 
     def _allocate(self, width: int, height: int, requested: int, motion_blur: bool = False,
-                  emission: bool = False, shafts: bool = False) -> None:
+                  emission: bool = False, shafts: bool = False, depth_texture: bool = False) -> None:
         samples = min(requested, gl_query.get_int(gl.GL_MAX_SAMPLES),
                       gl_query.get_int(gl.GL_MAX_COLOR_TEXTURE_SAMPLES))
         self._names["fbo"] = _new_framebuffer(f"{self.label} scene target")
@@ -794,13 +919,16 @@ class SceneTarget:
             self._allocate_attachment("emission", samples, width, height, gl.GL_RGBA16F)
         if shafts:
             self._allocate_attachment("shafts", samples, width, height, gl.GL_R16F)
-        name = (ctypes.c_uint * 1)()
-        gl.glCreateRenderbuffers(1, name)
-        self._names["depth"] = int(name[0])
-        if not self._names["depth"]:
-            raise RuntimeError(f"{self.label} scene depth allocation failed")
-        gl.glNamedRenderbufferStorageMultisample(self._names["depth"], samples if samples > 1 else 0,
-                                                  gl.GL_DEPTH_COMPONENT24, width, height)
+        if depth_texture:
+            self._allocate_attachment("depth_texture", samples, width, height, gl.GL_DEPTH_COMPONENT32F)
+        else:
+            name = (ctypes.c_uint * 1)()
+            gl.glCreateRenderbuffers(1, name)
+            self._names["depth"] = int(name[0])
+            if not self._names["depth"]:
+                raise RuntimeError(f"{self.label} scene depth allocation failed")
+            gl.glNamedRenderbufferStorageMultisample(self._names["depth"], samples if samples > 1 else 0,
+                                                      gl.GL_DEPTH_COMPONENT24, width, height)
         gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_COLOR_ATTACHMENT0, self._names["colour"], 0)
         second = self._names["velocity"] or self._names["emission"]
         if second:
@@ -813,12 +941,15 @@ class SceneTarget:
         elif second:
             gl.glNamedFramebufferDrawBuffers(self._names["fbo"], 2,
                                               [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
-        gl.glNamedFramebufferRenderbuffer(self._names["fbo"], gl.GL_DEPTH_ATTACHMENT,
-                                           gl.GL_RENDERBUFFER, self._names["depth"])
+        if depth_texture:
+            gl.glNamedFramebufferTexture(self._names["fbo"], gl.GL_DEPTH_ATTACHMENT, self._names["depth_texture"], 0)
+        else:
+            gl.glNamedFramebufferRenderbuffer(self._names["fbo"], gl.GL_DEPTH_ATTACHMENT,
+                                               gl.GL_RENDERBUFFER, self._names["depth"])
         if (gl.glCheckNamedFramebufferStatus(self._names["fbo"], gl.GL_FRAMEBUFFER)
                 != gl.GL_FRAMEBUFFER_COMPLETE):
             raise RuntimeError(f"{self.label} scene target incomplete at {width}x{height}x{samples}")
-        self._key = (width, height, requested, bool(motion_blur), bool(emission), bool(shafts))
+        self._key = (width, height, requested, bool(motion_blur), bool(emission), bool(shafts), bool(depth_texture))
         self._samples = max(1, samples)
 
     def release(self) -> None:
@@ -840,6 +971,10 @@ class SceneTarget:
             ("emission_resolve_fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
             ("emission_resolve", lambda name: gl.glDeleteTextures([name])),
             ("shafts", lambda name: gl.glDeleteTextures([name])),
+            ("depth_texture", lambda name: gl.glDeleteTextures([name])),
+            ("background_fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
+            ("background_colour", lambda name: gl.glDeleteTextures([name])),
+            ("background_depth", lambda name: gl.glDeleteTextures([name])),
         ):
             name = self._names[key]
             if not name:

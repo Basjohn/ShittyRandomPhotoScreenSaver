@@ -105,6 +105,8 @@ and binds; depth renderbuffers also use named storage. Rendering and resolve pas
 | Owner | Storage and allocation contract |
 | --- | --- |
 | `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets ; an **overlay** scope (a Visualizer drawn over its card) clears to transparent and composites the resolved scene back as straight alpha times an opacity, discarding where nothing was drawn, with no motion blur. An overlay **with bloom** adds an RGBA16F emission attachment (location 1, written only inside `emission_writes()` as `sceneEmission(light)`), blurs it through the shared bloom chain and composites premultiplied with the glow added, under a blend it sets and then hands back as the caller had it (captured at `begin`), so glow is exactly additive over what Quick drew and no emission writes means no glow. The non-bloom overlay path is unchanged |
+| `SceneTarget` depth texture and background (§4A G1, 2026-10-17) | `depth_texture=True` makes the depth attachment a DEPTH_COMPONENT32F texture (multisampled with the colour) instead of the depth24 renderbuffer; drawing is pixel-identical. `background()` captures, mid-scope, what has been drawn so far into a plain RGBA8 colour (averaged over samples) and an R32F nearest window depth (the far plane without a depth texture), then hands drawing back where it was (draw framebuffer, viewport, colour masks 0-1, blend, depth test, program, units 0-1). Allocated on first use or by `warm(..., background=True)` as one unit; released with the target |
+| `SceneTarget` light shafts (2026-10-17) | `shafts=True` (overlays only) adds an R16F shaft-source attachment at location 2, written only inside `shaft_writes()` (colour and emission masked there); a `ShaftLight` set during the scope makes `end` run `LightShafts` (half-size resolve plus two 16-tap radial gathers into two R16F levels) and composite through `_with_shafts`, the one transform of the overlay composite that adds the rays where the scene drew. Without a light that frame, the overlay composites as before |
 | Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
 | Motion | One RG16F compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
 | Motion Trails | Existing R8 mask, allocated only for its active requesting consumer |
@@ -315,6 +317,10 @@ their following body-pass depth state, and the existing visualizer fence still o
   unbound, after a failure, and across a real motion-blurred frame); runs without Motion Blur compile and dispatch no
   compute for every covered transition consumer; fixed loud tile capacity; release returns to zero and rebuilds; failed compute
   compiles/links leave no shader or program.
+- `test_scene3d_target.py` (G1, shafts): a depth-texture target draws the same pixels as the renderbuffer one; its
+  mid-scope background holds the colour and nearest depth at 1 and 4 samples and drawing resumes exactly where it was;
+  targets that ask for neither allocate no depth texture or background; the shafts composite is one transform of the
+  overlay composite and its programs warm with the target.
 - `test_qtquick_extruded_spectrum.py`: real-driver alpha compositing over an existing backdrop, order-sensitive
   overlapping translucent bars, directional-shadow positive/negative pixels, and unchanged target ownership across
   the shadow switch.
