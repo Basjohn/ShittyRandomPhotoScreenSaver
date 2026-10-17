@@ -43,9 +43,11 @@ Custom is excluded. The filename-derived variant survives sparse authored slots.
 schema-2 operator recordings under `logs/visualizer_recordings`; synthetic fixtures and archived takes are rejected.
 It replays the passage's pre-roll through the existing `ReplayBeatEngine`, production logical ticks, immutable capture,
 mailbox and `QuickVisualizerPresentationSync`, then renders published snapshots through `QuickVisualizerRenderHost`.
-The authored preset stays intact. The capture pins Scene3D High quality, draws the deterministic landscape through the
-production crossfade's settled source frame, supplies that same displayed photograph to reflection-capable modes, and
-places the canonical presentation extent in a centered stage with room for 3D overflow.
+The authored preset stays intact. The capture pins Scene3D High quality, draws on a plain dark grey
+(`VISUALIZER_BACKGROUND`, operator 2026-10-17; no photograph behind the card), supplies the fixture photograph to
+reflection-capable modes, and places the canonical presentation extent in a centered stage with room for 3D overflow.
+The frames are then cropped to the union over the run of every pixel the mode drew (`content_box`, a 1% margin, even
+dimensions), so no showcase carries empty space around its content and nothing a frame drew is cut.
 This is a production-renderer showcase, not a full-desktop or mixed-refresh acceptance test.
 
 Capture defaults to lossless 1280×720 PNG frames at 30 fps. WebPs start at 960×540, quality 92, loop forever, and carry no

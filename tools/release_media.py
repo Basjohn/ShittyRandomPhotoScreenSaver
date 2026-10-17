@@ -267,6 +267,39 @@ def transition_timeline_ms(duration_ms: int) -> int:
     return 2 * duration_ms + TRANSITION_MID_HOLD_MS
 
 
+# Visualizer showcases sit on a plain dark grey (operator 2026-10-17): no photograph behind them, and the frames are
+# cropped to what the mode actually draws over the whole run, with a slim margin.
+VISUALIZER_BACKGROUND = (28, 28, 30)
+VISUALIZER_CROP_MARGIN = 0.01
+
+
+def content_box(frames: list[Path], background: tuple[int, int, int], margin: float) -> tuple[int, int, int, int] | None:
+    """The union over ``frames`` of the pixels that differ from ``background``, grown by ``margin`` of the longer side
+    and kept inside the frame with even dimensions; ``None`` when nothing was drawn."""
+    import numpy as np
+    from PIL import Image
+
+    box = None
+    for path in frames:
+        with Image.open(path) as image:
+            pixels = np.asarray(image.convert("RGB"), dtype=np.int16)
+        drawn = np.abs(pixels - np.asarray(background, dtype=np.int16)).max(axis=2) > 6
+        rows, columns = np.flatnonzero(drawn.any(axis=1)), np.flatnonzero(drawn.any(axis=0))
+        if rows.size:
+            found = (int(columns[0]), int(rows[0]), int(columns[-1]) + 1, int(rows[-1]) + 1)
+            box = found if box is None else (min(box[0], found[0]), min(box[1], found[1]),
+                                             max(box[2], found[2]), max(box[3], found[3]))
+        height, width = drawn.shape
+    if box is None:
+        return None
+    pad = round(margin * max(width, height))
+    left, top = max(0, box[0] - pad), max(0, box[1] - pad)
+    right, bottom = min(width, box[2] + pad), min(height, box[3] + pad)
+    right -= (right - left) % 2
+    bottom -= (bottom - top) % 2
+    return left, top, right, bottom
+
+
 def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], fps: int,
                    duration_ms: int, clip=None, start_seconds: float = 0) -> list[Path]:
     from tools.transition_contact_sheet import TransitionCapture
@@ -304,11 +337,10 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
             indices = sample_indices(clip, start_seconds, duration_ms / 1000, fps)
             result = replay_clip(clip, case.identity, preset=case.preset, snapshots_at=indices)
             host = QuickVisualizerRenderHost()
-            photo = capture.production_run("crossfade", duration_ms)
             descriptor = get_visualizer_mode_descriptor(case.identity)
             backdrop = VisualizerBackdrop(identity="release_transition_fixture", size=size,
                                           rgba=capture.images[0].tobytes())
-            item_width, item_height = width * .7, height * .7
+            item_width, item_height = width * .7, height * .7   # room for 3D overflow; the crop removes the rest
             presentation = resolve_visualizer_presentation(
                 policy=get_visualizer_presentation_policy(case.identity), display_size=(width, height),
                 viewport_extent=(item_width, item_height), border_width=0, corner_radius=0, content_inset=0,
@@ -331,8 +363,8 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
                 gl.glViewport(0, 0, width, height)
                 gl.glDisable(gl.GL_SCISSOR_TEST)
                 gl.glDepthMask(gl.GL_TRUE)
+                gl.glClearColor(*(channel / 255 for channel in VISUALIZER_BACKGROUND), 1.0)
                 gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-                capture.host.render(capture.frame(photo, 0))
                 host.render(snapshot=snapshot, viewport=(0, 0, width, height),
                             logical_size=(item_width, item_height), matrix_values=matrix)
                 pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
@@ -342,6 +374,12 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
                 frames.append(path)
                 if gl.glGetError() != gl.GL_NO_ERROR:
                     raise RuntimeError("Visualizer capture GL error")
+            box = content_box(frames, VISUALIZER_BACKGROUND, VISUALIZER_CROP_MARGIN)
+            if box is not None:
+                for path in frames:
+                    with Image.open(path) as image:
+                        cropped = image.crop(box)
+                    cropped.save(path)
     finally:
         if host is not None:
             host.release_resources()
