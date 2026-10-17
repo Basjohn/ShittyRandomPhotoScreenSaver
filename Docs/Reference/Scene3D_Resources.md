@@ -277,6 +277,26 @@ instanced draw and program. Proven by `test_scene3d_spheres.py` (GPU id/depth pi
 from under 1% edge pixels, silhouettes within 1% of the analytic area from 1.5 to 0.02 radius, blur widens and softens
 the edge) and `test_scene3d_spheres_mirrors.py` (GLSL equals the mirrors).
 
+Round on screen (2026-10-17): a rectilinear view draws an off-axis sphere as an oval stretched toward the frame's edges.
+`sceneSphereScreenCorner` (vertex) places a screen-aligned square round the projected centre, sized to the apparent
+width across the line of sight, and `sceneSphereFacingRay` (fragment) gives the view ray as if the sphere were seen
+straight along the line to its centre, so every sphere is a circle wherever it sits (deformation is reserved for
+collisions). The mirror test proves every unit-circle corner grazes the silhouette.
+
+## Scene probe (§4A, 2026-10-17)
+
+`rendering/quick/scene3d/probe.py`: `SceneProbe(label, size)` owns one RGBA16F cube with a full mip chain, a depth
+renderbuffer and a framebuffer. `capture(draw)` renders the six faces (GL's cube convention; each face's 3x3
+world-to-view rotation and a 90-degree projection are handed to the callback), then pre-filters every mip level from
+the one above over a Gaussian cone (32 taps, sampled across face edges, about two texels of that level wide), so
+blurred lookups are a smooth, rotation-invariant filter (GL's per-face mipmaps read as blocks). The caller's
+framebuffer, viewport, scissor, clear colour, depth, blend, program, vertex array and unit 0's cube binding come back;
+nothing is allocated after the first capture. GLSL `sceneProbe(probe, direction, blur, levels)`. It is how glass,
+water and bubbles show the scene they sit in (the light, beams, lit particulate) instead of painted highlights.
+`test_scene3d_probe.py`: face rotations follow the cube convention, every direction reads back what the scene put
+there (with a mirrored-face negative control), blur is the same filter across faces and full blur is the hemisphere,
+state and allocation.
+
 ## Shared optics and underwater light (§4A G3B, 2026-10-17)
 
 Import-safe GLSL + CPU mirrors, no resources. `scene3d_optics.py`: `sceneFresnelDielectric` (exact unpolarised, total
@@ -289,6 +309,15 @@ in-scatter). `test_scene3d_optics_water.py` holds each to its mirror and its phy
 past the critical angle, no colour without a film and shifting fringes with thickness, an air sphere passing the axis
 straight and spreading the rest, wave gradients equal to finite differences, a thin moving caustic network, the sky
 overhead and the deep past the window, the medium's colour with distance).
+
+Light paths through spheres (2026-10-17, `scene3d_optics.py`): `sceneSpherePaths` (a homogeneous sphere: front
+reflection, through, one inner bounce, exact Fresnel weights) and `sceneHollowSphereTrace` (a ray traced through a
+shell between two concentric spheres, outside/shell/core indices: every interface splits by Fresnel, the reflected
+share handed back as a path and the refracted share followed, total internal reflection followed without loss, so
+light entering a glass wall near the silhouette is guided round inside it; up to eight (direction, weight) paths, the
+last the ray that leaves). Consumers look the directions up in a `SceneProbe`. Tests hold both to CPU mirrors on the
+GPU, conservation, the air bubble's mirror band, straight passage with matched indices and a solid sphere's
+reflection when the core is empty.
 
 ## State restoration
 

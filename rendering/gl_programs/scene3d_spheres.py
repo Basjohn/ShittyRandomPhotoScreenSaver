@@ -12,6 +12,12 @@ Qt's item matrix).
   (``corner`` in [-1, 1]^2). The quad lies in the plane through the centre perpendicular to the line of sight, with
   half-size ``(radius + blur) * d / sqrt(d^2 - (radius + blur)^2)``: exactly the silhouette cone's radius there.
   ``blur`` (view units) widens the sphere's soft edge for defocus. A camera inside the sphere collapses the quad.
+* Round on screen: a rectilinear camera draws a sphere off its axis as an oval stretched toward the frame's edges
+  (wide views make it obvious). ``sceneSphereScreenCorner(centre, radius, blur, corner, projection)`` (vertex) places
+  a screen-aligned square round the sphere's projected centre, sized to the sphere's apparent width across the line
+  of sight, and ``sceneSphereFacingRay(centre, reach, corner)`` (fragment, with the interpolated ``corner`` and
+  ``reach = radius + blur``) gives the view ray as if the sphere were seen straight along the line to its centre, so
+  every sphere is a circle wherever it sits; feed that ray to the functions below.
 * ``sceneSphereRay(ray, centre, radius, tNear, tFar)``: the ray's entry and exit distances (``ray`` normalised).
 * ``sceneSphereCoverage(ray, centre, radius, blur)``: antialiased (or, with ``blur``, softened) silhouette coverage
   from the ray's distance to the centre; 0 outside.
@@ -55,6 +61,29 @@ vec3 sceneSphereCorner(vec3 centre, float radius, float blur, vec2 corner) {
     vec3 v = cross(toEye, u);
     float half_ = reach * d / sqrt(d * d - reach * reach);
     return centre + (u * corner.x + v * corner.y) * half_;
+}
+void sceneSphereBasis(vec3 centre, out vec3 axis, out vec3 u, out vec3 v) {
+    axis = normalize(centre);
+    vec3 toEye = -axis;
+    vec3 up = abs(toEye.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+    u = normalize(cross(up, toEye));
+    v = cross(toEye, u);
+}
+vec4 sceneSphereScreenCorner(vec3 centre, float radius, float blur, vec2 corner, mat4 projection) {
+    float reach = radius + max(blur, 0.0);
+    float d = length(centre);
+    float tanA = reach / sqrt(max(d * d - reach * reach, 1e-8));
+    float cosOffAxis = max(-centre.z / d, 1e-3);
+    vec4 clip = projection * vec4(centre, 1.0);
+    vec2 ndcRadius = vec2(projection[0][0], projection[1][1]) * tanA / cosOffAxis;
+    return clip + vec4(corner * ndcRadius * clip.w, 0.0, 0.0);
+}
+vec3 sceneSphereFacingRay(vec3 centre, float reach, vec2 corner) {
+    vec3 axis, u, v;
+    sceneSphereBasis(centre, axis, u, v);
+    float d = length(centre);
+    float tanA = reach / sqrt(max(d * d - reach * reach, 1e-8));
+    return normalize(axis + (u * corner.x + v * corner.y) * tanA);
 }
 bool sceneSphereRay(vec3 ray, vec3 centre, float radius, out float tNear, out float tFar) {
     float b = dot(centre, ray);
@@ -171,6 +200,18 @@ def scene3d_sphere_corner(centre: Vec3, radius: float, blur: float, corner: tupl
     return tuple(centre[i] + (u[i] * corner[0] + v[i] * corner[1]) * half for i in range(3))
 
 
+def scene3d_sphere_facing_ray(centre: Vec3, reach: float, corner: tuple[float, float]) -> Vec3:
+    """CPU mirror of ``sceneSphereFacingRay``."""
+    d = math.sqrt(_dot(centre, centre))
+    axis = (centre[0] / d, centre[1] / d, centre[2] / d)
+    to_eye = (-axis[0], -axis[1], -axis[2])
+    up = (1.0, 0.0, 0.0) if abs(to_eye[1]) > 0.99 else (0.0, 1.0, 0.0)
+    u = _normalize(_cross(up, to_eye))
+    v = _cross(to_eye, u)
+    tan_a = reach / math.sqrt(max(d * d - reach * reach, 1e-8))
+    return _normalize(tuple(axis[i] + (u[i] * corner[0] + v[i] * corner[1]) * tan_a for i in range(3)))
+
+
 def scene3d_sphere_ray(ray: Vec3, centre: Vec3, radius: float) -> tuple[bool, float, float]:
     """CPU mirror of ``sceneSphereRay``: (hit, tNear, tFar)."""
     b = _dot(centre, ray)
@@ -199,4 +240,4 @@ def scene3d_cluster_distance(p: Vec3, spheres, blend: float) -> float:
 
 
 __all__ = ["SCENE3D_SPHERES_GLSL", "scene3d_cluster_distance", "scene3d_smooth_min", "scene3d_sphere_corner",
-           "scene3d_sphere_ray"]
+           "scene3d_sphere_facing_ray", "scene3d_sphere_ray"]
