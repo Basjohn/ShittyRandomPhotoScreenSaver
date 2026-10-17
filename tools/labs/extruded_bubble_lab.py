@@ -556,7 +556,7 @@ vec3 ribbonPath(float s) {
     vec3 lateral = -cross(uTrail, vec3(0.0, 0.0, 1.0));
     lateral = dot(lateral, lateral) > 1e-6 ? normalize(lateral) : vec3(1.0, 0.0, 0.0);
     vec3 p = aStart.xyz + uTrail * length_ * s;
-    p += lateral * (aShape.z * length_ * s * s + sin(s * 2.2 + seed * 6.28) * r * 2.5 * s * uSway);
+    p += lateral * (aShape.z * length_ * s * s + sin(s * 2.2 + seed * 6.28) * r * 4.0 * s * s * uSway);
     p.z += cos(s * 1.9 + seed * 4.1) * r * 1.5 * s * uSway;
     return p;
 }
@@ -569,8 +569,8 @@ void main() {
     vec3 previous = uWorldToView * ribbonPath(max(s - 0.02, 0.0));
     vec3 tangent = normalize(next - previous);
     vec3 across = normalize(cross(tangent, normalize(-here)));
-    float turn = 0.35 + 0.65 * cos(s * 3.5 + aShape.x * 6.28);
-    float width = aStart.w * mix(0.6, 0.9, s) * mix(1.0, 0.5, s * s);
+    float turn = 0.6 + 0.4 * cos(s * 3.5 + aShape.x * 6.28);
+    float width = aStart.w * mix(0.8, 1.6, s) * mix(1.0, 0.6, s * s);
     vAcross = vec2(sideSign, s);
     vFold = turn;
     vDepth = -here.z;
@@ -579,30 +579,46 @@ void main() {
     gl_Position = uProjection * vec4(here + across * sideSign * width * turn, 1.0);
 }
 """
-RIBBON_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n" + """
-uniform vec3 uShaftColour;
-uniform vec3 uSkyTint;
-uniform vec3 uLightColour;
+RIBBON_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
+                   + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + """
+uniform sampler2D uBackground;
+uniform vec2 uTargetSize;
 in vec2 vAcross;
 in float vFold;
 in float vDepth;
 flat in float vStrength;
 flat in float vShapeSeed;
+// A wake is disturbed water: it bends the scene behind it (a soft wobble across the sheet) and here and there a
+// thin fold of it catches the light as a faint broken strand; it fades as it falls behind.
 void main() {
     float s = vAcross.y;
-    float edge = pow(abs(vAcross.x), 3.0);
-    float fold = 0.45 / (abs(vFold) + 0.45);
-    float fade = smoothstep(0.0, 0.06, s) * pow(1.0 - s, 1.4);
     float u = vAcross.x * 0.5 + 0.5;
+    float fade = smoothstep(0.0, 0.08, s) * pow(1.0 - s, 1.8);
+    float sheet = smoothstep(0.0, 0.25, u) * smoothstep(1.0, 0.75, u);
+    // Refraction: the scene behind displaced across the sheet by a slow wave along it.
+    float wave = sin(u * 9.0 + s * 14.0 + vShapeSeed * 20.0) * 0.6 + sin(u * 23.0 - s * 9.0 + vShapeSeed * 7.0) * 0.4;
+    vec2 shift = vec2(dFdx(u), dFdy(u));
+    shift = shift / max(length(shift), 1e-6) * wave * 3.0 * sheet * fade;
+    if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
+    vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
+    // Strands: a bundle of fine filaments leaving the bubble together and fanning apart as they trail, each lightly
+    // broken along its length, brightest where the sheet turns edge-on.
     float strands = 0.0;
-    for (int k = 0; k < 7; ++k) {
-        float centre = fract(float(k) * 0.618 + vShapeSeed * 3.1) * 0.8 + 0.1 + 0.08 * sin(s * (3.0 + float(k)) + float(k));
-        float thin = fwidth(u) * 1.2 + 0.004;
-        strands += exp(-pow((u - centre) / thin, 2.0)) * (0.5 + 0.5 * fract(float(k) * 0.37 + vShapeSeed));
+    float pixelU = max(fwidth(u), 1e-4);
+    for (int k = 0; k < 10; ++k) {
+        float h = fract(float(k) * 0.618034 + vShapeSeed * 3.1);
+        float centre = 0.5 + (h - 0.5) * (0.25 + 0.85 * s) + 0.04 * sin(s * (5.0 + float(k)) + float(k) * 1.7);
+        float d = abs(u - centre) / (pixelU * mix(0.8, 1.6, fract(h * 7.3)));
+        float broken = mix(0.35, 1.0, smoothstep(0.3, 0.7, skyNoise2(vec2(s * (10.0 + 3.0 * float(k)), float(k) * 3.7 + vShapeSeed * 11.0), 171u)));
+        strands += exp(-d * d) * broken * mix(0.5, 1.0, fract(h * 13.1));
     }
-    float a = clamp((0.05 + 0.35 * edge + 0.75 * strands) * fold * fade * vStrength, 0.0, 0.9);
-    vec3 light = mix(vec3(dot(mix(uShaftColour, uSkyTint, 0.4), vec3(0.3333))), uLightColour, 0.25) * 2.2;
-    sceneTransparent(light * a, a, vDepth);
+    float edgeOn = 0.5 / (abs(vFold) + 0.5);
+    float glow = min(strands, 1.5) * edgeOn * fade * vStrength;
+    vec3 strandLight = mix(uSkyTint, uShaftColour, 0.5) * 1.6 + uLightColour * 0.25;
+    float sheetA = sheet * fade * vStrength * 0.3;
+    float a = clamp(sheetA + glow * 0.6, 0.0, 0.9);
+    vec3 premultiplied = bent * sheetA + strandLight * glow * 0.6;
+    sceneTransparent(premultiplied, a, vDepth);
     Emission = vec4(0.0);
 }
 """)
@@ -1134,6 +1150,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniformMatrix4fv(w("uProjection"), 1, gl.GL_FALSE, projection)
                         gl.glUniform3f(w("uTrail"), *trail)
                         gl.glUniform1f(w("uSway"), settings.get("sway", 1.0))
+                        gl.glUniform1i(w("uBackground"), 5)
+                        gl.glUniform2f(w("uTargetSize"), *target.allocation[:2])
                         gl.glDisable(gl.GL_CULL_FACE)
                         gl.glBindVertexArray(wvao)
                         gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 82, len(wakes))
