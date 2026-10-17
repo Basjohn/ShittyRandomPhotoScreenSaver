@@ -550,3 +550,94 @@ def test_targets_that_ask_for_neither_allocate_no_depth_texture_or_background(ca
     finally:
         target.release()
         resources.release_resources()
+
+
+_TRANSPARENT_FRAGMENT = """#version 460 core
+uniform vec4 uColour;     // straight colour and alpha
+uniform float uViewDepth; // scene units from the eye
+""" + __import__("rendering.quick.scene3d.target", fromlist=["SCENE_OIT_GLSL"]).SCENE_OIT_GLSL + """
+void main() { sceneTransparent(uColour.rgb * uColour.a, uColour.a, uViewDepth); }
+"""
+
+
+def _transparent(program, rect, depth, colour, view_depth):
+    gl.glUseProgram(program)
+    gl.glUniform1f(gl.glGetUniformLocation(program, "uViewDepth"), view_depth)
+    _rect(program, rect, depth, colour)
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_transparent_layers_give_the_same_picture_in_either_order_and_respect_opaque_depth(capture, samples):
+    from rendering.quick.render.gl_resources import compile_program
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    flat = compile_program(_RECT_VERTEX, _FLAT_FRAGMENT, label="flat")
+    glass = compile_program(_RECT_VERTEX, _TRANSPARENT_FRAGMENT, label="glass")
+    red, blue = ((-0.8, -0.8, 0.4, 0.8), -0.2, (1.0, 0.0, 0.0, 0.5), 2.0), ((-0.4, -0.6, 0.8, 0.6), 0.0, (0.0, 0.0, 1.0, 0.5), 3.0)
+    behind = ((0.5, -1.0, 1.0, 1.0), 0.8, (1.0, 1.0, 0.0, 0.8), 9.0)
+    card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+
+    def draw(order):
+        _clear(capture)
+        with target.scope(card, samples, resources, oit=True):
+            gl.glEnable(gl.GL_DEPTH_TEST)
+            gl.glDepthFunc(gl.GL_LESS)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glBindVertexArray(capture.vao)
+            _rect(flat, (-1.0, -1.0, 1.0, 1.0), 0.95, (0.1, 0.1, 0.1, 1.0))   # a far backdrop
+            _rect(flat, (0.5, -1.0, 1.0, 1.0), 0.5, (0.0, 1.0, 0.0, 1.0))     # an opaque wall at the right
+            gl.glBlendFunci(0, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+            with target.transparent_writes(card, resources):
+                for layer in order:
+                    _transparent(glass, *layer)
+            # Blend and depth state come back as they were.
+            assert int(np.asarray(gl.glGetIntegeri_v(gl.GL_BLEND_SRC_RGB, 0)).ravel()[0]) == gl.GL_SRC_ALPHA
+            assert bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK)) and bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
+        return _read(capture)
+
+    try:
+        forward, backward = draw((red, blue, behind)), draw((behind, blue, red))
+        assert np.abs(forward - backward).max() <= 1
+
+        def naive(order):   # negative control: ordinary alpha blending depends on the order
+            _clear(capture)
+            with target.scope(card, samples, resources):
+                gl.glDisable(gl.GL_DEPTH_TEST)
+                gl.glEnable(gl.GL_BLEND)
+                gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+                gl.glBindVertexArray(capture.vao)
+                for rect, depth, colour, _view in order:
+                    _rect(flat, rect, depth, colour)
+                gl.glDisable(gl.GL_BLEND)
+            return _read(capture)
+        assert np.abs(naive((red, blue)) - naive((blue, red))).max() > 40
+        row = HEIGHT // 2
+        column = lambda clip_x: int((clip_x + 1.0) * 0.5 * WIDTH)
+        both, red_only, wall = forward[row, column(0.0)], forward[row, column(-0.6)], forward[row, column(0.9)]
+        assert red_only[0] > 120 and red_only[2] < 30            # one layer: red over the dark backdrop
+        assert both[0] > both[2] > 40                              # both: the nearer red outweighs the blue
+        assert abs(int(wall[1]) - 255) <= 2 and wall[0] < 5       # the wall hides the yellow layer behind it
+    finally:
+        gl.glDeleteProgram(flat)
+        gl.glDeleteProgram(glass)
+        target.release()
+        resources.release_resources()
+
+
+def test_transparency_allocates_nothing_unless_asked_and_needs_its_scope(capture):
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+    try:
+        _clear(capture)
+        with target.scope(card, 4, resources):
+            with pytest.raises(RuntimeError, match="oit=True"):
+                with target.transparent_writes(card, resources):
+                    pass
+        assert not any(target._names[key] for key in ("oit_fbo", "oit_accum", "oit_reveal"))
+        with target.scope(card, 4, resources, oit=True):
+            pass
+        assert all(target._names[key] for key in ("oit_fbo", "oit_accum", "oit_reveal"))
+        target.release()
+        assert not target.has_resources
+    finally:
+        target.release()
+        resources.release_resources()
