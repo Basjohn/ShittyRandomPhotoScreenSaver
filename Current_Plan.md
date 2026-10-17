@@ -430,6 +430,12 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   glow, and G2 shadows when visually justified. Tier-bounded instances/targets and first-frame warm admission;
   do not add an EB-specific OIT, shadow, new SceneTarget or orbit implementation to compensate for a weak shared
   primitive. New genuinely needed substrate goes back through a measured §4A gate.
+- [ ] **EB5a — Shared range slider (operator 2026-10-17), before EB5 reactivity controls.** A new shared Settings
+  slider type, visually almost identical to the current shared slider, with **two draggable handles** that define a
+  range on the bar (for example 3–30 on a 1–50 bar). Reactivity maps the music across that range: the low handle is
+  the value at low reactivity (quiet), the high handle the value at high reactivity (loud), giving a range of
+  growth. Extruded Bubble uses it for every bubble count, particle amount and light-ray setting; it is shared, so
+  other modes may adopt it. Follow the shared slider's look, keyboard and accessibility patterns; one owner.
 - [ ] **EB5 — Reactivity, presets and physical acceptance.** Author spec-owned controls and experimental art,
   compare recorded quiet/onset/sustained passages with original Bubble baseline, and verify both displays,
   aspect/DPR, frame timing, latency, dormancy and audio-reactive fidelity before operator acceptance. Capture
