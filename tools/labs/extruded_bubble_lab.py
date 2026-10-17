@@ -85,14 +85,19 @@ VARIANTS = {
                                 mist=0.6, wakes=0.0, sparkle=0.7, crisp=1.0, surface=30.0, absorb=(0.1, 0.05, 0.03),
                                 drift=0.15, shaft_y=12.0),
 }
-VARIANTS["ExBubble6Diagonal"] = dict(deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), banded=True,
-                              speck_warm=(0.9, 0.26, 0.05), hdr_exposure=0.85, band_freq=9.0, sky=(1.0, 0.55, 0.22),
-                              shaft=(0.95, 0.45, 0.14), light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), pitch=4.0,
-                              exposure=1.0, surface=60.0, shaft_y=16.0, glow=0.35, rays=0.2, mist=0.6, sparkle=1.5, dust=0.5, sway=0.25, fizz=2.5, ray_focus=1.0, crisp=1.0, light_view=(1.0, 0.68, -1.0), specks=2.5, light_power=0.3, streak=(1.0, -0.3), cloud_contrast=3.0,
-                              cloud_floor=0.03, cloud_glow=1.2, fizz_size=2.0, rough=0.22, inner_blur=0.18, speck_size=1.8, small_count=5.0, shell=0.03, iors=(1.15, 1.6, 1.0), probe_fill=1.2,
-                              glint_power=120.0, glint_sharp=300.0, warm_share=0.9, lens=1.0,
-                              wakes=0.0, travel=(1.0, -0.3, 0.15), absorb=(0.06, 0.05, 0.05), focus=3.4,
-                              aperture=1.5)
+VARIANTS["ExBubble6Diagonal"] = dict(
+    # Water and light: near-black teal, orange light from the top-right corner, faint beams.
+    deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), sky=(1.0, 0.55, 0.22), shaft=(0.95, 0.45, 0.14),
+    light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), light_view=(1.0, 0.68, -1.0), pitch=4.0, exposure=1.0,
+    hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25, ray_focus=1.0, mist=0.6, dust=1.2,
+    light_power=0.15, absorb=(0.06, 0.05, 0.05),
+    # Ember particulate in diagonal bands; bubbles streaming with it.
+    specks=1.8, speck_warm=(0.9, 0.26, 0.05), speck_size=1.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
+    band_freq=9.0, cloud_contrast=3.0, cloud_floor=0.03, cloud_glow=0.6, travel=(1.0, -0.3, 0.15), sway=0.25,
+    fizz=2.5, fizz_size=2.0, small_count=5.0, sparkle=1.5, wakes=0.0, mid_count=1.5,
+    # Crisp clear glass bubbles: dark interiors, orange-lit rims and glints.
+    crisp=1.0, rough=0.1, inner_blur=0.6, shell=0.03, iors=(1.15, 2.0, 1.0), probe_fill=0.4, glint_power=300.0,
+    glint_sharp=300.0, lens=1.0, focus=3.4, aperture=1.5)
 
 COMMON = """
 uniform mat3 uViewToWorld;
