@@ -597,3 +597,4 @@ failure rather than hidden by larger timeout values.
 Historical harnesses may describe QOpenGLWidget/QRhiWidget/GLCompositor paths. They remain evidence, not current architecture instructions. A surviving harness that asserts a retired physical presenter is obsolete unless `Docs/TestSuite.md` identifies a still-valid neutral behavior that must first be rehomed to the current owner.
 
 Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is detailed.
+- `tools/labs/extruded_bubble_lab.py` - Extruded Bubble composition lab: the §4A primitives composed per operator mock, rendered offscreen beside the mocks for side-by-side judgement (`Docs/Reference/Extruded_Bubble_Target.md`).
