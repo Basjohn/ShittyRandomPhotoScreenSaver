@@ -38,8 +38,8 @@ VARIANTS = {
                       sun=(0.0, 0.8, -1.0), pitch=26.0, exposure=0.95),
     "ExBubble4": dict(deep=(0.003, 0.02, 0.06), water=(0.04, 0.14, 0.28), sky=(0.6, 0.8, 1.0), shaft=(0.4, 0.62, 0.9),
                       sun=(0.15, 0.65, -1.0), pitch=20.0, exposure=1.05),
-    "ExBubble5CameraAbyss": dict(deep=(0.001, 0.006, 0.02), water=(0.01, 0.05, 0.12), sky=(0.4, 0.6, 0.85),
-                                 shaft=(0.3, 0.5, 0.8), sun=(0.6, 0.6, -1.0), pitch=4.0, exposure=1.0, wisps=1.0),
+    "ExBubble5CameraAbyss": dict(deep=(0.0, 0.006, 0.03), water=(0.0, 0.06, 0.2), sky=(0.3, 0.6, 1.0),
+                                 shaft=(0.2, 0.5, 1.0), sun=(0.6, 0.6, -1.0), pitch=4.0, exposure=1.0, wisps=1.4),
     "ExBubble5Cameradown": dict(deep=(0.002, 0.012, 0.03), water=(0.02, 0.08, 0.16), sky=(0.5, 0.7, 0.9),
                                 shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=0.4),
 }
@@ -55,7 +55,6 @@ uniform vec3 uWater;
 uniform vec3 uSkyTint;
 uniform vec3 uShaftColour;
 uniform float uWisps;
-const float SEABED_Y = -11.0;
 const float SURFACE_Y = %.3f;
 vec2 equirectUv(vec3 d) { return vec2(atan(d.x, -d.z) / 6.28318530718 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5); }
 vec3 equirectDirection(vec2 uv) {
@@ -91,18 +90,11 @@ vec3 basinSky(vec3 dir) {
 // The water along a ray from the eye (world y up). detail 1: everything; lower in blurred lookups.
 vec3 basinWater(vec3 ray, float detail, float shafts) {
     float glow = max(dot(ray, uSunBelow), 0.0);
-    vec3 medium = mix(uDeep, uWater, smoothstep(-0.8, 0.85, ray.y))
+    vec3 medium = mix(uDeep * smoothstep(-1.0, -0.2, ray.y) * 0.8 + uDeep * 0.2, uWater, smoothstep(-0.8, 0.85, ray.y))
                 + uShaftColour * (pow(glow, 10.0) * 0.22 + pow(glow, 60.0) * 0.6);
     if (shafts > 0.0)
         medium += mix(uShaftColour, vec3(0.9), 0.35) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
-    if (ray.y < -0.03) {
-        // The seabed: pebbles and stone under the caustic network, fading into the water with distance.
-        float bedDistance = SEABED_Y / ray.y;
-        vec2 bedHit = (ray * bedDistance).xz;
-        vec2 bed = waterSeabed(bedHit * 0.9, uTime, 1.0);
-        vec3 lit = uWater * (0.5 + 1.5 * bed.x) + mix(uShaftColour, vec3(0.7, 0.95, 1.0), 0.4) * bed.y * (0.4 + bed.x) * 1.6;
-        return waterMedium(lit, bedDistance * 1.0, vec3(0.16, 0.065, 0.04), medium);
-    }
+    // Below: the abyss, darkening with depth (operator: no ocean floor).
     if (ray.y <= 0.015) return medium;
     float distance_ = SURFACE_Y / ray.y;
     vec2 hit = (ray * distance_).xz;
@@ -207,7 +199,8 @@ void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec3 centre = uWorldToView * aSphere.xyz;
     float depth = -centre.z;
-    float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 1.2 + 0.08);
+    // Blur in proportion to the bubble: a tiny near bubble softens without swelling into a grey disc.
+    float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.3);
     // At least half a pixel across so specks resolve; their light is scaled back to their true size.
     float radius = max(aSphere.w, uPixel * depth * 0.5);
     vSphere = vec4(centre, radius);
@@ -219,50 +212,81 @@ void main() {
 """
 SHADE_GLSL = """
 uniform sampler2D uEnvironment;
+uniform sampler2D uBackground;   // what was drawn before the bubbles, covering the target allocation
+uniform vec2 uTargetSize;
+// The scene behind seen through an air lens centred at centrePx: turned over and shrunk toward the centre.
+vec3 behindLens(vec2 centrePx, float strength) {
+    vec2 offset = gl_FragCoord.xy - centrePx;
+    return texture(uBackground, (centrePx - offset * strength) / uTargetSize).rgb;
+}
 uniform float uPixelSize;    // view units per pixel at unit distance
 vec3 environment(vec3 dir, float blur) { return textureLod(uEnvironment, equirectUv(dir), blur).rgb; }
-// A glassy bubble's light and coverage at one point of its surface (world normal n, world view ray rayW).
-vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed) {
+// A bubble's light and coverage at one point of its silhouette (world view ray rayW, world front normal n).
+// A thin shell: the front wall reflects the world upright, the back wall reflects it inverted and smaller; both
+// reflect through a soap film whose interference colours the reflection (blue, violet, magenta, gold) and both
+// reflect almost everything toward grazing, which makes the rim. Light that passed through focuses into a bright
+// crescent inside the far side. The interior is nearly clear.
+vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 centrePx) {
     float c = clamp(dot(-rayW, n), 0.0, 1.0);
-    float blurLevel = soft * 5.0 + max(0.0, 2.0 - log2(max(pixels, 1.0)));
-    vec3 transmitted = environment(sceneSphereRefraction(rayW, n, 1.0 / 1.42), blurLevel + 0.4) * 1.15;
-    vec3 reflectedDir = reflect(rayW, n);
-    vec3 reflected = environment(reflectedDir, blurLevel);
-    float fresnel = 0.04 + 0.96 * pow(1.0 - c, 5.0);
-    float swirl = skyFbm3(n * 2.3 + vec3(seed * 17.0, seed * 5.0, uTime * 0.07), 3, 7u);
-    float thickness = mix(140.0, 760.0, clamp(0.6 - 0.3 * n.y + 0.55 * (swirl - 0.5), 0.0, 1.0));
-    vec3 rimFilm = sceneThinFilm(c, thickness, 1.33, 1.0) * pow(1.0 - c, 1.6) * 1.6 * (1.0 - soft);
-    vec3 key = normalize(vec3(-0.5, 0.78, 0.4));
-    float glint = pow(max(dot(reflectedDir, uSunBelow), 0.0), 3000.0) * 50.0
-                + pow(max(dot(reflectedDir, key), 0.0), 900.0) * 14.0
-                + pow(max(dot(reflectedDir, key), 0.0), 55.0) * 1.3
-                + pow(max(dot(reflectedDir, key), 0.0), 18.0) * 0.3;
-    vec3 inner = normalize(vec3(0.35, -0.75, 0.55));
-    float sparkle = pow(max(dot(n, inner), 0.0), 320.0) * (1.0 - fresnel) * 2.2
-                  + pow(max(dot(n, inner), 0.0), 7.0) * (1.0 - fresnel) * 0.35;      // the soft crescent low inside
-    // The glass rim: a bright band about a tenth of the radius wide, brightest toward the surface.
-    float band = smoothstep(0.72, 0.93, 1.0 - c * c) * (1.0 - smoothstep(0.985, 1.0, 1.0 - c * c) * 0.4);
-    float lightSide = clamp(dot(n, normalize(key + vec3(0.0, 0.3, 0.0))) * 0.5 + 0.5, 0.0, 1.0);
-    float edge = band * (0.18 + 1.5 * lightSide * lightSide) * smoothstep(1.5, 6.0, pixels) * (1.0 - soft);
-    // Reflections of the bright water above read on the upper side of every bubble.
-    float window = smoothstep(0.35, 0.9, reflectedDir.y) * (0.25 + 0.75 * fresnel);
-    // The bright arcs the mocks show: the lit water above reflected as a broad crescent along the upper rim, and
-    // the light that passed through focused into a crescent inside the opposite, lower rim.
-    float arcUpper = band * smoothstep(0.2, 0.85, dot(n, normalize(vec3(-0.55, 0.75, 0.35)))) * (1.0 - soft);
-    float arcLower = smoothstep(0.55, 0.9, 1.0 - c * c) * (1.0 - smoothstep(0.93, 0.99, 1.0 - c * c))
-                   * smoothstep(0.35, 0.9, dot(n, inner)) * (1.0 - soft);
-    float arcs = (arcUpper * 1.6 + arcLower * 1.1) * smoothstep(3.0, 9.0, pixels);
-    vec3 light = mix(transmitted, reflected, max(fresnel, window * 0.6)) + reflected * rimFilm * 1.6 + vec3(arcs)
-               + (vec3(0.85, 0.9, 0.95) * 0.75 + reflected * 0.6) * edge + vec3(glint + sparkle);
-    // Specks: a bright point of reflected light rather than a dark dot.
-    light += uSkyTint * 0.75 * (1.0 - smoothstep(1.0, 4.0, pixels));
-    // Mostly clear: the scene behind shows through all but the rim.
-    float alpha = clamp(mix(0.32, 1.0, pow(1.0 - c, 2.2)) + glint * 0.5 + sparkle * 0.4 + arcs * 0.5, 0.0, 1.0)
-                * (1.0 - soft * 0.7);
-    // Out of focus: a luminous disc, its rim brighter, lit by the water it reflects.
-    vec3 bokeh = (environment(rayW, 5.0) * 0.8 + vec3(0.42, 0.5, 0.6)) * (0.55 + 1.1 * pow(1.0 - c, 2.0))
-               + vec3(glint) * 1.2;
-    light = mix(light, bokeh, soft * 0.85);
+    vec3 nBack = n - 2.0 * dot(n, rayW) * rayW;                 // the far wall along the same chord, outward
+    float big = smoothstep(4.0, 30.0, pixels);                   // detail grows with on-screen size
+    float sharp = soft * 4.5 + (1.0 - big) * 1.5;
+    vec3 rFront = reflect(rayW, n);
+    vec3 rBack = reflect(rayW, -nBack);
+    vec3 front = environment(rFront, sharp);
+    vec3 back = environment(rBack, sharp + 0.6);
+    // Bright reflected features (the lit surface's patches) stand out of the darker water.
+    front *= 1.0 + 1.8 * smoothstep(0.35, 1.4, dot(front, vec3(0.3333)));
+    back *= 1.0 + 1.2 * smoothstep(0.35, 1.4, dot(back, vec3(0.3333)));
+    float swirl = skyFbm3(n * 2.1 + vec3(seed * 17.0, seed * 5.0, uTime * 0.06), 3, 7u);
+    float thickness = mix(160.0, 560.0, clamp(0.55 - 0.35 * n.y + 0.6 * (swirl - 0.5), 0.0, 1.0));
+    vec3 filmFront = sceneThinFilm(c, thickness, 1.33, 1.0);
+    vec3 filmBack = sceneThinFilm(c, thickness * 0.9 + 40.0, 1.33, 1.0);
+    // Normalise the film to a hue and let the shell reflect more toward grazing (a broad rim, not a hairline).
+    vec3 hueFront = filmFront / max(dot(filmFront, vec3(0.3333)), 1e-3);
+    vec3 hueBack = filmBack / max(dot(filmBack, vec3(0.3333)), 1e-3);
+    float shell = 0.035 + 0.965 * pow(1.0 - c, 3.2);
+    float colourful = 0.55 * (1.0 - soft * 0.6);
+    vec3 tintFront = mix(vec3(1.0), hueFront, colourful);
+    vec3 tintBack = mix(vec3(1.0), hueBack, colourful);
+    vec3 reflectedLight = front * tintFront * shell + back * tintBack * shell * 0.55 * (1.0 - shell);
+    // Through the bubble: the scene behind, slightly turned over by the air lens, mostly clear.
+    vec3 through = mix(behindLens(centrePx, 0.55), environment(sceneSphereRefraction(rayW, n, 1.0 / 1.33), sharp + 0.3),
+                       0.25);
+    // Highlights: the sun (sharp core and a soft sheen), the bright water overhead as a broad upper arc.
+    float sunR = max(dot(rFront, uSunBelow), 0.0);
+    vec3 key = normalize(vec3(-0.45, 0.8, 0.4));
+    float keyR = max(dot(rFront, key), 0.0);
+    float glint = pow(sunR, 2500.0) * 60.0 + pow(sunR, 220.0) * 3.0 + pow(keyR, 900.0) * 18.0 + pow(keyR, 80.0) * 1.2;
+    float sunBack = max(dot(rBack, uSunBelow), 0.0);
+    glint += pow(sunBack, 1200.0) * 14.0 * big;
+    // The crescent of focused light inside the far side, opposite the light, brightest just inside the rim.
+    vec3 away = normalize(-uSunBelow + vec3(0.0, -0.2, 0.0));
+    float ring = smoothstep(0.35, 0.8, 1.0 - c * c) * (1.0 - smoothstep(0.9, 0.99, 1.0 - c * c));
+    float crescent = ring * pow(max(dot(n, away), 0.0), 2.0) * 1.4 * big;
+    // The rim's own glow: light scattered into the film all round reads as a luminous ring in every mock, brightest
+    // on the side toward the light, coloured by the film (blue, violet, magenta).
+    float lightSide = clamp(dot(n, normalize(uSunBelow + vec3(0.0, 0.2, 0.0))) * 0.5 + 0.5, 0.0, 1.0);
+    float rimBand = pow(1.0 - c, 2.6) * (1.0 - 0.35 * smoothstep(0.97, 1.0, 1.0 - c));
+    vec3 rimColour = mix(vec3(0.55, 0.72, 1.05), hueFront * vec3(0.8, 0.75, 1.25), 0.6 * (1.0 - soft * 0.3));
+    vec3 rimGlow = rimColour * rimBand * (0.55 + 1.3 * lightSide * lightSide) * mix(0.5, 1.0, big);
+    vec3 light = through * (1.0 - shell) + reflectedLight + rimGlow + vec3(glint) + vec3(0.8, 0.9, 1.0) * crescent;
+    // Specks: points of reflected light, not dark dots.
+    light += vec3(0.65, 0.82, 1.1) * 1.3 * (1.0 - smoothstep(1.0, 4.0, pixels));
+    float alpha = clamp(0.12 + 0.9 * shell + rimBand * 0.6 + glint * 0.4 + crescent * 0.5, 0.0, 1.0);
+    // Out of focus: a luminous disc whose rim stays (bokeh keeps the bubble's ring).
+    vec3 disc = environment(rayW, 5.0) * 0.6 + vec3(0.35, 0.42, 0.52) * (0.3 + 1.2 * pow(1.0 - c, 2.5))
+              + reflectedLight * 0.6 + rimGlow + vec3(glint);
+    // A defocused bubble near the lens catches the specks of light behind it as bokeh dots, over a faint blue fill.
+    vec2 local = (gl_FragCoord.xy - centrePx) / max(pixels, 1.0) * 5.0;
+    vec2 cellId = floor(local);
+    float dotHash = sceneRandom(uint(int(cellId.x) + 4096) * 0x8da6b343u ^ uint(int(cellId.y) + 4096) * 0xd8163841u, 3u,
+                                uint(seed * 977.0));
+    float dots = smoothstep(0.32, 0.22, distance(fract(local), vec2(0.5))) * step(0.72, dotHash) * (0.4 + dotHash);
+    // Near giants stay glass spheres (rim, film, lens, highlights), only softened, with the bokeh dots added.
+    light = mix(light, disc, soft * 0.3) + mix(uShaftColour, vec3(0.8, 0.9, 1.0), 0.5) * (dots * 0.9 + 0.1) * big * soft;
+    // Small defocused bubbles stay faint; only big near ones become luminous discs.
+    alpha = mix(alpha, (0.25 + 0.7 * pow(1.0 - c, 2.2)) * mix(0.25, 1.0, big), soft * 0.4);
     return vec4(light, alpha);
 }
 """
@@ -272,6 +296,8 @@ in vec3 vView;
 flat in vec4 vSphere;
 flat in float vBlur;
 flat in vec3 vExtra;
+uniform mat4 uProjection;
+uniform vec2 uFrameSize;
 void main() {
     vec3 ray = normalize(vView);
     float coverage = sceneSphereCoverage(ray, vSphere.xyz, vSphere.w, vBlur);
@@ -288,12 +314,14 @@ void main() {
         Emission = vec4(0.0);
         return;
     }
-    vec4 shaded = shadeBubble(rayW, uViewToWorld * normalize(front - vSphere.xyz), pixels, soft, vExtra.x);
+    vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
+    vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
+    vec4 shaded = shadeBubble(rayW, uViewToWorld * normalize(front - vSphere.xyz), pixels, soft, vExtra.x, centrePx);
     float speck = 1.0 - smoothstep(1.0, 3.0, pixels);
     float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck);
     shaded.rgb = mix(shaded.rgb, vec3(0.75, 0.85, 0.95) * 1.4, speck * 0.6);
     sceneTransparent(shaded.rgb * alpha, alpha, -front.z);
-    vec3 emitted = max(shaded.rgb - 1.5, 0.0) * alpha * 0.4 * smoothstep(3.0, 10.0, pixels);
+    vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6 * smoothstep(3.0, 10.0, pixels) * (1.0 - soft * 0.8);
     Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
 }
 """)
@@ -330,6 +358,8 @@ void main() {
 """
 CLUSTER_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
                     + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + SHADE_GLSL + """
+uniform mat4 uProjection;
+uniform vec2 uFrameSize;
 in vec3 vView;
 flat in vec4 vSpheres[3];
 flat in vec4 vBound;
@@ -352,10 +382,12 @@ void main() {
     }
     vec3 point = ray * t;
     float pixels = vBound.w / (uPixelSize * max(-point.z, 0.1));
-    vec4 shaded = shadeBubble(uViewToWorld * ray, uViewToWorld * normal, pixels, 0.0, vInfo.z);
+    vec4 clipC = uProjection * vec4(vBound.xyz, 1.0);
+    vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
+    vec4 shaded = shadeBubble(uViewToWorld * ray, uViewToWorld * normal, pixels, 0.0, vInfo.z, centrePx);
     float alpha = shaded.a * coverage;
     sceneTransparent(shaded.rgb * alpha, alpha, -point.z);
-    vec3 emitted = max(shaded.rgb - 1.5, 0.0) * alpha * 0.4;
+    vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6;
     Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
 }
 """)
@@ -514,6 +546,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                 gl.glUniform2f(gl.glGetUniformLocation(backdrop, "uFrameSize"), W, H)
                 gl.glBindVertexArray(capture.vao)
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                background_tex, _depth = target.background(frame, resources)
                 with target.transparent_writes(frame, resources):
                     common(shell)
                     u = lambda name: gl.glGetUniformLocation(shell, name)
@@ -526,7 +559,13 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glActiveTexture(gl.GL_TEXTURE3)
                     gl.glBindTexture(gl.GL_TEXTURE_2D, env)
                     gl.glUniform1i(u("uEnvironment"), 3)
+                    gl.glActiveTexture(gl.GL_TEXTURE5)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, background_tex)
                     gl.glActiveTexture(gl.GL_TEXTURE0)
+                    for name in ("uBackground",):
+                        gl.glUniform1i(u(name), 5)
+                    gl.glUniform2f(u("uTargetSize"), *target.allocation[:2])
+                    gl.glUniform2f(u("uFrameSize"), W, H)
                     gl.glBindVertexArray(vao)
                     if not BACKDROP_ONLY:
                         gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(items))
@@ -536,6 +575,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniformMatrix4fv(m("uProjection"), 1, gl.GL_FALSE, projection)
                     gl.glUniform1f(m("uPixelSize"), 2.0 * tan_y / H)
                     gl.glUniform1i(m("uEnvironment"), 3)
+                    gl.glUniform1i(m("uBackground"), 5)
+                    gl.glUniform2f(m("uTargetSize"), *target.allocation[:2])
+                    gl.glUniform2f(m("uFrameSize"), W, H)
                     gl.glBindVertexArray(cvao)
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(clusters))
                     gl.glActiveTexture(gl.GL_TEXTURE3)
