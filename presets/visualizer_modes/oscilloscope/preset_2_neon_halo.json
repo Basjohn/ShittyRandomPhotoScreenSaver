@@ -1,18 +1,14 @@
 {
+  "description": "The trace wrapped into a glowing ring that flares on every hit and shifts colour with the music.",
   "mode": "oscilloscope",
   "name": "Preset 2 (Neon Halo)",
   "preset_index": 1,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "oscilloscope",
-  "description": "The trace wrapped into a glowing ring that flares on every hit and shifts colour with the music.",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
         "mode": "oscilloscope",
-        "osc_display": "Ring",
-        "osc_span": 30.0,
-        "osc_gain": 2.0,
-        "osc_delay": 1.2,
+        "osc_afterglow": 0.35,
+        "osc_analog": 0.35,
         "osc_beam_color": [
           255,
           90,
@@ -26,12 +22,12 @@
           255
         ],
         "osc_beam_width": 2.0,
-        "osc_glow": 0.6,
-        "osc_afterglow": 0.35,
-        "osc_analog": 0.35,
-        "osc_spectral": 0.45,
+        "osc_delay": 1.2,
+        "osc_detail": 0.3,
+        "osc_display": "Ring",
         "osc_flare": 0.85,
-        "osc_pulse": 0.7,
+        "osc_gain": 2.0,
+        "osc_glow": 0.6,
         "osc_graticule": "Off",
         "osc_graticule_color": [
           255,
@@ -39,15 +35,19 @@
           255,
           30
         ],
-        "oscilloscope_bar_count": 32,
-        "oscilloscope_audio_block_size": 256,
+        "osc_pulse": 0.7,
+        "osc_span": 30.0,
+        "osc_spectral": 0.45,
         "oscilloscope_adaptive_sensitivity": true,
-        "oscilloscope_sensitivity": 0.4,
+        "oscilloscope_audio_block_size": 256,
+        "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
-        "oscilloscope_manual_floor": 0.12,
         "oscilloscope_input_gain": 1.0,
-        "osc_detail": 0.3
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_sensitivity": 0.4
       }
     }
-  }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
 }

@@ -8,7 +8,20 @@
         "bubble_adaptive_sensitivity": false,
         "bubble_agc_strength": 0.0,
         "bubble_audio_block_size": 128,
+        "bubble_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_bar_border_opacity": 1.0,
         "bubble_bar_count": 48,
+        "bubble_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "bubble_big_bass_pulse": 0.65,
         "bubble_big_contraction_bias": 0.4,
         "bubble_big_count": 8,
@@ -17,7 +30,6 @@
         "bubble_big_specular_max_size": 4.03,
         "bubble_big_visual_smoothing": 1.0,
         "bubble_drift_amount": 0.2,
-        "bubble_group_drift": false,
         "bubble_drift_direction": "swish_vertical",
         "bubble_drift_frequency": 0.1,
         "bubble_drift_speed": 0.15,
@@ -40,6 +52,7 @@
           255
         ],
         "bubble_gradient_semantics_version": 2,
+        "bubble_group_drift": false,
         "bubble_growth": 5.0,
         "bubble_input_gain": 0.75,
         "bubble_kick_lane_gain": 0.8,
@@ -82,20 +95,7 @@
         "bubble_transient_mix_vocal": 0.05,
         "bubble_transient_pulse_gain": 0.0,
         "mode": "bubble",
-        "monitor": "ALL",
-        "bubble_bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "bubble_bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bubble_bar_border_opacity": 1.0
+        "monitor": "ALL"
       }
     }
   },
