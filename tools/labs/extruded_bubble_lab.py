@@ -64,7 +64,8 @@ VARIANTS = {
                       chains=3.0, chain_size=1.0,
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
-    "ExBubble4": dict(ray_cut=0.1, near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
+    "ExBubble4": dict(ray_cut=0.1, near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=35.0, fan_reach=0.65,
+                      fan_contrast=0.35, fan_march=0.45, rays=0.45, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.5, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
@@ -344,6 +345,7 @@ uniform float uShaftSoft;       // threshold softness 0..1
 uniform float uShaftFan;        // share of the sun fan (0: depth march only)
 uniform float uFanRays;         // broad rays round a full turn of the fan
 uniform float uFanReach;        // angle (rad) over which the fan fades
+uniform vec2 uFanMix;           // ray contrast 0..1, share of the depth march under the fan
 float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     // Azimuth round the sun axis, zero pointing down (the seam faces up, behind the sun).
     vec3 down = normalize(vec3(0.0, -1.0, 0.0) - sunBelow * -sunBelow.y + vec3(1e-4, 0.0, 0.0));
@@ -356,7 +358,7 @@ float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     float fine = skyNoise2(vec2(x * 7.3 + t * 0.1, 7.5), 97u);
     // Many fine and medium rays packed side by side (mocks), never a few solid wedges: soft contrast over a floor.
     float n = broad * 0.3 + mid * 0.4 + fine * 0.3;
-    float rays = 0.3 * n + 0.7 * smoothstep(0.42, 0.78, n);
+    float rays = (1.0 - uFanMix.x) * n + uFanMix.x * smoothstep(0.42, 0.78, n);
     // Each ray reaches its own length; all fade with the angle from the sun, gone by about two thirds down.
     float reach = mix(uFanReach * 0.55, uFanReach * 1.25, skyNoise2(vec2(x * 1.3, 11.5), 101u));
     // The fan hangs below the sun: rays leaving sideways (toward the top corners) are faint (mocks).
@@ -390,7 +392,7 @@ void main() {
     float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     float toward = pow(max(dot(ray, uSunBelow), 0.0), 2.0);
     float march = labShafts(ray, 45.0, uSunBelow, uShaftY, uTime, 40, jitter) * 0.13 * (0.25 + toward);
-    FragColor = vec4(mix(march, labShaftFan(ray, uSunBelow, uTime) * 0.9 + march * 0.2, uShaftFan));
+    FragColor = vec4(mix(march, labShaftFan(ray, uSunBelow, uTime) * 0.9 + march * uFanMix.y, uShaftFan));
 }
 """
 BLUR_FRAGMENT = """#version 460 core
@@ -684,7 +686,11 @@ void main() {
     float speck = 1.0 - smoothstep(1.0, 2.5, pixels);
     float centreness = clamp(dot(-ray, normalize(front - vSphere.xyz)), 0.0, 1.0);
     vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
-    vec3 speckLight = (behind + mix(uSkyTint, uShaftColour, 0.4) * uSpeckGlow) * (0.7 + 0.6 * centreness);
+    // A bead under a few pixels: a slightly dark core (it bends the darker water below into view) and, on some, a
+    // sparkle. Every one adding the same glow turned dense streams into a uniform haze (mocks: glitter, not fog).
+    float sparkle = fract(vExtra.x * 17.31 + vSphere.w * 913.7) > 0.8 ? 2.5 : 0.2;
+    vec3 speckLight = behind * (0.55 + 0.45 * centreness)
+                    + mix(uSkyTint, uShaftColour, 0.4) * uSpeckGlow * sparkle * (0.7 + 0.6 * centreness);
     shaded = mix(shaded, vec4(speckLight, 0.3 + 0.5 * centreness), speck);
     float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck);
 #ifdef NEAR_LAYER
@@ -1268,6 +1274,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShaftFan"), settings.get("shaft_fan", 0.0))
         gl.glUniform1f(u("uFanRays"), settings.get("fan_rays", 30.0))
         gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))
+        gl.glUniform2f(u("uFanMix"), settings.get("fan_contrast", 0.7), settings.get("fan_march", 0.2))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))
         gl.glUniform1f(u("uGlintPower"), settings.get("glint_power", 0.0))
