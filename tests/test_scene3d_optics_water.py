@@ -136,3 +136,15 @@ def test_volumetric_shafts_follow_the_pattern_converge_on_the_sun_and_fade_with_
     shallow = [shafts(ray, eye=(0.0, 4.0, 0.0)) for ray in rays]
     deep = [shafts(ray, eye=(0.0, -20.0, 0.0)) for ray in rays]
     assert sum(shallow) > 0.0 and sum(deep) < 0.3 * sum(shallow)            # dimmer deep below the surface
+
+
+def test_ripples_equal_their_mirror_and_flatten_as_the_footprint_grows(probe):
+    rng = random.Random(21)
+    rows = [[(rng.uniform(-20, 20), rng.uniform(-20, 20), rng.uniform(0, 10), rng.choice((0.0, 0.3, 2.0)))]
+            for _ in range(96)]
+    gpu = probe.run("vec4 a = arg(0); FragColor = vec4(waterRipples(a.xy, a.z, a.w));", rows, DECL)[:, 0]
+    cpu = np.array([water.water_ripples(x, y, t, f) for (x, y, t, f), in rows])
+    assert np.abs(gpu - cpu).max() < 1e-4
+    points = [(rng.uniform(-30, 30), rng.uniform(-30, 30)) for _ in range(400)]
+    spread = lambda footprint: np.std([water.water_ripples(x, y, 1.0, footprint) for x, y in points])
+    assert spread(0.0) > spread(1.0) > spread(4.0) and spread(10.0) < 1e-9   # detail fades with distance, then gone
