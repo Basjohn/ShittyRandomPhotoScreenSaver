@@ -19,7 +19,11 @@ SHOCKWAVE_DEPTH = 2.4             # the grid's length into the distance, in fiel
 SHOCKWAVE_WIDTH = 0.16            # a crest's half width
 SHOCKWAVE_DECAY = 1.1             # seconds for a wave to fall to 1/e
 SHOCKWAVE_LIFETIME = 3.2          # seconds after which an event is dropped (all but invisible)
-SHOCKWAVE_CAPACITY = 16           # events held at once (the bounded event buffer)
+SHOCKWAVE_CAPACITY = 16           # events the water draws at once (the bounded GPU event buffer)
+# The onset ring remembers events longer and more of them than the water draws, for consumers with longer
+# tails (Neon's beat stars); the water still takes only its newest live events (``shockwave_event_records``).
+SHOCKWAVE_EVENT_MEMORY = 6.0
+SHOCKWAVE_EVENT_RING = 48
 SHOCKWAVE_MIN_GAP = 0.09          # seconds between two admitted onsets in the loudest passage
 SHOCKWAVE_MAX_BARS = 64
 SHOCKWAVE_GRID_CELLS = (180, 120)  # the displaced surface's tessellation (columns, rows)
@@ -129,9 +133,11 @@ def shockwave_height(x: float, z: float, events, amplitude: float, speed: float)
 
 
 def shockwave_event_records(events, half_width: float) -> list[dict[str, float]]:
-    """The std430 records for ``events`` [(age, x share, z, strength), ...]: x in world units."""
+    """The std430 records for ``events`` [(age, x share, z, strength), ..., oldest first]: x in world units.
+    Only the newest ``SHOCKWAVE_CAPACITY`` younger than ``SHOCKWAVE_LIFETIME`` (the ring remembers longer)."""
+    live = [event for event in events if float(event[0]) < SHOCKWAVE_LIFETIME][-SHOCKWAVE_CAPACITY:]
     return [{"age": float(age), "x": float(x) * half_width, "z": float(z), "strength": float(strength)}
-            for age, x, z, strength in events[:SHOCKWAVE_CAPACITY]]
+            for age, x, z, strength in live]
 
 
 def _smoothstep(edge0: float, edge1: float, value: float) -> float:

@@ -94,7 +94,7 @@ uniform vec4 uStarGlowColor; // beat stars' colour; alpha mixes it in over the s
 vec3 basinBeatStarColour() { return mix(uStarColor.rgb, uStarGlowColor.rgb, clamp(uStarGlowColor.a, 0.0, 1.0)); }
 uniform vec3 uStarGlow; // intensity, response and size (0..1) for selected beat stars
 uniform int uBeatStarCount;
-uniform vec4 uBeatStarCells[6];  // panorama star-grid x/y, fade strength
+uniform vec4 uBeatStarCells[12]; // panorama star-grid x/y, fade strength (three per beat, four beats)
 uniform vec4 uCloudColor;
 uniform vec4 uHorizonColor;
 uniform vec4 uClouds;      // volumetric clouds: coverage, softness, scale, opacity (opacity 0 = off)
@@ -369,11 +369,11 @@ float basinBeatStarLight(vec3 eye,vec3 ray,vec3 glow,float visibility) {
     float light=0.0;
     vec2 pixelScale=max(fwidth(grid),vec2(1e-4));
     float size=clamp(glow.z,0.0,1.0);
-    for (int i=0; i<6; ++i) {
+    for (int i=0; i<12; ++i) {
         if (i>=uBeatStarCount) break;
         float fade=uBeatStarCells[i].z;
         float reach=(2.5+34.0*size*size)*(0.4+0.6*fade);   // spike length, pixels
-        // Cull far cells before the burst math: only three (occasionally six) stars take part.
+        // Cull far cells before the burst math: only a handful of stars take part.
         vec2 difference=grid-uBeatStarCells[i].xy-0.5;
         if (any(greaterThan(abs(difference),vec2(1.0)+(reach+3.0)*pixelScale))) continue;
         vec2 delta=difference/pixelScale;

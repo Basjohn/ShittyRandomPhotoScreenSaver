@@ -311,7 +311,7 @@ class ExtrudedSpectrumFrame(SpectrumFrame):
 class ShockwaveGridFrame(SpectrumFrame):
     """Spectrum's authored payload plus the live shockwave events for the Shockwave Grid
     renderer: (age in seconds, origin x as a share of the grid's half width, origin z, strength),
-    aged on the logical clock at capture, oldest first, at most ``SHOCKWAVE_CAPACITY``."""
+    aged on the logical clock at capture, oldest first, at most ``SHOCKWAVE_EVENT_RING``."""
 
     events: tuple[tuple[float, float, float, float], ...] = ()
     # Terrain Reaction: the eased drive (0..1) of each shaper lane (Bass .. Treble) and the landforms' wander.

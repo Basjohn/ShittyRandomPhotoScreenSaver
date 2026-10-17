@@ -8,7 +8,12 @@ from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
 # Twenty percent easier again than the prior 0.28 floor: 0.35 * 0.64 = 0.224.
 # Only existing admitted onset records participate, never a second detector.
 STARSCAPE_BEAT_MIN_STRENGTH = 0.35 * 0.64
-STARSCAPE_BEAT_RELEASE = 1.75 / 0.6
+# Half the fade speed again (operator 2026-10-17): a beat star now fades over about 5.8 s.
+STARSCAPE_BEAT_RELEASE = 1.75 / 0.3
+# At most this many beats keep stars; once three newer beats have theirs, an older beat's stars fade over
+# STARSCAPE_BEAT_DISPLACE seconds instead of vanishing.
+STARSCAPE_BEAT_EVENTS = 4
+STARSCAPE_BEAT_DISPLACE = 0.6
 # Beat stars swell in over this long rather than switching on, so one event's stars rise while the last fade.
 STARSCAPE_BEAT_ATTACK = 0.2
 
@@ -115,10 +120,16 @@ def starscape_beat_cells(events, tilt: float, turn: float, *,
     bursts = []
     eye = (-camera*math.cos(tilt)*math.sin(turn), camera*math.sin(tilt),
            camera*math.cos(tilt)*math.cos(turn)-.5*SHOCKWAVE_DEPTH)
-    # Latest two strong hits retain independent gentle release tails.
+    # The latest strong hits keep independent gentle release tails; older ones give way gradually.
+    newer: list[float] = []
     for age, x, z, strength in reversed(events):
         if not (0.0 <= age < STARSCAPE_BEAT_RELEASE and strength >= STARSCAPE_BEAT_MIN_STRENGTH):
             continue
+        rank = len(newer)
+        newer.append(age)
+        displaced = 1.0 if rank < 3 else max(0.0, 1.0 - newer[rank - 3] / STARSCAPE_BEAT_DISPLACE)
+        if displaced <= 0.0 or rank >= STARSCAPE_BEAT_EVENTS:
+            break
         seed = int(abs(x * 8219.0 + z * 3191.0) * 1871.0)
         for i in range(3):
             # Stratify across the full framed sky's height as well as width.
@@ -140,9 +151,7 @@ def starscape_beat_cells(events, tilt: float, turn: float, *,
                     break
             rise = min(1.0, age / STARSCAPE_BEAT_ATTACK)
             intensity = (min(1.0, strength * 0.95) * rise * rise * (3.0 - 2.0 * rise)
-                         * max(0.0, 1.0 - (age / STARSCAPE_BEAT_RELEASE)**2)**2)
+                         * max(0.0, 1.0 - (age / STARSCAPE_BEAT_RELEASE)**2)**2 * displaced)
             bursts.append((float(cx), float(cy), float(intensity), 0.0))
-        if len(bursts) >= 6:
-            break
     return tuple(bursts)
 
