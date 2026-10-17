@@ -69,7 +69,7 @@ VARIANTS = {
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
                       wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5),inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=1500.0, glint_sharp=300.0, probe_fill=2.5, mid_count=0.45, travel=(0.4, 1.0, 0.0),
+    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.1, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=1.0, mid_count=0.45, travel=(0.4, 1.0, 0.0),
                                  columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
                                  rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
                                  specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
@@ -113,6 +113,7 @@ uniform vec3 uWater;
 uniform vec3 uSkyTint;
 uniform vec3 uShaftColour;
 uniform float uWisps;
+uniform float uVeils;           // luminous caustic web through the water (deep scenes)
 uniform float uSurfaceY;
 uniform vec3 uAbsorb;
 uniform float uShaftY;
@@ -289,6 +290,26 @@ void main() {
                      * exp(-d * 0.06);
         }
         colour += mix(uShaftColour, vec3(0.5, 0.8, 1.0), 0.3) * strands * 0.22 * uWisps;
+    }
+    if (uVeils > 0.0) {
+        // Light focused by the surface far above hangs in the water as a glowing net (mocks: the deep scenes' web of
+        // thin bright filaments, in patches, nearer sheets larger): the caustic cell edges on three sheets at depth.
+        float web = 0.0;
+        for (int i = 0; i < 3; ++i) {
+            float d = 5.0 + 6.0 * float(i);
+            vec3 at = ray * d;
+            vec2 q = vec2(at.x + at.z * 0.35, at.y * 1.3 + at.z * 0.2) * (0.55 - 0.08 * float(i)) + vec2(float(i) * 4.1, 1.7);
+            // Drawn out along the stream (the filaments trail with the water), fine across it.
+            vec2 along = normalize(uStreak + vec2(1e-4));
+            q = vec2(dot(q, along) * 0.45, dot(q, vec2(-along.y, along.x)) * 1.6);
+            vec2 warp = vec2(skyFbm2(q * 0.4 + vec2(uTime * 0.02, 0.0), 3, 211u), skyFbm2(q * 0.4 + vec2(3.3, uTime * 0.015), 3, 223u));
+            float c = waterCaustics(q + (warp - 0.5) * 1.6, uTime * 0.3);
+            float patches = smoothstep(0.3, 0.7, skyFbm2(q * 0.18 + vec2(float(i) * 2.9), 3, 227u));
+            // Thin bright threads in a soft glow of their own light.
+            web += (pow(c, 6.0) + pow(c, 2.0) * 0.12) * patches * exp(-d * 0.07);
+        }
+        vec3 veil = mix(uShaftColour, vec3(0.6, 0.85, 1.0), 0.25) * web * 2.2 * uVeils;
+        colour += veil;
     }
     if (uLightPower > 0.0) {
         float g = max(dot(ray, uSunBelow), 0.0);
@@ -1224,6 +1245,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform3f(u("uSunBelow"), *sun_below)
         exposure = settings["exposure"]
         gl.glUniform1f(u("uWisps"), settings.get("wisps", 0.0))
+        gl.glUniform1f(u("uVeils"), settings.get("veils", 0.0))
         gl.glUniform1f(u("uSurfaceY"), settings.get("surface", SURFACE_Y))
         gl.glUniform1f(u("uShaftY"), settings.get("shaft_y", SURFACE_Y))
         gl.glUniform1f(u("uGlow"), settings.get("glow", 1.0))
