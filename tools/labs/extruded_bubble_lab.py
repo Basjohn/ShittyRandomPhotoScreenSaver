@@ -1324,14 +1324,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         mark("start")
         PROBE.capture(draw_probe_face)
         mark("probe")
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, env_fbo)
-        gl.glViewport(0, 0, ENV_W, ENV_H)
+        # (The equirect environment map is no longer sampled: the scene probe replaced it.)
         gl.glDisable(gl.GL_BLEND)
         gl.glDisable(gl.GL_DEPTH_TEST)
-        common(env_program)
-        gl.glBindVertexArray(capture.vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-        gl.glGenerateTextureMipmap(env)
         # Shafts: half-resolution march, then a separable blur (two textures ping-pong).
         hw, hh = W // 2, H // 2
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, shaft_fbo[0])
@@ -1348,7 +1343,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
             gl.glUniform2f(gl.glGetUniformLocation(blur_program, "uStep"), *step)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-        mark("env+shafts")
+        mark("shafts")
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
         gl.glViewport(0, 0, W, H)
         gl.glClearColor(0.11, 0.11, 0.12, 1.0)
@@ -1538,6 +1533,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
 
 
 PROBE = None
+PROBE_SIZE = next((int(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--probe=")), 256)
 NEAR = None
 TIMINGS = {}
 TIMING_LOG = {}
@@ -1556,7 +1552,7 @@ YAW = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--yaw="
 def main():
     global PROBE, NEAR
     capture = TransitionCapture(W, H)
-    PROBE = SceneProbe("bubble lab probe", 512)
+    PROBE = SceneProbe("bubble lab probe", PROBE_SIZE)
     NEAR = DefocusLayer("bubble lab near layer")
     resources, target = MeshResources("bubble lab"), SceneTarget("bubble lab")
     programs = (compile_program(FULL_VERTEX, ENV_FRAGMENT, label="lab env"),
