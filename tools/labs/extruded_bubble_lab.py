@@ -45,13 +45,14 @@ VARIANTS = {
     "ExBubble3": dict(deep=(0.006, 0.012, 0.022), water=(0.025, 0.037, 0.055), sky=(0.6, 0.68, 0.78), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=26.0, exposure=0.82, absorb=(0.09, 0.06, 0.045)),
     "ExBubble4": dict(deep=(0.02, 0.06, 0.12), water=(0.05, 0.12, 0.2), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
-                      sun=(0.15, 0.65, -1.0), pitch=20.0, exposure=1.05, absorb=(0.1, 0.05, 0.03), drift=0.12),
+                      sun=(0.15, 0.65, -1.0), pitch=20.0, exposure=1.05, absorb=(0.1, 0.05, 0.03), drift=0.12,
+                      wakes=1.0, mist=0.3, aperture=1.2),
     "ExBubble5CameraAbyss": dict(deep=(0.004, 0.02, 0.05), water=(0.01, 0.06, 0.14), sky=(0.3, 0.6, 1.0),
-                                 shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=1.8,
+                                 shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0, mist=1.0, wakes=0.6, focus=3.2, sparkle=1.0,
                                  surface=60.0, absorb=(0.1, 0.05, 0.03), drift=0.6,
                                  shaft_y=16.0, glow=1.8, rays=0.6, aperture=0.6),
     "ExBubble5Cameradown": dict(deep=(0.01, 0.05, 0.13), water=(0.03, 0.09, 0.17), sky=(0.5, 0.7, 0.9),
-                                shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=1.4,
+                                shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=0.0, mist=0.6, wakes=0.8, sparkle=0.7,
                                 surface=30.0, absorb=(0.1, 0.05, 0.03), drift=0.15,
                                 shaft_y=12.0),
 }
@@ -72,6 +73,8 @@ uniform vec3 uAbsorb;
 uniform float uShaftY;
 uniform float uGlow;
 uniform float uRays;
+uniform float uMist;
+uniform float uSparkle;
 #define SURFACE_Y uSurfaceY
 vec2 equirectUv(vec3 d) { return vec2(atan(d.x, -d.z) / 6.28318530718 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5); }
 vec3 equirectDirection(vec2 uv) {
@@ -159,6 +162,12 @@ void main() {
     vec3 ray = uViewToWorld * normalize(vec3(vNdc * uTan, -1.0));
     float shafts = texture(uShafts, gl_FragCoord.xy / uFrameSize).r * uRays;
     vec3 colour = basinWater(ray, 1.0, shafts);
+    if (uMist > 0.0) {
+        float haze = pow(1.0 - abs(ray.y), 3.0);
+        float drift = skyFbm2(vec2(atan(ray.x, -ray.z) * 2.5, ray.y * 3.0) + vec2(uTime * 0.01, 0.0), 3, 61u);
+        vec3 mistColour = mix(uWater, uShaftColour * 0.35, 0.4);
+        colour += mistColour * uMist * haze * (0.35 + 0.9 * drift);
+    }
     if (uWisps > 0.0) {
         float strands = 0.0;
         for (int i = 0; i < 3; ++i) {
@@ -221,6 +230,7 @@ void main() {
     // Blur in proportion to the bubble: a tiny near bubble softens without swelling into a grey disc.
     float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.1);
     if (aExtra.y > 1.5) blur = aSphere.w * 0.3;
+    blur = max(blur, uPixel * depth * 0.7);
     // At least half a pixel across so specks resolve; their light is scaled back to their true size.
     float radius = max(aSphere.w, uPixel * depth * 0.5);
     vSphere = vec4(centre, radius);
@@ -267,6 +277,11 @@ vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 c
     vec3 sunColour = mix(uSkyTint, vec3(1.0), 0.85);
 
     vec3 through = behindLens(centrePx, 0.55);
+    // The light a bubble adds is relative to the water behind it: bright water keeps bubbles clear, dark water lets
+    // them glow (an absolute amount blew bubbles out to white in bright scenes).
+    float adapt = 1.25 / (1.0 + 3.0 * dot(through, vec3(0.3333)));
+    sceneLight *= adapt;
+    sunColour *= mix(1.0, adapt, 0.5);
     if (defocused > 0.0) {
         vec3 blurred = vec3(0.0);
         for (int i = 0; i < 8; ++i) {
@@ -275,7 +290,7 @@ vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 c
         }
         through = mix(through, blurred * 0.125 * 0.8 + environment(rayW, 4.0) * 0.2, defocused);
     }
-    vec3 mirrored = environment(reflect(rayW, n), soft * 4.5 + (1.0 - big) * 1.5 + 2.0);
+    vec3 mirrored = environment(reflect(rayW, n), soft * 4.5 + (1.0 - big) * 1.5 + 2.0) * adapt;
     float swirl = skyFbm3(n * 2.1 + vec3(seed * 17.0, seed * 5.0, uTime * 0.06), 3, 7u);
     vec3 film = sceneThinFilm(c, mix(200.0, 520.0, swirl), 1.33, 1.0);
     vec3 hue = film / max(dot(film, vec3(0.3333)), 1e-3);
@@ -285,10 +300,15 @@ vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 c
     vec3 filmTint = mix(vec3(1.0), hue, filmAmount);
 
     // 1 interior
+    // Seen through, the mocks' bubbles act as lenses that turn the scene over: the bright water overhead focused into
+    // the lower half, the deep above; glass-like, stronger than a physical air bubble.
+    vec3 lensEnv = environment(sceneSphereRefraction(rayW, n, 1.0 / 1.45), soft * 4.5 + (1.0 - big) * 1.0 + 3.5);
+    vec3 lensed = through * clamp(pow(lensEnv / max(environment(rayW, 6.0), vec3(1e-3)), vec3(1.2)), 0.85, 2.5);
+    through = mix(through, lensed, 0.25 * big * (1.0 - defocused));
     vec3 interior = through + sceneLight * (0.1 * big + 0.08 * defocused) + mirrored * 0.05 * big;
-    vec3 premultiplied = interior * mix(0.06, 0.25, big);
-    float alpha = mix(0.06, 0.25, big);
-    float opaque = 0.7 * defocused;
+    vec3 premultiplied = interior * mix(0.06, 0.28, big);
+    float alpha = mix(0.06, 0.28, big);
+    float opaque = 0.7 * defocused * clamp(adapt, 0.35, 1.0);
     premultiplied = interior * opaque + premultiplied * (1.0 - opaque);
     alpha = opaque + alpha * (1.0 - opaque);
     // 2 the glass wall
@@ -300,10 +320,28 @@ vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 c
     alpha = wallA + alpha * (1.0 - wallA);
     // 3 the rim
     float rim = exp(-fromEdge / (1.6 + blurPx)) * (1.6 + 0.3 * blurPx) / (1.6 + blurPx);
-    vec3 rimLight = mix(wall, vec3(dot(wall, vec3(0.3333))), 0.35) * 1.15 + sunColour * 0.7 * lit * lit;
+    vec3 rimLight = mix(wall, vec3(dot(wall, vec3(0.3333))), 0.35) * 1.15 + sunColour * 0.7 * lit * lit
+                  + sceneLight * 0.45 * smoothstep(1.0, 1.25, adapt);
     float rimA = rim * 0.85;
     premultiplied = rimLight * rimA + premultiplied * (1.0 - rimA);
     alpha = rimA + alpha * (1.0 - rimA);
+    // 3b fragments
+    float lensSide = smoothstep(0.2, -0.7, side);
+    for (int layer = 0; layer < 2; ++layer) {
+        float cells = layer == 0 ? 2.2 : 3.6;
+        vec2 local = q * cells + vec2(seed * 41.0 + float(layer) * 7.7, seed * 23.0);
+        vec2 cell = floor(local);
+        float h = sceneRandom(uint(int(cell.x) + 4096) * 0x8da6b343u ^ uint(int(cell.y) + 4096) * 0xd8163841u,
+                              11u + uint(layer), uint(seed * 977.0));
+        vec2 centre = vec2(fract(h * 57.3), fract(h * 91.1)) * 0.3 + 0.35;
+        float size = mix(0.2, 0.36, fract(h * 113.7));
+        float chance = clamp(0.05 + 0.45 * band + 0.3 * lensSide * (1.0 - band), 0.0, 0.7);
+        float piece = smoothstep(size, size * 0.05, distance(fract(local), centre)) * step(1.0 - chance, h)
+                    * mix(0.25, 1.0, fract(h * 37.7)) * smoothstep(0.98, 0.9, rel);
+        vec3 pieceColour = mix(mix(sceneLight, sunColour, 0.55) * 1.4, hue * sceneLight * 1.6, step(0.75, fract(h * 19.3)) * 0.8);
+        premultiplied += pieceColour * piece * big * (1.0 - defocused) * (layer == 0 ? 0.8 : 0.55);
+        alpha = clamp(alpha + piece * 0.3 * big * (1.0 - defocused), 0.0, 1.0);
+    }
     // 4 highlights
     vec2 atFront = q - toward * 0.62;
     vec2 atBack = q + toward * 0.68;
@@ -311,19 +349,21 @@ vec4 shadeBubble(vec3 rayW, vec3 n, float pixels, float soft, float seed, vec2 c
     float coreFront = exp(-dot(atFront, atFront) / 0.012) * (1.0 - 0.6 * defocused);
     float hiBack = exp(-dot(atBack, atBack) / 0.02);
     float coreBack = exp(-dot(atBack, atBack) / 0.005) * (1.0 - 0.6 * defocused);
-    float highlight = (hiFront * 0.9 + coreFront * 0.8 + hiBack * 0.45 + coreBack * 0.4) * smoothstep(3.0, 10.0, pixels);
+    float highlight = (hiFront * 0.9 * min(adapt, 1.0) + coreFront * 0.8 + hiBack * 0.45 * min(adapt, 1.0) + coreBack * 0.4)
+                    * smoothstep(3.0, 10.0, pixels);
     // The wall mirrors the busy water around it: soft bright spots of reflected light and bubbles, some film-coloured.
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 10; ++i) {
         float h = fract(seed * (17.31 + float(i) * 3.17) + float(i) * 0.137);
         float h2 = fract(h * 91.7 + 0.31);
         vec2 dir = vec2(cos(h * 6.2832), sin(h * 6.2832));
-        vec2 at = q - dir * mix(0.76, 0.9, h2);
+        vec2 at = q - dir * mix(0.7, 0.9, h2);
         float along = dot(at, vec2(-dir.y, dir.x)), across = dot(at, dir);
-        float spot = exp(-along * along / pow(mix(0.08, 0.22, fract(h2 * 7.3)), 2.0) - across * across / 0.004)
-                   * mix(0.3, 1.0, fract(h * 13.1));
+        float spread = mix(0.08, 0.3, fract(h2 * 7.3));
+        float spot = exp(-along * along / (spread * spread) - across * across / mix(0.004, 0.012, fract(h * 5.9)))
+                   * mix(0.35, 1.2, fract(h * 13.1));
         vec3 silver = mix(sceneLight, sunColour, 0.6) * 1.5;
-        vec3 spotColour = mix(silver, hue * silver, step(0.7, h2) * 0.7);
-        premultiplied += spotColour * spot * big * (1.0 - defocused) * (1.0 + 1.0 * lit);
+        vec3 spotColour = mix(silver, hue * silver, step(0.55, h2) * 0.75);
+        premultiplied += spotColour * spot * big * (1.0 - defocused) * (0.6 + 0.7 * lit);
         alpha = clamp(alpha + spot * 0.25 * big * (1.0 - defocused), 0.0, 1.0);
     }
     premultiplied += sunColour * highlight * 1.2;
@@ -376,7 +416,8 @@ void main() {
     }
     if (vExtra.y > 0.5) {
         float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7);
-        sceneTransparent(uShaftColour * 1.2 * a, a, -front.z);
+        float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7));
+        sceneTransparent(mix(uShaftColour, vec3(0.9, 0.95, 1.0), 0.4) * 1.2 * glitter * a, a, -front.z);
         Emission = vec4(0.0);
         return;
     }
@@ -385,7 +426,9 @@ void main() {
     vec4 shaded = shadeBubble(rayW, uViewToWorld * normalize(front - vSphere.xyz), pixels, soft, vExtra.x, centrePx);
     float speck = 1.0 - smoothstep(1.5, 4.5, pixels);
     float centreness = clamp(dot(-ray, normalize(front - vSphere.xyz)), 0.0, 1.0);
-    vec3 speckLight = mix(uSkyTint, uShaftColour, 0.4) * (0.75 + 0.6 * centreness);
+    vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+    vec3 speckLight = (behind * 1.4 + mix(uSkyTint, uShaftColour, 0.4) * 0.35 / (1.0 + 3.0 * dot(behind, vec3(0.3333))))
+                    * (0.7 + 0.6 * centreness);
     shaded = mix(shaded, vec4(speckLight, 0.22 + 0.4 * centreness), speck);
     float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck);
     sceneTransparent(shaded.rgb * alpha, alpha, -front.z);
@@ -459,6 +502,69 @@ void main() {
     Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
 }
 """)
+RIBBON_VERTEX = """#version 460 core
+layout(location=0) in vec4 aStart;    // world point under the bubble, bubble radius
+layout(location=1) in vec4 aShape;    // seed, length, current lean, strength
+uniform mat3 uWorldToView;
+uniform mat4 uProjection;
+const int SEGMENTS = 40;
+out vec2 vAcross;                     // across the sheet (-1..1), along it (0 at the bubble .. 1)
+out float vFold;
+out float vDepth;
+flat out float vStrength;
+flat out float vShapeSeed;
+vec3 ribbonPath(float s) {
+    float length_ = aShape.y, r = aStart.w, seed = aShape.x;
+    vec3 p = aStart.xyz + vec3(0.0, -length_ * s, 0.0);
+    p.x += aShape.z * length_ * s * s + sin(s * 2.2 + seed * 6.28) * r * 2.5 * s;
+    p.z += cos(s * 1.9 + seed * 4.1) * r * 1.5 * s;
+    return p;
+}
+void main() {
+    int i = gl_VertexID >> 1;
+    float sideSign = (gl_VertexID & 1) == 0 ? -1.0 : 1.0;
+    float s = float(i) / float(SEGMENTS);
+    vec3 here = uWorldToView * ribbonPath(s);
+    vec3 next = uWorldToView * ribbonPath(min(s + 0.02, 1.0));
+    vec3 previous = uWorldToView * ribbonPath(max(s - 0.02, 0.0));
+    vec3 tangent = normalize(next - previous);
+    vec3 across = normalize(cross(tangent, normalize(-here)));
+    float turn = 0.35 + 0.65 * cos(s * 3.5 + aShape.x * 6.28);
+    float width = aStart.w * mix(0.6, 0.9, s) * mix(1.0, 0.5, s * s);
+    vAcross = vec2(sideSign, s);
+    vFold = turn;
+    vDepth = -here.z;
+    vStrength = aShape.w;
+    vShapeSeed = aShape.x;
+    gl_Position = uProjection * vec4(here + across * sideSign * width * turn, 1.0);
+}
+"""
+RIBBON_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n" + """
+uniform vec3 uShaftColour;
+uniform vec3 uSkyTint;
+in vec2 vAcross;
+in float vFold;
+in float vDepth;
+flat in float vStrength;
+flat in float vShapeSeed;
+void main() {
+    float s = vAcross.y;
+    float edge = pow(abs(vAcross.x), 3.0);
+    float fold = 0.45 / (abs(vFold) + 0.45);
+    float fade = smoothstep(0.0, 0.06, s) * pow(1.0 - s, 1.4);
+    float u = vAcross.x * 0.5 + 0.5;
+    float strands = 0.0;
+    for (int k = 0; k < 7; ++k) {
+        float centre = fract(float(k) * 0.618 + vShapeSeed * 3.1) * 0.8 + 0.1 + 0.08 * sin(s * (3.0 + float(k)) + float(k));
+        float thin = fwidth(u) * 1.2 + 0.004;
+        strands += exp(-pow((u - centre) / thin, 2.0)) * (0.5 + 0.5 * fract(float(k) * 0.37 + vShapeSeed));
+    }
+    float a = clamp((0.05 + 0.35 * edge + 0.75 * strands) * fold * fade * vStrength, 0.0, 0.9);
+    vec3 light = mix(uShaftColour, uSkyTint, 0.4) * 2.2;
+    sceneTransparent(light * a, a, vDepth);
+    Emission = vec4(0.0);
+}
+""")
 GLINT_VERTEX = """#version 460 core
 layout(location=0) in vec4 aSphere;
 layout(location=1) in vec2 aExtra;
@@ -514,7 +620,7 @@ void main() {
 """
 
 
-def population(rng, view_to_world, tan, drift=0.0):
+def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0):
     items, clusters = [], []
     rot = np.array(view_to_world).reshape(3, 3).T
 
@@ -571,6 +677,9 @@ def population(rng, view_to_world, tan, drift=0.0):
                 cluster(members, r * rng.uniform(0.08, 0.35))
             else:
                 bubble(p, r)
+            if wakes is not None and wake_strength > 0.0 and high > 8.0 and rng.random() < wake_strength * 0.6:
+                wakes.append((p[0], p[1] - r * 0.95, p[2], r, rng.random(), r * rng.uniform(6.0, 14.0),
+                              drift + rng.uniform(-0.3, 0.3), wake_strength * rng.uniform(0.5, 1.0)))
             if high > 8.0:     # a dense wake of tiny bubbles trailing below, widening as it falls behind
                 count_trail = rng.randint(40, 110) if high > 18.0 else rng.randint(15, 40)
                 for k in range(count_trail):
@@ -586,16 +695,16 @@ def population(rng, view_to_world, tan, drift=0.0):
                rng.uniform(0.5, 0.8))
     # Rising chains: beads a few pixels across, spaced a few pixels apart on screen at any distance, wobbling a little
     # and leaning with the current; now and then a larger bead.
-    for _ in range(55):
+    for _ in range(42):
         u, depth = rng.uniform(-1.3, 1.3), 5.0 + 28.0 * rng.random()
         base = place(u, -1.25, depth)
         size = rng.uniform(1.4, 4.0)
         scale = depth / 15.0
         rise, phase = 0.0, rng.uniform(0.0, 6.3)
         while rise < 1.7 * depth:
-            rise += rng.uniform(0.08, 0.3) * scale * (4.0 if rng.random() < 0.05 else 1.0)
+            rise += rng.uniform(0.08, 0.34) * scale * (rng.uniform(3.0, 8.0) if rng.random() < 0.07 else 1.0)
             px = size * rng.uniform(0.35, 1.3) * (1.9 if rng.random() < 0.06 else 1.0)
-            bubble((base[0] + drift * rise + math.sin(rise / scale * 1.3 + phase) * 0.12 * scale + rng.gauss(0, 0.025 * scale),
+            bubble((base[0] + drift * rise + math.sin(rise / scale * 1.3 + phase) * 0.16 * scale + rng.gauss(0, 0.07 * scale),
                     base[1] + rise, base[2] + rng.gauss(0, 0.05 * scale)), px * pixel * depth)
     # Specks just in front of the lens, far out of focus: bokeh discs, most toward the lower corners.
     for _ in range(70):
@@ -610,7 +719,7 @@ def population(rng, view_to_world, tan, drift=0.0):
 
 
 def render_variant(capture, resources, target, programs, env, env_fbo, settings, seed):
-    env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, shaft_tex, shaft_fbo = programs
+    env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, shaft_tex, shaft_fbo = programs
     pitch = math.radians(settings["pitch"])
     c, s = math.cos(pitch), math.sin(pitch)
     view_to_world = (1, 0, 0, 0, c, s, 0, -s, c)
@@ -623,7 +732,19 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
     projection = (f * H / W, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0)
     sun = np.array(settings["sun"]) / np.linalg.norm(settings["sun"])
     sun_below = np.array(water_sun_below(tuple(sun)))
-    items, clusters = population(random.Random(seed), view_to_world, tan, settings.get("drift", 0.0))
+    wakes = []
+    items, clusters = population(random.Random(seed), view_to_world, tan, settings.get("drift", 0.0), wakes,
+                                 settings.get("wakes", 0.0))
+    wdata = np.array(wakes if wakes else [(0.0,) * 8], dtype=np.float32)
+    wvao, wvbo = int(gl.glGenVertexArrays(1)), int(gl.glGenBuffers(1))
+    gl.glBindVertexArray(wvao)
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, wvbo)
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, wdata.nbytes, wdata, gl.GL_STATIC_DRAW)
+    for location in range(2):
+        gl.glEnableVertexAttribArray(location)
+        gl.glVertexAttribPointer(location, 4, gl.GL_FLOAT, gl.GL_FALSE, 32, ctypes.c_void_p(16 * location))
+        gl.glVertexAttribDivisor(location, 1)
+    gl.glBindVertexArray(0)
     cdata = np.array(clusters, dtype=np.float32)
     cvao, cvbo = int(gl.glGenVertexArrays(1)), int(gl.glGenBuffers(1))
     gl.glBindVertexArray(cvao)
@@ -677,6 +798,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShaftY"), settings.get("shaft_y", SURFACE_Y))
         gl.glUniform1f(u("uGlow"), settings.get("glow", 1.0))
         gl.glUniform1f(u("uRays"), settings.get("rays", 1.0))
+        gl.glUniform1f(u("uMist"), settings.get("mist", 0.0))
+        gl.glUniform1f(u("uSparkle"), settings.get("sparkle", 0.0))
         gl.glUniform3f(u("uAbsorb"), *settings.get("absorb", (0.16, 0.065, 0.04)))
         for name, key in (("uDeep", "deep"), ("uWater", "water"), ("uSkyTint", "sky"), ("uShaftColour", "shaft")):
             gl.glUniform3f(u(name), *(v * exposure for v in settings[key]))
@@ -726,7 +849,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     u = lambda name: gl.glGetUniformLocation(shell, name)
                     gl.glUniformMatrix3fv(u("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
                     gl.glUniformMatrix4fv(u("uProjection"), 1, gl.GL_FALSE, projection)
-                    gl.glUniform1f(u("uFocus"), 4.2)
+                    gl.glUniform1f(u("uFocus"), settings.get("focus", 4.2))
                     gl.glUniform1f(u("uAperture"), settings.get("aperture", 3.0))
                     gl.glUniform1f(u("uPixel"), 2.0 * tan_y / H)
                     gl.glUniform1f(u("uPixelSize"), 2.0 * tan_y / H)
@@ -756,6 +879,14 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform3f(m("uSunScreen"), *sun_screen)
                     gl.glBindVertexArray(cvao)
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(clusters))
+                    if wakes and not BACKDROP_ONLY:
+                        common(ribbon_program)
+                        w = lambda name: gl.glGetUniformLocation(ribbon_program, name)
+                        gl.glUniformMatrix3fv(w("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
+                        gl.glUniformMatrix4fv(w("uProjection"), 1, gl.GL_FALSE, projection)
+                        gl.glDisable(gl.GL_CULL_FACE)
+                        gl.glBindVertexArray(wvao)
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 82, len(wakes))
                     gl.glActiveTexture(gl.GL_TEXTURE3)
                     gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
                     gl.glActiveTexture(gl.GL_TEXTURE0)
@@ -796,6 +927,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
     gl.glDeleteBuffers(1, [vbo])
     image = Image.frombytes("RGBA", (W, H), bytes(raw)).transpose(Image.Transpose.FLIP_TOP_BOTTOM).convert("RGB")
     gl.glDeleteVertexArrays(1, [cvao])
+    gl.glDeleteVertexArrays(1, [wvao])
+    gl.glDeleteBuffers(1, [wvbo])
     gl.glDeleteBuffers(1, [cvbo])
     return image, float(np.median(times)), len(items) + len(clusters)
 
@@ -809,7 +942,8 @@ def main():
                 compile_program(CLUSTER_VERTEX, CLUSTER_FRAGMENT, label="lab clusters"),
                 compile_program(FULL_VERTEX, SHAFT_FRAGMENT, label="lab shafts"),
                 compile_program(FULL_VERTEX, BLUR_FRAGMENT, label="lab blur"),
-                compile_program(GLINT_VERTEX, GLINT_FRAGMENT, label="lab glints"))
+                compile_program(GLINT_VERTEX, GLINT_FRAGMENT, label="lab glints"),
+                compile_program(RIBBON_VERTEX, RIBBON_FRAGMENT, label="lab ribbons"))
     shaft_tex, shaft_fbo = [], []
     for _ in range(2):
         texture = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
