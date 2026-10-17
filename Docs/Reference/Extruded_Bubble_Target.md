@@ -5,10 +5,14 @@ shared resource contracts; `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (BTF) b
 what the operator's mocks demand, what the shared Scene3D layer already provides, and which primitives must be proved
 (in order) before an Extruded Bubble renderer exists. It is not an implementation of Extruded Bubble.
 
-## 1. Visual target (operator mocks, `tmp/Bubbleexamples`, 2026-10-17)
+## 1. Visual target (operator mocks, `tmp/Bubbleexamples`, 2026-10-17; informational mocks 2026-10-18)
 
-Six frames: three looking up toward a sunlit surface (bright, mid, dark water), one with wake tendrils, one into the
-abyss, one down onto a caustic-lit seabed. Every element below is visible in at least two of them.
+Seven frames in `tmp/Bubbleexamples` (three looking up toward a sunlit surface, one with wake tendrils, the abyss, camera
+down, the diagonal orange stream) plus two annotated **informational mocks** (`tmp/Informational mock.png`,
+`tmp/Informational mock 2.png`, blue and copper) whose detail panels name each material requirement: broad specular
+from the light with inset peaks, real front/back double rims with Fresnel and colour separation, spherical volume with
+refracted background, merged bubbles with continuous surfaces, wide soft shafts, and dense micro-bubble trails
+("no ribbon/sperm lines"). Where a mock shows a seabed or ribbons, the operator's later rulings below win.
 
 | # | Element | What it must look like | Measurable goal |
 | --- | --- | --- | --- |
@@ -18,8 +22,8 @@ abyss, one down onto a caustic-lit seabed. Every element below is visible in at 
 | T4 | Depth and focus | Near bubbles large, soft and bokeh-like; far ones small and crisp; a few hundred micro-bubbles in columns | Per-bubble defocus by depth; thousands of micro-bubbles within the tier budget |
 | T5 | Water above | Bright Snell's-window surface with moving ripples and refracted sunlight at the top of frame | Animated surface normals, total internal reflection outside the window, brightness falling off with depth |
 | T6 | Light shafts | God rays from the surface fanning down, broken by the surface ripples | Reuse the shared `LightShafts` (landed 2026-10-17) with a surface-pattern source |
-| T7 | Caustics | Shimmering caustic network on the seabed (camera down) and faint caustic light on bubbles | Animated analytic caustics; no texture asset |
-| T8 | Wakes (one mock) | Curling translucent trails behind larger bubbles | Optional; demands G4 ribbons only if accepted (§4A says demand-driven) |
+| T7 | Below | **A palette-coherent murky abyss, not a seabed** (operator 2026-10-17, supersedes caustic seabed) | Darker with depth; the seabed primitive stays unused by Extruded Bubble |
+| T8 | Trails | **Discrete tiny-bead trails and rising chains** (operator: "no ribbon/sperm lines", supersedes wake ribbons) | Individual micro-bubbles; G4 ribbons are not demanded |
 | T9 | Water volume | Blue absorption and in-scattering with distance; darker abyss | Distance fog in the medium's colour, deeper = darker |
 | T10 | Camera | Framed internal camera that can look up, level or down | Shared FC capability with Bubble-specific bounds |
 
@@ -108,7 +112,46 @@ Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare agai
   smaller or every few frames. Still far from parity on every mock: shells lack the mocks' busy reflected detail and
   crisp starburst sparkles, wakes do not read as water traces, mid bubbles are too sparse and too regular.
 
-## 7. Product requirements recorded from the operator (2026-10-17)
+## 7. Recovery status (2026-10-18; governing brief `Docs/SRPSS_Extruded_Bubble_Local_Source_Recovery_REVISED_2026-10-17.zip`)
+
+The brief's audit (C01–C11) of the local lab `tools/labs/extruded_bubble_lab.py` is the work list. Status is recorded
+here and updated per stage; nothing below is parity.
+
+**Accepted, preserve (no population/surface retuning while fixing glass):** bubble density and size bands, rising bead
+chains, tiny-bead trails, ember particulate/dust in the copper scene, the rippled sunlit surface.
+
+**Failed (operator, four blockers in order):**
+1. Specular: shells read matte or carry one edge tick; mocks have broad curved highlights toward the light with inset
+   hot peaks and smaller wall glints.
+2. Double rim: uniform concentric hoops; mocks have distinct front/back wall events whose width and brightness vary
+   with the light, with Fresnel and colour separation.
+3. Roundness: flat tinted interiors, vertical streaks, flat giants, merged pairs shaded as separate spheres.
+4. Shafts: thin separated pencil beams; mocks have broad soft volumetric cones.
+
+**Source defects (proven from code) and remedies:**
+- C01 `uEdgeSoft` spread the eight rim sub-rays over `1 + 0.06·pixels` pixels (12× at 190 px): a size-scaled smear,
+  not anti-aliasing. Remedy: A/B against 0, then pixel-bounded filtering only.
+- C02 dedicated glint pass compiled but gated off in every variant; probe sun term not traced to the pixel. Remedy:
+  analytic finite-area light lobes on every shell interface (broad + narrow), traced by diagnostic modes.
+- C03 reversed-edge `smoothstep(0.85, 0.2, c)` (undefined in GLSL). Remedy: explicit monotone inverse.
+- C04 film hue at a fixed 0.75 incidence. Remedy: angle-dependent film with footprint-limited variation.
+- C05 cluster normal computed then discarded (a member sphere shaded instead). Remedy: shade the union surface point
+  with its SDF normal.
+- C06 no `gl_FragDepth`: quads depth-test at their plane. Remedy: GL occluder tests, then correct-depth writes that
+  keep transparent depth-write rules.
+- C07 glass-over-glass refracts only the opaque capture. Characterise before any architecture change.
+- C08 eight full shell traces × 32-tap gathers on rims. Remedy: measured per-pass timing, bounded footprints.
+- C09 blanket `uInnerBlur` (0.6 of the radius) flattens interiors; inward rim-ray clamp may draw a band. Remedy:
+  separate lens displacement from defocus; test the clamp.
+- C10 bubble proxy glints in the probe may outshine real lights. Remedy: rank real sources first.
+- C11 the lab is a static frame (`uTime=4`); dynamic fidelity is proved only at integration (original Bubble snapshots,
+  real-music recordings in `logs/visualizer_recordings`), behind the §4A/V5 gates.
+
+**Stages:** P0 baseline captures and timings → P1 correctness (C03, C01, C05, C06) with diagnostic views → P2 specular
+→ P3 double rim and curvature → P4 shafts alone → P5 all-scene validation and performance. One variable family per
+checkpoint; every stage compares mock | previous | candidate on all seven scenes plus 1:1 glass crops.
+
+## 8. Product requirements recorded from the operator (2026-10-17)
 
 - **Collision behaviour (operator 2026-10-17, supersedes the two-way ratio):** a triangle control with **Fuse**,
   **Pop** and **Bounce** at its corners; the node the user places by mouse inside it sets the three ratios

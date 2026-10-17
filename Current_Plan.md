@@ -430,6 +430,10 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   glow, and G2 shadows when visually justified. Tier-bounded instances/targets and first-frame warm admission;
   do not add an EB-specific OIT, shadow, new SceneTarget or orbit implementation to compensate for a weak shared
   primitive. New genuinely needed substrate goes back through a measured §4A gate.
+- [ ] **EB-R — Glass-material recovery in the lab (operator brief 2026-10-17, active).** Staged per
+  `Extruded_Bubble_Target.md` §7: correctness (C01 edge-soft smear, C03 smoothstep, C05 cluster normal, C06 depth),
+  then specular, double rim and roundness, then shafts alone; populations, trails and the surface are accepted and held
+  fixed. Lab work only; no EB2/EB3 before the §4A/V5 gates.
 - [ ] **EB5a — Shared range slider (operator 2026-10-17), before EB5 reactivity controls.** A new shared Settings
   slider type, visually almost identical to the current shared slider, with **two draggable handles** that define a
   range on the bar (for example 3–30 on a 1–50 bar). Reactivity maps the music across that range: the low handle is
