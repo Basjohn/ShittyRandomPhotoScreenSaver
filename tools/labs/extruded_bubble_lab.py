@@ -53,35 +53,36 @@ SURFACE_Y = 9.0
 # Per mock: water palette, sun, camera pitch.
 VARIANTS = {
     "ExBubble1": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
-                      chains=3.5, chain_size=1.3,
-                      deep=(0.05, 0.08, 0.12), water=(0.2, 0.25, 0.32), sky=(0.85, 0.9, 0.95), shaft=(0.62, 0.67, 0.74),
+                      chains=6.0, chain_size=0.85,
+                      deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),
                       sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032)),
     "ExBubble2": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
-                      chains=3.5, chain_size=1.3,
-                      deep=(0.008, 0.03, 0.075), water=(0.03, 0.085, 0.18), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
+                      chains=6.0, chain_size=0.85,
+                      deep=(0.022, 0.055, 0.12), water=(0.03, 0.08, 0.16), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
                       sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035), rays=0.7),
     "ExBubble3": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
-                      chains=3.5, chain_size=1.3,
-                      deep=(0.006, 0.012, 0.022), water=(0.02, 0.042, 0.066), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
-                      sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045)),
+                      chains=6.0, chain_size=0.85,
+                      deep=(0.01, 0.022, 0.036), water=(0.016, 0.034, 0.054), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
+                      sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
     "ExBubble4": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=4.0, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
                       chains=2.0, chain_size=2.0,
-                      deep=(0.02, 0.06, 0.12), water=(0.05, 0.12, 0.2), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
-                      sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.95, absorb=(0.1, 0.05, 0.03), drift=0.12,
-                      wakes=1.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=2.5, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=0.6,
-                                 rough=0.05, light_power=3.0, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
-                                 specks=1.0, warm_share=0.85, streak=(0.35, 1.0), chains=1.6, chain_size=2.0,
+                      deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
+                      sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
+                      wakes=0.0, mist=0.3, aperture=1.2),
+    "ExBubble5CameraAbyss": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=6.0, travel=(0.4, 1.0, 0.0),
+                                 columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=0.6,
+                                 rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
+                                 specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chains=2.4, chain_size=1.6,
                                  deep=(0.004, 0.02, 0.05), water=(0.01, 0.06, 0.14), sky=(0.3, 0.6, 1.0),
                                  shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0,
-                                 mist=1.0, wakes=0.6, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
-                                 absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=1.0, rays=0.6, aperture=0.6),
+                                 mist=0.6, wakes=0.0, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
+                                 absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
     "ExBubble5Cameradown": dict(glint_power=120.0, glint_sharp=300.0, probe_fill=2.5, shell=0.03, iors=(1.15, 1.6, 1.0), lens=1.0, surface_gain=0.6,
                                 rough=0.05, light_power=1.5, specks=1.0, warm_share=0.85, streak=(0.15, 1.0),
                                 chains=1.6, chain_size=2.0,
-                                deep=(0.01, 0.05, 0.13), water=(0.03, 0.09, 0.17), sky=(0.5, 0.7, 0.9),
+                                deep=(0.07, 0.15, 0.26), water=(0.05, 0.13, 0.24), sky=(0.5, 0.7, 0.9),
                                 shaft=(0.3, 0.55, 0.85), sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, wisps=0.0,
-                                mist=0.6, wakes=0.8, sparkle=0.7, crisp=1.0, surface=30.0, absorb=(0.1, 0.05, 0.03),
+                                mist=0.6, wakes=0.0, sparkle=0.7, crisp=1.0, surface=30.0, absorb=(0.1, 0.05, 0.03),
                                 drift=0.15, shaft_y=12.0),
 }
 VARIANTS["ExBubble6Diagonal"] = dict(deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), banded=True,
@@ -90,7 +91,7 @@ VARIANTS["ExBubble6Diagonal"] = dict(deep=(0.012, 0.05, 0.06), water=(0.03, 0.13
                               exposure=1.0, surface=60.0, shaft_y=16.0, glow=0.35, rays=0.2, mist=0.6, sparkle=1.5, dust=0.5, sway=0.25, fizz=2.5, ray_focus=1.0, crisp=1.0, light_view=(1.0, 0.68, -1.0), specks=2.5, light_power=0.3, streak=(1.0, -0.3), cloud_contrast=3.0,
                               cloud_floor=0.03, cloud_glow=1.2, fizz_size=2.0, rough=0.22, inner_blur=0.18, speck_size=1.8, small_count=5.0, shell=0.03, iors=(1.15, 1.6, 1.0), probe_fill=1.2,
                               glint_power=120.0, glint_sharp=300.0, warm_share=0.9, lens=1.0,
-                              wakes=0.3, travel=(1.0, -0.3, 0.15), absorb=(0.06, 0.05, 0.05), focus=3.4,
+                              wakes=0.0, travel=(1.0, -0.3, 0.15), absorb=(0.06, 0.05, 0.05), focus=3.4,
                               aperture=1.5)
 
 COMMON = """
@@ -113,6 +114,7 @@ uniform float uMist;
 uniform float uSurfaceGain;   // the light through the surface (HDR: what bubbles mirror)
 uniform float uDust;
 uniform float uRayFocus;
+uniform float uRayCut;          // beam density below which water stays clear
 uniform float uSpecks;          // particulate density in the water
 uniform float uProbeMode;       // 1 while drawn into the scene probe
 uniform float uLightPower;      // the light itself, seen directly (deep scenes)
@@ -239,9 +241,12 @@ BACKDROP_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\
 void main() {
     vec3 ray = uViewToWorld * normalize(vec3(vNdc * uTan, -1.0));
     float shafts = uProbeMode > 0.5
-                 ? waterShafts(vec3(0.0), ray, 40.0, uSunBelow, uShaftY, uTime, 16, 0.5) * 0.13
-                   * (0.25 + pow(max(dot(ray, uSunBelow), 0.0), 2.0)) * uRays
+                 ? 0.6 * pow(max(dot(ray, uSunBelow), 0.0), 3.0) * uRays
                  : texture(uShafts, gl_FragCoord.xy / uFrameSize).r * uRays;
+    if (uProbeMode < 0.5) {
+        float s = texture(uShafts, gl_FragCoord.xy / uFrameSize).r;
+        shafts = uRays * (s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3);
+    }
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
     shafts *= mix(1.0, pow(max(dot(ray, uSunBelow), 0.0), 6.0) * 3.0, uRayFocus);
     vec3 colour = basinWater(ray, 1.0, shafts);
@@ -425,7 +430,10 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         if (i == count - 1) {
             // What is seen through is out of focus inside the bubble (the lens's depth): softened with its size.
             vec4 behind = behindAt(frontView + paths[i].xyz * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
-            seen = mix(seen, behind.rgb, behind.a * uFrameShare);
+            // Off the frame's edge the bent view falls back to the scene behind this pixel, never to the probe (its
+            // scattered fill lit every bubble at the frame's edge).
+            vec3 here = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+            seen = mix(mix(here, seen, 1.0 - uFrameShare), behind.rgb, behind.a * uFrameShare);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;
         } else {
@@ -816,7 +824,8 @@ void main() {
 
 
 def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0, travel=None, fizz=1.0,
-               particulate_scene=False, chain_scale=1.0, chain_size=1.0, fizz_size=1.0, banded=None, small_count=1.0):
+               particulate_scene=False, chain_scale=1.0, chain_size=1.0, fizz_size=1.0, banded=None, small_count=1.0,
+               columns=None):
     if travel is not None:
         travel = np.array(travel, dtype=float) / np.linalg.norm(travel)
         across = np.cross(travel, (0.0, 0.0, 1.0))
@@ -859,6 +868,13 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
                 u, v = rng.uniform(-1.12, 1.12), rng.uniform(-1.1, 1.08)
                 pixels = rng.uniform(low, high)
                 x, y = u * W / 2, v * H / 2
+                if columns and rng.random() < 0.75:
+                    # Streams: bubbles line up in columns along the travel (on screen), as the mocks show them.
+                    tx, ty = columns[0], columns[1]
+                    s = x * -ty + y * tx
+                    snapped = round(s / columns[2]) * columns[2] + rng.gauss(0.0, columns[2] * 0.06)
+                    x, y = x + -ty * (snapped - s), y + tx * (snapped - s)
+                    u, v = x / (W / 2), y / (H / 2)
                 if banded is not None:
                     d = np.array(place(u, v, 1.0))
                     if rng.random() > 0.1 + 0.9 * float(stream_bands(d[None, :] / np.linalg.norm(d), banded)[0]) ** 2:
@@ -908,8 +924,10 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
     # Rising chains: beads a few pixels across, spaced a few pixels apart on screen at any distance, wobbling a little
     # and leaning with the current; now and then a larger bead.
     for _ in range(int(42 * chain_scale)):
-        u, depth = rng.uniform(-1.3, 1.3), 5.0 + 28.0 * rng.random()
+        u, depth = rng.uniform(-1.3, 1.3), 7.0 + 26.0 * rng.random()
         base = place(u, -1.25, depth)
+        # The chain starts below the frame; beads come nearer the camera there, so they are sized where they are.
+        base_depth = depth
         if travel is not None:
             base = tuple(np.array(place(rng.uniform(-1.2, 1.2), rng.uniform(-1.1, 1.1), depth)) - travel * 0.85 * depth)
         size = rng.uniform(1.4, 4.0) * chain_size
@@ -924,8 +942,10 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
                       + np.array((0.0, 0.0, 1.0)) * rng.gauss(0, 0.05 * scale))
                 bubble(tuple(at), px * pixel * depth)
                 continue
-            bubble((base[0] + drift * rise + math.sin(rise / scale * 1.3 + phase) * 0.16 * scale + rng.gauss(0, 0.07 * scale),
-                    base[1] + rise, base[2] + rng.gauss(0, 0.05 * scale)), px * pixel * depth)
+            at = (base[0] + drift * rise + math.sin(rise / scale * 1.3 + phase) * 0.16 * scale + rng.gauss(0, 0.07 * scale),
+                  base[1] + rise, base[2] + rng.gauss(0, 0.05 * scale))
+            view_depth = -float(np.dot(rot.T @ np.array(at), (0.0, 0.0, 1.0)))
+            bubble(at, px * pixel * max(view_depth, 1.0))
     if particulate_scene:
         return items, clusters
     # Marine snow.
@@ -957,7 +977,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                                  settings.get("wakes", 0.0), settings.get("travel"), settings.get("fizz", 1.0),
                                  settings.get("specks", 0.0) > 0.0, settings.get("chains", 1.0),
                                  settings.get("chain_size", 1.0), settings.get("fizz_size", 1.0),
-                                 settings if settings.get("banded") else None, settings.get("small_count", 1.0))
+                                 settings if settings.get("banded") else None, settings.get("small_count", 1.0),
+                                 settings.get("columns"))
     pdata = particulate(random.Random(seed * 7 + 1), settings)
     # Proxies: each bubble as the probe sees it, its glint toward the light (a small bright point near its surface).
     bubble_rows = np.array([row for row in items if row[5] == 0.0 and row[3] > 0.02], dtype=np.float64)
@@ -1048,6 +1069,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uSurfaceGain"), settings.get("surface_gain", 1.0))
         gl.glUniform1f(u("uDust"), settings.get("dust", 0.0))
         gl.glUniform1f(u("uRayFocus"), settings.get("ray_focus", 0.0))
+        gl.glUniform1f(u("uRayCut"), settings.get("ray_cut", 0.25))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))
         gl.glUniform1f(u("uGlintPower"), settings.get("glint_power", 0.0))
@@ -1086,9 +1108,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
         gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0))
-        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.3))
+        gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
-        gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.06))
+        gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.14))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
         gl.glUniform1f(u("uNearLayer"), 1.0 if program == near_program else 0.0)
         gl.glActiveTexture(gl.GL_TEXTURE3)
@@ -1213,7 +1235,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                         gl.glUniform1f(v("uShell"), settings.get("shell", 0.1))
                         gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                         gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
-                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.06))
+                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.14))
                         gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUseProgram(shell)
                     gl.glBindVertexArray(vao)
@@ -1229,7 +1251,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glUniform1f(m("uShell"), settings.get("shell", 0.1))
                     gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
                     gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
-                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.06))
+                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.14))
                     gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
                     gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
                     gl.glUniformMatrix4fv(m("uProjection"), 1, gl.GL_FALSE, projection)
