@@ -52,19 +52,19 @@ SURFACE_Y = 9.0
 
 # Per mock: water palette, sun, camera pitch.
 VARIANTS = {
-    "ExBubble1": dict(shaft_fan=1.0, fan_rays=22.0, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=3.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
+    "ExBubble1": dict(shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),
                       sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032), ray_cut=0.08, rays=0.7),
-    "ExBubble2": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=22.0, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=3.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
+    "ExBubble2": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.022, 0.055, 0.12), water=(0.03, 0.08, 0.16), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
                       sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035), rays=0.7),
-    "ExBubble3": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=22.0, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=3.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
+    "ExBubble3": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
-    "ExBubble4": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=22.0, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=3.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
+    "ExBubble4": dict(ray_cut=0.1, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.8, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
                       chains=3.0, chain_size=1.0,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
@@ -321,6 +321,7 @@ uniform float uShaftScale;      // source pattern frequency (1: the shared patte
 uniform float uShaftSoft;       // threshold softness 0..1
 uniform float uShaftFan;        // share of the sun fan (0: depth march only)
 uniform float uFanRays;         // broad rays round a full turn of the fan
+uniform float uFanReach;        // angle (rad) over which the fan fades
 float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     // Azimuth round the sun axis, zero pointing down (the seam faces up, behind the sun).
     vec3 down = normalize(vec3(0.0, -1.0, 0.0) - sunBelow * -sunBelow.y + vec3(1e-4, 0.0, 0.0));
@@ -331,11 +332,11 @@ float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     float broad = skyNoise2(vec2(x + t * 0.04, 0.5), 83u);
     float mid = skyNoise2(vec2(x * 2.7 - t * 0.07, 3.5), 89u);
     float fine = skyNoise2(vec2(x * 7.3 + t * 0.1, 7.5), 97u);
-    float n = broad * 0.55 + mid * 0.3 + fine * 0.15;
-    float lo = mix(0.5, 0.25, uShaftSoft), hi = mix(0.78, 0.9, uShaftSoft);
-    float rays = smoothstep(lo, hi, n);
-    // Each ray reaches its own length; all fade with the angle from the sun.
-    float reach = mix(0.7, 1.6, skyNoise2(vec2(x * 1.3, 11.5), 101u));
+    // Many fine and medium rays packed side by side (mocks), never a few solid wedges: soft contrast over a floor.
+    float n = broad * 0.3 + mid * 0.4 + fine * 0.3;
+    float rays = 0.3 * n + 0.7 * smoothstep(0.42, 0.78, n);
+    // Each ray reaches its own length; all fade with the angle from the sun, gone by about two thirds down.
+    float reach = mix(uFanReach * 0.55, uFanReach * 1.25, skyNoise2(vec2(x * 1.3, 11.5), 101u));
     // The fan hangs below the sun: rays leaving sideways (toward the top corners) are faint (mocks).
     float spread = smoothstep(0.24, 0.1, abs(phi));
     return rays * spread * exp(-theta / reach) * smoothstep(0.02, 0.12, theta);
@@ -1237,6 +1238,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
         gl.glUniform1f(u("uShaftFan"), settings.get("shaft_fan", 0.0))
         gl.glUniform1f(u("uFanRays"), settings.get("fan_rays", 30.0))
+        gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))
         gl.glUniform1f(u("uGlintPower"), settings.get("glint_power", 0.0))
