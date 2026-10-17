@@ -503,7 +503,7 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
     // One pixel's step in view directions, analytic (derivatives after the caller's discard are undefined: they
     // came back zero and every sub-ray was the same ray).
     vec3 dx = vec3(uPixelSize, 0.0, 0.0) * -rayView.z, dy = vec3(0.0, uPixelSize, 0.0) * -rayView.z;
-    if (facing > 0.55 && pixels > 40.0) {
+    if (facing > 0.8 || pixels < 3.0) {
         sum = shadeBubbleRay(rayView, sphere, pixels, soft, blur);
     } else {
         sum = vec4(0.0);
