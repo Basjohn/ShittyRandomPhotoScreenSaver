@@ -16,6 +16,11 @@ softens by exactly its circle, and the light a pixel carries is kept, only sprea
   its circle reaches this pixel and weighted by the share of its light that lands here (1 / its circle's area), so
   energy is conserved and a bright point becomes an even disc; pixels with no circle pass through sharp. The circle
   is stored alpha-weighted so mip levels average it only over what was drawn.
+* Highlights: a fixed tap pattern catches a small bright source unevenly (striped, blocky blobs where a lens draws
+  a round disc). Light above ``highlight`` (luminance, averaged over a texel of the read level) and above the
+  mean round it (two levels coarser) is taken out of the
+  gather and drawn instead as one instanced disc per such texel, of that texel's circle, its edge antialiased and a
+  little brighter (as lens bokeh is), holding exactly the light removed. Below the threshold nothing changes.
 
 Nothing is allocated per frame after the first ``begin`` at a size; ``release`` drops the textures, framebuffer and
 program.
@@ -23,6 +28,7 @@ program.
 from __future__ import annotations
 
 import ctypes
+import math
 
 from OpenGL import GL as gl
 
@@ -83,6 +89,75 @@ void main() {
     FragColor = sum;
 }
 """ % DEFOCUS_TAPS
+# Each tap gathers only the light below the highlight threshold; the excess goes to the sprites.
+_GATHER = _GATHER.replace("uniform float uMaxRadius;", "uniform float uMaxRadius;\nuniform sampler2D uBelow;"
+                          ).replace("sum += textureLod(uColour, uv, level) * reach", "sum += textureLod(uBelow, uv, 0.0) * reach")
+_CLIP = """#version 460 core
+out vec4 FragColor;
+uniform sampler2D uColour;
+uniform int uLevel;
+uniform float uHighlight;
+// A highlight is light above its surroundings (the mean two levels coarser) and above the floor.
+float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLevel) {
+    vec2 uv = (vec2(texel) + 0.5) / vec2(textureSize(colour, level));
+    float local = dot(textureLod(colour, uv, float(level + 2)).rgb, vec3(0.2126, 0.7152, 0.0722));
+    return max(floorLevel, local);
+}
+void main() {
+    vec4 c = texelFetch(uColour, ivec2(gl_FragCoord.xy), uLevel);
+    float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float limit = sceneHighlightAt(uColour, ivec2(gl_FragCoord.xy), uLevel, uHighlight);
+    FragColor = l > limit ? vec4(c.rgb * (limit / l), c.a) : c;
+}
+"""
+_SPRITE_VERTEX = """#version 460 core
+uniform sampler2D uColour;
+uniform sampler2D uCircle;
+uniform int uLevel;
+uniform float uHighlight;
+uniform vec2 uSize;
+out vec2 vOffset;
+flat out float vCircle;
+flat out vec3 vLight;
+// A highlight is light above its surroundings (the mean two levels coarser) and above the floor.
+float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLevel) {
+    vec2 uv = (vec2(texel) + 0.5) / vec2(textureSize(colour, level));
+    float local = dot(textureLod(colour, uv, float(level + 2)).rgb, vec3(0.2126, 0.7152, 0.0722));
+    return max(floorLevel, local);
+}
+void main() {
+    ivec2 grid = textureSize(uColour, uLevel);
+    ivec2 texel = ivec2(gl_InstanceID % grid.x, gl_InstanceID / grid.x);
+    vec4 c = texelFetch(uColour, texel, uLevel);
+    vec2 circleData = texelFetch(uCircle, texel, uLevel).rg;
+    float circle = circleData.y > 1e-4 ? circleData.x / circleData.y : 0.0;
+    float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
+    float limit = sceneHighlightAt(uColour, texel, uLevel, uHighlight);
+    if (l <= limit || circle < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    float texelPx = float(1 << uLevel);
+    // The texel's excess light, in pixel units, spread over its circle's area.
+    vLight = c.rgb * (1.0 - limit / l) * texelPx * texelPx / (3.14159265 * circle * circle);
+    vCircle = circle;
+    vOffset = corner * (circle + 1.0);
+    vec2 centre = (vec2(texel) + 0.5) * texelPx;
+    gl_Position = vec4((centre + vOffset) / uSize * 2.0 - 1.0, 0.0, 1.0);
+}
+"""
+_SPRITE_FRAGMENT = """#version 460 core
+out vec4 FragColor;
+in vec2 vOffset;
+flat in float vCircle;
+flat in vec3 vLight;
+void main() {
+    float d = length(vOffset);
+    float inside = clamp(vCircle - d + 0.5, 0.0, 1.0);
+    if (inside <= 0.0) discard;
+    // A lens disc: even, its edge a little brighter (the mean of this profile over the disc is ~1).
+    float rim = 0.88 + 0.3 * smoothstep(0.55, 1.0, d / vCircle);
+    FragColor = vec4(vLight * inside * rim, 0.0);
+}
+"""
 
 
 class DefocusLayer:
@@ -95,11 +170,17 @@ class DefocusLayer:
         self._circle = 0
         self._fbo = 0
         self._program = 0
+        self._sprites = 0
+        self._clip = 0
+        self._below = 0
+        self._below_fbo = 0
+        self._below_size = (0, 0)
         self._vao = 0
         self._saved = None
 
     def has_resources(self) -> bool:
-        return bool(self._colour or self._circle or self._fbo or self._program or self._vao)
+        return bool(self._colour or self._circle or self._fbo or self._program or self._sprites or self._clip
+                    or self._below or self._below_fbo or self._vao)
 
     def _texture(self, internal, width, height) -> int:
         name = (ctypes.c_uint * 1)()
@@ -128,6 +209,8 @@ class DefocusLayer:
         self._size = (width, height)
         if not self._program:
             self._program = compile_program(_VERTEX, _GATHER, label=f"{self.label} defocus")
+            self._sprites = compile_program(_SPRITE_VERTEX, _SPRITE_FRAGMENT, label=f"{self.label} bokeh")
+            self._clip = compile_program(_VERTEX, _CLIP, label=f"{self.label} defocus clip")
             gl.glCreateVertexArrays(1, name)
             self._vao = int(name[0])
 
@@ -166,8 +249,9 @@ class DefocusLayer:
         (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
         self._saved = None
 
-    def composite(self, max_radius: float) -> None:
-        """Spread the layer over its circles and lay it over the bound framebuffer (premultiplied over)."""
+    def composite(self, max_radius: float, highlight: float = 0.25) -> None:
+        """Spread the layer over its circles and lay it over the bound framebuffer (premultiplied over); light above
+        ``highlight`` (texel-averaged luminance) and its surroundings becomes round discs."""
         program = self._program
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
@@ -177,26 +261,58 @@ class DefocusLayer:
                  gl_query.get_indexed_int(gl.GL_BLEND_DST_ALPHA, 0))
         depth_test = gl_query.is_enabled(gl.GL_DEPTH_TEST)
         units = []
-        for unit in range(2):
+        for unit in range(3):
             gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
             units.append(gl_query.get_int(gl.GL_TEXTURE_BINDING_2D))
+        framebuffer = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+        viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
+        # The gather's read level (as in the shader), so the sprites and the gather split the same texels.
+        tap_area = math.pi * max_radius * max_radius / DEFOCUS_TAPS
+        level = max(int(math.floor(math.log2(max(math.sqrt(tap_area), 1.0)))), 0)
+        width, height = max(self._size[0] >> level, 1), max(self._size[1] >> level, 1)
         try:
             gl.glGenerateTextureMipmap(self._colour)
             gl.glGenerateTextureMipmap(self._circle)
             gl.glDisable(gl.GL_DEPTH_TEST)
-            gl.glEnablei(gl.GL_BLEND, 0)
-            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
-            gl.glUseProgram(program)
             for unit, texture in ((0, self._colour), (1, self._circle)):
                 gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            gl.glBindVertexArray(self._vao)
+            # The read level with each texel clipped at the threshold (what the gather spreads).
+            self._ensure_below(width, height)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._below_fbo)
+            gl.glViewport(0, 0, width, height)
+            gl.glDisablei(gl.GL_BLEND, 0)
+            gl.glUseProgram(self._clip)
+            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uColour"), 0)
+            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uLevel"), level)
+            gl.glUniform1f(gl.glGetUniformLocation(self._clip, "uHighlight"), float(highlight))
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
+            gl.glViewport(*viewport)
+            gl.glEnablei(gl.GL_BLEND, 0)
+            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
+            gl.glActiveTexture(gl.GL_TEXTURE2)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, self._below)
+            gl.glUseProgram(program)
             gl.glUniform1i(gl.glGetUniformLocation(program, "uColour"), 0)
             gl.glUniform1i(gl.glGetUniformLocation(program, "uCircle"), 1)
+            gl.glUniform1i(gl.glGetUniformLocation(program, "uBelow"), 2)
             gl.glUniform1f(gl.glGetUniformLocation(program, "uMaxRadius"), float(max_radius))
-            gl.glBindVertexArray(self._vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            if max_radius >= 0.5:
+                gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+                gl.glUseProgram(self._sprites)
+                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uColour"), 0)
+                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uCircle"), 1)
+                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uLevel"), level)
+                gl.glUniform1f(gl.glGetUniformLocation(self._sprites, "uHighlight"), float(highlight))
+                gl.glUniform2f(gl.glGetUniformLocation(self._sprites, "uSize"), float(self._size[0]), float(self._size[1]))
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, width * height)
         finally:
-            for unit in (1, 0):
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
+            gl.glViewport(*viewport)
+            for unit in (2, 1, 0):
                 gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, units[unit])
             gl.glActiveTexture(prior_active)
@@ -207,6 +323,31 @@ class DefocusLayer:
             (gl.glEnablei if enabled else gl.glDisablei)(gl.GL_BLEND, 0)
             (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
 
+    def _ensure_below(self, width: int, height: int) -> None:
+        if self._below_size == (width, height) and self._below:
+            return
+        self._drop_below()
+        name = (ctypes.c_uint * 1)()
+        gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+        self._below = int(name[0])
+        gl.glTextureStorage2D(self._below, 1, gl.GL_RGBA16F, width, height)
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTextureParameteri(self._below, parameter, gl.GL_LINEAR)
+        for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+            gl.glTextureParameteri(self._below, wrap, gl.GL_CLAMP_TO_EDGE)
+        gl.glCreateFramebuffers(1, name)
+        self._below_fbo = int(name[0])
+        gl.glNamedFramebufferTexture(self._below_fbo, gl.GL_COLOR_ATTACHMENT0, self._below, 0)
+        self._below_size = (width, height)
+
+    def _drop_below(self) -> None:
+        if self._below_fbo:
+            gl.glDeleteFramebuffers(1, [self._below_fbo])
+        if self._below:
+            gl.glDeleteTextures(1, [self._below])
+        self._below = self._below_fbo = 0
+        self._below_size = (0, 0)
+
     def _drop_targets(self) -> None:
         if self._fbo:
             gl.glDeleteFramebuffers(1, [self._fbo])
@@ -215,14 +356,16 @@ class DefocusLayer:
                 gl.glDeleteTextures(1, [texture])
         self._colour = self._circle = self._fbo = 0
         self._size = (0, 0)
+        self._drop_below()
 
     def release(self) -> None:
         self._drop_targets()
         if self._vao:
             gl.glDeleteVertexArrays(1, [self._vao])
-        if self._program:
-            gl.glDeleteProgram(self._program)
-        self._program = self._vao = 0
+        for program in (self._program, self._sprites, self._clip):
+            if program:
+                gl.glDeleteProgram(program)
+        self._program = self._sprites = self._clip = self._vao = 0
 
 
 __all__ = ["DEFOCUS_TAPS", "DefocusLayer", "SCENE_DEFOCUS_GLSL"]

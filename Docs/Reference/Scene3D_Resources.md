@@ -306,8 +306,15 @@ hands back framebuffer, viewport, blend and depth state; `composite(max_radius)`
 own circle (64 golden-angle taps, each read from the mip level matching the taps' spacing so no source pixel is
 missed, weighted by 1 / its circle's area so light is conserved) and lays the result over the bound framebuffer.
 A near transparent object should write only its own light (reflections), so the scene behind stays visible.
+Highlights (`composite(max_radius, highlight=0.25)`, 2026-10-18): the fixed taps catch a small bright source
+unevenly at a coarse read level (striped, blocky blobs where a lens draws a round disc). Light in a texel of the read
+level above the floor and above the mean round it (two levels coarser) is taken out of the gather (a clipped copy of
+that level, so gather and sprites split the same texels and light is kept) and drawn as one instanced disc per such
+texel, of its circle, antialiased and slightly brighter at its edge. Cost in the bubble lab: within noise of the
+gather alone (~0.05 ms).
 `test_scene3d_defocus.py`: a bright point becomes an even filled disc of its circle holding its light, a sharp pixel
-stays exactly in place, state comes back, nothing is left after `release`.
+stays exactly in place, state comes back, nothing is left after `release`; a highlight under a wide circle is one
+even round disc (and the gather alone, the case it guards, is measurably lumpier).
 
 `SceneTarget.scope(..., hdr=exposure)` (overlay with bloom only): colour, background capture and resolve are
 half-float, so light brighter than white survives for every pass that reads the scene (refraction, reflection,
