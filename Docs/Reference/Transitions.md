@@ -445,6 +445,16 @@ Each foundation slice adds what it learned here.
 - The whole lab scene (1,081 impostor bubbles, water, shafts, background capture, OIT resolve, bloom) measured
   0.125 ms GPU at 960x540 with 4x MSAA on an idle RTX 4090: impostors are per-pixel ray-sphere solves inside a
   silhouette-tight quad, cheaper than meshes; fill rate and shading, not the "ray tracing", set the cost.
+- Judge against every mock side by side at the mock's own resolution, crops included; a single mock or a scaled
+  thumbnail hid most of the gaps the operator saw immediately (2026-10-17).
+- An underwater surface reads as water only through refracted sunlight on noise-based wind ripples (bright wavelet
+  patches, stretched by perspective, fading with distance); sine-wave sums read as regular patterns and Voronoi
+  cells as mosaics. Window/mirror decisions per ripple alias into blocks: let ripples shape light, not coverage.
+- `waterMedium` must fade the scatter in by mean transmittance: per-channel fading tilted a glowing medium brown.
+- Populations should be authored by on-screen size bands (what the mocks show), back-computed to world radius by
+  depth; world-radius distributions made everything mid-sized. Specks need their light kept at sub-pixel sizes.
+- Glassy bubbles in the mocks carry broad white arcs (the lit water reflected along the upper rim, focused
+  light inside the lower rim) and a thick bright rim band; small glints alone read as plastic.
 
 ## Operator-triggered appearance review (reference checklist)
 

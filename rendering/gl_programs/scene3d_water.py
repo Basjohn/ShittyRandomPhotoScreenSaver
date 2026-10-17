@@ -5,6 +5,13 @@ Import-safe GLSL plus CPU mirrors (no GL), on the shared integer hash.
   dh/dz)``), a sum of eight directional waves spread by the golden angle, wavelengths falling geometrically from 1
   to about 0.12, each travelling at deep-water speed (sqrt of its wavenumber), so the pattern never repeats visibly
   and short ripples outrun long swells. ``waterNormal`` turns it into the surface normal (y up).
+  ``waterWavesFiltered(p, t, choppiness, footprint)`` is the same with each wave faded out as its wavelength
+  approaches the pixel's ``footprint`` on the surface (``length(fwidth(p))``), so a distant surface antialiases
+  itself instead of breaking into a mosaic.
+* ``waterRipples(p, t, footprint)`` / ``waterRippleNormal(p, t, footprint, steepness)``: wind ripples for a surface
+  seen from below: six drifting, rotated octaves of lattice noise stretched across the wind, each faded out as its
+  wavelength nears the pixel's ``footprint`` (``length(fwidth(p))``). Refracting the sun through their slopes gives
+  the bright wavelet patches of a real underwater surface; the sine waves above read too regular for that.
 * ``waterCaustics(p, t)``: the bright, shifting network light draws on the bottom: the edges between moving Voronoi
   cells (``F2 - F1`` sharpened), two layers at different scales and speeds; 0..1.
 * ``waterSurfaceFromBelow(ray, normal, sun, sky, deep, sunPower)``: what a ray rising to the surface sees. Inside
@@ -23,7 +30,8 @@ Import-safe GLSL plus CPU mirrors (no GL), on the shared integer hash.
   the surface and the distance from the eye, so beams converge toward the sun in perspective and thin out with depth.
   ``jitter`` (0..1, per pixel) offsets the samples so few steps do not band.
 * ``waterMedium(colour, distance, absorption, scatter)``: light crossing ``distance`` of water: absorbed per channel
-  (red first) and replaced by the water's in-scattered colour.
+  (red first) and replaced by the water's in-scattered colour, faded in by the *mean* transmittance: a per-channel
+  fade would let the scatter colour's red through where its blue is lost, tilting a glowing medium toward brown.
 """
 from __future__ import annotations
 
@@ -53,6 +61,20 @@ vec3 waterWaves(vec2 p, float t, float choppiness) {
     }
     return sum;
 }
+vec3 waterWavesFiltered(vec2 p, float t, float choppiness, float footprint) {
+    vec3 sum = vec3(0.0);
+    float wavelength = 1.0;
+    for (int i = 0; i < 8; ++i) {
+        float angle = float(i) * 2.39996322972865332;
+        vec2 direction = vec2(cos(angle), sin(angle));
+        float k = 6.28318530718 / wavelength;
+        float amplitude = wavelength * 0.035 * choppiness * (1.0 - smoothstep(0.25, 0.6, footprint / wavelength));
+        float phase = k * dot(direction, p) - sqrt(9.81 * k) * t;
+        sum += vec3(amplitude * sin(phase), amplitude * k * cos(phase) * direction);
+        wavelength *= 0.74;
+    }
+    return sum;
+}
 vec3 waterNormal(vec2 p, float t, float choppiness) {
     vec3 wave = waterWaves(p, t, choppiness);
     return normalize(vec3(-wave.y, 1.0, -wave.z));
@@ -64,6 +86,25 @@ vec2 waterCellPoint(ivec2 cell, float t, uint seed) {
     float turn = 6.28318530718 * sceneRandom(key, 5u, seed);
     return vec2(cell) + 0.5 + 0.38 * vec2(sin(t * speed + turn + base.x * 6.28318530718),
                                           cos(t * speed * 0.83 + turn + base.y * 6.28318530718));
+}
+float waterRipples(vec2 p, float t, float footprint) {
+    float h = 0.0, amplitude = 0.5, wavelength = 3.0;
+    vec2 q = p;
+    for (int i = 0; i < 6; ++i) {
+        float fade = 1.0 - smoothstep(0.35, 0.8, footprint / wavelength);
+        vec2 drift = vec2(0.9, 0.35) * t * (0.6 + 0.25 * float(i));
+        h += amplitude * fade * (skyNoise2((q + drift) / wavelength * vec2(1.0, 1.7), 90u + uint(i)) - 0.5);
+        amplitude *= 0.55;
+        wavelength *= 0.52;
+        q = mat2(0.8, 0.6, -0.6, 0.8) * q;
+    }
+    return h;
+}
+vec3 waterRippleNormal(vec2 p, float t, float footprint, float steepness) {
+    float e = max(footprint * 0.5, 0.02);
+    float dx = waterRipples(p + vec2(e, 0.0), t, footprint) - waterRipples(p - vec2(e, 0.0), t, footprint);
+    float dz = waterRipples(p + vec2(0.0, e), t, footprint) - waterRipples(p - vec2(0.0, e), t, footprint);
+    return normalize(vec3(-dx / (2.0 * e) * steepness, 1.0, -dz / (2.0 * e) * steepness));
 }
 float waterCellEdge(vec2 p, float t, uint seed) {
     ivec2 cell = ivec2(floor(p));
@@ -110,8 +151,8 @@ vec3 waterSunBelow(vec3 sun) {
     return normalize(-refract(-normalize(sun), vec3(0.0, 1.0, 0.0), 1.0 / 1.33));
 }
 float waterShaftPattern(vec2 q, float t) {
-    float a = skyNoise2(q * 0.55 + vec2(t * 0.05, -t * 0.03), 71u);
-    float b = skyNoise2(q * 1.3 + vec2(-t * 0.08, t * 0.06), 73u);
+    float a = skyNoise2(q * 2.1 + vec2(t * 0.12, -t * 0.07), 71u);
+    float b = skyNoise2(q * 5.3 + vec2(-t * 0.2, t * 0.15), 73u);
     float n = a * 0.65 + b * 0.35;
     return smoothstep(0.58, 0.82, n) + 0.35 * smoothstep(0.7, 0.9, b);
 }
@@ -131,7 +172,7 @@ float waterShafts(vec3 eye, vec3 ray, float maxDistance, vec3 sunBelow, float su
 }
 vec3 waterMedium(vec3 colour, float distance_, vec3 absorption, vec3 scatter) {
     vec3 kept = exp(-absorption * max(distance_, 0.0));
-    return colour * kept + scatter * (1.0 - kept);
+    return colour * kept + scatter * (1.0 - dot(kept, vec3(1.0 / 3.0)));
 }
 #endif
 """
@@ -189,9 +230,26 @@ def water_shaft_pattern(x: float, y: float, t: float) -> float:
     def smooth(e0, e1, v):
         u = max(0.0, min(1.0, (v - e0) / (e1 - e0)))
         return u * u * (3.0 - 2.0 * u)
-    a = sky_noise2(x * 0.55 + t * 0.05, y * 0.55 - t * 0.03, 71)
-    b = sky_noise2(x * 1.3 - t * 0.08, y * 1.3 + t * 0.06, 73)
+    a = sky_noise2(x * 2.1 + t * 0.12, y * 2.1 - t * 0.07, 71)
+    b = sky_noise2(x * 5.3 - t * 0.2, y * 5.3 + t * 0.15, 73)
     return smooth(0.58, 0.82, a * 0.65 + b * 0.35) + 0.35 * smooth(0.7, 0.9, b)
+
+
+def water_ripples(x: float, y: float, t: float, footprint: float) -> float:
+    """CPU mirror of ``waterRipples``."""
+    def smooth(e0, e1, v):
+        u = max(0.0, min(1.0, (v - e0) / (e1 - e0)))
+        return u * u * (3.0 - 2.0 * u)
+    h, amplitude, wavelength = 0.0, 0.5, 3.0
+    qx, qy = x, y
+    for i in range(6):
+        fade = 1.0 - smooth(0.35, 0.8, footprint / wavelength)
+        dx, dy = 0.9 * t * (0.6 + 0.25 * i), 0.35 * t * (0.6 + 0.25 * i)
+        h += amplitude * fade * (sky_noise2((qx + dx) / wavelength, (qy + dy) / wavelength * 1.7, 90 + i) - 0.5)
+        amplitude *= 0.55
+        wavelength *= 0.52
+        qx, qy = 0.8 * qx - 0.6 * qy, 0.6 * qx + 0.8 * qy
+    return h
 
 
 def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -206,5 +264,5 @@ def water_sun_below(sun: tuple[float, float, float]) -> tuple[float, float, floa
     return -bx / norm, -by / norm, -bz / norm
 
 
-__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_shaft_pattern", "water_sun_below",
+__all__ = ["SCENE3D_WATER_GLSL", "WATER_IOR", "water_caustics", "water_ripples", "water_shaft_pattern", "water_sun_below",
            "water_waves"]
