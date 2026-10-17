@@ -33,7 +33,8 @@ MANIFEST = "release_media.json"
 # operator-owned Usu scenes (Windows-local, never bundled), 480 px wide ("480p" means the width:
 # 854x480 was far too large), smooth. Its own ignored folder; never a normal GODZIP payload.
 USU_SCENES = tuple(ROOT / "assets" / "usu" / "scenes" / f"UsuScene{index}.png" for index in range(1, 5))
-TRANSITION_OUTPUT = ROOT / "assets" / "webp"
+TRANSITION_OUTPUT = ROOT / "assets" / "webp" / "trans"
+VISUALIZER_OUTPUT = ROOT / "assets" / "webp" / "viz"
 TRANSITION_WIDTH = 480
 # Parity (operator direction): every showcase plays at the same frame rate and its authored speed,
 # so none looks faster than another. One encode at one quality: about 10 MB is a comfortable size,
@@ -503,8 +504,8 @@ def main(argv=None) -> int:
                         help="optional byte ceiling (default: none for transitions, 10 MiB for Visualizers)")
     args = parser.parse_args(argv)
     transitions_only = args.kind == "transition"
-    if transitions_only and args.output_dir is None and not args.list:
-        args.output_dir = TRANSITION_OUTPUT
+    if args.output_dir is None and not args.list and args.kind in ("transition", "visualizer"):
+        args.output_dir = TRANSITION_OUTPUT if transitions_only else VISUALIZER_OUTPUT
     from tools.run_matrix import _source_attribution
     provenance = _source_attribution() if not args.list else None
     if provenance is not None:
@@ -525,11 +526,14 @@ def main(argv=None) -> int:
         parser.error("invalid capture bounds")
     output = args.output_dir.resolve()
     if (output == ROOT or output == ROOT / "logs"
-            or ROOT in output.parents and ROOT / "logs" not in output.parents and output != TRANSITION_OUTPUT):
-        parser.error("repository captures must use assets/webp (transitions) or a dedicated ignored logs "
-                     "subdirectory; external release directories are allowed")
+            or ROOT in output.parents and ROOT / "logs" not in output.parents
+            and output not in (TRANSITION_OUTPUT, VISUALIZER_OUTPUT)):
+        parser.error("repository captures must use assets/webp/trans (transitions), assets/webp/viz (Visualizers) "
+                     "or a dedicated ignored logs subdirectory; external release directories are allowed")
     if output == TRANSITION_OUTPUT and not transitions_only:
-        parser.error("assets/webp holds transition showcases only (--kind transition)")
+        parser.error("assets/webp/trans holds transition showcases only (--kind transition)")
+    if output == VISUALIZER_OUTPUT and args.kind != "visualizer":
+        parser.error("assets/webp/viz holds Visualizer showcases only (--kind visualizer)")
     scenes = None
     scene_hashes = None
     if any(case.kind == "transition" for case in cases):

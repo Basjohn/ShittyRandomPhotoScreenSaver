@@ -5,7 +5,7 @@ the normal GODZIP, or runtime asset trees. Use a dedicated ignored `logs/<direct
 
 ```powershell
 python tools/release_media.py --list
-python tools/release_media.py --kind transition --id jigsaw      # -> assets/webp (the default for transitions)
+python tools/release_media.py --kind transition --id jigsaw      # -> assets/webp/trans (the default for transitions)
 python tools/release_media.py --kind visualizer --clip logs/visualizer_recordings/balanced.jsonl --start-seconds 5 --output-dir logs/release_media
 ```
 
@@ -32,7 +32,7 @@ keyframes every 150 frames. About 10 MB is comfortable, not a cap; do not squeez
 An explicit `--max-bytes` request admits the tool's bounded quality reduction and loud failure below its quality floor.
 Scene pairs/seeds remain stable in the manifest for unchanged entries; random choice does not itself stale a capture.
 
-Transition outputs default to ignored `assets/webp/`, excluded from normal Godzips. The agent reviews every new or
+Transition outputs default to ignored `assets/webp/trans/` and Visualizer outputs to `assets/webp/viz/` (operator layout 2026-10-17), both excluded from normal Godzips. Every new or reworked transition or Visualizer gets one rendered showcase WebP there (operator policy 2026-10-17). The agent reviews every new or
 visually changed transition's WebP before closing that implementation. The accepted catalogue exclusions are Warp
 Dissolve, Particle and Blinds Flat until the operator changes them. Landed transitions are accepted; catalogue generation
 and capture endpoint proof do not reopen general product visual acceptance. Remaining execution lives in Current_Plan §3.
