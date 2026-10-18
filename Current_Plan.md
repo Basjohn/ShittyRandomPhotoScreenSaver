@@ -48,12 +48,14 @@ them as pending work. Neon Lake's technical contract is `Docs/Reference/Neon_Lak
 - [ ] **Pre-existing reds (impacted run 2026-10-16/17, red at clean HEAD).** test_3d_curated_preset_ownership,
   test_defaults_schema_authority / test_default_settings_editor (`ast.literal_eval` meets the `basin_profile()` call),
   test_defaults_projection, test_engine_lifecycle, test_image_prefetch_transport, test_qt611_shader_admission,
-  test_qtquick_visualizer_all_five_owner_chain, test_qtquick_visualizer_fade_authority, test_scene3d_foundation,
+  test_scene3d_foundation,
   test_scene3d_quality_settings, test_sphere_shared_scene3d_projection, test_theme_defaults_authority,
   test_transition_distribution, test_visualizer_3d_reach, test_visualizer_custom_route_contract,
   test_visualizer_edit_content_envelope, test_visualizer_presentation_orientation, test_visualizer_runtime_controller,
   test_visualizer_settings_body_transaction_contract, and 11 stale cases in test_neon_scene_materials (rear/translucent
   body, body depth: they find no visible Sun/Moon in their reference render). Triage each: stale vs real defect.
+  (2026-10-18: the owner-chain fake engine gained the passage level, and the fade test accepts a SceneTarget overlay
+  fed from the content fade; both green.)
 
 ## 3. Release media and bounded source cleanup | Independent, nonblocking work
 
@@ -193,8 +195,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   quiet/transient/sustained-loud Bubble replay and define static/motion bubble depth, translucency, overlap,
   lighting, bloom and framed-camera goals. Distinguish useful G2 shadow receivers and optional G3B optics from
   merely decorative demand; do not expand the shared architecture without evidence.
-- [~] **EB2 — Descriptor, spec and frame admission.** *Landed 2026-10-18 behind its closed gate (see target §10
-  S2); the starter preset was replaced by the seven lab scenes in S4.* Declare one canonical mode/capability and presentation
+- [~] **EB2 — Descriptor, spec and frame admission.** *Landed 2026-10-18 (see target §10 S2); the starter preset was
+  replaced by the seven lab scenes in S4; the gate opened 2026-10-18 (operator) for physical acceptance.* Declare one canonical mode/capability and presentation
   Settings path (control surface drafted in `Extruded_Bubble_Target.md` §9: every lab scene must be authorable as a
   preset from the spec's controls alone, operator 2026-10-18); its own logical simulation and frame runtime on the
   sole clock (no second clock/capture/DSP). Assert original Bubble replay unchanged and zero inactive import/GL/resource work.

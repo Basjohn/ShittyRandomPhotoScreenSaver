@@ -625,11 +625,19 @@
         784,
         518
       ]
+    },
+    {
+      "mode_id": "extruded_bubble",
+      "path": "visualizer_extruded_bubble.png",
+      "size": [
+        784,
+        518
+      ]
     }
   ],
   "generation": {
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 26573637
+  "total_bytes": 27176134
 }

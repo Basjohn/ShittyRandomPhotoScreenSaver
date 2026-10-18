@@ -703,7 +703,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   axis. They never move/resize the card or alter its viewport, in ordinary interaction or Edit. See
   [Neon Lake Basin](Neon_Lake_Basin.md) for admission, persistence and clipping.
 - **Gated modes:** `_GATED_MODES` in `visualizer_mode_registry.py` holds registered modes that are not yet offered
-  (Extruded Bubble until its acceptance): they own defaults, a spec, presets, a runtime and a renderer, but are never
+  (empty since Extruded Bubble opened, 2026-10-18): they own defaults, a spec, presets, a runtime and a renderer, but are never
   selectable, cycled, offered in Guided Setup or listed in the 3D tab, and get no runtime work. The gate opens in code,
   never through an environment flag; tests open it for themselves with `monkeypatch` when they exercise the body.
 - **Framed preset starting views:** optional top-level `starting_view` JSON metadata contains exactly the mode's

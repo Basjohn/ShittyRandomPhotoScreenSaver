@@ -67,6 +67,10 @@ class _Engine:
     def get_energy_bands(self):
         return SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.15)
 
+    def get_musical_intensity(self):
+        # The passage level on the fixed real-music scale (Neon Lake, Extruded Bubble).
+        return 0.4
+
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.15)
 
