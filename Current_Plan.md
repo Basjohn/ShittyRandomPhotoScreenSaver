@@ -246,6 +246,10 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   any other spec improvements found (new control types, shared builder affordances, Transitions spec parity). Keep
   canonical keys and stored values compatible (migrate inputs, never silently change saved meaning); prove each
   replaced body with its real-body round-trip and render it offscreen before committing.
+  **Advanced buckets (operator 2026-10-18, later work):** make the Advanced bucket more prominent (use the existing
+  larger bucket type), migrate each mode's Technical controls under Advanced, put Extruded Bubble's Camera bucket under
+  Advanced, and draw curved tree connection lines from an opened bucket to its children if the shared bucket UI lacks
+  them. One shared owner for each; apply across every Settings page.
 
 ### 4C. Remaining modes and character/world substrate
 
