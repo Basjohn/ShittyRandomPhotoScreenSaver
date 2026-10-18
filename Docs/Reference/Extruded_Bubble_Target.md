@@ -222,7 +222,8 @@ start | now):**
 
 ## 9. Settings and presets (EB2 design, operator 2026-10-18)
 
-**Principles.** Controls are extensive but friendly: nested buckets closed by default (one open per level), short
+**Principles.** Extruded Bubble has its own control set (original Bubble's is a guideline only). Controls are
+extensive but friendly: nested buckets closed by default (one open per level), short
 Title Case names, one-sentence intros with detail in tooltips, and heavy use of `when` conditionals so only what the
 current choices use is shown. Spatial and proportional choices use **visual controls**, not number pairs. Every
 amount that music can move is an **EB5a range slider** (quiet..loud). **Presets are authored through these controls
@@ -248,7 +249,7 @@ accessibility):**
 | Glass | Clarity; Rim Glow; Iridescence (amount, colour band); Softness; Sparkle | Iridescence band only when Iridescence on |
 | Bubbles → Population | Large Bubbles, Small Bubbles, Bead Chains (ranges); Size Variety; Bead Columns | always |
 | Bubbles → Motion | Stream Direction (direction mapper); Stream Speed (range); Drift; Sway; Swirl (with its direction) | Swirl replaces Stream Direction while on |
-| Bubbles → Reaction | Breathing (bass pulse, range); Small Bubble Pulse (range); Stream Reactivity; Contraction | always |
+| Bubbles → Reaction | Breathing (range); Small Bubble Pulse (range); Stream Reactivity; Contraction | always |
 | Bubbles → Collision | Collision triangle (Fuse / Pop / Bounce); applies to Big / Small / All; Fuse Variety (neck width, members) | Fuse Variety only when Fuse share > 0 |
 | Particles | Amount (range); Size; Warmth; Glow; Bands (frequency, contrast) | Bands' detail only when Bands on |
 | Lens | Focus; Aperture; Exposure | always |
@@ -270,6 +271,8 @@ tint, default `speck_warm`; Light Strength → `glint_power`, `light_power`, `su
 `small_count` + `fizz`, `chains`; Bead Columns → `columns`; Stream Direction → `travel`, `streak`; Drift, Sway →
 `drift`, `sway`; Particles → `specks`, `speck_size`, `warm_share` + `speck_warm`, `speck_bloom` + `dust`, `banded`,
 `band_freq`, `cloud_*`; Lens → `focus`, `aperture` + `near_coc`, `exposure` + `hdr_exposure`. Breathing, pulse,
-stream reactivity, contraction and collision come from original Bubble's logical simulation (§2), not the lab.
+stream reactivity, contraction and collision have no lab knobs yet. **Extruded Bubble's controls are its own:**
+original Bubble's control set is only a guideline (operator 2026-10-18); nothing is copied or shared from its Settings
+body, and each control here is designed for this mode.
 Values still kept per scene until their control exists: mock 1's `ray_cut`, camera-down's `glint_sharp` and the
 `rough` differences.
