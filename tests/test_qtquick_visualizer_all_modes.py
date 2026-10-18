@@ -62,7 +62,8 @@ from widgets.spotify_visualizer.spectrum_frame_runtime import (
     SpectrumFrameRuntime,
 )
 from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
-from widgets.spotify_visualizer.render_state import ExtrudedSpectrumFrame, ShockwaveGridFrame
+from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame, ExtrudedSpectrumFrame, ShockwaveGridFrame
+from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime, controls_from_parameters
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 
 
@@ -78,6 +79,7 @@ _MODE_STATES = {
     "sphere": SphereFrame,
     "extruded_spectrum": ExtrudedSpectrumFrame,
     "shockwave_grid": ShockwaveGridFrame,
+    "extruded_bubble": ExtrudedBubbleFrame,
 }
 _MODE_IDS = tuple(
     descriptor.mode_id
@@ -124,6 +126,8 @@ def _runtime(mode_id: str):
         return DevCurveFrameRuntime()
     if mode_id == "sphere":
         return SphereFrameRuntime()
+    if mode_id == "extruded_bubble":
+        return ExtrudedBubbleFrameRuntime()
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 
@@ -272,6 +276,17 @@ def _drive_runtime(
             frame=resolved,
             reactive_source_ready=bool(fresh_source and playing),
         )
+    if mode_id == "extruded_bubble":
+        resolved = runtime.advance(
+            onsets=(), now_ts=now_ts, playing=playing, intensity=0.5,
+            identity=(identity["runtime_generation"], identity["engine_generation"], identity["activation_id"]),
+            source_identity=(identity["source_generation"], identity["source_activation_id"]),
+            controls=controls_from_parameters(_resolved_mode_config("extruded_bubble")),
+        )
+        if resolved is None:
+            return None
+        # Its snapshot holds no identity; readiness is the runtime's own source fence.
+        return SimpleNamespace(frame=resolved, reactive_source_ready=bool(fresh_source and playing))
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 

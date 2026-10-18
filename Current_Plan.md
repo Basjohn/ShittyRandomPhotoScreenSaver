@@ -193,7 +193,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   quiet/transient/sustained-loud Bubble replay and define static/motion bubble depth, translucency, overlap,
   lighting, bloom and framed-camera goals. Distinguish useful G2 shadow receivers and optional G3B optics from
   merely decorative demand; do not expand the shared architecture without evidence.
-- [ ] **EB2 — Descriptor, spec and frame admission.** Declare one canonical mode/capability and presentation
+- [~] **EB2 — Descriptor, spec and frame admission.** *Landed 2026-10-18 behind its closed gate (see target §10
+  S2); open: the starter preset is replaced in S4.* Declare one canonical mode/capability and presentation
   Settings path (control surface drafted in `Extruded_Bubble_Target.md` §9: every lab scene must be authorable as a
   preset from the spec's controls alone, operator 2026-10-18); its own logical simulation and frame runtime on the
   sole clock (no second clock/capture/DSP). Assert original Bubble replay unchanged and zero inactive import/GL/resource work.

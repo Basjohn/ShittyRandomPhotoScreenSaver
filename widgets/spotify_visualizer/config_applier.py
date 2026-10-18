@@ -323,6 +323,19 @@ def shockwave_grid_parameters(widget: Any, now_ts: float | None = None) -> Dict[
     return values
 
 
+def extruded_bubble_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
+    """Extruded Bubble's parameters from the presentation owner, with the live orbit or Auto Rotate swivel
+    evaluated at the capture's ``now_ts``."""
+    pres = _presentation_source(widget)
+    values = spec_mode_parameters(pres, "extruded_bubble")
+    values["scene3d_detail"] = str(pres._scene3d_detail)
+    if now_ts is not None:
+        from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion
+
+        values = apply_view_orbit_motion(pres, "extruded_bubble", values, now_ts)
+    return values
+
+
 def extruded_spectrum_parameters(widget: Any, now_ts: float | None = None) -> Dict[str, object]:
     """Extruded Spectrum's renderer-only parameters from the presentation owner, with any
     held-key view orbit evaluated at the capture's ``now_ts``."""

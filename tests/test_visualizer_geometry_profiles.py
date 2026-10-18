@@ -14,13 +14,14 @@ def test_registered_modes_separate_geometry_kind_from_layout_profile():
 
     assert set(kinds.values()) <= {"planar", "freeform_3d"}
     assert {mode for mode, kind in kinds.items() if kind == "freeform_3d"} == {
-        "sphere", "extruded_spectrum", "shockwave_grid",
+        "sphere", "extruded_spectrum", "shockwave_grid", "extruded_bubble",
     }
     assert {profile for mode, profile in profiles.items() if kinds[mode] == "planar"} == {"planar"}
     assert profiles["extruded_spectrum"] == "3d:extruded_spectrum"
     assert profiles["shockwave_grid"] == "3d:shockwave_grid"
     assert profiles["sphere"] == "3d:sphere"
-    assert len({profiles[mode] for mode in ("extruded_spectrum", "shockwave_grid", "sphere")}) == 3
+    assert profiles["extruded_bubble"] == "3d:extruded_bubble"
+    assert len({profiles[mode] for mode in ("extruded_spectrum", "shockwave_grid", "sphere", "extruded_bubble")}) == 4
 
 
 def test_layout_profile_is_compatibility_metadata_not_camera_state():

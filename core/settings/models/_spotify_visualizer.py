@@ -824,6 +824,13 @@ class SpotifyVisualizerSettings:
     oscilloscope_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_adaptive_sensitivity'))
     oscilloscope_sensitivity: float = field(default_factory=lambda: _visualizer_default('oscilloscope_sensitivity'))
     oscilloscope_bar_count: int = field(default_factory=lambda: _visualizer_default('oscilloscope_bar_count'))
+    extruded_bubble_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('extruded_bubble_dynamic_floor'))
+    extruded_bubble_manual_floor: float = field(default_factory=lambda: _visualizer_default('extruded_bubble_manual_floor'))
+    extruded_bubble_input_gain: float = field(default_factory=lambda: _visualizer_default('extruded_bubble_input_gain'))
+    extruded_bubble_audio_block_size: int = field(default_factory=lambda: _visualizer_default('extruded_bubble_audio_block_size'))
+    extruded_bubble_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('extruded_bubble_adaptive_sensitivity'))
+    extruded_bubble_sensitivity: float = field(default_factory=lambda: _visualizer_default('extruded_bubble_sensitivity'))
+    extruded_bubble_bar_count: int = field(default_factory=lambda: _visualizer_default('extruded_bubble_bar_count'))
     devcurve_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_floor'))
     devcurve_manual_floor: float = field(default_factory=lambda: _visualizer_default('devcurve_manual_floor'))
     devcurve_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_range_enabled'))
@@ -985,6 +992,7 @@ class SpotifyVisualizerSettings:
     preset_devcurve: int = field(default_factory=lambda: _visualizer_default('preset_devcurve'))
     preset_sphere: int = field(default_factory=lambda: _visualizer_default('preset_sphere'))
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
+    preset_extruded_bubble: int = field(default_factory=lambda: _visualizer_default('preset_extruded_bubble'))
     preset_shockwave_grid: int = field(default_factory=lambda: _visualizer_default('preset_shockwave_grid'))
 
     def __post_init__(self):

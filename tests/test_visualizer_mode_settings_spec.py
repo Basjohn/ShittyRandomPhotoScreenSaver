@@ -11,11 +11,15 @@ from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import (
+    VISUAL_CONTROLS,
     Choice,
     Colour,
     Custom,
+    Direction,
+    Range,
     Slider,
     Toggle,
+    Triangle,
     iter_mode_settings,
     control_runtime_attr,
     control_runtime_value,
@@ -42,7 +46,29 @@ def settings_manager(qt_app, tmp_path):
     assert manager.flush(timeout=5.0)
 
 
+@pytest.fixture
+def open_gate(monkeypatch):
+    """Open a gated mode's code gate for this test only (its body is what users get once it opens)."""
+    import core.settings.visualizer_mode_registry as registry
+
+    def open_(mode):
+        if mode in registry._GATED_MODES:
+            monkeypatch.setitem(registry._GATED_MODES, mode, lambda: True)
+    return open_
+
+
 def _different(control, value):
+    if isinstance(control, Range):
+        low, high = value
+        changed = [control.low, control.high] if [low, high] != [control.low, control.high] else \
+            [control.low, (control.low + control.high) / 2]
+        return [int(round(v)) for v in changed] if control.integer else changed
+    if isinstance(control, Triangle):
+        return [round(value[1], 4), round(value[2], 4), round(value[0], 4)] if value[0] != value[1] else [0.2, 0.3, 0.5]
+    if isinstance(control, Direction):
+        return [((value[0] + 90.0 + 180.0) % 360.0) - 180.0,
+                (control.height_low + control.height_high) / 2 if value[1] != (control.height_low + control.height_high) / 2
+                else control.height_high]
     if isinstance(control, Slider):
         return control.high if value != control.high else control.low
     if isinstance(control, Toggle):
@@ -90,6 +116,8 @@ def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
             wild[control.key] = "not a colour"
         elif isinstance(control, Choice):
             wild[control.key] = DEFAULTS[control.key] if control.ingress_strict else "not a choice"
+        elif isinstance(control, VISUAL_CONTROLS):
+            wild[control.key] = "not a value"
         else:
             wild[control.key] = "on"
     model = SpotifyVisualizerSettings.from_mapping(wild, apply_preset_overlay=False)
@@ -97,7 +125,7 @@ def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
         value = getattr(model, control.key)
         if isinstance(control, Slider):
             assert value == (control.high if control.admission_high is None else control.admission_high)
-        elif isinstance(control, (Colour, Choice)):
+        elif isinstance(control, (Colour, Choice, *VISUAL_CONTROLS)):
             assert value == control.admit(DEFAULTS[control.key], DEFAULTS[control.key])
         else:
             assert value is True
@@ -201,14 +229,17 @@ def test_a_live_condition_cannot_reenable_a_permanently_unavailable_control(qt_a
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.mode_id)
-def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settings_manager, spec):
+def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settings_manager, spec, open_gate):
     from PySide6.QtGui import QColor
+
+    from ui.tabs.media.spec_mode_builder import _current_value
 
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
     from core.settings.visualizer_presets import get_custom_preset_index
     from ui.tabs.visualizers_tab import VisualizersTab
 
     mode = spec.mode_id
+    open_gate(mode)
     settings_manager.set("widgets", {"spotify_visualizer": {
         "enabled": True, "visualizers_enabled": True, "mode": mode,
         "mode_activation": build_visualizer_mode_activation([mode]),
@@ -226,7 +257,14 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
                 getattr(tab, f"{control.key}_btn").color_changed.emit(QColor(*wanted[control.key]))
                 continue
             widget = getattr(tab, control.key)
-            if isinstance(control, Slider):
+            if isinstance(control, VISUAL_CONTROLS):
+                wanted[control.key] = _different(control, _current_value(tab, control))
+                if isinstance(control, Range):
+                    widget.setValue(control.positions(wanted[control.key]))
+                else:
+                    widget.setValue(wanted[control.key])
+                wanted[control.key] = control.admit(wanted[control.key], wanted[control.key])
+            elif isinstance(control, Slider):
                 assert (widget.minimum(), widget.maximum()) == (round(control.low * control.scale),
                                                                 round(control.high * control.scale))
                 wanted[control.key] = _different(control, widget.value() / control.scale)
@@ -264,6 +302,8 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
             if isinstance(control, Colour):
                 colour = getattr(reloaded, f"_{control.key}")
                 shown = [colour.red(), colour.green(), colour.blue(), colour.alpha()]
+            elif isinstance(control, VISUAL_CONTROLS):
+                shown = _current_value(reloaded, control)
             elif isinstance(control, Slider):
                 shown = getattr(reloaded, control.key).value() / control.scale
             elif isinstance(control, Toggle):
@@ -298,13 +338,14 @@ CONDITIONAL = [spec for spec in SPECS if any(control.when for control in spec.co
 
 
 @pytest.mark.parametrize("spec", CONDITIONAL, ids=lambda spec: spec.mode_id)
-def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, settings_manager, spec):
+def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, settings_manager, spec, open_gate):
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
     from core.settings.visualizer_presets import get_custom_preset_index
     from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
     from ui.tabs.visualizers_tab import VisualizersTab
 
     mode = spec.mode_id
+    open_gate(mode)
     settings_manager.set("widgets", {"spotify_visualizer": {
         "enabled": True, "visualizers_enabled": True, "mode": mode,
         "mode_activation": build_visualizer_mode_activation([mode]),

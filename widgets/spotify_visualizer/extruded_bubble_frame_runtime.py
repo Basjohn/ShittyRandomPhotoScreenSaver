@@ -20,6 +20,36 @@ from widgets.spotify_visualizer.transient_bus import musical_weight
 
 # The largest step one capture may take (a stalled clock never leaps the population).
 MAX_STEP_SECONDS = 0.1
+# Settings units -> simulation units: stream speed (volume units/s), breathing and pulse (share of radius) at 100%.
+STREAM_SPEED_FULL = 0.25
+BREATHING_FULL = 0.35
+SMALL_PULSE_FULL = 0.15
+_SCOPES = {"All": "all", "Big": "big", "Small": "small", "Off": "off"}
+
+
+def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
+    """The simulation's controls from the mode's Settings values (``extruded_bubble_*``, as the spec admits them)."""
+    def pair(key, scale=1.0):
+        low, high = parameters[key]
+        return float(low) * scale, float(high) * scale
+
+    return ExtrudedBubbleControls(
+        large_count=pair("extruded_bubble_large_bubbles"),
+        mid_count=pair("extruded_bubble_mid_bubbles"),
+        size_variety=float(parameters["extruded_bubble_size_variety"]),
+        stream_direction=pair("extruded_bubble_stream_direction"),
+        stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),
+        drift=pair("extruded_bubble_drift"),
+        sway=float(parameters["extruded_bubble_sway"]),
+        emission=pair("extruded_bubble_particles"),
+        idle=float(parameters["extruded_bubble_idle"]),
+        breathing=pair("extruded_bubble_breathing", BREATHING_FULL),
+        small_pulse=pair("extruded_bubble_small_pulse", SMALL_PULSE_FULL),
+        sustained=float(parameters["extruded_bubble_sustained"]),
+        smoothing=float(parameters["extruded_bubble_smoothing"]),
+        collision=tuple(float(v) for v in parameters["extruded_bubble_collision"]),
+        collision_scope=_SCOPES[str(parameters["extruded_bubble_collision_scope"])],
+    )
 
 
 def onset_weight(onset) -> float:
@@ -81,4 +111,4 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         return self._latest
 
 
-__all__ = ["ExtrudedBubbleFrameRuntime", "MAX_STEP_SECONDS", "onset_weight"]
+__all__ = ["ExtrudedBubbleFrameRuntime", "MAX_STEP_SECONDS", "controls_from_parameters", "onset_weight"]

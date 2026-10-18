@@ -1,0 +1,124 @@
+{
+  "description": "Starter preset (the canonical defaults); replaced when the lab scenes are rebuilt through Settings (S4).",
+  "mode": "extruded_bubble",
+  "name": "Preset 1 (Sunlit Surface)",
+  "preset_index": 0,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "mode": "extruded_bubble",
+        "extruded_bubble_adaptive_sensitivity": true,
+        "extruded_bubble_aperture": 0.4,
+        "extruded_bubble_audio_block_size": 512,
+        "extruded_bubble_auto_rotate": false,
+        "extruded_bubble_auto_rotate_after": 20,
+        "extruded_bubble_auto_rotate_speed": 6,
+        "extruded_bubble_band_contrast": 0.5,
+        "extruded_bubble_bar_count": 32,
+        "extruded_bubble_bead_chains": [
+          2,
+          4
+        ],
+        "extruded_bubble_breathing": [
+          0.15,
+          0.6
+        ],
+        "extruded_bubble_clarity": 0.0,
+        "extruded_bubble_collision": [
+          0.4,
+          0.3,
+          0.3
+        ],
+        "extruded_bubble_collision_scope": "All",
+        "extruded_bubble_depth_colour": [
+          6,
+          14,
+          31,
+          255
+        ],
+        "extruded_bubble_drift": [
+          0.3,
+          0.8
+        ],
+        "extruded_bubble_dynamic_floor": false,
+        "extruded_bubble_exposure": 1.0,
+        "extruded_bubble_focus": 0.5,
+        "extruded_bubble_haze": 0.2,
+        "extruded_bubble_idle": 0.5,
+        "extruded_bubble_input_gain": 1.0,
+        "extruded_bubble_iridescence": 0.35,
+        "extruded_bubble_large_bubbles": [
+          6,
+          14
+        ],
+        "extruded_bubble_light_colour": [
+          235,
+          242,
+          255,
+          255
+        ],
+        "extruded_bubble_light_direction": [
+          0.0,
+          55.0
+        ],
+        "extruded_bubble_light_strength": 1.0,
+        "extruded_bubble_light_type": "Sunlit Surface",
+        "extruded_bubble_manual_floor": 0.12,
+        "extruded_bubble_mid_bubbles": [
+          20,
+          48
+        ],
+        "extruded_bubble_particle_bands": false,
+        "extruded_bubble_particle_colour": [
+          255,
+          140,
+          60,
+          255
+        ],
+        "extruded_bubble_particle_glow": 0.0,
+        "extruded_bubble_particle_size": 1.0,
+        "extruded_bubble_particle_warmth": 0.3,
+        "extruded_bubble_particles": [
+          0.3,
+          1.0
+        ],
+        "extruded_bubble_ray_flicker": 0.3,
+        "extruded_bubble_ray_reach": 0.6,
+        "extruded_bubble_ray_softness": 0.35,
+        "extruded_bubble_rays": [
+          0.45,
+          0.75
+        ],
+        "extruded_bubble_rays_enabled": true,
+        "extruded_bubble_rim_glow": 1.0,
+        "extruded_bubble_sensitivity": 0.4,
+        "extruded_bubble_size_variety": 0.6,
+        "extruded_bubble_small_pulse": [
+          0.15,
+          0.8
+        ],
+        "extruded_bubble_smoothing": 0.5,
+        "extruded_bubble_softness": 0.1,
+        "extruded_bubble_sparkle": 1.0,
+        "extruded_bubble_stream_direction": [
+          0.0,
+          0.0
+        ],
+        "extruded_bubble_stream_speed": [
+          0.25,
+          0.8
+        ],
+        "extruded_bubble_surface_brightness": 1.0,
+        "extruded_bubble_sustained": 0.6,
+        "extruded_bubble_sway": 0.4,
+        "extruded_bubble_veils": 0.0,
+        "extruded_bubble_water_colour": [
+          8,
+          20,
+          41,
+          255
+        ]
+      }
+    }
+  }
+}

@@ -645,8 +645,48 @@ class DevCurveFrame:
         return "devcurve"
 
 
+@dataclass(frozen=True, slots=True)
+class ExtrudedBubbleFrame:
+    """Extruded Bubble's authored state (its own simulation's snapshot, ``extruded_bubble_simulation``): packed
+    bubble records (x, y, z, radius, alpha, swell, identity, cluster) and cluster records (members, then member
+    slots), the scene scalars the GPU-procedural layers read, and the renderer parameters."""
+
+    bubbles: tuple[float, ...] = ()
+    clusters: tuple[float, ...] = ()
+    time: float = 0.0
+    level: float = 0.0
+    breath: float = 0.0
+    flash: float = 0.0
+    sustain: float = 0.0
+    drift: float = 0.0
+    emission: float = 0.0
+    stream: tuple[float, float, float] = (0.0, 1.0, 0.0)
+    stream_speed: float = 0.0
+    parameters: FrozenFields = FrozenFields()
+
+    def __post_init__(self) -> None:
+        bubbles = _float_tuple(self.bubbles, name="extruded bubble record")
+        clusters = _float_tuple(self.clusters, name="extruded bubble cluster")
+        if len(bubbles) % 8 or len(clusters) % 4:
+            raise ValueError("Extruded Bubble records must be whole (8 floats a bubble, 4 a cluster)")
+        object.__setattr__(self, "bubbles", bubbles)
+        object.__setattr__(self, "clusters", clusters)
+        stream = _float_tuple(self.stream, name="extruded bubble stream")
+        if len(stream) != 3:
+            raise ValueError("Extruded Bubble stream must be a 3D direction")
+        object.__setattr__(self, "stream", stream)
+        for name in ("time", "level", "breath", "flash", "sustain", "drift", "emission", "stream_speed"):
+            object.__setattr__(self, name, _finite(getattr(self, name), name=f"extruded bubble {name}"))
+        object.__setattr__(self, "parameters",
+                           _coerce_frozen_fields(self.parameters, name="extruded bubble parameters"))
+
+    @property
+    def mode_id(self) -> str:
+        return "extruded_bubble"
+
+
 ModeFrame: TypeAlias = (
-    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame
+    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame | ExtrudedBubbleFrame
 )
 
 
@@ -723,7 +763,7 @@ class VisualizerLogicalFrame:
             raise TypeError("common state must be VisualizerCommonState")
         if not isinstance(
             self.mode_state,
-            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame),
+            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame, ExtrudedBubbleFrame),
         ):
             raise TypeError("mode state must be one of the canonical immutable frames")
         edges = tuple(self.protected_edges)

@@ -337,3 +337,14 @@ speed (no stutter), it rises within about a second into loud sections and decays
 held loud passages, and the mid bubbles pulse on snares. Emission had pinned at its maximum (a flat onset bump); it is
 now a share of its own span. Passage intensity is the track's level on the fixed scale: the "acoustic soft" recording
 measures as loud as the heavy ones (median 7.7), so its high sustain is correct.
+
+**S2 landed (2026-10-18).** `extruded_bubble` is registered behind its closed code gate (`_GATED_MODES`: not
+selectable, cycled, offered in Guided Setup or listed in the 3D tab). Its own Settings spec (§9: Light, Light Rays,
+Bubbles, Motion, Reaction, Collision, Camera; advanced Water, Glass, Particles, Lens) uses the direction mappers,
+the collision triangle and range sliders with `when` conditionals; its analysis profile owns Oscilloscope's
+technical subset (floors default off; its reactivity reads only fixed-scale intensity and onsets). The capture
+advances its own simulation on the logical clock (`controls_from_parameters` maps Settings units to the
+simulation's), Auto Rotate is declared with its enable toggle, and a starter preset equal to the defaults stands in
+until S4 rebuilds the lab scenes through these controls. The renderer admits its frame and draws nothing until S3.
+Tests: the generic spec suite (model repair, real body build/save/reload incl. the visual controls, conditionals,
+with the gate opened for the test), the all-mode runtime lifecycle, geometry profiles, presets.
