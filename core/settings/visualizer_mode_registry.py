@@ -133,6 +133,18 @@ class VisualizerModeDescriptor:
     # units. Empty: the keys keep their ordinary meaning (any key exits).
     view_orbit_settings: tuple[str, ...] = ()
     view_orbit_steps: tuple[float, ...] = ()
+    # Framed camera (FC) policy, declared per mode (the camera code never branches on a mode id):
+    # ``view_orbit_turn_wraps`` False clamps turn to its range (a landscape has no back to swing to);
+    # ``view_orbit_inertia`` lets a released drag coast to a stop on the logical clock;
+    # ``scene_pan_envelope`` (anchor x, anchor y, upper reference y, left, right), all screen-normalised, keeps a
+    # framed scene's anchor between left and right and its anchor/upper reference reachable as pan and zoom change;
+    # ``view_auto_rotate_settings`` names (Auto Rotate After seconds, Auto Rotate Speed degrees/s) presentation
+    # settings: after that long without camera input the view swivels gently round a full circle (turn only),
+    # starting at once when a startup or mode/preset swap completes. Only for modes whose turn wraps.
+    view_orbit_turn_wraps: bool = True
+    view_orbit_inertia: bool = False
+    scene_pan_envelope: tuple[float, ...] = ()
+    view_auto_rotate_settings: tuple[str, ...] = ()
     # Optional framed scene pose (scale, screen-normalized pan x/y). These
     # capabilities target the scene inside the card, never CUSTOM geometry.
     # Canonical presentation specs own the numeric ranges and defaults.
@@ -279,6 +291,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         backdrop_setting="sphere_mirror",
         view_orbit_settings=("sphere_turn", "sphere_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        view_orbit_inertia=True,
         geometry_kind="freeform_3d",
         layout_profile="3d:sphere",
     ),
@@ -340,6 +353,10 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         profile_migration_source_mode="spectrum",
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        # A landscape: no wrapping through its back/underside. Pan keeps the lake anchor in view and, looking up,
+        # an upper-sky reference (so the Sun can be framed without the lake staying central).
+        view_orbit_turn_wraps=False,
+        scene_pan_envelope=(0.50, 0.68, 0.12, 0.08, 0.92),
         scene_transform_settings=("shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y"),
         prepared_reveal=True,
         geometry_kind="freeform_3d",
@@ -354,6 +371,9 @@ def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
 
 
 VISUALIZER_MODE_IDS: tuple[str, ...] = tuple(d.mode_id for d in _ALL_DESCRIPTORS)
+# Framed modes whose pan is bounded by a declared envelope (scale, pan x, pan y transform settings).
+SCENE_PAN_ENVELOPE_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = tuple(
+    d for d in _ALL_DESCRIPTORS if d.scene_pan_envelope and len(d.scene_transform_settings) == 3)
 
 
 def iter_visualizer_mode_descriptors() -> tuple[VisualizerModeDescriptor, ...]:

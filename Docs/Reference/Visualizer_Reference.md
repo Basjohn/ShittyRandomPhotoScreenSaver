@@ -661,6 +661,17 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   These are mode-specific live view settings, excluded from curated artwork and Custom art snapshots. Ordinary art
   hydration cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
   stage geometry, with no camera authority.
+- **Framed camera policy is declared, never keyed on a mode id (FC, 2026-10-18):** descriptor fields
+  `view_orbit_turn_wraps` (False clamps turn: Neon Lake's landscape), `view_orbit_inertia` (a released drag coasts:
+  Sphere), `scene_pan_envelope` (anchor x/y, upper reference y, left/right margins bounding pan at each zoom: Neon Lake;
+  identical to its former bounds over a dense scale/pan grid) and `view_auto_rotate_settings` (Auto Rotate After
+  seconds, Speed degrees/s). Orbit is rotation of the view (turn/tilt); pan and zoom are the separate scene transform.
+  **Auto Rotate** swivels turn only, round a full circle (wrapping modes only), after that long without camera input;
+  a completed startup or mode/preset swap (the orbit-admission edge) starts it at once, so a preset's starting view
+  is where it begins. The GUI thread publishes one immutable `AutoRotate` record (armed at that edge and when
+  orbiting stops, dropped by any camera input, which first settles the swivelled turn so the view never snaps); the
+  logical capture evaluates it at its frame time. No timer, polling or per-frame write; the swivel is never
+  persisted. Tests: `test_visualizer_view_orbit.py` (swivel, wait, input takeover, off/clamped/undeclared).
 - **Reusable framed 3D camera contract (planned consolidation):** Neon Lake's working internal-camera
   input and canonical presentation pose are the reference for **all future bordered 3D Visualizers**, including
   Extruded Bubble, Cubes, Aurora, Ember Swarm and Waveform Ribbon. Promote its capability into the existing

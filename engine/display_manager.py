@@ -797,6 +797,12 @@ class DisplayManager(QObject):
         """Tell every live Quick input whether W/A/S/D orbit the shown Visualizer."""
 
         admitted = self._quick_view_orbit_admitted()
+        owner = self._quick_visualizer_owner
+        if admitted and owner is not None:
+            # A completed startup or mode/preset swap starts Auto Rotate at once (when the mode has it on).
+            from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
+            arm_view_auto_rotate(owner.controller.presentation_state, str(owner.controller.mode_id), time.time(),
+                                 immediate=True)
         for display in tuple(self.displays):
             if not isinstance(display, QuickDisplayUnit) or display.is_retired:
                 continue
@@ -1020,11 +1026,13 @@ class DisplayManager(QObject):
             settled = stop_view_orbit_motion(pres, now)
             if settled is not None:
                 self._quick_view_orbit_pending = settled
-            if owner.controller.mode_id == 'sphere':
-                from widgets.spotify_visualizer.view_orbit import release_sphere_orbit_inertia
-                endpoint = release_sphere_orbit_inertia(pres, now)
-                if endpoint is not None:
-                    self._quick_view_orbit_pending = ('sphere', endpoint)
+            from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate, release_view_orbit_inertia
+            mode_id = str(owner.controller.mode_id)
+            endpoint = release_view_orbit_inertia(pres, mode_id, now)
+            if endpoint is not None:
+                self._quick_view_orbit_pending = (mode_id, endpoint)
+            # Orbiting stopped: the swivel resumes after the mode's Auto Rotate After without camera input.
+            arm_view_auto_rotate(pres, mode_id, now, immediate=False)
         pending = self._quick_view_orbit_pending
         self._quick_view_orbit_pending = None
         pose_owner = getattr(self, '_quick_view_pose_owner', None)
