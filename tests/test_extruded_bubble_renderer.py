@@ -148,13 +148,22 @@ def test_particles_read_their_range_at_the_emission_follower_growing_density_and
     assert scene.speck_amount({**settings, "extruded_bubble_particles": [1.0, 1.0]}, 0.5)[0] == pytest.approx(1.0)
     assert scene.speck_amount({**settings, "extruded_bubble_particles": [0.0, 0.0]}, 1.0) == (0.0, 0.0)
 
-def test_ray_strength_reads_its_range_at_the_level_and_is_off_when_disabled():
+def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled():
     low, high = SETTINGS["extruded_bubble_rays"]
     on = {**SETTINGS, "extruded_bubble_rays_enabled": True}
     assert scene.ray_strength(on, 0.0) == pytest.approx(low)
     assert scene.ray_strength(on, 1.0) == pytest.approx(high)
     assert scene.ray_strength(on, 2.0) == pytest.approx(high)
     assert scene.ray_strength({**SETTINGS, "extruded_bubble_rays_enabled": False}, 0.7) == 0.0
+
+
+def test_ray_flicker_deepens_as_the_rays_rise_and_a_held_passage_reaches_further():
+    on = {**SETTINGS, "extruded_bubble_rays_enabled": True, "extruded_bubble_ray_flicker": 0.5}
+    quiet, loud = scene.ray_motion(on, 0.0, 0.0), scene.ray_motion(on, 1.0, 1.0)
+    assert 0.0 < quiet[0] < loud[0] <= 0.5
+    assert quiet[1] < loud[1]
+    assert scene.ray_motion({**on, "extruded_bubble_ray_flicker": 0.0}, 1.0, 1.0)[0] == 0.0
+    assert scene.ray_motion({**on, "extruded_bubble_rays_enabled": False}, 1.0, 1.0) == (0.0, 1.0)
 
 
 def test_procedural_counts_read_the_bead_range_at_the_emission_follower_and_the_tier():
@@ -240,6 +249,22 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
     monkeypatch.undo()
     host.release_resources()
     assert not renderer.has_resources
+
+
+@pytest.mark.qt
+def test_the_rays_follow_the_simulation_driver_never_the_raw_level(target):
+    """The passage level holds at 1 through loud music: the picture reads the simulation's ray driver instead."""
+    capture, host = target
+
+    def with_state(**fields):
+        snapshot = _snapshot(extruded_bubble_rays_enabled=True, extruded_bubble_rays=[0.0, 1.0])
+        state = dataclasses.replace(snapshot.logical.mode_state, **fields)
+        return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
+    for _ in range(4):                                                  # prepared and warm
+        capture.render(host, with_state(level=0.0, rays=0.2))
+    base = capture.render(host, with_state(level=0.0, rays=0.2))
+    assert np.array_equal(capture.render(host, with_state(level=1.0, rays=0.2)), base)
+    assert np.abs(capture.render(host, with_state(level=0.0, rays=0.9)) - base).mean() > 0.5
 
 
 def _frame(snapshot, quad_vao):

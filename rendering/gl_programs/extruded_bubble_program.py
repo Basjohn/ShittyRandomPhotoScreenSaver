@@ -251,6 +251,8 @@ uniform float uShaftFan;        // share of the sun fan (0: depth march only)
 uniform float uFanRays;         // broad rays round a full turn of the fan
 uniform float uFanReach;        // angle (rad) over which the fan fades
 uniform vec2 uFanMix;           // ray contrast 0..1, share of the depth march under the fan
+uniform float uFlicker;         // Ray Flicker's depth now (0: steady rays)
+uniform float uShimmer;         // the shimmer's phase (the simulation's; faster on the hits)
 float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     // Azimuth round the sun axis, zero pointing down (the seam faces up, behind the sun).
     vec3 down = normalize(vec3(0.0, -1.0, 0.0) - sunBelow * -sunBelow.y + vec3(1e-4, 0.0, 0.0));
@@ -264,6 +266,8 @@ float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     // Many fine and medium rays packed side by side (mocks), never a few solid wedges: soft contrast over a floor.
     float n = broad * 0.3 + mid * 0.4 + fine * 0.3;
     float rays = (1.0 - uFanMix.x) * n + uFanMix.x * smoothstep(0.42, 0.78, n);
+    // Ray Flicker: each ray brightens and dims on its own as the shimmer runs.
+    rays *= 1.0 + uFlicker * 1.6 * (skyNoise2(vec2(x * 1.9, uShimmer * 1.3), 107u) - 0.5);
     // Each ray reaches its own length; all fade with the angle from the sun, gone by about two thirds down.
     float reach = mix(uFanReach * 0.55, uFanReach * 1.25, skyNoise2(vec2(x * 1.3, 11.5), 101u));
     // The fan hangs below the sun: rays leaving sideways (toward the top corners) are faint (mocks).
@@ -277,7 +281,8 @@ float labShaftPattern(vec2 q, float t) {
     float slow = skyNoise2(q * 0.55 + vec2(t * 0.03, 0.0), 79u);
     float n = a * 0.7 + b * 0.3;
     float lo = mix(0.58, 0.3, uShaftSoft), hi = mix(0.82, 0.95, uShaftSoft);
-    return smoothstep(lo, hi, n) * (0.45 + 0.9 * slow);
+    float flicker = 1.0 + uFlicker * 1.6 * (skyNoise2(q * 1.4 + vec2(uShimmer * 0.9, -uShimmer * 0.6), 109u) - 0.5);
+    return smoothstep(lo, hi, n) * (0.45 + 0.9 * slow) * flicker;
 }
 float labShafts(vec3 ray, float maxDistance, vec3 sunBelow, float surfaceY, float t, int samples, float jitter) {
     float stepLength = maxDistance / float(samples);
