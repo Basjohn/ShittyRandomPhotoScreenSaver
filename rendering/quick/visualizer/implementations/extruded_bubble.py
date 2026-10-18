@@ -12,7 +12,8 @@ from Settings (``extruded_bubble_scene``). Each frame:
    shells over the captured background, then the near giants through the shared ``DefocusLayer``.
 
 The simulation (``ExtrudedBubbleFrame``) owns only what music and collisions move; near giants are view-anchored and
-drift on the frame's own time. Bead chains, fizz and particulate are S3c (GPU-procedural). Instance data goes up in
+drift on the frame's own time. Bead chains, marine snow and fizz wakes are GPU-procedural (``BEAD_VERTEX``, moved by
+the simulation's ``travel``; the wakes read the shell instances as a storage buffer). Instance data goes up in
 fixed-capacity buffers (``glNamedBufferSubData``, a few KB a frame); uniforms are uploaded only when they change.
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
-    BACKDROP_FRAGMENT, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
+    BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
     NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
 )
 from rendering.gl_programs.extruded_bubble_scene import (
@@ -31,6 +32,7 @@ from rendering.gl_programs.extruded_bubble_scene import (
     glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
 )
 from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.quick import gl_query
 from rendering.quick.scene3d.defocus import DefocusLayer
 from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.probe import SceneProbe
@@ -48,6 +50,7 @@ _PROGRAMS = (
     ("blur", FULL_VERTEX, BLUR_FRAGMENT),
     ("shells", BUBBLE_VERTEX, BUBBLE_FRAGMENT),
     ("clusters", CLUSTER_VERTEX, CLUSTER_FRAGMENT),
+    ("beads", BEAD_VERTEX, BUBBLE_FRAGMENT),
     ("near", BUBBLE_VERTEX, NEAR_FRAGMENT),
     ("proxies", PARTICLE_VERTEX, PARTICLE_FRAGMENT),
 )
@@ -58,6 +61,19 @@ _NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a gia
 _SHELL_CAPACITY = MAX_BUBBLES + NEAR_GIANTS
 _CLUSTER_CAPACITY = MAX_BUBBLES // 2
 _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
+# Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
+# scaled by the tier's particle share). Beads climb by the stream's travel plus their own buoyancy.
+_CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, 2500
+_FIZZ_PER_BUBBLE, _SHELL_BINDING = 64, 7        # wake motes behind each simulated bubble; their storage binding
+_BEAD_CLIMB, _BEAD_BUOYANCY, _SNOW_CARRY = 30.0, 1.2, 8.0
+
+
+def _procedural_counts(parameters, emission: float) -> tuple[int, int]:
+    """(beads, snow motes) for the Bead Chains range read at the emission follower (never the raw level)."""
+    share = scene3d_detail(parameter(parameters, "scene3d_detail")).particles
+    low, high = (float(v) for v in parameter(parameters, "extruded_bubble_bead_chains"))
+    chains = round((low + (high - low) * max(0.0, min(1.0, float(emission)))) * _CHAINS_PER_STEP * share)
+    return chains * _BEADS_PER_CHAIN, round(_SNOW * share)
 
 
 def _scene_samples(parameters) -> int:
@@ -254,6 +270,7 @@ class QuickExtrudedBubbleRenderer:
         self._shells = _Instances(_SHELL_CAPACITY, (4, 2))
         self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4))
         self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))
+        self._empty_vao = 0                       # the procedural layers read no attributes
         self._uniforms = _Uniforms()
         self._knobs_for: object = None
         self._knobs: dict[str, object] = {}
@@ -261,7 +278,8 @@ class QuickExtrudedBubbleRenderer:
     @property
     def has_resources(self) -> bool:
         return (self._resources.has_resources or self._target.has_resources or self._near.has_resources()
-                or self._shafts.has_resources or bool(self._shells.vao) or self._probe is not None)
+                or self._shafts.has_resources or bool(self._shells.vao) or bool(self._empty_vao)
+                or self._probe is not None)
 
     def _probe_for(self, parameters) -> SceneProbe:
         size = _PROBE_SIZE[scene3d_detail(parameter(parameters, "scene3d_detail")).name]
@@ -287,8 +305,7 @@ class QuickExtrudedBubbleRenderer:
         if not warm_programs(self._programs(samples)):
             return False
         if not self._shells.vao:
-            for instances in (self._shells, self._clusters, self._proxies):
-                instances.allocate()
+            self._allocate_instances()
             return False
         width, height = item_pixel_rect(frame)[2:]
         if not self._shafts.warm(width, height):
@@ -320,8 +337,7 @@ class QuickExtrudedBubbleRenderer:
         r = self._resources
         programs = {key: r.program(key, vertex, fragment) for key, vertex, fragment in _PROGRAMS}
         if not self._shells.vao:
-            for instances in (self._shells, self._clusters, self._proxies):
-                instances.allocate()
+            self._allocate_instances()
         self._shafts.warm(width, height)
         probe = self._probe_for(parameters)
 
@@ -344,8 +360,18 @@ class QuickExtrudedBubbleRenderer:
         view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
                 "uProbeLevels": float(probe.levels)}
-        for key, near in (("shells", False), ("clusters", False), ("near", True)):
+        for key, near in (("shells", False), ("clusters", False), ("near", True), ("beads", False)):
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near)})
+        beads, snow = _procedural_counts(parameters, state.emission)
+        stream = _floats(state.stream)
+        self._uniforms.set(programs["beads"], {
+            "uStreamView": (stream[0], stream[1], -stream[2]), "uBeadsPerChain": _BEADS_PER_CHAIN,
+            "uBeadCount": beads, "uBeadSize": 1.0,
+            "uBeadTravel": _BEAD_CLIMB * float(state.travel) + _BEAD_BUOYANCY * float(state.time),
+            "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": _FIZZ_PER_BUBBLE,
+            "uShellCount": shell_count})
+        fizz = round(shell_count * _FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
+        fizz -= fizz % _FIZZ_PER_BUBBLE
         self._uniforms.set(programs["blur"], {"uSource": 0})
         self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0,
                                                  "uSpeckWarm": _floats(knobs["light"]), "uRowMajor": 1,
@@ -364,7 +390,7 @@ class QuickExtrudedBubbleRenderer:
                                                       "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS,
                                                       "uFrameSize": (float(width), float(height))})
             target_size = (float(allocation[0]), float(allocation[1]))
-            for key in ("shells", "clusters", "near"):
+            for key in ("shells", "clusters", "near", "beads"):
                 self._uniforms.set(programs[key], {"uTargetSize": target_size})
             # The card's camera covers the item's pixels (the target's origin), not the window's viewport.
             gl.glViewport(0, 0, width, height)
@@ -385,6 +411,14 @@ class QuickExtrudedBubbleRenderer:
                         gl.glUseProgram(programs["clusters"])
                         gl.glBindVertexArray(self._clusters.vao)
                         gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
+                    if beads + snow + fizz:
+                        # The wakes read their bubbles from the shell instances (binding handed back after).
+                        prior = gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, _SHELL_BINDING)
+                        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _SHELL_BINDING, self._shells.buffer)
+                        gl.glUseProgram(programs["beads"])
+                        gl.glBindVertexArray(self._empty_vao)
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, beads + snow + fizz)
+                        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _SHELL_BINDING, prior)
             # Near giants: drawn sharp with their circles of confusion, then spread into round bokeh over the scene
             # (the shared defocus layer, at the card's own pixels; colour only, no emission).
             self._near.begin(width, height)
@@ -397,6 +431,13 @@ class QuickExtrudedBubbleRenderer:
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
                 gl.glBindTextureUnit(unit, 0)
             gl.glViewport(*scene_viewport)
+
+    def _allocate_instances(self) -> None:
+        for instances in (self._shells, self._clusters, self._proxies):
+            instances.allocate()
+        name = (ctypes.c_uint * 1)()
+        gl.glCreateVertexArrays(1, name)
+        self._empty_vao = int(name[0])
 
     def _capture_probe(self, probe: SceneProbe, programs, proxy_count: int, quad_vao: int) -> None:
         """The water and light all round the eye, each bubble's glint added as a bright point."""
@@ -447,10 +488,15 @@ class QuickExtrudedBubbleRenderer:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, prior_framebuffer)
             gl.glViewport(*prior_viewport)
 
+    def _release_empty_vao(self) -> None:
+        if self._empty_vao:
+            gl.glDeleteVertexArrays(1, [self._empty_vao])
+        self._empty_vao = 0
+
     def release_resources(self) -> None:
         errors: list[str] = []
         releases = [self._target.release, self._near.release, self._shafts.release, self._resources.release_resources,
-                    self._shells.release, self._clusters.release, self._proxies.release]
+                    self._shells.release, self._clusters.release, self._proxies.release, self._release_empty_vao]
         if self._probe is not None:
             releases.append(self._probe.release)
         for release in releases:

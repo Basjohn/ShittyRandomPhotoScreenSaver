@@ -214,6 +214,23 @@ def test_stream_speed_rises_quickly_decays_slowly_and_never_jumps_or_stops():
     assert max(steps) < 0.025 * span                               # no frame moves it by more than 2.5% of its span
 
 
+def test_travel_is_the_distance_the_stream_carried_the_water_so_procedural_layers_never_jump():
+    """The bead chains and snow move by ``travel`` (the integral of stream speed on the logical clock), not by time x
+    the current speed: a change of speed changes how fast it grows, never where it is."""
+    controls = ExtrudedBubbleControls(stream_speed=(0.04, 0.2), collision_scope="off")
+    simulation = ExtrudedBubbleSimulation(6)
+    previous = simulation.advance(MusicInput(STEP, True, 0.0), controls)
+    expected = previous.travel
+    for i in range(int(6.0 / STEP)):
+        intensity = 0.0 if i < 120 else 1.0                       # a sudden loud passage
+        onsets = (("kick", 1.0),) if i % 30 == 0 else ()
+        snapshot = simulation.advance(MusicInput(STEP, True, intensity, onsets), controls)
+        expected += snapshot.stream_speed * STEP
+        assert snapshot.travel > previous.travel                  # always moving on
+        assert snapshot.travel - previous.travel <= max(previous.stream_speed, snapshot.stream_speed) * STEP * 1.0001
+        previous = snapshot
+    assert previous.travel == pytest.approx(expected, rel=1e-9)
+
 def test_drift_and_emission_follow_the_passage_and_silence_keeps_a_light_breath():
     controls = ExtrudedBubbleControls(drift=(0.2, 0.9), emission=(0.1, 0.9), collision_scope="off", idle=0.6)
     simulation = ExtrudedBubbleSimulation(4)

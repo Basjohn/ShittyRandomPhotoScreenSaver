@@ -86,6 +86,7 @@ class ExtrudedBubbleSnapshot:
     drift: float = 0.0
     emission: float = 0.0
     sustain: float = 0.0
+    travel: float = 0.0                     # how far the stream has carried the water (volume units, ever rising)
 
     @property
     def count(self) -> int:
@@ -168,6 +169,7 @@ class ExtrudedBubbleSimulation:
         self._pulse = 0.0
         self._flash = 0.0
         self._sustain = 0.0
+        self._travel = 0.0
         self._speed: float | None = None
         self._drift: float | None = None
         self._emission: float | None = None
@@ -251,6 +253,9 @@ class ExtrudedBubbleSimulation:
         self._drift = _follow(self._drift, drift_target, dt, 0.5 * soft, 2.5 * soft)
         self._emission = _follow(self._emission, emission_target, dt, 0.1 * soft, 1.5 * soft)
         speed = self._speed
+        # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
+        # change of speed never makes them jump.
+        self._travel += speed * dt
 
         # Population: fill at once on the first step, then grow toward the target upstream and thin by fading.
         targets = {True: int(round(min(MAX_BUBBLES, _lerp(controls.large_count, level)))),
@@ -471,7 +476,8 @@ class ExtrudedBubbleSimulation:
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
-                                      self._flash, direction, speed, self._drift, self._emission, self._sustain)
+                                      self._flash, direction, speed, self._drift, self._emission, self._sustain,
+                                      self._travel)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

@@ -736,8 +736,115 @@ void main() {
 """
 
 
+# The procedural small bubbles' vertex stage: the bubble vertex stage with its per-instance attributes generated.
+_BEAD_GLSL = """// GPU-procedural small bubbles (S3c): rising bead chains and drifting marine snow, generated from the instance index,
+// fixed seeds, the logical time and the stream, then shaded exactly as the simulation's bubbles (the same fragment
+// stage). The volume is the simulation's (view-anchored until world-fixed bubbles land).
+uniform mat3 uViewToWorld;
+uniform vec2 uTan;
+uniform float uTime;
+uniform vec3 uStreamView;      // the stream's unit direction in view space
+uniform float uBeadTravel;     // how far beads have climbed their chains (view units; from the stream's travel)
+uniform int uBeadsPerChain;
+uniform int uBeadCount;        // chains x beads; instances past it are marine snow
+uniform float uBeadSize;       // bead size scale
+uniform float uSnowDrift;      // how far snow has drifted along the stream (view units)
+uniform int uSnowCount;        // instances past chains and snow are fizz: uFizzPer behind each shell record
+uniform int uFizzPer;
+uniform int uShellCount;
+layout(std430, binding = 7) readonly buffer EbShells { float ebShell[]; };   // x, y, z, radius, seed, kind
+vec4 aSphere;
+vec2 aExtra;
+uint beadHash(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+float beadRandom(int index, uint salt) {
+    return float(beadHash(uint(index) * 0x9e3779b9u ^ salt * 0x85ebca6bu) & 0xffffffu) / 16777215.0;
+}
+void beadInstance() {
+    vec3 along = normalize(uStreamView + vec3(0.0, 1e-4, 0.0));
+    vec3 across = cross(along, vec3(0.0, 0.0, 1.0));
+    across = dot(across, across) > 1e-6 ? normalize(across) : vec3(1.0, 0.0, 0.0);
+    if (gl_InstanceID < uBeadCount) {
+        int chain = gl_InstanceID / uBeadsPerChain;
+        int k = gl_InstanceID - chain * uBeadsPerChain;
+        float depth = 7.0 + 26.0 * beadRandom(chain, 3u);
+        vec3 centre = vec3(mix(-1.25, 1.25, beadRandom(chain, 1u)) * uTan.x * depth,
+                           mix(-1.1, 1.1, beadRandom(chain, 2u)) * uTan.y * depth, -depth);
+        float scale = depth / 15.0;
+        float span = 1.7 * depth;
+        // Beads keep their place along the chain and climb it together; one leaving the top re-enters at the foot
+        // (both beyond the frame), so the chain flows without a gap or a jump.
+        float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
+        float s = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span) * span;
+        float phase = 6.2832 * beadRandom(chain, 6u);
+        vec3 p = centre + along * (s - 0.5 * span)
+               + across * (sin(s / scale * 0.6 + phase + uTime * 0.6) * 0.1 * scale
+                           + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.09 * scale * (1.0 + s / depth))
+               + vec3(0.0, 0.0, 1.0) * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
+        float size = mix(1.4, 4.0, beadRandom(chain, 9u)) * uBeadSize;
+        float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
+                 * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
+        float ends = smoothstep(0.0, 0.06, s / span) * smoothstep(1.0, 0.94, s / span);
+        aSphere = vec4(uViewToWorld * p, px * uPixel * max(-p.z, 1.0) * ends);
+        aExtra = vec2(beadRandom(chain * 977 + k, 12u), 0.0);
+        return;
+    }
+    if (gl_InstanceID >= uBeadCount + uSnowCount) {
+        // Fizz: a wake of tiny bubbles streaming off behind each bubble (against the stream), widening as it falls
+        // behind and flowing back along it with the water's travel.
+        int f = gl_InstanceID - uBeadCount - uSnowCount;
+        int owner = f / uFizzPer;
+        int k = f - owner * uFizzPer;
+        vec3 centre = vec3(ebShell[owner * 6], ebShell[owner * 6 + 1], ebShell[owner * 6 + 2]);
+        float r = ebShell[owner * 6 + 3];
+        float kind = ebShell[owner * 6 + 5];
+        int seed = int(ebShell[owner * 6 + 4] * 65536.0) * 131 + k;
+        vec3 view = uWorldToView * centre;
+        float pixels = r / (uPixel * max(-view.z, 0.1));
+        // Larger bubbles shed a fuller wake; giants and specks none.
+        float share = clamp((pixels - 6.0) / 30.0, 0.0, 1.0);
+        if (owner >= uShellCount || kind > 0.5 || beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
+            aSphere = vec4(0.0, 0.0, 0.0, 0.0);
+            aExtra = vec2(0.0, 0.0);
+            return;
+        }
+        float reach = r * 9.0;
+        float along_ = pow(fract(beadRandom(seed, 19u) + uBeadTravel * 0.05 / max(reach, 1e-3)), 0.7) * reach;
+        float spread = r * (0.15 + along_ / reach * 0.8);
+        vec2 g = sqrt(-2.0 * log(max(beadRandom(seed, 20u), 1e-6))) * vec2(cos(6.2832 * beadRandom(seed, 21u)),
+                                                                         sin(6.2832 * beadRandom(seed, 21u)));
+        vec3 p = view - along * (r * 0.6 + along_) + across * (g.x * spread + sin(along_ / r) * r * 0.3)
+               + vec3(0.0, 0.0, 1.0) * g.y * spread * 0.6;
+        float size = r * mix(0.04, 0.12, beadRandom(seed, 22u)) * (1.0 - 0.5 * along_ / reach);
+        float ends = smoothstep(0.0, 0.08, along_ / reach) * smoothstep(1.0, 0.85, along_ / reach);
+        aSphere = vec4(uViewToWorld * p, size * ends);
+        aExtra = vec2(beadRandom(seed, 23u), 0.0);
+        return;
+    }
+    // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
+    int i = gl_InstanceID - uBeadCount;
+    vec3 box = vec3(1.2 * uTan.x, 1.2 * uTan.y, 1.0);
+    float depth = 2.5 + 35.0 * fract(beadRandom(i, 13u) + uSnowDrift * along.z * 0.01);
+    vec2 at = vec2(beadRandom(i, 14u), beadRandom(i, 15u)) + uSnowDrift * along.xy / (2.0 * box.xy * depth)
+            + vec2(0.0, 0.004 * sin(uTime * 0.3 + 6.28 * beadRandom(i, 16u)));
+    at = fract(at) * 2.0 - 1.0;
+    vec3 p = vec3(at * box.xy * depth, -depth);
+    aSphere = vec4(uViewToWorld * p, 0.005);
+    aExtra = vec2(beadRandom(i, 17u), 1.0);
+}
+"""
+_ATTRIBUTES = """layout(location=0) in vec4 aSphere;   // world centre, radius
+layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
+"""
+assert BUBBLE_VERTEX.count(_ATTRIBUTES) == 1 and BUBBLE_VERTEX.count("void main() {\n") == 1
+BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
+               .replace("void main() {\n", _BEAD_GLSL + "void main() {\n    beadInstance();\n"))
+
 __all__ = [
     "BACKDROP_FRAGMENT",
+    "BEAD_VERTEX",
     "BLUR_FRAGMENT",
     "BUBBLE_FRAGMENT",
     "BUBBLE_FRAGMENT_BODY",
