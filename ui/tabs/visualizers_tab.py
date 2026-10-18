@@ -83,6 +83,7 @@ _MODE_NORMAL_ATTR = {
     "sphere": "_sphere_normal",
     "extruded_spectrum": "_extruded_spectrum_normal",
     "shockwave_grid": "_shockwave_grid_normal",
+    "extruded_bubble": "_extruded_bubble_normal",
 }
 
 

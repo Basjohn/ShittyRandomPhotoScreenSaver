@@ -138,9 +138,9 @@ class VisualizerModeDescriptor:
     # ``view_orbit_inertia`` lets a released drag coast to a stop on the logical clock;
     # ``scene_pan_envelope`` (anchor x, anchor y, upper reference y, left, right), all screen-normalised, keeps a
     # framed scene's anchor between left and right and its anchor/upper reference reachable as pan and zoom change;
-    # ``view_auto_rotate_settings`` names (Auto Rotate After seconds, Auto Rotate Speed degrees/s) presentation
-    # settings: after that long without camera input the view swivels gently round a full circle (turn only),
-    # starting at once when a startup or mode/preset swap completes. Only for modes whose turn wraps.
+    # ``view_auto_rotate_settings`` names ([enabled toggle,] Auto Rotate After seconds, Auto Rotate Speed degrees/s)
+    # presentation settings: after that long without camera input the view swivels gently round a full circle (turn
+    # only), starting at once when a startup or mode/preset swap completes. Only for modes whose turn wraps.
     view_orbit_turn_wraps: bool = True
     view_orbit_inertia: bool = False
     scene_pan_envelope: tuple[float, ...] = ()
@@ -362,9 +362,49 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         geometry_kind="freeform_3d",
         layout_profile="3d:shockwave_grid",
     ),
+    # Its own mode (not original Bubble): a framed underwater volume of traced glass bubbles with its own simulation
+    # (``extruded_bubble_simulation``), Settings and presets. Behind a closed code gate until its acceptance (EB5).
+    VisualizerModeDescriptor(
+        "extruded_bubble",
+        "Extruded Bubble",
+        "_extruded_bubble_preset_slider",
+        ("extruded_bubble_",),
+        VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.CARD,
+            clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
+            viewport_resize_capable=True,
+        ),
+        frame_runtime_module="widgets.spotify_visualizer.extruded_bubble_frame_runtime",
+        frame_runtime_class="ExtrudedBubbleFrameRuntime",
+        renderer_module="rendering.quick.visualizer.implementations.extruded_bubble",
+        settings_builder_module="ui.tabs.media.extruded_bubble_builder",
+        settings_builder_factory="build_extruded_bubble_ui",
+        # It reads the passage intensity and onsets on the fixed real-music scale; it owns only the analysis
+        # settings those depend on.
+        technical_setting_suffixes=(
+            "bar_count", "audio_block_size", "adaptive_sensitivity", "sensitivity",
+            "dynamic_floor", "manual_floor", "input_gain",
+        ),
+        rainbow_controls=False,
+        shared_bar_appearance=False,
+        guided_setup_offered=False,
+        view_orbit_settings=("extruded_bubble_turn", "extruded_bubble_tilt"),
+        view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        view_auto_rotate_settings=("extruded_bubble_auto_rotate", "extruded_bubble_auto_rotate_after",
+                                   "extruded_bubble_auto_rotate_speed"),
+        # A volume, not a landscape: pan keeps its centre in view at every zoom.
+        scene_pan_envelope=(0.50, 0.50, 0.50, 0.15, 0.85),
+        scene_transform_settings=("extruded_bubble_scene_scale", "extruded_bubble_scene_pan_x",
+                                  "extruded_bubble_scene_pan_y"),
+        prepared_reveal=True,
+        geometry_kind="freeform_3d",
+        layout_profile="3d:extruded_bubble",
+    ),
 )
 
-_GATED_MODES: dict[str, callable] = {}
+# Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D tab, and given no
+# runtime work. A gate opens in code at its acceptance, never through an environment flag.
+_GATED_MODES: dict[str, callable] = {"extruded_bubble": lambda: False}
 
 def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     return tuple(d for d in _ALL_DESCRIPTORS if d.mode_id not in _GATED_MODES or _GATED_MODES[d.mode_id]())

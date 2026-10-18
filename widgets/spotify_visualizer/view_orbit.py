@@ -231,6 +231,11 @@ def arm_view_auto_rotate(host: Any, mode_id: str, now: float, *, immediate: bool
     if not keys or not descriptor.view_orbit_turn_wraps or not descriptor.view_orbit_settings:
         setattr(host, _AUTO, None)
         return None
+    if len(keys) == 3:
+        if not bool(getattr(host, f"_{keys[0]}", False)):
+            setattr(host, _AUTO, None)
+            return None
+        keys = keys[1:]
     after_key, speed_key = keys
     after = float(getattr(host, f"_{after_key}", 0.0) or 0.0)
     speed = float(getattr(host, f"_{speed_key}", 0.0) or 0.0)

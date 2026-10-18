@@ -55,11 +55,11 @@ _TIERS_TIP = (
 def scene3d_visualizer_entries() -> tuple[tuple[str, str], ...]:
     """(mode id, display name) of each 3D Visualizer mode with its own tier, from the canonical
     ``scene3d`` section (the defaults own which entries exist)."""
-    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor, is_mode_active
 
     canonical = get_default_setting(SCENE3D_SECTION, missing=None) or {}
     return tuple((mode, get_visualizer_mode_descriptor(mode).display_name) for mode in VISUALIZER_MODE_IDS
-                 if scene3d_entry_key(mode) in canonical)
+                 if scene3d_entry_key(mode) in canonical and is_mode_active(mode))
 
 
 class Scene3DTab(QWidget):

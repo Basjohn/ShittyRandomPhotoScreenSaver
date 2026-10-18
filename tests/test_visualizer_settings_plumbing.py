@@ -1263,12 +1263,13 @@ class TestVisualizerModeRegistryContract:
         )
         from core.settings.visualizer_presets import MODES
 
+        # Every registered mode (gated ones too) has presets; the active descriptors are the registered ones
+        # whose gate is open, in registry order.
         descriptors = iter_visualizer_mode_descriptors()
+        active = tuple(descriptor.mode_id for descriptor in descriptors)
         assert tuple(MODES) == VISUALIZER_MODE_IDS
-        assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
-        assert tuple(descriptor.preset_key for descriptor in descriptors) == tuple(
-            f"preset_{mode}" for mode in VISUALIZER_MODE_IDS
-        )
+        assert active == tuple(mode for mode in VISUALIZER_MODE_IDS if mode in active)
+        assert tuple(descriptor.preset_key for descriptor in descriptors) == tuple(f"preset_{mode}" for mode in active)
 
     def test_registry_exposes_spline_curve_display_name(self):
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor

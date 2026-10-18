@@ -402,6 +402,46 @@ def _capture_shockwave_grid(
     return replace(frame, terrain_bands=reaction.bands, terrain_phase=reaction.phase), extra
 
 
+def _capture_extruded_bubble(
+    widget: Any,
+    engine: Any,
+    context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]] | None:
+    """Advance Extruded Bubble's own simulation on this capture's logical time with the onsets published since
+    its last serial and the passage intensity, and freeze its snapshot with the renderer parameters."""
+    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import controls_from_parameters
+    from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
+
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("Extruded Bubble logical capture requires its runtime controller owner")
+    runtime_type = _mode_frame_runtime_type("extruded_bubble")
+    runtime = _resolve_current_mode_runtime(controller, "extruded_bubble", runtime_type)
+    if runtime is None:
+        return None
+    parameters = config_applier.extruded_bubble_parameters(widget, context.now_ts)
+    getter = getattr(engine, "get_onset_events", None) if engine is not None else None
+    onsets = getter(runtime.onset_serial) if callable(getter) else ()
+    intensity = float(engine.get_musical_intensity()) if engine is not None else 0.0
+    snapshot = runtime.advance(
+        onsets=onsets, now_ts=context.now_ts, playing=context.playing, intensity=intensity,
+        identity=(context.runtime_generation, context.engine_generation, context.activation_id),
+        source_identity=(context.source_generation, context.source_activation_id),
+        controls=controls_from_parameters(parameters),
+    )
+    if snapshot is None or controller.peek_logical_mode_state("extruded_bubble") is not runtime:
+        return None
+    extra = _base_extras(widget, "extruded_bubble", engine)
+    extra.update(parameters)
+    frame = ExtrudedBubbleFrame(
+        bubbles=snapshot.bubbles, clusters=snapshot.clusters, time=snapshot.time, level=snapshot.level,
+        breath=snapshot.breath, flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
+        emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
+        parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
+    )
+    return frame, extra
+
+
 def _capture_spectrum_family(
     widget: Any,
     engine: Any,
@@ -872,6 +912,7 @@ _BUILTIN_MODE_CAPTURE: dict[str, ModeCapture] = {
     "spectrum": _capture_spectrum,
     "extruded_spectrum": _capture_extruded_spectrum,
     "shockwave_grid": _capture_shockwave_grid,
+    "extruded_bubble": _capture_extruded_bubble,
     "oscilloscope": _capture_oscilloscope,
     "sine_wave": _capture_sine,
     "bubble": _capture_bubble,

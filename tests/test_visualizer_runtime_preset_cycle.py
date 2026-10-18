@@ -10,6 +10,7 @@ from core.settings.defaults import get_default_settings
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     get_preset_key,
+    is_mode_active,
 )
 from core.settings.visualizer_presets import (
     build_normalized_custom_snapshot,
@@ -102,7 +103,7 @@ def test_shipped_custom_cache_route_leak_is_stripped_on_normalization() -> None:
     assert not {"monitor", "position", "enabled"}.intersection(normalized["bubble"])
 
 
-@pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
+@pytest.mark.parametrize("mode", [mode for mode in VISUALIZER_MODE_IDS if is_mode_active(mode)])
 def test_every_active_mode_wraps_from_custom_without_changing_mode(mode: str) -> None:
     config = _default_visualizer_config()
     custom_index = get_custom_preset_index(mode)

@@ -1419,7 +1419,106 @@ _BUBBLE = ModeSettings(
 )
 
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE)
+# ---- Extruded Bubble ------------------------------------------------------------------------------------------
+# Its own control set (original Bubble's is only a guideline). Extruded_Bubble_Target.md section 9: nested buckets,
+# visual controls (direction mappers, the collision triangle, range sliders for every quiet..loud amount) and
+# conditionals so only what the current choices use is shown.
+
+_EB_RAYS = ("extruded_bubble_rays_enabled", True)
+_EB_SURFACE = ("extruded_bubble_light_type", "Sunlit Surface")
+_EB_BANDS = ("extruded_bubble_particle_bands", True)
+_EB_AUTO_ROTATE = ("extruded_bubble_auto_rotate", True)
+
+_EXTRUDED_BUBBLE = ModeSettings(
+    "extruded_bubble",
+    buckets=(
+        Bucket("light", "Light", "Where the scene's light comes from, its colour and strength."),
+        Bucket("rays", "Light Rays", "Rays of light through the water and how they answer the music."),
+        Bucket("bubbles", "Bubbles", "How many bubbles there are, quiet to loud, and how varied their sizes."),
+        Bucket("motion", "Motion", "The stream's direction and speed, and how bubbles drift and sway."),
+        Bucket("reaction", "Reaction", "Breathing, pulse and the response to sustained loud passages."),
+        Bucket("collision", "Collision", "What happens when bubbles meet: fuse, pop or bounce."),
+        Bucket("camera", "Camera", "Turn the view slowly on its own after a while without camera input."),
+        Bucket("water", "Water", "The water's colours, haze and veils of light.", advanced=True),
+        Bucket("glass", "Glass", "How the bubbles' glass looks: clarity, rim glow, iridescence.", advanced=True),
+        Bucket("particles", "Particles", "Specks, dust and their glow, quiet to loud.", advanced=True),
+        Bucket("lens", "Lens", "Focus, depth of field and exposure.", advanced=True),
+    ),
+    entries=(
+        Choice("extruded_bubble_light_type", "Light Type:", ("Sunlit Surface", "Deep Light"), bucket="light",
+               tooltip="Sunlit Surface: the sun above the water, seen through the surface. Deep Light: a light "
+                       "inside the water, no surface in view."),
+        Direction("extruded_bubble_light_direction", "Light Direction:", 0.0, 90.0, centre_text="Overhead",
+                  marker="light", bucket="light", tooltip="Drag the light round the disc; the centre is straight above."),
+        Colour("extruded_bubble_light_colour", "Light Colour:", "Light Colour", bucket="light", alpha=False),
+        Slider("extruded_bubble_light_strength", "Light Strength:", 0.0, 2.0, bucket="light"),
+        Toggle("extruded_bubble_rays_enabled", "", "Light Rays", bucket="rays"),
+        Range("extruded_bubble_rays", "Ray Strength:", 0.0, 1.0, percent=True, bucket="rays", when=_EB_RAYS,
+              tooltip="Left handle: the rays in quiet music; right handle: in loud music."),
+        Slider("extruded_bubble_ray_softness", "Ray Softness:", 0.0, 1.0, bucket="rays", when=_EB_RAYS),
+        Slider("extruded_bubble_ray_reach", "Ray Reach:", 0.0, 1.0, bucket="rays", when=_EB_RAYS),
+        Slider("extruded_bubble_ray_flicker", "Ray Flicker:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
+               tooltip="How much the rays shimmer with the music."),
+        Range("extruded_bubble_large_bubbles", "Large Bubbles:", 0.0, 40.0, scale=1, integer=True, bucket="bubbles"),
+        Range("extruded_bubble_mid_bubbles", "Small Bubbles:", 0.0, 150.0, scale=1, integer=True, bucket="bubbles"),
+        Range("extruded_bubble_bead_chains", "Bead Chains:", 0.0, 10.0, scale=1, integer=True, bucket="bubbles"),
+        Slider("extruded_bubble_size_variety", "Size Variety:", 0.0, 1.0, bucket="bubbles"),
+        Direction("extruded_bubble_stream_direction", "Stream Direction:", -90.0, 90.0, centre_text="Into Scene",
+                  marker="arrow", bucket="motion",
+                  tooltip="Drag the arrow: round the disc is the screen direction; toward the centre tips the stream "
+                          "into the scene."),
+        Range("extruded_bubble_stream_speed", "Stream Speed:", 0.0, 1.0, percent=True, bucket="motion"),
+        Range("extruded_bubble_drift", "Drift:", 0.0, 1.0, percent=True, bucket="motion"),
+        Slider("extruded_bubble_sway", "Sway:", 0.0, 1.0, bucket="motion"),
+        Range("extruded_bubble_breathing", "Breathing:", 0.0, 1.0, percent=True, bucket="reaction",
+              tooltip="How much large bubbles swell with the beat, quiet to loud."),
+        Range("extruded_bubble_small_pulse", "Small Bubble Pulse:", 0.0, 1.0, percent=True, bucket="reaction"),
+        Slider("extruded_bubble_sustained", "Sustained Response:", 0.0, 1.0, bucket="reaction",
+               tooltip="How much small bubbles keep moving through a long loud passage."),
+        Slider("extruded_bubble_smoothing", "Smoothing:", 0.0, 1.0, bucket="reaction"),
+        Slider("extruded_bubble_idle", "Idle Energy:", 0.0, 1.0, bucket="reaction",
+               tooltip="The gentle breathing kept in silence."),
+        Triangle("extruded_bubble_collision", "Collision:", ("Fuse", "Pop", "Bounce"), bucket="collision",
+                 tooltip="Place the dot: the nearer a corner, the more often meeting bubbles do that."),
+        Choice("extruded_bubble_collision_scope", "Applies To:", ("All", "Big", "Small", "Off"), bucket="collision"),
+        Toggle("extruded_bubble_auto_rotate", "", "Auto Rotate", bucket="camera"),
+        Slider("extruded_bubble_auto_rotate_after", "Auto Rotate After:", 1.0, 120.0, scale=1, integer=True,
+               suffix=" s", decimals=0, bucket="camera", when=_EB_AUTO_ROTATE),
+        Slider("extruded_bubble_auto_rotate_speed", "Auto Rotate Speed:", 1.0, 30.0, scale=1, integer=True,
+               suffix="\u00b0/s", decimals=0, bucket="camera", when=_EB_AUTO_ROTATE),
+        Colour("extruded_bubble_water_colour", "Water Colour:", "Water Colour", bucket="water", alpha=False),
+        Colour("extruded_bubble_depth_colour", "Depth Colour:", "Depth Colour", bucket="water", alpha=False),
+        Slider("extruded_bubble_haze", "Haze:", 0.0, 1.0, bucket="water"),
+        Slider("extruded_bubble_veils", "Light Veils:", 0.0, 1.0, bucket="water"),
+        Slider("extruded_bubble_surface_brightness", "Surface Brightness:", 0.0, 2.0, bucket="water",
+               when=_EB_SURFACE),
+        Slider("extruded_bubble_clarity", "Clarity:", 0.0, 1.0, bucket="glass"),
+        Slider("extruded_bubble_rim_glow", "Rim Glow:", 0.0, 2.0, bucket="glass"),
+        Slider("extruded_bubble_iridescence", "Iridescence:", 0.0, 1.0, bucket="glass"),
+        Slider("extruded_bubble_softness", "Softness:", 0.0, 1.0, bucket="glass"),
+        Slider("extruded_bubble_sparkle", "Sparkle:", 0.0, 2.0, bucket="glass"),
+        Range("extruded_bubble_particles", "Particles:", 0.0, 1.0, percent=True, bucket="particles"),
+        Slider("extruded_bubble_particle_size", "Particle Size:", 0.5, 2.0, bucket="particles"),
+        Colour("extruded_bubble_particle_colour", "Particle Colour:", "Particle Colour", bucket="particles",
+               alpha=False),
+        Slider("extruded_bubble_particle_warmth", "Warm Share:", 0.0, 1.0, bucket="particles"),
+        Slider("extruded_bubble_particle_glow", "Particle Glow:", 0.0, 1.0, bucket="particles"),
+        Toggle("extruded_bubble_particle_bands", "", "Particle Bands", bucket="particles"),
+        Slider("extruded_bubble_band_contrast", "Band Contrast:", 0.0, 1.0, bucket="particles", when=_EB_BANDS),
+        Slider("extruded_bubble_focus", "Focus:", 0.0, 1.0, bucket="lens"),
+        Slider("extruded_bubble_aperture", "Aperture:", 0.0, 1.0, bucket="lens"),
+        Slider("extruded_bubble_exposure", "Exposure:", 0.5, 1.5, bucket="lens"),
+        # The live view pose (set by orbiting, scrolling and panning inside the card, not from the body).
+        Slider("extruded_bubble_turn", "", -1.0, 1.0, bucket=""),
+        Slider("extruded_bubble_tilt", "", -0.5, 0.5, bucket=""),
+        Slider("extruded_bubble_scene_scale", "", 0.5, 2.0),
+        Slider("extruded_bubble_scene_pan_x", "", -0.5, 0.5),
+        Slider("extruded_bubble_scene_pan_y", "", -0.5, 0.5),
+    ),
+)
+
+_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE,
+                                    _EXTRUDED_BUBBLE)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 _CONTROLS = tuple(control for spec in _SPECS for control in spec.controls)
 
