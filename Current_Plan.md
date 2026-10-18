@@ -136,7 +136,7 @@ runtime-replacement audit as independent work.
 
 ## 4. Graphics decomposition
 
-**Dependency, not a parallel workstream:** §4A preflight/shared substrate acceptance -> §4B Extruded Bubble. **No EB2/EB3 renderer work before G0,
+**Dependency, not a parallel workstream:** §4A preflight/shared substrate acceptance (closed 2026-10-18) -> §4B Extruded Bubble. **No EB2/EB3 renderer work before G0,
 G1, framed-camera sharing, G3's depth-aware transparent compositor and G2's justified shadow foundation
 are proved.** An EB visual target may inform G0's requirements, but EB production implementation begins only
 when the shared-gate checklist is complete. Do not build speculative full optics, particle or volume engines.
@@ -153,48 +153,20 @@ instancing, stream rings, compute/population, emission, bloom, trails, GGX/Fresn
 shadow helpers; inventory before adding anything. **Primitive green means measured actual GPU pixels, GL state,
 resize/retirement and dormant-zero-cost tests**, not only shader compilation or a source-string assertion.
 
-- [~] **G0 — Inventory, target contract and baselines (first).** *Inventory, gate status, overhead baseline and
-  1440p lab costs recorded 2026-10-18 (`Scene3D_Resources.md` §4A gate status); open: card-size sweep.* Inventory renderer owners, existing primitives,
-  cost and validation gaps, and approved Extruded Bubble depth/overlap/translucency/shadow goals *without starting
-  EB implementation*. Record current CPU/GPU, GL calls, memory and dual-1440p/card-size baselines. Run
-  `tools/overhead_baseline.py` before/after every shared change. Do not implement a primitive whose missing
-  capability cannot be demonstrated; existing modes must not load/allocate the optional extension.
-- [ ] **G1 / S17 — Attachments, depth and temporal ownership.** Define required normal/material/depth/history
-  attachment formats, targets, clears, reuse, size keys, context and generation invalidation, multisample resolve,
-  near-plane/depth tests, transparent versus opaque ordering and inherited GL-state restoration. Prove actual
-  backdrop/card alpha pixels (including glass, star/celestial occlusion), mixed-DPR resize and no stale-history
-  sampling. Implement only demanded targets and release them at park/context teardown. G1 precedes G2 and G3.
-- [~] **FC — Promote Neon Lake's bounded framed camera into ONE shared opt-in capability.** *2026-10-18: policy
-  declared per mode on the descriptor (turn wrap/clamp, inertia, pan envelope; no mode-id branches), Auto Rotate
-  added; Neon Lake's pan bounds identical. Open: per-mode fit/pivot/near-plane declarations as Extruded Bubble needs them.* Neon Lake is the
-  reference for **internal** WASD/Alt-left orbit, Alt-right pan, Alt-wheel zoom, retained border/card clipping,
-  camera/view-pose persistence outside art and layout, composition-aware limits and homogeneous near-plane safety.
-  Consolidate *existing* descriptor/view-orbit/scene-transform/projection helpers, not a new pose store, clock,
-  controller or universal orbit policy. Each **framed 3D Visualizer** declares its own safe bounds, fit, pivot and
-  content envelope; Neon Lake's landscape angles are not defaults for bubbles, ribbons or cubes. Exclude current
-  unframed Sphere/Extruded Spectrum from forced clamping. Prove identical Neon Lake input/visual behavior after
-  sharing, retained card/Edit/CUSTOM SSOT, persistence, no exposure of world edges, small-card/DPR adaptation,
-  multi-display view isolation and dormant-zero-cost. Record reusable contract in `Docs/Reference/Visualizer_Reference.md`.
-- [ ] **G3A / S17 — Shared depth-aware transparency and compositing (before EB renderer).** Provide a proven
-  opt-in weighted-blended OIT or equivalently correct bounded order-independent layering for overlapping transparent
-  bubble surfaces; keep depth, opaque objects, overlay-card alpha, emission/bloom and GL state coherent. Compare
-  overlapping spheres in opposite draw orders, near-plane/camera crossings, depth-tested backgrounds, resize,
-  context loss and performance tiers. **Do not fall back to locally sorted, manually composited EB-only glass**
-  or duplicate SceneTargets. Existing GGX/Fresnel material helpers remain authoritative.
-- [ ] **G2 / S25 — Shared real shadow-map foundation.** After G1, prove one fitted directional depth map with
+**§4A closed 2026-10-18** (evidence per gate, with owners, proofs and costs: `Scene3D_Resources.md` §4A gate status).
+G0 inventory and baselines (overhead `tools/baselines/overhead/2026-10-18_f4dbb4ab.json`, lab 1440p per-pass costs);
+G1 targets (depth texture, background, OIT, HDR attachments: pixels, resize, release, mixed DPR, a 3x2 card); FC framed
+camera (declared per-mode policy, Neon Lake parity, Auto Rotate, starting views); G3A transparency (order independence,
+opaque depth, near-plane HDR layers finite); G3B optics (probe, traced shells, defocus with bokeh, HDR; rough
+transmission and dispersion recorded unnecessary). Extruded Bubble declares its own camera fit/pivot/tilt/pan bounds
+at EB2 and proves its renderer's retirement on context loss (`sceneGraphInvalidated`) at EB3.
+
+- [ ] **G2 / S25 — Shared real shadow-map foundation (deferred: not demanded by Extruded Bubble's target, which has no
+  receiver; built when a consumer needs it, e.g. Usu S25).** After G1, prove one fitted directional depth map with
   bounded soft PCF/bias, caster/receiver admission, resizing, lazy allocation/teardown and tier-specific GPU cost
   on a test scene. This is the *same* shadow foundation referenced by Usu S25; do not resurrect the rejected
   Extruded Spectrum cast-shadow experiment. Extruded Bubble uses it only where EB's approved receiver/lighting
   target demonstrably improves; absence of a receiver is not permission to invent one.
-- [ ] **G3B / S17 — Measured optical enhancements before EB if its target needs them.** After G3A,
-  evaluate bubble-shell Fresnel/rough transmission, thickness/depth-aware refraction and restrained dispersion
-  against actual overlapping-bubble target images. Prove only the useful variants as reusable primitives **before**
-  EB3/EB4; explicitly record which are unnecessary and leave them deferred, rather than inventing an EB-local
-  replacement or building a general optics stack without a consumer. GTAO is not implicitly admitted.
-- [ ] **Shared-gate closure before Extruded Bubble.** Real-driver pixel/reference tests, dual-display and
-  extreme size/DPR/zoom cases, owner-state restoration under failure, warmed-demand paths, disabled-feature
-  allocations, resource retirement and measured before/after CPU/GPU cost all pass. Update Spec/Scene3D/Visualizer
-  reference and TestSuite contracts. Only then begin EB1/EB2. Do not require unrelated G4/G5 primitives.
 
 **Later demand-driven foundation (not prerequisites for Extruded Bubble):**
 
@@ -206,7 +178,7 @@ resize/retirement and dormant-zero-cost tests**, not only shader compilation or 
   smoke/fog/fire, advection and reprojection only after an actual admitted consumer and independent cost/quality
   evidence. No permanent volume targets or separate cadence.
 
-### 4B. Extruded Bubble | begins only after §4A shared-gate closure
+### 4B. Extruded Bubble | §4A closed 2026-10-18
 
 Extruded Bubble is a **bordered/framed internal 3D** successor that reuses the original Bubble logical
 simulation/reactivity rather than modifying it. Read current fixed loudness; never add independent floors,
