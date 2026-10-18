@@ -238,3 +238,30 @@ def test_a_sustained_loud_passage_keeps_the_mid_bubbles_shimmering_between_hits(
     assert mids and max(mids) > 0.05 and max(mids) - min(mids) > 0.03   # alive, each on its own phase
     faded = _run(simulation, controls, 1.0, intensity=0.2)
     assert faded.sustain > 0.5                                           # slow to fade
+
+
+
+def test_big_bubbles_hold_large_through_a_sustained_loud_passage_instead_of_flickering():
+    controls = ExtrudedBubbleControls(breathing=(0.05, 0.25), collision_scope="off")
+
+    def large_swells(simulation, intensity, seconds):
+        values = []
+        for i in range(int(seconds / STEP)):
+            onsets = (("kick", 1.0),) if i % 30 == 0 else ()          # a kick every half second
+            snapshot = simulation.advance(MusicInput(STEP, True, intensity, onsets), controls)
+            large = [r[5] for r in _records(snapshot) if r[3] >= 0.07 and r[4] > 0.9]
+            values.append(sum(large) / len(large) if large else 0.0)
+        return values
+
+    simulation = ExtrudedBubbleSimulation(14)
+    moderate = large_swells(simulation, 0.4, 6.0)[-int(2.0 / STEP):]      # not sustained: breathing on each kick
+    held = large_swells(simulation, 1.0, 10.0)[-int(2.0 / STEP):]         # sustained loud
+    flicker = lambda values: max(values) - min(values)
+    assert sum(held) / len(held) > sum(moderate) / len(moderate) * 1.5   # held large
+    assert flicker(held) < 0.5 * max(held)                                # and steady, not flickering to nothing
+
+
+def test_nothing_pins_flat_at_the_top_of_its_range():
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _soft_top
+    assert _soft_top(0.5) == 0.5
+    assert 0.8 < _soft_top(0.95) < _soft_top(1.2) < _soft_top(3.0) < 1.0      # still rising, never flat on 1
