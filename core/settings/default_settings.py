@@ -1121,7 +1121,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_particle_glow': 0.0,
                                     'extruded_bubble_particle_size': 1.0,
                                     'extruded_bubble_particle_warmth': 0.3,
-                                    'extruded_bubble_particles': [0.3, 1.0],
+                                    'extruded_bubble_particles': [0.1, 0.35],
                                     'extruded_bubble_ray_flicker': 0.3,
                                     'extruded_bubble_ray_reach': 0.6,
                                     'extruded_bubble_ray_softness': 0.35,

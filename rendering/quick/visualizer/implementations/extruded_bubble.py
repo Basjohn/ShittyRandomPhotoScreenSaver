@@ -26,11 +26,11 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
 )
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, VOLUME_EXTENT, bubble_instances, camera,
-    cluster_instances, lens_shift,
+    SPECKS_FULL, cluster_instances, lens_shift, speck_amount,
     glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
 )
 from rendering.gl_programs.scene3d import scene3d_detail
@@ -55,6 +55,7 @@ _PROGRAMS = (
     ("beads", BEAD_VERTEX, BUBBLE_FRAGMENT),
     ("near", BUBBLE_VERTEX, NEAR_FRAGMENT),
     ("proxies", PARTICLE_VERTEX, PARTICLE_FRAGMENT),
+    ("specks", SPECK_VERTEX, PARTICLE_FRAGMENT),
 )
 # The probe's cube face size per 3D Detail tier (what bubbles mirror; smaller is softer and cheaper).
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
@@ -67,7 +68,7 @@ _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # scaled by the tier's particle share). Beads climb by the stream's travel plus their own buoyancy.
 _CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, 2500
 _FIZZ_PER_BUBBLE, _SHELL_BINDING = 64, 7        # wake motes behind each simulated bubble; their storage binding
-_BEAD_CLIMB, _BEAD_BUOYANCY, _SNOW_CARRY = 30.0, 1.2, 8.0
+_BEAD_CLIMB, _BEAD_BUOYANCY, _SNOW_CARRY, _SPECK_CARRY = 30.0, 1.2, 8.0, 10.0
 
 
 def _procedural_counts(parameters, emission: float) -> tuple[int, int]:
@@ -383,6 +384,16 @@ class QuickExtrudedBubbleRenderer:
         fizz = round(shell_count * _FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
         fizz -= fizz % _FIZZ_PER_BUBBLE
         self._uniforms.set(programs["blur"], {"uSource": 0})
+        share, brightness = speck_amount(parameters, state.emission)
+        specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
+        stream_world = np.asarray((stream[0], stream[1], -stream[2])) @ np.asarray(view_to_world).reshape(3, 3)
+        self._uniforms.set(programs["specks"], {
+            "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
+            "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]), "uSpeckWarm": _floats(knobs["speck_warm"]),
+            "uStreamWorld": _floats(stream_world / max(float(np.linalg.norm(stream_world)), 1e-6)),
+            "uSpeckTravel": _SPECK_CARRY * float(state.travel), "uWarmShare": float(knobs["warm_share"]),
+            "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
+            "uBandFreq": float(knobs["band_freq"]), "uSpeckSize": float(knobs["speck_size"])})
         self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0,
                                                  "uSpeckWarm": _floats(knobs["light"]), "uRowMajor": 1,
                                                  "uPixel": 2.0 / probe.size})
@@ -409,6 +420,17 @@ class QuickExtrudedBubbleRenderer:
                 gl.glUseProgram(programs["backdrop"])
                 gl.glBindVertexArray(frame.quad_vao)
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                if specks:
+                    # Light only: added over the water, never hiding it, and writing no depth.
+                    gl.glEnablei(gl.GL_BLEND, 0)
+                    gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+                    gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+                    gl.glDepthMask(gl.GL_FALSE)
+                    gl.glUseProgram(programs["specks"])
+                    gl.glBindVertexArray(self._empty_vao)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, specks)
+                    gl.glDepthMask(gl.GL_TRUE)
+                    gl.glDisablei(gl.GL_BLEND, 0)
                 background, _depth = self._target.background(frame, r)
                 gl.glBindTextureUnit(_UNIT_BACKGROUND, background)
                 gl.glBindTextureUnit(_UNIT_PROBE, probe.texture)
