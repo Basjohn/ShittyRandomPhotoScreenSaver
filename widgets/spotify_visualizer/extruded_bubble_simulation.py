@@ -17,8 +17,9 @@ near-silent passage barely moves anything). Every quiet..loud range is read at `
 breathe, snares pulse the mid ones. Drift, stream speed and particle emission each follow their target with a quick
 attack and a slow decay (the stream slowest of all), and onsets feed them only through those followers, so nothing
 stutters, judders or stops suddenly. Sustained loud passages have their own response: ``sustain`` (the level held
-for seconds: slow to rise, slow to fall) keeps the mid bubbles shimmering on their own phases and lifts drift and the
-stream, so a saturated passage stays alive between hits. In silence a light idle energy keeps the bubbles gently
+for seconds: slow to rise, slow to fall) lets the large bubbles hold large (kicks add less on top as it rises: better
+than flickering), while the mid bubbles shimmer on their own phases and drift and the stream lift, so a saturated
+passage stays alive between hits. Nothing pins: values near the top of their range pass a soft knee, never a clamp. In silence a light idle energy keeps the bubbles gently
 breathing.
 
 **Collisions.** Overlapping bubbles admitted by ``collision_scope`` resolve once per contact, chosen by the
@@ -124,6 +125,15 @@ def stream_vector(around: float, height: float) -> tuple[float, float, float]:
 
 def _lerp(pair: tuple[float, float], t: float) -> float:
     return pair[0] + (pair[1] - pair[0]) * t
+
+
+def _soft_top(value: float, top: float = 1.0, knee: float = 0.8) -> float:
+    """``value`` unchanged below ``knee`` x ``top``, then easing toward ``top`` without ever flattening on it."""
+    start = knee * top
+    if value <= start:
+        return value
+    room = top - start
+    return start + room * (1.0 - math.exp(-(value - start) / room))
 
 
 def _follow(current: float, target: float, dt: float, attack: float, release: float) -> float:
@@ -232,8 +242,9 @@ class ExtrudedBubbleSimulation:
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low, high = controls.stream_speed
         speed_target = _lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)
-        drift_target = min(1.0, _lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0]))
-        emission_target = min(1.0, _lerp(controls.emission, level) + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
+        drift_target = _soft_top(_lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0]))
+        emission_target = _soft_top(_lerp(controls.emission, level)
+                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         self._speed = _follow(self._speed, speed_target, dt, 0.35 * soft, 3.0 * soft)
@@ -442,7 +453,10 @@ class ExtrudedBubbleSimulation:
 
     def _snapshot(self, direction, speed, controls: ExtrudedBubbleControls) -> ExtrudedBubbleSnapshot:
         level = self._level
-        breathing = _lerp(controls.breathing, level) * self._breath
+        # Large bubbles: kicks make them breathe; through a sustained loud passage they hold large instead, the kicks
+        # adding less on top (holding beats flickering on every beat).
+        hold = self._sustain
+        breathing = _lerp(controls.breathing, level) * max(hold * 0.85, self._breath * (1.0 - 0.6 * hold))
         pulse = _lerp(controls.small_pulse, level) * self._pulse
         shimmer = _lerp(controls.small_pulse, 1.0) * controls.sustained * self._sustain
         index = {b.ident: i for i, b in enumerate(self._bubbles)}

@@ -215,6 +215,8 @@ start | now):**
   intensity, onsets by musical weight): no dynamic floors; room to optimise rather than Bubble's specific simulation.
   **Sustained loud passages** need their own response (drift, stream speed and especially the small bubbles reacting
   through sustained loudness, not only hits); always check them on the real recordings in `logs/visualizer_recordings`.
+  Avoid pinning almost everywhere: big bubbles may hold large through sustained loud passages (better than flickering)
+  while small bubbles and motion compensate with their breathing and movement; real-music volume decides it.
 - **Reactivity:** light shafts react to the music (intensity, spread or flicker), alongside bubble breathing, speed
   and drift, all through Extruded Bubble's own logical simulation on the sole clock, never a second clock or DSP.
 - **Sizes:** strong variation with a slight bias to small bubbles, authored by on-screen size bands.
