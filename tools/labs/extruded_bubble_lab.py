@@ -50,59 +50,71 @@ CARD = None if CARD_ARG is None else (CARD_ARG.split("=", 1)[1] if "=" in CARD_A
 ENV_W, ENV_H = 1024, 512
 SURFACE_Y = 9.0
 
-# Per mock: water palette, sun, camera pitch.
+# Settings in three layers (the shape of the eventual product presets):
+# * ENGINE: the same for every scene (the glass's optics, its lens share).
+# * MODES: what a light setting implies. "surface": the sun above the water seen through it (Snell's window, a fan of
+#   rays from it, lit scattering water round the bubbles); "deep": a light inside the water with no surface in view.
+# * Each scene: its mode plus what a preset would store (colours, light direction, amounts, camera pitch).
+ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
+MODES = {
+    "surface": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55,
+                    shaft_soft=0.35, ray_focus=0.3, ray_cut=0.1, surface_sky=0.35, glint_power=120.0,
+                    glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, rough=0.05, chains=3.0),
+    "deep": dict(crisp=1.0),
+}
 VARIANTS = {
-    "ExBubble1": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=1.6, rough=0.05,
-                      chains=3.0, chain_size=1.0,
+    "ExBubble1": dict(mode="surface", film=0.3, surface_gain=1.6, ray_cut=0.08, rays=0.7,
                       deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),
-                      sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032), ray_cut=0.08, rays=0.7),
-    "ExBubble2": dict(ray_cut=0.1, near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.35, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=3.0, rough=0.05,
-                      chains=3.0, chain_size=1.0,
+                      sun=(0.05, 0.75, -1.0), pitch=16.0, exposure=1.0, absorb=(0.06, 0.042, 0.032)),
+    "ExBubble2": dict(mode="surface", film=0.35, surface_gain=3.0, rays=0.7,
                       deep=(0.022, 0.055, 0.12), water=(0.03, 0.08, 0.16), sky=(0.6, 0.76, 0.95), shaft=(0.36, 0.55, 0.85),
-                      sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035), rays=0.7),
-    "ExBubble3": dict(ray_cut=0.1, near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.3, surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.0, rough=0.05,
-                      chains=3.0, chain_size=1.0,
+                      sun=(0.0, 0.7, -1.0), pitch=16.0, exposure=0.9, absorb=(0.08, 0.05, 0.035)),
+    "ExBubble3": dict(mode="surface", film=0.3, surface_gain=2.0, rays=0.55,
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
-                      sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045), rays=0.55),
-    "ExBubble4": dict(ray_cut=0.1, near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=35.0, fan_reach=0.65,
-                      fan_contrast=0.35, fan_march=0.45, rays=0.45, shaft_scale=0.55, shaft_soft=0.35, ray_focus=0.3, film=0.5, film_range=(255.0, 345.0), surface_sky=0.35, glint_power=120.0, glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=2.5, rough=0.05,
-                      chains=3.0, chain_size=1.0,
+                      sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045)),
+    # Broad soft rays (operator preferred them to the fine fan here), lighter film, haze, a wider aperture.
+    "ExBubble4": dict(mode="surface", fan_rays=35.0, fan_contrast=0.35, fan_march=0.45, rays=0.45,
+                      film=0.5, film_range=(255.0, 345.0), surface_gain=2.5,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
-                      wakes=0.0, mist=0.3, aperture=1.2),
-    "ExBubble5CameraAbyss": dict(spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12, speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9, film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=3.0, face_reflect=0.2, mid_count=0.45, travel=(0.4, 1.0, 0.0),
-                                 columns=(0.371, 0.928, 120.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, surface_gain=0.6,
-                                 rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0), light=(0.75, 0.88, 1.0),
-                                 specks=0.35, warm_share=0.85, streak=(0.35, 1.0), chain_size=1.0,
+                      mist=0.3, aperture=1.2),
+    # A dark teal abyss lit from the upper right inside the water: luminous veils, bead columns, clear glass.
+    "ExBubble5CameraAbyss": dict(mode="deep", spec_view=(0.6, 0.6, 0.5), veils=0.4, proxy_power=6.0, inner_blur=0.12,
+                                 speck_glow=0.25, chains=2.0, near_coc=3.0, near_lens=1.0, near_reflect=0.1, film=0.9,
+                                 film_range=(255.0, 345.0), glint_power=600.0, glint_sharp=300.0, probe_fill=3.0,
+                                 face_reflect=0.2, mid_count=0.45, travel=(0.4, 1.0, 0.0), columns=(0.371, 0.928, 120.0),
+                                 surface_gain=0.6, rough=0.05, light_power=1.2, light_view=(0.75, 0.75, -1.0),
+                                 light=(0.75, 0.88, 1.0), specks=0.35, warm_share=0.85, streak=(0.35, 1.0),
                                  deep=(0.016, 0.05, 0.08), water=(0.02, 0.08, 0.13), sky=(0.3, 0.6, 1.0),
-                                 shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, wisps=0.0,
-                                 mist=0.6, wakes=0.0, focus=3.2, sparkle=1.0, crisp=1.0, surface=60.0,
-                                 absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0, glow=0.6, rays=0.2, aperture=0.6),
-    "ExBubble5Cameradown": dict(
-        # Looking down into a dark abyss lit from above and behind: deep blue-black, a lighter haze far off.
-        deep=(0.05, 0.12, 0.2), water=(0.03, 0.11, 0.2), sky=(0.45, 0.65, 1.0), shaft=(0.3, 0.55, 0.95), face_reflect=0.25,
-        sun=(0.3, 0.8, -1.0), pitch=-32.0, exposure=1.0, surface=30.0, shaft_y=12.0, absorb=(0.1, 0.05, 0.03),
-        surface_gain=0.6, light_power=0.0, mist=0.4, rays=0.4, glow=0.6, drift=0.15, wisps=0.0, wakes=0.0,
-        # Particulate and streams.
-        specks=0.6, warm_share=0.85, streak=(0.15, 1.0), chains=5.0, chain_size=1.0, mid_count=0.6, sparkle=0.7,
-        # Luminous violet-rimmed glass bubbles with sharp glints.
-        crisp=1.0, rough=0.03, film=1.0, film_range=(255.0, 345.0), shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0,
-        probe_fill=5.0, glint_power=400.0, glint_sharp=600.0, inner_blur=0.15),
+                                 shaft=(0.25, 0.5, 0.95), sun=(0.6, 0.6, -1.0), pitch=6.0, exposure=1.0, mist=0.6,
+                                 focus=3.2, sparkle=1.0, surface=60.0, absorb=(0.1, 0.05, 0.03), drift=0.6, shaft_y=16.0,
+                                 glow=0.6, rays=0.2, aperture=0.6),
+    # Looking down into a dark abyss lit from above and behind: deep blue, a lighter haze far off, violet-rimmed glass.
+    "ExBubble5Cameradown": dict(mode="deep", deep=(0.05, 0.12, 0.2), water=(0.03, 0.11, 0.2), sky=(0.45, 0.65, 1.0),
+                                shaft=(0.3, 0.55, 0.95), face_reflect=0.25, sun=(0.3, 0.8, -1.0), pitch=-32.0,
+                                exposure=1.0, surface=30.0, shaft_y=12.0, absorb=(0.1, 0.05, 0.03), surface_gain=0.6,
+                                light_power=0.0, mist=0.4, rays=0.4, glow=0.6, drift=0.15, specks=0.6, warm_share=0.85,
+                                streak=(0.15, 1.0), chains=5.0, mid_count=0.6, sparkle=0.7, rough=0.03, film=1.0,
+                                film_range=(255.0, 345.0), probe_fill=5.0, glint_power=400.0, glint_sharp=600.0,
+                                inner_blur=0.15),
+    # Near-black teal, orange light from the top-right corner, ember particulate in diagonal bands, dark clear glass.
+    "ExBubble6Diagonal": dict(mode="deep", spec_view=(0.75, 0.55, 0.38), deep=(0.012, 0.05, 0.06),
+                              water=(0.03, 0.13, 0.17), sky=(1.0, 0.55, 0.22), shaft=(0.95, 0.45, 0.14),
+                              light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), light_view=(1.0, 0.68, -1.0), pitch=4.0,
+                              exposure=1.0, hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25,
+                              ray_focus=1.0, mist=0.6, dust=0.4, light_power=0.15, absorb=(0.06, 0.05, 0.05),
+                              specks=2.4, speck_warm=(1.0, 0.25, 0.02), speck_size=1.6, speck_bloom=0.6,
+                              warm_share=0.9, streak=(1.0, -0.3), banded=True, band_freq=9.0, cloud_contrast=4.0,
+                              cloud_floor=0.03, cloud_glow=1.8, travel=(1.0, -0.3, 0.15), sway=0.25, fizz=2.5,
+                              fizz_size=2.0, small_count=5.0, sparkle=1.5, mid_count=1.5, rough=0.1, inner_blur=0.6,
+                              probe_fill=1.5, face_reflect=0.3, veils=0.35, glint_power=60.0, glint_sharp=300.0,
+                              focus=3.4, aperture=1.5),
 }
-VARIANTS["ExBubble6Diagonal"] = dict(spec_view=(0.75, 0.55, 0.38),
-    # Water and light: near-black teal, orange light from the top-right corner, faint beams.
-    deep=(0.012, 0.05, 0.06), water=(0.03, 0.13, 0.17), sky=(1.0, 0.55, 0.22), shaft=(0.95, 0.45, 0.14),
-    light=(1.0, 0.52, 0.2), sun=(0.9, 0.35, -0.5), light_view=(1.0, 0.68, -1.0), pitch=4.0, exposure=1.0,
-    hdr_exposure=0.75, surface=60.0, shaft_y=16.0, glow=0.2, rays=0.25, ray_focus=1.0, mist=0.6, dust=0.4,
-    light_power=0.15, absorb=(0.06, 0.05, 0.05),
-    # Ember particulate in diagonal bands; bubbles streaming with it.
-    specks=2.4, speck_warm=(1.0, 0.25, 0.02), speck_size=1.6, speck_bloom=0.6, warm_share=0.9, streak=(1.0, -0.3), banded=True,
-    band_freq=9.0, cloud_contrast=4.0, cloud_floor=0.03, cloud_glow=1.8, travel=(1.0, -0.3, 0.15), sway=0.25,
-    fizz=2.5, fizz_size=2.0, small_count=5.0, sparkle=1.5, wakes=0.0, mid_count=1.5,
-    # Crisp clear glass bubbles: dark interiors, orange-lit rims and glints.
-    crisp=1.0, rough=0.1, inner_blur=0.6, shell=0.03, iors=(1.15, 2.0, 1.0), probe_fill=1.5, face_reflect=0.3, veils=0.35,
-    glint_power=60.0,
-    glint_sharp=300.0, lens=1.0, focus=3.4, aperture=1.5)
+
+
+def effective(variant):
+    """A scene's full settings: engine, then its mode, then its own values."""
+    return {**ENGINE, **MODES[variant["mode"]], **variant}
 
 COMMON = """
 uniform mat3 uViewToWorld;
@@ -1142,7 +1154,7 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
 def render_variant(capture, resources, target, programs, env, env_fbo, settings, seed):
     (env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, particle_program,
      near_program, shaft_tex, shaft_fbo) = programs
-    settings = {**settings, **OVERRIDES}
+    settings = {**effective(settings), **OVERRIDES}
     pitch = math.radians(settings["pitch"])
     c, s = math.cos(pitch), math.sin(pitch)
     view_to_world = (1, 0, 0, 0, c, s, 0, -s, c)
