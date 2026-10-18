@@ -280,3 +280,38 @@ original Bubble's control set is only a guideline (operator 2026-10-18); nothing
 body, and each control here is designed for this mode.
 Values still kept per scene until their control exists: mock 1's `ray_cut`, camera-down's `glint_sharp` and the
 `rough` differences.
+
+## 10. Architecture (EB2/EB3, 2026-10-18)
+
+**Mode.** Descriptor `extruded_bubble` ("Extruded Bubble"): card shell with card-interior clipping, viewport-resizable,
+`freeform_3d` with its own `layout_profile` ("3d:extruded_bubble"); framed camera declared on the descriptor (turn/tilt
+orbit wrapping a full circle, `view_auto_rotate_settings`, scene scale/pan with a `scene_pan_envelope`), prepared
+reveal. Registered behind a closed code gate (`_GATED_MODES`: not selectable, not offered in Guided Setup, no
+runtime work) until EB5 acceptance flips it in code; never an environment flag.
+
+**Simulation (CPU, logical clock).** `widgets/spotify_visualizer/extruded_bubble_frame_runtime.py` owns an
+`ExtrudedBubbleSimulation` advanced in the mode's logical capture (as Neon Lake's runtime is), with dt from the sole
+logical clock and the existing audio feeds (fixed loudness, bands, transient onsets, event scheduler). It owns only
+what music and collisions move: the large and mid bubbles (bounded, about 200): identity, position in the framed
+volume (normalised, depth included), velocity, radius, breathing, fuse-cluster membership and pop fade. Streams are
+emitters with a direction (Stream Direction), rate and speed (EB5a ranges across loudness); drift and sway are
+deterministic noise of (identity, logical time). Collisions use a spatial hash on that small set and resolve to Fuse
+(a cluster record with neck and members), Pop (a soft fade) or Bounce (an elastic push) by the Triangle shares and the
+Big/Small/All admission. The capture freezes an immutable snapshot (packed float32 bubble records, cluster records,
+scene scalars such as loudness envelope and beat flash). Nothing in it touches Qt or GL; it is deterministic for a
+recorded clip, so replay audits work as for other modes.
+
+**Procedural on the GPU.** Bead chains, fizz, tiny bubbles and particulate are generated in the vertex stage from
+fixed seeds, the logical time and the snapshot's scalars (stream direction, speed, density range): tens of
+thousands of instances with no per-bead CPU work and no GIL-held numpy on the logical thread.
+
+**Renderer (EB3).** `rendering/quick/visualizer/implementations/extruded_bubble.py` ports the lab's proven passes onto
+the shared owners: `SceneTarget` (depth texture, OIT, HDR, bloom), `SceneProbe`, sphere impostors shaded by
+`sceneHollowSphereTrace`, the cluster pass, `DefocusLayer` for near giants, the light (sun fan / deep beams), the water
+backdrop (Snell's window or the abyss), veils and particulate bloom. Detail tiers (`scene3d_detail`) bound probe size,
+rim sub-rays, bead density and defocus taps; the small-bead model (G0) is the main budget lever.
+
+**Slices.** S1 simulation + frame runtime + capture, pure and tested (determinism, bounds, collisions, cadence on
+the logical clock, dormancy) → S2 descriptor behind its gate, Settings spec (§9), defaults, builder, parameters →
+S3 renderer port pass by pass, each compared with the lab at full resolution → S4 controls drive reactivity, every lab
+scene rebuilt as a preset through the Settings UI alone → S5 physical acceptance with real recordings, gate opened.
