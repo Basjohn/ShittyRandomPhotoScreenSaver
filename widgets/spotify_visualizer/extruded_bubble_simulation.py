@@ -11,10 +11,15 @@ framed camera's view.
 identity, position, velocity, base radius, a breathing response, a fade, and fuse-cluster membership. Bead chains,
 fizz and particulate are procedural on the GPU from the snapshot's scalars (stream, speed, level, flash).
 
-**Music.** ``level`` is the passage intensity (``BeatEngine.get_musical_intensity``: 0..1 on the fixed real-music
-scale), smoothed; every quiet..loud range (counts, speed, breathing, pulse) is read at it. Kicks (and low-end novelty)
-make the large bubbles breathe; snares pulse the mid ones; any onset briefly speeds the stream (``flash``). Onsets
-count by ``musical_weight`` so a near-silent passage barely moves anything.
+**Music.** Fixed-scale drivers only, no dynamic floors: ``level`` is the passage intensity
+(``BeatEngine.get_musical_intensity``: 0..1 on the fixed real-music scale) and onsets count by ``musical_weight`` (a
+near-silent passage barely moves anything). Every quiet..loud range is read at ``level``. Kicks make the large bubbles
+breathe, snares pulse the mid ones. Drift, stream speed and particle emission each follow their target with a quick
+attack and a slow decay (the stream slowest of all), and onsets feed them only through those followers, so nothing
+stutters, judders or stops suddenly. Sustained loud passages have their own response: ``sustain`` (the level held
+for seconds: slow to rise, slow to fall) keeps the mid bubbles shimmering on their own phases and lifts drift and the
+stream, so a saturated passage stays alive between hits. In silence a light idle energy keeps the bubbles gently
+breathing.
 
 **Collisions.** Overlapping bubbles admitted by ``collision_scope`` resolve once per contact, chosen by the
 Fuse / Pop / Bounce shares from the pair's identities: Fuse joins them into a cluster (at most ``CLUSTER_MAX``
@@ -47,10 +52,13 @@ class ExtrudedBubbleControls:
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     stream_direction: tuple[float, float] = (0.0, 0.0)   # (around, height) degrees: 0 up; height into the scene
     stream_speed: tuple[float, float] = (0.05, 0.16)     # volume units per second
-    drift: float = 0.5                      # 0..1 lateral wander
+    drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
     sway: float = 0.4                       # 0..1 side-to-side swing
+    emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
+    idle: float = 0.5                       # 0..1 the light energy kept in silence
     breathing: tuple[float, float] = (0.04, 0.18)        # large bubbles' swell (share of radius)
     small_pulse: tuple[float, float] = (0.02, 0.10)      # mid bubbles' pulse (share of radius)
+    sustained: float = 0.6                  # 0..1 how much a sustained loud passage moves the mid bubbles
     smoothing: float = 0.5                  # 0 snappy .. 1 soft (visual smoothing of level and breath)
     collision: tuple[float, float, float] = (0.4, 0.3, 0.3)   # Fuse, Pop, Bounce shares
     collision_scope: str = "all"            # "all", "big", "small" or "off"
@@ -61,7 +69,6 @@ class MusicInput:
     dt: float
     playing: bool
     intensity: float = 0.0                  # passage intensity 0..1
-    bass: float = 0.0                       # pre-AGC low-band energy 0..1
     onsets: tuple[tuple[str, float], ...] = ()   # (kind, weight 0..1) taken this step
 
 
@@ -75,6 +82,9 @@ class ExtrudedBubbleSnapshot:
     flash: float = 0.0
     stream: tuple[float, float, float] = (0.0, 1.0, 0.0)
     stream_speed: float = 0.0
+    drift: float = 0.0
+    emission: float = 0.0
+    sustain: float = 0.0
 
     @property
     def count(self) -> int:
@@ -147,7 +157,10 @@ class ExtrudedBubbleSimulation:
         self._breath = 0.0
         self._pulse = 0.0
         self._flash = 0.0
-        self._bass_slow = 0.0
+        self._sustain = 0.0
+        self._speed: float | None = None
+        self._drift: float | None = None
+        self._emission: float | None = None
         self._filled = False
         self._spawn_credit = {True: 0.0, False: 0.0}
 
@@ -194,17 +207,17 @@ class ExtrudedBubbleSimulation:
         self._time += dt
         soft = 0.5 + 1.5 * max(0.0, min(1.0, controls.smoothing))       # visual smoothing scales every follower
 
-        # Music: the passage level, breathing from kicks and low-end novelty, a pulse from snares, a flash per onset.
+        # Music: the passage level, breathing from kicks, a pulse from snares, a flash per onset.
         intensity = max(0.0, min(1.0, float(music.intensity))) if music.playing else 0.0
         self._level = _follow(self._level, intensity, dt, 0.25 * soft, 1.2 * soft)
-        bass = max(0.0, float(music.bass)) if music.playing else 0.0
-        self._bass_slow = _follow(self._bass_slow, bass, dt, 2.0, 2.0)
-        novelty = max(0.0, bass - self._bass_slow) / max(self._bass_slow, 0.05)
         kick = max((w for kind, w in music.onsets if kind == "kick"), default=0.0)
         snare = max((w for kind, w in music.onsets if kind != "kick"), default=0.0)
-        breath_target = min(1.0, 0.6 * min(novelty, 1.5) + kick)
-        self._breath = max(self._breath, kick) if kick > 0 else self._breath
-        self._breath = _follow(self._breath, breath_target, dt, 0.04 * soft, 0.35 * soft)
+        if kick > 0.0:
+            self._breath = max(self._breath, kick)
+        # Between kicks the breath settles toward a gentle idle sway (stronger in silence, never zero while alive).
+        quietness = 1.0 - self._level
+        idle_breath = controls.idle * (0.12 + 0.18 * quietness) * (0.5 + 0.5 * math.sin(self._time * 0.6))
+        self._breath = _follow(self._breath, idle_breath, dt, 0.04 * soft, 0.35 * soft)
         self._pulse = max(self._pulse, snare)
         self._pulse = _follow(self._pulse, 0.0, dt, 0.03, 0.25 * soft)
         if music.onsets:
@@ -212,8 +225,21 @@ class ExtrudedBubbleSimulation:
         self._flash = _follow(self._flash, 0.0, dt, 0.02, 0.6 * soft)
 
         level = self._level
+        # A loud passage held for seconds: slow to build, slow to fade.
+        self._sustain = _follow(self._sustain, max(0.0, (intensity - 0.45) / 0.55), dt, 2.5, 3.5)
+        sustain = self._sustain
         direction = stream_vector(*controls.stream_direction)
-        speed = _lerp(controls.stream_speed, level) * (1.0 + 0.6 * self._flash)
+        # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
+        low, high = controls.stream_speed
+        speed_target = _lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)
+        drift_target = min(1.0, _lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0]))
+        emission_target = min(1.0, _lerp(controls.emission, level) + 0.3 * self._flash)
+        if self._speed is None:
+            self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
+        self._speed = _follow(self._speed, speed_target, dt, 0.35 * soft, 3.0 * soft)
+        self._drift = _follow(self._drift, drift_target, dt, 0.5 * soft, 2.5 * soft)
+        self._emission = _follow(self._emission, emission_target, dt, 0.1 * soft, 1.5 * soft)
+        speed = self._speed
 
         # Population: fill at once on the first step, then grow toward the target upstream and thin by fading.
         targets = {True: int(round(min(MAX_BUBBLES, _lerp(controls.large_count, level)))),
@@ -257,9 +283,9 @@ class ExtrudedBubbleSimulation:
                 continue
             size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
-            wander = controls.drift * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
+            wander = self._drift * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             swing = controls.sway * 0.06 * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase)
-            deep = controls.drift * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
+            deep = self._drift * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep)
             b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep)
             b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep)
@@ -269,7 +295,7 @@ class ExtrudedBubbleSimulation:
             if not members:
                 continue
             forward = speed * 0.9
-            wander = controls.drift * 0.04 * math.sin(t * 0.31 + c.ident)
+            wander = self._drift * 0.04 * math.sin(t * 0.31 + c.ident)
             c.x += dt * (direction[0] * forward + across[0] * wander)
             c.y += dt * (direction[1] * forward + across[1] * wander)
             c.z += dt * (direction[2] * forward + across[2] * wander)
@@ -418,10 +444,12 @@ class ExtrudedBubbleSimulation:
         level = self._level
         breathing = _lerp(controls.breathing, level) * self._breath
         pulse = _lerp(controls.small_pulse, level) * self._pulse
+        shimmer = _lerp(controls.small_pulse, 1.0) * controls.sustained * self._sustain
         index = {b.ident: i for i, b in enumerate(self._bubbles)}
         bubbles: list[float] = []
         for b in self._bubbles:
-            swell = breathing if b.large else pulse
+            # Mid bubbles: the snare pulse, and through a sustained passage a shimmer on each one's own phase.
+            swell = breathing if b.large else max(pulse, shimmer * (0.5 + 0.5 * math.sin(self._time * 3.1 + b.phase)))
             radius = b.radius * (1.0 + swell + (0.25 * min(1.0, b.popping / _POP_SECONDS) if b.popping >= 0 else 0.0))
             bubbles.extend((b.x, b.y, b.z, radius, b.alpha, swell, float(b.ident), float(b.cluster)))
         clusters: list[float] = []
@@ -429,7 +457,7 @@ class ExtrudedBubbleSimulation:
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
-                                      self._flash, direction, speed)
+                                      self._flash, direction, speed, self._drift, self._emission, self._sustain)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

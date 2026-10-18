@@ -1,7 +1,6 @@
 """Activation-fenced authored state for Extruded Bubble: its own simulation, advanced in the mode's logical capture.
 
-Each capture passes the logical time, the activation and source identities, the passage intensity, the low-band
-energy and the onsets the engine published since ``onset_serial`` (each ``MusicalOnset`` is taken exactly once, by
+Each capture passes the logical time, the activation and source identities, the passage intensity and the onsets the engine published since ``onset_serial`` (each ``MusicalOnset`` is taken exactly once, by
 serial, however the analysis and logical cadences relate). dt is the logical time since the previous capture; a new
 activation, a source that is not ready, or a clock that goes back starts the simulation over or holds it silent.
 Nothing here touches Qt or GL.
@@ -54,7 +53,7 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         return self._latest
 
     @retirement_fenced
-    def advance(self, *, onsets, now_ts: float, playing: bool, intensity: float, bass: float,
+    def advance(self, *, onsets, now_ts: float, playing: bool, intensity: float,
                 identity: tuple[int, int, int], source_identity: tuple[int, int],
                 controls: ExtrudedBubbleControls) -> ExtrudedBubbleSnapshot | None:
         now = float(now_ts)
@@ -77,8 +76,7 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         live = bool(playing) and source_ready
         dt = 0.0 if self._last_ts is None else min(MAX_STEP_SECONDS, max(0.0, now - self._last_ts))
         self._last_ts = now
-        music = MusicInput(dt, live, float(intensity) if live else 0.0, float(bass) if live else 0.0,
-                           tuple(taken) if live else ())
+        music = MusicInput(dt, live, float(intensity) if live else 0.0, tuple(taken) if live else ())
         self._latest = self._simulation.advance(music, controls)
         return self._latest
 

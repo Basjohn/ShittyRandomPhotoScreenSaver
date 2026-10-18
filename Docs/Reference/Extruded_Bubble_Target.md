@@ -208,6 +208,13 @@ start | now):**
   (a very gentle fade out) when bubbles collide; merges must vary (sizes, neck width, orientation, two to four
   members), never one uniform shape.
 - **Trails:** dense wakes of tiny bubbles behind mid and large bubbles that follow the drift.
+- **Reactivity priorities (operator 2026-10-18):** breathing; drift rising and falling with intensity; stream speed
+  rising through saturated passages; particle emission (specks, dust, trails), especially in 3D. Quick attack and slow
+  decay on all of them, the stream above all: never a stutter, judder or sudden stop. Each is a range-slider (EB5a)
+  candidate. A light idle energy in silence (original Bubble does this well). Fixed-scale drivers only (passage
+  intensity, onsets by musical weight): no dynamic floors; room to optimise rather than Bubble's specific simulation.
+  **Sustained loud passages** need their own response (drift, stream speed and especially the small bubbles reacting
+  through sustained loudness, not only hits); always check them on the real recordings in `logs/visualizer_recordings`.
 - **Reactivity:** light shafts react to the music (intensity, spread or flicker), alongside bubble breathing, speed
   and drift, all through Extruded Bubble's own logical simulation on the sole clock, never a second clock or DSP.
 - **Sizes:** strong variation with a slight bias to small bubbles, authored by on-screen size bands.
