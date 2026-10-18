@@ -415,7 +415,8 @@ class DirectionMapper(_VisualControl):
     """A direction placed on a disc: the angle round it is ``around`` (0 up, clockwise), the distance
     from the centre is ``height`` (centre = the top of the range, rim = its bottom). ``centre_text``
     names the centre (``"Overhead"``, ``"Into Scene"``); ``marker`` draws the point as an arrow from
-    the centre (a stream) or a glowing dot (a light)."""
+    the centre (a stream) or a glowing dot (a light). A collapsed height range (low == high) is a plain
+    angle dial: the point rides a ring and only ``around`` changes (gradient, shadow or screen directions)."""
 
     def __init__(self, height_range: tuple[float, float] = (0.0, 90.0), *, centre_text: str = "",
                  marker: str = "arrow", parent=None) -> None:
@@ -424,12 +425,14 @@ class DirectionMapper(_VisualControl):
         self._centre_text = centre_text
         self._marker = marker
         self._around, self._height = 0.0, self._high
-        self.setMinimumSize(150, 150)
+        side = 96 if self.is_dial() else 150          # a plain angle needs less room than a full disc
+        self.setMinimumSize(side, side)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setAccessibleDescription(self.describe())
 
     def sizeHint(self) -> QSize:  # type: ignore[override]
-        return QSize(150, 150)
+        side = 96 if self.is_dial() else 150
+        return QSize(side, side)
 
     def value(self) -> tuple[float, float]:
         return self._around, self._height
@@ -442,6 +445,8 @@ class DirectionMapper(_VisualControl):
         self.update()
 
     def describe(self) -> str:
+        if self.is_dial():
+            return f"Angle {round(self._around)} degrees"
         return f"Around {round(self._around)} degrees, height {round(self._height)} degrees"
 
     def disc(self) -> tuple[QPointF, float]:
@@ -450,15 +455,22 @@ class DirectionMapper(_VisualControl):
 
     def point(self) -> QPointF:
         centre, radius = self.disc()
-        span = max(1e-6, self._high - self._low)
-        r = radius * (self._high - self._height) / span
+        if self.is_dial():
+            r = radius * 0.8
+        else:
+            r = radius * (self._high - self._height) / (self._high - self._low)
         angle = math.radians(self._around)
         return QPointF(centre.x() + r * math.sin(angle), centre.y() - r * math.cos(angle))
+
+    def is_dial(self) -> bool:
+        return self._high - self._low < 1e-6
 
     def value_at(self, point: QPointF) -> tuple[float, float]:
         centre, radius = self.disc()
         dx, dy = point.x() - centre.x(), point.y() - centre.y()
         distance = min(1.0, math.hypot(dx, dy) / max(radius, 1e-6))
+        if self.is_dial():
+            distance = max(distance, 0.8)        # a dial reads only the angle
         # Snap to the centre and to each 45 degree spoke within a few pixels.
         if distance * radius <= 5.0:
             return self._around, self._high
@@ -480,7 +492,7 @@ class DirectionMapper(_VisualControl):
         faint = _colour("slider.groove.bottom_border")
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QPen(faint, 1.0))
-        for ring in (1 / 3, 2 / 3):
+        for ring in ((0.8,) if self.is_dial() else (1 / 3, 2 / 3)):
             painter.drawEllipse(centre, radius * ring, radius * ring)
         for k in range(8):
             angle = math.radians(45.0 * k)
