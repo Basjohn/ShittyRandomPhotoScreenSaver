@@ -717,3 +717,42 @@ def test_every_optional_attachment_follows_a_resize_and_is_gone_after_release(ca
     finally:
         target.release()
         resources.release_resources()
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_bright_transparent_layers_at_the_near_plane_stay_finite_and_order_independent(capture, samples):
+    """Layers right at the eye (near giants crossing the near plane) carry the largest weight; bright (HDR) light
+    stacked there must not overflow the half-float accumulation into infinity / NaN (a black hole)."""
+    from rendering.quick.render.gl_resources import compile_program
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    flat = compile_program(_RECT_VERTEX, _FLAT_FRAGMENT, label="flat")
+    glass = compile_program(_RECT_VERTEX, _TRANSPARENT_FRAGMENT, label="glass")
+    card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+    layers = [((-0.9 + 0.05 * i, -0.9, 0.9, 0.9), 0.0, (6.0, 5.0, 4.0, 0.9), 0.001 * (i + 1)) for i in range(8)]
+
+    def draw(order):
+        _clear(capture)
+        with target.scope(card, samples, resources, overlay=1.0, bloom=0.5, oit=True, hdr=1.0):
+            gl.glBindVertexArray(capture.vao)
+            _rect(flat, (-1.0, -1.0, 1.0, 1.0), 0.95, (0.1, 0.1, 0.1, 1.0))
+            with target.transparent_writes(card, resources):
+                for layer in order:
+                    _transparent(glass, *layer)
+            colour, _depth = target.background(card, resources)
+            buffer = np.zeros((target.allocation[1], target.allocation[0], 4), dtype=np.float32)
+            gl.glGetTextureImage(colour, 0, gl.GL_RGBA, gl.GL_FLOAT, buffer.nbytes, buffer)
+        return _read(capture), buffer
+
+    try:
+        forward, scene = draw(layers)
+        backward, _ = draw(layers[::-1])
+        overlap = scene[HEIGHT // 2, WIDTH // 2]
+        assert np.all(np.isfinite(scene)), "transparency accumulation overflowed"
+        assert overlap[0] > 1.0                                   # bright light kept past white
+        assert int(forward[HEIGHT // 2, WIDTH // 2, 0]) > 200      # shown bright, not a black hole
+        assert np.abs(forward - backward).max() <= 2
+    finally:
+        gl.glDeleteProgram(flat)
+        gl.glDeleteProgram(glass)
+        target.release()
+        resources.release_resources()

@@ -498,6 +498,8 @@ Each foundation slice adds what it learned here.
   overlay composite (HDR exposure) added a GL call to every 3D mode, caught only by the overhead baseline's call counts.
   Give the feature its own program instance and leave the shared one's linked defaults untouched. Run the full
   baseline after any shared-target change, and never trust a filtered run that matched no cases.
+- Weighted-blended OIT on a half-float accumulation must bound each layer's weighted light: the near-camera weight
+  (thousands) times HDR colour overflows to infinity after a few layers and resolves to NaN black holes.
 - Budget by ablation before optimising: an exact early-out that looks free can be both small and inexact (half-float
   mips flush tiny coverage); find which population pays (here 2-6 px beads through the full shell trace) first.
 

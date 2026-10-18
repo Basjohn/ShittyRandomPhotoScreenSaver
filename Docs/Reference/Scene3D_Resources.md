@@ -354,7 +354,7 @@ What each pre-Extruded-Bubble gate has, what proves it and what is missing. Extr
 | --- | --- | --- | --- |
 | G1 attachments/depth | `SceneTarget` (`depth_texture`, mid-scope `background`, `hdr`) | `test_scene3d_target.py`: same pixels as the renderbuffer target, background colour + nearest depth at 1/4 samples, nothing allocated unless asked, allocation reuse/resize, failure hands state back | Mixed-DPR resize untested (resize and release of the depth, background, OIT and HDR attachments proven 2026-10-18; a leaked attachment fails it). Normal/material/history attachments: not demanded (none planned) |
 | FC framed camera | descriptor `view_orbit_settings` / `scene_transform_settings`, `widgets/spotify_visualizer/view_orbit.py`, `core/settings/visualizer_view_orbit.py` | Neon Lake, Sphere, Extruded Spectrum orbit through it | Neon Lake's policies are keyed on its mode id (clamped turn, `_bounded_basin_pose` lake/sky anchors); FC needs them as per-mode declared bounds/fit/pivot so a second framed mode declares its own |
-| G3A transparency | `SceneTarget(oit=True)`, `SCENE_OIT_GLSL` | `test_scene3d_target.py`: either draw order gives the same picture at 1/4 samples (ordinary blending differs by >40 levels), nearer outweighs farther, opaque depth respected, state restored, nothing allocated without `oit` | Near-plane/camera crossings and context loss not asserted |
+| G3A transparency | `SceneTarget(oit=True)`, `SCENE_OIT_GLSL` | `test_scene3d_target.py`: either draw order gives the same picture at 1/4 samples (ordinary blending differs by >40 levels), nearer outweighs farther, opaque depth respected, state restored, nothing allocated without `oit` | Context loss not asserted (near-plane crossing proven 2026-10-18: bright HDR layers at the eye overflowed the half-float accumulation to NaN; each layer's weighted light is now capped at 2048) |
 | G2 shadow map | none (planar/directional silhouettes in `shadows.py` only) | — | No fitted depth-map foundation. Extruded Bubble's target has no receiver (abyss, no seabed): not demanded by it; stays deferred until a consumer needs it |
 | G3B optics | `scene3d_optics.py` (Fresnel, thin film, `sceneSpherePaths`, `sceneHollowSphereTrace`), `scene3d_spheres.py` impostors, `probe.py`, `defocus.py`, `scene3d_water.py` | mirror tests for every traced path, probe and defocus pixel tests, HDR tone curve | Rough transmission and dispersion: evaluated, not needed by the target (recorded unnecessary) |
 
@@ -445,6 +445,8 @@ their following body-pass depth state, and the existing visualizer fence still o
   4 samples (ordinary alpha blending of the same layers, the negative control, differs by over 40 levels), the nearer
   layer outweighs the farther, an opaque wall hides the layer behind it, blend/depth state comes back, and nothing is
   allocated without `oit`.
+- `test_scene3d_target.py` (G3A near plane): eight bright (HDR) translucent layers at the eye stay finite, keep light
+  past white and give the same picture in either order (it failed before the weight cap).
 - `test_scene3d_target.py` (G1 lifetime): with depth texture, background, OIT and HDR all on, every attachment
   reallocates when the rect outgrows its bucket and no GL object survives `release` (negative control: skipping one
   OIT texture's delete fails it).

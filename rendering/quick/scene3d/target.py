@@ -143,6 +143,9 @@ void sceneTransparent(vec3 premultiplied, float alpha, float viewDepth) {
     float z = abs(viewDepth);
     float weight = clamp(10.0 / (1e-5 + pow(z / 5.0, 2.0) + pow(z / 200.0, 6.0)), 1e-2, 3e3);
     weight *= clamp(alpha * 10.0, 0.0, 1.0) + 0.01;
+    // The accumulation is half float (max ~65504): a layer's weighted light stays <= 2048, so about 32 bright
+    // (HDR) layers at the eye still sum finitely (unbounded, near giants overflowed to infinity / NaN).
+    weight = min(weight, 2048.0 / max(1.0, max(max(premultiplied.r, premultiplied.g), premultiplied.b)));
     SceneAccum = vec4(premultiplied, alpha) * weight;
     SceneReveal = vec4(alpha);
 }
