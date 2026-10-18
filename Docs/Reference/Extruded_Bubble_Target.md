@@ -36,9 +36,9 @@ Extruded Bubble is a real mode with its **own** logical simulation: a 3D populat
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
 Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer
 clock**. It reads the existing audio feeds (fixed loudness, energy bands, transients, the event scheduler) and adds no
-clock, capture, DSP, floor or renderer-owned simulation. Original Bubble (`bubble_simulation.py`) is a guideline for
-what good bubble reactivity feels like, never shared code, settings or a projection; it stays untouched and its replay
-unchanged. The renderer draws the simulation's immutable frame snapshot.
+clock, capture, DSP, floor or renderer-owned simulation. Original Bubble is only a guideline, for gradients, drift,
+breathing motion and visual smoothing, nothing more: never shared code, settings or a projection, and Extruded Bubble
+is free to be better and unique (operator 2026-10-18). Original Bubble stays untouched and its replay unchanged. The renderer draws the simulation's immutable frame snapshot.
 
 ## 3. Inventory: what the shared layer already has
 
