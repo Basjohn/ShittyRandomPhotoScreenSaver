@@ -679,3 +679,41 @@ def test_an_hdr_target_keeps_light_brighter_than_white_and_tone_maps_it_once(cap
         gl.glDeleteProgram(flat)
         target.release()
         resources.release_resources()
+
+
+def test_every_optional_attachment_follows_a_resize_and_is_gone_after_release(capture):
+    """Depth texture, background capture, OIT and HDR (with bloom) reallocate when the rect outgrows its bucket and
+    leave no GL object behind on release (park / context teardown)."""
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+
+    def names():
+        return {key: name for key, name in target._names.items() if name}
+
+    def alive(key, name):
+        return bool(gl.glIsFramebuffer(name) if key.endswith("fbo") else
+                    gl.glIsTexture(name) or gl.glIsRenderbuffer(name))
+
+    try:
+        _clear(capture)
+        kwargs = dict(overlay=1.0, bloom=0.5, depth_texture=True, oit=True, hdr=1.0)
+        with target.scope(_card_frame(capture, 0, 0, 100, 60), 4, resources, **kwargs):
+            target.background(_card_frame(capture, 0, 0, 100, 60), resources)
+        small = names()
+        for key in ("depth_texture", "background_colour", "background_depth", "oit_fbo", "oit_accum", "oit_reveal"):
+            assert key in small, key
+        assert all(alive(key, name) for key, name in small.items())
+        with target.scope(_card_frame(capture, 0, 0, 130, 60), 4, resources, **kwargs):
+            target.background(_card_frame(capture, 0, 0, 130, 60), resources)
+        assert target.allocation == (192, 64, 4)
+        large = names()
+        assert set(large) == set(small)
+        out = np.zeros(1, dtype=np.int32)
+        gl.glGetTextureLevelParameteriv(large["depth_texture"], 0, gl.GL_TEXTURE_WIDTH, out)
+        width = int(out[0])
+        assert width == 192                        # the depth texture followed the new bucket
+        target.release()
+        assert not target.has_resources
+        assert not any(alive(key, name) for key, name in {**small, **large}.items())
+    finally:
+        target.release()
+        resources.release_resources()
