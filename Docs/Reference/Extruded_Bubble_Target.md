@@ -374,10 +374,20 @@ Tests: `tests/test_extruded_bubble_renderer.py` (camera, volume mapping, cluster
 type, rays; a prepared renderer draws turned and repeated frames compiling and allocating nothing, releases everything),
 prepared reveal for the mode, defocus under a masked index, target warm list = what an HDR/OIT/background scope compiles.
 
+**S3c (first part) landed (2026-10-18).** GPU-procedural small bubbles through the same traced-shell fragment:
+`BEAD_VERTEX` (the bubble vertex stage with its attributes generated from the instance index) draws bead chains
+(Bead Chains range read at the emission follower, 12 chains a step, 160 beads a chain, scaled by the tier's particle
+share), marine snow (2500 motes x share) and fizz wakes (64 motes behind each simulated bubble, read from the shell
+instances bound as a storage buffer; fuller behind larger bubbles). Beads climb and snow drifts by the simulation's
+new `travel` (the stream speed integrated on the logical clock, in the snapshot and frame) plus a constant
+buoyancy, so a change of speed never makes them jump; no renderer-owned state. At 1672x941, 4x MSAA: 6.2 ms GPU with
+the default range at loud, 7.2 ms with the lab's mock 2 density (Bead Chains 10; the lab's scene 11.6 ms).
+
 **Next in S3.** S3b: world-fixed bubbles under turn/tilt (the simulation takes the view rotation and wraps lateral
-exits; today the volume is view-anchored, so orbiting turns only the water and light); Scene Pan. S3c: GPU-procedural
-bead chains, fizz, marine snow and particulate (Particles range at the emission level), the main visual gap to the
-lab (compare `tmp/eb_s3`). Then the deep light type and the remaining lab knobs per section 9.
+exits; today the volume is view-anchored, so orbiting turns only the water and light); Scene Pan. S3c (rest): the
+3D particulate (Particles range at the emission level, ember bands for the deep scenes) and the bead budget (lab
+lesson: 2-6 px beads through the full shell trace are the cost). Then the deep light type and the remaining lab knobs
+per section 9.
 **For S4 (found in S3a on real recordings):** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
 by design (10-12 s of "dontyouseemetrying" read 1.000 throughout); the Light Rays range read linearly at it is pinned
 there. S4 drives the rays (strength, spread, Ray Flicker) from the simulation's own followers (soft-knee, quick attack

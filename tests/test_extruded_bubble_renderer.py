@@ -95,6 +95,21 @@ def test_ray_strength_reads_its_range_at_the_level_and_is_off_when_disabled():
     assert scene.ray_strength({**SETTINGS, "extruded_bubble_rays_enabled": False}, 0.7) == 0.0
 
 
+def test_procedural_counts_read_the_bead_range_at_the_emission_follower_and_the_tier():
+    from rendering.quick.visualizer.implementations.extruded_bubble import (
+        _BEADS_PER_CHAIN, _procedural_counts,
+    )
+
+    low, high = 2, 7                                               # TEST INPUT: a Bead Chains range
+    settings = {**SETTINGS, "extruded_bubble_bead_chains": [low, high], "scene3d_detail": "High"}
+    quiet, _snow = _procedural_counts(settings, 0.0)
+    loud, snow = _procedural_counts(settings, 1.0)
+    assert quiet % _BEADS_PER_CHAIN == 0 and quiet < loud
+    assert loud / quiet == pytest.approx(high / low)
+    assert _procedural_counts({**settings, "extruded_bubble_bead_chains": [0, 0]}, 1.0)[0] == 0
+    cheaper = _procedural_counts({**settings, "scene3d_detail": "KAK"}, 1.0)
+    assert cheaper[0] < loud and cheaper[1] < snow
+
 # --- the renderer through the production host -------------------------------------------------------------------
 
 
