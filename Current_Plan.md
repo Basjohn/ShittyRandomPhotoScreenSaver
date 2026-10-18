@@ -255,6 +255,11 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   larger bucket type), migrate each mode's Technical controls under Advanced, put Extruded Bubble's Camera bucket under
   Advanced, and draw curved tree connection lines from an opened bucket to its children if the shared bucket UI lacks
   them. One shared owner for each; apply across every Settings page.
+  **3D Visualizer quality in place (operator 2026-10-18):** transitions show their quality choices on their own page
+  (Anti-aliasing, Bloom, Motion Blur; Auto follows the 3D tier); 3D Visualizers have only the 3D Settings tab
+  (`ui/tabs/scene3d_tab.py`: 3D Visualizers detail plus one entry per mode). Surface the same values in each 3D
+  mode's Visualizer body (and an overall 3D Visualizers quality near the mode list) as views of those keys, never a
+  second owner; consider per-mode Anti-aliasing / Bloom overrides through `resolve_scene_quality` as transitions do.
 - [ ] **Aspiration, far future — Settings live preview (operator 2026-10-18).** A very small styled preview box in the
   Settings sidebar's empty space between About and Quick Start that draws lazily (very slow fade in / out) only while
   a preview-relevant control (Visualizer, Transition) is being worked on, and costs nothing otherwise. Feasible on
