@@ -378,6 +378,10 @@ abyss's 3.3 ms) and the shells' rim sub-rays (~2 ms) are the measured hot spots.
 An exact-looking gather early-out (skip where the coverage mip shows nothing within reach) saved <= 0.2 ms and was
 not exact (half-float mips flush tiny coverage to zero: 77 pixels differed): rejected. The abyss's near-defocus time
 is mostly the near giants' traced shells drawn into the layer, so the shell shading is the budget lever.
+Shell cost is mostly beads: mock 2 at 1440p spends 1.84 ms on 32k shells, 0.40 ms without its 25k bead-chain
+instances. Beads are 2-6 px and each runs the full 8-path hollow trace (skipping the trace only at <= 1 px, where it
+is mixed away, changed nothing: few beads are that small). The EB3/EB4 budget lever is a cheaper small-bead model
+(rim, light lobe and core) below a pixel threshold, judged against the mocks, worth about 1.4 ms per 1440p display.
 
 ## State restoration
 
