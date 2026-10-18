@@ -6,8 +6,9 @@ preset authored through the Settings are the same knobs (``Extruded_Bubble_Targe
 
 **Knobs.** ``ENGINE`` is the same for every scene; ``MODES`` holds what a Light Type implies; ``scene_knobs`` reads
 the mode's Settings (``extruded_bubble_*``) on top: colours (0..255 to linear 0..1), the light's direction and
-strength, rays, water, glass, particles and lens, each mapped as section 9's table says. ``ray_strength`` reads the
-Light Rays range at the passage level (the one knob that moves with the music every frame).
+strength, rays, water, glass, particles and lens, each mapped as section 9's table says. ``ray_strength`` and
+``ray_motion`` read the Light Rays range, Ray Flicker and the fan's reach at the simulation's ray driver and sustain
+(never the raw passage level, which holds at 1 through loud music).
 
 **Camera.** A 62 degree vertical field of view from the eye at the origin; tilt (pitch) and turn (yaw) from the live
 view pose, Scene Scale as a zoom. **Volume.** The simulation's normalised volume (x, y -1..1 across the view, z 0..1
