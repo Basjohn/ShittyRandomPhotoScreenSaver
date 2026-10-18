@@ -82,6 +82,10 @@ frozen-settings baseline, use synthetic fixtures for durable behavior tests and 
 recordings for physical fidelity. No curated preset values become frozen oracles. Close Settings-spec coverage
 for all original Visualizers before commencing shared 3D-primitive work.
 
+`test_visual_controls.py` covers the shared visual controls: spec admission (order, clamp, normalise, wrap), real
+mouse/keyboard gestures (a range handle never passes the other, stacked handles follow the drag, corner/centre and
+spoke snapping, clamping outside), wheel ignored, and the spec builder's build/load/collect with one save per gesture
+(negative control: saving on the live signal fails it). Widgets are never shown.
 `test_visualizer_mode_settings_spec.py` requires exact coverage of every registered original mode and exercises
 their real lazy Settings bodies, canonical model/default admission, conditional rows and actual consumer routes.
 `test_bubble_spec_ui.py` replaces the retired fake-widget Bubble binding checks with real-body tests for all nine

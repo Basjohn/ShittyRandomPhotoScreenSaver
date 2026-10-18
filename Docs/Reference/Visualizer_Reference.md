@@ -22,6 +22,17 @@ metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own t
 the membership authority. Canonical defaults and editable presets own values. The model, appliers and lazy body use
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
+Control types: `Slider`, `Toggle`, `Choice`, `Colour` and the **visual controls** (2026-10-18) `Range` (two
+values on one bar, low <= high, persisted `[low, high]`: the reactive quiet..loud span), `Triangle` (three shares
+summing to 1 placed by one node, e.g. Fuse / Pop / Bounce) and `Direction` (`[around, height]` degrees on a disc,
+around wrapping, height clamped; "arrow" for a stream, "light" for a light). Their widgets live in
+`ui/widgets/visual_controls.py` (`RangeSlider`, `TriangleMapper`, `DirectionMapper`) so any Settings builder
+(Transitions, widgets) can adopt them: they paint the shared slider's theme tokens (groove, fill, 16x10 pill
+handle, hover/pressed, and the page's single last-moved highlight via `shared_styles.mark_last_moved_control`),
+repaint on theme change, ignore the wheel, offer keyboard control and an accessible description, and save once per
+gesture or keyboard step (`valueCommitted`; the value label follows `valueChanged`). Use `when` conditionals and
+nested buckets heavily so a body shows only what the current choices use.
+
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows

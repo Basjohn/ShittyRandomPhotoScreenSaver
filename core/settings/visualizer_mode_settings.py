@@ -29,6 +29,9 @@ pairs; Choice predicates may admit a tuple of alternative values;
 ``when`` hides their rows. Runtime aliases and strict admission remain configuration-only. Immutable
 specs cache their derived control/consumer tuples; frame extraction does not rebuild membership.
 
+Visual controls (``Range``, ``Triangle``, ``Direction``) persist short lists and are shown by the shared widgets in
+``ui/widgets/visual_controls.py``; prefer them to number pairs for spans, proportions and directions.
+
 Adding a setting to a spec'd mode is its default plus one control here; the renderer reads it by key.
 A control may also be shown only while another control holds a value (``when``), so a group that only
 matters while its toggle is on hides with it.
@@ -302,6 +305,133 @@ class Colour:
 
 
 @dataclass(frozen=True)
+class Range:
+    """Two floats on one bar, ``low <= high``, persisted as ``[low, high]`` and shown as the shared range
+    slider (``ui/widgets/visual_controls.py``) of ``scale`` positions per unit. The usual reactive use: what an
+    amount is with quiet music (low) and with loud music (high). Labels read as ``Slider`` values do."""
+
+    key: str
+    label: str
+    low: float
+    high: float
+    tooltip: str = ""
+    bucket: str = ""
+    logical: bool = False
+    scale: int = 100
+    decimals: int = 2
+    suffix: str = ""
+    percent: bool = False
+    integer: bool = False
+    when: When = ()
+    enabled_when: EnabledWhen = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+
+    def admit(self, value: object, default: object) -> list[float | int]:
+        pair = list(value) if isinstance(value, (list, tuple)) else []
+        numbers = [_finite(v) for v in pair[:2]]
+        if len(numbers) != 2 or any(number is None for number in numbers):
+            numbers = [float(v) for v in list(default)[:2]]
+        numbers = sorted(max(float(self.low), min(float(self.high), number)) for number in numbers)
+        return [int(round(number)) for number in numbers] if self.integer else numbers
+
+    def coerce(self, value: object) -> list:
+        return list(value)
+
+    def admit_runtime(self, value: object, default: object) -> tuple:
+        return tuple(self.admit(value, default))
+
+    def positions(self, value: object) -> tuple[int, int]:
+        low, high = self.admit(value, value)
+        return round(low * self.scale), round(high * self.scale)
+
+    def text(self, positions: tuple[int, int]) -> str:
+        def one(position: int) -> str:
+            if self.percent:
+                return f"{round(position * 100 / self.scale)}%"
+            if self.integer:
+                return f"{round(position / self.scale)}{self.suffix}"
+            return f"{position / self.scale:.{self.decimals}f}{self.suffix}"
+        return f"{one(positions[0])} – {one(positions[1])}"
+
+
+@dataclass(frozen=True)
+class Triangle:
+    """Three shares placed by one node inside a triangle (``corners`` name its top, bottom-left and
+    bottom-right), persisted as three fractions summing to 1; shown as the shared triangle mapper."""
+
+    key: str
+    label: str
+    corners: tuple[str, str, str]
+    tooltip: str = ""
+    bucket: str = ""
+    logical: bool = False
+    when: When = ()
+    enabled_when: EnabledWhen = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+
+    def admit(self, value: object, default: object) -> list[float]:
+        shares = list(value) if isinstance(value, (list, tuple)) else []
+        numbers = [_finite(v) for v in shares[:3]]
+        if len(numbers) != 3 or any(n is None or n < 0.0 for n in numbers) or sum(numbers) <= 0.0:
+            numbers = [float(v) for v in list(default)[:3]]
+        total = sum(numbers)
+        return [round(n / total, 4) for n in numbers]
+
+    def coerce(self, value: object) -> list:
+        return list(value)
+
+    def admit_runtime(self, value: object, default: object) -> tuple:
+        return tuple(self.admit(value, default))
+
+    def text(self, value: object) -> str:
+        shares = self.admit(value, value)
+        return " · ".join(f"{name} {round(share * 100)}%" for name, share in zip(self.corners, shares))
+
+
+@dataclass(frozen=True)
+class Direction:
+    """A direction persisted as ``[around, height]`` degrees and placed on the shared direction mapper's
+    disc: ``around`` is the angle round it (0 up, clockwise, wrapped to [-180, 180)), ``height`` its
+    distance from the rim (the disc's centre is ``height_high``, its rim ``height_low``). ``centre_text``
+    names the centre ("Overhead", "Into Scene"); ``marker`` is "arrow" (a stream) or "light"."""
+
+    key: str
+    label: str
+    height_low: float = 0.0
+    height_high: float = 90.0
+    centre_text: str = ""
+    marker: str = "arrow"
+    tooltip: str = ""
+    bucket: str = ""
+    logical: bool = False
+    when: When = ()
+    enabled_when: EnabledWhen = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+
+    def admit(self, value: object, default: object) -> list[float]:
+        pair = list(value) if isinstance(value, (list, tuple)) else []
+        numbers = [_finite(v) for v in pair[:2]]
+        if len(numbers) != 2 or any(number is None for number in numbers):
+            numbers = [float(v) for v in list(default)[:2]]
+        around = (numbers[0] + 180.0) % 360.0 - 180.0
+        height = max(float(self.height_low), min(float(self.height_high), numbers[1]))
+        return [round(around, 1), round(height, 1)]
+
+    def coerce(self, value: object) -> list:
+        return list(value)
+
+    def admit_runtime(self, value: object, default: object) -> tuple:
+        return tuple(self.admit(value, default))
+
+    def text(self, value: object) -> str:
+        around, height = self.admit(value, value)
+        return f"Around {round(around)}°, Height {round(height)}°"
+
+
+@dataclass(frozen=True)
 class Custom:
     """A body part built by the mode's own code: ``build(tab, layout)``, ``load(tab, config)`` and
     ``collect(tab) -> dict`` named as ``"module:function"``. Its persisted keys stay with their
@@ -315,8 +445,10 @@ class Custom:
     keys: tuple[str, ...] = ()
 
 
-Control = Union[Slider, Toggle, Choice, Colour]
-Entry = Union[Slider, Toggle, Choice, Colour, Custom]
+Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction]
+Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, Custom]
+# Controls shown by a shared visual control (``ui/widgets/visual_controls.py``) rather than a stock widget.
+VISUAL_CONTROLS = (Range, Triangle, Direction)
 
 
 @dataclass(frozen=True)
@@ -1341,9 +1473,13 @@ __all__ = [
     "Colour",
     "Control",
     "Custom",
+    "Direction",
     "ModeSettings",
+    "Range",
     "Slider",
     "Toggle",
+    "Triangle",
+    "VISUAL_CONTROLS",
     "iter_mode_settings",
     "mode_settings",
     "require_mode_settings",
