@@ -140,10 +140,11 @@ def ray_strength(parameters: Mapping[str, object], level: float) -> float:
     return low + (high - low) * max(0.0, min(1.0, float(level)))
 
 
-def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0):
+def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0, shift=(0.0, 0.0)):
     """(view_to_world, world_to_view, tan, projection): column-major mat3s (GL order) and the mat4 projection.
     ``turn`` -1..1 is a full circle of yaw; ``tilt`` -0.5..0.5 pitches up to +-45 degrees beyond the authored 16
-    degrees up (looking toward the surface, as the mocks do); ``scale`` above 1 zooms in."""
+    degrees up (looking toward the surface, as the mocks do); ``scale`` above 1 zooms in; ``shift`` (NDC, from
+    ``lens_shift``) moves the view's centre on screen (an off-axis frustum: Scene Pan, no parallax)."""
     pitch = math.radians(16.0 + 90.0 * float(tilt))
     yaw = math.pi * float(turn)
     cp, sp, cy, sy = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
@@ -157,12 +158,17 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0):
     tan_y = math.tan(math.radians(FOV_Y_DEGREES) / 2.0) / max(float(scale), 1e-3)
     tan = (tan_y * aspect, tan_y)
     f = 1.0 / tan_y
-    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0, (FAR + NEAR) / (NEAR - FAR), -1.0,
-                  0.0, 0.0, 2.0 * FAR * NEAR / (NEAR - FAR), 0.0)
+    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, -float(shift[0]), -float(shift[1]),
+                  (FAR + NEAR) / (NEAR - FAR), -1.0, 0.0, 0.0, 2.0 * FAR * NEAR / (NEAR - FAR), 0.0)
     return view_to_world, world_to_view, tan, projection
 
 
 VOLUME_EXTENT = 1.25          # the simulation's volume reaches this far past the view (its margin) before wrapping
+
+
+def lens_shift(pan_x: float, pan_y: float) -> tuple[float, float]:
+    """Scene Pan (fractions of the card, y down, as the framed camera's envelope bounds it) as an NDC lens shift."""
+    return 2.0 * float(pan_x), -2.0 * float(pan_y)
 
 
 def _wrapped_turn(points: np.ndarray, periods: np.ndarray, turn: float) -> np.ndarray:
@@ -305,11 +311,11 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
     if view[2] >= -1e-3:
         return 0.0, 0.0, 0.0
     width, height = size
-    return ((projection[0] * view[0] / -view[2] * 0.5 + 0.5) * width,
-            (projection[5] * view[1] / -view[2] * 0.5 + 0.5) * height, 1.0)
+    return (((projection[0] * view[0] / -view[2] - projection[8]) * 0.5 + 0.5) * width,
+            ((projection[5] * view[1] / -view[2] - projection[9]) * 0.5 + 0.5) * height, 1.0)
 
 
 __all__ = ["CLUSTER_FLOATS", "DEPTH_NEAR", "VOLUME_EXTENT", "DEPTH_SPAN", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
            "NEAR_GIANTS", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
-           "cluster_instances", "direction_vector", "glint_proxies", "light_on_screen", "near_giants", "ray_strength",
+           "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "near_giants", "ray_strength",
            "scene_knobs", "screen_streak", "volume_to_world"]
