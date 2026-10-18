@@ -507,6 +507,11 @@ Each foundation slice adds what it learned here.
   `emission_writes()`), and its second output silently writes nothing. Every owner that draws to several attachments
   sets and restores its own masks; a lab that happened to call it inside the right scope proves nothing about product
   call order (Extruded Bubble's near giants drew sharp in the product until `DefocusLayer` did this).
+- A camera that only rotates needs no simulation change to make a field world-fixed: rotation has no parallax, so
+  place the field by the unrotated camera and wrap each point by whole periods round the heading. A wrap period must
+  be per point and constant under the motion (for a turn: from the point's elevation, which a turn keeps), and wide
+  enough at that elevation: a pitched view spans more azimuth near its top, so one period for every point shows the
+  seam. Planar-depth tangent mappings are not rotations; check world-fixedness numerically before tuning anything.
 - A product port of a lab scene: keep one source for programs and knobs (the lab imports both), render the product
   through its production host from a real recording, and compare with the lab at the same size before tuning anything.
 

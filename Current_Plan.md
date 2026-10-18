@@ -200,8 +200,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   sole clock (no second clock/capture/DSP). Assert original Bubble replay unchanged and zero inactive import/GL/resource work.
 - [~] **EB3 — Bordered 3D renderer on proven primitives.** *S3a landed 2026-10-18 (target §10): the lab's scene
   draws through the production host (probe, shafts, shells, clusters, near-giant defocus; prepared reveal); S3c
-  beads, snow and fizz landed (GPU-procedural, moved by the simulation's `travel`); open: S3b world-fixed bubbles under
-  turn/tilt and Scene Pan, S3c 3D particulate and bead budget, the deep light
+  beads, snow and fizz landed (GPU-procedural, moved by the simulation's `travel`); S3b world-fixed field under the
+  turn landed (stateless wrap, never on screen); open: Scene Pan, S3c 3D particulate and bead budget, the deep light
   type's remaining knobs, small/large card and DPR, context retirement on a real display.* Instanced geometry, correct overlapping transparency,
   depth/card clipping, lighting/materials and **shared FC bounded orbit/pan/zoom** with Bubble-specific limits.
   The outer card, Edit/CUSTOM rectangle and independent camera view pose never become competing geometry authorities.

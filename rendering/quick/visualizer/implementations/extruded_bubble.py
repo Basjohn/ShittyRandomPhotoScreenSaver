@@ -19,6 +19,7 @@ fixed-capacity buffers (``glNamedBufferSubData``, a few KB a frame); uniforms ar
 from __future__ import annotations
 
 import ctypes
+import math
 
 import numpy as np
 from OpenGL import GL as gl
@@ -28,7 +29,8 @@ from rendering.gl_programs.extruded_bubble_program import (
     NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
 )
 from rendering.gl_programs.extruded_bubble_scene import (
-    CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera, cluster_instances,
+    CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, VOLUME_EXTENT, bubble_instances, camera,
+    cluster_instances,
     glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
 )
 from rendering.gl_programs.scene3d import scene3d_detail
@@ -341,14 +343,15 @@ class QuickExtrudedBubbleRenderer:
         self._shafts.warm(width, height)
         probe = self._probe_for(parameters)
 
-        view_to_world, world_to_view, tan, projection = camera(
-            float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")),
-            width / height, float(parameter(parameters, "extruded_bubble_scene_scale")))
+        pose = (float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")))
+        scale = float(parameter(parameters, "extruded_bubble_scene_scale"))
+        view_to_world, world_to_view, tan, projection = camera(*pose, width / height, scale)
         pixel = 2.0 * tan[1] / height
-        shells = np.concatenate((bubble_instances(state.bubbles, view_to_world, tan),
+        # World-fixed under the turn (the scene module's notes); near giants stay at the lens.
+        shells = np.concatenate((bubble_instances(state.bubbles, tan, pose),
                                  near_giants(state.time, view_to_world, tan)))
         shell_count = self._shells.upload(shells)
-        cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters, view_to_world, tan))
+        cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters, tan, pose))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
                                                          float(knobs.get("proxy_power", 2.5))))
         common = _common(knobs, view_to_world=view_to_world, tan=tan, time=state.time,
@@ -365,6 +368,10 @@ class QuickExtrudedBubbleRenderer:
         beads, snow = _procedural_counts(parameters, state.emission)
         stream = _floats(state.stream)
         self._uniforms.set(programs["beads"], {
+            "uViewToWorldTurn0": _floats(camera(0.0, pose[1], width / height, scale)[0]),
+            "uOrbit": (-math.pi * pose[0], math.cos(math.radians(16.0 + 90.0 * pose[1])),
+                       math.sin(math.radians(16.0 + 90.0 * pose[1]))),
+            "uSide": VOLUME_EXTENT * 1.12 * tan[0],
             "uStreamView": (stream[0], stream[1], -stream[2]), "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": 1.0,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel) + _BEAD_BUOYANCY * float(state.time),
