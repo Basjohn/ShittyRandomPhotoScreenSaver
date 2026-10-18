@@ -756,3 +756,39 @@ def test_bright_transparent_layers_at_the_near_plane_stay_finite_and_order_indep
         gl.glDeleteProgram(glass)
         target.release()
         resources.release_resources()
+
+
+def _card_frame_at(capture, dpr, left, top, width, height):
+    """A card placed in logical units in a window drawn at ``dpr`` device pixels per logical pixel."""
+    logical_w, logical_h = WIDTH / dpr, HEIGHT / dpr
+    matrix = (2 / logical_w, 0, 0, 0, 0, -2 / logical_h, 0, 0, 0, 0, 1, 0,
+              2 * left / logical_w - 1, 1 - 2 * top / logical_h, 0, 1)
+    return SimpleNamespace(viewport=(0, 0, WIDTH, HEIGHT), logical_size=(width, height),
+                           matrix_values=matrix, quad_vao=capture.vao)
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_a_card_moved_between_display_scales_and_a_tiny_card_match_direct_draws(capture, samples):
+    """The same logical card on a 100% then a 200% display (mixed DPR) reallocates to its device pixels and still
+    draws exactly what a direct draw does, with every optional attachment on; so does a card a few pixels wide."""
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    texture = capture.textures[0]
+    kwargs = dict(depth_texture=True, oit=True)
+    try:
+        for dpr, rect in ((1.0, (20, 10, 60, 40)), (2.0, (20, 10, 60, 40)), (1.0, (100, 50, 3, 2))):
+            card = _card_frame_at(capture, dpr, *rect)
+            _clear(capture)
+            resources.draw_image(card, texture)
+            direct = _read(capture)
+            _clear(capture)
+            with target.scope(card, samples, resources, **kwargs):
+                resources.draw_image(card, texture)
+            assert np.array_equal(direct, _read(capture)), (dpr, rect)
+            x, y, w, h = item_pixel_rect(card)
+            assert target.allocation[0] >= w and target.allocation[1] >= h
+            assert w == round(rect[2] * dpr) and h == round(rect[3] * dpr)
+            assert gl.glGetError() == gl.GL_NO_ERROR
+    finally:
+        target.release()
+        resources.release_resources()
+    assert not target.has_resources
