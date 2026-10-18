@@ -237,6 +237,10 @@ The durable technical contract remains `Docs/Reference/Neon_Lake_Basin.md`. Do n
 accepted architecture or settings simply because old historical checkboxes were unchecked.
 
 - [ ] **V5 — original Bubble, immediately after Neon Lake closure and BEFORE shared-primitive/Extruded Bubble work.**
+  *Source state (verified 2026-10-18): the migration below landed in `e7f99f87` (2026-10-15) — Bubble's body is built
+  from its typed spec, model/binding/applier tables retired; `logs/bubble_v5_before_20261015` vs `_after_` match
+  exactly (4 clips, 21,824 native-frame fingerprints, 12 GPU stills, resolved settings). What remains is the physical
+  replay review on the real display with music and this gate's closure.*
   Save a current frozen-settings recorded-clip baseline, migrate controls, then compare
   `python -m tools.visualizer_replay.mode_audit --modes bubble --compare <saved run>`. The existing local baseline is
   `logs/bubble_readings_baseline.json`; verify its inputs before reuse. All readings remain x1.00 unless a separately
