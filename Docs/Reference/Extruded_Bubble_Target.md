@@ -30,15 +30,15 @@ refracted background, merged bubbles with continuous surfaces, wide soft shafts,
 Not in the target: hard cast shadows (no receiver shows one; the seabed's light is caustic, not shadowed), GTAO,
 volumetric smoke/fire, screen-space reflections.
 
-## 2. Reactivity (concept foundation: original Bubble)
+## 2. Reactivity: its own simulation (operator 2026-10-18, supersedes "reads original Bubble")
 
-The original Bubble simulation (`widgets/spotify_visualizer/bubble_simulation.py`, ticked by
-`bubble_frame_runtime.py`) owns spawn, drift, swirl, stream direction, big/small lanes, collision pops, pulse and
-trail smear; it is the reactivity authority and BTF binds it. Extruded Bubble **reads** its logical snapshot (positions,
-radii, pulse, lane, trail) and derives only presentation from it: a deterministic per-bubble depth from its identity,
-3D placement inside the framed volume, defocus, and the shell's response to the bubble's pulse. No second clock,
-capture, DSP, floor or renderer-owned simulation. Improvements to reactivity go through the original Bubble with its
-replay audit (`tools/visualizer_replay/mode_audit --modes bubble`), never into the 3D renderer.
+Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
+bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
+Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer
+clock**. It reads the existing audio feeds (fixed loudness, energy bands, transients, the event scheduler) and adds no
+clock, capture, DSP, floor or renderer-owned simulation. Original Bubble (`bubble_simulation.py`) is a guideline for
+what good bubble reactivity feels like, never shared code, settings or a projection; it stays untouched and its replay
+unchanged. The renderer draws the simulation's immutable frame snapshot.
 
 ## 3. Inventory: what the shared layer already has
 
@@ -209,7 +209,7 @@ start | now):**
   members), never one uniform shape.
 - **Trails:** dense wakes of tiny bubbles behind mid and large bubbles that follow the drift.
 - **Reactivity:** light shafts react to the music (intensity, spread or flicker), alongside bubble breathing, speed
-  and drift, all through the original Bubble's logical reactivity (BTF), never a second clock or DSP.
+  and drift, all through Extruded Bubble's own logical simulation on the sole clock, never a second clock or DSP.
 - **Sizes:** strong variation with a slight bias to small bubbles, authored by on-screen size bands.
 - **Camera down:** a darker abyss below, not an ocean floor (operator 2026-10-17); the seabed primitive stays
   in the library unused by Extruded Bubble.
