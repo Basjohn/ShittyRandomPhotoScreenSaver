@@ -220,42 +220,56 @@ start | now):**
 
 - **Presets (operator 2026-10-18):** each mock must eventually be an easily achievable preset.
 
-## 9. Preset surface (EB2 draft, 2026-10-18)
+## 9. Settings and presets (EB2 design, operator 2026-10-18)
 
-Every look the lab renders is a preset of a small control surface. The lab already stores scenes in its three layers
-(`ENGINE` constants, `MODES` surface/deep, lean per-scene values; `effective()` merges them, proven pixel-identical
-to the flat settings). EB2 turns this into the typed Settings spec; the lab scenes are the reference presets, and the
-spec is accepted only when each of them can be authored from these controls alone. Amounts use the EB5a range slider
-(quiet..loud). Buckets follow the existing Settings pattern (nested, closed by default, short Title Case names).
+**Principles.** Controls are extensive but friendly: nested buckets closed by default (one open per level), short
+Title Case names, one-sentence intros with detail in tooltips, and heavy use of `when` conditionals so only what the
+current choices use is shown. Spatial and proportional choices use **visual controls**, not number pairs. Every
+amount that music can move is an **EB5a range slider** (quiet..loud). **Presets are authored through these controls
+alone:** after construction the agent rebuilds every lab scene (`VARIANTS` in `tools/labs/extruded_bubble_lab.py`,
+layered as `ENGINE` / `MODES` / scene) as a preset using only the Settings UI and its saved values; a scene that
+cannot be reached means a missing or wrong control, fixed in the spec, never by a hidden value.
 
-| Bucket | Control | Lab knobs it sets |
+**New shared controls (one owner each, reusable by any mode; follow the shared slider's look, keyboard and
+accessibility):**
+- **Range slider** (EB5a): two handles on one bar.
+- **Triangle mapper**: a node dragged inside a triangle sets three shares (barycentric); used by Collision.
+- **Direction mapper**: a small disc/hemisphere the user drags a point on to set a direction (around + height),
+  with a live arrow; used by Stream Direction and Light Direction.
+
+**Buckets** (controls shown only when their condition holds):
+
+| Bucket | Controls | Shown when |
 | --- | --- | --- |
-| Light | Light Type: Sunlit Surface / Deep Light | `mode` (and everything in `MODES`) |
-| Light | Light Direction (around, height) | `sun`, `light_view`, `spec_view` (highlight direction derived from it) |
-| Light | Light Colour | `light`, `shaft`, `sky` tint, default `speck_warm` |
-| Light | Light Strength | `glint_power`, `light_power`, `surface_gain`, `glow` |
-| Light | Light Rays (range) | `rays` |
-| Light | Ray Softness | `fan_contrast`, `fan_march`, `fan_rays` (deep: `ray_focus`) |
-| Water | Water Colour, Depth Colour | `water`, `deep`; `absorb` derived from them |
-| Water | Haze | `mist` |
-| Water | Light Veils | `veils` |
-| Glass | Clarity | `face_reflect` |
-| Glass | Rim Glow | `probe_fill`, `proxy_power` |
-| Glass | Iridescence | `film`, `film_range` |
-| Glass | Softness | `rough`, `inner_blur` |
-| Glass | Sparkle | `sparkle`, `speck_glow`, `glint_sharp` |
-| Bubbles | Large Bubbles, Small Bubbles, Bead Chains (ranges) | `mid_count`, `small_count` + `fizz`, `chains` |
-| Bubbles | Flow Direction, Drift, Sway | `travel` + `streak`, `drift`, `sway` |
-| Bubbles | Collision (Fuse / Pop / Bounce triangle, §8) | not in the lab yet |
-| Particles | Amount (range), Size | `specks`, `speck_size` |
-| Particles | Warmth, Glow | `warm_share` + `speck_warm`, `speck_bloom` + `dust` |
-| Particles | Bands | `banded`, `band_freq`, `cloud_contrast`, `cloud_floor`, `cloud_glow` |
-| Lens | Focus, Aperture | `focus`, `aperture` + `near_coc` |
-| Lens | Exposure | `exposure`, `hdr_exposure` |
+| Light | Light Type (Sunlit Surface / Deep Light); Light Direction (direction mapper); Light Colour; Light Strength | always |
+| Light → Rays | Light Rays (range); Ray Style (Fan / Beams); Ray Softness; Ray Reach; Ray Reaction (intensity, spread, flicker) | Light Rays on; Fan options only for Sunlit Surface |
+| Light → Surface | Surface Brightness; Ripples | Light Type = Sunlit Surface |
+| Water | Water Colour; Depth Colour; Haze; Light Veils (amount, threads) | Veils' detail only when Veils on |
+| Glass | Clarity; Rim Glow; Iridescence (amount, colour band); Softness; Sparkle | Iridescence band only when Iridescence on |
+| Bubbles → Population | Large Bubbles, Small Bubbles, Bead Chains (ranges); Size Variety; Bead Columns | always |
+| Bubbles → Motion | Stream Direction (direction mapper); Stream Speed (range); Drift; Sway; Swirl (with its direction) | Swirl replaces Stream Direction while on |
+| Bubbles → Reaction | Breathing (bass pulse, range); Small Bubble Pulse (range); Stream Reactivity; Contraction | always |
+| Bubbles → Collision | Collision triangle (Fuse / Pop / Bounce); applies to Big / Small / All; Fuse Variety (neck width, members) | Fuse Variety only when Fuse share > 0 |
+| Particles | Amount (range); Size; Warmth; Glow; Bands (frequency, contrast) | Bands' detail only when Bands on |
+| Lens | Focus; Aperture; Exposure | always |
+| Camera | Auto Rotate After (Off / seconds); Auto Rotate Speed | Speed only when Auto Rotate is on |
 
-Not controls: `ENGINE` (`shell`, `iors`, `lens`); mode-implied values (`near_lens`, `near_reflect`, `shaft_scale`,
-`shaft_soft`, `ray_cut`, `fan_reach`, `surface_sky`, `crisp`, scene geometry `surface`/`shaft_y`); `columns` (a
-population layout the abyss uses, to become a Bubbles choice if a second scene wants it). Camera `pitch` is the view
-pose of the shared framed camera (FC), persisted outside art; a preset may suggest a starting pose only if FC admits
-it. Remaining folds to settle at EB2: mock 1's `ray_cut` 0.08 (mode 0.1), camera-down's `glint_sharp` 600 (300
-elsewhere) and `rough` 0.03 / mock 6's 0.1 (mode 0.05) are kept as per-scene values until Sparkle and Softness exist.
+**Camera: Auto Rotate.** When enabled, the camera starts a gentle full-circle swivel (turn only; pitch, zoom and pan
+untouched) after the set time with no camera input. Completion of a full startup or of a mode/preset swap counts as
+an immediate trigger. Any orbit input stops it and restarts the wait. Driven by the logical frame clock (idle =
+frame time since the last camera input), never a timer or polling; part of the shared framed camera (FC), so any
+framed 3D mode can opt in. The view pose stays outside art presets; Auto Rotate After/Speed are presentation settings.
+
+**Lab knob mapping** (what each control sets in the lab; `ENGINE` values and mode defaults are not controls):
+Light Type → `mode`; Light Direction → `sun`, `light_view`, `spec_view`; Light Colour → `light`, `shaft`, `sky`
+tint, default `speck_warm`; Light Strength → `glint_power`, `light_power`, `surface_gain`, `glow`; Light Rays →
+`rays`; Ray Softness → `fan_contrast`, `fan_march`, `fan_rays`; Ray Reach → `fan_reach`; Beams' focus →
+`ray_focus`; Water/Depth Colour → `water`, `deep` (`absorb` derived); Haze → `mist`; Light Veils → `veils`; Clarity →
+`face_reflect`; Rim Glow → `probe_fill`, `proxy_power`; Iridescence → `film`, `film_range`; Softness → `rough`,
+`inner_blur`; Sparkle → `sparkle`, `speck_glow`, `glint_sharp`; Large/Small Bubbles, Bead Chains → `mid_count`,
+`small_count` + `fizz`, `chains`; Bead Columns → `columns`; Stream Direction → `travel`, `streak`; Drift, Sway →
+`drift`, `sway`; Particles → `specks`, `speck_size`, `warm_share` + `speck_warm`, `speck_bloom` + `dust`, `banded`,
+`band_freq`, `cloud_*`; Lens → `focus`, `aperture` + `near_coc`, `exposure` + `hdr_exposure`. Breathing, pulse,
+stream reactivity, contraction and collision come from original Bubble's logical simulation (§2), not the lab.
+Values still kept per scene until their control exists: mock 1's `ray_cut`, camera-down's `glint_sharp` and the
+`rough` differences.

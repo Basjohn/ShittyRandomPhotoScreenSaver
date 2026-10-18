@@ -232,6 +232,12 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   `Extruded_Bubble_Target.md` §7: correctness (C01 edge-soft smear, C03 smoothstep, C05 cluster normal, C06 depth),
   then specular, double rim and roundness, then shafts alone; populations, trails and the surface are accepted and held
   fixed. Lab work only; no EB2/EB3 before the §4A gates.
+- [ ] **EB5b — Shared visual controls and camera Auto Rotate (operator 2026-10-18).** A **triangle mapper**
+  (Collision Fuse / Pop / Bounce) and a **direction mapper** (Stream Direction, Light Direction), one shared owner
+  each; FC gains **Auto Rotate After / Auto Rotate Speed** (gentle turn-only swivel after camera idle on the logical
+  clock; full startup or mode/preset swap completion triggers it at once; no timers). Settings use heavy `when`
+  conditionals and nested buckets (`Extruded_Bubble_Target.md` §9). After construction, rebuild every lab scene as a
+  preset through the Settings UI alone; an unreachable scene is a missing control.
 - [ ] **EB5a — Shared range slider (operator 2026-10-17), before EB5 reactivity controls.** A new shared Settings
   slider type, visually almost identical to the current shared slider, with **two draggable handles** that define a
   range on the bar (for example 3–30 on a 1–50 bar). Reactivity maps the music across that range: the low handle is
