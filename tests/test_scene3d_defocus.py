@@ -96,7 +96,7 @@ def test_a_point_spreads_over_its_circle_keeping_its_light_and_sharp_pixels_stay
     assert not layer.has_resources()
 
 
-def _bright_point_disc(capture, circle, max_radius, highlight):
+def _bright_point_disc(capture, circle, max_radius, highlight, masked=False):
     layer = DefocusLayer("defocus disc test")
     texture, fbo = _float_target()
     program = compile_program(_POINTS_VERTEX, _POINTS_FRAGMENT.replace("flat in int vId;\n", ""), label="defocus pts")
@@ -105,6 +105,8 @@ def _bright_point_disc(capture, circle, max_radius, highlight):
         gl.glViewport(0, 0, SIZE, SIZE)
         gl.glClearColor(0.0, 0.0, 0.0, 0.0)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        if masked:      # as a scene target leaves its emission index outside emission_writes()
+            gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
         layer.begin(SIZE, SIZE)
         gl.glUseProgram(program)
         gl.glUniform2fv(gl.glGetUniformLocation(program, "uAt"), 2, [32.0, 32.0, 32.0, 32.0])
@@ -112,10 +114,13 @@ def _bright_point_disc(capture, circle, max_radius, highlight):
         gl.glBindVertexArray(capture.vao)
         gl.glDrawArrays(gl.GL_POINTS, 0, 1)
         layer.end()
+        if masked:
+            assert [bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, 1)] == [False] * 4   # handed back
         layer.composite(max_radius, highlight)
         return np.frombuffer(bytes(gl.glReadPixels(0, 0, SIZE, SIZE, gl.GL_RGBA, gl.GL_FLOAT)),
                              dtype=np.float32).reshape(SIZE, SIZE, 4)[:, :, 0].copy()
     finally:
+        gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         layer.release()
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures(1, [texture])
@@ -144,3 +149,14 @@ def test_a_highlight_under_a_wide_circle_is_one_even_round_disc(capture):
     # The gather alone (threshold out of reach) is the uneven case this guards.
     gathered, _ = _evenness(_bright_point_disc(capture, 20.0, 24.0, 1e9), 20.0)
     assert gathered > spread * 2.0
+
+
+def test_a_callers_masked_draw_buffer_does_not_stop_the_layer_spreading(capture):
+    """Colour masks belong to draw buffer indices, not framebuffers: drawn while a scene target masks its emission
+    index (outside emission_writes()), the layer still records each pixel's circle and spreads it, then hands the
+    mask back (Extruded Bubble's near giants came out sharp before)."""
+    plain = _bright_point_disc(capture, 20.0, 24.0, 0.25)
+    masked = _bright_point_disc(capture, 20.0, 24.0, 0.25, masked=True)
+    assert np.abs(masked - plain).max() <= 1e-4 * max(1.0, plain.max())
+    _spread, d = _evenness(masked, 20.0)
+    assert masked[(d > 12.0) & (d < 16.0)].mean() > 0.0          # a disc, not the sharp point

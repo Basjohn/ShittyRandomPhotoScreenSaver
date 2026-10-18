@@ -1,33 +1,472 @@
-"""Extruded Bubble's Qt Quick renderer.
+"""Extruded Bubble's Qt Quick renderer: an underwater scene of traced glass bubbles in its card.
 
-S2 admits the mode's frame and owns no GL resources: the mode is registered behind its closed gate while S3 ports
-the lab's proven passes (``tools/labs/extruded_bubble_lab.py``) onto the shared Scene3D owners
-(``Extruded_Bubble_Target.md`` section 10). Until then it draws nothing.
+The composition lab's proven passes (``tools/labs/extruded_bubble_lab.py``; ``Extruded_Bubble_Target.md`` section
+10) on the shared Scene3D owners, with the lab's own programs (``extruded_bubble_program``) and the scene mapping
+from Settings (``extruded_bubble_scene``). Each frame:
+
+1. **Probe.** The water and light all round the eye into the shared ``SceneProbe`` (what every bubble's wall
+   mirrors), with each bubble's glint as a bright proxy point so bubbles sparkle in one another.
+2. **Shafts.** The volumetric light at half the card's resolution, then a separable blur (two owned R16F targets).
+3. **Scene.** Through the card's ``SceneTarget`` (overlay, HDR with bloom, depth texture, background capture,
+   order-independent transparency): the water and shafts, then the simulation's bubbles and fused clusters as traced
+   shells over the captured background, then the near giants through the shared ``DefocusLayer``.
+
+The simulation (``ExtrudedBubbleFrame``) owns only what music and collisions move; near giants are view-anchored and
+drift on the frame's own time. Bead chains, fizz and particulate are S3c (GPU-procedural). Instance data goes up in
+fixed-capacity buffers (``glNamedBufferSubData``, a few KB a frame); uniforms are uploaded only when they change.
 """
 from __future__ import annotations
 
+import ctypes
+
+import numpy as np
+from OpenGL import GL as gl
+
+from rendering.gl_programs.extruded_bubble_program import (
+    BACKDROP_FRAGMENT, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
+    NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+)
+from rendering.gl_programs.extruded_bubble_scene import (
+    CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera, cluster_instances,
+    glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
+)
+from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.quick.scene3d.defocus import DefocusLayer
+from rendering.quick.scene3d.frame import item_pixel_rect
+from rendering.quick.scene3d.probe import SceneProbe
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
+
+from ..implementation_values import parameter
+
+_PROGRAMS = (
+    ("backdrop", FULL_VERTEX, BACKDROP_FRAGMENT),
+    ("shafts", FULL_VERTEX, SHAFT_FRAGMENT),
+    ("blur", FULL_VERTEX, BLUR_FRAGMENT),
+    ("shells", BUBBLE_VERTEX, BUBBLE_FRAGMENT),
+    ("clusters", CLUSTER_VERTEX, CLUSTER_FRAGMENT),
+    ("near", BUBBLE_VERTEX, NEAR_FRAGMENT),
+    ("proxies", PARTICLE_VERTEX, PARTICLE_FRAGMENT),
+)
+# The probe's cube face size per 3D Detail tier (what bubbles mirror; smaller is softer and cheaper).
+_PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
+_BLOOM = 0.55
+_NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a giant over (pixels)
+_SHELL_CAPACITY = MAX_BUBBLES + NEAR_GIANTS
+_CLUSTER_CAPACITY = MAX_BUBBLES // 2
+_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
+
+
+def _scene_samples(parameters) -> int:
+    """The card's multisampling: the tier's overlay samples (one sample when it has none)."""
+    return max(1, scene3d_detail(parameter(parameters, "scene3d_detail")).overlay_samples)
+
+
+class _ShaftTargets:
+    """Two half-resolution single-channel targets the shafts march into and blur between."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.size = (0, 0)
+        self.textures: list[int] = []
+        self.framebuffers: list[int] = []
+
+    @property
+    def has_resources(self) -> bool:
+        return bool(self.textures or self.framebuffers)
+
+    def warm(self, width: int, height: int) -> bool:
+        size = (max(1, int(width) // 2), max(1, int(height) // 2))
+        if size == self.size and self.textures:
+            return True
+        self.release()
+        name = (ctypes.c_uint * 1)()
+        for _ in range(2):
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+            texture = int(name[0])
+            self.textures.append(texture)
+            gl.glTextureStorage2D(texture, 1, gl.GL_R16F, *size)
+            for key in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                gl.glTextureParameteri(texture, key, gl.GL_LINEAR)
+            for key in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture, key, gl.GL_CLAMP_TO_EDGE)
+            gl.glCreateFramebuffers(1, name)
+            self.framebuffers.append(int(name[0]))
+            gl.glNamedFramebufferTexture(self.framebuffers[-1], gl.GL_COLOR_ATTACHMENT0, texture, 0)
+            if not texture or not self.framebuffers[-1]:
+                raise RuntimeError(f"{self.label}: shaft target allocation failed")
+        self.size = size
+        return False
+
+    def release(self) -> None:
+        if self.framebuffers:
+            gl.glDeleteFramebuffers(len(self.framebuffers), self.framebuffers)
+        if self.textures:
+            gl.glDeleteTextures(len(self.textures), self.textures)
+        self.textures, self.framebuffers, self.size = [], [], (0, 0)
+
+
+class _Instances:
+    """One fixed-capacity instance buffer and its vertex array (attributes of ``sizes`` floats, divisor 1)."""
+
+    def __init__(self, capacity: int, sizes: tuple[int, ...]) -> None:
+        self.capacity, self.sizes = capacity, sizes
+        self.stride = 4 * sum(sizes)
+        self.vao = self.buffer = 0
+        self.count = 0
+
+    def allocate(self) -> None:
+        name = (ctypes.c_uint * 1)()
+        gl.glCreateBuffers(1, name)
+        self.buffer = int(name[0])
+        gl.glNamedBufferStorage(self.buffer, self.capacity * self.stride, None, gl.GL_DYNAMIC_STORAGE_BIT)
+        gl.glCreateVertexArrays(1, name)
+        self.vao = int(name[0])
+        if not (self.buffer and self.vao):
+            raise RuntimeError("Extruded Bubble instance allocation failed")
+        gl.glVertexArrayVertexBuffer(self.vao, 0, self.buffer, 0, self.stride)
+        gl.glVertexArrayBindingDivisor(self.vao, 0, 1)
+        offset = 0
+        for location, size in enumerate(self.sizes):
+            gl.glEnableVertexArrayAttrib(self.vao, location)
+            gl.glVertexArrayAttribFormat(self.vao, location, size, gl.GL_FLOAT, gl.GL_FALSE, offset)
+            gl.glVertexArrayAttribBinding(self.vao, location, 0)
+            offset += 4 * size
+
+    def upload(self, rows: np.ndarray) -> int:
+        rows = np.ascontiguousarray(rows[:self.capacity], dtype=np.float32)
+        self.count = len(rows)
+        if self.count:
+            gl.glNamedBufferSubData(self.buffer, 0, rows.nbytes, rows)
+        return self.count
+
+    def release(self) -> None:
+        if self.vao:
+            gl.glDeleteVertexArrays(1, [self.vao])
+        if self.buffer:
+            gl.glDeleteBuffers(1, [self.buffer])
+        self.vao = self.buffer = self.count = 0
+
+
+class _Uniforms:
+    """Uniform uploads by name for linked programs, each sent only when its value changed (``glProgramUniform*``:
+    no program bind). Values: int/bool, float, 2/3-float tuples, 9 (mat3) or 16 (mat4) floats, column-major."""
+
+    def __init__(self) -> None:
+        self._locations: dict[tuple[int, str], int] = {}
+        self._values: dict[tuple[int, str], object] = {}
+
+    def set(self, program: int, values: dict[str, object]) -> None:
+        for name, value in values.items():
+            key = (program, name)
+            if self._values.get(key, _UNSET) == value:
+                continue
+            self._values[key] = value
+            location = self._locations.get(key)
+            if location is None:
+                location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
+            if location < 0:
+                continue                      # not read by this program (the driver dropped it)
+            if isinstance(value, (bool, int)):
+                gl.glProgramUniform1i(program, location, int(value))
+            elif isinstance(value, float):
+                gl.glProgramUniform1f(program, location, value)
+            elif len(value) == 2:
+                gl.glProgramUniform2f(program, location, *value)
+            elif len(value) == 3:
+                gl.glProgramUniform3f(program, location, *value)
+            elif len(value) == 9:
+                gl.glProgramUniformMatrix3fv(program, location, 1, gl.GL_FALSE, value)
+            elif len(value) == 16:
+                gl.glProgramUniformMatrix4fv(program, location, 1, gl.GL_FALSE, value)
+            else:
+                raise ValueError(f"uniform {name}: unsupported value {value!r}")
+
+    def clear(self) -> None:
+        self._locations.clear()
+        self._values.clear()
+
+
+_UNSET = object()
+
+
+def _floats(values) -> tuple[float, ...]:
+    return tuple(float(v) for v in values)
+
+
+def _common(knobs, *, view_to_world, tan, time, rays, streak) -> dict[str, object]:
+    """What every scene program reads (``COMMON``), as the lab sets it from a scene's knobs."""
+    exposure = float(knobs["exposure"])
+    values = {
+        "uViewToWorld": _floats(view_to_world), "uTan": _floats(tan), "uTime": float(time),
+        "uSun": _floats(knobs["sun"]), "uSunBelow": _floats(knobs["sun_below"]),
+        "uWisps": 0.0, "uVeils": float(knobs.get("veils", 0.0)),
+        "uSurfaceY": float(knobs.get("surface", SURFACE_Y)), "uShaftY": float(knobs.get("shaft_y", SURFACE_Y)),
+        "uGlow": float(knobs.get("glow", 1.0)), "uRays": float(rays), "uMist": float(knobs.get("mist", 0.0)),
+        "uSurfaceGain": float(knobs.get("surface_gain", 1.0)), "uSurfaceSky": float(knobs.get("surface_sky", 1.0)),
+        "uDust": 0.0, "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
+        "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
+        "uShaftFan": float(knobs.get("shaft_fan", 0.0)), "uFanRays": float(knobs.get("fan_rays", 30.0)),
+        "uFanReach": float(knobs.get("fan_reach", 0.6)),
+        "uFanMix": (float(knobs.get("fan_contrast", 0.7)), float(knobs.get("fan_march", 0.2))),
+        "uSpecks": 0.0, "uLightPower": float(knobs.get("light_power", 0.0)),
+        "uGlintPower": float(knobs.get("glint_power", 0.0)), "uProbeFill": float(knobs.get("probe_fill", 0.0)),
+        "uGlintSharp": float(knobs.get("glint_sharp", 6000.0)), "uProbeMode": 0.0, "uStreak": _floats(streak),
+        "uSparkle": float(knobs.get("sparkle", 0.0)), "uLightColour": _floats(knobs["light"]),
+        "uFilm": float(knobs.get("film", 0.0)), "uFilmRange": _floats(knobs.get("film_range", (250.0, 600.0))),
+        "uCrisp": float(knobs.get("crisp", 0.0)), "uAbsorb": _floats(knobs["absorb"]),
+    }
+    for name, key in (("uDeep", "deep"), ("uWater", "water"), ("uSkyTint", "sky"), ("uShaftColour", "shaft")):
+        values[name] = tuple(float(v) * exposure for v in knobs[key])
+    return values
+
+
+def _glass(knobs, near: bool) -> dict[str, object]:
+    """The traced glass's own knobs (shells, clusters; the near layer's lens and reflection differ)."""
+    light = _floats(knobs["light"])
+    return {
+        "uEta": 1.33, "uBehind": 8.0, "uShell": float(knobs.get("shell", 0.1)),
+        "uLens": float(knobs.get("near_lens", 0.5) if near else knobs.get("lens", 0.85)),
+        "uIors": _floats(knobs.get("iors", (1.33, 1.5, 1.0))), "uRough": float(knobs.get("rough", 0.0)),
+        "uShellMin": 0.0, "uDiag": 0, "uLightDir": _floats(knobs["spec_dir"]),
+        "uSpecColour": tuple(c * 300.0 for c in light), "uSpecThrough": 0.4, "uSpecShape": (0.05, 0.25, 0.012),
+        "uInnerBlur": float(knobs.get("inner_blur", 0.25)),
+        "uReflect": float(knobs.get("near_reflect", 0.15) if near else knobs.get("face_reflect", 1.0)),
+        "uSpeckGlow": 0.6, "uFrameShare": 1.0, "uNearCoc": 22.0, "uNearGain": 0.5,
+        "uFocus": float(knobs.get("focus", 4.2)), "uAperture": float(knobs.get("aperture", 3.0)),
+        "uNearLayer": 1.0 if near else 0.0,
+        "uBackground": _UNIT_BACKGROUND, "uProbe": _UNIT_PROBE,
+    }
 
 
 class QuickExtrudedBubbleRenderer:
     mode_id = "extruded_bubble"
 
+    def __init__(self) -> None:
+        self._resources = MeshResources("Extruded Bubble")
+        self._target = SceneTarget("Extruded Bubble")
+        self._near = DefocusLayer("Extruded Bubble near layer")
+        self._shafts = _ShaftTargets("Extruded Bubble shafts")
+        self._probe: SceneProbe | None = None
+        self._shells = _Instances(_SHELL_CAPACITY, (4, 2))
+        self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4))
+        self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))
+        self._uniforms = _Uniforms()
+        self._knobs_for: object = None
+        self._knobs: dict[str, object] = {}
+
     @property
     def has_resources(self) -> bool:
-        return False
+        return (self._resources.has_resources or self._target.has_resources or self._near.has_resources()
+                or self._shafts.has_resources or bool(self._shells.vao) or self._probe is not None)
+
+    def _probe_for(self, parameters) -> SceneProbe:
+        size = _PROBE_SIZE[scene3d_detail(parameter(parameters, "scene3d_detail")).name]
+        if self._probe is not None and self._probe.size != size:
+            self._probe.release()
+            self._probe = None
+        if self._probe is None:
+            self._probe = SceneProbe("Extruded Bubble probe", size)
+        return self._probe
+
+    def _programs(self, samples: int):
+        r = self._resources
+        return [*((r, *program) for program in _PROGRAMS),
+                *((r, *program) for program in scene_target_programs(samples, True, False, overlay=True,
+                                                                       background=True, oit=True, hdr=True))]
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
-        """Nothing to compile or allocate yet (S3 warms its programs and targets here, one unit a frame)."""
-        return True
+        """One unit of what a first visible frame would otherwise compile or allocate (a program, the instance
+        buffers, the shaft targets, the probe, the near layer, the scene target), on a hidden reveal frame; True
+        once nothing is left."""
+        parameters = frame.snapshot.logical.mode_state.parameters
+        samples = _scene_samples(parameters)
+        if not warm_programs(self._programs(samples)):
+            return False
+        if not self._shells.vao:
+            for instances in (self._shells, self._clusters, self._proxies):
+                instances.allocate()
+            return False
+        width, height = item_pixel_rect(frame)[2:]
+        if not self._shafts.warm(width, height):
+            return False
+        if not self._probe_for(parameters).warm():
+            return False
+        if not self._near.warm(width, height, _NEAR_SPREAD):
+            return False
+        return self._target.warm((width, height), samples, overlay=True, bloom=True, depth_texture=True,
+                                 background=True, oit=True, hdr=True)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
-        if not isinstance(frame.snapshot.logical.mode_state, ExtrudedBubbleFrame):
+        state = frame.snapshot.logical.mode_state
+        if not isinstance(state, ExtrudedBubbleFrame):
             raise TypeError("Extruded Bubble renderer received another mode frame")
+        presentation = frame.snapshot.presentation
+        if presentation.content_fade <= 0.0:
+            return
+        if frame.content_rotation_quarters:
+            raise ValueError("Extruded Bubble does not offer content rotation")
+        x, y, width, height = item_pixel_rect(frame)
+        if width <= 0 or height <= 0:
+            return
+        parameters = state.parameters
+        if parameters != self._knobs_for:
+            self._knobs, self._knobs_for = scene_knobs(parameters), parameters
+        knobs = self._knobs
+        samples = _scene_samples(parameters)
+        r = self._resources
+        programs = {key: r.program(key, vertex, fragment) for key, vertex, fragment in _PROGRAMS}
+        if not self._shells.vao:
+            for instances in (self._shells, self._clusters, self._proxies):
+                instances.allocate()
+        self._shafts.warm(width, height)
+        probe = self._probe_for(parameters)
+
+        view_to_world, world_to_view, tan, projection = camera(
+            float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")),
+            width / height, float(parameter(parameters, "extruded_bubble_scene_scale")))
+        pixel = 2.0 * tan[1] / height
+        shells = np.concatenate((bubble_instances(state.bubbles, view_to_world, tan),
+                                 near_giants(state.time, view_to_world, tan)))
+        shell_count = self._shells.upload(shells)
+        cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters, view_to_world, tan))
+        proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
+                                                         float(knobs.get("proxy_power", 2.5))))
+        common = _common(knobs, view_to_world=view_to_world, tan=tan, time=state.time,
+                         rays=ray_strength(parameters, state.level), streak=screen_streak(state.stream))
+        for key in programs:
+            if key != "blur":
+                self._uniforms.set(programs[key], common)
+        sun_screen = light_on_screen(knobs["sun_below"], world_to_view, projection, (width, height))
+        view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
+                "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
+                "uProbeLevels": float(probe.levels)}
+        for key, near in (("shells", False), ("clusters", False), ("near", True)):
+            self._uniforms.set(programs[key], {**view, **_glass(knobs, near)})
+        self._uniforms.set(programs["blur"], {"uSource": 0})
+        self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0,
+                                                 "uSpeckWarm": _floats(knobs["light"]), "uRowMajor": 1,
+                                                 "uPixel": 2.0 / probe.size})
+
+        gl.glDisable(gl.GL_BLEND)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        self._capture_probe(probe, programs, proxy_count, frame.quad_vao)
+        self._draw_shafts(programs, frame.quad_vao)
+
+        with self._target.scope(frame, samples, r, overlay=presentation.content_fade, bloom=_BLOOM,
+                                depth_texture=True, oit=True, hdr=1.0):
+            scene_viewport = (frame.viewport[0] - x, frame.viewport[1] - y, frame.viewport[2], frame.viewport[3])
+            allocation = self._target.allocation
+            self._uniforms.set(programs["backdrop"], {"uProbeMode": 0.0, "uViewToWorld": _floats(view_to_world),
+                                                      "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS,
+                                                      "uFrameSize": (float(width), float(height))})
+            target_size = (float(allocation[0]), float(allocation[1]))
+            for key in ("shells", "clusters", "near"):
+                self._uniforms.set(programs[key], {"uTargetSize": target_size})
+            # The card's camera covers the item's pixels (the target's origin), not the window's viewport.
+            gl.glViewport(0, 0, width, height)
+            with self._target.emission_writes():
+                gl.glBindTextureUnit(_UNIT_SHAFTS, self._shafts.textures[0])
+                gl.glUseProgram(programs["backdrop"])
+                gl.glBindVertexArray(frame.quad_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                background, _depth = self._target.background(frame, r)
+                gl.glBindTextureUnit(_UNIT_BACKGROUND, background)
+                gl.glBindTextureUnit(_UNIT_PROBE, probe.texture)
+                with self._target.transparent_writes(frame, r):
+                    if shell_count:
+                        gl.glUseProgram(programs["shells"])
+                        gl.glBindVertexArray(self._shells.vao)
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+                    if cluster_count:
+                        gl.glUseProgram(programs["clusters"])
+                        gl.glBindVertexArray(self._clusters.vao)
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
+            # Near giants: drawn sharp with their circles of confusion, then spread into round bokeh over the scene
+            # (the shared defocus layer, at the card's own pixels; colour only, no emission).
+            self._near.begin(width, height)
+            gl.glViewport(0, 0, width, height)
+            gl.glUseProgram(programs["near"])
+            gl.glBindVertexArray(self._shells.vao)
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+            self._near.end()
+            self._near.composite(_NEAR_SPREAD)
+            for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
+                gl.glBindTextureUnit(unit, 0)
+            gl.glViewport(*scene_viewport)
+
+    def _capture_probe(self, probe: SceneProbe, programs, proxy_count: int, quad_vao: int) -> None:
+        """The water and light all round the eye, each bubble's glint added as a bright point."""
+        backdrop, proxies = programs["backdrop"], programs["proxies"]
+
+        def draw(face, world_to_face, projection):
+            self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face), "uTan": (1.0, 1.0),
+                                          "uProbeMode": 1.0, "uFrameSize": (float(probe.size), float(probe.size))})
+            gl.glDisable(gl.GL_BLEND)
+            gl.glUseProgram(backdrop)
+            gl.glBindVertexArray(quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            if not proxy_count:
+                return
+            self._uniforms.set(proxies, {"uWorldToView": _floats(world_to_face), "uProjection": _floats(projection)})
+            gl.glEnablei(gl.GL_BLEND, 0)
+            gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+            gl.glDepthMask(gl.GL_FALSE)
+            gl.glUseProgram(proxies)
+            gl.glBindVertexArray(self._proxies.vao)
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, proxy_count)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glDisablei(gl.GL_BLEND, 0)
+
+        probe.capture(draw)
+
+    def _draw_shafts(self, programs, quad_vao: int) -> None:
+        """The volumetric light at half resolution, then a separable blur back into the first target."""
+        prior_framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
+        prior_viewport = [int(v) for v in gl.glGetIntegerv(gl.GL_VIEWPORT)]
+        textures, framebuffers = self._shafts.textures, self._shafts.framebuffers
+        try:
+            gl.glViewport(0, 0, *self._shafts.size)
+            gl.glBindVertexArray(quad_vao)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffers[0])
+            gl.glUseProgram(programs["shafts"])
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glUseProgram(programs["blur"])
+            for source, target, step in ((textures[0], framebuffers[1], (1.0, 0.0)),
+                                         (textures[1], framebuffers[0], (0.0, 1.0))):
+                gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
+                gl.glBindTextureUnit(0, source)
+                self._uniforms.set(programs["blur"], {"uStep": step})
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glBindTextureUnit(0, 0)
+        finally:
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, prior_framebuffer)
+            gl.glViewport(*prior_viewport)
 
     def release_resources(self) -> None:
-        return None
+        errors: list[str] = []
+        releases = [self._target.release, self._near.release, self._shafts.release, self._resources.release_resources,
+                    self._shells.release, self._clusters.release, self._proxies.release]
+        if self._probe is not None:
+            releases.append(self._probe.release)
+        for release in releases:
+            try:
+                release()
+            except Exception as exc:
+                errors.append(str(exc))
+        if errors:
+            raise RuntimeError("Quick Extruded Bubble cleanup incomplete: " + " | ".join(errors))
+        self._probe = None
+        self._uniforms.clear()
+        self._knobs_for, self._knobs = None, {}
 
 
 def create_visualizer_renderer() -> QuickExtrudedBubbleRenderer:
     return QuickExtrudedBubbleRenderer()
+
+
+__all__ = ["QuickExtrudedBubbleRenderer", "create_visualizer_renderer"]

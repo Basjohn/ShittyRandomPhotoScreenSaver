@@ -66,6 +66,9 @@ def mode_output(frame):
     if frame.mode_id == "shockwave_grid":
         # The live waves' strengths, newest last (the grid's reaction; its bars are Spectrum's).
         return tuple(float(event[3]) for event in state.events)
+    if frame.mode_id == "extruded_bubble":
+        # Its own simulation's bubble records (positions, radii, fades) and the scene scalars the GPU layers read.
+        return (*state.bubbles, state.level, state.breath, state.drift, state.emission, state.stream_speed)
     if frame.mode_id == "sine_wave":
         # What the lines' amplitude reads: each band's reactive energy scaled by the resolved
         # sensitivity, and the heartbeat pulse.

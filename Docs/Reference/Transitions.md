@@ -502,6 +502,13 @@ Each foundation slice adds what it learned here.
   (thousands) times HDR colour overflows to infinity after a few layers and resolves to NaN black holes.
 - Budget by ablation before optimising: an exact early-out that looks free can be both small and inexact (half-float
   mips flush tiny coverage); find which population pays (here 2-6 px beads through the full shell trace) first.
+- Colour write masks belong to draw buffer indices, not framebuffers: an owner that binds its own multi-target
+  framebuffer inherits whatever the caller masked (a scene target masks its emission index outside
+  `emission_writes()`), and its second output silently writes nothing. Every owner that draws to several attachments
+  sets and restores its own masks; a lab that happened to call it inside the right scope proves nothing about product
+  call order (Extruded Bubble's near giants drew sharp in the product until `DefocusLayer` did this).
+- A product port of a lab scene: keep one source for programs and knobs (the lab imports both), render the product
+  through its production host from a real recording, and compare with the lab at the same size before tuning anything.
 
 ## Operator-triggered appearance review (reference checklist)
 

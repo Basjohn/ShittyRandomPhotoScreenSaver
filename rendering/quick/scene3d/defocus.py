@@ -214,6 +214,25 @@ class DefocusLayer:
             gl.glCreateVertexArrays(1, name)
             self._vao = int(name[0])
 
+    def warm(self, width: int, height: int, max_radius: float) -> bool:
+        """One warm-up step: True when the layer is allocated at this size (programs compiled) with the read level
+        ``composite(max_radius)`` clips into, else allocate the next of them now (on a hidden frame) instead of at
+        the first ``begin`` / ``composite``."""
+        if self._size != (int(width), int(height)) or not self._fbo:
+            self._allocate(int(width), int(height))
+            return False
+        size = self._read_size(max_radius)[1:]
+        if self._below_size != size or not self._below:
+            self._ensure_below(*size)
+            return False
+        return True
+
+    def _read_size(self, max_radius: float) -> tuple[int, int, int]:
+        """The gather's read level for ``max_radius`` (as in the shader) and its size."""
+        tap_area = math.pi * max_radius * max_radius / DEFOCUS_TAPS
+        level = max(int(math.floor(math.log2(max(math.sqrt(tap_area), 1.0)))), 0)
+        return level, max(self._size[0] >> level, 1), max(self._size[1] >> level, 1)
+
     def begin(self, width: int, height: int) -> None:
         if self._size != (int(width), int(height)) or not self._fbo:
             self._allocate(int(width), int(height))
@@ -223,8 +242,13 @@ class DefocusLayer:
                          gl_query.get_indexed_int(gl.GL_BLEND_SRC_ALPHA, i), gl_query.get_indexed_int(gl.GL_BLEND_DST_ALPHA, i),
                          gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_RGB, i),
                          gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_ALPHA, i)) for i in range(2)],
-                       bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK)), gl_query.is_enabled(gl.GL_DEPTH_TEST))
+                       bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK)), gl_query.is_enabled(gl.GL_DEPTH_TEST),
+                       # Colour masks are per draw buffer index, not per framebuffer: a caller's masked index (a
+                       # scene target's emission outside emission_writes()) would drop the circles here.
+                       [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in range(2)])
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._fbo)
+        for i in range(2):
+            gl.glColorMaski(i, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         gl.glViewport(0, 0, *self._size)
         gl.glClearBufferfv(gl.GL_COLOR, 0, (0.0, 0.0, 0.0, 0.0))
         gl.glClearBufferfv(gl.GL_COLOR, 1, (0.0, 0.0, 0.0, 0.0))
@@ -238,8 +262,10 @@ class DefocusLayer:
         gl.glBlendFuncSeparatei(1, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
 
     def end(self) -> None:
-        framebuffer, viewport, blends, depth_mask, depth_test = self._saved
+        framebuffer, viewport, blends, depth_mask, depth_test, masks = self._saved
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
+        for i, mask in enumerate(masks):
+            gl.glColorMaski(i, *mask)
         gl.glViewport(*viewport)
         for i, (enabled, src_rgb, dst_rgb, src_a, dst_a, eq_rgb, eq_a) in enumerate(blends):
             gl.glBlendFuncSeparatei(i, src_rgb, dst_rgb, src_a, dst_a)
@@ -267,9 +293,7 @@ class DefocusLayer:
         framebuffer = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
         viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
         # The gather's read level (as in the shader), so the sprites and the gather split the same texels.
-        tap_area = math.pi * max_radius * max_radius / DEFOCUS_TAPS
-        level = max(int(math.floor(math.log2(max(math.sqrt(tap_area), 1.0)))), 0)
-        width, height = max(self._size[0] >> level, 1), max(self._size[1] >> level, 1)
+        level, width, height = self._read_size(max_radius)
         try:
             gl.glGenerateTextureMipmap(self._colour)
             gl.glGenerateTextureMipmap(self._circle)

@@ -198,7 +198,10 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   Settings path (control surface drafted in `Extruded_Bubble_Target.md` §9: every lab scene must be authorable as a
   preset from the spec's controls alone, operator 2026-10-18); its own logical simulation and frame runtime on the
   sole clock (no second clock/capture/DSP). Assert original Bubble replay unchanged and zero inactive import/GL/resource work.
-- [ ] **EB3 — Bordered 3D renderer on proven primitives.** Instanced geometry, correct overlapping transparency,
+- [~] **EB3 — Bordered 3D renderer on proven primitives.** *S3a landed 2026-10-18 (target §10): the lab's scene
+  draws through the production host (probe, shafts, shells, clusters, near-giant defocus; prepared reveal); open: S3b
+  world-fixed bubbles under turn/tilt and Scene Pan, S3c GPU-procedural beads/fizz/snow/particulate, the deep light
+  type's remaining knobs, small/large card and DPR, context retirement on a real display.* Instanced geometry, correct overlapping transparency,
   depth/card clipping, lighting/materials and **shared FC bounded orbit/pan/zoom** with Bubble-specific limits.
   The outer card, Edit/CUSTOM rectangle and independent camera view pose never become competing geometry authorities.
   Verify perspective fit, near clipping, glass layering, small/large card/DPR, dual displays and context retirement.
@@ -250,6 +253,14 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   larger bucket type), migrate each mode's Technical controls under Advanced, put Extruded Bubble's Camera bucket under
   Advanced, and draw curved tree connection lines from an opened bucket to its children if the shared bucket UI lacks
   them. One shared owner for each; apply across every Settings page.
+- [ ] **Aspiration, far future — Settings live preview (operator 2026-10-18).** A very small styled preview box in the
+  Settings sidebar's empty space between About and Quick Start that draws lazily (very slow fade in / out) only while
+  a preview-relevant control (Visualizer, Transition) is being worked on, and costs nothing otherwise. Feasible on
+  existing pieces: the offscreen Quick render path (`QQuickRenderControl`, as the onboarding/foundry renders use) and
+  `QuickVisualizerRenderHost` draw one mode's renderer at a small size from the Settings being edited, fed by a
+  bundled short recorded clip through the replay engine rather than live audio. Rules it must keep: never a second
+  live Visualizer beside a running saver (Settings runs standalone; one preview renderer, released when idle), no
+  timers polling at rest, low frame rate and resolution, render-thread resources retired with the box. Not scheduled.
 
 ### 4C. Remaining modes and character/world substrate
 
