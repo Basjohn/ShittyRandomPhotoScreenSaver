@@ -271,7 +271,8 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     bind_setting_signal(tab, widget.valueCommitted, auto_switch=auto_switch)
     content.addWidget(widget)
     content.addWidget(label)
-    content.addStretch()
+    if not isinstance(control, Range):
+        content.addStretch()            # the mappers keep their size; a range fills the row as a slider does
     widget.setToolTip(control.tooltip)
     _apply_availability(widget, control)
     setattr(tab, control.key, widget)
