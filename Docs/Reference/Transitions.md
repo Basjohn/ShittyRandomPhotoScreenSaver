@@ -507,6 +507,10 @@ Each foundation slice adds what it learned here.
   `emission_writes()`), and its second output silently writes nothing. Every owner that draws to several attachments
   sets and restores its own masks; a lab that happened to call it inside the right scope proves nothing about product
   call order (Extruded Bubble's near giants drew sharp in the product until `DefocusLayer` did this).
+- Time each draw by its program before cutting cost: the suspected pass is rarely the whole story, and a
+  per-draw table names what disappears. Size floors in vertex stages ("at least half a pixel so specks resolve")
+  turn every left-out instance (radius 0) into a shaded dot: cull zero size before any floor. A fragment whose
+  result a later blend replaces whole (a sub-pixel bead's trace under its speck light) should not compute it.
 - A camera that only rotates needs no simulation change to make a field world-fixed: rotation has no parallax, so
   place the field by the unrotated camera and wrap each point by whole periods round the heading. A wrap period must
   be per point and constant under the motion (for a turn: from the point's elevation, which a turn keeps), and wide
