@@ -215,3 +215,44 @@ start | now):**
 - **Look:** parity with all six mocks, judged side by side at full resolution with crops
   (`tools/labs/extruded_bubble_lab.py` renders one variant per mock against it).
 
+- **Presets (operator 2026-10-18):** each mock must eventually be an easily achievable preset.
+
+## 9. Preset surface (EB2 draft, 2026-10-18)
+
+Every look the lab renders is a preset of a small control surface. The lab already stores scenes in its three layers
+(`ENGINE` constants, `MODES` surface/deep, lean per-scene values; `effective()` merges them, proven pixel-identical
+to the flat settings). EB2 turns this into the typed Settings spec; the lab scenes are the reference presets, and the
+spec is accepted only when each of them can be authored from these controls alone. Amounts use the EB5a range slider
+(quiet..loud). Buckets follow the existing Settings pattern (nested, closed by default, short Title Case names).
+
+| Bucket | Control | Lab knobs it sets |
+| --- | --- | --- |
+| Light | Light Type: Sunlit Surface / Deep Light | `mode` (and everything in `MODES`) |
+| Light | Light Direction (around, height) | `sun`, `light_view`, `spec_view` (highlight direction derived from it) |
+| Light | Light Colour | `light`, `shaft`, `sky` tint, default `speck_warm` |
+| Light | Light Strength | `glint_power`, `light_power`, `surface_gain`, `glow` |
+| Light | Light Rays (range) | `rays` |
+| Light | Ray Softness | `fan_contrast`, `fan_march`, `fan_rays` (deep: `ray_focus`) |
+| Water | Water Colour, Depth Colour | `water`, `deep`; `absorb` derived from them |
+| Water | Haze | `mist` |
+| Water | Light Veils | `veils` |
+| Glass | Clarity | `face_reflect` |
+| Glass | Rim Glow | `probe_fill`, `proxy_power` |
+| Glass | Iridescence | `film`, `film_range` |
+| Glass | Softness | `rough`, `inner_blur` |
+| Glass | Sparkle | `sparkle`, `speck_glow`, `glint_sharp` |
+| Bubbles | Large Bubbles, Small Bubbles, Bead Chains (ranges) | `mid_count`, `small_count` + `fizz`, `chains` |
+| Bubbles | Flow Direction, Drift, Sway | `travel` + `streak`, `drift`, `sway` |
+| Bubbles | Collision (Fuse / Pop / Bounce triangle, §8) | not in the lab yet |
+| Particles | Amount (range), Size | `specks`, `speck_size` |
+| Particles | Warmth, Glow | `warm_share` + `speck_warm`, `speck_bloom` + `dust` |
+| Particles | Bands | `banded`, `band_freq`, `cloud_contrast`, `cloud_floor`, `cloud_glow` |
+| Lens | Focus, Aperture | `focus`, `aperture` + `near_coc` |
+| Lens | Exposure | `exposure`, `hdr_exposure` |
+
+Not controls: `ENGINE` (`shell`, `iors`, `lens`); mode-implied values (`near_lens`, `near_reflect`, `shaft_scale`,
+`shaft_soft`, `ray_cut`, `fan_reach`, `surface_sky`, `crisp`, scene geometry `surface`/`shaft_y`); `columns` (a
+population layout the abyss uses, to become a Bubbles choice if a second scene wants it). Camera `pitch` is the view
+pose of the shared framed camera (FC), persisted outside art; a preset may suggest a starting pose only if FC admits
+it. Remaining folds to settle at EB2: mock 1's `ray_cut` 0.08 (mode 0.1), camera-down's `glint_sharp` 600 (300
+elsewhere) and `rough` 0.03 / mock 6's 0.1 (mode 0.05) are kept as per-scene values until Sparkle and Softness exist.

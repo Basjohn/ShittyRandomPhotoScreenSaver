@@ -420,7 +420,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   lighting, bloom and framed-camera goals. Distinguish useful G2 shadow receivers and optional G3B optics from
   merely decorative demand; do not expand the shared architecture without evidence.
 - [ ] **EB2 — Descriptor, spec and frame admission.** Declare one canonical mode/capability and presentation
-  Settings path; consume Bubble logical state or a clearly mode-owned projection, not a second clock/capture/DSP.
+  Settings path (control surface drafted in `Extruded_Bubble_Target.md` §9: every lab scene must be authorable as a
+  preset from the spec's controls alone, operator 2026-10-18); consume Bubble logical state or a clearly mode-owned projection, not a second clock/capture/DSP.
   Assert original Bubble replay equality and zero inactive import/GL/resource work.
 - [ ] **EB3 — Bordered 3D renderer on proven primitives.** Instanced geometry, correct overlapping transparency,
   depth/card clipping, lighting/materials and **shared FC bounded orbit/pan/zoom** with Bubble-specific limits.
