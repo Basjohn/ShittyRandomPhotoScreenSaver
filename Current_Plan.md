@@ -361,7 +361,9 @@ instancing, stream rings, compute/population, emission, bloom, trails, GGX/Fresn
 shadow helpers; inventory before adding anything. **Primitive green means measured actual GPU pixels, GL state,
 resize/retirement and dormant-zero-cost tests**, not only shader compilation or a source-string assertion.
 
-- [ ] **G0 — Inventory, target contract and baselines (first).** Inventory renderer owners, existing primitives,
+- [~] **G0 — Inventory, target contract and baselines (first).** *Inventory, gate status, overhead baseline and
+  1440p lab costs recorded 2026-10-18 (`Scene3D_Resources.md` §4A gate status); open: dual-display measurement on the
+  physical displays, card-size sweep.* Inventory renderer owners, existing primitives,
   cost and validation gaps, and approved Extruded Bubble depth/overlap/translucency/shadow goals *without starting
   EB implementation*. Record current CPU/GPU, GL calls, memory and dual-1440p/card-size baselines. Run
   `tools/overhead_baseline.py` before/after every shared change. Do not implement a primitive whose missing
