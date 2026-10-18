@@ -164,7 +164,9 @@ resize/retirement and dormant-zero-cost tests**, not only shader compilation or 
   near-plane/depth tests, transparent versus opaque ordering and inherited GL-state restoration. Prove actual
   backdrop/card alpha pixels (including glass, star/celestial occlusion), mixed-DPR resize and no stale-history
   sampling. Implement only demanded targets and release them at park/context teardown. G1 precedes G2 and G3.
-- [ ] **FC — Promote Neon Lake's bounded framed camera into ONE shared opt-in capability.** Neon Lake is the
+- [~] **FC — Promote Neon Lake's bounded framed camera into ONE shared opt-in capability.** *2026-10-18: policy
+  declared per mode on the descriptor (turn wrap/clamp, inertia, pan envelope; no mode-id branches), Auto Rotate
+  added; Neon Lake's pan bounds identical. Open: per-mode fit/pivot/near-plane declarations as Extruded Bubble needs them.* Neon Lake is the
   reference for **internal** WASD/Alt-left orbit, Alt-right pan, Alt-wheel zoom, retained border/card clipping,
   camera/view-pose persistence outside art and layout, composition-aware limits and homogeneous near-plane safety.
   Consolidate *existing* descriptor/view-orbit/scene-transform/projection helpers, not a new pose store, clock,

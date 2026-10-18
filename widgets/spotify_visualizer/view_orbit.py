@@ -16,6 +16,11 @@ drag steps the view directly. Nothing here saves: the caller persists once, when
 Keys move the camera around the scene: W up over it, S down, A to the left, D to the right
 (the near end of the row then swings toward the side the camera went); a drag turns the scene
 toward it (rendering/runtime_input.py).
+
+Framed-camera policy (turn wrap or clamp, release inertia, scene pan envelope, Auto Rotate) is declared on each
+mode's descriptor; nothing here branches on a mode id. Auto Rotate is one immutable ``AutoRotate`` record the GUI
+thread publishes (armed at startup/swap completion and when orbiting stops, dropped by any camera input); the
+logical capture evaluates it at its frame time, so the swivel costs no timer, polling or per-frame write.
 """
 
 from __future__ import annotations
@@ -32,10 +37,11 @@ VIEW_ORBIT_STEPS_PER_SECOND = 30.0
 _MOTION = "_view_orbit_motion"
 _DRAG = "_view_orbit_drag_velocity"
 _INERTIA = "_view_orbit_inertia"
-# Presentation-only release tail, sampled by the existing logical frame clock.
-# The normal Sphere shader's continuous base rotation is independent of this view pose.
-SPHERE_INERTIA_SECONDS = 0.9
-SPHERE_INERTIA_MAX_AGE = 0.18
+_AUTO = "_view_orbit_auto_rotate"
+# Presentation-only release tail, sampled by the existing logical frame clock (modes with
+# ``view_orbit_inertia``). The normal Sphere shader's continuous base rotation is independent of this view pose.
+VIEW_ORBIT_INERTIA_SECONDS = 0.9
+VIEW_ORBIT_INERTIA_MAX_AGE = 0.18
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +67,24 @@ def inertia_pose(inertia: OrbitInertia, now: float) -> Dict[str, float]:
     """Finite smooth deceleration, ending at exactly the once-persisted final view."""
     progress = max(0.0, min(1.0, (float(now) - inertia.since) / inertia.duration))
     portion = 1.0 - (1.0 - progress) ** 3
-    return {"sphere_turn": _wrap(inertia.turn_start + inertia.turn_delta * portion),
-            "sphere_tilt": _clamped("sphere_tilt", inertia.tilt_start + inertia.tilt_delta * portion)}
+    turn_key, tilt_key = view_orbit_settings(inertia.mode_id)
+    return {turn_key: _turn_for_mode(inertia.mode_id, turn_key, inertia.turn_start + inertia.turn_delta * portion),
+            tilt_key: _clamped(tilt_key, inertia.tilt_start + inertia.tilt_delta * portion)}
+
+
+@dataclass(frozen=True, slots=True)
+class AutoRotate:
+    """The view of ``mode_id`` swivels from ``turn`` at ``rate`` (turn units per second) from ``start``
+    (logical-clock seconds) on; before ``start`` it holds still."""
+
+    mode_id: str
+    turn: float
+    rate: float
+    start: float
+
+
+def auto_rotate_turn(record: AutoRotate, turn_key: str, now: float) -> float:
+    return _wrap(record.turn + record.rate * max(0.0, float(now) - record.start))
 
 
 
@@ -99,27 +121,25 @@ def _clamped(key: str, value: float) -> float:
 
 
 def _turn_for_mode(mode_id: str, key: str, value: float) -> float:
-    # The framed basin is a landscape: no wrapping through its back/underside.
-    # Sphere and Extruded keep their established unrestricted orbit behavior.
-    return _clamped(key, value) if mode_id == "shockwave_grid" else _wrap(value)
+    # A mode whose turn does not wrap (a landscape) clamps it to its range.
+    return _wrap(value) if get_visualizer_mode_descriptor(mode_id).view_orbit_turn_wraps else _clamped(key, value)
 
 
-def _bounded_basin_pose(scale: float, pan_x: float, pan_y: float) -> tuple[float, float]:
-    """Retain basin/sky overlap without forcing the lake to stay central.
+def bounded_scene_pan(envelope: tuple[float, ...], scale: float, pan_x: float, pan_y: float) -> tuple[float, float]:
+    """A framed scene's pan kept inside its declared envelope at this zoom.
 
-    The scene is scaled about the interior centre. Pan bounds therefore depend
-    on zoom. Looking down keeps the basin reference in view; looking up may
-    move it below the card while retaining an upper-sky reference. Keeping the
-    same lake anchor central in both directions prevented framing the Sun.
-    This is mode-only presentation admission, not editor/card geometry.
+    The scene is scaled about the interior centre, so pan bounds depend on zoom. Horizontally the anchor stays
+    between left and right; vertically the anchor stays above the bottom margin and the upper reference below the
+    top one, so looking up may move the anchor below the card while the upper reference stays (Neon Lake: the lake
+    and an upper-sky reference; keeping the lake central in both directions prevented framing the Sun). This is
+    mode-only presentation admission, not editor/card geometry.
     """
-    anchor_x, anchor_y = 0.50, 0.68
-    left, right = 0.08, 0.92
+    anchor_x, anchor_y, upper_y, left, right = envelope
     projected_x = 0.5 + (anchor_x - 0.5) * scale
     projected_y = 0.5 + (anchor_y - 0.5) * scale
-    projected_sky_y = 0.5 + (0.12 - 0.5) * scale
+    projected_upper_y = 0.5 + (upper_y - 0.5) * scale
     return (max(left-projected_x, min(right-projected_x, pan_x)),
-            max(left-projected_y, min(right-projected_sky_y, pan_y)))
+            max(left-projected_y, min(right-projected_upper_y, pan_y)))
 
 
 def orbit_motion_values(motion: ViewOrbitMotion, now: float) -> Dict[str, float]:
@@ -142,9 +162,14 @@ def view_orbit_values(host: Any, mode_id: str, now: float | None = None) -> Dict
     if motion is not None and now is not None:
         return orbit_motion_values(motion, now)
     inertia = getattr(host, _INERTIA, None)
-    if mode_id == 'sphere' and isinstance(inertia, OrbitInertia) and now is not None and inertia.mode_id == mode_id:
+    if isinstance(inertia, OrbitInertia) and now is not None and inertia.mode_id == mode_id:
         return inertia_pose(inertia, now)
-    return {key: float(getattr(host, f"_{key}")) for key in view_orbit_settings(mode_id)}
+    values = {key: float(getattr(host, f"_{key}")) for key in view_orbit_settings(mode_id)}
+    auto = getattr(host, _AUTO, None)
+    if isinstance(auto, AutoRotate) and now is not None and auto.mode_id == mode_id and values:
+        turn_key = view_orbit_settings(mode_id)[0]
+        values[turn_key] = auto_rotate_turn(auto, turn_key, now)
+    return values
 
 
 def view_pose_values(host: Any, mode_id: str, now: float | None = None) -> Dict[str, float]:
@@ -161,14 +186,62 @@ def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, flo
     if not keys or not set(values) <= keys:
         return {}
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    import time as _time
+    _take_auto_rotation(host, mode_id, _time.time())
     apply_presentation_vis_mode_kwargs(host, {key: _clamped(key, float(value)) for key, value in values.items()})
     return view_pose_values(host, mode_id)
 
 
 def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object], now: float) -> Dict[str, object]:
-    """A capture's ``values`` with the held-key view at ``now`` (logical thread; read only)."""
+    """A capture's ``values`` with the held-key or auto-rotating view at ``now`` (logical thread; read only)."""
     motion = _motion(host, mode_id)
-    return dict(values) if motion is None else {**values, **orbit_motion_values(motion, now)}
+    if motion is not None:
+        return {**values, **orbit_motion_values(motion, now)}
+    auto = getattr(host, _AUTO, None)
+    if isinstance(auto, AutoRotate) and auto.mode_id == mode_id:
+        turn_key = view_orbit_settings(mode_id)[0]
+        return {**values, turn_key: auto_rotate_turn(auto, turn_key, now)}
+    return dict(values)
+
+
+def _take_auto_rotation(host: Any, mode_id: str, now: float | None) -> None:
+    """Camera input arrived (GUI thread): the swivelled view becomes the settled view and the swivel stops."""
+    auto = getattr(host, _AUTO, None)
+    if not isinstance(auto, AutoRotate):
+        return
+    setattr(host, _AUTO, None)
+    if auto.mode_id != mode_id or now is None or float(now) <= auto.start:
+        return
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+
+    turn_key = view_orbit_settings(mode_id)[0]
+    apply_presentation_vis_mode_kwargs(host, {turn_key: auto_rotate_turn(auto, turn_key, now)})
+
+
+def arm_view_auto_rotate(host: Any, mode_id: str, now: float, *, immediate: bool) -> AutoRotate | None:
+    """Publish (GUI thread) the swivel ``mode_id`` starts when its Auto Rotate is on: at once for a completed
+    startup or mode/preset swap (``immediate``), else after its Auto Rotate After seconds without camera input.
+    Off, or a mode without Auto Rotate or whose turn does not wrap: the record is dropped."""
+    try:
+        descriptor = get_visualizer_mode_descriptor(mode_id)
+    except (KeyError, ValueError):
+        setattr(host, _AUTO, None)
+        return None
+    keys = descriptor.view_auto_rotate_settings
+    if not keys or not descriptor.view_orbit_turn_wraps or not descriptor.view_orbit_settings:
+        setattr(host, _AUTO, None)
+        return None
+    after_key, speed_key = keys
+    after = float(getattr(host, f"_{after_key}", 0.0) or 0.0)
+    speed = float(getattr(host, f"_{speed_key}", 0.0) or 0.0)
+    if after <= 0.0 or speed == 0.0:
+        setattr(host, _AUTO, None)
+        return None
+    turn_key = descriptor.view_orbit_settings[0]
+    record = AutoRotate(mode_id, float(getattr(host, f"_{turn_key}")), speed / 180.0,
+                        float(now) if immediate else float(now) + after)
+    setattr(host, _AUTO, record)
+    return record
 
 
 def set_view_orbit_rates(host: Any, mode_id: str, turn_steps: float, tilt_steps: float,
@@ -181,10 +254,11 @@ def set_view_orbit_rates(host: Any, mode_id: str, turn_steps: float, tilt_steps:
         return {}
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode_id).view_orbit_steps
     turn_key, tilt_key = keys
+    _take_auto_rotation(host, mode_id, now)
     values = view_orbit_values(host, mode_id, now)
     setattr(host, _INERTIA, None)  # held keys take over from the exact live view
     setattr(host, _DRAG, None)  # a later key release is not a mouse flick
-    if mode_id == 'sphere':
+    if get_visualizer_mode_descriptor(mode_id).view_orbit_inertia:
         from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
         apply_presentation_vis_mode_kwargs(host, values)
     setattr(host, _MOTION, ViewOrbitMotion(
@@ -247,11 +321,12 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
         return view_orbit_values(host, mode_id, now)
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
 
+    _take_auto_rotation(host, mode_id, now)
     values = view_orbit_values(host, mode_id, now)
     setattr(host, _INERTIA, None)
     turn_delta = turn_step * float(turn_steps)
     tilt_delta = tilt_step * float(tilt_steps)
-    if mode_id == 'sphere' and now is not None and (turn_delta or tilt_delta):
+    if get_visualizer_mode_descriptor(mode_id).view_orbit_inertia and now is not None and (turn_delta or tilt_delta):
         previous = getattr(host, _DRAG, None)
         # A new gesture must not borrow velocity from an earlier gesture.
         dt = (float(now) - previous.time if isinstance(previous, OrbitDragVelocity)
@@ -270,26 +345,28 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
     return view_orbit_values(host, mode_id, now)
 
 
-def release_sphere_orbit_inertia(host: Any, now: float) -> Dict[str, float] | None:
-    """Settle a Sphere drag onto the existing presentation clock, no additional timer.
+def release_view_orbit_inertia(host: Any, mode_id: str, now: float) -> Dict[str, float] | None:
+    """Settle a drag of a mode with ``view_orbit_inertia`` onto the existing presentation clock, no timer.
 
     Persist the analytic endpoint once at release. Until the tail finishes, captures
     read its intermediate view, then naturally read the identical saved endpoint.
     """
     sample = getattr(host, _DRAG, None)
     setattr(host, _DRAG, None)
-    if (not isinstance(sample, OrbitDragVelocity) or sample.mode_id != 'sphere'
-            or not 0 <= float(now) - sample.time <= SPHERE_INERTIA_MAX_AGE):
+    if (not isinstance(sample, OrbitDragVelocity) or sample.mode_id != mode_id
+            or not get_visualizer_mode_descriptor(mode_id).view_orbit_inertia
+            or not 0 <= float(now) - sample.time <= VIEW_ORBIT_INERTIA_MAX_AGE):
         return None
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
-    start = view_orbit_values(host, 'sphere', now)
-    turn_delta = max(-0.16, min(0.16, sample.turn_rate * SPHERE_INERTIA_SECONDS / 3))
-    tilt_delta = max(-0.12, min(0.12, sample.tilt_rate * SPHERE_INERTIA_SECONDS / 3))
+    turn_key, tilt_key = view_orbit_settings(mode_id)
+    start = view_orbit_values(host, mode_id, now)
+    turn_delta = max(-0.16, min(0.16, sample.turn_rate * VIEW_ORBIT_INERTIA_SECONDS / 3))
+    tilt_delta = max(-0.12, min(0.12, sample.tilt_rate * VIEW_ORBIT_INERTIA_SECONDS / 3))
     if abs(turn_delta) + abs(tilt_delta) < 0.0005:
         return None
-    inertia = OrbitInertia('sphere', float(now), SPHERE_INERTIA_SECONDS,
-                           start['sphere_turn'], start['sphere_tilt'], turn_delta, tilt_delta)
-    final = inertia_pose(inertia, float(now) + SPHERE_INERTIA_SECONDS)
+    inertia = OrbitInertia(mode_id, float(now), VIEW_ORBIT_INERTIA_SECONDS,
+                           start[turn_key], start[tilt_key], turn_delta, tilt_delta)
+    final = inertia_pose(inertia, float(now) + VIEW_ORBIT_INERTIA_SECONDS)
     apply_presentation_vis_mode_kwargs(host, final)
     setattr(host, _INERTIA, inertia)
     return final

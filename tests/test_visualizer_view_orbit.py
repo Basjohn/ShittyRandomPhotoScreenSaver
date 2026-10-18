@@ -480,7 +480,7 @@ def test_alt_drag_through_the_real_display_window_reaches_the_runtime_in_fractio
 
 def test_sphere_drag_inertia_uses_existing_capture_clock_then_matches_saved_endpoint():
     from widgets.spotify_visualizer.view_orbit import (
-        SPHERE_INERTIA_SECONDS, release_sphere_orbit_inertia, view_orbit_values,
+        VIEW_ORBIT_INERTIA_SECONDS, release_view_orbit_inertia, view_orbit_values,
     )
     host = _host()
     original = view_orbit_values(host, 'sphere', 100.0)
@@ -489,31 +489,31 @@ def test_sphere_drag_inertia_uses_existing_capture_clock_then_matches_saved_endp
     orbit_visualizer_view(host, 'sphere', 1.0, 0.0, 100.0)
     orbit_visualizer_view(host, 'sphere', 1.0, 0.0, 100.016)
     at_release = view_orbit_values(host, 'sphere', 100.03)
-    endpoint = release_sphere_orbit_inertia(host, 100.03)
+    endpoint = release_view_orbit_inertia(host, "sphere", 100.03)
     assert endpoint is not None
     assert endpoint['sphere_turn'] != pytest.approx(at_release['sphere_turn'])
     assert view_orbit_values(host, 'sphere', 100.03) == pytest.approx(at_release)
-    mid = view_orbit_values(host, 'sphere', 100.03 + SPHERE_INERTIA_SECONDS / 2)
+    mid = view_orbit_values(host, 'sphere', 100.03 + VIEW_ORBIT_INERTIA_SECONDS / 2)
     assert mid['sphere_turn'] != pytest.approx(at_release['sphere_turn'])
     assert mid['sphere_turn'] != pytest.approx(endpoint['sphere_turn'])
-    assert view_orbit_values(host, 'sphere', 100.03 + SPHERE_INERTIA_SECONDS) == pytest.approx(endpoint)
+    assert view_orbit_values(host, 'sphere', 100.03 + VIEW_ORBIT_INERTIA_SECONDS) == pytest.approx(endpoint)
     assert view_orbit_values(host, 'sphere', 200.0) == pytest.approx(endpoint)
     assert view_orbit_values(host, 'sphere') == pytest.approx(endpoint)  # persisted pose matches
-    assert release_sphere_orbit_inertia(host, 200.0) is None
+    assert release_view_orbit_inertia(host, "sphere", 200.0) is None
 
 
 def test_sphere_inertia_expired_or_new_drag_does_not_snap_to_old_pose():
-    from widgets.spotify_visualizer.view_orbit import release_sphere_orbit_inertia
+    from widgets.spotify_visualizer.view_orbit import release_view_orbit_inertia
     host = _host()
     orbit_visualizer_view(host, 'sphere', 2.0, 0.0, 50.0)
-    assert release_sphere_orbit_inertia(host, 51.0) is None  # stale drag has no inertia
+    assert release_view_orbit_inertia(host, "sphere", 51.0) is None  # stale drag has no inertia
     orbit_visualizer_view(host, 'sphere', -2.0, 0.0, 52.0)
-    endpoint = release_sphere_orbit_inertia(host, 52.01)
+    endpoint = release_view_orbit_inertia(host, "sphere", 52.01)
     assert endpoint is not None
     moving = view_orbit_values(host, 'sphere', 52.15)
     after = orbit_visualizer_view(host, 'sphere', 0.5, 0.0, 52.15)
     assert after['sphere_turn'] == pytest.approx((moving['sphere_turn'] + get_visualizer_mode_descriptor('sphere').view_orbit_steps[0] * 0.5 + 1) % 2 - 1)
-    assert release_sphere_orbit_inertia(host, 53.1) is None
+    assert release_view_orbit_inertia(host, "sphere", 53.1) is None
 
 
 def test_sphere_inertia_cleared_when_preset_rebases_without_held_keys():
@@ -546,3 +546,74 @@ def test_framed_orbit_settlement_preserves_the_complete_internal_pose():
     assert saved['shockwave_grid_scene_pan_y'] == -.3
     assert set(get_visualizer_view_pose_keys(mode)) <= set(saved)
     assert custom == {}
+
+
+# --- Auto Rotate (framed camera, FC) ---------------------------------------------------------------------------
+
+def _auto_rotating(monkeypatch, mode="extruded_spectrum", after=5.0, speed=18.0):
+    """``mode`` lent a test Auto Rotate declaration (After ``after`` s, Speed ``speed`` deg/s) on a real host."""
+    import dataclasses
+    import widgets.spotify_visualizer.view_orbit as view_orbit
+
+    real = view_orbit.get_visualizer_mode_descriptor
+
+    def descriptor(mode_id):
+        found = real(mode_id)
+        return dataclasses.replace(found, view_auto_rotate_settings=("t_auto_after", "t_auto_speed")) \
+            if mode_id == mode else found
+
+    monkeypatch.setattr(view_orbit, "get_visualizer_mode_descriptor", descriptor)
+    host = _host()
+    host._t_auto_after, host._t_auto_speed = after, speed
+    return host
+
+
+def _turn_difference(a, b):
+    return (a - b + 1.0) % 2.0 - 1.0
+
+
+def test_auto_rotate_swivels_turn_only_round_a_full_circle_from_a_completed_swap(monkeypatch):
+    from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion, arm_view_auto_rotate
+
+    host = _auto_rotating(monkeypatch)
+    turn, tilt = view_orbit_settings("extruded_spectrum")
+    base, tilt_value = float(getattr(host, f"_{turn}")), float(getattr(host, f"_{tilt}"))
+    assert arm_view_auto_rotate(host, "extruded_spectrum", 100.0, immediate=True) is not None
+    # 18 degrees a second = 0.1 turn units (a full circle is 2): moving at once, tilt untouched.
+    view = view_orbit_values(host, "extruded_spectrum", 105.0)
+    assert _turn_difference(view[turn], base) == pytest.approx(0.5)
+    assert view[tilt] == tilt_value
+    assert _turn_difference(view_orbit_values(host, "extruded_spectrum", 120.0)[turn], base) == pytest.approx(0.0, abs=1e-9)
+    # The logical capture reads the same swivel; nothing was written to the settings.
+    assert apply_view_orbit_motion(host, "extruded_spectrum", {}, 105.0)[turn] == pytest.approx(view[turn])
+    assert float(getattr(host, f"_{turn}")) == base
+
+
+def test_auto_rotate_waits_its_time_after_camera_input_and_input_takes_the_swivelled_view(monkeypatch):
+    from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
+
+    host = _auto_rotating(monkeypatch)
+    turn, _tilt = view_orbit_settings("extruded_spectrum")
+    arm_view_auto_rotate(host, "extruded_spectrum", 100.0, immediate=True)
+    swivelled = view_orbit_values(host, "extruded_spectrum", 103.0)[turn]
+    # Camera input: the view continues from what was shown (no snap back) and the swivel stops.
+    after_input = orbit_visualizer_view(host, "extruded_spectrum", 0.0, 0.0, 103.0)[turn]
+    assert after_input == pytest.approx(swivelled)
+    assert view_orbit_values(host, "extruded_spectrum", 150.0)[turn] == pytest.approx(swivelled)
+    # Orbiting stopped: still for Auto Rotate After (5 s), then swivelling again from there.
+    arm_view_auto_rotate(host, "extruded_spectrum", 200.0, immediate=False)
+    assert view_orbit_values(host, "extruded_spectrum", 204.9)[turn] == pytest.approx(swivelled)
+    assert _turn_difference(view_orbit_values(host, "extruded_spectrum", 207.0)[turn], swivelled) == pytest.approx(0.2)
+
+
+def test_auto_rotate_off_or_on_a_clamped_landscape_publishes_nothing(monkeypatch):
+    from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
+
+    for after, speed in ((0.0, 18.0), (5.0, 0.0)):
+        host = _auto_rotating(monkeypatch, after=after, speed=speed)
+        assert arm_view_auto_rotate(host, "extruded_spectrum", 1.0, immediate=True) is None
+    # A mode whose turn does not wrap cannot swivel round a full circle.
+    host = _auto_rotating(monkeypatch, mode="shockwave_grid")
+    assert arm_view_auto_rotate(host, "shockwave_grid", 1.0, immediate=True) is None
+    # A mode without the declaration: nothing.
+    assert arm_view_auto_rotate(_host(), "sphere", 1.0, immediate=True) is None

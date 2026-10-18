@@ -259,7 +259,11 @@ accessibility):**
 untouched) after the set time with no camera input. Completion of a full startup or of a mode/preset swap counts as
 an immediate trigger. Any orbit input stops it and restarts the wait. Driven by the logical frame clock (idle =
 frame time since the last camera input), never a timer or polling; part of the shared framed camera (FC), so any
-framed 3D mode can opt in. The view pose stays outside art presets; Auto Rotate After/Speed are presentation settings.
+framed 3D mode can opt in (declared as `view_auto_rotate_settings`, implemented 2026-10-18). Orbit is rotation of the
+view (turn/tilt); pan and zoom are separate. **Starting views as Neon Lake does:** each preset carries its camera
+through the established `starting_view` metadata (Save Preset As with **Include current camera view when saving**,
+applied once on a preset selection; Custom keeps the live view), so every rebuilt lab scene saves its framing with
+it; Auto Rotate then starts from that view. Auto Rotate After/Speed are presentation settings.
 
 **Lab knob mapping** (what each control sets in the lab; `ENGINE` values and mode defaults are not controls):
 Light Type → `mode`; Light Direction → `sun`, `light_view`, `spec_view`; Light Colour → `light`, `shaft`, `sky`

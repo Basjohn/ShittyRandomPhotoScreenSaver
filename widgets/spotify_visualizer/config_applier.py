@@ -268,16 +268,22 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
                 value = control.admit_runtime(read_control_value(control, kwargs.get, default), default)
                 setattr(host, control_runtime_attr(control), control_runtime_value(control, value))
 
-    if not logical and any(key in kwargs for key in (
-            "shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y")):
-        # One admission path for live drags, scroll, config reload and repair.
-        # View transform keys stay spec-owned, and the outer card never moves.
-        from widgets.spotify_visualizer.view_orbit import _bounded_basin_pose
-        scale = float(getattr(host, "_shockwave_grid_scene_scale", _visualizer_default("shockwave_grid_scene_scale")))
-        x, y = _bounded_basin_pose(scale, float(getattr(host, "_shockwave_grid_scene_pan_x", _visualizer_default("shockwave_grid_scene_pan_x"))),
-                                   float(getattr(host, "_shockwave_grid_scene_pan_y", _visualizer_default("shockwave_grid_scene_pan_y"))))
-        host._shockwave_grid_scene_pan_x = x
-        host._shockwave_grid_scene_pan_y = y
+    if not logical:
+        # One admission path for live drags, scroll, config reload and repair: a framed mode's declared pan
+        # envelope. View transform keys stay spec-owned, and the outer card never moves.
+        from core.settings.visualizer_mode_registry import SCENE_PAN_ENVELOPE_DESCRIPTORS
+        for descriptor in SCENE_PAN_ENVELOPE_DESCRIPTORS:
+            transform = descriptor.scene_transform_settings
+            if not any(key in kwargs for key in transform):
+                continue
+            from widgets.spotify_visualizer.view_orbit import bounded_scene_pan
+            scale_key, pan_x_key, pan_y_key = transform
+            scale = float(getattr(host, f"_{scale_key}", _visualizer_default(scale_key)))
+            x, y = bounded_scene_pan(descriptor.scene_pan_envelope, scale,
+                                     float(getattr(host, f"_{pan_x_key}", _visualizer_default(pan_x_key))),
+                                     float(getattr(host, f"_{pan_y_key}", _visualizer_default(pan_y_key))))
+            setattr(host, f"_{pan_x_key}", x)
+            setattr(host, f"_{pan_y_key}", y)
 
 
 def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:
