@@ -383,8 +383,18 @@ new `travel` (the stream speed integrated on the logical clock, in the snapshot 
 buoyancy, so a change of speed never makes them jump; no renderer-owned state. At 1672x941, 4x MSAA: 6.2 ms GPU with
 the default range at loud, 7.2 ms with the lab's mock 2 density (Bead Chains 10; the lab's scene 11.6 ms).
 
-**Next in S3.** S3b: world-fixed bubbles under turn/tilt (the simulation takes the view rotation and wraps lateral
-exits; today the volume is view-anchored, so orbiting turns only the water and light); Scene Pan. S3c (rest): the
+**S3b landed (2026-10-18), stateless in the renderer.** The eye only rotates, so a world-fixed field needs no
+simulation change: the volume is placed by the camera at turn 0 and the current tilt, then each point turns about the
+world vertical by whole periods to stay within half a period of the camera's heading. A point's period is twice the
+azimuth where its elevation meets the volume's side plane, a closed form (a quadratic in the plane's vertical tangent;
+the whole circle where the plane never reaches that elevation): every visible point of that elevation lies inside
+it, also near the top of a pitched view. A turn keeps elevation and distance, so periods never change and a bubble
+leaving one side returns on the far side unseen. Clusters and bead chains turn as one (by their lead member / centre);
+beads and snow run the same wrap in GLSL. Tilt stays view-relative (a tilted preset frames the bubbles as authored).
+Tested: world-fixed under small turns; a full turn at four aspects/tilts never wraps a bubble on screen (largest
+on-screen step is the rotation itself). Near giants stay at the lens.
+
+**Next in S3.** Scene Pan (lens shift within the declared envelope). S3c (rest): the
 3D particulate (Particles range at the emission level, ember bands for the deep scenes) and the bead budget (lab
 lesson: 2-6 px beads through the full shell trace are the cost). Then the deep light type and the remaining lab knobs
 per section 9.

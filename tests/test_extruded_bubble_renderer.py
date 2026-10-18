@@ -39,22 +39,22 @@ def test_scene_scale_zooms_without_turning_the_view():
 
 
 def test_a_bubble_keeps_its_share_of_the_view_at_any_depth_and_fades_by_shrinking():
-    view_to_world, _w, tan, _p = scene.camera(0.3, 0.2, 1.6)
+    _v, _w, tan, _p = scene.camera(0.3, 0.2, 1.6)
     rows = scene.bubble_instances(_record(z=0.0) + _record(z=1.0, ident=2.0) + _record(alpha=0.25, ident=3.0),
-                                  view_to_world, tan)
+                                  tan, (0.3, 0.2))
     assert len(rows) == 3
     for row, z, alpha in zip(rows, (0.0, 1.0, 0.5), (1.0, 1.0, 0.25)):
         depth = scene.DEPTH_NEAR + scene.DEPTH_SPAN * z
-        assert np.linalg.norm(row[:3]) >= depth                       # in front of the eye, at its depth
+        assert np.linalg.norm(row[:3]) >= depth * (1 - 1e-6)          # at least its depth from the eye
         assert row[3] / (tan[1] * depth) == pytest.approx(0.1 * math.sqrt(alpha), rel=1e-5)
         assert row[5] == 0.0
 
 
 def test_fused_members_and_faded_bubbles_are_not_shells_and_clusters_carry_their_members():
-    view_to_world, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
+    _v, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
     records = _record(x=-0.1, cluster=0.0) + _record(x=0.1, ident=2.0, cluster=0.0) + _record(alpha=0.0, ident=3.0)
-    assert len(scene.bubble_instances(records, view_to_world, tan)) == 0
-    clusters = scene.cluster_instances(records, (2.0, 0.0, 1.0, -1.0), view_to_world, tan)
+    assert len(scene.bubble_instances(records, tan)) == 0
+    clusters = scene.cluster_instances(records, (2.0, 0.0, 1.0, -1.0), tan)
     assert clusters.shape == (1, scene.CLUSTER_FLOATS)
     assert clusters[0, 12] == 2.0 and clusters[0, 8:12].tolist() == [0.0] * 4    # two members, third unused
 
@@ -68,11 +68,49 @@ def test_near_giants_are_drawn_by_the_near_layer_and_drift_without_jumping():
 
 def test_glint_proxies_follow_bubbles_toward_the_light():
     view_to_world, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    shells = np.concatenate((scene.bubble_instances(_record(), view_to_world, tan),
+    shells = np.concatenate((scene.bubble_instances(_record(), tan),
                              scene.near_giants(0.0, view_to_world, tan)))
     proxies = scene.glint_proxies(shells, (0.0, 1.0, 0.0), 3.0)
     assert len(proxies) == 1                                          # giants mirror nothing into the probe
     assert proxies[0, 1] > shells[0, 1] and proxies[0, 4] == 3.0
+
+
+def _on_screen(world, pose, aspect):
+    _v, world_to_view, _t, projection = scene.camera(*pose, aspect)
+    view = np.asarray(world)[:, :3] @ np.asarray(world_to_view).reshape(3, 3)
+    front = view[:, 2] < 0.0
+    return (np.where(front, projection[0] * view[:, 0] / -view[:, 2], 9.0),
+            np.where(front, projection[5] * view[:, 1] / -view[:, 2], 9.0))
+
+
+def test_bubbles_stay_fixed_in_the_world_as_the_camera_turns():
+    _v, _w, tan, _p = scene.camera(0.0, 0.1, 16 / 9)
+    record = _record(x=0.3, y=0.1)
+    start = scene.bubble_instances(record, tan, (0.0, 0.1))[0, :3]
+    for turn in (0.02, -0.05, 0.08):                                 # small turns: no wrap yet
+        assert np.allclose(scene.bubble_instances(record, tan, (turn, 0.1))[0, :3], start, atol=1e-4)
+    x0, _y0 = _on_screen(scene.bubble_instances(record, tan, (0.0, 0.1)), (0.0, 0.1), 16 / 9)
+    x1, _y1 = _on_screen(scene.bubble_instances(record, tan, (0.05, 0.1)), (0.05, 0.1), 16 / 9)
+    assert x1[0] != pytest.approx(x0[0], abs=0.02)                   # and so it moves across the view
+
+
+@pytest.mark.parametrize("aspect, tilt", [(16 / 9, 0.0), (16 / 9, 0.45), (1.0, -0.4), (3.0, 0.3)])
+def test_turning_a_full_circle_never_wraps_a_bubble_on_screen(aspect, tilt):
+    """An endless field: each bubble returns on the far side where no one sees it, also near the top of a pitched
+    view (the view spans more azimuth there)."""
+    _v, _w, tan, _p = scene.camera(0.0, tilt, aspect)
+    xs, ys, zs = np.meshgrid(np.linspace(-1.25, 1.25, 9), np.linspace(-1.3, 1.3, 9), (0.0, 1.0))
+    n = xs.size
+    records = np.column_stack([xs.ravel(), ys.ravel(), zs.ravel(), np.full(n, 0.1), np.ones(n), np.zeros(n),
+                               np.arange(n), np.full(n, -1.0)]).ravel()
+    previous = None
+    for turn in np.linspace(0.0, 2.0, 721):
+        here = _on_screen(scene.bubble_instances(records, tan, (turn, tilt)), (turn, tilt), aspect)
+        if previous is not None:
+            seen = ((np.abs(previous[0]) < 1.15) & (np.abs(previous[1]) < 1.15)) | (
+                (np.abs(here[0]) < 1.15) & (np.abs(here[1]) < 1.15))
+            assert np.hypot(here[0] - previous[0], here[1] - previous[1])[seen].max(initial=0.0) < 0.06
+        previous = here
 
 
 @pytest.mark.parametrize("light_type", ["Sunlit Surface", "Deep Light"])

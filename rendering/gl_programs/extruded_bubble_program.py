@@ -739,8 +739,12 @@ void main() {
 # The procedural small bubbles' vertex stage: the bubble vertex stage with its per-instance attributes generated.
 _BEAD_GLSL = """// GPU-procedural small bubbles (S3c): rising bead chains and drifting marine snow, generated from the instance index,
 // fixed seeds, the logical time and the stream, then shaded exactly as the simulation's bubbles (the same fragment
-// stage). The volume is the simulation's (view-anchored until world-fixed bubbles land).
+// stage). World-fixed under the turn as the simulation's bubbles are (``extruded_bubble_scene``): placed by the
+// camera at turn 0, then turned about the vertical by whole periods to stay round the camera's heading.
 uniform mat3 uViewToWorld;
+uniform mat3 uViewToWorldTurn0; // the camera at turn 0 and the current tilt
+uniform vec3 uOrbit;            // the camera's heading (-pi x turn), cos and sin of its pitch
+uniform float uSide;            // the volume's side plane: its extent x 1.12 x the view's tangent across
 uniform vec2 uTan;
 uniform float uTime;
 uniform vec3 uStreamView;      // the stream's unit direction in view space
@@ -762,6 +766,27 @@ uint beadHash(uint x) {
 float beadRandom(int index, uint salt) {
     return float(beadHash(uint(index) * 0x9e3779b9u ^ salt * 0x85ebca6bu) & 0xffffffu) / 16777215.0;
 }
+// The turn (about the world vertical) that keeps world point ``p`` within half its period of the camera's heading;
+// the period: twice the azimuth where its elevation meets the volume's side plane (a whole circle where it never does).
+float wrapTurn(vec3 p) {
+    float a = uOrbit.y, b = uOrbit.z;
+    float s = p.y / max(length(p), 1e-9);
+    float qa = a * a - s * s, qb = 2.0 * a * b, qc = b * b - s * s * (uSide * uSide + 1.0);
+    float period = 6.2831853;
+    float disc = qb * qb - 4.0 * qa * qc;
+    if (disc >= 0.0) {
+        for (int k = 0; k < 2; ++k) {
+            float root = abs(qa) > 1e-9 ? (-qb + (k == 0 ? 1.0 : -1.0) * sqrt(disc)) / (2.0 * qa) : -qc / qb;
+            if ((a * root + b) * s >= 0.0) period = min(period, 2.0 * abs(atan(uSide, a - root * b)));
+        }
+    }
+    float azimuth = atan(p.x, -p.z);
+    return mod(azimuth - uOrbit.x + 0.5 * period, period) - 0.5 * period + uOrbit.x - azimuth;
+}
+vec3 turnAbout(vec3 p, float angle) {
+    float c = cos(angle), s = sin(angle);
+    return vec3(p.x * c - p.z * s, p.y, p.z * c + p.x * s);
+}
 void beadInstance() {
     vec3 along = normalize(uStreamView + vec3(0.0, 1e-4, 0.0));
     vec3 across = cross(along, vec3(0.0, 0.0, 1.0));
@@ -770,7 +795,7 @@ void beadInstance() {
         int chain = gl_InstanceID / uBeadsPerChain;
         int k = gl_InstanceID - chain * uBeadsPerChain;
         float depth = 7.0 + 26.0 * beadRandom(chain, 3u);
-        vec3 centre = vec3(mix(-1.25, 1.25, beadRandom(chain, 1u)) * uTan.x * depth,
+        vec3 centre = vec3(mix(-1.4, 1.4, beadRandom(chain, 1u)) * uTan.x * depth,
                            mix(-1.1, 1.1, beadRandom(chain, 2u)) * uTan.y * depth, -depth);
         float scale = depth / 15.0;
         float span = 1.7 * depth;
@@ -787,7 +812,9 @@ void beadInstance() {
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
         float ends = smoothstep(0.0, 0.06, s / span) * smoothstep(1.0, 0.94, s / span);
-        aSphere = vec4(uViewToWorld * p, px * uPixel * max(-p.z, 1.0) * ends);
+        // The whole chain turns with its centre, never split across the seam.
+        aSphere = vec4(turnAbout(uViewToWorldTurn0 * p, wrapTurn(uViewToWorldTurn0 * centre)),
+                       px * uPixel * max(-p.z, 1.0) * ends);
         aExtra = vec2(beadRandom(chain * 977 + k, 12u), 0.0);
         return;
     }
@@ -825,13 +852,13 @@ void beadInstance() {
     }
     // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
     int i = gl_InstanceID - uBeadCount;
-    vec3 box = vec3(1.2 * uTan.x, 1.2 * uTan.y, 1.0);
+    vec3 box = vec3(1.4 * uTan.x, 1.2 * uTan.y, 1.0);
     float depth = 2.5 + 35.0 * fract(beadRandom(i, 13u) + uSnowDrift * along.z * 0.01);
     vec2 at = vec2(beadRandom(i, 14u), beadRandom(i, 15u)) + uSnowDrift * along.xy / (2.0 * box.xy * depth)
             + vec2(0.0, 0.004 * sin(uTime * 0.3 + 6.28 * beadRandom(i, 16u)));
     at = fract(at) * 2.0 - 1.0;
-    vec3 p = vec3(at * box.xy * depth, -depth);
-    aSphere = vec4(uViewToWorld * p, 0.005);
+    vec3 p = uViewToWorldTurn0 * vec3(at * box.xy * depth, -depth);
+    aSphere = vec4(turnAbout(p, wrapTurn(p)), 0.005);
     aExtra = vec2(beadRandom(i, 17u), 1.0);
 }
 """
