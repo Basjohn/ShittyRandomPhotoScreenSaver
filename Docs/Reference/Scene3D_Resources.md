@@ -375,6 +375,9 @@ which is fixed. Extruded Bubble lab at 2560x1440, 4x MSAA, RTX 4090 (`--size=256
 About 4.0–5.7 ms per full-screen display plus the probe (0.18 ms GPU; its lab timestamp is Python submission), so
 two full-screen cards exceed a 165 Hz frame. Budget work before EB3: near defocus (64 full-resolution taps; the
 abyss's 3.3 ms) and the shells' rim sub-rays (~2 ms) are the measured hot spots.
+An exact-looking gather early-out (skip where the coverage mip shows nothing within reach) saved <= 0.2 ms and was
+not exact (half-float mips flush tiny coverage to zero: 77 pixels differed): rejected. The abyss's near-defocus time
+is mostly the near giants' traced shells drawn into the layer, so the shell shading is the budget lever.
 
 ## State restoration
 
