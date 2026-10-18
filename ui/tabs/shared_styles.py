@@ -561,22 +561,28 @@ class NoWheelSlider(QSlider):
         slider.style().polish(slider)
 
     def _mark_last_moved(self, *_args) -> None:
-        global _last_moved_slider
-        if not _is_live_qobject(self):
-            _last_moved_slider = None
-            return
-        prev = _last_moved_slider() if _last_moved_slider is not None else None
-        if prev is self:
-            return
-        if prev is not None and _is_live_qobject(prev):
-            self._set_last_moved_state(prev, False)
-        elif prev is not None:
-            _last_moved_slider = None
-        self._set_last_moved_state(self, True)
-        _last_moved_slider = weakref.ref(self)
+        mark_last_moved_control(self)
 
     def wheelEvent(self, event):  # type: ignore[override]
         event.ignore()
+
+
+def mark_last_moved_control(widget) -> None:
+    """Give ``widget`` the page's single last-moved highlight (``lastMoved`` property), taking it from the
+    previous holder: shared sliders and the shared visual controls (``ui/widgets/visual_controls.py``)."""
+    global _last_moved_slider
+    if not _is_live_qobject(widget):
+        _last_moved_slider = None
+        return
+    prev = _last_moved_slider() if _last_moved_slider is not None else None
+    if prev is widget:
+        return
+    if prev is not None and _is_live_qobject(prev):
+        NoWheelSlider._set_last_moved_state(prev, False)
+    elif prev is not None:
+        _last_moved_slider = None
+    NoWheelSlider._set_last_moved_state(widget, True)
+    _last_moved_slider = weakref.ref(widget)
 
 
 class RecommendedMarkSlider(NoWheelSlider):
@@ -1639,6 +1645,12 @@ def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
     for slider in tuple(_LIVE_RECOMMENDED_SLIDERS):
         if _is_live_qobject(slider):
             slider._refresh_theme_marker(theme)
+
+    # Shared visual controls (range slider, triangle and direction mappers) paint from the theme's tokens.
+    from ui.widgets.visual_controls import LIVE_THEMED_PAINTERS
+    for painter in tuple(LIVE_THEMED_PAINTERS):
+        if _is_live_qobject(painter):
+            painter.update()
 
 
 # Future tab/component migration should consume current module attributes or

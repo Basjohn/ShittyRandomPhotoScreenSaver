@@ -17,12 +17,16 @@ from PySide6.QtWidgets import QCheckBox, QLabel, QSlider
 
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import (
+    VISUAL_CONTROLS,
     Choice,
     Colour,
     Custom,
+    Direction,
     ModeSettings,
+    Range,
     Slider,
     Toggle,
+    Triangle,
     require_mode_settings,
     read_control_value,
 )
@@ -37,6 +41,7 @@ from ui.tabs.media.builder_scaffold import (
 )
 from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
+from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMapper
 
 _LABEL_WIDTH = 150
 
@@ -132,7 +137,7 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
         control = spec.control(key)
         widget = getattr(tab, control.key)
         signal = (widget.toggled if isinstance(control, Toggle) else widget.valueChanged
-                  if isinstance(control, Slider) else widget.currentIndexChanged)
+                  if isinstance(control, (Slider, *VISUAL_CONTROLS)) else widget.currentIndexChanged)
         signal.connect(apply)
     apply()
 
@@ -143,6 +148,11 @@ def _current_value(tab, control):
         return widget.isChecked()
     if isinstance(control, Slider):
         return control.admit(widget.value() / control.scale, control.low)
+    if isinstance(control, Range):
+        low, high = widget.value()
+        return control.admit((low / control.scale, high / control.scale), (control.low, control.high))
+    if isinstance(control, (Triangle, Direction)):
+        return control.admit(widget.value(), widget.value())
     if control.indexed:
         return widget.currentIndex()
     return widget.currentData() if control.labels else widget.currentText()
@@ -171,6 +181,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         content.addWidget(button)
         content.addStretch()
         return row
+    if isinstance(control, VISUAL_CONTROLS):
+        return _build_visual_control(tab, layout, control, default, auto_switch=auto_switch)
     if shared_row is not None:
         row, content = shared_row
     elif isinstance(control, Toggle) and not control.label:
@@ -234,6 +246,38 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
     return row
 
 
+def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
+    """A range slider, triangle mapper or direction mapper with its value label. The value label follows
+    every move; the setting saves once per gesture or keyboard step (``valueCommitted``)."""
+    row, content = _row(layout, control.label)
+    value = control.admit(default, default)
+    if isinstance(control, Range):
+        widget = RangeSlider(round(control.low * control.scale), round(control.high * control.scale))
+        widget.setValue(control.positions(value))
+        describe = control.text
+    elif isinstance(control, Triangle):
+        widget = TriangleMapper(control.corners)
+        widget.setValue(value)
+        describe = control.text
+    else:
+        widget = DirectionMapper((control.height_low, control.height_high), centre_text=control.centre_text,
+                                 marker=control.marker)
+        widget.setValue(value)
+        describe = control.text
+    widget.setAccessibleName(control.label.rstrip(":"))
+    label = QLabel(describe(widget.value()))
+    setattr(tab, f"{control.key}_label", label)
+    widget.valueChanged.connect(lambda current, d=describe, l=label: l.setText(d(current)))
+    bind_setting_signal(tab, widget.valueCommitted, auto_switch=auto_switch)
+    content.addWidget(widget)
+    content.addWidget(label)
+    content.addStretch()
+    widget.setToolTip(control.tooltip)
+    _apply_availability(widget, control)
+    setattr(tab, control.key, widget)
+    return row
+
+
 def _apply_availability(widget, control) -> None:
     if control.availability:
         flag, unavailable_tooltip = control.availability
@@ -269,7 +313,11 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
             continue
         previous = widget.blockSignals(True)
         try:
-            if isinstance(entry, Slider):
+            if isinstance(entry, Range):
+                widget.setValue(entry.positions(value))
+            elif isinstance(entry, (Triangle, Direction)):
+                widget.setValue(value)
+            elif isinstance(entry, Slider):
                 widget.setValue(entry.position(value))
             elif isinstance(entry, Toggle):
                 widget.setChecked(value)
@@ -281,7 +329,7 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
                 widget.setCurrentText(value)
         finally:
             widget.blockSignals(previous)
-        if isinstance(entry, Slider):
+        if isinstance(entry, (Slider, *VISUAL_CONTROLS)):
             # Its value label follows valueChanged, which was blocked.
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))
         _apply_availability(widget, entry)
