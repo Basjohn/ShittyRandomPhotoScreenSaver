@@ -257,6 +257,15 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   aspect/DPR, frame timing, latency, dormancy and audio-reactive fidelity before operator acceptance. Capture
   release media only after renderer and musical behavior are stable.
 
+- [ ] **EB6 — Settings UX audit after Extruded Bubble (operator 2026-10-18).** Once Extruded Bubble's body is
+  accepted, audit every Settings page (Visualizers, Transitions, widgets) and extend the shared visual controls
+  (`ui/widgets/visual_controls.py`; spec `Range` / `Triangle` / `Direction`): angle dials for 8-way direction
+  drop-downs (gradients, shadows, specular, stream), range sliders for low/high number pairs, triangle mappers for
+  three-way ratios, heavier `when` conditionals and proper nested bucketing to cut user fatigue. Record and land
+  any other spec improvements found (new control types, shared builder affordances, Transitions spec parity). Keep
+  canonical keys and stored values compatible (migrate inputs, never silently change saved meaning); prove each
+  replaced body with its real-body round-trip and render it offscreen before committing.
+
 ### 4C. Remaining modes and character/world substrate
 
 - [ ] **Reactive Particle Field:** compose G4 with recorded musical controls; establish lifetime/capacity and response
