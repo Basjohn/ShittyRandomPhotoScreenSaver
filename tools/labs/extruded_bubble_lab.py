@@ -26,6 +26,8 @@ from rendering.quick.scene3d.target import SCENE_OIT_GLSL, SceneTarget
 from tools.transition_contact_sheet import TransitionCapture
 
 W, H = 1672, 941
+# --size=WxH: render (and time) at another size, e.g. a 1440p display (mock sheets and card crops assume the default).
+W, H = next((tuple(int(v) for v in a.split("=", 1)[1].split("x")) for a in sys.argv if a.startswith("--size=")), (W, H))
 BACKDROP_ONLY = "--backdrop" in sys.argv
 # --card[=MockName]: a mock's own bubbles at their measured positions and pixel sizes (x, y from the top-left,
 # radius, depth; doublets joined as the mock shows them; bead chains as x, y from, y to), so crops compare one to one.
