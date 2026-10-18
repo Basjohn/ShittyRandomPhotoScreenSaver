@@ -399,10 +399,18 @@ shift in the projection and in the full-screen passes' rays; none in the probe):
 move alike, nothing turns. Deep Light renders through the product (teal abyss, light in the water, veils); its
 look is preset work (S4).
 
-**Next in S3.** S3c (rest): the
-3D particulate (Particles range at the emission level, ember bands for the deep scenes) and the bead budget (lab
-lesson: 2-6 px beads through the full shell trace are the cost). Then the deep light type and the remaining lab knobs
-per section 9.
+**S3c particulate landed (2026-10-18).** `SPECK_VERTEX` (the particle vertex stage with generated attributes): specks
+all round the eye in clouds stretched along the stream (the lab's `particulate`; Particle Bands sharpens them into
+the sixth mock's bands), flowing by `travel`, world-placed (fixed under the turn), added as light before the
+background capture. `speck_amount`: the Particles range at the emission follower; density grows with its square and
+brightness with it, 1.0 = the lab's heaviest scene (216,000 specks x the tier's particle share). The default range
+became light dust (0.1..0.35; the starter preset follows the defaults until S4). A mock-6-like scene authored from
+Settings alone (Deep Light, orange light, banded warm particles, diagonal stream) already streams like the mock; its
+ember glow and light colour are S4 preset work.
+
+**Next.** The bead budget (lab lesson: 2-6 px beads through the full shell trace are the cost; today 5-8 ms at
+1672x941 4x MSAA on the RTX 4090 offscreen), then S4: reactivity wiring (rays and shafts from the simulation's
+followers, never the clamped level) and every lab scene rebuilt as a preset through the Settings UI.
 **For S4 (found in S3a on real recordings):** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
 by design (10-12 s of "dontyouseemetrying" read 1.000 throughout); the Light Rays range read linearly at it is pinned
 there. S4 drives the rays (strength, spread, Ray Flicker) from the simulation's own followers (soft-knee, quick attack

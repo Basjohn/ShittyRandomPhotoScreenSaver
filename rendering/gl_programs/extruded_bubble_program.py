@@ -867,6 +867,57 @@ _ATTRIBUTES = """layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
 """
 assert BUBBLE_VERTEX.count(_ATTRIBUTES) == 1 and BUBBLE_VERTEX.count("void main() {\n") == 1
+_SPECK_GLSL = """// GPU-procedural particulate (S3c): specks all round the eye, gathered in clouds stretched along the stream (the
+// lab's ``particulate``), flowing with the water's travel. World-placed, so fixed under the camera's turn.
+uniform vec3 uStreamWorld;     // the stream's unit direction in the world
+uniform float uSpeckTravel;    // how far the specks have flowed (world units)
+uniform float uWarmShare;      // share lit in the particle colour
+uniform vec3 uClouds;          // cloud contrast, floor, glow
+uniform float uBandFreq;
+uniform float uSpeckSize;
+vec4 aPoint;
+vec4 aLook;
+uint speckHash(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+float speckRandom(int index, uint salt) {
+    return float(speckHash(uint(index) * 0x9e3779b9u ^ salt * 0x85ebca6bu) & 0xffffffu) / 16777215.0;
+}
+vec2 speckGauss(int index, uint salt) {
+    float r = sqrt(-2.0 * log(max(speckRandom(index, salt), 1e-7)));
+    float a = 6.2831853 * speckRandom(index, salt + 1u);
+    return r * vec2(cos(a), sin(a));
+}
+void speckInstance() {
+    int i = gl_InstanceID;
+    vec3 direction = normalize(vec3(speckGauss(i, 1u), speckGauss(i, 3u).x) + vec3(0.0, 1e-5, 0.0));
+    float distance_ = 1.2 + 38.0 * pow(speckRandom(i, 5u), 1.6);
+    vec3 along = uStreamWorld;
+    vec3 across = cross(along, vec3(0.0, 0.0, 1.0));
+    across = dot(across, across) > 1e-6 ? normalize(across) : vec3(1.0, 0.0, 0.0);
+    float a = dot(direction, across), b = dot(direction, along);
+    float phase = a * uBandFreq + 1.4 * sin(b * 2.3 + a * 3.0) + 0.8 * sin(b * 5.1 - a * 7.0);
+    float clouds = pow(clamp(0.5 + 0.5 * sin(phase), 0.0, 1.0), uClouds.x);
+    bool kept = speckRandom(i, 6u) < uClouds.y + 0.88 * clouds;
+    // Each speck flows along the stream over a stretch of water and returns to its start, fading at both ends.
+    float span = 24.0;
+    float s = fract(speckRandom(i, 7u) + uSpeckTravel / span);
+    vec3 p = direction * distance_ + along * (s - 0.5) * span;
+    float ends = smoothstep(0.0, 0.1, s) * smoothstep(1.0, 0.9, s);
+    float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * uPixel * length(p) * uSpeckSize;
+    float bright = exp(0.7 * speckGauss(i, 9u).x) * (0.35 + uClouds.z * clouds) * ends;
+    aPoint = vec4(p, kept ? radius : 0.0);
+    aLook = vec4(kept ? bright : 0.0, speckRandom(i, 11u) < uWarmShare ? 1.0 : 0.0, speckRandom(i, 12u), 0.0);
+}
+"""
+_SPECK_ATTRIBUTES = """layout(location=0) in vec4 aPoint;   // world position (eye at the origin), world radius
+layout(location=1) in vec4 aLook;    // brightness, warm (lit in the light's colour) or neutral, seed, unused
+"""
+assert PARTICLE_VERTEX.count(_SPECK_ATTRIBUTES) == 1 and PARTICLE_VERTEX.count("void main() {\n") == 1
+# The procedural particulate's vertex stage: the particle vertex stage with its per-instance attributes generated.
+SPECK_VERTEX = (PARTICLE_VERTEX.replace(_SPECK_ATTRIBUTES, "")
+                .replace("void main() {\n", _SPECK_GLSL + "void main() {\n    speckInstance();\n"))
 BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
                .replace("void main() {\n", _BEAD_GLSL + "void main() {\n    beadInstance();\n"))
 
@@ -886,5 +937,6 @@ __all__ = [
     "PARTICLE_VERTEX",
     "SHADE_GLSL",
     "SHAFT_FRAGMENT",
+    "SPECK_VERTEX",
     "SPECKS_GLSL",
 ]

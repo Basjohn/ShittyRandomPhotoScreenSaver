@@ -126,10 +126,24 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                  sparkle=float(_p(parameters, "sparkle")), glint_sharp=300.0)
     knobs.update(specks_scale=2.4, speck_size=float(_p(parameters, "particle_size")),
                  speck_warm=_rgb(_p(parameters, "particle_colour")), warm_share=float(_p(parameters, "particle_warmth")),
-                 speck_bloom=float(_p(parameters, "particle_glow")), banded=bool(_p(parameters, "particle_bands")),
-                 cloud_contrast=1.5 + 2.5 * float(_p(parameters, "band_contrast")))
+                 speck_bloom=float(_p(parameters, "particle_glow")), banded=bool(_p(parameters, "particle_bands")))
+    # Clouds stretched along the stream; Particle Bands sharpens them into the sixth mock's diagonal bands.
+    banded = bool(knobs["banded"])
+    knobs.update(cloud_contrast=1.5 + 2.5 * float(_p(parameters, "band_contrast")) if banded else 1.5,
+                 cloud_floor=0.03 if banded else 0.12, cloud_glow=1.8 if banded else 1.3, band_freq=9.0)
     knobs.update(focus=2.5 + 3.0 * float(_p(parameters, "focus")), aperture=0.3 + 2.7 * float(_p(parameters, "aperture")))
     return knobs
+
+
+SPECKS_FULL = 216000          # specks at the top of the Particles range (the lab's heaviest scene, the sixth mock)
+
+
+def speck_amount(parameters: Mapping[str, object], emission: float) -> tuple[float, float]:
+    """The Particles range read at the emission follower (never the raw level): (share of ``SPECKS_FULL`` drawn,
+    brightness). Density and brightness both grow with it, as the lab's ``specks`` did."""
+    low, high = (float(v) for v in _p(parameters, "particles"))
+    value = max(0.0, low + (high - low) * max(0.0, min(1.0, float(emission))))
+    return value * value, 2.4 * value
 
 
 def ray_strength(parameters: Mapping[str, object], level: float) -> float:
@@ -318,4 +332,4 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
 __all__ = ["CLUSTER_FLOATS", "DEPTH_NEAR", "VOLUME_EXTENT", "DEPTH_SPAN", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
            "NEAR_GIANTS", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
            "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "near_giants", "ray_strength",
-           "scene_knobs", "screen_streak", "volume_to_world"]
+           "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL", "volume_to_world"]
