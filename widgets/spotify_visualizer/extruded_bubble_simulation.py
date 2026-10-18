@@ -233,7 +233,7 @@ class ExtrudedBubbleSimulation:
         low, high = controls.stream_speed
         speed_target = _lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)
         drift_target = min(1.0, _lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0]))
-        emission_target = min(1.0, _lerp(controls.emission, level) + 0.3 * self._flash)
+        emission_target = min(1.0, _lerp(controls.emission, level) + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         self._speed = _follow(self._speed, speed_target, dt, 0.35 * soft, 3.0 * soft)

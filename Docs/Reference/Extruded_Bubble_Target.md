@@ -328,3 +328,10 @@ scene rebuilt as a preset through the Settings UI alone → S5 physical acceptan
 retirement). Tests: `tests/test_extruded_bubble_simulation.py` (determinism, population across quiet..loud, stream
 direction, breathing and smoothing, each collision outcome alone, Off and scope, idle, reset, runtime fences). Not yet
 wired: no descriptor, capture or renderer reads it (S2).
+
+**S1 on real music (2026-10-18).** `tools/visualizer_replay/extruded_bubble_traces.py` drives the simulation with real
+recordings through the BeatEngine replay seam. On four recordings the stream's largest frame step is 0.6-1.0% of its loud
+speed (no stutter), it rises within about a second into loud sections and decays over several, sustain builds through
+held loud passages, and the mid bubbles pulse on snares. Emission had pinned at its maximum (a flat onset bump); it is
+now a share of its own span. Passage intensity is the track's level on the fixed scale: the "acoustic soft" recording
+measures as loud as the heavy ones (median 7.7), so its high sustain is correct.
