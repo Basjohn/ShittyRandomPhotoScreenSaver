@@ -25,7 +25,9 @@ the same declared type/range/owner, while bespoke editors retain named Custom bu
 Control types: `Slider`, `Toggle`, `Choice`, `Colour` and the **visual controls** (2026-10-18) `Range` (two
 values on one bar, low <= high, persisted `[low, high]`: the reactive quiet..loud span), `Triangle` (three shares
 summing to 1 placed by one node, e.g. Fuse / Pop / Bounce) and `Direction` (`[around, height]` degrees on a disc,
-around wrapping, height clamped; "arrow" for a stream, "light" for a light). Their widgets live in
+around wrapping, height clamped; "arrow" for a stream, "light" for a light; equal height bounds make a compact
+angle dial for 2D directions such as gradients, shadows or screen-plane rays, a visual replacement for 8-way
+direction drop-downs). Their widgets live in
 `ui/widgets/visual_controls.py` (`RangeSlider`, `TriangleMapper`, `DirectionMapper`) so any Settings builder
 (Transitions, widgets) can adopt them: they paint the shared slider's theme tokens (groove, fill, 16x10 pill
 handle, hover/pressed, and the page's single last-moved highlight via `shared_styles.mark_last_moved_control`),

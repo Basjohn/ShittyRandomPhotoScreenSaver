@@ -173,3 +173,13 @@ def test_the_spec_builder_builds_loads_collects_and_saves_once_per_gesture(qt_ap
     assert len(saves) == 1
     low, high = builder._current_value(tab, _SPEC.control("t_span"))
     assert tab.t_span_label.text() == f"{low} – {high}" and high > 40
+
+
+def test_a_collapsed_height_range_is_a_plain_angle_dial(qt_app):
+    dial = DirectionMapper((0.0, 0.0))
+    dial.resize(dial.sizeHint())
+    centre, radius = dial.disc()
+    QTest.mouseClick(dial, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                     _point(QPointF(centre.x() - radius * 0.2, centre.y())))      # near the middle still reads the angle
+    assert dial.value() == (pytest.approx(-90.0), 0.0)
+    assert Direction("g", "Gradient:", 0.0, 0.0).text([45, 30]) == "45°"

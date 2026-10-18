@@ -395,7 +395,8 @@ class Direction:
     """A direction persisted as ``[around, height]`` degrees and placed on the shared direction mapper's
     disc: ``around`` is the angle round it (0 up, clockwise, wrapped to [-180, 180)), ``height`` its
     distance from the rim (the disc's centre is ``height_high``, its rim ``height_low``). ``centre_text``
-    names the centre ("Overhead", "Into Scene"); ``marker`` is "arrow" (a stream) or "light"."""
+    names the centre ("Overhead", "Into Scene"); ``marker`` is "arrow" (a stream) or "light". Equal height
+    bounds make it a plain angle dial (2D directions: gradients, shadows, screen-plane rays)."""
 
     key: str
     label: str
@@ -428,6 +429,8 @@ class Direction:
 
     def text(self, value: object) -> str:
         around, height = self.admit(value, value)
+        if self.height_high - self.height_low < 1e-6:
+            return f"{round(around)}°"               # a plain angle dial
         return f"Around {round(around)}°, Height {round(height)}°"
 
 
