@@ -20,12 +20,12 @@ from widgets.spotify_visualizer.extruded_bubble_simulation import (
 STEP = 1.0 / 60.0
 
 
-def _run(simulation, controls, seconds, *, intensity=0.5, bass=0.2, onsets_every=0.0, kind="kick"):
+def _run(simulation, controls, seconds, *, intensity=0.5, onsets_every=0.0, kind="kick"):
     snapshot = None
     steps = int(round(seconds / STEP))
     for i in range(steps):
         onsets = ((kind, 1.0),) if onsets_every and i % int(onsets_every / STEP) == 0 else ()
-        snapshot = simulation.advance(MusicInput(STEP, True, intensity, bass, onsets), controls)
+        snapshot = simulation.advance(MusicInput(STEP, True, intensity, onsets), controls)
     return snapshot
 
 
@@ -59,7 +59,7 @@ def test_the_population_follows_the_passage_between_its_quiet_and_loud_counts():
 
 def test_bubbles_travel_along_the_stream_direction_and_stay_near_the_volume():
     for around, height in ((0.0, 0.0), (90.0, 0.0), (35.0, 30.0)):
-        controls = ExtrudedBubbleControls(stream_direction=(around, height), drift=0.0, sway=0.0,
+        controls = ExtrudedBubbleControls(stream_direction=(around, height), drift=(0.0, 0.0), sway=0.0,
                                           collision_scope="off")
         simulation = ExtrudedBubbleSimulation(11)
         before = {r[6]: r[:3] for r in _records(_run(simulation, controls, STEP))}
@@ -78,8 +78,8 @@ def test_bubbles_travel_along_the_stream_direction_and_stay_near_the_volume():
 def test_kicks_make_the_large_bubbles_breathe_and_smoothing_softens_the_release():
     controls = ExtrudedBubbleControls(breathing=(0.1, 0.3), collision_scope="off")
     simulation = ExtrudedBubbleSimulation(5)
-    calm = _run(simulation, controls, 3.0, bass=0.2)
-    kicked = simulation.advance(MusicInput(STEP, True, 0.5, 0.2, (("kick", 1.0),)), controls)
+    calm = _run(simulation, controls, 3.0)
+    kicked = simulation.advance(MusicInput(STEP, True, 0.5, (("kick", 1.0),)), controls)
     assert kicked.breath > calm.breath + 0.5
     swells = [r[5] for r in _records(kicked) if r[3] >= 0.07]
     assert swells and min(swells) > 0.05
@@ -87,10 +87,10 @@ def test_kicks_make_the_large_bubbles_breathe_and_smoothing_softens_the_release(
     snappy = ExtrudedBubbleSimulation(5)
     for sim, smoothing in ((soft, 1.0), (snappy, 0.0)):
         c = ExtrudedBubbleControls(breathing=(0.1, 0.3), collision_scope="off", smoothing=smoothing)
-        _run(sim, c, 3.0, bass=0.2)
-        sim.advance(MusicInput(STEP, True, 0.5, 0.2, (("kick", 1.0),)), c)
-    after_soft = _run(soft, ExtrudedBubbleControls(collision_scope="off", smoothing=1.0), 0.3, bass=0.2)
-    after_snappy = _run(snappy, ExtrudedBubbleControls(collision_scope="off", smoothing=0.0), 0.3, bass=0.2)
+        _run(sim, c, 3.0)
+        sim.advance(MusicInput(STEP, True, 0.5, (("kick", 1.0),)), c)
+    after_soft = _run(soft, ExtrudedBubbleControls(collision_scope="off", smoothing=1.0), 0.3)
+    after_snappy = _run(snappy, ExtrudedBubbleControls(collision_scope="off", smoothing=0.0), 0.3)
     assert after_soft.breath > after_snappy.breath
 
 
@@ -117,7 +117,7 @@ def test_only_pop_fades_bubbles_out_and_only_bounce_leaves_nothing_overlapping()
     seen_pop = False
     controls = _crowded((0.0, 1.0, 0.0))
     for _ in range(int(6.0 / STEP)):
-        snapshot = popping.advance(MusicInput(STEP, True, 0.5, 0.2, ()), controls)
+        snapshot = popping.advance(MusicInput(STEP, True, 0.5, ()), controls)
         seen_pop = seen_pop or any(0.0 < r[4] < 1.0 and r[3] > 0 for r in _records(snapshot))
     assert seen_pop and snapshot.clusters == ()
     bouncing = _run(ExtrudedBubbleSimulation(4), _crowded((0.0, 0.0, 1.0)), 6.0)
@@ -161,7 +161,7 @@ def _onset(serial, kind="kick", magnitude=1.5, loudness=12.0, presence=1.0):
 
 
 def _capture(runtime, now, onsets=(), *, identity=(1, 2, 3), source=(2, 3), playing=True):
-    return runtime.advance(onsets=onsets, now_ts=now, playing=playing, intensity=0.6, bass=0.3, identity=identity,
+    return runtime.advance(onsets=onsets, now_ts=now, playing=playing, intensity=0.6, identity=identity,
                            source_identity=source, controls=ExtrudedBubbleControls())
 
 
@@ -184,6 +184,57 @@ def test_the_runtime_steps_on_logical_time_takes_each_onset_once_and_fences_acti
     assert _capture(runtime, 50.0, identity=(1, 2, 4), source=(2, 4)).time == 0.0
     # A source that is not ready is silent: no level, no onsets.
     silent = [_capture(runtime, 50.0 + i * 0.05, (_onset(20 + i),), source=(9, 9), identity=(1, 2, 4)) for i in range(3)]
-    assert silent[-1].level == 0.0 and silent[-1].breath == 0.0
+    assert silent[-1].level == 0.0 and silent[-1].breath < 0.2      # only the idle sway, no onsets taken
     runtime.retire()
     assert _capture(runtime, 60.0, identity=(1, 2, 4), source=(2, 4)) is None
+
+
+
+def test_stream_speed_rises_quickly_decays_slowly_and_never_jumps_or_stops():
+    controls = ExtrudedBubbleControls(stream_speed=(0.04, 0.2), collision_scope="off")
+    simulation = ExtrudedBubbleSimulation(6)
+    speeds = []
+    for i in range(int(4.0 / STEP)):                               # quiet
+        speeds.append(simulation.advance(MusicInput(STEP, True, 0.0), controls).stream_speed)
+    quiet = speeds[-1]
+    for i in range(int(4.0 / STEP)):                               # a saturated passage with a hit every beat
+        onsets = (("kick", 1.0),) if i % 30 == 0 else ()
+        speeds.append(simulation.advance(MusicInput(STEP, True, 1.0, onsets), controls).stream_speed)
+    loud = speeds[-1]
+    rise = next(i for i, s in enumerate(speeds[int(4.0 / STEP):]) if s > quiet + 0.6 * (loud - quiet))
+    for i in range(int(6.0 / STEP)):                               # the music stops
+        speeds.append(simulation.advance(MusicInput(STEP, False), controls).stream_speed)
+    assert loud > quiet * 2.5
+    assert rise * STEP < 1.6                                       # quick attack
+    one_second_later = speeds[int(8.0 / STEP) + int(1.0 / STEP)]
+    assert one_second_later > quiet + 0.55 * (loud - quiet)        # slow decay: most of it still there after 1 s
+    assert speeds[-1] > 0.0                                        # never a sudden stop
+    steps = [abs(b - a) for a, b in zip(speeds, speeds[1:])]
+    span = max(speeds) - min(speeds)
+    assert max(steps) < 0.025 * span                               # no frame moves it by more than 2.5% of its span
+
+
+def test_drift_and_emission_follow_the_passage_and_silence_keeps_a_light_breath():
+    controls = ExtrudedBubbleControls(drift=(0.2, 0.9), emission=(0.1, 0.9), collision_scope="off", idle=0.6)
+    simulation = ExtrudedBubbleSimulation(4)
+    quiet = _run(simulation, controls, 5.0, intensity=0.0)
+    loud = _run(simulation, controls, 6.0, intensity=1.0)
+    assert loud.drift > quiet.drift + 0.5 and loud.emission > quiet.emission + 0.6
+    breaths = [simulation.advance(MusicInput(STEP, False), controls).breath for _ in range(int(12.0 / STEP))]
+    tail = breaths[int(4.0 / STEP):]
+    assert max(tail) > 0.08 and max(tail) - min(tail) > 0.05      # gently breathing, not frozen
+    assert max(tail) < 0.3
+
+
+
+def test_a_sustained_loud_passage_keeps_the_mid_bubbles_shimmering_between_hits():
+    controls = ExtrudedBubbleControls(small_pulse=(0.02, 0.12), sustained=0.8, collision_scope="off")
+    simulation = ExtrudedBubbleSimulation(12)
+    _run(simulation, controls, 3.0, intensity=0.3)
+    short = _run(simulation, controls, 0.5, intensity=1.0)               # a loud moment is not yet sustained
+    held = _run(simulation, controls, 8.0, intensity=1.0)                # held loud, no onsets at all
+    assert short.sustain < 0.3 and held.sustain > 0.8
+    mids = [r[5] for r in _records(held) if r[3] < 0.07 and r[4] > 0.9]
+    assert mids and max(mids) > 0.05 and max(mids) - min(mids) > 0.03   # alive, each on its own phase
+    faded = _run(simulation, controls, 1.0, intensity=0.2)
+    assert faded.sustain > 0.5                                           # slow to fade
