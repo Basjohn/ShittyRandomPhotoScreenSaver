@@ -20,6 +20,7 @@ from tests._visualizer_frozen_settings import frozen_visualizer_settings
 pytestmark = pytest.mark.qt
 
 _CASES = {
+    "extruded_bubble": {},
     "extruded_spectrum": {"extruded_spectrum_smooth_edges": True, "extruded_spectrum_face_mirror": 0.6},
     "shockwave_grid": {"shockwave_grid_glow": 0.8},
     "sphere": {},
@@ -78,7 +79,7 @@ def test_hidden_frames_prepare_spaced_and_the_first_visible_frame_creates_nothin
     target, host, clock, compiles = rig
     parameters = _CASES[mode]
     backdrop = (0.1, 0.2, 0.3, 1.0)
-    for _ in range(60):
+    for _ in range(150):                                                 # three frames a step
         frame_compiles = len(compiles)
         pixels = target.render(host, _snapshot(mode, 0.0, **parameters), backdrop=backdrop)
         assert len(compiles) - frame_compiles <= 1                       # at most one compile a frame
@@ -112,7 +113,7 @@ def test_a_new_activation_prepares_what_its_parameters_add(rig):
     target, host, clock, compiles = rig
     target.render(host, _snapshot("shockwave_grid", 1.0, shockwave_grid_glow=0.0))
     plain = len(compiles)
-    for _ in range(60):
+    for _ in range(150):                                                 # three frames a step
         target.render(host, _snapshot("shockwave_grid", 0.0, activation=2, shockwave_grid_glow=0.8))
         if host.prepared_activation == ("shockwave_grid", 2):
             break

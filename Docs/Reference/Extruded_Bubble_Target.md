@@ -353,3 +353,32 @@ simulation's), Auto Rotate is declared with its enable toggle, and a starter pre
 until S4 rebuilds the lab scenes through these controls. The renderer admits its frame and draws nothing until S3.
 Tests: the generic spec suite (model repair, real body build/save/reload incl. the visual controls, conditionals,
 with the gate opened for the test), the all-mode runtime lifecycle, geometry profiles, presets.
+
+**S3a landed (2026-10-18).** The renderer draws the lab's scene through the production host. Programs:
+`rendering/gl_programs/extruded_bubble_program.py` (moved from the lab; the lab imports them). Scene mapping (no GL):
+`rendering/gl_programs/extruded_bubble_scene.py`: `ENGINE`/`MODES` (the lab imports them), `scene_knobs` (Settings to
+knobs, as section 9), `ray_strength` (Light Rays read at the level), `camera` (pitch 16 + 90 x tilt, yaw pi x turn,
+Scene Scale as zoom), the simulation's volume to world (depth 6..32, radii as shares of the half view height),
+cluster records, view-anchored near giants (three, slow drift) and glint proxies. Each frame: probe capture (water and
+light all round plus each bubble's glint), half-resolution shafts and blur (two owned R16F targets), then through the
+card's `SceneTarget` (overlay, HDR, bloom 0.55, depth texture, background, OIT): water and shafts, shells and clusters
+over the captured background, near giants through `DefocusLayer`. Instance data in fixed-capacity buffers
+(`glNamedBufferSubData`); uniforms sent only when they change (`glProgramUniform*`). `prepare_step` warms every program
+(the target's list now covers background, OIT and HDR), the buffers, shaft targets, probe (size per tier: 256 / 256 /
+128 / 64) and near layer (with its read level), one unit a hidden frame. Harness: `tools/extruded_bubble_capture.py`
+(real recording through `replay_clip` and the production host; frames, contact sheet, GPU ms). First capture at
+1672x941, 4x MSAA: 3-4 ms GPU (the lab's mock 2 scene, with its tens of thousands of beads, 11.6 ms). Defect found and
+fixed in the shared owner: `DefocusLayer` inherited the scene target's masked draw buffer 1 (outside
+`emission_writes()`), dropping every circle so near giants drew sharp; it now sets and restores its own colour masks.
+Tests: `tests/test_extruded_bubble_renderer.py` (camera, volume mapping, clusters, giants, proxies, knobs per light
+type, rays; a prepared renderer draws turned and repeated frames compiling and allocating nothing, releases everything),
+prepared reveal for the mode, defocus under a masked index, target warm list = what an HDR/OIT/background scope compiles.
+
+**Next in S3.** S3b: world-fixed bubbles under turn/tilt (the simulation takes the view rotation and wraps lateral
+exits; today the volume is view-anchored, so orbiting turns only the water and light); Scene Pan. S3c: GPU-procedural
+bead chains, fizz, marine snow and particulate (Particles range at the emission level), the main visual gap to the
+lab (compare `tmp/eb_s3`). Then the deep light type and the remaining lab knobs per section 9.
+**For S4 (found in S3a on real recordings):** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
+by design (10-12 s of "dontyouseemetrying" read 1.000 throughout); the Light Rays range read linearly at it is pinned
+there. S4 drives the rays (strength, spread, Ray Flicker) from the simulation's own followers (soft-knee, quick attack
+and slow decay) plus their own flicker, never the raw level, so a saturated passage still moves.

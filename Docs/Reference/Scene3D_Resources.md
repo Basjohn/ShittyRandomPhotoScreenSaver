@@ -291,7 +291,8 @@ world-to-view rotation and a 90-degree projection are handed to the callback), t
 the one above over a Gaussian cone (32 taps, sampled across face edges, about two texels of that level wide), so
 blurred lookups are a smooth, rotation-invariant filter (GL's per-face mipmaps read as blocks). The caller's
 framebuffer, viewport, scissor, clear colour, depth, blend, program, vertex array and unit 0's cube binding come back;
-nothing is allocated after the first capture. GLSL `sceneProbe(probe, direction, blur, levels)`. It is how glass,
+nothing is allocated after the first capture; `warm()` allocates it (and compiles its prefilter) on a hidden frame
+instead. GLSL `sceneProbe(probe, direction, blur, levels)`. It is how glass,
 water and bubbles show the scene they sit in (the light, beams, lit particulate) instead of painted highlights.
 `test_scene3d_probe.py`: face rotations follow the cube convention, every direction reads back what the scene put
 there (with a mirrored-face negative control), blur is the same filter across faces and full blur is the hemisphere,
@@ -301,8 +302,11 @@ state and allocation.
 
 `rendering/quick/scene3d/defocus.py`: `DefocusLayer` is depth of field for objects near the lens. `begin(w, h)`
 binds an RGBA16F premultiplied colour and an RG16F alpha-weighted circle of confusion (both mipmapped); the caller
-draws its near objects sharp with `SCENE_DEFOCUS_GLSL` `sceneDefocusWrite(premultiplied, alpha, cocPixels)`; `end()`
-hands back framebuffer, viewport, blend and depth state; `composite(max_radius)` spreads every pixel evenly over its
+draws its near objects sharp with `SCENE_DEFOCUS_GLSL` `sceneDefocusWrite(premultiplied, alpha, cocPixels)`; `begin`
+sets its own colour masks for both outputs (masks are per draw buffer index: a scene target masks its emission index
+outside `emission_writes()`, which dropped every circle); `end()` hands back framebuffer, viewport, blend, depth and
+masks; `warm(w, h, max_radius)` allocates the layer and the read level `composite(max_radius)` clips into, one unit a
+hidden frame; `composite(max_radius)` spreads every pixel evenly over its
 own circle (64 golden-angle taps, each read from the mip level matching the taps' spacing so no source pixel is
 missed, weighted by 1 / its circle's area so light is conserved) and lays the result over the bound framebuffer.
 A near transparent object should write only its own light (reflections), so the scene behind stays visible.

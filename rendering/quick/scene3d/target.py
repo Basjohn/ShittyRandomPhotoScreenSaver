@@ -319,16 +319,32 @@ void main() {
 
 
 def scene_target_programs(samples: int, bloom: bool, motion: bool,
-                          overlay: bool = False, shafts: bool = False) -> tuple[tuple[str, str, str], ...]:
+                          overlay: bool = False, shafts: bool = False, *, background: bool = False,
+                          oit: bool = False, hdr: bool = False) -> tuple[tuple[str, str, str], ...]:
     """(key, vertex, fragment) of every program ``end`` draws with for this setup, for a gradual
     warm-up. Keep in step with ``end`` (the warm-up bar renders a first frame that must compile
     nothing). With ``shafts`` (an overlay's light shafts) both the frames with a light and those
-    without are covered."""
+    without are covered. ``background`` adds what ``background()`` captures with, ``oit`` what
+    ``transparent_writes()`` resolves with, and ``hdr`` (an overlay with bloom) the composite's own
+    HDR instance in place of the plain one."""
     multisampled = int(samples) > 1
+    if hdr and not (overlay and bloom):
+        raise ValueError("an HDR scene target tone maps in its overlay bloom composite")
+    programs = [*((BACKGROUND_SAMPLES_PROGRAMS if multisampled else BACKGROUND_PROGRAMS) if background else ()),
+                *((OIT_SAMPLES_PROGRAMS if multisampled else OIT_PROGRAMS) if oit else ())]
+    for entry in _end_programs(multisampled, bloom, motion, overlay, shafts):
+        if hdr and entry[0].startswith(("scene_overlay_bloom", "scene_overlay_shafts")):
+            entry = (entry[0] + "_hdr", *entry[1:])
+        programs.append(entry)
+    return tuple(programs)
+
+
+def _end_programs(multisampled: bool, bloom: bool, motion: bool, overlay: bool,
+                  shafts: bool) -> tuple[tuple[str, str, str], ...]:
     if overlay and shafts:
         if motion:
             raise ValueError("an overlay scene target has no motion blur")
-        programs = list(scene_target_programs(samples, bloom, False, overlay=True))
+        programs = list(_end_programs(multisampled, bloom, False, True, False))
         programs.extend(SHAFT_SAMPLES_PROGRAMS if multisampled else SHAFT_PROGRAMS)
         programs.append(("scene_overlay_shafts_samples", ITEM_QUAD_VERTEX_SOURCE,
                          _COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT) if multisampled

@@ -24,6 +24,7 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL, SceneTarget
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.gl_programs.extruded_bubble_scene import ENGINE, MODES
 from rendering.gl_programs.extruded_bubble_program import (  # the product's shaders, proven here
     COMMON,
     FULL_VERTEX,
@@ -74,13 +75,7 @@ SURFACE_Y = 9.0
 # * MODES: what a light setting implies. "surface": the sun above the water seen through it (Snell's window, a fan of
 #   rays from it, lit scattering water round the bubbles); "deep": a light inside the water with no surface in view.
 # * Each scene: its mode plus what a preset would store (colours, light direction, amounts, camera pitch).
-ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
-MODES = {
-    "surface": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55,
-                    shaft_soft=0.35, ray_focus=0.3, ray_cut=0.1, surface_sky=0.35, glint_power=120.0,
-                    glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, rough=0.05, chains=3.0),
-    "deep": dict(crisp=1.0),
-}
+# ENGINE and MODES are the product's (rendering/gl_programs/extruded_bubble_scene.py); VARIANTS are the lab's scenes.
 VARIANTS = {
     "ExBubble1": dict(mode="surface", film=0.3, surface_gain=1.6, ray_cut=0.08, rays=0.7,
                       deep=(0.1, 0.16, 0.24), water=(0.19, 0.26, 0.36), sky=(0.82, 0.9, 0.98), shaft=(0.62, 0.67, 0.74),

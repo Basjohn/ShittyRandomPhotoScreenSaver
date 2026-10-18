@@ -599,4 +599,5 @@ Historical harnesses may describe QOpenGLWidget/QRhiWidget/GLCompositor paths. T
 Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is detailed.
 - `tools/labs/extruded_bubble_lab.py` - Extruded Bubble composition lab: the §4A primitives composed per operator mock, rendered offscreen beside the mocks for side-by-side judgement (`Docs/Reference/Extruded_Bubble_Target.md`).
 
+- `tools/extruded_bubble_capture.py`: Extruded Bubble drawn by the production render host from a real recording (`--clip`, `--start`, `--duration`, `--fps`, `--size`, `--window`, `--set KEY=JSON`, `--gif`): sampled frames, contact sheet and `capture.json` (simulation scalars and GPU ms per frame); offscreen, not physical acceptance.
 - `tools/visualizer_replay/extruded_bubble_traces.py`: Extruded Bubble's reactive signals (breath, stream speed, drift, emission, sustain, mid pulse, population) on real recordings through the BeatEngine replay seam, as a PNG of traces plus the largest stream-speed step; for quick-attack/slow-decay, sustained passages and stutter checks.

@@ -138,6 +138,14 @@ class SceneProbe:
     def has_resources(self) -> bool:
         return bool(self._texture or self._depth or self._fbo or self._program or self._vao)
 
+    def warm(self) -> bool:
+        """One warm-up step: True when the probe is already allocated (and its prefilter compiled), else
+        allocate it now (on a hidden frame) instead of at its first capture."""
+        if self._texture:
+            return True
+        self._allocate()
+        return False
+
     def _allocate(self) -> None:
         texture = gl.glGenTextures(1)
         self._texture = int(texture if not hasattr(texture, "__len__") else texture[0])

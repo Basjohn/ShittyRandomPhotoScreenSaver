@@ -751,6 +751,10 @@ def test_bright_transparent_layers_at_the_near_plane_stay_finite_and_order_indep
         assert overlap[0] > 1.0                                   # bright light kept past white
         assert int(forward[HEIGHT // 2, WIDTH // 2, 0]) > 200      # shown bright, not a black hole
         assert np.abs(forward - backward).max() <= 2
+        # The warm-up list for this setup is exactly what these frames compiled (background, transparency, HDR).
+        from rendering.quick.scene3d.target import scene_target_programs
+        assert set(resources._programs) == {key for key, *_ in scene_target_programs(
+            samples, True, False, overlay=True, background=True, oit=True, hdr=True)}
     finally:
         gl.glDeleteProgram(flat)
         gl.glDeleteProgram(glass)
