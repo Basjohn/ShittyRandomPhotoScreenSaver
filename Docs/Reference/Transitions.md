@@ -507,6 +507,9 @@ Each foundation slice adds what it learned here.
   `emission_writes()`), and its second output silently writes nothing. Every owner that draws to several attachments
   sets and restores its own masks; a lab that happened to call it inside the right scope proves nothing about product
   call order (Extruded Bubble's near giants drew sharp in the product until `DefocusLayer` did this).
+- A driver that clamps by design (passage intensity holds at 1 through loud music) pins anything read linearly at
+  it. Give the reaction its own follower that mixes the clamped level with onset lifts and eases below the top, so a
+  saturated passage still moves; test it on the real recordings' saturated windows, not on synthetic ramps alone.
 - Time each draw by its program before cutting cost: the suspected pass is rarely the whole story, and a
   per-draw table names what disappears. Size floors in vertex stages ("at least half a pixel so specks resolve")
   turn every left-out instance (radius 0) into a shaded dot: cull zero size before any floor. A fragment whose

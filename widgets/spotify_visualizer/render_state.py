@@ -663,6 +663,8 @@ class ExtrudedBubbleFrame:
     stream: tuple[float, float, float] = (0.0, 1.0, 0.0)
     stream_speed: float = 0.0
     travel: float = 0.0
+    rays: float = 0.0
+    shimmer: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -676,7 +678,8 @@ class ExtrudedBubbleFrame:
         if len(stream) != 3:
             raise ValueError("Extruded Bubble stream must be a 3D direction")
         object.__setattr__(self, "stream", stream)
-        for name in ("time", "level", "breath", "flash", "sustain", "drift", "emission", "stream_speed", "travel"):
+        for name in ("time", "level", "breath", "flash", "sustain", "drift", "emission", "stream_speed", "travel",
+                     "rays", "shimmer"):
             object.__setattr__(self, name, _finite(getattr(self, name), name=f"extruded bubble {name}"))
         object.__setattr__(self, "parameters",
                            _coerce_frozen_fields(self.parameters, name="extruded bubble parameters"))

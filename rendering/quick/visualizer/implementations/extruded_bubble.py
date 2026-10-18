@@ -31,7 +31,7 @@ from rendering.gl_programs.extruded_bubble_program import (
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, VOLUME_EXTENT, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, lens_shift, speck_amount,
-    glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
+    glint_proxies, light_on_screen, near_giants, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
 from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick import gl_query
@@ -357,12 +357,16 @@ class QuickExtrudedBubbleRenderer:
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters, tan, pose))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
                                                          float(knobs.get("proxy_power", 2.5))))
-        common = _common(knobs, view_to_world=view_to_world, tan=tan, time=state.time,
-                         rays=ray_strength(parameters, state.level), streak=screen_streak(state.stream))
+        # The rays read the simulation's ray driver and shimmer, never the raw level (it holds at 1 when loud).
+        flicker, reach = ray_motion(parameters, state.rays, state.sustain)
+        common = _common({**knobs, "fan_reach": float(knobs.get("fan_reach", 0.6)) * reach}, view_to_world=view_to_world,
+                         tan=tan, time=state.time, rays=ray_strength(parameters, state.rays),
+                         streak=screen_streak(state.stream))
         for key in programs:
             if key != "blur":
                 self._uniforms.set(programs[key], common)
-        self._uniforms.set(programs["shafts"], {"uLensShift": shift})
+        self._uniforms.set(programs["shafts"], {"uLensShift": shift, "uFlicker": flicker,
+                                                "uShimmer": float(state.shimmer)})
         sun_screen = light_on_screen(knobs["sun_below"], world_to_view, projection, (width, height))
         view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,

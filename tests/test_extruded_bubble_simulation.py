@@ -231,6 +231,40 @@ def test_travel_is_the_distance_the_stream_carried_the_water_so_procedural_layer
         previous = snapshot
     assert previous.travel == pytest.approx(expected, rel=1e-9)
 
+def test_the_rays_move_through_a_saturated_passage_rise_quickly_fall_slowly_and_never_stutter():
+    """The passage level holds at 1 through loud music; the rays' driver must still move with its hits, stay below
+    the top, and never step abruptly."""
+    controls = ExtrudedBubbleControls(collision_scope="off")
+    simulation = ExtrudedBubbleSimulation(5)
+    quiet = _run(simulation, controls, 4.0, intensity=0.0)
+    rays, shimmer = [], []
+    for i in range(int(10.0 / STEP)):                               # saturated, a hit every 0.75 s
+        onsets = (("kick", 1.0),) if i % 45 == 0 else ()
+        snapshot = simulation.advance(MusicInput(STEP, True, 1.0, onsets), controls)
+        rays.append(snapshot.rays)
+        shimmer.append(snapshot.shimmer)
+    assert rays[int(0.6 / STEP)] > quiet.rays + 0.4                 # quick attack
+    held = rays[int(4.0 / STEP):]
+    assert max(held) < 1.0                                          # never on the top
+    assert max(held) - min(held) > 0.04                             # still moving with the hits
+    # Never a jump: even the quick attack out of silence takes several frames to cross a tenth of the range.
+    assert max(abs(b - a) for a, b in zip(rays, rays[1:])) < 0.1
+    assert all(b > a for a, b in zip(shimmer, shimmer[1:]))         # the shimmer runs on, never back
+    loud = rays[-1]
+    after = _run(simulation, controls, 1.0, intensity=0.0)
+    assert after.rays > quiet.rays + 0.4 * (loud - quiet.rays)      # slow decay
+
+
+def test_the_shimmer_runs_faster_on_the_hits():
+    controls = ExtrudedBubbleControls(collision_scope="off")
+    calm, busy = ExtrudedBubbleSimulation(2), ExtrudedBubbleSimulation(2)
+    calm_start = _run(calm, controls, 2.0, intensity=0.6).shimmer
+    busy_start = _run(busy, controls, 2.0, intensity=0.6).shimmer
+    calm_gain = _run(calm, controls, 4.0, intensity=0.6).shimmer - calm_start
+    busy_gain = _run(busy, controls, 4.0, intensity=0.6, onsets_every=0.5).shimmer - busy_start
+    assert busy_gain > 1.5 * calm_gain > 0.0
+
+
 def test_drift_and_emission_follow_the_passage_and_silence_keeps_a_light_breath():
     controls = ExtrudedBubbleControls(drift=(0.2, 0.9), emission=(0.1, 0.9), collision_scope="off", idle=0.6)
     simulation = ExtrudedBubbleSimulation(4)

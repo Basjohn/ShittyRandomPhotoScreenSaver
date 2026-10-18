@@ -419,9 +419,15 @@ faded ones, specks outside their clouds) draw no quad: the vertex stages' half-p
 apply: nothing in the scene is opaque (beads behind glass show through it), and off-screen quads cost only their
 four vertices (the rasterizer clips them).
 
-**Next.** S4: reactivity wiring (rays and shafts from the simulation's
-followers, never the clamped level) and every lab scene rebuilt as a preset through the Settings UI.
-**For S4 (found in S3a on real recordings):** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
-by design (10-12 s of "dontyouseemetrying" read 1.000 throughout); the Light Rays range read linearly at it is pinned
-there. S4 drives the rays (strength, spread, Ray Flicker) from the simulation's own followers (soft-knee, quick attack
-and slow decay) plus their own flicker, never the raw level, so a saturated passage still moves.
+**S4 ray reactivity landed (2026-10-18).** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
+by design (half of "dontyouseemetrying" reads above 0.995), so nothing reads it linearly any more. The simulation
+owns a ray driver: 0.65 x level + 0.05 x sustain + 0.3 x a lift that follows the onset flash (0.1 s rise, 0.4 s x
+smoothing fall), eased below the top (`_soft_top`, knee 0.9); and a shimmer phase that advances at 0.5 + 2.5 x the
+lift (an integral, like `travel`). Both ride the snapshot and frame. Light Rays (range) read the driver; Ray Flicker
+(a Settings control nothing had read) brightens and dims each fan ray and each beam cell on the shimmer, deeper as
+the driver rises (x 0.3..1.0); the fan reaches 0.85..1.15 x further with sustain. On seven real recordings the driver
+never exceeds 0.93, still swings about 0.09 through 2 s windows where the level holds at 1, and moves at most 0.05
+in one 60 fps step. Tests: never pinned and moving through a saturated passage, quick rise and slow fall, no jump;
+the shimmer runs faster on hits; the picture is identical at level 0 and 1 and changes with the driver.
+
+**Next.** Every lab scene rebuilt as a preset through the Settings UI (S4), then physical acceptance (S5).

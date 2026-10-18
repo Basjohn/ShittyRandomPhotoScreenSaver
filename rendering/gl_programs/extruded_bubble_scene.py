@@ -146,12 +146,23 @@ def speck_amount(parameters: Mapping[str, object], emission: float) -> tuple[flo
     return value * value, 2.4 * value
 
 
-def ray_strength(parameters: Mapping[str, object], level: float) -> float:
-    """The Light Rays range read at the passage ``level`` (0..1), or none when the rays are off."""
+def ray_strength(parameters: Mapping[str, object], rays: float) -> float:
+    """The Light Rays range read at the simulation's ray driver (0..1; never the raw passage level, which holds at 1
+    through loud passages), or none when the rays are off."""
     if not bool(_p(parameters, "rays_enabled")):
         return 0.0
     low, high = (float(v) for v in _p(parameters, "rays"))
-    return low + (high - low) * max(0.0, min(1.0, float(level)))
+    return low + (high - low) * max(0.0, min(1.0, float(rays)))
+
+
+def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) -> tuple[float, float]:
+    """(flicker, reach scale): Ray Flicker's shimmer, deeper as the rays rise (a light shimmer stays in quiet music),
+    and the fan reaching further through a held loud passage."""
+    if not bool(_p(parameters, "rays_enabled")):
+        return 0.0, 1.0
+    rays = max(0.0, min(1.0, float(rays)))
+    return (float(_p(parameters, "ray_flicker")) * (0.3 + 0.7 * rays),
+            0.85 + 0.3 * max(0.0, min(1.0, float(sustain))))
 
 
 def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0, shift=(0.0, 0.0)):
@@ -332,4 +343,4 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
 __all__ = ["CLUSTER_FLOATS", "DEPTH_NEAR", "VOLUME_EXTENT", "DEPTH_SPAN", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
            "NEAR_GIANTS", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
            "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "near_giants", "ray_strength",
-           "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL", "volume_to_world"]
+           "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL", "volume_to_world"]

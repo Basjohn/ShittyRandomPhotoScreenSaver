@@ -87,6 +87,8 @@ class ExtrudedBubbleSnapshot:
     emission: float = 0.0
     sustain: float = 0.0
     travel: float = 0.0                     # how far the stream has carried the water (volume units, ever rising)
+    rays: float = 0.0                       # the light rays' driver (0..1, eased below the top: never pinned)
+    shimmer: float = 0.0                    # the rays' shimmer phase (ever rising, faster on the hits)
 
     @property
     def count(self) -> int:
@@ -170,6 +172,9 @@ class ExtrudedBubbleSimulation:
         self._flash = 0.0
         self._sustain = 0.0
         self._travel = 0.0
+        self._ray_lift = 0.0
+        self._rays = 0.0
+        self._shimmer = 0.0
         self._speed: float | None = None
         self._drift: float | None = None
         self._emission: float | None = None
@@ -240,6 +245,12 @@ class ExtrudedBubbleSimulation:
         # A loud passage held for seconds: slow to build, slow to fade.
         self._sustain = _follow(self._sustain, max(0.0, (intensity - 0.45) / 0.55), dt, 2.5, 3.5)
         sustain = self._sustain
+        # The light rays: the passage, a lift from the onsets (quick rise, slow fall) and a held loud passage, eased
+        # below the top, so a saturated passage (the level held at 1) still moves them with its hits. Their shimmer
+        # advances faster on the hits: a phase integral, so a change of rate never makes the pattern jump.
+        self._ray_lift = _follow(self._ray_lift, self._flash, dt, 0.1, 0.4 * soft)
+        self._rays = _soft_top(0.65 * level + 0.05 * sustain + 0.3 * self._ray_lift, knee=0.9)
+        self._shimmer += dt * (0.5 + 2.5 * self._ray_lift)
         direction = stream_vector(*controls.stream_direction)
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low, high = controls.stream_speed
@@ -477,7 +488,7 @@ class ExtrudedBubbleSimulation:
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
-                                      self._travel)
+                                      self._travel, self._rays, self._shimmer)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

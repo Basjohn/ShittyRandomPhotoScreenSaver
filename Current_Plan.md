@@ -231,7 +231,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
 - [ ] **EB5 — Reactivity, presets and physical acceptance.** Carries every reactivity requirement in
   `Extruded_Bubble_Target.md` §8: the **Fuse / Pop / Bounce triangle** (barycentric node placed by mouse; Big / Small /
   All checkboxes; unaffected bubbles pass through), EB5a range sliders on every bubble count, particle amount and
-  light-ray setting, and music-reactive shafts (intensity, spread, flicker) beside breathing, speed and drift, all
+  light-ray setting, and music-reactive shafts (intensity, spread, flicker; *landed 2026-10-18 on the simulation's
+  ray driver and shimmer, target §10*) beside breathing, speed and drift, all
   through Extruded Bubble's own logical simulation. Priorities (operator 2026-10-18): breathing, drift with intensity,
   stream speed through saturated passages and particle emission, all quick attack / slow decay (never a stutter,
   judder or sudden stop), a light idle energy, and no dynamic floors. Author spec-owned controls and experimental art,

@@ -173,7 +173,7 @@ def capture(output: Path, clip_path: Path, *, size, window, overrides, start, du
                             "bubbles": len(state.bubbles) // 8, "clusters": len(state.clusters) // 4,
                             **{name: getattr(state, name) for name in (
                                 "time", "level", "breath", "flash", "sustain", "drift", "emission",
-                                "stream_speed")}})
+                                "stream_speed", "rays", "shimmer")}})
             if ordinal % max(1, round(fps)) == 0 or ordinal == len(wanted) - 1:
                 tile = image.copy()
                 tile.thumbnail((400, 250))
