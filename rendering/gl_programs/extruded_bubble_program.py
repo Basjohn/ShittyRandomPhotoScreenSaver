@@ -336,6 +336,9 @@ void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec3 centre = uWorldToView * aSphere.xyz;
     float depth = -centre.z;
+    // Nothing to draw (a generated instance left out, or faded to nothing; one behind the eye): no quad at all. Never
+    // the half-pixel floor below, which shaded every such instance as a dot.
+    if (aSphere.w <= 0.0 || depth <= 0.05) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     // Blur in proportion to the bubble: a tiny near bubble softens without swelling into a grey disc.
     float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.1);
     if (aExtra.y > 1.5 && aExtra.y < 2.5) blur = aSphere.w * 0.3;
@@ -515,6 +518,7 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
 // A bubble seen along one view ray (view space: the ray, the sphere's centre and radius): the ray traced exactly
 // through the hollow sphere, every path looked up in the scene itself. Toward the rim, where the paths change from
 // one pixel to the next (light guided round inside the wall), four rays spread over the pixel are averaged.
+const float kRimRaysFull = 10.0;  // radius px from which a rim pixel averages eight rays (four below)
 vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 frontView) {
     // Each pixel sees a cone of directions as wide as the curvature it covers: read the probe at that level.
     float texelAngle = 1.5707963 / float(textureSize(uProbe, 0).x);
@@ -533,10 +537,13 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
         sum = shadeBubbleRay(rayView, sphere, pixels, soft, blur);
     } else {
         sum = vec4(0.0);
-        for (int i = 0; i < 8; ++i) {
-            // Eight points spread over the pixel (a rotated-grid pattern), never beyond it.
-            vec2 o = vec2(fract(float(i) * 0.618034 + 0.0625), (float(i) + 0.5) / 8.0) - 0.5;
-            sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur) * 0.125;
+        // Points spread over the pixel (a rotated-grid pattern), never beyond it: eight, or four on a bead, whose
+        // rim is a pixel or two wide (the trace through every point was the beads' cost).
+        int rays = pixels < kRimRaysFull ? 4 : 8;
+        for (int i = 0; i < rays; ++i) {
+            vec2 o = vec2(fract(float(i) * 0.618034 + 0.5 / float(rays)), (float(i) + 0.5) / float(rays)) - 0.5;
+            sum += shadeBubbleRay(normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur)
+                 / float(rays);
         }
     }
     if (uDiag > 0) return vec4(sum.rgb / max(sum.a, 1e-4), 1.0);
@@ -586,9 +593,10 @@ void main() {
     vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
     vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
     gl_FragDepth = sceneSphereDepth(front, uProjection);
-    vec4 shaded = shadeBubble(ray, vSphere, pixels, soft, front);
-    if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
     float speck = 1.0 - smoothstep(1.0, 2.5, pixels);
+    // A bead of a pixel or less is all speck light below: its trace would be thrown away.
+    vec4 shaded = speck < 1.0 ? shadeBubble(ray, vSphere, pixels, soft, front) : vec4(0.0);
+    if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
     float centreness = clamp(dot(-ray, normalize(front - vSphere.xyz)), 0.0, 1.0);
     vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
     // A bead under a few pixels: a slightly dark core (it bends the darker water below into view) and, on some, a
@@ -717,7 +725,9 @@ void main() {
     vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
     vColour = tint * aLook.x * phase * energy * uSpecks;
     vCorner = corner;
-    gl_Position = depth > 0.05 ? uProjection * vec4(c + vec3(corner * drawn * 2.0, 0.0), 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
+    // A speck left out (radius 0) draws no quad (its zero light would still be blended over the water).
+    gl_Position = depth > 0.05 && aPoint.w > 0.0 ? uProjection * vec4(c + vec3(corner * drawn * 2.0, 0.0), 1.0)
+                                                 : vec4(2.0, 2.0, 2.0, 1.0);
 }
 """
 PARTICLE_FRAGMENT = """#version 460 core

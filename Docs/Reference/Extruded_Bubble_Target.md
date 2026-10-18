@@ -408,8 +408,18 @@ became light dust (0.1..0.35; the starter preset follows the defaults until S4).
 Settings alone (Deep Light, orange light, banded warm particles, diagonal stream) already streams like the mock; its
 ember glow and light colour are S4 preset work.
 
-**Next.** The bead budget (lab lesson: 2-6 px beads through the full shell trace are the cost; today 5-8 ms at
-1672x941 4x MSAA on the RTX 4090 offscreen), then S4: reactivity wiring (rays and shafts from the simulation's
+**Bead budget landed (2026-10-18).** Measured per pass first (`tools/extruded_bubble_capture.py --passes`): at the
+lab's mock 2 density the beads were 2.4 ms of 6.4, then shells 0.8, near giants 0.6 (+0.5 their defocus), probe
+prefilter 0.6, backdrop 0.5, shafts 0.4. Two cuts in the shared fragment, no look change (side-by-side crops: only
+rim sparkle on beads differs): a bead of a pixel or less, which the speck light replaces whole, no longer traces;
+rim pixels under 10 px radius average four sub-rays instead of eight. Instances of no size (generated ones left out,
+faded ones, specks outside their clouds) draw no quad: the vertex stages' half-pixel floor had shaded each as a dot
+(tested; fails without the cull). Interleaved A/B, three rounds at 1672x941 4x MSAA: mock 2 density median
+4.7-4.9 -> 3.5-4.3 ms, defaults 3.5-4.8 -> 2.8-3.7 ms (beads pass 2.4 -> 1.1 ms). Occlusion culling does not
+apply: nothing in the scene is opaque (beads behind glass show through it), and off-screen quads cost only their
+four vertices (the rasterizer clips them).
+
+**Next.** S4: reactivity wiring (rays and shafts from the simulation's
 followers, never the clamped level) and every lab scene rebuilt as a preset through the Settings UI.
 **For S4 (found in S3a on real recordings):** `level` is `PassageIntensity`, which clamps at 1.0 through loud passages
 by design (10-12 s of "dontyouseemetrying" read 1.000 throughout); the Light Rays range read linearly at it is pinned

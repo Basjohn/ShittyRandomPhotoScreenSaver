@@ -250,3 +250,58 @@ def _frame(snapshot, quad_vao):
     return QuickVisualizerRenderFrame(snapshot=snapshot, viewport=(0, 0, W, H), logical_size=(float(W), float(H)),
                                       matrix_values=(2 / W, 0, 0, 0, 0, -2 / H, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                       quad_vao=quad_vao)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("stage", ["bubble", "particle"])
+def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
+    """Generated instances left out (or faded to nothing) carry radius 0. The vertex stages' size floors (half a pixel
+    so specks resolve) once drew each as a shaded dot; with no size there is no quad at all."""
+    from OpenGL import GL as gl
+
+    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, PARTICLE_VERTEX
+    from rendering.quick.render.gl_resources import compile_program
+    from tools.transition_contact_sheet import TransitionCapture
+
+    width, height = 96, 64
+    capture = TransitionCapture(width, height)
+    try:
+        assert capture.context.makeCurrent(capture.surface)
+        _v, _w, tan, projection = scene.camera(0.0, 0.0, width / height)
+        program = compile_program(BUBBLE_VERTEX if stage == "bubble" else PARTICLE_VERTEX,
+                                  "#version 460 core\nout vec4 colour;\nvoid main() { colour = vec4(1.0); }\n",
+                                  label="no-size test")
+        gl.glUseProgram(program)
+        for name, value in (("uFocus", 10.0), ("uAperture", 0.0), ("uCrisp", 0.0), ("uNearLayer", 0.0),
+                            ("uPixel", 2.0 * tan[1] / height), ("uSpecks", 1.0)):
+            location = gl.glGetUniformLocation(program, name)
+            if location >= 0:
+                gl.glUniform1f(location, value)
+        gl.glUniformMatrix3fv(gl.glGetUniformLocation(program, "uWorldToView"), 1, False,
+                              np.eye(3, dtype=np.float32))
+        gl.glUniformMatrix4fv(gl.glGetUniformLocation(program, "uProjection"), 1, False,
+                              np.asarray(projection, dtype=np.float32))
+        vao = int(np.asarray(gl.glGenVertexArrays(1)).ravel()[0])
+        gl.glBindVertexArray(vao)
+
+        def lit(radius):
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            gl.glViewport(0, 0, width, height)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDisable(gl.GL_BLEND)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            gl.glVertexAttrib4f(0, 0.0, 0.0, -5.0, radius)      # straight ahead
+            gl.glVertexAttrib4f(1, 1.0, 0.0, 0.5, 0.0)
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, 1)
+            gl.glFinish()
+            pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+            return int(np.count_nonzero(np.frombuffer(bytes(pixels), dtype=np.uint8)))
+
+        assert lit(1e-6) > 0                                    # the smallest size still resolves (the floor)
+        assert lit(0.0) == 0
+        gl.glBindVertexArray(0)
+        gl.glDeleteVertexArrays(1, [vao])
+        gl.glDeleteProgram(program)
+    finally:
+        capture.close()
