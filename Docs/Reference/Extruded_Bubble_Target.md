@@ -315,3 +315,9 @@ rim sub-rays, bead density and defocus taps; the small-bead model (G0) is the ma
 the logical clock, dormancy) → S2 descriptor behind its gate, Settings spec (§9), defaults, builder, parameters →
 S3 renderer port pass by pass, each compared with the lab at full resolution → S4 controls drive reactivity, every lab
 scene rebuilt as a preset through the Settings UI alone → S5 physical acceptance with real recordings, gate opened.
+
+**S1 landed (2026-10-18).** `extruded_bubble_simulation.py` (pure, deterministic; 1.3 ms a step at 190 bubbles) and
+`extruded_bubble_frame_runtime.py` (activation/source fences, onsets taken once by serial, steps capped at 0.1 s,
+retirement). Tests: `tests/test_extruded_bubble_simulation.py` (determinism, population across quiet..loud, stream
+direction, breathing and smoothing, each collision outcome alone, Off and scope, idle, reset, runtime fences). Not yet
+wired: no descriptor, capture or renderer reads it (S2).

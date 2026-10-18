@@ -82,6 +82,9 @@ frozen-settings baseline, use synthetic fixtures for durable behavior tests and 
 recordings for physical fidelity. No curated preset values become frozen oracles. Close Settings-spec coverage
 for all original Visualizers before commencing shared 3D-primitive work.
 
+`test_extruded_bubble_simulation.py` covers Extruded Bubble's own simulation and frame runtime without Qt/GL:
+determinism, population across its quiet..loud counts, stream direction, breathing/smoothing, each Fuse/Pop/Bounce
+outcome alone, Off and scope, idle, and the runtime's logical-time, onset-once and activation fences.
 `test_visual_controls.py` covers the shared visual controls: spec admission (order, clamp, normalise, wrap), real
 mouse/keyboard gestures (a range handle never passes the other, stacked handles follow the drag, corner/centre and
 spoke snapping, clamping outside), wheel ignored, and the spec builder's build/load/collect with one save per gesture
