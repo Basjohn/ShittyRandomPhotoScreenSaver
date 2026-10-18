@@ -300,8 +300,9 @@ Values still kept per scene until their control exists: mock 1's `ray_cut`, came
 **Mode.** Descriptor `extruded_bubble` ("Extruded Bubble"): card shell with card-interior clipping, viewport-resizable,
 `freeform_3d` with its own `layout_profile` ("3d:extruded_bubble"); framed camera declared on the descriptor (turn/tilt
 orbit wrapping a full circle, `view_auto_rotate_settings`, scene scale/pan with a `scene_pan_envelope`), prepared
-reveal. Registered behind a closed code gate (`_GATED_MODES`: not selectable, not offered in Guided Setup, no
-runtime work) until EB5 acceptance flips it in code; never an environment flag.
+reveal. Offered since 2026-10-18 (operator): selectable, cycled, in Guided Setup (its preview rendered by the
+onboarding foundry from preset 1) and the 3D tab, so its physical acceptance (EB5) runs on real displays. It sat
+behind the `_GATED_MODES` code gate from S2 until then.
 
 **Simulation (CPU, logical clock).** `widgets/spotify_visualizer/extruded_bubble_frame_runtime.py` owns an
 `ExtrudedBubbleSimulation` advanced in the mode's logical capture (as Neon Lake's runtime is), with dt from the sole
@@ -448,5 +449,9 @@ as (pitch - 16) / 90 (Looking Down's -32 degrees clamps at the tilt limit, -29).
 are the renderer's, not the presets': mock 4's curved trails and caustic floor, mock 6's smoky ember texture (specks
 read as points), Looking Down's seafloor (dropped by design) and generally fewer, smaller bubbles than the mocks
 paint. Each preset is authored content: the operator retunes them at will.
+
+**Gate opened (2026-10-18, operator).** `_GATED_MODES` is empty and the descriptor is offered in Guided Setup;
+its Guided Setup preview (`visualizer_extruded_bubble.png`) is rendered by the onboarding foundry
+(`_RENDERED_VISUALIZER_PREVIEWS`), registered in the onboarding resource pack with its locked hash.
 
 **Next.** Physical acceptance (S5) on a real display with real music.

@@ -363,7 +363,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         layout_profile="3d:shockwave_grid",
     ),
     # Its own mode (not original Bubble): a framed underwater volume of traced glass bubbles with its own simulation
-    # (``extruded_bubble_simulation``), Settings and presets. Behind a closed code gate until its acceptance (EB5).
+    # (``extruded_bubble_simulation``), Settings and presets. Offered since 2026-10-18 (operator) for its physical
+    # acceptance on real displays (EB5).
     VisualizerModeDescriptor(
         "extruded_bubble",
         "Extruded Bubble",
@@ -387,7 +388,6 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         ),
         rainbow_controls=False,
         shared_bar_appearance=False,
-        guided_setup_offered=False,
         view_orbit_settings=("extruded_bubble_turn", "extruded_bubble_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
         view_auto_rotate_settings=("extruded_bubble_auto_rotate", "extruded_bubble_auto_rotate_after",
@@ -404,7 +404,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
 
 # Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D tab, and given no
 # runtime work. A gate opens in code at its acceptance, never through an environment flag.
-_GATED_MODES: dict[str, callable] = {"extruded_bubble": lambda: False}
+_GATED_MODES: dict[str, callable] = {}
 
 def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     return tuple(d for d in _ALL_DESCRIPTORS if d.mode_id not in _GATED_MODES or _GATED_MODES[d.mode_id]())

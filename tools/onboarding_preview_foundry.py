@@ -1029,7 +1029,7 @@ _WIDGET_PREVIEWS: Final = {
 # rendered through their production capture and renderer. They sit on a dark backdrop inside a
 # drawn frame like the sheet's Sphere; a mode whose glow is added light renders straight onto it
 # (``_GLOW_ON_BACKDROP``), since added light shows only over something.
-_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid", "oscilloscope")
+_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid", "oscilloscope", "extruded_bubble")
 # Modes whose picture comes from musical onsets get a few fixture onsets (time, type, magnitude,
 # presence: a big hit, then two ordinary ones) through a minimal transient-bus stand-in before the
 # settled captures at 1.0 and 1.12 s.
@@ -1102,6 +1102,9 @@ class _PreviewOnsets:
     def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
         return 1.0, 1, 1
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
+# The curated preset a rendered preview shows (0-based; the first one unless named): Extruded Bubble's Ember Drift
+# reads at preview size, its first preset's bead streams do not (operator 2026-10-18).
+_PREVIEW_PRESETS: Final = {"extruded_bubble": 6}
 _GLOW_ON_BACKDROP: Final = frozenset({"oscilloscope"})
 _PREVIEW_BACKDROP: Final = (24, 26, 34)       # the gradient backdrop's middle shade
 
@@ -1215,7 +1218,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     # copies, tests/_visualizer_frozen_settings.py, so authored presets never decide a test).
     if settings is None:
         activation = resolve_visualizer_activation_payload(
-            {"mode": mode, f"preset_{mode}": 0},
+            {"mode": mode, f"preset_{mode}": _PREVIEW_PRESETS.get(mode, 0)},
             mode=mode,
         )
         settings = activation.resolved_config

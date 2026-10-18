@@ -83,7 +83,7 @@ def author(mode: str, values: dict, *, index: int, title: str, description: str,
     for stale in directory.glob(f"preset_{index}_*.json"):
         if stale != path:
             stale.unlink()
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")
 
     # Read back through the activation path (the preset applied, then its starting view): exactly the values given.
     reload_presets(mode)
