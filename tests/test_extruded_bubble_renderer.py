@@ -38,6 +38,21 @@ def test_scene_scale_zooms_without_turning_the_view():
     assert zoomed[2][1] == pytest.approx(plain[2][1] / 2.0)
 
 
+def test_scene_pan_shifts_everything_on_screen_alike_without_turning_the_view():
+    """Scene Pan is an off-axis frustum: every point (and the light's screen position) moves by the same screen
+    distance, in the card's units (x right, y down), and nothing turns."""
+    shift = scene.lens_shift(0.15, 0.1)
+    plain, panned = scene.camera(0.2, 0.1, 1.6), scene.camera(0.2, 0.1, 1.6, shift=shift)
+    assert panned[0] == plain[0] and panned[2] == plain[2]
+    for point in ((0.3, -0.2, -5.0), (-2.0, 1.0, -20.0)):
+        clip = [np.asarray(m).reshape(4, 4).T @ np.array((*point, 1.0)) for m in (plain[3], panned[3])]
+        moved = clip[1][:2] / clip[1][3] - clip[0][:2] / clip[0][3]
+        assert moved == pytest.approx((0.3, -0.2))                   # right and down by the pan (NDC: y up)
+    light = (0.2, 0.5, -0.8)
+    before = scene.light_on_screen(light, plain[1], plain[3], (1000, 600))
+    after = scene.light_on_screen(light, panned[1], panned[3], (1000, 600))
+    assert (after[0] - before[0], after[1] - before[1]) == pytest.approx((150.0, -60.0))
+
 def test_a_bubble_keeps_its_share_of_the_view_at_any_depth_and_fades_by_shrinking():
     _v, _w, tan, _p = scene.camera(0.3, 0.2, 1.6)
     rows = scene.bubble_instances(_record(z=0.0) + _record(z=1.0, ident=2.0) + _record(alpha=0.25, ident=3.0),

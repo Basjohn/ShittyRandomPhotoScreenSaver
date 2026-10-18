@@ -30,7 +30,7 @@ from rendering.gl_programs.extruded_bubble_program import (
 )
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, NEAR_GIANTS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, VOLUME_EXTENT, bubble_instances, camera,
-    cluster_instances,
+    cluster_instances, lens_shift,
     glint_proxies, light_on_screen, near_giants, ray_strength, scene_knobs, screen_streak,
 )
 from rendering.gl_programs.scene3d import scene3d_detail
@@ -345,7 +345,9 @@ class QuickExtrudedBubbleRenderer:
 
         pose = (float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")))
         scale = float(parameter(parameters, "extruded_bubble_scene_scale"))
-        view_to_world, world_to_view, tan, projection = camera(*pose, width / height, scale)
+        shift = lens_shift(float(parameter(parameters, "extruded_bubble_scene_pan_x")),
+                           float(parameter(parameters, "extruded_bubble_scene_pan_y")))
+        view_to_world, world_to_view, tan, projection = camera(*pose, width / height, scale, shift)
         pixel = 2.0 * tan[1] / height
         # World-fixed under the turn (the scene module's notes); near giants stay at the lens.
         shells = np.concatenate((bubble_instances(state.bubbles, tan, pose),
@@ -359,6 +361,7 @@ class QuickExtrudedBubbleRenderer:
         for key in programs:
             if key != "blur":
                 self._uniforms.set(programs[key], common)
+        self._uniforms.set(programs["shafts"], {"uLensShift": shift})
         sun_screen = light_on_screen(knobs["sun_below"], world_to_view, projection, (width, height))
         view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
@@ -394,7 +397,7 @@ class QuickExtrudedBubbleRenderer:
             scene_viewport = (frame.viewport[0] - x, frame.viewport[1] - y, frame.viewport[2], frame.viewport[3])
             allocation = self._target.allocation
             self._uniforms.set(programs["backdrop"], {"uProbeMode": 0.0, "uViewToWorld": _floats(view_to_world),
-                                                      "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS,
+                                                      "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS, "uLensShift": shift,
                                                       "uFrameSize": (float(width), float(height))})
             target_size = (float(allocation[0]), float(allocation[1]))
             for key in ("shells", "clusters", "near", "beads"):
@@ -451,7 +454,7 @@ class QuickExtrudedBubbleRenderer:
         backdrop, proxies = programs["backdrop"], programs["proxies"]
 
         def draw(face, world_to_face, projection):
-            self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face), "uTan": (1.0, 1.0),
+            self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face), "uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0),
                                           "uProbeMode": 1.0, "uFrameSize": (float(probe.size), float(probe.size))})
             gl.glDisable(gl.GL_BLEND)
             gl.glUseProgram(backdrop)

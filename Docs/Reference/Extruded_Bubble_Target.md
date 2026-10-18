@@ -394,7 +394,12 @@ beads and snow run the same wrap in GLSL. Tilt stays view-relative (a tilted pre
 Tested: world-fixed under small turns; a full turn at four aspects/tilts never wraps a bubble on screen (largest
 on-screen step is the rotation itself). Near giants stay at the lens.
 
-**Next in S3.** Scene Pan (lens shift within the declared envelope). S3c (rest): the
+**Scene Pan landed (2026-10-18).** An off-axis frustum (`lens_shift`: the card-fraction pan, y down, as an NDC
+shift in the projection and in the full-screen passes' rays; none in the probe): water, light, bubbles and beads
+move alike, nothing turns. Deep Light renders through the product (teal abyss, light in the water, veils); its
+look is preset work (S4).
+
+**Next in S3.** S3c (rest): the
 3D particulate (Particles range at the emission level, ember bands for the deep scenes) and the bead budget (lab
 lesson: 2-6 px beads through the full shell trace are the cost). Then the deep light type and the remaining lab knobs
 per section 9.

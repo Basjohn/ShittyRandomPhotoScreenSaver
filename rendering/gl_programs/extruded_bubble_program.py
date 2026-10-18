@@ -121,10 +121,11 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
 
 FULL_VERTEX = """#version 460 core
 out vec2 vNdc;
+uniform vec2 uLensShift;        // Scene Pan: where the view's centre sits on screen (NDC; zero in the probe)
 void main() {
     vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-    vNdc = p * 2.0 - 1.0;
-    gl_Position = vec4(vNdc, 0.9999, 1.0);
+    gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0);
+    vNdc = p * 2.0 - 1.0 - uLensShift;
 }
 """
 
