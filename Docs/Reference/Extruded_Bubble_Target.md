@@ -454,4 +454,63 @@ paint. Each preset is authored content: the operator retunes them at will.
 its Guided Setup preview (`visualizer_extruded_bubble.png`) is rendered by the onboarding foundry
 (`_RENDERED_VISUALIZER_PREVIEWS`), registered in the onboarding resource pack with its locked hash.
 
-**Next.** Physical acceptance (S5) on a real display with real music.
+**Operator review on a real display (2026-10-18, 19:23-19:25 run: preset 1 for ~50 s with music, then presets 2-7).
+Four defects, in the operator's order of importance: D, B, C, A. Not yet fixed; this records what is wrong and why.**
+The mode logs none of its own state, so the evidence below is the same simulation replayed on the real recordings
+(`replay_clip`, presets 1 and 7, past the first 5 s), with pixels at 1080p (a volume unit is half the view height).
+
+**D. Breathing is near zero, also on big bubbles; I reported it as working.** Measured large-bubble swell (share of
+radius): heavy1 median 0.039 / p90 0.058, 1985_loud1 0.031 / 0.049; through the sustained passages of
+dontyouseemetrying and nightsolong it sits flat at 0.16-0.18 (held, not breathing). Mid bubbles: 0.015-0.04. A large
+bubble's radius changes by a median 0.2-0.4 px per second. Causes:
+- Three sub-1 factors multiply: the Breathing range x `BREATHING_FULL` 0.35 (default 0.05..0.21 of radius) x the
+  passage level x the breath follower (median 0.2, p90 0.4-0.5): typically 0.01-0.04.
+- The breath follower is kicks only (onset weight, decaying in ~0.45 s); kicks are sparse or weak on many tracks.
+- Through a sustained passage `hold` replaces breathing with a constant size: the "big bubbles may hold large"
+  allowance became the whole response, with nothing moving on top.
+- Process: S1's tests and survey checked follower timing (attack, decay, no jumps), never visible amplitude in
+  pixels, and S1's notes claimed the response ("mid bubbles pulse on snares") from those curves.
+Direction: author the response in visible units (a big bubble's breath a clear share of its size on every kick, a
+continuous breathing motion whose depth and rate rise through loud and sustained passages instead of freezing,
+driven by its own quick-attack/slow-decay energy, not by kicks alone); accept it by pixel amplitude on the real
+recordings, saturated windows included.
+
+**B. Three static near giants in every preset and scene.** `near_giants()` (scene module) draws three huge
+defocused bubbles at fixed screen positions (left-bottom, right-bottom, left-top), anchored to the camera: they turn
+with it, drift +-0.04 of the view over about two minutes, are never replaced, ignore the stream and the music, and
+no Setting reaches them. Cause: the mocks' blurred foreground bubbles were ported from the lab as lens decorations,
+because the simulation's volume starts at depth 6 (`DEPTH_NEAR`) and no simulated bubble can come near the lens.
+Direction: retire the fixed giants; extend the volume toward the lens so real bubbles pass close (spawned, carried by
+the stream, leaving and replaced like the rest, world-fixed, defocused by the near layer as they come close), with
+their number on a Setting.
+
+**C. Big bubble streams have little speed and almost no energy.** Large bubbles move a median 96 px/s (heavy1) and
+125 px/s (dontyouseemetrying); the stream speed moves only about +-10% within a track (heavy1 0.163..0.193,
+dontyouseemetrying 0.227..0.252 volume units/s, p10..p90). Causes:
+- Positions and speeds are in view fractions, so every bubble moves at the same screen speed at any depth: no
+  parallax; a near big bubble drifts like a far one.
+- The Stream Speed range tops out at `STREAM_SPEED_FULL` 0.25 (8 s to cross the view at its maximum), and the
+  reaction terms (flash, sustain) add little on top of a level that is already near its top in music.
+- Drift and sway amplitudes are 0.015-0.06 volume units/s (invisible); big bubbles get only 10-35% more speed than
+  small ones and no wobble of their own.
+Direction: motion in world units (near bubbles cross faster), a full scale and reactive span that visibly surge on
+hits and run fast through loud passages (quick attack, slow decay), big bubbles rising faster with size and
+swaying/zigzagging as large real bubbles do; accept by px/s on the recordings.
+
+**A. Mock details the renderer cannot draw.** "Remaining differences are the renderer's" was an excuse; each was a
+choice not to build or port:
+- Curved trails (mock 4): the lab's ribbon wakes (`RIBBON_VERTEX` / `RIBBON_FRAGMENT`, `wakes` in its population)
+  were never ported; only fizz motes were. Section 8's "Trails" requirement is unmet.
+- Smoky ember texture (mock 6) and wisps: the shared backdrop already has `uDust` and `uWisps` (the lab's Diagonal
+  scene uses dust 0.4), but the product hardwires both to 0.0 in `_common` and no Setting maps them.
+- The bright caustic floor (mock 4, mock 5 Cameradown): section 8 records "a darker abyss below, not an ocean floor"
+  (operator 2026-10-17; the seabed primitive stays in the library). **Operator decision needed:** supersede that for
+  these mocks, or keep the abyss.
+- Bubble density and size: the presets draw fewer and smaller bubbles than the mocks paint.
+
+**Also missing:** opt-in runtime evidence. A live session leaves nothing about the mode's own state (level, breath,
+swell, speed), so a real-display review cannot be measured afterwards. Needs an admitted diagnostic summary (zero
+work at rest, `core/diagnostics/experiment_flags.py`).
+
+**Next.** Fix D, B, C, A in that order, each accepted by visible amplitude (px, px/s) on the real recordings and
+reviewed in motion (GIFs), not stills; then physical acceptance (S5).

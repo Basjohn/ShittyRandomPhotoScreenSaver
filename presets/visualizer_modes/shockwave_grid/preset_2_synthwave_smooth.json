@@ -1,85 +1,49 @@
 {
-  "description": "Saved from current Settings state.",
   "mode": "shockwave_grid",
   "name": "Preset 2 (Synthwave Smooth)",
   "preset_index": 1,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "shockwave_grid",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "mode": "shockwave_grid",
-        "shockwave_grid_adaptive_sensitivity": false,
-        "shockwave_grid_agc_strength": 0.15,
-        "shockwave_grid_audio_block_size": 256,
-        "shockwave_grid_bar_count": 35,
-        "shockwave_grid_celestial_glow_enabled": true,
-        "shockwave_grid_celestial_glow_reactivity": 2.0,
-        "shockwave_grid_celestial_glow_strength": 1.0,
-        "shockwave_grid_celestial_rim_vertices": false,
-        "shockwave_grid_cloud_color": [
-          64,
-          4,
-          82,
-          255
-        ],
-        "shockwave_grid_crest_color": [
-          255,
-          70,
-          210,
-          255
-        ],
-        "shockwave_grid_density": 0.6,
-        "shockwave_grid_drop_speed": 1.3,
-        "shockwave_grid_dynamic_floor": false,
-        "shockwave_grid_dynamic_range_enabled": false,
-        "shockwave_grid_floor": 0.6,
-        "shockwave_grid_glass_roughness": 0.08,
-        "shockwave_grid_glass_strength": 0.69,
-        "shockwave_grid_glass_tint": [
-          110,
-          190,
-          235,
-          255
-        ],
-        "shockwave_grid_glow": 0.5,
-        "shockwave_grid_horizon": 0.75,
-        "shockwave_grid_horizon_color": [
-          97,
-          6,
-          74,
-          255
-        ],
-        "shockwave_grid_horizon_thickness": 1.8,
-        "shockwave_grid_idle": 0.25,
-        "shockwave_grid_input_gain": 1.1,
-        "shockwave_grid_kick_lane_gain": 1.0,
-        "shockwave_grid_lane_strengths_linear": {
-          "Bass": 0.8,
-          "Hi-Mid": 0.8,
-          "Low-Mid": 0.7,
-          "Treble": 1.0,
-          "Vocal": 0.64
-        },
-        "shockwave_grid_lane_strengths_mirrored": {
-          "Bass": 0.12820512820512966,
-          "Low-Mid": 0.7,
-          "Mid": 0.564102564102567,
-          "Vocal": 0.6923076923076923
-        },
-        "shockwave_grid_line_color": [
-          17,
-          78,
-          209,
-          255
-        ],
-        "shockwave_grid_manual_floor": 0.2,
         "shockwave_grid_mirrored": true,
-        "shockwave_grid_moon_color": [
-          255,
-          255,
-          255,
-          255
+        "shockwave_grid_shape_nodes": [
+          [
+            0.0,
+            0.6509433962264162
+          ],
+          [
+            0.3110119047619048,
+            0.8993710691823903
+          ],
+          [
+            0.65,
+            0.55
+          ],
+          [
+            1.0,
+            0.6257861635220129
+          ]
         ],
-        "shockwave_grid_moon_phase": 0.5,
+        "shockwave_grid_notch_positions_mirrored": [
+          [
+            0.0,
+            "Mid"
+          ],
+          [
+            0.3,
+            "Vocal"
+          ],
+          [
+            0.65,
+            "Low-Mid"
+          ],
+          [
+            1.0,
+            "Bass"
+          ]
+        ],
         "shockwave_grid_notch_positions_linear": [
           [
             0.0,
@@ -102,86 +66,203 @@
             "Treble"
           ]
         ],
-        "shockwave_grid_notch_positions_mirrored": [
-          [
-            0.0,
-            "Mid"
-          ],
-          [
-            0.3,
-            "Vocal"
-          ],
-          [
-            0.65,
-            "Low-Mid"
-          ],
-          [
-            1.0,
-            "Bass"
-          ]
-        ],
-        "shockwave_grid_profile_floor": 0.1,
-        "shockwave_grid_scroll": 0.25,
-        "shockwave_grid_sensitivity": 1.22,
-        "shockwave_grid_shape_nodes": [
-          [
-            0.0,
-            0.6509433962264162
-          ],
-          [
-            0.3110119047619048,
-            0.8993710691823903
-          ],
-          [
-            0.65,
-            0.55
-          ],
-          [
-            1.0,
-            0.6257861635220129
-          ]
-        ],
-        "shockwave_grid_sky_color": [
-          33,
-          61,
-          153,
+        "shockwave_grid_lane_strengths_mirrored": {
+          "Bass": 0.12820512820512966,
+          "Low-Mid": 0.7,
+          "Mid": 0.564102564102567,
+          "Vocal": 0.6923076923076923
+        },
+        "shockwave_grid_lane_strengths_linear": {
+          "Bass": 0.8,
+          "Hi-Mid": 0.8,
+          "Low-Mid": 0.7,
+          "Treble": 1.0,
+          "Vocal": 0.64
+        },
+        "shockwave_grid_visual_smoothing_enabled": false,
+        "shockwave_grid_visual_smoothing": 0.5,
+        "shockwave_grid_solid_bar_hysteresis_enabled": false,
+        "shockwave_grid_terrain_height": 0.9,
+        "shockwave_grid_terrain_detail": 0.35,
+        "shockwave_grid_terrain_fill_color": [
+          5,
+          2,
+          12,
           255
         ],
+        "shockwave_grid_water_color": [
+          40,
+          105,
+          180,
+          255
+        ],
+        "shockwave_grid_line_color": [
+          0,
+          208,
+          255,
+          255
+        ],
+        "shockwave_grid_crest_color": [
+          255,
+          70,
+          210,
+          255
+        ],
+        "shockwave_grid_wave_height": 1.0,
+        "shockwave_grid_wave_speed": 0.58,
+        "shockwave_grid_water_detail": 0.22,
+        "shockwave_grid_scroll": 0.3,
+        "shockwave_grid_idle": 0.25,
+        "shockwave_grid_water_reflection": 0.82,
+        "shockwave_grid_terrain_reaction_enabled": true,
+        "shockwave_grid_terrain_reaction_strength": 0.6,
+        "shockwave_grid_terrain_pulses": 0.8,
+        "shockwave_grid_terrain_peaks": 0.7,
+        "shockwave_grid_terrain_swell": 0.15,
+        "shockwave_grid_terrain_motion_speed": 0.5,
+        "shockwave_grid_terrain_growth_attack": 0.12,
+        "shockwave_grid_terrain_growth_release": 0.3,
+        "shockwave_grid_wire_display": "Glass",
+        "shockwave_grid_glass_tint": [
+          110,
+          190,
+          235,
+          255
+        ],
+        "shockwave_grid_glass_strength": 0.69,
+        "shockwave_grid_glass_roughness": 0.14,
+        "shockwave_grid_vertex_color": [
+          0,
+          220,
+          255,
+          255
+        ],
+        "shockwave_grid_vertex_accent_color": [
+          255,
+          70,
+          210,
+          255
+        ],
+        "shockwave_grid_vertex_outline_color": [
+          190,
+          240,
+          255,
+          255
+        ],
+        "shockwave_grid_density": 0.6,
+        "shockwave_grid_floor": 0.6,
+        "shockwave_grid_horizon_thickness": 1.8,
         "shockwave_grid_sky_enabled": true,
         "shockwave_grid_sky_strength": 0.8,
-        "shockwave_grid_solid_bar_hysteresis_enabled": false,
+        "shockwave_grid_sky_color": [
+          12,
+          22,
+          54,
+          255
+        ],
+        "shockwave_grid_horizon_color": [
+          97,
+          6,
+          74,
+          255
+        ],
+        "shockwave_grid_cloud_color": [
+          64,
+          4,
+          82,
+          255
+        ],
         "shockwave_grid_star_color": [
           217,
           229,
           255,
           255
         ],
-        "shockwave_grid_star_glow_reactivity": 1.77,
-        "shockwave_grid_star_glow_strength": 0.7,
+        "shockwave_grid_volumetric_clouds": true,
+        "shockwave_grid_cloud_coverage": 0.45,
+        "shockwave_grid_cloud_softness": 0.5,
+        "shockwave_grid_cloud_scale": 0.5,
+        "shockwave_grid_cloud_opacity": 0.85,
+        "shockwave_grid_cloud_drift": 0.25,
+        "shockwave_grid_nebula_enabled": true,
+        "shockwave_grid_nebula_intensity": 0.5,
+        "shockwave_grid_nebula_scale": 0.5,
+        "shockwave_grid_nebula_filaments": 0.5,
+        "shockwave_grid_nebula_dust": 0.4,
+        "shockwave_grid_nebula_position": 0.0,
+        "shockwave_grid_nebula_drift": 0.03,
+        "shockwave_grid_nebula_color_a": [
+          255,
+          80,
+          180,
+          255
+        ],
+        "shockwave_grid_nebula_color_b": [
+          80,
+          140,
+          255,
+          255
+        ],
         "shockwave_grid_starscape_beat": true,
+        "shockwave_grid_star_glow_strength": 0.7,
+        "shockwave_grid_star_glow_reactivity": 1.85,
+        "shockwave_grid_star_size": 0.4,
+        "shockwave_grid_star_glow_color": [
+          255,
+          214,
+          140,
+          0
+        ],
+        "shockwave_grid_sun_enabled": true,
+        "shockwave_grid_sun_mode": "Moon",
         "shockwave_grid_sun_color": [
           255,
           25,
           180,
           255
         ],
-        "shockwave_grid_sun_enabled": true,
-        "shockwave_grid_sun_mode": "Moon",
+        "shockwave_grid_moon_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "shockwave_grid_moon_phase": 0.6,
+        "shockwave_grid_sun_size": 0.16,
+        "shockwave_grid_sun_x": 0.7,
+        "shockwave_grid_sun_y": 0.8,
+        "shockwave_grid_sun_z": 0.08,
         "shockwave_grid_sun_orbit_enabled": false,
         "shockwave_grid_sun_orbit_speed": 0.001,
+        "shockwave_grid_celestial_glow_enabled": true,
+        "shockwave_grid_celestial_glow_strength": 0.6,
+        "shockwave_grid_celestial_glow_reactivity": 1.4,
+        "shockwave_grid_celestial_rim_vertices": false,
+        "shockwave_grid_sun_rays_enabled": true,
+        "shockwave_grid_sun_rays_strength": 0.34,
         "shockwave_grid_sun_rays_color": [
           255,
           252,
           255,
           255
         ],
-        "shockwave_grid_sun_rays_enabled": true,
-        "shockwave_grid_sun_rays_strength": 0.45,
-        "shockwave_grid_sun_size": 0.15,
-        "shockwave_grid_sun_x": 0.58,
-        "shockwave_grid_sun_y": 0.8,
-        "shockwave_grid_sun_z": -2.59,
+        "shockwave_grid_sun_rays_length": 0.77,
+        "shockwave_grid_sun_rays_spread": 0.4,
+        "shockwave_grid_glow": 0.5,
+        "shockwave_grid_horizon": 0.75,
+        "shockwave_grid_water_line_glow_color": [
+          93,
+          190,
+          255,
+          0
+        ],
+        "shockwave_grid_water_line_glow": 1.8,
+        "shockwave_grid_wave_amplitude": 0.75,
+        "shockwave_grid_profile_floor": 0.1,
+        "shockwave_grid_drop_speed": 1.3,
         "shockwave_grid_terrain": {
+          "version": 1,
+          "size": 65,
           "heights": [
             0.19462470216003733,
             0.23267239638610787,
@@ -4408,58 +4489,83 @@
             0.04215345507738708,
             0.04842605814475375,
             0.07080927264195287
-          ],
-          "size": 65,
-          "version": 1
+          ]
         },
-        "shockwave_grid_terrain_detail": 0.35,
-        "shockwave_grid_terrain_fill_color": [
-          5,
-          2,
-          12,
-          255
-        ],
-        "shockwave_grid_terrain_growth_attack": 0.08,
-        "shockwave_grid_terrain_growth_release": 0.3,
-        "shockwave_grid_terrain_height": 0.9,
-        "shockwave_grid_terrain_reactivity": 1.0,
-        "shockwave_grid_transient_clamp": 1.5,
+        "shockwave_grid_terrain_shaper": {
+          "nodes": [
+            [
+              0.0,
+              0.45
+            ],
+            [
+              0.2529761904761904,
+              0.6572327044025159
+            ],
+            [
+              0.49776785714285715,
+              1.0
+            ],
+            [
+              0.8400297619047618,
+              0.7452830188679256
+            ],
+            [
+              1.0,
+              0.6
+            ]
+          ],
+          "notches": [
+            [
+              0.0,
+              "Bass"
+            ],
+            [
+              0.25,
+              "Low-Mid"
+            ],
+            [
+              0.5,
+              "Vocal"
+            ],
+            [
+              0.7,
+              "Hi-Mid"
+            ],
+            [
+              0.88,
+              "Treble"
+            ]
+          ],
+          "lanes": {
+            "Bass": 0.5384615384615429,
+            "Low-Mid": 0.85,
+            "Vocal": 1.0,
+            "Hi-Mid": 0.85,
+            "Treble": 0.8
+          }
+        },
+        "shockwave_grid_dynamic_floor": false,
+        "shockwave_grid_manual_floor": 0.2,
+        "shockwave_grid_dynamic_range_enabled": false,
+        "shockwave_grid_agc_strength": 0.15,
+        "shockwave_grid_input_gain": 1.1,
+        "shockwave_grid_kick_lane_gain": 1.0,
         "shockwave_grid_transient_pulse_gain": 1.0,
-        "shockwave_grid_vertex_accent_color": [
-          255,
-          70,
-          210,
-          255
-        ],
-        "shockwave_grid_vertex_color": [
-          0,
-          220,
-          255,
-          255
-        ],
-        "shockwave_grid_vertex_outline_color": [
-          190,
-          240,
-          255,
-          255
-        ],
-        "shockwave_grid_visual_smoothing": 0.5,
-        "shockwave_grid_visual_smoothing_enabled": false,
-        "shockwave_grid_water_color": [
-          40,
-          105,
-          180,
-          255
-        ],
-        "shockwave_grid_water_detail": 0.22,
-        "shockwave_grid_water_reflection": 0.77,
-        "shockwave_grid_wave_amplitude": 0.75,
-        "shockwave_grid_wave_height": 0.96,
-        "shockwave_grid_wave_speed": 0.45,
-        "shockwave_grid_wire_display": "Glass"
+        "shockwave_grid_transient_clamp": 1.5,
+        "shockwave_grid_audio_block_size": 256,
+        "shockwave_grid_adaptive_sensitivity": false,
+        "shockwave_grid_sensitivity": 1.22,
+        "shockwave_grid_bar_count": 35,
+        "mode": "shockwave_grid"
       }
     }
   },
-  "visualizer_preset_mode": "shockwave_grid",
-  "visualizer_preset_override": true
+  "starting_view": {
+    "shockwave_grid_turn": -0.2,
+    "shockwave_grid_tilt": 0.17,
+    "shockwave_grid_scene_scale": 2.303029300000003,
+    "shockwave_grid_scene_pan_x": -0.06669846789545915,
+    "shockwave_grid_scene_pan_y": 0.37561885231045083
+  },
+  "description": "Saved from current Settings state."
 }
