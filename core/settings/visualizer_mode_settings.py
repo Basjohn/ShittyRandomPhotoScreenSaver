@@ -1463,6 +1463,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Range("extruded_bubble_mid_bubbles", "Small Bubbles:", 0.0, 150.0, scale=1, integer=True, bucket="bubbles"),
         Range("extruded_bubble_bead_chains", "Bead Chains:", 0.0, 10.0, scale=1, integer=True, bucket="bubbles"),
         Slider("extruded_bubble_size_variety", "Size Variety:", 0.0, 1.0, bucket="bubbles"),
+        Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles",
+               tooltip="How many bubbles rise in lines along the stream."),
         Direction("extruded_bubble_stream_direction", "Stream Direction:", -90.0, 90.0, centre_text="Into Scene",
                   marker="arrow", bucket="motion",
                   tooltip="Drag the arrow: round the disc is the screen direction; toward the centre tips the stream "

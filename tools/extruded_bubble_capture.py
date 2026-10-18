@@ -4,6 +4,7 @@
     .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --size 1672x941 --start 20 --duration 6 --gif
     .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --set extruded_bubble_turn=0.25
     .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --passes
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --preset 5
 
 The clip's recorded feature frames drive the mode's own simulation through ``replay_clip`` (the production logical
 capture: real intensity and onsets on the logical clock); each sampled snapshot is drawn by the production
@@ -124,7 +125,8 @@ def _draw(host, target, snapshot, size, window, passes=None):
     return rgba, elapsed
 
 
-def capture(output: Path, clip_path: Path, *, size, window, overrides, start, duration, fps, gif, passes=False):
+def capture(output: Path, clip_path: Path, *, size, window, overrides, start, duration, fps, gif, passes=False,
+            preset=1):
     from bisect import bisect_left
     from PIL import Image, ImageDraw
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
@@ -150,7 +152,7 @@ def capture(output: Path, clip_path: Path, *, size, window, overrides, start, du
     stop = min(start + duration, times[-1])
     wanted = sorted({min(len(times) - 1, bisect_left(times, start + index / fps))
                      for index in range(max(1, math.ceil((stop - start) * fps)))})
-    activation = resolve_visualizer_activation_payload({"mode": MODE, f"preset_{MODE}": 0}, mode=MODE)
+    activation = resolve_visualizer_activation_payload({"mode": MODE, f"preset_{MODE}": preset - 1}, mode=MODE)
     settings = {**activation.resolved_config, **overrides}
     window = window or size
     target = TransitionCapture(*window)
@@ -232,6 +234,7 @@ def main():
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON", help="in-memory settings override")
     parser.add_argument("--gif", action="store_true", help="also export a silent GIF (at most 960x540)")
     parser.add_argument("--passes", action="store_true", help="time every draw by its program (shares, not totals)")
+    parser.add_argument("--preset", type=int, default=1, help="the curated preset (1-based), with its starting view")
     args = parser.parse_args()
     size = tuple(map(int, args.size.lower().split("x")))
     window = tuple(map(int, args.window.lower().split("x"))) if args.window else None
@@ -246,7 +249,7 @@ def main():
     if not disable_per_call_gl_error_checking():
         raise RuntimeError("OpenGL.GL imported before production error policy")
     capture(args.output, args.clip, size=size, window=window, overrides=overrides, start=args.start,
-            duration=args.duration, fps=args.fps, gif=args.gif, passes=args.passes)
+            duration=args.duration, fps=args.fps, gif=args.gif, passes=args.passes, preset=args.preset)
 
 
 if __name__ == "__main__":

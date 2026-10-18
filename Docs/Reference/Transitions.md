@@ -507,6 +507,10 @@ Each foundation slice adds what it learned here.
   `emission_writes()`), and its second output silently writes nothing. Every owner that draws to several attachments
   sets and restores its own masks; a lab that happened to call it inside the right scope proves nothing about product
   call order (Extruded Bubble's near giants drew sharp in the product until `DefocusLayer` did this).
+- Porting lab scenes to Settings-only presets: convert each authored quantity in the space it was authored in (a
+  view-space light at the scene's pitch, a screen-space stream), check every value through its control's `admit`,
+  and prove the preset through the real activation path (pixel-equal to the authored scene). A scene that will not
+  reach is a missing control or a wrong mapping; never a hidden value.
 - A driver that clamps by design (passage intensity holds at 1 through loud music) pins anything read linearly at
   it. Give the reaction its own follower that mixes the clamped level with onset lifts and eases below the top, so a
   saturated passage still moves; test it on the real recordings' saturated windows, not on synthetic ramps alone.

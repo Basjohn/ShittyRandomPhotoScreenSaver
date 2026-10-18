@@ -42,6 +42,7 @@ _POP_SECONDS = 0.35
 _LARGE_RADIUS = (0.075, 0.16)
 _MID_RADIUS = (0.025, 0.07)
 _MARGIN = 0.25             # how far outside the volume a bubble may be before it is gone
+_LANE = 0.26               # spacing of the columns across the stream (shares of the half view)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ class ExtrudedBubbleControls:
     large_count: tuple[float, float] = (6.0, 14.0)
     mid_count: tuple[float, float] = (20.0, 48.0)
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
+    columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
     stream_direction: tuple[float, float] = (0.0, 0.0)   # (around, height) degrees: 0 up; height into the scene
     stream_speed: tuple[float, float] = (0.05, 0.16)     # volume units per second
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
@@ -197,6 +199,16 @@ class ExtrudedBubbleSimulation:
     def _spawn(self, large: bool, controls: ExtrudedBubbleControls, direction, *, anywhere: bool) -> None:
         rng = self._rng
         x, y, z = rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(0.05, 1.0)
+        if controls.columns > 0.0 and rng.random() < controls.columns:
+            # Columns (the mocks' lines of bubbles): the place across the stream on screen snaps to a lane, so the
+            # bubble rises along it. A stream straight into the scene has no lanes.
+            dx, dy = direction[0], direction[1]
+            length = math.hypot(dx, dy)
+            if length > 0.2:
+                ax, ay = -dy / length, dx / length
+                across = x * ax + y * ay
+                lane = round(across / _LANE) * _LANE + rng.gauss(0.0, _LANE * 0.06)
+                x, y = x + ax * (lane - across), y + ay * (lane - across)
         if not anywhere:
             # Upstream: walk back against the stream until just outside the volume.
             dx, dy, dz = direction

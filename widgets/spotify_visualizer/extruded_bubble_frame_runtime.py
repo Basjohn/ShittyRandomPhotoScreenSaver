@@ -37,6 +37,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         large_count=pair("extruded_bubble_large_bubbles"),
         mid_count=pair("extruded_bubble_mid_bubbles"),
         size_variety=float(parameters["extruded_bubble_size_variety"]),
+        columns=float(parameters["extruded_bubble_columns"]),
         stream_direction=pair("extruded_bubble_stream_direction"),
         stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),
         drift=pair("extruded_bubble_drift"),
