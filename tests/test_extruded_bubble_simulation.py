@@ -231,6 +231,28 @@ def test_travel_is_the_distance_the_stream_carried_the_water_so_procedural_layer
         previous = snapshot
     assert previous.travel == pytest.approx(expected, rel=1e-9)
 
+def _lane_offsets(snapshot, stream):
+    """Each bubble's distance across the stream from its nearest lane."""
+    ax, ay = -stream[1], stream[0]
+    length = math.hypot(ax, ay)
+    offsets = []
+    for record in _records(snapshot):
+        across = (record[0] * ax + record[1] * ay) / length
+        offsets.append(abs(across - round(across / 0.26) * 0.26))
+    return offsets
+
+
+def test_columns_line_bubbles_up_along_the_stream():
+    stream = stream_vector(40.0, 0.0)
+    lined = ExtrudedBubbleControls(columns=1.0, stream_direction=(40.0, 0.0), drift=(0.0, 0.0), sway=0.0,
+                                   collision_scope="off")
+    loose = ExtrudedBubbleControls(columns=0.0, stream_direction=(40.0, 0.0), drift=(0.0, 0.0), sway=0.0,
+                                   collision_scope="off")
+    lined_offsets = _lane_offsets(_run(ExtrudedBubbleSimulation(9), lined, 0.5), stream)
+    loose_offsets = _lane_offsets(_run(ExtrudedBubbleSimulation(9), loose, 0.5), stream)
+    assert sum(lined_offsets) / len(lined_offsets) < 0.3 * sum(loose_offsets) / len(loose_offsets)
+
+
 def test_the_rays_move_through_a_saturated_passage_rise_quickly_fall_slowly_and_never_stutter():
     """The passage level holds at 1 through loud music; the rays' driver must still move with its hits, stay below
     the top, and never step abruptly."""

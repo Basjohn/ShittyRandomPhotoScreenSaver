@@ -330,3 +330,18 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         gl.glDeleteProgram(program)
     finally:
         capture.close()
+
+
+def test_a_deep_light_tints_the_water_it_lights_more_than_a_sunlit_surface_does():
+    """Inside the water the light's own colour carries its glow, beams and veils; under a surface the sky's light is
+    mostly the water's."""
+    orange = {**SETTINGS, "extruded_bubble_light_colour": [255, 130, 50, 255],
+              "extruded_bubble_water_colour": [8, 30, 40, 255]}
+    light = np.asarray(scene._rgb(orange["extruded_bubble_light_colour"]))
+
+    def distance(light_type, key):
+        knobs = scene.scene_knobs({**orange, "extruded_bubble_light_type": light_type})
+        tint = np.asarray(knobs[key]) / max(knobs[key])
+        return float(np.abs(tint - light / light.max()).sum())
+    for key in ("sky", "shaft"):
+        assert distance("Deep Light", key) < 0.5 * distance("Sunlit Surface", key)

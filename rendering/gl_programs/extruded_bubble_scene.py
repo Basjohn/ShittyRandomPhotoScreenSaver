@@ -112,9 +112,12 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                      surface=SURFACE_Y, shaft_y=SURFACE_Y)
     else:
         # No surface in view: the light is in the water; its highlights face the bubbles from where it is.
+        # Its colour carries through the water it lights (its glow, beams and veils take its colour; under a surface
+        # the sky's light is mostly the water's own).
         knobs.update(sun=direction, sun_below=direction, spec_dir=direction, surface_gain=0.6,
                      glint_power=600.0 * strength, light_power=1.2 * strength, surface=60.0, shaft_y=16.0,
-                     glow=0.6, ray_focus=1.0)
+                     glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, 0.85),
+                     shaft=tuple(0.95 * c for c in _mix(water_hue, light, 0.85)))
     softness = float(_p(parameters, "ray_softness"))
     knobs.update(fan_contrast=0.8 + (0.2 - 0.8) * softness, fan_march=0.15 + (0.6 - 0.15) * softness,
                  fan_rays=80.0 + (30.0 - 80.0) * softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))

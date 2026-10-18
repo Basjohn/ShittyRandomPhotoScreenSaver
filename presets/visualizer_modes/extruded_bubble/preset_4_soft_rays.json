@@ -1,0 +1,134 @@
+{
+  "description": "Broad soft rays through hazy blue water, lighter film and a wider aperture.",
+  "mode": "extruded_bubble",
+  "name": "Preset 4 (Soft Rays)",
+  "preset_index": 3,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "extruded_bubble",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "extruded_bubble_light_type": "Sunlit Surface",
+        "extruded_bubble_light_direction": [
+          8.5,
+          32.7
+        ],
+        "extruded_bubble_light_colour": [
+          164,
+          180,
+          187,
+          255
+        ],
+        "extruded_bubble_light_strength": 1.0,
+        "extruded_bubble_rays_enabled": true,
+        "extruded_bubble_rays": [
+          0.35,
+          0.55
+        ],
+        "extruded_bubble_ray_softness": 0.9,
+        "extruded_bubble_ray_reach": 0.6,
+        "extruded_bubble_ray_flicker": 0.3,
+        "extruded_bubble_large_bubbles": [
+          6,
+          14
+        ],
+        "extruded_bubble_mid_bubbles": [
+          20,
+          48
+        ],
+        "extruded_bubble_bead_chains": [
+          4,
+          6
+        ],
+        "extruded_bubble_size_variety": 0.6,
+        "extruded_bubble_columns": 0.0,
+        "extruded_bubble_stream_direction": [
+          0.0,
+          0.0
+        ],
+        "extruded_bubble_stream_speed": [
+          0.25,
+          0.8
+        ],
+        "extruded_bubble_drift": [
+          0.3,
+          0.8
+        ],
+        "extruded_bubble_sway": 0.4,
+        "extruded_bubble_breathing": [
+          0.15,
+          0.6
+        ],
+        "extruded_bubble_small_pulse": [
+          0.15,
+          0.8
+        ],
+        "extruded_bubble_sustained": 0.6,
+        "extruded_bubble_smoothing": 0.5,
+        "extruded_bubble_idle": 0.5,
+        "extruded_bubble_collision": [
+          0.4,
+          0.3,
+          0.3
+        ],
+        "extruded_bubble_collision_scope": "All",
+        "extruded_bubble_auto_rotate": false,
+        "extruded_bubble_auto_rotate_after": 20,
+        "extruded_bubble_auto_rotate_speed": 6,
+        "extruded_bubble_water_colour": [
+          10,
+          26,
+          43,
+          255
+        ],
+        "extruded_bubble_depth_colour": [
+          13,
+          28,
+          51,
+          255
+        ],
+        "extruded_bubble_haze": 0.3,
+        "extruded_bubble_veils": 0.0,
+        "extruded_bubble_surface_brightness": 1.25,
+        "extruded_bubble_clarity": 0.0,
+        "extruded_bubble_rim_glow": 1.0,
+        "extruded_bubble_iridescence": 0.5,
+        "extruded_bubble_softness": 0.1,
+        "extruded_bubble_sparkle": 1.0,
+        "extruded_bubble_particles": [
+          0.1,
+          0.35
+        ],
+        "extruded_bubble_particle_size": 1.0,
+        "extruded_bubble_particle_colour": [
+          255,
+          140,
+          60,
+          255
+        ],
+        "extruded_bubble_particle_warmth": 0.3,
+        "extruded_bubble_particle_glow": 0.0,
+        "extruded_bubble_particle_bands": false,
+        "extruded_bubble_band_contrast": 0.5,
+        "extruded_bubble_focus": 0.5,
+        "extruded_bubble_aperture": 0.33,
+        "extruded_bubble_exposure": 0.82,
+        "extruded_bubble_dynamic_floor": false,
+        "extruded_bubble_manual_floor": 0.12,
+        "extruded_bubble_input_gain": 1.0,
+        "extruded_bubble_audio_block_size": 512,
+        "extruded_bubble_adaptive_sensitivity": true,
+        "extruded_bubble_sensitivity": 0.4,
+        "extruded_bubble_bar_count": 32,
+        "mode": "extruded_bubble"
+      }
+    }
+  },
+  "starting_view": {
+    "extruded_bubble_turn": 0.0,
+    "extruded_bubble_tilt": -0.022,
+    "extruded_bubble_scene_scale": 1.0,
+    "extruded_bubble_scene_pan_x": 0.0,
+    "extruded_bubble_scene_pan_y": 0.0
+  }
+}

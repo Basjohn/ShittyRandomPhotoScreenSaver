@@ -256,7 +256,7 @@ accessibility):**
 | Light → Surface | Surface Brightness; Ripples | Light Type = Sunlit Surface |
 | Water | Water Colour; Depth Colour; Haze; Light Veils (amount, threads) | Veils' detail only when Veils on |
 | Glass | Clarity; Rim Glow; Iridescence (amount, colour band); Softness; Sparkle | Iridescence band only when Iridescence on |
-| Bubbles → Population | Large Bubbles, Small Bubbles, Bead Chains (ranges); Size Variety; Bead Columns | always |
+| Bubbles → Population | Large Bubbles, Small Bubbles, Bead Chains (ranges); Size Variety; Columns | always |
 | Bubbles → Motion | Stream Direction (direction mapper); Stream Speed (range); Drift; Sway; Swirl (with its direction) | Swirl replaces Stream Direction while on |
 | Bubbles → Reaction | Breathing (range); Small Bubble Pulse (range); Stream Reactivity; Contraction | always |
 | Bubbles → Collision | Collision triangle (Fuse / Pop / Bounce); applies to Big / Small / All; Fuse Variety (neck width, members) | Fuse Variety only when Fuse share > 0 |
@@ -286,7 +286,7 @@ tint, default `speck_warm`; Light Strength → `glint_power`, `light_power`, `su
 `ray_focus`; Water/Depth Colour → `water`, `deep` (`absorb` derived); Haze → `mist`; Light Veils → `veils`; Clarity →
 `face_reflect`; Rim Glow → `probe_fill`, `proxy_power`; Iridescence → `film`, `film_range`; Softness → `rough`,
 `inner_blur`; Sparkle → `sparkle`, `speck_glow`, `glint_sharp`; Large/Small Bubbles, Bead Chains → `mid_count`,
-`small_count` + `fizz`, `chains`; Bead Columns → `columns`; Stream Direction → `travel`, `streak`; Drift, Sway →
+`small_count` + `fizz`, `chains`; Columns → `columns`; Stream Direction → `travel`, `streak`; Drift, Sway →
 `drift`, `sway`; Particles → `specks`, `speck_size`, `warm_share` + `speck_warm`, `speck_bloom` + `dust`, `banded`,
 `band_freq`, `cloud_*`; Lens → `focus`, `aperture` + `near_coc`, `exposure` + `hdr_exposure`. Breathing, pulse,
 stream reactivity, contraction and collision have no lab knobs yet. **Extruded Bubble's controls are its own:**
@@ -430,4 +430,23 @@ never exceeds 0.93, still swings about 0.09 through 2 s windows where the level 
 in one 60 fps step. Tests: never pinned and moving through a saturated passage, quick rise and slow fall, no jump;
 the shimmer runs faster on hits; the picture is identical at level 0 and 1 and changes with the driver.
 
-**Next.** Every lab scene rebuilt as a preset through the Settings UI (S4), then physical acceptance (S5).
+**S4 presets landed (2026-10-18).** Every lab scene is a curated preset authored from Settings values alone:
+1 Sunlit Surface, 2 Deep Blue, 3 Night Water, 4 Soft Rays, 5 Abyss, 6 Looking Down, 7 Ember Drift (mocks 1-4, 5
+Abyss, 5 Cameradown, 6). `tools/visualizer_preset_author.py` writes each one: every value must come back unchanged
+from its Settings control's `admit` (reachable in the UI), the payload passes the normalisers the Settings save uses,
+the view pose becomes `starting_view`, and the file is read back through the activation path. Rendered through
+`tools/extruded_bubble_capture.py --preset N` (the real activation, starting view included) each preset draws the
+same picture as its authored scene (max difference 1/255). Two scenes could not be reached, so the Settings
+changed, never a hidden value:
+- **Columns** (section 9's "Bead Columns", built now): a share of the bubbles spawn in lanes along the stream (the
+  across-stream position snaps to a lane 0.26 apart), as the Abyss mock lines them up. Simulation-owned, tested.
+- **Deep Light colour:** a light inside the water now carries its colour into the sky and shaft tints (0.85 toward
+  the light; a sunlit surface stays 0.6 / 0.45), so an orange light gives orange beams, glow and veils (mock 6).
+Conversions used: the lab's deep `light_view` is a view-space direction at the authored pitch, rotated to the world
+for Light Direction; the lab's `travel` (across, up, into) maps to Stream Direction's around/height; pitch to tilt
+as (pitch - 16) / 90 (Looking Down's -32 degrees clamps at the tilt limit, -29). Remaining differences from the mocks
+are the renderer's, not the presets': mock 4's curved trails and caustic floor, mock 6's smoky ember texture (specks
+read as points), Looking Down's seafloor (dropped by design) and generally fewer, smaller bubbles than the mocks
+paint. Each preset is authored content: the operator retunes them at will.
+
+**Next.** Physical acceptance (S5) on a real display with real music.
