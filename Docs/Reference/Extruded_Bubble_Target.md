@@ -42,6 +42,9 @@ replay audit (`tools/visualizer_replay/mode_audit --modes bubble`), never into t
 
 ## 3. Inventory: what the shared layer already has
 
+*Superseded 2026-10-18 by the G0 gate status in `Scene3D_Resources.md` (depth texture, OIT, probe, traced shells,
+defocus and HDR now exist). Kept as the 2026-10-17 starting point.*
+
 | Need | Existing owner | Gap for the target |
 | --- | --- | --- |
 | Multisampled overlay target, emission, bloom | `SceneTarget`, `BloomChain` | Depth is a renderbuffer: nothing can sample scene depth (T3 compositing, T4 defocus, soft intersections) |

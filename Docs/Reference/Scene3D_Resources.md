@@ -344,6 +344,38 @@ last the ray that leaves). Consumers look the directions up in a `SceneProbe`. T
 GPU, conservation, the air bubble's mirror band, straight passage with matched indices and a solid sphere's
 reflection when the core is empty.
 
+## §4A gate status (G0 inventory, 2026-10-18)
+
+What each pre-Extruded-Bubble gate has, what proves it and what is missing. Extruded Bubble's demands come from
+`Extruded_Bubble_Target.md` (§1 target, §7 recovery, §9 preset surface); its lab
+(`tools/labs/extruded_bubble_lab.py`) is the consumer that exercised these primitives.
+
+| Gate | Owner | Proof | Gap |
+| --- | --- | --- | --- |
+| G1 attachments/depth | `SceneTarget` (`depth_texture`, mid-scope `background`, `hdr`) | `test_scene3d_target.py`: same pixels as the renderbuffer target, background colour + nearest depth at 1/4 samples, nothing allocated unless asked, allocation reuse/resize, failure hands state back | Release/resize of the depth, OIT and HDR attachments at park/context teardown not yet asserted per attachment; mixed-DPR resize of them untested. Normal/material/history attachments: not demanded (none planned) |
+| FC framed camera | descriptor `view_orbit_settings` / `scene_transform_settings`, `widgets/spotify_visualizer/view_orbit.py`, `core/settings/visualizer_view_orbit.py` | Neon Lake, Sphere, Extruded Spectrum orbit through it | Neon Lake's policies are keyed on its mode id (clamped turn, `_bounded_basin_pose` lake/sky anchors); FC needs them as per-mode declared bounds/fit/pivot so a second framed mode declares its own |
+| G3A transparency | `SceneTarget(oit=True)`, `SCENE_OIT_GLSL` | `test_scene3d_target.py`: either draw order gives the same picture at 1/4 samples (ordinary blending differs by >40 levels), nearer outweighs farther, opaque depth respected, state restored, nothing allocated without `oit` | Near-plane/camera crossings and context loss not asserted |
+| G2 shadow map | none (planar/directional silhouettes in `shadows.py` only) | — | No fitted depth-map foundation. Extruded Bubble's target has no receiver (abyss, no seabed): not demanded by it; stays deferred until a consumer needs it |
+| G3B optics | `scene3d_optics.py` (Fresnel, thin film, `sceneSpherePaths`, `sceneHollowSphereTrace`), `scene3d_spheres.py` impostors, `probe.py`, `defocus.py`, `scene3d_water.py` | mirror tests for every traced path, probe and defocus pixel tests, HDR tone curve | Rough transmission and dispersion: evaluated, not needed by the target (recorded unnecessary) |
+
+**Baselines.** Overhead (1920x1080, all transitions and modes): `tools/baselines/overhead/2026-10-18_f4dbb4ab.json`;
+it caught one shared regression from the HDR change (an exposure uniform written per frame by every overlay composite)
+which is fixed. Extruded Bubble lab at 2560x1440, 4x MSAA, RTX 4090 (`--size=2560x1440`), GPU ms per pass, median:
+
+| Scene | shafts | backdrop + particulate | shells | clusters | OIT resolve | near defocus | bloom + composite |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Mock 1 | 0.25 | 0.24 | 2.03 | 0.20 | 0.08 | 1.07 | 0.12 |
+| Mock 2 | 0.23 | 0.23 | 1.83 | 0.36 | 0.08 | 0.84 | 0.11 |
+| Mock 3 | 0.23 | 0.24 | 1.89 | 0.34 | 0.08 | 0.91 | 0.11 |
+| Mock 4 | 0.26 | 0.27 | 2.10 | 0.28 | 0.08 | 1.17 | 0.12 |
+| Abyss | 0.30 | 0.92 | 0.77 | 0.25 | 0.05 | 3.30 | 0.11 |
+| Camera down | 0.30 | 0.12 | 0.90 | 0.25 | 0.06 | 0.75 | 0.11 |
+| Mock 6 | 0.32 | 1.23 | 1.57 | 0.42 | 0.07 | 1.09 | 0.13 |
+
+About 4.0–5.7 ms per full-screen display plus the probe (0.18 ms GPU; its lab timestamp is Python submission), so
+two full-screen cards exceed a 165 Hz frame. Budget work before EB3: near defocus (64 full-resolution taps; the
+abyss's 3.3 ms) and the shells' rim sub-rays (~2 ms) are the measured hot spots.
+
 ## State restoration
 
 The common transition fence restores 2D textures on units 0, 1 and 2, multisample textures on units 0 and 1, and the
