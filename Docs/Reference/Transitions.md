@@ -494,6 +494,12 @@ Each foundation slice adds what it learned here.
   highlight stays bright.
 - A gather depth of field with fixed taps cannot draw a small bright source as a round disc at a coarse read level;
   scatter highlights as sprites and gather a clipped copy so light is kept.
+- An opt-in feature on a shared program must cost nothing when off: a uniform written unconditionally on the shared
+  overlay composite (HDR exposure) added a GL call to every 3D mode, caught only by the overhead baseline's call counts.
+  Give the feature its own program instance and leave the shared one's linked defaults untouched. Run the full
+  baseline after any shared-target change, and never trust a filtered run that matched no cases.
+- Budget by ablation before optimising: an exact early-out that looks free can be both small and inexact (half-float
+  mips flush tiny coverage); find which population pays (here 2-6 px beads through the full shell trace) first.
 
 ## Operator-triggered appearance review (reference checklist)
 
