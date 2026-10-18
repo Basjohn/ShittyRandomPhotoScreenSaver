@@ -520,8 +520,23 @@ class DirectionMapper(_VisualControl):
                 head.moveTo(point)
             painter.drawPath(head)
         elif self._marker == "light":
+            # The light: a glow, and three short rays fanning from it toward the scene (where its shafts fall).
+            dx, dy = centre.x() - point.x(), centre.y() - point.y()
+            reach = math.hypot(dx, dy)
+            if reach > 8.0:
+                angle = math.atan2(dy, dx)
+                length = reach - 6.0                     # all the way in, as the stream arrow spans the disc
+                for spread, alpha in ((-0.28, 0.45), (0.0, 0.85), (0.28, 0.45)):
+                    ray = QColor(accent)
+                    ray.setAlphaF(alpha)
+                    pen = QPen(ray, 1.6)
+                    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    painter.setPen(pen)
+                    start = QPointF(point.x() + 9.0 * math.cos(angle + spread), point.y() + 9.0 * math.sin(angle + spread))
+                    painter.drawLine(start, QPointF(point.x() + length * math.cos(angle + spread),
+                                                    point.y() + length * math.sin(angle + spread)))
             glow = QColor(accent)
-            for size, alpha in ((11.0, 0.10), (8.0, 0.18)):
+            for size, alpha in ((14.0, 0.12), (10.0, 0.22)):
                 glow.setAlphaF(alpha)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(glow)

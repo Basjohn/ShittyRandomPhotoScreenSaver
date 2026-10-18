@@ -264,6 +264,11 @@ accessibility):**
 | Lens | Focus; Aperture; Exposure | always |
 | Camera | Auto Rotate After (Off / seconds); Auto Rotate Speed | Speed only when Auto Rotate is on |
 
+**Light and gradients (operator 2026-10-18).** Light Direction is the same direction mapper as Stream Direction
+(a light with rays falling toward the scene instead of an arrow); the shafts follow it, so one control sets both. No
+separate gradient control: the water's gradient is Water Colour (surface) to Depth Colour (below) shaped by the
+light's direction, colour and haze.
+
 **Camera: Auto Rotate.** When enabled, the camera starts a gentle full-circle swivel (turn only; pitch, zoom and pan
 untouched) after the set time with no camera input. Completion of a full startup or of a mode/preset swap counts as
 an immediate trigger. Any orbit input stops it and restarts the wait. Driven by the logical frame clock (idle =

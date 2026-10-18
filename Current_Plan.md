@@ -239,7 +239,10 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   accepted, audit every Settings page (Visualizers, Transitions, widgets) and extend the shared visual controls
   (`ui/widgets/visual_controls.py`; spec `Range` / `Triangle` / `Direction`): angle dials for 8-way direction
   drop-downs (gradients, shadows, specular, stream), range sliders for low/high number pairs, triangle mappers for
-  three-way ratios, heavier `when` conditionals and proper nested bucketing to cut user fatigue. Record and land
+  three-way ratios, heavier `when` conditionals and proper nested bucketing to cut user fatigue. **Gradients
+  (operator 2026-10-18):** the direction mapper as a gradient control: around = direction, distance from the centre =
+  strength / how gradual (centre even, rim hard); first candidate original Bubble's 8-way gradient direction. Extruded
+  Bubble needs no separate gradient: Water Colour to Depth Colour with the light's direction, colour and haze is it. Record and land
   any other spec improvements found (new control types, shared builder affordances, Transitions spec parity). Keep
   canonical keys and stored values compatible (migrate inputs, never silently change saved meaning); prove each
   replaced body with its real-body round-trip and render it offscreen before committing.
