@@ -180,9 +180,12 @@ at EB2 and proves its renderer's retirement on context loss (`sceneGraphInvalida
 
 ### 4B. Extruded Bubble | §4A closed 2026-10-18
 
-Extruded Bubble is a **bordered/framed internal 3D** successor that reuses the original Bubble logical
-simulation/reactivity rather than modifying it. Read current fixed loudness; never add independent floors,
-clocks, DSP, polling or renderer-owned simulation. Preserve original Bubble Temporal Fidelity and distinct
+Extruded Bubble is a **real mode of its own** (operator 2026-10-18: "Extruded Bubble is NOT Bubble"): a
+bordered/framed internal 3D mode with its **own** logical simulation (a 3D bubble population with its own spawn,
+drift, streams, collisions, breathing and reactivity), its own frame runtime and logical tick hook, its own Settings
+and presets. Original Bubble is a guideline only and stays untouched (no shared simulation, settings or projection).
+It runs on the sole Visualizer logical clock and reads the existing audio feeds (fixed loudness, bands, transients,
+events); never add independent floors, clocks, DSP, polling or renderer-owned simulation. Distinct
 mode/preset/CUSTOM authorities. Use §4A's shared FC camera, G1 targets, G3A compositor and applicable
 G2/G3B facilities **from the initial renderer**, not as deferred post-launch rewrites.
 
@@ -192,8 +195,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   merely decorative demand; do not expand the shared architecture without evidence.
 - [ ] **EB2 — Descriptor, spec and frame admission.** Declare one canonical mode/capability and presentation
   Settings path (control surface drafted in `Extruded_Bubble_Target.md` §9: every lab scene must be authorable as a
-  preset from the spec's controls alone, operator 2026-10-18); consume Bubble logical state or a clearly mode-owned projection, not a second clock/capture/DSP.
-  Assert original Bubble replay equality and zero inactive import/GL/resource work.
+  preset from the spec's controls alone, operator 2026-10-18); its own logical simulation and frame runtime on the
+  sole clock (no second clock/capture/DSP). Assert original Bubble replay unchanged and zero inactive import/GL/resource work.
 - [ ] **EB3 — Bordered 3D renderer on proven primitives.** Instanced geometry, correct overlapping transparency,
   depth/card clipping, lighting/materials and **shared FC bounded orbit/pan/zoom** with Bubble-specific limits.
   The outer card, Edit/CUSTOM rectangle and independent camera view pose never become competing geometry authorities.
@@ -224,8 +227,8 @@ G2/G3B facilities **from the initial renderer**, not as deferred post-launch rew
   `Extruded_Bubble_Target.md` §8: the **Fuse / Pop / Bounce triangle** (barycentric node placed by mouse; Big / Small /
   All checkboxes; unaffected bubbles pass through), EB5a range sliders on every bubble count, particle amount and
   light-ray setting, and music-reactive shafts (intensity, spread, flicker) beside breathing, speed and drift, all
-  through original Bubble's logical reactivity. Author spec-owned controls and experimental art,
-  compare recorded quiet/onset/sustained passages with original Bubble baseline, and verify both displays,
+  through Extruded Bubble's own logical simulation. Author spec-owned controls and experimental art,
+  validate recorded quiet/onset/sustained passages (real recordings in `logs/visualizer_recordings`), and verify
   aspect/DPR, frame timing, latency, dormancy and audio-reactive fidelity before operator acceptance. Capture
   release media only after renderer and musical behavior are stable.
 
