@@ -945,9 +945,14 @@ class SceneTarget:
         else:
             key = "scene_overlay_bloom_samples" if multisampled else "scene_overlay_bloom"
             source = _COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT if multisampled else _COMPOSITE_OVERLAY_BLOOM_FRAGMENT
+        # An HDR target uses its own program instance and sets its exposure; every other target's program is never
+        # given one, so it keeps the linked default 0 (as drawn) with no per-frame uniform write.
+        if self._exposure > 0.0:
+            key += "_hdr"
         program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
-        names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength",
-                 "uHdrExposure")
+        names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength")
+        if self._exposure > 0.0:
+            names += ("uHdrExposure",)
         if shafts:
             names += ("uShafts", "uShaftColour")
         uniforms = resources.uniforms(key, names + (("uSceneSamples", "uSamples") if multisampled else ("uScene",)))
@@ -962,7 +967,8 @@ class SceneTarget:
         gl.glUniform1f(uniforms["uOpacity"], self._overlay)
         gl.glUniform2f(uniforms["uBloomScale"], 1.0 / self._key[0], 1.0 / self._key[1])
         gl.glUniform1f(uniforms["uBloomStrength"], float(bloom))
-        gl.glUniform1f(uniforms["uHdrExposure"], self._exposure)
+        if self._exposure > 0.0:
+            gl.glUniform1f(uniforms["uHdrExposure"], self._exposure)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, glow)
         gl.glUniform1i(uniforms["uBloom"], 1)
