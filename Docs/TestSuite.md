@@ -101,9 +101,9 @@ and actual GPU stills, then fails on drift against a separately saved frozen-set
 output evidence, not physical display cadence or audible latency. Existing lazy-body/preset/resource checks retain
 zero unopened bodies, canonical Custom saves and reusable renderer data ownership.
 
-Neon Lake closes only after actual rendered horizon/depth and size/DPR evidence; improved star/celestial response,
-terrain reactivity and visual timing must be checked on both synthetic replay and the operator's real-music
-recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. The local
+Neon Lake is operator-accepted; its historical closure required actual rendered horizon/depth and size/DPR
+evidence. Future visual/temporal changes to star/celestial response, terrain reactivity or water must still be
+checked on both synthetic replay and the operator's real-music recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. The local
 agent may run these replays and compare low/high signal, transient and sustained passages. Six new disposable
 experiment presets must round-trip through canonical schema without silently replacing the operator's
 current Preset 1 edits. All preset values, including those in Preset 1, are freely operator-editable
@@ -112,13 +112,52 @@ Preset experiment aesthetic rejection does not redefine the mode's behavioral re
 
 The shared pre-Extruded Bubble gate requires real GL/reference-pixel tests for G1 attachments/depth, FC framed
 camera (including comparison against existing Neon Lake), G3A overlapping translucent spheres in different
-render orders, G2 shadow-map caster/receiver, and any chosen G3B optics; measure CPU/GPU cost and memory,
+render orders, and any actually demanded/approved G3B optics; **G2 shadow maps are deferred without an
+approved Extruded Bubble receiver** (`Current_Plan.md` §4A), not a release prerequisite. Measure CPU/GPU cost and memory,
 GL state on success/failure, context retirement, card resize/aspect/DPR and dormant-mode neutrality. Test
 actual overlay alpha/near-plane occlusion and multi-display framing. A passing offline shader compile or
 an attractive static mock cannot close these gates. The subsequent EB renderer must consume **these** primitives
 rather than maintain duplicate view/transparency/shadow code. Only relevant targeted tests run after a change;
 operator physical acceptance remains a distinct check. Do not introduce environment-variable mutation or
 runtime Settings exposure into test setup.
+
+
+**Extruded Bubble recovery gates (standalone and native).**
+`& .\.venv\Scripts\python.exe tests\test_extruded_bubble_motion_contract.py` is a dependency-free,
+no-environment-mutation logical gate for: zero spawned synthetic near bubbles, sustained large-bubble
+radius excursions exceeding four equivalent pixels at 1080p, smooth kick onset, and both surface and bead
+phase rates being materially slower at idle than during sustained playback. It deliberately runs
+without Qt fixtures, not on a GPU. `test_extruded_bubble_simulation.py` checks the same physical logic
+through the normal Qt-integrated test suite; `test_extruded_bubble_renderer.py` checks ordinary large
+bubble world-fixed geometry and focus-path prerequisites; `test_extruded_bubble_shader_contract.py`
+checks GLSL varying ownership. All nine linked shader pairs in Mesa compatibility mode are **not**
+a native NVIDIA display acceptance. Native test runs must still prove the ordinary shell goes through
+ONE optical pass at the near cutoff (no double-composite, no abrupt change or unblurred newborn lens
+bubble), with authentic bubbles from near-depth 2.8 to far-depth 32.0 and varying Focus; fused clusters
+currently have no near-focus routing. Existing source tests do not prove
+what the camera sees or the perceived speed of moving backgrounds.
+
+**Extruded Bubble's 2026-10-18 operator failure ledger is not closed by these green coverage claims.**
+`Docs/Reference/Extruded_Bubble_Target.md` §10 (D → B → C → A) and §11 (five additional findings)
+are the physical acceptance authority. Extend the targeted tests with stable whole-bead-chain identities and
+birth/retirement opacity envelopes at fractional population changes (not merely per-bead end fades); curved
+world-space advection, 15%-wider chain footprint; no unowned fixed-time acceleration in silence; smooth
+silence→onset→sustained→release phase/speed changes. Trace level/flash/sustain→ray snapshot→actual GL uniforms
+and capture actual ray pixel brightness/spread (flicker without visible musical range fails). Diagnose coin/edge-on
+clear glass in Preset 7 and another scene via existing reflected/transmitted/normal/alpha/depth views, capture
+both stills and animated orbits. The existing renderer and simulation checks alone do **not** prove these.
+For sporadic Extruded Bubble→Settings failure, stress real generation retirement and cold/warm lazy Settings
+body entry; capture surviving Python-owner referrers and first-body-build duration **separately** without
+disabling the strict destruction barrier. A synthetic Settings builder test cannot prove retired Qt/GL resources.
+Use real recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`
+with the local agent; never fabricate run results. The shared DirectionMapper's opt-in horizon/midline stroke
+requires offscreen painted-pixel/DPR and unchanged drag, theme, keyboard and one-save-per-gesture coverage.
+
+**Neon Lake future work (not a regression against the accepted mode):** when admitted, test larger water
+height/splash as actual geometry and world-space spray (not just capped crest luminance), versioned water-height
+brush authoring and falloff with preserved wet/dry distinction, and independent real-contour Water Edge Glow
+colour/intensity without changing existing Water Line Glow. The deferred contract is in
+`Docs/Reference/Neon_Lake_Basin.md` and `Future_Work.md`.
 
 ## 1.1 Test durability and authority hygiene
 
@@ -863,3 +902,67 @@ agent image/video approval. Compare silent/onset/sustained clips and the operato
 real-music recordings at
 `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
 Use the project `.venv`, and never mutate environment variables.
+
+
+### Extruded Bubble shader-interface crash gate ([~] partial)
+
+`tests/test_extruded_bubble_shader_contract.py` is dependency-free and can run as
+`python tests/test_extruded_bubble_shader_contract.py` outside Qt; it checks that each authored vertex varying
+assignment has an output declaration in its own vertex stage, including the `vOpacity` bead-fade varying.
+The operator observed `clusters vertex shader compile failed ... undefined variable "vOpacity"`, caused by
+stray `vOpacity = 1.0` in both the cluster and particle vertex shaders. The source candidate removes only
+those two assignments. A temporary offscreen Mesa 4.5/GLSL 450 compatibility check linked all nine authored
+production pairs after version substitution and an unused shared vertex derivative substitution; this is
+**not** an OpenGL 4.6/NVIDIA production admission. The operator subsequently reported 26 focused tests passed in 5.90 s and rendering works on Windows
+after that fix. Verify **all preset** shader compile/link and complete full render passes, first-frame
+preparation, resize and clean release on Windows before moving this blocker from `[~]` to `[x]`.
+Do not collapse, delete or overwrite any Extruded Bubble §10/§11 physical failure or its acceptance details.
+
+### Extruded Bubble recovery acceptance ([~] live; not operator-accepted)
+
+Previously attempted near-field identity/lifetime and world-fixed orbit mapping are **retained as rejected
+source history**: the operator found those added bubbles distracting and initially focused. The current
+implementation spawns no separate near-field shells. A normal large bubble can enter shared near DoF
+only when its actual depth and authored focus admit it. Also retain shader-managed
+bead-chain opacity/curvature/width, integrated travel for bead motion and surface ripple phase, and the typed opt-in
+DirectionMapper midline (`tests/test_visual_controls.py`). The first energy-travel correction did not pass: the
+operator saw idle movement FASTER than playback. Retest the current music-integrated ambient/surface phase
+and 5× stream-distance bead climb; do not call phase-rate assertions visual acceptance. The normal Windows focused tests require PySide6/OpenGL
+and the local test fixtures; absence of those dependencies in an external analysis container is not a failing
+product result. Require a real shader compile/link, premultiplied transparency/defocus verification and a motion
+review at quiet/first onset/sustained/decay on all seven presets. The existing local real-music recordings at
+`F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` remain evidence; no replay
+was performed here. Do not mark the renderer's visual fidelity, independent near-field authoring, ray response,
+settings retirement, or breathing fixed from source-only or synthetic validation.
+
+
+### Extruded Bubble wake-emitter ownership and micro-glass gate (2026-10-19, `[~]`)
+
+`python tests/test_extruded_bubble_wake_contract.py` is a dependency-free *contract* test for live/retiring stable emitter identity, pop/compaction stability, source-head-to-tail fade parameters, reset and zero-parent cases, and a scene-lit microglass branch. `tests/test_extruded_bubble_shader_contract.py` protects vertex/fragment outputs. The 9 production shader pairs must also be compiled and linked with the actual Windows OpenGL 4.6 renderer; Mesa GLSL 4.50 compatibility linking is **not** native acceptance. Fixed buffers remain bounded to 2× `MAX_BUBBLES`, and retired sources must be consumed only by the existing simulation and immutable frame seam; no extra clocks, GPU random emitter authority or leaked GL resources.
+
+These checks **cannot** override the operator's confirmed full-mode reactivity failure. Bead shimmer must be assessed while moving under shafts in Presets 1/7; wake termination must be filmed at pop, fuse, surface exit and ordinary disappearance, with the dissolution marching from its travel-facing end backward. The still-open fused-cluster near DoF must have its own real-driver camera/Focus/Aperture acceptance. Follow the detailed live checklist in `Docs/Reference/Extruded_Bubble_Target.md` and the dedicated historical ledger; **do not close `[~]` without operator instruction**. Preserve real-music playback evidence at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` as well as synthetic replay fixtures.
+
+### Extruded Bubble: negative source probes versus physical acceptance (2026-10-19)
+
+- [~] `tools/extruded_bubble_source_audit.py` is a **read-only diagnostic with expected negative findings** (camera-origin relocation, projected size cancellation, alpha-as-radius and double Particles Range). Run it as an investigation, **not** in the green test suite, and do not relabel its documented violations as passing assertions.
+- [~] `test_extruded_bubble_renderer.py::test_a_bubble_keeps_its_share_of_the_view_at_any_depth_and_fades_by_shrinking` currently **asserts the wrong product behavior**, and `test_turning_a_full_circle_never_wraps_a_bubble_on_screen` permits camera-dependent world relocations because it only measures onscreen seam continuity. These are **false visual oracles**; neither is proof of proper 3D perspective, material birth/death fade or fixed world-space orbit. When rebuilding camera/opacity, replace these with identity-stable physical coordinates and actual pixel/opacity measures; preserve the old failure history.
+- [~] A playback capture-capable agent or the operator must observe full-res images/video of a constant snapshot while turning the camera, and a fixed camera through quiet→onset→sustained→silence. Sample tracked IDs, projected radius, opacity, stream heading, rays and emission across several presets. Do not equate live `get_musical_intensity`/onset wiring or snapshot scalars with perceived reactivity: the user reports **no visible large/mid breathing at all**. Preserve all open EB checklists and mutable presets.
+- [~] Micro-glass shader performance requires A/B capture on the **pre-micro-glass** and current full trees using `tools/extruded_bubble_capture.py --passes` with identical clip/Settings/size/tier, plus warmed-frame total GPU median/p90 and source call counts where available. Required at 1672×941 and 2560×1440, notably dense beads and Presets 1/7; compare both image quality (some chains shimmer) and costs. Rendering quality and GPU budget remain **unmeasured**, regardless of pass/link success. Source audit and source-only math do not justify a performance conclusion.
+
+
+
+### Extruded Bubble full-dynamic reactivity negative controls (2026-10-19, `[~]`)
+
+`& .\.venv\Scripts\python.exe tests\test_extruded_bubble_full_dynamic_audio.py` runs without Qt, user Settings or GPU. It holds scalar musical intensity at 1.000 while exercising *different* bass/mid/high bands from the shared original-Bubble feed and tests the **source-only** resulting separated large/mid swells, ray/stream/emission fields, single Particles Range ownership and zero constant sine in the production band path. These tests must NOT be interpreted as visible breathing: the previous scalar-only numerical tests were green while the operator saw nothing. **The full-dynamic candidate itself has now ALSO FAILED an operator real-display retest (`logs3a0d4fa1176.zip`)**: large and small bubbles still show no meaningful music-driven growth/shrinkage; maximum Sensitivity or enabling Dynamic Floor gives only a small, rapid, repeating, musically unrelated pulse. All tested reactivity (idle/live, streams, beads, rays and emission) is still `[~] COMPLETELY FUCKED`. Neither the successful test, the presence of bass/mid/high input, nor source-side radius deltas permit a downgrade to partial success. Existing scalar fixture tests remain useful for historical falsification, not product acceptance. Real clips are in `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`; require real input features matched to actual rendered 3D pixels by operator or offscreen/capture-capable agent. Dynamic Floor must not be necessary for breathing; maximum Sensitivity and Dynamic Floor are diagnostic toggles only and the current pulsing behavior with them is an **explicit negative acceptance case**. For any new mode-dependent CPU work, verify no additional clock/timer, source reader or permanent dormant cost.
+
+Settings timeout independent gate: the 2026-10-19 `logs3a0d4fa1175.zip` has a failed Settings barrier with **one `QuickDisplayVisualizerOwner` Python root**, but *no* remaining QObject/resource/thread/subscription. Run opt-in diagnostic product to obtain failure-only `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]` snapshots, then isolate the precise strong reference; test repeated 3D preset change → Settings → reopen/restart transitions without weakening the barrier. Keep fused near-DoF, camera world-space relocation, real opacity fades and micro-glass GPU performance separately open.
+
+`tools/extruded_bubble_source_audit.py` is still a **negative** CPU diagnostic for camera, opacity, true perspective and bead-direction faults. Its old double-Range *failure* is historical; its emission field must now report the **single-Range source candidate** while remaining `[~]` until pixels prove it.
+
+### Extruded Bubble: frame-trace evidence and full-dynamic pixel-value capture gate (`logs3a0d4fa1177.zip`, `[~]`)
+
+- [~] **Decode existing trace, do not pretend it contains bubble geometry.** With the supplied `screensaver_frame_trace.bin` extracted to a local file, run `& .\.venv\Scripts\python.exe tools\frame_trace_report.py <full-path-to-extracted-screensaver_frame_trace.bin>`. This repo decoder reports 614,364 records, 15,012 logical publications, 12,693 Quick syncs, 12,245 draws/swaps and 11,572 audio-analysis pairs; screen-1 lifecycle-aware steady median 11.503 ms, p99 19.202 ms, 23 gaps >25 ms, max 124.832 ms. Its ~348.70-s monotonic span includes lifecycle and possible unrendered intervals. Frame trace v1 tracks timestamps/event/revision/aux rather than real bass/mid/high, per-ID radii, instance attributes or pixel appearance. Never infer FPS from minute-bucket counts across lifecycle windows, or classify this as accepted reactivity.
+- [~] **Prove mode config and per-feature ownership independently.** Crosscheck the archived `screensaver_spotify_vis.log` `[VIS_TECH_CONFIG] mode=extruded_bubble` lines with actual Settings-model/typed Range and capture at each logical publication. The archived 02:25–02:30 run includes Sensitivity 2.160, 0.910, 0.770, 2.070 and Dynamic Floor-on, all without accepted visual changes. A technical-config line is not evidence that final `Breathing`, `Small Pulse`, stream, rays or particle uniform reached a GPU draw. Confirm per-source playback/generation/activation identity; do not use an extra audio-reader or timer.
+- [~] **Fix the diagnostic oracle BEFORE diagnosing from it.** `tools/visualizer_replay/extruded_bubble_traces.py` currently omits `body_bands` from `runtime.advance`; fallback `(0,0,0)` means its plots cannot exercise the production big/small band driver. `snapshot.breath` is the kick/breath follower, not the per-object breathing output; real records have 8 floats `[x,y,z,radius,alpha,swell,id,cluster]`. Avoid a global average across changing IDs. Either revise an **opt-in offline diagnostic** or use the existing `replay_clip` pathway and add bounded trace fields for actual band input, Range, per-ID base/current radius, instance packed radius, view depth and projected pixels. Do not claim that the current `tools/extruded_bubble_capture.py` `capture.json` has those fields: it presently records time/level/breath/flash/sustain/drift/emission/speed/rays/shimmer/count/GPU and images only.
+- [~] **Matched visual A/B is the actual admission gate.** On Windows with native Qt/OpenGL 4.6 and real recorded music in `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`, use `tools/extruded_bubble_capture.py --output <output-folder> --clip <real-clip.jsonl> --size 1672x941 --duration 6 --fps 12 --preset 1` as the existing offscreen image path, and repeat for other clips/Presets 7, fixed camera and fixed operator-authored Settings; the script uses `replay_clip` and the production render host, but is not by itself a per-bubble trace and requires a usable local git working tree for its provenance call. Add explicit opt-in, bounded matching band/instance/pixel diagnostics and a contact/video artifact. Run silence→onset→sustained→release with Dynamic Floor off, then Floor-on as **failed-behavior comparison only**, and normal versus extreme Sensitivity. Compare the original accepted 2D Bubble's response as a reference, without editing it. Require large/small per-ID pixel-size/opacity series, ray ROI variation, water/bead movement in pixels/s, speck count/intensity and first loss-of-response stage. **Only operator approval or visual-agent capture evidence can resolve `[~]`**; synthetics alone are known false positives.
+- [~] **Independent failures/budgets remain nonnegotiable.** Camera world-wrap/29.49-unit relocation, false perspective, radius-as-opacity birth/death, bead direction, fused-cluster near DoF, source-retirement wakes and micro-glass shimmer continue to contaminate image tests and retain their detailed target/ledger requirements. Compare micro-glass A/B warmed GPU pass and whole-frame median/p90 at 1672×941 and 2560×1440 and watch source-read CPU tick cost. Separately obtain Settings failure-only owner-referrer attribution for the retained `QuickDisplayVisualizerOwner`; do not relax the lifecycle barrier. The acceptance evidence belongs in the live checklist, not a chronological progress log. All existing failures stay `[~]` until the operator explicitly accepts them.

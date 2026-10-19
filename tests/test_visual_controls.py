@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QImage, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -183,3 +183,24 @@ def test_a_collapsed_height_range_is_a_plain_angle_dial(qt_app):
                      _point(QPointF(centre.x() - radius * 0.2, centre.y())))      # near the middle still reads the angle
     assert dial.value() == (pytest.approx(-90.0), 0.0)
     assert Direction("g", "Gradient:", 0.0, 0.0).text([45, 30]) == "45°"
+
+
+def test_direction_midline_is_opt_in_painted_guide_not_a_second_direction_authority(qt_app):
+    def image(midline, *, dial=False):
+        widget = DirectionMapper((0.0, 0.0) if dial else (0.0, 90.0), midline=midline)
+        widget.resize(widget.sizeHint())
+        widget.setValue((35.0, 40.0))
+        result = QImage(widget.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        result.fill(0)
+        widget.render(result)
+        return result, widget.value(), widget.describe()
+
+    regular, value, desc = image(False)
+    surface, after, after_desc = image(True)
+    assert regular != surface                            # opt-in produces a real paint difference
+    assert (value, desc) == (after, after_desc)           # no value/label/accessibility authority
+    ordinary, _, _ = image(False, dial=True)
+    ignored, _, _ = image(True, dial=True)
+    assert ordinary == ignored                           # angle-only dials have no horizon
+    assert not Direction("ordinary", "Ordinary:").midline
+    assert Direction("surface", "Surface:", midline=True).midline

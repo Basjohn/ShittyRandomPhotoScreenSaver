@@ -404,6 +404,7 @@ class Direction:
     height_high: float = 90.0
     centre_text: str = ""
     marker: str = "arrow"
+    midline: bool = False  # optional horizontal horizon/height guide, not a value
     tooltip: str = ""
     bucket: str = ""
     logical: bool = False
@@ -1449,7 +1450,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip="Sunlit Surface: the sun above the water, seen through the surface. Deep Light: a light "
                        "inside the water, no surface in view."),
         Direction("extruded_bubble_light_direction", "Light Direction:", 0.0, 90.0, centre_text="Overhead",
-                  marker="light", bucket="light", tooltip="Drag the light round the disc; the centre is straight above."),
+                  marker="light", midline=True, bucket="light", tooltip="Drag the light round the disc; the centre is straight above."),
         Colour("extruded_bubble_light_colour", "Light Colour:", "Light Colour", bucket="light", alpha=False),
         Slider("extruded_bubble_light_strength", "Light Strength:", 0.0, 2.0, bucket="light"),
         Toggle("extruded_bubble_rays_enabled", "", "Light Rays", bucket="rays"),
@@ -1466,7 +1467,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles",
                tooltip="How many bubbles rise in lines along the stream."),
         Direction("extruded_bubble_stream_direction", "Stream Direction:", -90.0, 90.0, centre_text="Into Scene",
-                  marker="arrow", bucket="motion",
+                  marker="arrow", midline=True, bucket="motion",
                   tooltip="Drag the arrow: round the disc is the screen direction; toward the centre tips the stream "
                           "into the scene."),
         Range("extruded_bubble_stream_speed", "Stream Speed:", 0.0, 1.0, percent=True, bucket="motion"),

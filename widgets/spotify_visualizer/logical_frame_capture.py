@@ -423,8 +423,23 @@ def _capture_extruded_bubble(
     getter = getattr(engine, "get_onset_events", None) if engine is not None else None
     onsets = getter(runtime.onset_serial) if callable(getter) else ()
     intensity = float(engine.get_musical_intensity()) if engine is not None else 0.0
+    # Consume the SAME support-aware, full-dynamic band snapshot already proven by 2D Bubble.
+    # The scalar is retained for legacy admission/diagnostic context; in production the band
+    # changes now also drive the existing audio Ranges for stream, rays and emission. Neither
+    # a scalar plateau nor an invented dynamic floor can establish musical body movement.
+    body_bands = (0.0, 0.0, 0.0)
+    if engine is not None and context.playing:
+        band_getter = getattr(engine, "get_bubble_energy_bands", None)
+        if not callable(band_getter):
+            band_getter = getattr(engine, "get_pre_agc_energy_bands", None)
+        if callable(band_getter):
+            bands = band_getter()
+            if bands is not None:
+                body_bands = tuple(float(getattr(bands, name, 0.0) or 0.0)
+                                   for name in ("bass", "mid", "high"))
     snapshot = runtime.advance(
         onsets=onsets, now_ts=context.now_ts, playing=context.playing, intensity=intensity,
+        body_bands=body_bands,
         identity=(context.runtime_generation, context.engine_generation, context.activation_id),
         source_identity=(context.source_generation, context.source_activation_id),
         controls=controls_from_parameters(parameters),
@@ -437,7 +452,8 @@ def _capture_extruded_bubble(
         bubbles=snapshot.bubbles, clusters=snapshot.clusters, time=snapshot.time, level=snapshot.level,
         breath=snapshot.breath, flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
         emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
-        travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
+        travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer, near_bubbles=snapshot.near_bubbles,
+        motion_phase=snapshot.motion_phase, wakes=snapshot.wakes,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
     )
     return frame, extra

@@ -314,7 +314,7 @@ def test_a_sustained_loud_passage_keeps_the_mid_bubbles_shimmering_between_hits(
 
 
 
-def test_big_bubbles_hold_large_through_a_sustained_loud_passage_instead_of_flickering():
+def test_big_bubbles_keep_a_high_average_swell_and_continuous_oscillation_through_sustained_loud_passage():
     controls = ExtrudedBubbleControls(breathing=(0.05, 0.25), collision_scope="off")
 
     def large_swells(simulation, intensity, seconds):
@@ -331,10 +331,57 @@ def test_big_bubbles_hold_large_through_a_sustained_loud_passage_instead_of_flic
     held = large_swells(simulation, 1.0, 10.0)[-int(2.0 / STEP):]         # sustained loud
     flicker = lambda values: max(values) - min(values)
     assert sum(held) / len(held) > sum(moderate) / len(moderate) * 1.5   # held large
-    assert flicker(held) < 0.5 * max(held)                                # and steady, not flickering to nothing
+    assert flicker(held) > 0.06 and min(held) > 0.02                    # visible cyclical breathing, never static
 
 
 def test_nothing_pins_flat_at_the_top_of_its_range():
     from widgets.spotify_visualizer.extruded_bubble_simulation import _soft_top
     assert _soft_top(0.5) == 0.5
     assert 0.8 < _soft_top(0.95) < _soft_top(1.2) < _soft_top(3.0) < 1.0      # still rising, never flat on 1
+
+
+def test_only_regular_bubbles_exist_no_synthetic_near_cohort_under_any_playback():
+    controls = ExtrudedBubbleControls(large_count=(9.0, 9.0), mid_count=(0.0, 0.0), collision_scope="off")
+    sim = ExtrudedBubbleSimulation(91)
+    for playing, intensity, seconds in ((False, 0.0, 2.0), (True, 0.9, 10.0), (False, 0.0, 2.0)):
+        for _ in range(int(seconds / STEP)):
+            frame = sim.advance(MusicInput(STEP, playing, intensity), controls)
+            assert not frame.near_bubbles
+            assert frame.count > 0
+
+
+def test_visible_breathing_keeps_oscillating_at_saturated_energy_in_pixel_units():
+    controls = ExtrudedBubbleControls(breathing=(0.05, 0.25), collision_scope="off",
+                                     large_count=(14.0, 14.0), mid_count=(0.0, 0.0))
+    sim = ExtrudedBubbleSimulation(100)
+    swells = []
+    for i in range(int(10.0 / STEP)):
+        snap = sim.advance(MusicInput(STEP, True, 1.0, (("kick", 1.0),) if i % 30 == 0 else ()), controls)
+        if i >= int(7.0 / STEP):
+            vals = [r[5] for r in _records(snap) if r[4] > 0.95]
+            if vals:
+                swells.append(sum(vals) / len(vals))
+    assert len(swells) > 100
+    # At 1080p, a 0.12-half-view radius is about 65px; 0.08 swell change is over 5px.
+    assert (max(swells) - min(swells)) * 0.12 * 540 > 4.0
+    assert min(swells) > 0.02                         # sustained passage never deflates to nothing
+    assert max(swells) <= controls.breathing[1] + 1e-6
+
+
+def test_water_and_bead_motion_are_slow_in_idle_and_speed_up_during_playback_without_phase_jumps():
+    controls = ExtrudedBubbleControls(stream_speed=(0.0625, 0.2), idle=0.5, collision_scope="off")
+    sim = ExtrudedBubbleSimulation(101)
+    def segment(playing, intensity, seconds):
+        data = []
+        for _ in range(round(seconds / STEP)):
+            data.append(sim.advance(MusicInput(STEP, playing, intensity), controls))
+        assert all(b.motion_phase >= a.motion_phase and b.travel >= a.travel
+                   for a, b in zip(data, data[1:]))
+        return (data[-1].motion_phase - data[-61].motion_phase,
+                5.0 * (data[-1].travel - data[-61].travel))
+    quiet_surface, quiet_beads = segment(False, 0.0, 5.0)
+    loud_surface, loud_beads = segment(True, 1.0, 9.0)
+    assert quiet_surface < 0.35 and quiet_beads < 0.4
+    assert loud_surface > quiet_surface * 4.0
+    assert loud_beads > quiet_beads * 2.5
+    segment(False, 0.0, 12.0)  # gentle release, no reversal or snap to another phase
