@@ -1,8 +1,9 @@
 # Neon Lake Basin
 
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID, settings prefix and layout profile remain
-`shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. Visual fidelity and musical acceptance remain live work in
-`Current_Plan.md` §2A V4A. The supplied low/high mock in
+`shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. The operator accepted the existing mode and its existing graphics/behavior baseline;
+`Current_Plan.md` §2A is the current status authority. Its future water/brush/glow extensions below are **not**
+retroactive acceptance failures. The supplied low/high mock in
 `Docs/Future_Work/Additional_Future_Transitions_Package.zip` is concept provenance, **not** the
 accepted artistic reference. The **operator's current** Preset 1 is the working visual comparison,
 not a frozen baseline; the operator may change it whenever desired.
@@ -12,10 +13,11 @@ not a permit to copy its special-case view code into each future mode. The share
 §4A prerequisite for Extruded Bubble and other framed 3D visualizers. Preserve this mode's authored
 landscape angles, existing Settings/presentation pose and card/CUSTOM behavior when promoting the common
 input/bounds/projection ownership; other modes supply their own bounds and visual target. Current acceptance
-and experimental preset closure are tracked only in `Current_Plan.md` §2A; the existing Preset 1 remains the
+is tracked only in `Current_Plan.md` §2A; the existing Preset 1 remains the
 working visual reference while six new experimental presets are temporary and may all be rejected.
-Every preset remains operator-editable, including Preset 1 and all six experiments. Audio reactivity
-review includes deterministic and operator real-music recordings and precedes mode closure.
+Every preset remains operator-editable, including Preset 1 and all six experiments. The historical
+audio-reactivity acceptance gate included deterministic and operator real-music recordings; future additions
+retain those evidence requirements but do not reopen the accepted baseline.
 
 ## Card, scene pose and input
 
@@ -405,10 +407,11 @@ Settings-timer or a bypass for the display owner. See `Docs/TestSuite.md` for th
 proof inventory and `Docs/Audits/Neon_Lake_Settings_And_Settings_Handoff_2026-10-13.md`
 for diagnostic history.
 
-Neon Lake completion requires image/physical review of actual distant horizon, size/DPR,
+The original Neon Lake acceptance required image/physical review of actual distant horizon, size/DPR,
 large-card glow/beat response and meaningful terrain reactivity; deterministic replay and
-operator real-music recordings must show appropriate transient, vocal/midband and sustained
-behavior with no bass washout. The operator's recordings are at
+operator real-music recordings were the required evidence for transient, vocal/midband and sustained
+behavior with no bass washout. **The operator subsequently accepted Neon Lake**; these are preserved
+regression/extension proof standards, not an unclosed launch gate. The operator's recordings are at
 `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
 A local agent may run real-music replays and compare before/after clips. Six new experimental
 editable presets must be delivered without silently replacing the operator's current Preset 1 edits; their eventual aesthetic
@@ -417,3 +420,43 @@ closure criteria live **only** in `Current_Plan.md` §2A, not a second checklist
 Rejected attempts and old checkpoint evidence belong in
 `Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md` and Historical Bugs,
 not in this live behavior reference.
+
+
+## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
+
+These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored
+Preset 1, or reinterpret existing controls. Track their admission in `Future_Work.md`; all art presets remain
+operator-editable. Use one basin surface/heightfield and the existing canonical Settings/presentation authorities.
+
+1. **Much greater water peak height plus splash.** `basinSurface()` currently computes
+   `ripple = 0.18 * tanh(wave.x / 0.18) + ...`, strongly capping physical vertical water displacement
+   regardless of source wave energy. The `crest = min(wave.y, 2.5)` path caps a *visual crest signal*, not
+   a liquid spray or physical peak. Offer an intentionally higher, tier-bounded physical water reach and a
+   connected crest/splash behavior when water climbs or breaks at the top, compatible with actual scene depth,
+   reflections, shore taper, orbit and water reactivity. Avoid bright-line-only faux splashes or a global gain
+   that destroys low settings. Verify very tall peaks in silhouette with impact/spray/falloff across card sizes
+   and musical attack/sustain/release, and benchmark GPU cost at maximum authored settings.
+
+2. **A heightful Water brush with falloff (volcano/fountain shaping).** Today's terrain editor treats the Water
+   tool as a hard authoring of **exact zero** at its half-weight contour, while positive values are land; the
+   persisted `heightfield` only stores `heights` in 0..1 and `sceneHeightfieldWater` classifies exactly zero.
+   This is why raising a water region using Water is structurally impossible, rather than a missing knob.
+   Extend the existing editor with a falloff-weighted water-height authoring concept that can form raised cones,
+   basins, fountains and volcanic water peaks while preserving a distinct wet/dry classification: **never**
+   make raised water masquerade as positive land or casually reinterpret version-1 heights as two meanings.
+   An explicit migrated single-owner water elevation/mask representation (design before implementation) must
+   remain deterministic, stroke/path-speed invariant and Undo/Redo/Custom/preset compatible. Edge height and
+   falloff must join the existing water/shore geometry continuously, without moving ordinary dry land.
+
+3. **Water-edge glow strength AND colour.** Existing `Water Line Glow` and its RGBA colour own moving ripple/
+   water-line emission; `Surface Glow` is a shared emission multiplier, and shoreline light is a distinct
+   composition term. A new independently authorable **water/shore *edge*** glow/colour is required: it must trace
+   the actual wet/dry/raised-water contour (including curved or tall sculpted water), not simply tint all moving
+   water lines or duplicate general Surface Glow. Keep the existing Water Line Glow's values, migration and
+   consumer intact, use the canonical typed spec/default/preset path for the new controls, and test the edge with
+   ordinary flat water, tall cones, distant shores, reflection and zero glow.
+
+**Gate:** design classification and height representation first; then add editor authoring, high-reach surface
+and coherent splash, and water-edge lighting as separate measurable slices. Actual operator-side physical
+comparison is required before checking any item complete. No changes to production behavior are implied by
+this deferred contract.

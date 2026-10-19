@@ -60,6 +60,24 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
 
 R128 hard-disables cast shadows after three successive physically rejected treatments (R125–R127). The existing Settings controls are greyed out, saved values are retained for compatibility, and the renderer never draws the rejected pass or expands Edit bounds for it. Reopen only when there is a new, operator-approved visual target and a renderer design consistent with the canvas and global shadow direction. Do **not** silently re-enable the old GLSL projection. The failed approaches and visual evidence are in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`.
 
+
+
+## Neon Lake water extension (operator-requested, deferred 2026-10-18)
+
+Neon Lake is already accepted: extend it **without** changing the current art, existing Water Line Glow semantics,
+card/camera ownership, land classification or operator-authored presets. The governing requirements and source
+constraints are in `Docs/Reference/Neon_Lake_Basin.md` ("Operator-authorized future water improvements").
+
+- [ ] Higher physically displaced water cap, with coherent water splash/spray on tall crests, a real 3D
+  silhouette and bounded reflection/scene-depth cost (current `tanh` caps surface displacement near 0.18).
+- [ ] Falloff-aware Water brush that can sculpt **raised water** (including volcano/fountain shapes), preserving
+  wet/dry distinction, deterministic stroke semantics, versioned canonical authoring and safe existing saves.
+- [ ] Separate water/shore **edge glow colour and strength**, alongside but not replacing existing Water Line Glow
+  for ripples. Follow the real contour, including newly raised water, and retain Surface Glow ownership.
+
+Admit only with the operator's approval of implementation sequencing and per-feature physical/GL evidence;
+none is a blocker on the accepted Neon Lake baseline or current Extruded Bubble work.
+
 ## 4. Deferred maintenance / product work
 
 Keep these deferred unless new evidence or an explicit request promotes them:

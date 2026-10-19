@@ -261,7 +261,7 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
         describe = control.text
     else:
         widget = DirectionMapper((control.height_low, control.height_high), centre_text=control.centre_text,
-                                 marker=control.marker)
+                                 marker=control.marker, midline=control.midline)
         widget.setValue(value)
         describe = control.text
     widget.setAccessibleName(control.label.rstrip(":"))

@@ -419,11 +419,12 @@ class DirectionMapper(_VisualControl):
     angle dial: the point rides a ring and only ``around`` changes (gradient, shadow or screen directions)."""
 
     def __init__(self, height_range: tuple[float, float] = (0.0, 90.0), *, centre_text: str = "",
-                 marker: str = "arrow", parent=None) -> None:
+                 marker: str = "arrow", midline: bool = False, parent=None) -> None:
         super().__init__(parent)
         self._low, self._high = float(height_range[0]), float(height_range[1])
         self._centre_text = centre_text
         self._marker = marker
+        self._midline = bool(midline)
         self._around, self._height = 0.0, self._high
         side = 96 if self.is_dial() else 150          # a plain angle needs less room than a full disc
         self.setMinimumSize(side, side)
@@ -497,6 +498,14 @@ class DirectionMapper(_VisualControl):
         for k in range(8):
             angle = math.radians(45.0 * k)
             painter.drawLine(centre, QPointF(centre.x() + radius * math.sin(angle), centre.y() - radius * math.cos(angle)))
+        if self._midline and not self.is_dial():
+            # The X (horizontal) axis is the subtle water-surface / halfway guide in a full
+            # direction disc; never give an angle-only dial a fictitious height reference.
+            guide = QPen(faint, 2.0)
+            guide.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(guide)
+            painter.drawLine(QPointF(centre.x() - radius, centre.y()),
+                             QPointF(centre.x() + radius, centre.y()))
         if self._centre_text:
             font = QFont(self.font())
             font.setPointSizeF(max(7.0, font.pointSizeF() - 1.5))

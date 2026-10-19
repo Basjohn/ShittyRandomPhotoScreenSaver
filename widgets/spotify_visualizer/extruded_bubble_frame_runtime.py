@@ -20,7 +20,8 @@ from widgets.spotify_visualizer.transient_bus import musical_weight
 
 # The largest step one capture may take (a stalled clock never leaps the population).
 MAX_STEP_SECONDS = 0.1
-# Settings units -> simulation units: stream speed (volume units/s), breathing and pulse (share of radius) at 100%.
+# Settings units -> simulation units: speed (volume units/s), breathing and pulse (radius shares at 100%).
+# Full-dynamic musical body bands are read from the existing 2D Bubble engine, not a new floor/DSP.
 STREAM_SPEED_FULL = 0.25
 BREATHING_FULL = 0.35
 SMALL_PULSE_FULL = 0.15
@@ -86,7 +87,8 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
     @retirement_fenced
     def advance(self, *, onsets, now_ts: float, playing: bool, intensity: float,
                 identity: tuple[int, int, int], source_identity: tuple[int, int],
-                controls: ExtrudedBubbleControls) -> ExtrudedBubbleSnapshot | None:
+                controls: ExtrudedBubbleControls,
+                body_bands: tuple[float, float, float] | None = None) -> ExtrudedBubbleSnapshot | None:
         now = float(now_ts)
         if not math.isfinite(now):
             raise ValueError("Extruded Bubble capture time must be finite")
@@ -107,7 +109,8 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         live = bool(playing) and source_ready
         dt = 0.0 if self._last_ts is None else min(MAX_STEP_SECONDS, max(0.0, now - self._last_ts))
         self._last_ts = now
-        music = MusicInput(dt, live, float(intensity) if live else 0.0, tuple(taken) if live else ())
+        music = MusicInput(dt, live, float(intensity) if live else 0.0, tuple(taken) if live else (),
+                           tuple(body_bands) if live and body_bands is not None else (0.0, 0.0, 0.0))
         self._latest = self._simulation.advance(music, controls)
         return self._latest
 

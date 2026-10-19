@@ -74,19 +74,41 @@ def test_fused_members_and_faded_bubbles_are_not_shells_and_clusters_carry_their
     assert clusters[0, 12] == 2.0 and clusters[0, 8:12].tolist() == [0.0] * 4    # two members, third unused
 
 
-def test_near_giants_are_drawn_by_the_near_layer_and_drift_without_jumping():
-    view_to_world, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    now, later = scene.near_giants(10.0, view_to_world, tan), scene.near_giants(10.0 + 1 / 60, view_to_world, tan)
-    assert now.shape == (scene.NEAR_GIANTS, scene.SHELL_FLOATS) and np.all(now[:, 5] == 3.0)
-    assert np.abs(later[:, :3] - now[:, :3]).max() < 1e-3
+def test_ordinary_shells_are_world_fixed_and_no_synthetic_near_population_is_generated():
+    _v, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
+    record = _record(x=0.17, y=-0.31, z=0.0, radius=0.15, alpha=0.8)
+    now = scene.bubble_instances(record, tan, (0.0, 0.0))
+    turned = scene.bubble_instances(record, tan, (0.03, 0.0))
+    assert now.shape == (1, scene.SHELL_FLOATS) and now[0, 5] == 0.0
+    assert np.allclose(now[:, :4], turned[:, :4], atol=1e-4)
+    x0, _y0 = _on_screen(now, (0.0, 0.0), 1.6)
+    x1, _y1 = _on_screen(turned, (0.03, 0.0), 1.6)
+    assert abs(x0[0] - x1[0]) > 0.02
+    assert scene.bubble_instances((), tan).shape == (0, scene.SHELL_FLOATS)
+
+
+def test_only_authentic_foreground_bubbles_are_eligible_for_depth_based_shared_defocus():
+    _v, view, tan, _p = scene.camera(0.0, 0.0, 16 / 9)
+    near = scene.bubble_instances(_record(z=0.05, radius=0.17), tan)
+    far = scene.bubble_instances(_record(z=0.5, radius=0.17, ident=2.0), tan)
+    to_view = np.asarray(view).reshape(3, 3)
+    def front_depth(shell):
+        return -(shell[:3] @ to_view)[2] - shell[3]
+    def circle(shell, focus):
+        return 22.0 * max(focus - front_depth(shell), 0.0) / max(focus - 2.5, 0.1)
+    assert near.shape == (1, scene.SHELL_FLOATS) and near[0, 5] == 0.0
+    assert scene.DEPTH_NEAR < 6.0                     # physically extends the ordinary population toward the lens
+    assert scene.DEPTH_NEAR + scene.DEPTH_SPAN == pytest.approx(32.0)  # far plane/scene retained
+    assert circle(near[0], 4.0) > 1.5                # normal camera focus can defocus an authentic close bubble
+    assert circle(near[0], 5.5) > circle(near[0], 4.0)
+    assert circle(far[0], 5.5) == 0.0               # distant bubbles do not enter the near layer
 
 
 def test_glint_proxies_follow_bubbles_toward_the_light():
     view_to_world, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    shells = np.concatenate((scene.bubble_instances(_record(), tan),
-                             scene.near_giants(0.0, view_to_world, tan)))
+    shells = scene.bubble_instances(_record(), tan)
     proxies = scene.glint_proxies(shells, (0.0, 1.0, 0.0), 3.0)
-    assert len(proxies) == 1                                          # giants mirror nothing into the probe
+    assert len(proxies) == 1                                          # no invented foreground cohort
     assert proxies[0, 1] > shells[0, 1] and proxies[0, 4] == 3.0
 
 
@@ -142,11 +164,13 @@ def test_every_light_type_gives_the_knobs_the_renderer_reads(light_type):
 def test_particles_read_their_range_at_the_emission_follower_growing_density_and_brightness_together():
     low, high = 0.2, 0.8                                           # TEST INPUT: a Particles range
     settings = {**SETTINGS, "extruded_bubble_particles": [low, high]}
-    quiet, loud = scene.speck_amount(settings, 0.0), scene.speck_amount(settings, 1.0)
+    # Caller already resolved the operator's low/high Range into state.emission. Renderer must not
+    # perform an additional interpolation (the old test encoded that exact double-range bug).
+    quiet, loud = scene.speck_amount(settings, low), scene.speck_amount(settings, high)
     assert quiet[0] < loud[0] and quiet[1] < loud[1]
-    assert loud[0] / quiet[0] == pytest.approx((high / low) ** 2)  # density grows faster than brightness
-    assert scene.speck_amount({**settings, "extruded_bubble_particles": [1.0, 1.0]}, 0.5)[0] == pytest.approx(1.0)
-    assert scene.speck_amount({**settings, "extruded_bubble_particles": [0.0, 0.0]}, 1.0) == (0.0, 0.0)
+    assert loud[0] / quiet[0] == pytest.approx((high / low) ** 2)  # density shaping preserved
+    assert scene.speck_amount({**settings, "extruded_bubble_particles": [1.0, 1.0]}, 0.5) == pytest.approx((0.25, 1.2))
+    assert scene.speck_amount({**settings, "extruded_bubble_particles": [0.0, 0.0]}, 1.0) == pytest.approx((1.0, 2.4))
 
 def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled():
     low, high = SETTINGS["extruded_bubble_rays"]

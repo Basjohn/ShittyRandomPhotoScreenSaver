@@ -1,5 +1,5 @@
 """Extruded Bubble's GLSL programs: the underwater water and light, volumetric shafts, traced glass shells (and the
-near-giant defocus layer), fused clusters and particulate.
+near-field defocus layer), fused clusters and particulate.
 
 Proven in the composition lab (``tools/labs/extruded_bubble_lab.py``, against the operator's mocks) and drawn by the
 mode's renderer (``rendering/quick/visualizer/implementations/extruded_bubble.py``): one source for both, so every
@@ -18,6 +18,7 @@ COMMON = """
 uniform mat3 uViewToWorld;
 uniform vec2 uTan;
 uniform float uTime;
+uniform float uSurfaceTravel;
 uniform vec3 uSun;
 uniform vec3 uSunBelow;
 uniform vec3 uDeep;
@@ -95,7 +96,7 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
     float distance_ = SURFACE_Y / ray.y;
     vec2 hit = (ray * distance_).xz;
     float footprint = length(fwidth(hit)) * detail + (1.0 - detail) * 1.5;
-    vec3 n = rippleNormal(hit, uTime, footprint);
+    vec3 n = rippleNormal(hit, uSurfaceTravel, footprint);
     // Light from above leaves through the surface where the slope lets it; the sun's broad lobe through tilted
     // wavelets makes the bright patches, the sky between them the dimmer light, total reflection the deep.
     vec3 out_ = refract(ray, -n, 1.33);
@@ -210,7 +211,7 @@ void main() {
             vec2 along = normalize(uStreak + vec2(1e-4));
             q = vec2(dot(q, along) * 0.45, dot(q, vec2(-along.y, along.x)) * 1.6);
             vec2 warp = vec2(skyFbm2(q * 0.4 + vec2(uTime * 0.02, 0.0), 3, 211u), skyFbm2(q * 0.4 + vec2(3.3, uTime * 0.015), 3, 223u));
-            float c = waterCaustics(q + (warp - 0.5) * 1.6, uTime * 0.3);
+            float c = waterCaustics(q + (warp - 0.5) * 1.6, uSurfaceTravel * 0.3);
             float patches = smoothstep(0.3, 0.7, skyFbm2(q * 0.18 + vec2(float(i) * 2.9), 3, 227u));
             // Thin bright threads in a soft glow of their own light.
             web += (pow(c, 6.0) + pow(c, 2.0) * 0.12) * patches * exp(-d * 0.07);
@@ -331,13 +332,16 @@ uniform float uFocus;
 uniform float uAperture;
 uniform float uPixel;
 uniform float uCrisp;
-uniform float uNearLayer;      // 1: drawing the near layer (kind 3 only, sharp)
+uniform float uNearLayer;      // 1: drawing front-of-focus ordinary shells through shared defocus
+uniform float uNearCoc;        // near lens circle scale, shared by both passes
 out vec2 vCorner;
 flat out vec4 vSphere;
 flat out float vBlur;
 flat out vec3 vExtra;    // seed, kind, true radius / drawn radius
+flat out float vOpacity;   // procedural chain lifetime and population fades; 1 for all other shells
 """ + SCENE3D_SPHERES_GLSL + """
 void main() {
+    vOpacity = 1.0;
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec3 centre = uWorldToView * aSphere.xyz;
     float depth = -centre.z;
@@ -348,7 +352,11 @@ void main() {
     float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.1);
     if (aExtra.y > 1.5 && aExtra.y < 2.5) blur = aSphere.w * 0.3;
     blur = max(blur, uPixel * depth * mix(0.7, 0.2, uCrisp));
-    bool near_ = aExtra.y > 2.5;
+    // Ordinary large bubbles are routed exclusively through ONE layer. Their actual front surface, not
+    // their identity or a camera-attached fake, decides whether near-focus bokeh is warranted.
+    float frontDepth = depth - aSphere.w;
+    float coc = uNearCoc * max(uFocus - frontDepth, 0.0) / max(uFocus - 2.5, 0.1);
+    bool near_ = aExtra.y < 0.5 && coc > 1.5;
     if (near_) blur = uPixel * depth * 0.5;                  // sharp in its layer; the lens blurs it
     if (near_ != (uNearLayer > 0.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     // At least half a pixel across so specks resolve; their light is scaled back to their true size.
@@ -563,6 +571,7 @@ in vec2 vCorner;
 flat in vec4 vSphere;
 flat in float vBlur;
 flat in vec3 vExtra;
+flat in float vOpacity;
 void main() {
     vec3 ray = sceneSphereFacingRay(vSphere.xyz, vSphere.w + vBlur, vCorner);
     float coverage = sceneSphereCoverage(ray, vSphere.xyz, vSphere.w, vBlur);
@@ -595,6 +604,25 @@ void main() {
 #endif
         return;
     }
+    if (vExtra.y > 2.5 && vExtra.y < 3.5) {
+        // Beads below a few pixels should not flip between a refractive highlight and stochastic speck when
+        // crossing the 1..2.5 px threshold. A stable, environment-lit glass speck retains water/probe colours,
+        // background transmission, mild Fresnel and scene depth, without high-frequency multi-tap refraction.
+        vec3 normalV = hit ? normalize(front - vSphere.xyz) : -ray;
+        float fresnel = pow(1.0 - clamp(dot(normalV, -ray), 0.0, 1.0), 3.0);
+        vec3 probe = textureLod(uProbe, uViewToWorld * reflect(ray, normalV), min(uProbeLevels - 1.0, 3.0)).rgb;
+        vec3 waterBehind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+        float glint = 0.65 + 0.35 * fract(vExtra.x * 17.31); // seeded identity, never the changing radius
+        vec3 light = mix(waterBehind, probe, 0.22 + 0.45 * fresnel);
+        light += uShaftColour * uSpeckGlow * (0.12 + 0.30 * fresnel) * glint;
+        float alpha = coverage * (0.22 + 0.38 * fresnel) * vExtra.z * vOpacity;
+        gl_FragDepth = sceneSphereDepth(front, uProjection);
+#ifndef NEAR_LAYER
+        sceneTransparent(light * alpha, alpha, -front.z);
+        Emission = vec4(0.0);
+#endif
+        return;
+    }
     vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
     vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
     gl_FragDepth = sceneSphereDepth(front, uProjection);
@@ -610,10 +638,11 @@ void main() {
     vec3 speckLight = behind * (0.55 + 0.45 * centreness)
                     + mix(uSkyTint, uShaftColour, 0.4) * uSpeckGlow * sparkle * (0.7 + 0.6 * centreness);
     shaded = mix(shaded, vec4(speckLight, 0.3 + 0.5 * centreness), speck);
-    float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck);
+    float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck) * vOpacity;
 #ifdef NEAR_LAYER
     // The circle this bubble's light spreads over at the lens, in pixels: grows as it nears the camera.
-    float coc = uNearCoc * max(uFocus - (-vSphere.z), 0.0) / max(uFocus - 2.5, 0.1);
+    float frontDepth = -vSphere.z - vSphere.w;
+    float coc = uNearCoc * max(uFocus - frontDepth, 0.0) / max(uFocus - 2.5, 0.1);
     sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, coc);
 #else
     sceneTransparent(shaded.rgb * alpha, alpha, -front.z);
@@ -768,11 +797,12 @@ uniform float uBeadTravel;     // how far beads have climbed their chains (view 
 uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
+uniform float uChainFill;       // continuous (possibly fractional) number of visible chains
 uniform float uSnowDrift;      // how far snow has drifted along the stream (view units)
-uniform int uSnowCount;        // instances past chains and snow are fizz: uFizzPer behind each shell record
+uniform int uSnowCount;        // instances past chains and snow are fizz: uFizzPer behind each stable wake emitter
 uniform int uFizzPer;
-uniform int uShellCount;
-layout(std430, binding = 7) readonly buffer EbShells { float ebShell[]; };   // x, y, z, radius, seed, kind
+uniform int uWakeCount;
+layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // world xyz, radius, stable id, retire, alpha, reserved
 vec4 aSphere;
 vec2 aExtra;
 uint beadHash(uint x) {
@@ -820,18 +850,26 @@ void beadInstance() {
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
         float s = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span) * span;
         float phase = 6.2832 * beadRandom(chain, 6u);
+        // A coherent, gently bending path shared by each bead in the chain (no fast independent
+        // sideways clock). Increase its authored lateral width by 15%; tiny seeded scatter remains.
+        float arc = sin(s / scale * 0.23 + phase + uBeadTravel * 0.025) * 0.09
+                  + sin(s / scale * 0.45 + phase * 1.7) * 0.01;
         vec3 p = centre + along * (s - 0.5 * span)
-               + across * (sin(s / scale * 0.6 + phase + uTime * 0.6) * 0.1 * scale
-                           + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.09 * scale * (1.0 + s / depth))
+               + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
                + vec3(0.0, 0.0, 1.0) * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
+        // A whole-chain lifetime, independent for each stable seed; both population changes and
+        // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
+        float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));
+        float lifetimeFade = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.82, 1.0, life));
+        vOpacity = clamp(uChainFill - float(chain), 0.0, 1.0) * lifetimeFade;
         float size = mix(1.4, 4.0, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
-        float ends = smoothstep(0.0, 0.06, s / span) * smoothstep(1.0, 0.94, s / span);
+        float ends = smoothstep(0.0, 0.06, s / span) * (1.0 - smoothstep(0.94, 1.0, s / span));
         // The whole chain turns with its centre, never split across the seam.
         aSphere = vec4(turnAbout(uViewToWorldTurn0 * p, wrapTurn(uViewToWorldTurn0 * centre)),
                        px * uPixel * max(-p.z, 1.0) * ends);
-        aExtra = vec2(beadRandom(chain * 977 + k, 12u), 0.0);
+        aExtra = vec2(beadRandom(chain * 977 + k, 12u), 3.0); // stable environment-lit micro-glass
         return;
     }
     if (gl_InstanceID >= uBeadCount + uSnowCount) {
@@ -840,15 +878,17 @@ void beadInstance() {
         int f = gl_InstanceID - uBeadCount - uSnowCount;
         int owner = f / uFizzPer;
         int k = f - owner * uFizzPer;
-        vec3 centre = vec3(ebShell[owner * 6], ebShell[owner * 6 + 1], ebShell[owner * 6 + 2]);
-        float r = ebShell[owner * 6 + 3];
-        float kind = ebShell[owner * 6 + 5];
-        int seed = int(ebShell[owner * 6 + 4] * 65536.0) * 131 + k;
+        // Stable emitter records survive a parent popping, fusing, leaving or changing shell-array slot.
+        vec3 centre = vec3(ebWake[owner * 8], ebWake[owner * 8 + 1], ebWake[owner * 8 + 2]);
+        float r = ebWake[owner * 8 + 3];
+        int seed = int(uint(ebWake[owner * 8 + 4]) * 131u + uint(k));
+        float retirement = ebWake[owner * 8 + 5]; // -1 live, 0..1 dissolving from front to back
+        float sourceAlpha = ebWake[owner * 8 + 6];
         vec3 view = uWorldToView * centre;
         float pixels = r / (uPixel * max(-view.z, 0.1));
         // Larger bubbles shed a fuller wake; giants and specks none.
         float share = clamp((pixels - 6.0) / 30.0, 0.0, 1.0);
-        if (owner >= uShellCount || kind > 0.5 || beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
+        if (owner >= uWakeCount || beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
             aSphere = vec4(0.0, 0.0, 0.0, 0.0);
             aExtra = vec2(0.0, 0.0);
             return;
@@ -861,9 +901,14 @@ void beadInstance() {
         vec3 p = view - along * (r * 0.6 + along_) + across * (g.x * spread + sin(along_ / r) * r * 0.3)
                + vec3(0.0, 0.0, 1.0) * g.y * spread * 0.6;
         float size = r * mix(0.04, 0.12, beadRandom(seed, 22u)) * (1.0 - 0.5 * along_ / reach);
-        float ends = smoothstep(0.0, 0.08, along_ / reach) * smoothstep(1.0, 0.85, along_ / reach);
-        aSphere = vec4(uViewToWorld * p, size * ends);
-        aExtra = vec2(beadRandom(seed, 23u), 0.0);
+        // Front = near the former source (along_/reach = 0). The dissolve walks down the remaining tail.
+        float tail = along_ / reach;
+        float ends = smoothstep(0.0, 0.08, tail) * (1.0 - smoothstep(0.85, 1.0, tail));
+        float headToTail = retirement < 0.0 ? 1.0
+                         : smoothstep(retirement - 0.08, retirement + 0.12, tail);
+        vOpacity = sourceAlpha * ends * headToTail;
+        aSphere = vec4(uViewToWorld * p, size);
+        aExtra = vec2(beadRandom(seed, 23u), 3.0); // micro-glass, same medium and lighting, stable sparkle
         return;
     }
     // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
@@ -934,7 +979,8 @@ assert PARTICLE_VERTEX.count(_SPECK_ATTRIBUTES) == 1 and PARTICLE_VERTEX.count("
 SPECK_VERTEX = (PARTICLE_VERTEX.replace(_SPECK_ATTRIBUTES, "")
                 .replace("void main() {\n", _SPECK_GLSL + "void main() {\n    speckInstance();\n"))
 BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
-               .replace("void main() {\n", _BEAD_GLSL + "void main() {\n    beadInstance();\n"))
+               .replace("void main() {\n    vOpacity = 1.0;\n",
+               _BEAD_GLSL + "void main() {\n    vOpacity = 1.0;\n    beadInstance();\n"))
 
 __all__ = [
     "BACKDROP_FRAGMENT",

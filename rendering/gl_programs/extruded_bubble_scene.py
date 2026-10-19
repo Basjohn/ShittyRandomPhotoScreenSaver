@@ -25,10 +25,10 @@ the view spans more azimuth; an elevation the plane never reaches (toward the ze
 keeps a point's elevation and distance, so its period never changes while it moves: a bubble leaving one side
 returns on the other where no one sees it. Tilt stays relative to the view (a tilted
 preset frames the bubbles as authored; a tilt drag carries them with it). The simulation never knows the camera.
-Near giants stay at the lens.
+The separate near-field cohort is disabled; the closest part of the *ordinary* volume starts at 2.8
+instead of 6.0 units so authentic large bubbles can enter the focus region. Far end remains 32.0.
 
-**Instances.** Shell records are (world centre, world radius, seed, kind): kind 0 a bubble, 3 a near giant (drawn
-by the near defocus layer only). Clusters are three member spheres then (members, neck blend, seed, 0). Glint proxies
+**Instances.** Shell records are (world centre, world radius, seed, kind): kind 0 an ordinary bubble, eligible for near defocus based on actual eye depth. Clusters are three member spheres then (members, neck blend, seed, 0). Glint proxies
 are each bubble's highlight as the scene probe sees it (particle records: point, radius, brightness, warm, seed, 0).
 """
 from __future__ import annotations
@@ -42,10 +42,9 @@ from rendering.gl_programs.scene3d_water import water_sun_below
 
 FOV_Y_DEGREES = 62.0
 NEAR, FAR = 0.05, 200.0
-DEPTH_NEAR, DEPTH_SPAN = 6.0, 26.0
+DEPTH_NEAR, DEPTH_SPAN = 2.8, 29.2
 SURFACE_Y = 9.0
 SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 6, 16, 8
-NEAR_GIANTS = 3
 # What a Light Type implies (the lab's "surface" and "deep" modes) and what every scene shares.
 ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
 MODES = {
@@ -143,10 +142,13 @@ SPECKS_FULL = 216000          # specks at the top of the Particles range (the la
 
 
 def speck_amount(parameters: Mapping[str, object], emission: float) -> tuple[float, float]:
-    """The Particles range read at the emission follower (never the raw level): (share of ``SPECKS_FULL`` drawn,
-    brightness). Density and brightness both grow with it, as the lab's ``specks`` did."""
-    low, high = (float(v) for v in _p(parameters, "particles"))
-    value = max(0.0, low + (high - low) * max(0.0, min(1.0, float(emission))))
+    """Consume the already Range-resolved emission follower once (never the raw musical level).
+
+    Return (density share, brightness); the authored range is mapped in the simulation,
+    not here. The nonlinear density curve is retained, unvalidated on a real display."""
+    # `emission` is already the smoothed value of the operator's Particles Range,
+    # resolved exactly once by ExtrudedBubbleSimulation. Never apply that Range again.
+    value = max(0.0, min(1.0, float(emission)))
     return value * value, 2.4 * value
 
 
@@ -276,6 +278,23 @@ def bubble_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
     return out
 
 
+def wake_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
+    """Stable simulation-owned wake sources, independent of the compacted visible-shell GPU slots.
+
+    8 floats: world centre x/y/z, physical radius, stable identity, retirement progress (-1 active),
+    opacity at retirement/current birth, reserved. Retirements keep their final world-volume anchor.
+    """
+    rows = np.asarray(records, dtype=np.float64).reshape(-1, 8)
+    if len(rows) == 0:
+        return np.empty((0, 8), dtype=np.float32)
+    points, depth, periods = _volume_points(rows[:, 0], rows[:, 1], rows[:, 2], tan, pose[1])
+    out = np.empty((len(rows), 8), dtype=np.float32)
+    out[:, :3] = _wrapped_turn(points, periods, pose[0])
+    out[:, 3] = rows[:, 3] * tan[1] * depth
+    out[:, 4:8] = rows[:, 4:8]
+    return out
+
+
 def cluster_instances(records, clusters, tan, pose=(0.0, 0.0)) -> np.ndarray:
     """Each fused cluster as the cluster pass's instance; it turns as one (by its first member), never split across
     the seam."""
@@ -296,23 +315,6 @@ def cluster_instances(records, clusters, tan, pose=(0.0, 0.0)) -> np.ndarray:
         out.append(tuple(float(v) for m in padded for v in m) + (float(len(members)), blend,
                                                                   (clusters[i + 1] * 0.618) % 1.0, 0.0))
     return np.asarray(out, dtype=np.float32).reshape(-1, CLUSTER_FLOATS)
-
-
-def near_giants(time: float, view_to_world, tan) -> np.ndarray:
-    """A few huge, out-of-focus bubbles just in front of the lens at the frame's edges (the mocks' corners), drifting
-    very slowly so they never jump. View-anchored: they float at the camera, wherever it turns."""
-    out = np.empty((NEAR_GIANTS, SHELL_FLOATS), dtype=np.float32)
-    axes = _axes(view_to_world)
-    t = float(time)
-    for k, (u, v, depth, radius, seed) in enumerate(((-0.92, -0.55, 3.2, 0.68, 0.31),
-                                                     (0.95, -0.42, 3.0, 0.62, 0.57),
-                                                     (-0.88, 0.62, 3.5, 0.55, 0.83))):
-        u += 0.04 * math.sin(t * 0.05 + 6.28 * seed)
-        v += 0.05 * math.sin(t * 0.037 + 3.1 * seed)
-        view = np.array((u * tan[0] * depth, v * tan[1] * depth, -depth))
-        out[k, :3] = view @ axes
-        out[k, 3:] = (radius, seed, 3.0)
-    return out
 
 
 def glint_proxies(shells: np.ndarray, sun_below, power: float, size: float = 0.6) -> np.ndarray:
@@ -345,6 +347,6 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
 
 
 __all__ = ["CLUSTER_FLOATS", "DEPTH_NEAR", "VOLUME_EXTENT", "DEPTH_SPAN", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
-           "NEAR_GIANTS", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
-           "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "near_giants", "ray_strength",
+           "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
+           "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "ray_strength",
            "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL", "volume_to_world"]
