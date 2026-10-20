@@ -990,3 +990,8 @@ getter rather than silently substituting pre-AGC or zero bands. Synthetic tests 
 fences, onset consumption, smoothing and deterministic bounded population. They cannot approve visible fidelity.
 Native evidence and the precise transfer/minimum-size comparison belong in the failure ledger §7; physical
 acceptance, collision geometry, camera/perspective/fade/DoF and material parity remain separate live gates.
+
+`test_extruded_bubble_renderer.py` also protects the actual Deep Light softness consumer in native pixels
+(previous 0/1 output was identical), both light types' shaft-threshold mapping, dim nonzero ray rest and full
+authored loud strength. The real-recording ray-probe grids are component interventions, not musical or physical
+acceptance. A changed softness image does not alone establish the desired broad shaft profile.

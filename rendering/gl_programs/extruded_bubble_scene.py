@@ -118,7 +118,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                      glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, 0.85),
                      shaft=tuple(0.95 * c for c in _mix(water_hue, light, 0.85)))
     softness = float(_p(parameters, "ray_softness"))
-    knobs.update(fan_contrast=0.8 + (0.2 - 0.8) * softness, fan_march=0.15 + (0.6 - 0.15) * softness,
+    knobs.update(shaft_soft=softness,
+                 fan_contrast=0.8 + (0.2 - 0.8) * softness, fan_march=0.15 + (0.6 - 0.15) * softness,
                  fan_rays=80.0 + (30.0 - 80.0) * softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
     knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")))
     clarity, softness = float(_p(parameters, "clarity")), float(_p(parameters, "softness"))
@@ -153,12 +154,17 @@ def speck_amount(parameters: Mapping[str, object], emission: float) -> tuple[flo
 
 
 def ray_strength(parameters: Mapping[str, object], rays: float) -> float:
-    """The Light Rays range read at the simulation's ray driver (0..1; never the raw passage level, which holds at 1
-    through loud passages), or none when the rays are off."""
+    """Resolve the authored Range once, with collapsed resting activity in silence.
+
+    A strong quiet-music endpoint must not keep the full fan bright with no musical
+    input. The continuous simulation driver opens the light from 3% resting activity
+    to the authored loud endpoint; disabled rays still emit no shafts.
+    """
     if not bool(_p(parameters, "rays_enabled")):
         return 0.0
     low, high = (float(v) for v in _p(parameters, "rays"))
-    return low + (high - low) * max(0.0, min(1.0, float(rays)))
+    drive = max(0.0, min(1.0, float(rays)))
+    return (low + (high - low) * drive) * (0.03 + 0.97 * drive)
 
 
 def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) -> tuple[float, float]:

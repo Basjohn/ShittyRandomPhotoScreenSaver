@@ -340,3 +340,29 @@ frequency/contrast rather than a common beam-edge profile. Repair the dead consu
 driver/softness endpoints and actual real-passage ray ROIs at both resolutions. Quiet music, playback-off rest,
 continuous phase, broad shafts and authored surface/light appearance require distinct checks. No light fix is
 claimed in this checkpoint.
+
+## 8. Ray consumer correction (2026-10-20 candidate)
+
+`scene_knobs` now sends Ray Softness to `shaft_soft` for **both** light types, retaining fan controls.
+This repairs Deep Light's proved dead consumer without another program, pass, target or clock. Native P7
+softness 0/1 mean absolute RGB difference is now **11.75** at full driver (previously exactly 0), and the same
+probe was repeated at 2560×1440. Source mapping plus the native regression test fail if this consumer is removed.
+
+Ray strength now resolves its authored Range once, then opens with `0.03 + 0.97*driver` resting activity.
+At driver 0 P1 uploads 0.018 rather than 0.6; at driver 1 it still reaches its authored 0.8. P7 similarly spans
+0.003–0.2. This is a deliberate resting-activity contract, not a changed preset or additional audio floor.
+Continuous simulation followers preserve release/phase; disabled rays remain off.
+
+Evidence: `logs/eb_reactivity_20261020/rays_fixed_p1`, `rays_fixed_p7`, `rays_fixed_p7_1440`, plus the real opening
+12-second `light_passage_p1` native sequence. Fixed-state central RGB mean at softness 0 now spans
+**93.36–114.66** for P1, compared with **111.50–116.63** before. At softness 1 P1 spans **95.27–161.16**.
+P7's scene is intentionally dominated by other light/particulate, so its central-region average remains a weak
+ray-isolation measure; retain the full native grids and inspect shaft regions rather than declaring global
+brightness a musical oracle. No authored Range, palette, particle count or surface-light setting was changed.
+
+**30 focused renderer checks pass**, including actual GL Deep Light softness pixels, driver ownership and
+prepared-frame allocation/resource retirement. The shader source is unchanged. These checks establish restored
+consumer behavior, not full broad-shaft/reference or operator listening acceptance. Fixed blur footprint,
+real-passage profile/ROI response, world/camera optics and all non-light EB defects remain in the live plan.
+Next operator-requested slice: constrain free/attached bead size to roughly ±10%, always strictly below the
+current parent, and restore visibly very slow nonzero idle stream/emission/water without losing improved settling.

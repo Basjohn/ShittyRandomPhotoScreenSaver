@@ -53,6 +53,12 @@ disables size reaction. Minimum size and maximum excursion are separate acceptan
 nonpopping stable identities against accepted 2D, including the big population and projected/visible size at fixed
 depth. Do not count entry fade, pop shrinkage, changed perspective or a departing identity as musical contraction.
 
+Ray Softness must reach both the angular sun fan and the marched Deep Light shaft pattern. The Light Rays
+Range is resolved once at the simulation's continuous ray driver, with resting light activity reduced to 3%
+at zero drive and full authored strength at drive 1. This lets strong quiet-music authoring coexist with dim
+silence. Shimmer/phase still comes from the logical simulation, with gentle release rather than a pause reset.
+Broad shaft appearance and reaction remain native/physical acceptance questions, not shader-link assertions.
+
 Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
 Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer
@@ -304,7 +310,7 @@ it; Auto Rotate then starts from that view. Auto Rotate After/Speed are presenta
 **Lab knob mapping** (what each control sets in the lab; `ENGINE` values and mode defaults are not controls):
 Light Type → `mode`; Light Direction → `sun`, `light_view`, `spec_view`; Light Colour → `light`, `shaft`, `sky`
 tint, default `speck_warm`; Light Strength → `glint_power`, `light_power`, `surface_gain`, `glow`; Light Rays →
-`rays`; Ray Softness → `fan_contrast`, `fan_march`, `fan_rays`; Ray Reach → `fan_reach`; Beams' focus →
+`rays`; Ray Softness → `shaft_soft`, `fan_contrast`, `fan_march`, `fan_rays`; Ray Reach → `fan_reach`; Beams' focus →
 `ray_focus`; Water/Depth Colour → `water`, `deep` (`absorb` derived); Haze → `mist`; Light Veils → `veils`; Clarity →
 `face_reflect`; Rim Glow → `probe_fill`, `proxy_power`; Iridescence → `film`, `film_range`; Softness → `rough`,
 `inner_blur`; Sparkle → `sparkle`, `speck_glow`, `glint_sharp`; Large/Small Bubbles, Bead Chains → `mid_count`,

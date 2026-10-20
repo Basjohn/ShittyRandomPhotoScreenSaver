@@ -257,13 +257,13 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Preserve stable identities and source-to-tail retirement. Idle motions improved in the operator retest, but
   stream/emission/surface-water now look stopped: establish visibly very slow nonzero rest, without restoring
   fast idle motion or an oscillator. Follow the completed light slice before making these changes.
-- [ ] Repair the **Ray Softness consumer in Deep Light**: the setting controls fan frequency/contrast but the
-  depth-marched shaft threshold remains fixed (`uShaftSoft` defaults to 0). Connect the authored setting to both
-  actual paths and prove native 0/1 endpoints in Presets 1/7. Measure broad softness in angular/pixel units at both
+- [ ] **Awaiting Validation — Ray Softness.** The candidate now connects the authored setting to the depth-marched
+  shaft threshold as well as the fan; native endpoints differ where Deep Light previously ignored the setting.
+  Review broad softness in actual P1/P7 passages, measuring angular/pixel units at both
   resolutions; fixed blur taps alone are not a resolution-independent appearance contract.
-- [ ] Restore a useful **ray reaction range**, including slow idle dimming. The current `low+(high-low)*driver`
-  keeps Preset 1 at 0.6 even with driver 0, so the complete driver sweep changes central RGB mean only about 5%
-  in the fixed-state probe. Separate authored quiet-music appearance from collapsed silence; retain the single
+- [ ] **Awaiting Validation — ray reaction range and slow idle dimming.** The candidate retains 3% resting activity,
+  then opens the authored Range with the continuous musical driver. Verify useful native contrast through real
+  quiet/onset/sustained/release, including P1's strong quiet handle and P7's low-light art. Retain the single
   ray Range owner, motion phase continuity and independent light/surface art. Prove actual ray ROI and profile
   changes on real passages, not merely a changed uniform or shimmer clock. See report §7 for the native probe.
 - [ ] Validate stable live/retiring wake emitters at the physical surface, pop, fusion, parent exit and slot compaction.

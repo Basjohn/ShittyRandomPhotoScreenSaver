@@ -22,10 +22,14 @@ parser.add_argument('--clip',type=Path,required=True)
 parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--preset',type=int,default=1)
 parser.add_argument('--at',type=float,default=3.)
+parser.add_argument('--size',default='1672x941')
 args = parser.parse_args()
 if not 1 <= args.preset <= 7 or args.at < 0:
     parser.error('preset must be 1..7 and at nonnegative')
 out = args.output
+size = tuple(map(int, args.size.split('x')))
+if len(size) != 2 or min(size) <= 0:
+    parser.error('size must be positive WIDTHxHEIGHT')
 out.mkdir(parents=True, exist_ok=False)
 root = Path(__file__).resolve().parents[2]
 source_paths = [root/'rendering/gl_programs/extruded_bubble_scene.py',
@@ -34,7 +38,7 @@ source_paths = [root/'rendering/gl_programs/extruded_bubble_scene.py',
 source_hashes = {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths}
 (out/'source_receipt.json').write_text(json.dumps(dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
     source_hashes=source_hashes,clip=str(args.clip.resolve()),clip_sha256=hashlib.sha256(args.clip.read_bytes()).hexdigest(),
-    preset=args.preset,at=args.at),indent=2))
+    preset=args.preset,at=args.at,size=size),indent=2))
 original = capture._draw
 ledger = []
 
@@ -50,10 +54,13 @@ def draw(host, target, snapshot, size, window, passes=None):
             picture = Image.fromarray(pixels).convert('RGB')
             picture.save(out / f'soft_{soft:g}_drive_{drive:g}.png')
             knobs = scene_knobs(params)
+            x0,x1 = (round(size[0]*v/1672) for v in (400,1200))
+            y0,y1 = (round(size[1]*v/941) for v in (250,750))
             ledger.append(dict(softness=soft, drive=drive, strength=ray_strength(params, drive),
                                shaft_soft=knobs.get('shaft_soft', 0.0), fan_contrast=knobs['fan_contrast'],
                                fan_rays=knobs['fan_rays'], gpu_ms=ms,
-                               central_rgb_mean=float(np.asarray(picture)[250:750,400:1200].mean())))
+                               rgb_roi=[x0,y0,x1,y1],
+                               central_rgb_mean=float(np.asarray(picture)[y0:y1,x0:x1].mean())))
             picture.thumbnail((550,310))
             tile=Image.new('RGB',(550,340),'#101827');tile.paste(picture,(0,0))
             ImageDraw.Draw(tile).text((8,315),f'softness {soft:g} | driver {drive:g} | uRays {ray_strength(params,drive):.3f}',fill='white')
@@ -66,7 +73,7 @@ def draw(host, target, snapshot, size, window, passes=None):
 
 with patch.object(capture,'_draw',draw):
     capture.capture(out,args.clip,
-                    size=(1672,941),window=(1672,941),overrides={},start=args.at,duration=.02,
+                    size=size,window=size,overrides={},start=args.at,duration=.02,
                     fps=30,gif=False,preset=args.preset)
 
 if {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths} != source_hashes:

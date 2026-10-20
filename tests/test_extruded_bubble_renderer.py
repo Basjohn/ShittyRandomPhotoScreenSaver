@@ -175,10 +175,19 @@ def test_particles_read_their_range_at_the_emission_follower_growing_density_and
 def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled():
     low, high = SETTINGS["extruded_bubble_rays"]
     on = {**SETTINGS, "extruded_bubble_rays_enabled": True}
-    assert scene.ray_strength(on, 0.0) == pytest.approx(low)
+    assert 0 < scene.ray_strength(on, 0.0) < low * .05  # very dim rest, not the full quiet-music endpoint
+    assert scene.ray_strength(on, .15) < scene.ray_strength(on, .75) * .3
     assert scene.ray_strength(on, 1.0) == pytest.approx(high)
     assert scene.ray_strength(on, 2.0) == pytest.approx(high)
     assert scene.ray_strength({**SETTINGS, "extruded_bubble_rays_enabled": False}, 0.7) == 0.0
+
+
+@pytest.mark.parametrize("light", ["Sunlit Surface", "Deep Light"])
+def test_ray_softness_reaches_the_actual_marched_shaft_consumer(light):
+    for value in (0., .35, 1.):
+        knobs = scene.scene_knobs({**SETTINGS, "extruded_bubble_light_type": light,
+                                  "extruded_bubble_ray_softness": value})
+        assert knobs["shaft_soft"] == value
 
 
 def test_ray_flicker_deepens_as_the_rays_rise_and_a_held_passage_reaches_further():
@@ -289,6 +298,20 @@ def test_the_rays_follow_the_simulation_driver_never_the_raw_level(target):
     base = capture.render(host, with_state(level=0.0, rays=0.2))
     assert np.array_equal(capture.render(host, with_state(level=1.0, rays=0.2)), base)
     assert np.abs(capture.render(host, with_state(level=0.0, rays=0.9)) - base).mean() > 0.5
+
+
+@pytest.mark.qt
+def test_deep_light_softness_changes_native_shaft_pixels(target):
+    capture, host = target
+    def at(softness):
+        snapshot = _snapshot(extruded_bubble_light_type="Deep Light",
+                             extruded_bubble_ray_softness=softness,
+                             extruded_bubble_rays_enabled=True, extruded_bubble_rays=[.2, .8])
+        state = dataclasses.replace(snapshot.logical.mode_state, rays=.8)
+        return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
+    sharp = capture.render(host, at(0.))
+    soft = capture.render(host, at(1.))
+    assert np.abs(soft - sharp).mean() > .5  # previous consumer produced byte-identical images
 
 
 def _frame(snapshot, quad_vao):
