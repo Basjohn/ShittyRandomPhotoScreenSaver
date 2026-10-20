@@ -66,6 +66,17 @@ fade/hide a bead if a tiny/fading parent cannot support that bound. Keep nominal
 than rebinding to a compacted slot. Slow idle must remain visibly alive: motion and emission need separate
 resting activity because particle density squares the emission value. Zero authored amounts remain zero.
 
+Large/Small count Ranges bound new admission including identities still retiring. A lower newly selected ceiling
+allows previously admitted records to fade, then waits for their slots rather than deleting them. Musical
+drivers must remain normalized before count interpolation. Small bubbles primarily track vocal/body changes
+with restrained held support; a sustained vocal plateau must not turn the whole small field into hero-size shells.
+
+View-aware crossing/overlap handling supplements world contacts using the existing camera's derived projection.
+It must track stable pairs, depth and relative motion, never redefine the world around the camera or teleport
+distant surfaces into a fusion. Use continuous steering/approach or extremely gentle opacity retirement as the
+authored response permits. Fixed-camera crossing proof precedes the later Auto Rotate challenge. Pops must
+fade opacity, not implode geometry. Detailed policy/admission work remains in the current plan.
+
 Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
 Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer

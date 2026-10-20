@@ -391,7 +391,7 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
 only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
 Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
-measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–7; work stays in
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–12; work stays in
 `Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
 response comparator, then quiet→loud/heavy/soft recordings.
 
@@ -401,6 +401,8 @@ response comparator, then quiet→loud/heavy/soft recordings.
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_controls --duration 8 --probe-controls
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output logs/eb_forensics/archive_inventory.json
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_rays --preset 7 --at 3
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output logs/eb_forensics/new_held_bands.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output logs/eb_forensics/new_coverage
 ```
 
 Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
@@ -419,6 +421,13 @@ overlaps; do not claim a reconstructed soundtrack is verified merely because eac
 The ray probe holds one production snapshot fixed and varies only Ray Softness (0/1) and the simulation ray
 driver (0/.5/1), saving native PNGs, a labelled grid and mapped consumer values. Other layers stay unchanged;
 its central RGB mean is a fixed-region brightness observation, not segmented shaft luminance or musical fidelity.
+
+The held-band comparison selects an actual hot vocal frame but clears further discrete events/transient lanes;
+it tests steady support rather than repeatedly firing that frame's snare. It is not continuous music. Optional
+`--simulation-ref <commit>` loads only that simulation module from Git into the tool process, with its compiled
+hash recorded; other source stays current. It never changes checkout state. The coverage probe instead draws
+one frozen primitive through unmodified ordinary/cluster shaders, with coverage diagnostic/OIT readback and
+center/edge placement. It isolates silhouette conventions, not the identity of a bubble in an operator screenshot.
 
 `--set KEY=JSON` is an in-memory override. Ordinary replay serves recorded post-DSP bands, so technical overrides
 cannot demonstrate live Sensitivity/Floor behavior. Optional `--reanalyze-pcm` explicitly recomputes production

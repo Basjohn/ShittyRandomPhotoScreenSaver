@@ -196,6 +196,7 @@ class ExtrudedBubbleSimulation:
         self._motion_rate: float | None = None
         self._body_big_envelope = 0.0
         self._body_small_envelope = 0.0
+        self._small_body_reference = 0.0
         self._kick_swell = 0.0
         self._ray_lift = 0.0
         self._rays = 0.0
@@ -266,7 +267,7 @@ class ExtrudedBubbleSimulation:
         bass, mid, high = (max(0.0, min(1.0, float(v))) if music.playing else 0.0
                            for v in music.body_bands)
         big_body = max(bass, 0.28 * mid + 0.10 * high)
-        small_body = max(0.70 * mid + 0.35 * high, 0.45 * bass)
+        small_body = min(1.0, max(0.70 * mid + 0.35 * high, 0.45 * bass))
         intensity = max(big_body, small_body)
         self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
         onsets = music.onsets if music.playing else ()
@@ -288,8 +289,13 @@ class ExtrudedBubbleSimulation:
         body_release = (1.5 if intensity < 0.01 else 0.20) * soft
         self._body_big_envelope = _follow(self._body_big_envelope,
             _soft_top(0.75 * big_body + 0.50 * self._kick_swell + 0.10 * sustain * big_body), dt, 0.06 * soft, body_release)
+        # Small bubbles open on changing vocal/body energy, with restrained held support.
+        # A hot mid/high plateau must not inflate the whole small field to hero size.
+        self._small_body_reference = _follow(self._small_body_reference, small_body, dt, 0.7 * soft, 0.9 * soft)
+        small_change = max(0.0, small_body - self._small_body_reference)
         self._body_small_envelope = _follow(self._body_small_envelope,
-            _soft_top(0.80 * small_body + 0.40 * self._pulse + 0.25 * sustain * small_body), dt, 0.06 * soft, body_release)
+            _soft_top(0.50 * small_body + 1.10 * small_change + 0.40 * self._pulse
+                      + 0.12 * sustain * small_body), dt, 0.06 * soft, body_release)
         # Resting phases barely advance. Sway and shader animation share this integrated musical time.
         idle_rate = 0.03 + 0.06 * max(0.0, min(1.0, controls.idle))
         motion_target = idle_rate + 1.60 * level + 0.22 * self._flash + 0.20 * sustain
@@ -330,19 +336,26 @@ class ExtrudedBubbleSimulation:
             targets[False] = MAX_BUBBLES - targets[True]
         live = {True: [b for b in self._bubbles if b.large and not b.leaving and b.popping < 0],
                 False: [b for b in self._bubbles if not b.large and not b.leaving and b.popping < 0]}
+        present_large = sum(b.large for b in self._bubbles)
+        present = {True: present_large, False: len(self._bubbles) - present_large}
+        limits = {True: min(MAX_BUBBLES, round(max(controls.large_count))),
+                  False: min(MAX_BUBBLES, round(max(controls.mid_count)))}
         for large in (True, False):
             if not self._filled:
                 for _ in range(targets[large]):
                     self._spawn(large, controls, direction, anywhere=True)
                 continue
             shortage = targets[large] - len(live[large])
-            if shortage > 0:
+            if shortage > 0 and present[large] < limits[large]:
                 # A steady inflow, faster the further below target (never a burst).
                 self._spawn_credit[large] += dt * (0.5 + 1.5 * shortage / max(1, targets[large]))
                 while self._spawn_credit[large] >= 1.0 / max(1, targets[large]) and shortage > 0 \
                         and len(self._bubbles) < MAX_BUBBLES:
+                    if present[large] >= limits[large]:
+                        break  # retiring identities retain their slot until their gentle fade completes
                     self._spawn_credit[large] -= 1.0 / max(1, targets[large])
                     self._spawn(large, controls, direction, anywhere=False)
+                    present[large] += 1
                     shortage -= 1
             elif shortage < 0:
                 self._spawn_credit[large] = 0.0

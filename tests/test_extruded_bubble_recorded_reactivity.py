@@ -65,6 +65,27 @@ def test_sustained_control_changes_actual_recorded_production_output(clip):
                for a, b in zip(left.bubbles[5::8], right.bubbles[5::8])) > .02
 
 
+def test_held_real_hot_vocal_frame_keeps_the_small_population_distinct_from_large():
+    path=ROOT/'logs/visualizer_recordings/cindarellaman_heavy2.jsonl'
+    if not path.is_file():
+        pytest.skip('local real heavy recording is required for the hot vocal hold gate')
+    from tools.visualizer_replay.extruded_bubble_forensics import load_clip
+    source=load_clip(path,10)
+    peak=max(source.frames,key=lambda f:.7*f.energy.bubble.mid+.35*f.energy.bubble.high)
+    quiet_events=replace(peak.real,onsets=(),events=())
+    quiet_transient=replace(peak.energy.transient,bass=0.,mid=0.,high=0.,overall=0.,
+                            onset_detected=False,onset_type='',onset_strength=0.)
+    quiet_energy=replace(peak.energy,transient=quiet_transient)
+    held=FeatureClip('held_actual_hot_vocal',tuple(replace(peak,timestamp_us=peak.timestamp_us+i*11000,
+                                                        real=quiet_events,energy=quiet_energy)
+                                                for i in range(1200)))
+    state=states(held,extruded_bubble_stream_speed=(0.,0.),extruded_bubble_drift=(0.,0.),extruded_bubble_sway=0.)[-1]
+    large=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if state.bubbles[i+6]<=4]
+    small=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if 5<=state.bubbles[i+6]<=12]
+    assert large and small
+    assert median(small)<1.6  # sustained support, not near 3x inflation of every small bubble
+
+
 def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     last = clip.frames[-1]
     paused = tuple(replace(last, timestamp_us=last.timestamp_us + (i+1)*11_000, playing=False)
