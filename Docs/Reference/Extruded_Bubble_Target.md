@@ -10,8 +10,8 @@ Visual acceptance cannot be inferred from the lab, green unit tests or authored 
 ## 1. Visual target (operator mocks, `tmp/Bubbleexamples`, 2026-10-17; informational mocks 2026-10-18)
 
 Seven frames in `tmp/Bubbleexamples` (three looking up toward a sunlit surface, one with wake tendrils, the abyss, camera
-down, the diagonal orange stream) plus two annotated **informational mocks** (`tmp/Informational mock.png`,
-`tmp/Informational mock 2.png`, blue and copper) whose detail panels name each material requirement: broad specular
+down, the diagonal orange stream) plus two annotated **informational mocks** (`tmp/Bubbleexamples/Informational mock.png`,
+`tmp/Bubbleexamples/Informational mock 2.png`, blue and copper) whose detail panels name each material requirement: broad specular
 from the light with inset peaks, real front/back double rims with Fresnel and colour separation, spherical volume with
 refracted background, merged bubbles with continuous surfaces, wide soft shafts, and dense micro-bubble trails
 ("no ribbon/sperm lines"). Where a mock shows a seabed or ribbons, the operator's later rulings below win.
@@ -29,8 +29,14 @@ refracted background, merged bubbles with continuous surfaces, wide soft shafts,
 | T9 | Water volume | Blue absorption and in-scattering with distance; darker abyss | Distance fog in the medium's colour, deeper = darker |
 | T10 | Camera | Framed internal camera that can look up, level or down | Shared FC capability with Bubble-specific bounds |
 
-Not in the target: hard cast shadows (no receiver shows one; the seabed's light is caustic, not shadowed), GTAO,
-volumetric smoke/fire, screen-space reflections.
+Not in the target: hard cast shadows without a demonstrated receiver, GTAO or screen-space reflections without
+an actual target need. **Operator clarification 2026-10-20:** the fiery example's debris/gas/smoky appearance,
+proper stream source points and useful EB camera control/centring are in scope. Add whatever bounded runtime/shared
+architecture reproducing the examples requires; the older blanket exclusion of volumetric smoke/fire must not
+exclude needed gas/wisp/volume behavior. EB's open volume need not inherit Neon Lake's camera restrictions.
+`tools/labs/extruded_bubble_lab.py` and its `ExBubble1`–`ExBubble6Diagonal` variants are comparison assets;
+matching a lab still does not establish production emitter/lifetime/reactivity or physical camera correctness.
+Healthy reactivity is the immediate priority; required scene architecture remains subsequent active EB recovery.
 
 ## 2. Reactivity: its own simulation (operator 2026-10-18, supersedes "reads original Bubble")
 

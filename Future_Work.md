@@ -57,7 +57,10 @@ Only genuinely deferred concepts live here. Accepted transition membership belon
 
 ### Deferred 3D consumers and missing substrate
 
-Promote after Extruded Bubble only when separately admitted. Retain the order **Reactive Particle Field →
+This section defers **generic later consumers and their unused extensions**. Any emitter/particle/wisp/volume or
+camera primitive needed to reproduce Extruded Bubble's examples is active EB work under `Current_Plan.md` §4B;
+it does not wait until after EB. Healthy reactivity is the first recovery slice, not a reduction of its visual scope.
+Promote the unrelated modes after Extruded Bubble only when separately admitted. Retain the order **Reactive Particle Field →
 Terrain/Skyline/Tunnel → Waveform Ribbon → Deformable Blob Sphere**. Usu remains governed by its focused plan.
 Each promoted mode needs recorded musical controls, its own accepted visual target and bounded measured cost.
 
@@ -69,6 +72,8 @@ Each promoted mode needs recorded musical controls, its own accepted visual targ
   and shared G3A transparency. A proven EB need promotes only the small needed primitive, not the whole engine.
 - **G5 / S18, lightning then volumes:** bounded procedural geometry/light before reduced-resolution smoke/fog/fire,
   advection and reprojection. Require consumer-specific quality/cost proof; no permanent targets/separate cadence.
+  This generic progression does not constrain EB's required ember/gas composition: build its needed primitive in
+  EB recovery when the example/lab comparison demands it, using the shared substrate where reusable.
 - **Reactive Particle Field:** establish capacity, lifetime and response target before collision; consume G4 on demand.
   **Terrain/Skyline/Tunnel:** one bounded geometry/camera slice at a time, fixed loudness semantics. **Waveform Ribbon:**
   real waveform history plus G4 ribbon proof. **Deformable Blob Sphere:** deformation/normal/geometry bounds and
