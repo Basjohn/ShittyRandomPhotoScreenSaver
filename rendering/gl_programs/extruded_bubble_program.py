@@ -352,7 +352,6 @@ void main() {
     if (aSphere.w <= 0.0 || vOpacity <= 0.0 || depth + aSphere.w <= 0.05) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     // Blur in proportion to the bubble: a tiny near bubble softens without swelling into a grey disc.
     float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.1);
-    if (aExtra.y > 1.5 && aExtra.y < 2.5) blur = aSphere.w * 0.3;
     blur = max(blur, uPixel * depth * mix(0.7, 0.2, uCrisp));
     // Ordinary large bubbles are routed exclusively through ONE layer. Their actual front surface, not
     // their identity or a camera-attached fake, decides whether near-focus bokeh is warranted.
@@ -591,19 +590,6 @@ void main() {
     vec3 rayW = uViewToWorld * ray;
     float soft = clamp(vBlur / max(vSphere.w, 1e-3), 0.0, 1.0);
     float pixels = vSphere.w / (uPixelSize * max(-front.z, 0.1));
-    if (vExtra.y > 1.5 && vExtra.y < 2.5) {
-        // A defocused speck close to the lens: a flat disc of its light, a little brighter at its edge.
-        float edge = smoothstep(0.55, 1.0, length(ray - normalize(vSphere.xyz)) / (vSphere.w / length(vSphere.xyz)));
-        float h = fract(vExtra.x * 7.13);
-        vec3 sceneHue = uSkyTint / max(dot(uSkyTint, vec3(0.3333)), 1e-3);
-        vec3 tint = mix(sceneHue, h < 0.15 ? vec3(0.85, 0.78, 1.15) : vec3(1.0), 0.35);
-        float a = coverage * (0.08 + 0.06 * edge) * (0.5 + fract(vExtra.x * 3.7));
-#ifndef NEAR_LAYER
-        sceneTransparent(tint * 1.3 * a, a, -front.z);
-        Emission = vec4(0.0);
-#endif
-        return;
-    }
     if (vExtra.y > 0.5 && vExtra.y < 1.5) {
         float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7) * vOpacity;
         float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7));

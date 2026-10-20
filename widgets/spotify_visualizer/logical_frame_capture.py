@@ -446,7 +446,7 @@ def _capture_extruded_bubble(
         bubbles=snapshot.bubbles, clusters=snapshot.clusters, time=snapshot.time, level=snapshot.level,
         breath=snapshot.breath, flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
         emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
-        travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer, near_bubbles=snapshot.near_bubbles,
+        travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
         motion_phase=snapshot.motion_phase, wakes=snapshot.wakes,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
     )

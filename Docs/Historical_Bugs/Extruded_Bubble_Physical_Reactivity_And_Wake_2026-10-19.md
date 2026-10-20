@@ -699,3 +699,25 @@ dead `near_bubbles` transport cleanup; same-ID big/small native silhouettes on t
 idle/onset/sustain/release and sparse-range visibility; depth/material/near softness and restrained glow;
 fire/smoke/fog/debris architecture and centralized preset/mock provenance; only then a justified persistent
 unreadable-crossing policy, with Auto Rotate later. Keep physical musical, lifecycle and operator gates open.
+
+### 15.1 Follow-up audit and obsolete-path retirement
+
+A read-only follow-up by the same reviewer found no live camera-dependent population constructor. It identified
+two dead remnants: the always-empty `near_bubbles` snapshot/frame/capture transport and an unreachable kind-2
+defocused flat-speck branch (production emits ordinary 0, snow 1 and micro-glass 3). Both are removed rather
+than preserved as alternate schemas or shaders. Redundant empty-field assertions are removed; physical world
+upload/procedural and count/lifetime checks remain the real falsifiers. Initial focused execution caught the
+obsolete positional empty tuple in the snapshot constructor; it was removed before rerunning the gate.
+The resulting focused immutable-frame, recorded-response, motion, shader and native world-GL gate is **26 passed**.
+
+Free chains still use fixed finite seeded world segments with opacity at their ends; oblique segment endpoints
+can be interior emitters. This is not camera spawning, but it is not proof of actual upstream-boundary source
+authoring for every family. Source/region unification remains active work. Raster coverage floors and defocus
+can also limit apparent pixel contraction below resolution; record those alongside physical reaction measurements.
+
+The operator identified `tmp/eb_s4/presets_sheet.png` as valuable target evidence. The primary inspected it:
+mock/product pairs show a substantial remaining gap in depth hierarchy, dense fine bubble streams, near softness,
+coherent light and the diagonal scene's glowing particulate/wisps. Preserve the full `tmp/eb_s4` provenance,
+especially `scenes.json`, `scenes.py`, lab/scenes/presets outputs and comparison/pair PNGs, alongside original
+`tmp/Bubbleexamples` assets in the later canonical target organization. Specks remain an important target element;
+neither removal nor disabling is a substitute for correct placement, glow, depth and reachability.
