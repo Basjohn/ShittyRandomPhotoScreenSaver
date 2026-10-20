@@ -386,6 +386,39 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 
 ## 6. Visualizer logical-runtime permanent gates
 
+### Extruded Bubble forensic tools
+
+Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
+only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
+Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6; work stays in
+`Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
+response comparator, then quiet→loud/heavy/soft recordings.
+
+```powershell
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_eb --duration 12 --preset 1 --size 1672x941 --capture --fps 12 --gif
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_2d --duration 12 --preset 1 --size 1672x941 --fps 12
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_controls --duration 8 --probe-controls
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output logs/eb_forensics/archive_inventory.json
+```
+
+Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
+without GL. Stable IDs, alpha/cluster/pop exclusions and body followers distinguish actual response from population
+churn. Native paired zero-swell frames show whether radius reaches pixels; they do not segment a particular
+silhouette. Projected radius/centre fields are first-order estimates. `--passes` serializes draw timing and must not
+be compared to independent total-frame timing as if it were an ordinary frame budget.
+
+`--set KEY=JSON` is an in-memory override. Ordinary replay serves recorded post-DSP bands, so technical overrides
+cannot demonstrate live Sensitivity/Floor behavior. Optional `--reanalyze-pcm` explicitly recomputes production
+body-band DSP on requested-size native PCM tails while retaining recorded onsets/loudness/sampled cadence. It is
+a **hybrid diagnostic**, not exact native-callback/live reproduction; Auto's negotiated block and skipped native
+callbacks are not recoverable. Do not infer that its flat bands were present in an operator run or change accepted
+shared DSP from that evidence alone. Settings receipts from ZIPs prove authoring, not eventual shader consumption;
+retained rotations overlap and are not independent runs. The inventory evaluates only selected literal settings,
+never arbitrary logged code or complete user widget payloads.
+
+### Logical-runtime contract checks
+
 Search current tests by contract rather than stale test names when needed:
 
 ```powershell

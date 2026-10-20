@@ -68,7 +68,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | R154 display-owner retirement callback; historical diagnostic preset collision, superseded by R155 unified runtime root | `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` |
 | R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md`; `Current_Plan.md` §5 |
 | R155 cross-display Media shortcuts and compiled Diagnostic shared preset authority | `Docs/Guardrails/Visualizer_Presentation.md`; `Spec.md` → Media transport / Visualizer preset catalogue |
-| physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §1 / §5 |
+| physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §5 |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer planar/freeform CUSTOM geometry split and hot-swap contract | `Docs/Contracts.md`; `Spec.md` → Visualizer geometry; `Docs/Guides/Visualizer_Change_Checklist.md` §7A |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
@@ -78,8 +78,9 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
-| Original Bubble typed Settings, full-output replay parity and remaining physical gate | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Current_Plan.md` §2A |
-| Active sequence: Bubble physical/spec gate → shared 3D prerequisites → Extruded Bubble | `Current_Plan.md` §0 / §2A / §4 |
+| Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
+| Active Extruded Bubble investigation/recovery and genuine acceptance debt | `Current_Plan.md` §0 / §4B; `Docs/Reference/Extruded_Bubble_Target.md` |
+| Extruded Bubble native recorded-audio forensics, 2D positive comparator, failed mechanisms and archive Settings receipts | `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md` §6; `Docs/Reference/Harness_Index.md` → Extruded Bubble forensic tools |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |

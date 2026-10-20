@@ -34,6 +34,13 @@ volumetric smoke/fire, screen-space reflections.
 
 ## 2. Reactivity: its own simulation (operator 2026-10-18, supersedes "reads original Bubble")
 
+**Operator clarification, 2026-10-20:** accepted 2D Bubble sets the minimum *response scale*, especially the
+immediate strong changes in `anything_mixed2.jsonl`. In idle EB must slowly settle into a collapsed resting state
+across size, drift/sway, stream, beads/wakes, rays, emission and ambient/surface motion. Nothing remotely fast;
+no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes are subordinate to this requirement.
+Native measurements and reproduced control failures are in the dedicated Extruded Bubble failure ledger §6;
+`Current_Plan.md` §4B owns the current actionable recovery order. Investigation/tooling does not constitute a fix.
+
 Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
 Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer

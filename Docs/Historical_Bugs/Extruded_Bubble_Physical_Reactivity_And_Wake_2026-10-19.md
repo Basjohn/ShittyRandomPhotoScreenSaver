@@ -58,3 +58,172 @@
 - [~] **COMPLETELY FUCKED | Breathing source/measurement blind spots.** Current production `_snapshot` radii are nonnegative `base*(1+swell+pop)`; `body*0.38 + positive delta*2.7` plus smoothing can favor a held expansion rather than real growth/relaxation. The `snapshot.breath` field is *not* the same as actual big/small `swell` at bubble record index 5. `tools/visualizer_replay/extruded_bubble_traces.py` omits `body_bands`; the frame runtime substitutes `(0,0,0)`, so its scalar/breath plots **cannot** prove full-dynamic production breathing. The offscreen GL capture tool has real images but lacks synchronized per-ID feature/instance/pixel evidence in `capture.json`. Existing passing synthetic tests targeted the wrong acceptance boundary.
 - [~] **COMPLETELY FUCKED | First response-loss point remains unknown.** Need same-sequence record of actual 2D Bubble-derived bass/mid/high, onset and source identity → authored low/high Ranges and smoothed simulation envelopes → SAME bubble identity (base radius, swell, alpha) → packed renderer instance/cluster, camera depth, projected pixel radius/DoF and material opacity → matching captured frames. Make the equivalent layer-by-layer measurement for ray-only pixels, chain/stream direction, motion speed, water-phase optical flow and counted/lit emission. Do not recommend additional blind multipliers, floors, timers, fake scene wrapping or preset edits. Follow target §14 and TestSuite's capture matrix.
 - [~] **PARTIAL (BARELY) | Agent-only measurement gates unchanged.** Require operator physical acceptance or full-resolution Windows OpenGL offscreen/capture-capable visual agent; benchmark micro-glass GPU passes against the previous stable bead shader at 1672×941 and 2560×1440, plus logical CPU source-read cost. Fused cluster near DoF, camera wrapping, false perspective, true fade, bead wake/direction/shimmer, seven-preset fidelity and Settings lifecycle owner survivor remain explicitly open as previously detailed, including the strict barrier's unchanged ownership requirement.
+
+## 6. Native recorded-audio forensic report (2026-10-20; investigation only)
+
+**Tree examined:** `e599387303e282a16953f2d88fab62a854f74efd`, initially clean. No production code, presets,
+Settings, accepted 2D Bubble or lifecycle policy changed. No agents delegated. Evidence is retained locally at
+`logs/eb_forensics_20261020/`; these ignored artifacts are not bundled into source control. Reproduction tooling
+is in `tools/visualizer_replay/{extruded_bubble_forensics,bubble_reference_capture,extruded_bubble_log_inventory}.py`.
+Current work and acceptance remain in `Current_Plan.md` §4B. This report supersedes the earlier *unknown first
+response-loss stage* for the measured offline cases only; it does not erase the operator's failed live retests.
+
+### 6.1 Correct target: collapsed idle, strong musical excursions
+
+Operator clarification 2026-10-20: **idle is a slow, gently collapsed resting state**, as in accepted 2D Bubble;
+music reopens the response. This applies to size, drift, stream, beads/wakes, rays, emission and ambient/surface
+motion. Nothing should remain remotely fast in idle. An autonomous periodic idle size oscillator is **not** the
+requirement. Earlier mentions of missing "idle breathing" must not be read as a request to restore a sine.
+`anything_mixed2.jsonl` should give impressive response immediately; accepted 2D Bubble supplies the minimum
+response-scale reference, without becoming EB's simulation/settings owner.
+
+### 6.2 Evidence and fidelity checks
+
+- Native production GL host ran successfully on **NVIDIA GeForce RTX 4090/PCIe/SSE2**, with full-resolution
+  1672×941 and 2560×1440 captures. This was not the earlier GLSL 450 compatibility substitute.
+- `anything_p1/` and `anything_2d_full/`: the same first 12 seconds of `anything_mixed2.jsonl`, 1,091 recorded
+  logical inputs, 144 captured frames each at 12 fps, unchanged curated preset 1. `comparison/` contains paired
+  native frames, contact sheet and silent motion GIF. The final 2D comparator uses canonical CUSTOM viewport
+  admission plus the production presentation resize resolver. **Discard `anything_2d/` for pixel comparison:**
+  that initial tool run drew the canonical 420×280 card into the larger target; it was caught and corrected.
+- `ragdoll_p1/`, `ragdoll_p7/`, `heavy_p1/`: full-minute real recordings (5,455 inputs each), including quiet,
+  changing and heavy material. `p1_pixels/` and `p7_pixels_1440/`: native 30–36-second sequences from Ragdoll.
+- `custody.jsonl` records actual production capture arguments (bands, scalar, playback, generation/activation,
+  onsets and typed controls), private simulation followers read without mutation, stable logical IDs/base radii,
+  alpha/swell/cluster/pop state, packed ordinary shell instances, view depth and projected centre/radius estimates.
+  The radius estimates are first-order geometry, **not segmented pixel-radius measurements**. Clustered, popping
+  and nonopaque births/deaths are excluded from the stable ordinary-shell size summaries.
+- Each GPU sample also renders a **same-frame zero-swell counterfactual**, preserving time, world, camera,
+  alpha, population, lighting and the pop expansion. Native `zero_swell_*.png` and `swell_difference_*.png`
+  demonstrate that changed logical radius reaches actual pixels. Whole-frame differences include changed
+  refraction/probe lighting; they are not isolated silhouette sizes or proof of musical quality.
+- `controls/control_probe.json` compares real-input production captures, changing only Sustained Response or
+  idle admission/control. Parameter echo is excluded when comparing evolved mode state.
+
+### 6.3 Measured response loss: input varies, size transfer is much too restricted
+
+For `anything_mixed2`'s opening 12 seconds, recorded Bubble bands have bass p05/median/p95
+**0.0063 / 0.4556 / 0.7153**, mid **0.00085 / 0.3747 / 0.5148**, high
+**0.00011 / 0.1473 / 0.3133**. These are not flat or missing in this replay.
+
+| Same source interval, authored preset 1 | Median tracked large radius excursion | Median tracked small radius excursion |
+| --- | ---: | ---: |
+| Accepted original Bubble | **183.76%** | **117.42%** |
+| Extruded Bubble | **12.56%** | **5.90%** |
+
+Excursion is `(maximum - minimum) / minimum` within each observed mature, nonpop identity, then the median
+across identities. The two modes have different populations/lifetimes; this is a response-scale comparison,
+not a claim of identical geometry or lifetimes. 2D's radius comes from its final position payload; EB's statistic
+uses its per-ID swell and fixed base, excluding alpha/cluster/pop confounds. Native captures visibly support the
+scale difference. Example accepted 2D ID 1 spans **25.04–98.57 estimated px** over 1.507–3.488 s; EB ID 1
+never exceeds **13.07%** musical expansion over its measured mature lifetime. No preset was retuned.
+
+A stricter **same-ID, same-window** comparison (1.507–3.147 s) removes the differing-lifetime explanation:
+2D ID 1's final radius/base moves **0.7068 → 2.7819**, while EB ID 1 stays within **1.0384–1.1307**.
+This directly shows the absent collapsed state and restricted expansion, rather than relying solely on a
+population median or different base sizes.
+
+The source mechanisms are specific:
+
+1. `extruded_bubble_frame_runtime.py` scales the full Breathing control by **0.35**, Small Pulse by **0.15**.
+   Thus even a maximum high handle is only a 35%/15% expansion ceiling, before any follower attenuation.
+   Preset 1's authored `[0.15,0.6]` becomes `[0.0525,0.21]`; Small Pulse `[0.15,0.8]` becomes `[0.0225,0.12]`.
+2. `ExtrudedBubbleSimulation.advance` combines bands into another slow shared `level`, then the body lane
+   into `min(1, body*0.38 + positive_delta*2.7)`, followed by attack/release smoothing. Both the Range
+   interpolation and that envelope attenuate the same size excursion. On held body energy the delta vanishes,
+   leaving a mostly held 0.38×body support component.
+3. `_snapshot` applies `radius = base * (1 + swell + pop_expansion)` with nonnegative swell. There is no
+   independent musically collapsed radius below base. Accepted 2D's `_big_render_pulse_factor`, in contrast,
+   has explicit quiet contraction plus much wider musical pulse authority. Copying its equations is not required;
+   preserving EB's present tiny positive-only transfer is not an adequate target.
+4. At default smoothing, the extra shared level takes approximately **0.313 s attack / 1.5 s release**;
+   the body follower approximately **0.094 / 0.413 s**; stream speed **0.438 / 3.75 s**. These are separate
+   stages, not a single "quick attack" guarantee. Ragdoll's stream p05–p95 is **0.1319–0.1588 units/s**,
+   Heavy's **0.1341–0.1500**, consistent with the reported weak within-song speed contrast.
+
+Across the Ragdoll full-minute ordinary population at 1672×941, the music-added first-order radius is median
+**0.449 px**, p95 **4.228 px**; the small population dominates that median. The same-frame GPU interventions
+change the native image, so **a renderer that universally drops radius changes is falsified for these cases**.
+Camera/depth/fade defects remain real, but depth cancellation does not mathematically cancel the *relative*
+musical swell: do not attribute every reactivity failure to projection alone.
+
+### 6.4 Two control failures and the actual idle violation
+
+- **Sustained Response is dead in production evolution.** `controls.sustained` only scales a local `shimmer`
+  term consumed by the legacy scalar-only snapshot branch. Production always supplies a band tuple. Over 728
+  real inputs, Sustained Response **0 versus 1 gives identical evolved mode state** after removing only the
+  expected Settings parameter echo. This is a reproduced owner-to-consumer disconnect.
+- With playback off, Idle Energy **0 versus 1 gives identical bubble records** and zero swell. The output stays
+  at the uncontracted base radius; it does **not** approach 2D's musically collapsed radius. Meanwhile the ambient
+  phase endpoint over the 8-second probe changes **0.9598 → 2.8794**, a 3× rate increase. Stream travel still
+  comes from the low Stream Speed handle and the ordinary sway sinusoid still uses raw logical time.
+  Therefore fixing idle means **slow settling and collapse across all reactive lanes**, not adding oscillation.
+  The operator's specific *idle faster than playback* optical-flow inversion is not yet reproduced/attributed.
+- Rays, emission and most motion share the compressed `level`/onset followers. Ray strength then maps another
+  authored low/high Range; free-chain counts use `state.emission`, whereas attached fizz count uses wake owners
+  and quality. These are distinct populations, not one proven music-driven emission system. Separate ray-only,
+  water-motion and particle-count pixel interventions are still required; the radius intervention does not prove them.
+
+### 6.5 Settings/log forensics and the limits of PCM reanalysis
+
+`extruded_bubble_log_inventory` read 15 ZIPs in `F:/Programming/Apps` without extracting or changing them,
+hashing each and retaining EB-only Settings/configuration receipts. Eight archives have EB technical receipts;
+overlapping retained logs mean counts are **not independent runs**. No receipts in an older archive is not
+proof EB never ran. All selected Settings records parsed without errors, including logged Qt reprs elsewhere
+in widgets (the tool lexically selects the top-level Visualizer section before evaluating numeric leaves).
+
+The latest `logs3a0d4fa1177.zip` has 14 Settings snapshots with `mode=extruded_bubble`. These show actual
+authored values in addition to the previously documented technical sweep:
+
+| Control | Distinct retained EB Settings values |
+| --- | --- |
+| Breathing | `[0.06,0.89]`, `[0.15,0.6]`, `[0.48,0.84]` |
+| Small Pulse | `[0.15,0.8]`, `[0.15,0.94]` |
+| Stream Speed | `[0.07,0.8]`, `[0.25,0.8]` |
+| Sustained Response / Idle Energy | `0.55,0.6` / `0.22,0.5` |
+| Rays / Particles | `[0.1,0.2]`, `[0.6,0.8]` / `[0.1,0.35]`, `[0.85,1.0]` |
+
+These prove authored changes were saved/logged, **not their eventual native uniforms**. Recommending another
+blind sensitivity/Range sweep is not a diagnosis. The local binary frame trace reproduces the previous
+**614,364 events / 15,012 logical publications / 12,245 draws / 11,572 audio analyses** result; it still contains
+no band tuples or per-object radii.
+
+`provenance.json` confirms the local binary trace is SHA-256-identical to the retained latest ZIP's trace and
+records source/tool hashes. `git diff` over production directories/presets was empty throughout this investigation.
+
+Ordinary replay uses **recorded post-DSP bands**; changing Sensitivity/Floor there cannot test how live DSP
+produces those bands. `--reanalyze-pcm` is a separately labelled *hybrid diagnostic*: native recorded PCM tails
+through the current production body-band DSP/getter, requested block size, retained recorded onsets/loudness
+and sampled source cadence. It cannot recover skipped native callbacks, negotiated Auto block sizes or the
+original recorder's complete configuration/history. Ragdoll at requested 512/manual floor shows bass/mid
+plateaus near **0.770648 / 0.9712** even at sensitivity 0.4; 2.07 does not reopen those plateaus. Dynamic Floor
+changes support but still holds bass near **0.728936**. This demonstrates a plausible upstream flattening
+mechanism under controlled inputs, **not proof those tuples were present in the operator's failing live run**.
+Do not change accepted/shared DSP based on this hybrid experiment.
+
+### 6.6 Independent geometry, optics, lifecycle and performance findings
+
+- Current `source_audit.json` reproduces **29.4868 world-unit displacement / 28.9467-unit single jump** with
+  camera yaw. Near depth 2.8 and far depth 32 have identical projected normalized radius. Alpha 0.25 produces
+  radius ratio 0.5, with ordinary shell material opacity hardcoded to 1. Clusters ignore equivalent logical fade
+  and bypass ordinary near DoF. These are concrete independent ownership/representation defects, not cures for
+  the restricted musical transfer. Camera tilt/zoom also enter volume construction; physical world invariance
+  must cover the complete pose, not yaw alone.
+- Native Preset 7 still shows clear/coin-like shells and dense bright particulate. Sphere-ray maths alone does
+  not establish convincing glass. The ordinary shell's screen-facing ray convention and fused-cluster optics
+  require separate normals/coverage/reflection/transmission diagnostic views before naming the dominant cause.
+- Every inspected archive lacks `[PYTHON_OWNER_REFS*]` receipts. The 01:11:43 survivor remains precisely one
+  `QuickDisplayVisualizerOwner`, all other retirement categories clear. Current source has a **Diagnostic-build-only,
+  failure-only** referrer path; debug/trace flags alone do not activate it. No retaining strong edge is proved.
+  Keep **Awaiting Logs** for an actual failure with that receipt; never soften the barrier or blame the typed builder.
+- Current offscreen observations (36 frames; first cold compile excluded) are P1 **5.67/7.54 ms median/p90** at
+  1672×941 and P7 **15.79/18.59 ms** at 2560×1440. These sampled paired-intervention runs are not controlled
+  product cadence or a before/after benchmark. P1 serial draw queries at 1440p give shells **1.913 ms**, OIT
+  resolve **1.594**, backdrop **1.569**, beads **0.271**. Serial query shares cannot establish frame totals or
+  exonerate micro-glass. Pre-micro-glass comparison, dense chains, both resolutions/presets, GL/Python call counts,
+  CPU band-read cost and idle/dormant neutrality remain unmeasured acceptance debt.
+
+**Result:** reproduced response compression and two control/rest-state contract failures; verified changing
+radius reaches native pixels; independently reproduced world/perspective/fade defects. No repair or physical
+acceptance is claimed. Native live input values, component-specific optical flow, coin-like material root,
+fused near DoF, wake/chain continuity and the strong Settings-owner retaining edge remain open.

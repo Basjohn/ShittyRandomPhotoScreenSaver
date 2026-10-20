@@ -292,12 +292,19 @@ change the unframed Sphere or Extruded Spectrum controls. Do not clone Neon Lake
 an independent controller, gesture timer, view-pose persistence schema or per-mode GPU camera owner. Large and small
 card pixels/DPR require deliberate fit, LOD and glow-footprint validation, not a global bloom boost.
 
-**Consumer-driven prerequisite sequence:** finish Neon Lake's visual/replay acceptance and temporary experimental
-presets, migrate the *original* Bubble under the typed Settings spec with full fixed-recording fidelity, then prove
-G0, G1, FC, G3A and the measured G2/G3B subset called for by real Extruded Bubble materials before implementing
-its renderer. All shared work stays import-safe/dormant for nonconsumers, while G4 ribbons and G5 volumes are
-not blanket prerequisites. `Current_Plan.md` owns the live checkboxes and completion order; the reusable contracts
-live in `Docs/Reference/Scene3D_Resources.md` and `Docs/Reference/Visualizer_Reference.md`.
+**Consumer-driven prerequisites:** framed modes consume proven G0/G1/FC/G3A and only the G2/G3B subset
+demanded by their actual materials. Shared work stays import-safe/dormant for nonconsumers; ribbons/volumes are
+not blanket prerequisites. `Current_Plan.md` owns active sequencing/acceptance, `Future_Work.md` routes deferred
+consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualizer_Reference.md` own shared contracts.
+
+**Extruded Bubble** owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
+Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum
+musical response-scale reference. In idle every reactive aspect settles slowly into its collapsed/resting state,
+leaving room for expansion on music return; an autonomous idle oscillator is not the target. Size, drift/sway,
+stream, beads/wakes, rays, emission and ambient/surface motion must all remain gentle while idle. The scene exists
+independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
+transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble_Target.md`;
+measured failures and native 2D/EB comparison: the Extruded Bubble ledger in `Docs/Historical_Bugs/`.
 
 Future 3D modes/effects should therefore begin by inventorying the files above, then add the smallest missing substrate
 needed by the real vertical feature. Do not cargo-cult Block Spins' transition-specific projection/math, and do not distort

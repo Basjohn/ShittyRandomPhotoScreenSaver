@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-10-19 (added Extruded Bubble live failure ledger; earlier 2026-10-09 archival pruning retained). **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-10-20. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -78,7 +78,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-102 — Frozen Qt Quick Runtime Pruned The PySide6.QtOpenGL Binding](Historical_Bugs/R-102_Frozen_QtQuick_Runtime_Pruned_PySide6_QtOpenGL_Binding.md) | Archived investigation | **STRONG** |
 | [R-103 — Media/GSMTC Per-Query Proactor Context Ratcheted Semaphore Handles](Historical_Bugs/R-103_Media_GSMTC_Per_Query_Proactor_Semaphore_Handle_Churn.md) | Archived investigation | **STRONG** |
 | [R-104 — FEEDS Main-GIL Parsing Stalled Qt, Warm Artwork Lost Its Binding, And Hydration Drove Fades](Historical_Bugs/R-104_FEEDS_Main_GIL_Parse_Stall_Durable_Artwork_And_Hydration_Fades.md) | Archived investigation | **STRONG** |
-| [Extruded Bubble / Physical Reactivity, Wake Identity and Optical Failure Ledger](Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md) | **Live** failed reactivity, camera/world-wrap, direction, fade and perspective; §5 binary frame-trace / Settings sweep evidence and missing per-ID pixel trace; unverified wake/micro-glass; operator or captured-frame acceptance required | **STRONG** |
+| [Extruded Bubble / Physical Reactivity, Wake Identity and Optical Failure Ledger](Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md) | **Live** failures; §6 native real-music 2D/EB comparison, measured response compression, dead Sustained control, collapsed-idle contract, archive Settings and trace evidence; world/fade/optics/wakes/performance/Settings-owner gates remain open | **STRONG** |
 | [R-105 / Bubble Remaining Small-Radius Judder](Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md) | Deferred Bubble watchlist | **STRONG** |
 | [R-106 / Visualizer Dormancy Audit and Frame-Trace Observer Pressure](Historical_Bugs/R-106_Visualizer_Dormancy_And_Shutdown_Ownership_Followup.md) | Archived investigation | **STRONG** |
 | [R-107 / RSS index denied-write startup spin](Historical_Bugs/R-107_RSS_Index_Denied_Write_Startup_Spin.md) | Archived investigation | **STRONG** |

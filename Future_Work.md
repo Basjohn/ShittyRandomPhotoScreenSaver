@@ -35,9 +35,8 @@ QRhi cannot expose and must remain isolated rather than becoming parallel perman
 
 ## 3. Deferred visual concepts
 
-Only genuinely deferred concepts live here. The currently admitted transition expansion batch (Jigsaw Piece Flip, Volumetric
-Dissolve, VHS Distortion, Edge Bloom Reveal, Liquid Lens, Membrane Turnover, Surface Tension Merge, Chromatic Shear, Depth
-Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than this backlog.
+Only genuinely deferred concepts live here. Accepted transition membership belongs to the canonical registry and
+`Docs/Reference/Transitions.md`; do not resurrect completed expansion batches as active plan work.
 
 - **Volumetric music chamber** — bounded fog volume, light shafts and spectrum-driven emitters.
 - **Audio aurora / ribbon volume** — translucent ribbons with OIT, glow and slow logical-history advection. - Generate mock for promotion possibility
@@ -51,10 +50,47 @@ Card Cascade and Capillary Bloom) is now owned by `Current_Plan.md` rather than 
   and lies down across a round moon under a starscape, with orbit framing and optional fuzz-tip bloom. Plan, behaviour,
   reactivity contract, required architecture and gates: `Docs/Future_Work/Usu_Moonscape.md` (supersedes the 2026-10-02
   snapshot); its remaining Blender authoring work is in `Docs/Future_Work/Usu_Blender_Work.md`. Its missing shared foundations (asset pipeline, skinning, animation graph, secondary motion, felt/fuzz material,
-  shadow maps, sphere world/starscape, world-view projection) are listed as S19–S27 in `Current_Plan.md` §4 and are to be side-built by
+  shadow maps, sphere world/starscape, world-view projection) are listed below as S19–S27 and are to be side-built by
   transitions/Visualizer consumers first; a bordered Visualizer consumes the shared §4A framed-camera capability,
   rather than inventing its own camera input authority. The Usu mode itself stays deferred until the relevant
   shared foundations are accepted.
+
+### Deferred 3D consumers and missing substrate
+
+Promote after Extruded Bubble only when separately admitted. Retain the order **Reactive Particle Field →
+Terrain/Skyline/Tunnel → Waveform Ribbon → Deformable Blob Sphere**. Usu remains governed by its focused plan.
+Each promoted mode needs recorded musical controls, its own accepted visual target and bounded measured cost.
+
+- **G2 / S25, shared shadows:** one fitted directional depth map, bounded soft PCF/bias, caster/receiver admission,
+  resize/teardown/dormancy and tier cost on a real test scene. Build when a consumer needs an approved receiver;
+  EB currently has none. This is also Usu S25, not a second shadow foundation or revival of rejected Extruded shadows.
+- **G4 / S18, particle/ribbon extensions:** inventory CompactedPopulation/sprite/streak helpers first; add bounded
+  lifetimes, ribbons, collision or indirect draws only for a real consumer. Keep deterministic admission/retirement
+  and shared G3A transparency. A proven EB need promotes only the small needed primitive, not the whole engine.
+- **G5 / S18, lightning then volumes:** bounded procedural geometry/light before reduced-resolution smoke/fog/fire,
+  advection and reprojection. Require consumer-specific quality/cost proof; no permanent targets/separate cadence.
+- **Reactive Particle Field:** establish capacity, lifetime and response target before collision; consume G4 on demand.
+  **Terrain/Skyline/Tunnel:** one bounded geometry/camera slice at a time, fixed loudness semantics. **Waveform Ribbon:**
+  real waveform history plus G4 ribbon proof. **Deformable Blob Sphere:** deformation/normal/geometry bounds and
+  independent measured cost before materials/effects.
+- **S19 → S20:** deterministic validated Blender/glTF bake with provenance-stamped packed assets, followed by shared
+  material/instancing static-mesh rendering. Runtime consumes packed data, not Blender authoring graphs.
+- **S21 → S22 → S23:** bounded GPU joint palettes/skinning; logical-time clip sampling/crossfades/masks/additive
+  layers/root motion/eye tracks; deterministic secondary-motion springs. Prove each in an offscreen harness before
+  combining. No physics engine or extra animation clock. Usu static silhouette approval remains a separate hard gate.
+- **S24:** opt-in felt/sheen/bounded fuzz shells and emitted tips; preserve existing shaders and measure tier costs.
+  **S25:** reuse G2. **S27 → S26:** prove world-view projection distinct from the photo-plane camera, then seeded
+  sphere/crater/stars and logical travel. Bordered consumers use shared FC input/persistence; unframed world travel
+  may have different projection semantics, never duplicate framed-camera authority.
+- **Combinations:** electrical terrain, smoke-lit fracture, ember/dust destruction, refractive glass lit by bolts,
+  volumetric shockwaves and photo-colour IBL only after component proofs; one promoted effect at a time.
+
+### Settings live preview (aspiration, not scheduled)
+
+A small styled box in the Settings sidebar may lazily show a slow-fading preview only while relevant controls are
+being edited. Investigate the existing offscreen Quick render path, production Visualizer host and a bundled short
+recorded clip. Settings runs standalone: one preview renderer, no second live saver Visualizer, low resolution/rate,
+render-thread resource retirement and zero idle polling/work. No implementation is admitted by this description.
 
 ## Rejected Extruded cast shadows (deferred)
 
