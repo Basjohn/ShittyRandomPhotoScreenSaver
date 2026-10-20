@@ -37,7 +37,7 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
         frames = []
         for i in range(round(seconds / self.dt)):
             hits = (("kick", 1.0),) if beats and i % 30 == 0 else ()
-            frames.append(sim.advance(self.mod.MusicInput(self.dt, playing, level, hits), controls))
+            frames.append(sim.advance(self.mod.MusicInput(self.dt, playing, level, hits, (level,) * 3), controls))
         return frames
 
     def test_no_synthetic_lens_or_near_population_at_start_or_during_playback(self):
@@ -48,11 +48,12 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
             self.assertTrue(all(not f.near_bubbles for f in frames))
             self.assertGreater(frames[-1].count, 0)
 
-    def test_sustained_loud_breathing_has_multi_pixel_motion_not_static_holding(self):
+    def test_real_band_changes_have_multi_pixel_motion_at_saturated_presence(self):
         sim = self.mod.ExtrudedBubbleSimulation(72)
         controls = self.mod.ExtrudedBubbleControls(large_count=(14, 14), mid_count=(0, 0),
                                                   breathing=(0.05, 0.25), collision_scope="off")
-        frames = self._run(sim, controls, playing=True, level=1, seconds=10, beats=True)
+        frames = [sim.advance(self.mod.MusicInput(self.dt, True, 1.0, (),
+                         ((0.3 if i % 60 < 30 else 0.8), 0.4, 0.2)), controls) for i in range(600)]
         swells = []
         for f in frames[-180:]:
             records = [f.bubbles[i:i + 8] for i in range(0, len(f.bubbles), 8)]
@@ -61,8 +62,7 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
                 swells.append(sum(large) / len(large))
         self.assertGreater(len(swells), 100)
         self.assertGreater((max(swells) - min(swells)) * 0.12 * 540, 4.0)
-        self.assertGreater(min(swells), 0.02)
-        self.assertLessEqual(max(swells), controls.breathing[1] + 1e-6)
+        self.assertGreater(max(swells), 0.2)
 
     def test_idle_phase_is_quiet_and_music_accelerates_water_and_beads(self):
         sim = self.mod.ExtrudedBubbleSimulation(73)
@@ -105,8 +105,8 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
         controls = self.mod.ExtrudedBubbleControls(large_count=(6, 6), mid_count=(0, 0),
                                                   breathing=(0.05, 0.25), collision_scope="off")
         self._run(sim, controls, playing=True, level=0.5, seconds=3)
-        before = sim.advance(self.mod.MusicInput(self.dt, True, 0.5), controls)
-        after = sim.advance(self.mod.MusicInput(self.dt, True, 0.5, (("kick", 1),)), controls)
+        before = sim.advance(self.mod.MusicInput(self.dt, True, 0.5, (), (0.5,) * 3), controls)
+        after = sim.advance(self.mod.MusicInput(self.dt, True, 0.5, (("kick", 1),), (0.5,) * 3), controls)
         mapping = lambda snap: {snap.bubbles[i + 6]: snap.bubbles[i + 5]
                                 for i in range(0, len(snap.bubbles), 8)}
         prev, curr = mapping(before), mapping(after)

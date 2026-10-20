@@ -6,10 +6,10 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 
 ## 0. Current scope, order and protected baseline
 
-**Authorized now (operator 2026-10-20): deep Extruded Bubble investigation, bounded tooling and documentation.
-No production implementation or preset changes yet; minimal/no subagents.** Continue collecting falsifiable evidence,
-not another speculative tuning slice. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+**Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
+minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
+cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
+§6–7; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -166,22 +166,23 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   replay holds recorded post-DSP bands: Sensitivity/Floor overrides cannot test live DSP there. The optional PCM
   reanalysis is explicitly hybrid (requested PCM tails plus recorded events/loudness/sampled cadence), not proof
   of the failing live tuples; do not change accepted/shared DSP based on its plateaus alone.
-- [ ] Measure source-band read/logical-tick CPU cost without introducing a permanent observer. Leave the old
-  `extruded_bubble_traces.py` scalar plot outside acceptance: it omits body bands and graphs the wrong breath lane.
+- [ ] Measure source-band read/logical-tick CPU cost without introducing a permanent observer. The auxiliary
+  `extruded_bubble_traces.py` plot supplies real bands and classifies by identity, but its default-control population
+  means and kick follower are not per-ID radius or native-pixel acceptance. Use forensic custody for those claims.
 
 #### EB-D — Musical size, attack/release and collapsed rest (first recovery priority)
 
-- [ ] Specify EB's replacement **musical radius transfer** at its simulation owner before implementation.
-  Current 35%/15% maximum control scaling, Range interpolation, body/delta follower and positive-only
-  `base*(1+swell)` produce much weaker excursions than accepted 2D. Preserve independently authored Breathing
-  and Small Pulse endpoints, while defining genuine collapsed rest, quick musical expansion, slow relaxation,
-  strong onset/phrase changes and sustained-passage variation. No new floor, shared 2D simulation or blind gain patch.
-- [ ] Restore the real **Sustained Response** consumer: it currently changes only a legacy-branch local term.
-  The production-band control intervention gives identical evolved output at 0 and 1. Define which live small/body
-  and motion behavior the control owns; prove endpoints through the canonical Settings/capture seam and pixels.
-- [ ] Define and prove **idle settling across every reactive lane**. Production size currently rests at uncontracted
-  base, while idle/background phase and the Stream Speed low endpoint can keep motion prominent. Separate resting
-  target from a repeating oscillator; inspect raw-time sway, water phase, bead travel, ray shimmer and emission.
+- [ ] **Awaiting Validation — candidate musical radius transfer.** Use report §7 and the current simulation as the
+  implementation reference. Verify real large/small SAME-ID minima as well as excursion/peaks, without treating
+  birth/pop/fade as contraction. Normal reaction strengths must let even the big population settle near 0.13× nominal
+  radius, comparable to accepted 2D's low range, then expand strongly with music. Measure full-alpha projected and
+  actual silhouette size at fixed depth; preserve deliberate zero-strength disabling and independent Range handles.
+  Reject a large percentage excursion that still leaves the minimum inflated or makes musical peaks too small.
+- [ ] **Awaiting Validation — Sustained Response.** The band-path consumer now supports body size and motion;
+  prove 0/1 endpoints in actual pixels on sustained real passages without inventing a periodic pulse on held input.
+- [ ] **Awaiting Validation — idle settling across every reactive lane.** The candidate contracts size and reduces
+  integrated resting phases, stream, drift and emission. Inspect gentle release over seconds, raw-time bypasses,
+  water phase, bead travel, ray shimmer and emission in pixels, including pause→resume without a reset or jump.
   Trace why the operator perceived idle faster than playback; this inversion is still unattributed, not disproved
   by a slower numerical phase. Compare matched optical flow on pause/release/resume with the same scene/camera.
 - [ ] Compare effective multi-stage latency and excursion on quiet, onset, changing body, saturated music and release.
@@ -216,6 +217,12 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   mapping cancels perspective. Prove real near-large/far-small perspective, parallax, scene pan/zoom semantics,
   clipping and response amplitude together. Retire false seam-only/constant-projected-size oracles when source
   implementation is authorized; do not weaken genuine admission/depth/continuity gates.
+- [ ] Align collision/contact geometry with the **current reacted radius** at the physical-world owner. Collision
+  broadphase, reach, bounce separation and fuse offsets currently use nominal base radii even while shells contract
+  or expand. This can produce contact between visibly separated tiny shells or let expanded shells overlap, and is
+  more exposed by the restored size range. Derive one physical radius for collision/render/wake geometry and a
+  broadphase that cannot miss large extents; verify identity, bounded cost, no jitter and stable fused rest/expansion.
+  Do this with world metric correction; scaling contact reach alone cannot fix the present camera-dependent mapping.
 - [ ] Carry logical lifetime alpha as **material opacity**, independently of radius. Ordinary shells currently
   shrink by `sqrt(alpha)` and receive hardcoded opacity 1; fused members lack coherent fade. Prove transparent
   entry/pop/exit, stable identities and orbit with no sudden already-opaque arrivals or resurrected compacted slots.
@@ -236,6 +243,29 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 - [ ] Prove free chains' complete birth/death fade, curved **15% wider** paths and common world stream direction.
   Integer/rounded draw counts cannot fade an instance no longer submitted. Diagnose heading divergence under
   camera motion separately from intended curvature. Keep chains distinct from bubble-attached wakes.
+- [ ] Give **free bead-chain bubbles** a modest simulation-owned size response through the existing immutable
+  frame; their current procedural sizes are fixed while population/travel respond. They are already tiny: do not
+  apply the large shells' deep contraction to them. Speed/drift/emission should carry much of their reaction.
+  Include every family in the minimum-size audit: ordinary large/mid, fused members, free beads and parent-attached wake beads. Wake
+  source radius now follows its reacted parent, but native surface attachment and retiring tails still need proof.
+  Keep non-bubble dust/snow distinct; a count reduction or disappearance does not prove size contraction.
+- [ ] **Next after lights — operator retest correction (2026-10-20).** Limit individual free/attached bead-size
+  reaction to at most roughly −10%/+10%. Parent-reacted radius owns the wake's attachment point, not a full-scale
+  multiplication of bead size/trail shape. Every attached bead must stay **strictly smaller than its current
+  parent** throughout contraction/expansion, including retirement. Choose nominal bead sizes that can satisfy
+  both constraints across the parent's supported minimum; prove the bound with native tiny/large parent cases.
+  Preserve stable identities and source-to-tail retirement. Idle motions improved in the operator retest, but
+  stream/emission/surface-water now look stopped: establish visibly very slow nonzero rest, without restoring
+  fast idle motion or an oscillator. Follow the completed light slice before making these changes.
+- [ ] Repair the **Ray Softness consumer in Deep Light**: the setting controls fan frequency/contrast but the
+  depth-marched shaft threshold remains fixed (`uShaftSoft` defaults to 0). Connect the authored setting to both
+  actual paths and prove native 0/1 endpoints in Presets 1/7. Measure broad softness in angular/pixel units at both
+  resolutions; fixed blur taps alone are not a resolution-independent appearance contract.
+- [ ] Restore a useful **ray reaction range**, including slow idle dimming. The current `low+(high-low)*driver`
+  keeps Preset 1 at 0.6 even with driver 0, so the complete driver sweep changes central RGB mean only about 5%
+  in the fixed-state probe. Separate authored quiet-music appearance from collapsed silence; retain the single
+  ray Range owner, motion phase continuity and independent light/surface art. Prove actual ray ROI and profile
+  changes on real passages, not merely a changed uniform or shimmer clock. See report §7 for the native probe.
 - [ ] Validate stable live/retiring wake emitters at the physical surface, pop, fusion, parent exit and slot compaction.
   Require the travel-front-to-tail dissolve with no detached/falling fizz or new-parent attachment. The dedicated
   wake SSBO/source candidate is unaccepted; shader/source tests do not demonstrate visual continuity.
@@ -250,6 +280,12 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 
 #### EB-A — Glass/material, mock fidelity and authoring
 
+- [ ] **After reactivity: centralize visual target assets and parity mapping.** Preserve original mocks and lab
+  targets from `tmp/Bubbleexamples` / the lab outputs in a durable canonical location with provenance and a
+  preset→example→lab mapping, fidelity gaps, owning architecture and verification steps. Preset 7 maps to
+  `ExBubble6Diagonal`; it is the operator's strongest current preset but still lacks fire/smoke/fog and other
+  fidelity. The other presets are poor and may be mismapped or miss settings relative to their lab targets.
+  Audit actual Settings-resolved production scenes, not just preset labels. Organisation follows the live response slice.
 - [ ] Isolate coin-like/edge-on clear shells, especially Preset 7, with native normal/coverage/reflected/transmitted
   diagnostic views and SAME-ID samples. Inspect screen-facing-ray, refraction, film/rim, interior blur and DoF
   separately; analytical sphere intersections do not establish believable spherical glass.

@@ -48,6 +48,22 @@ def load_clip(path, stop):
 def run(args):
     output = args.output
     output.mkdir(parents=True, exist_ok=False)
+    root = Path(__file__).resolve().parents[2]
+    paths = [root / p for p in (
+        'widgets/spotify_visualizer/extruded_bubble_simulation.py',
+        'widgets/spotify_visualizer/extruded_bubble_frame_runtime.py',
+        'widgets/spotify_visualizer/logical_frame_capture.py',
+        'core/settings/visualizer_mode_settings.py',
+        'rendering/gl_programs/extruded_bubble_scene.py',
+        'tools/visualizer_replay/extruded_bubble_forensics.py')]
+    paths.extend((root / 'rendering/gl_programs').glob('extruded_bubble*.py'))
+    hashes = lambda: {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+                      for p in sorted(set(paths))}
+    source_hashes = hashes()
+    receipt = dict(commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+                   tracked_diff_sha256=hashlib.sha256(subprocess.check_output(['git', 'diff', 'HEAD'])).hexdigest(),
+                   source_hashes=source_hashes)
+    (output / 'source_receipt.json').write_text(json.dumps(receipt, indent=2)+'\n', encoding='utf-8')
     size = tuple(map(int, args.size.split('x')))
     clip = load_clip(args.clip, args.start + args.duration)
     activation = resolve_visualizer_activation_payload(
@@ -80,6 +96,8 @@ def run(args):
                       idle_max_swell=max(value for frame in quiet_b for value in frame.mode_state.bubbles[5::8]),
                       idle_motion_phase_endpoints=[quiet_a[-1].mode_state.motion_phase, quiet_b[-1].mode_state.motion_phase])
         (output / 'control_probe.json').write_text(json.dumps(result, indent=2)+'\n', encoding='utf-8')
+        if hashes() != source_hashes:
+            raise RuntimeError('source changed during replay; reject this evidence directory')
         print(json.dumps(result, indent=2))
         return
     observed = {}
@@ -159,8 +177,7 @@ def run(args):
                          controls=asdict(kwargs['controls']),
                          dsp=observed.get('dsp'),
                          followers={name: getattr(sim, name) for name in (
-                             '_body_big_average', '_body_small_average', '_body_big_envelope',
-                             '_body_small_envelope', '_kick_swell', '_pulse')},
+                             '_body_big_envelope', '_body_small_envelope', '_kick_swell', '_pulse')},
                          state={name: getattr(snapshot, name) for name in (
                              'level', 'breath', 'flash', 'sustain', 'stream_speed', 'drift',
                              'emission', 'rays', 'shimmer', 'travel', 'motion_phase')},
@@ -254,6 +271,8 @@ def run(args):
         for row in rows:
             stream.write(json.dumps(row, separators=(',', ':')) + '\n')
     (output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+    if hashes() != source_hashes:
+        raise RuntimeError('source changed during replay; reject this evidence directory')
     print(json.dumps({k: summary[k] for k in ('frames', 'bands', 'mature_large_swell',
                                              'mature_small_swell', 'musical_radius_delta_px')}, indent=2))
 

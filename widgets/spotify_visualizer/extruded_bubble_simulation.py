@@ -10,16 +10,15 @@ framed camera's view.
 **What it owns.** What music and collisions move: up to ``MAX_BUBBLES`` large and mid bubbles, each with an identity, position, velocity, base radius, a breathing response, a fade, and fuse-cluster membership. Bead chains,
 fizz and particulate are procedural on the GPU from the snapshot's scalars (stream, speed, level, flash).
 
-**Music.** Fixed-scale drivers only, no dynamic floors: ``level`` is the passage intensity
-(``BeatEngine.get_musical_intensity``: 0..1 on the fixed real-music scale) and onsets count by ``musical_weight`` (a
-near-silent passage barely moves anything). Every quiet..loud range is read at ``level``. Kicks make the large bubbles
-breathe, snares pulse the mid ones. Drift, stream speed and particle emission each follow their target with a quick
-attack and a slow decay (the stream slowest of all), and onsets feed them only through those followers, so nothing
-stutters, judders or stops suddenly. Sustained loud passages have their own response: ``sustain`` (the level held
-for seconds: slow to rise, slow to fall) lets the large bubbles hold large (kicks add less on top as it rises: better
-than flickering), while the mid bubbles shimmer on their own phases and drift and the stream lift, so a saturated
-passage stays alive between hits. Nothing pins: values near the top of their range pass a soft knee, never a clamp. In silence a light idle energy keeps the bubbles gently
-breathing.
+**Music.** The existing full-dynamic bass/mid/high bands drive separate large and mid envelopes;
+the passage-presence scalar is diagnostic only. Weighted kick/snare events add accents with headroom
+above the body response. Authored reaction strengths span contracted rest and musical expansion,
+with quick attack and slower release. Sustained Response strengthens held body support and motion
+through this same production path. No independent oscillator manufactures size changes.
+Drift, stream speed and emission resolve their authored ranges once and settle slowly to a very low
+resting activity. Sway, surface motion and shimmer use integrated musical phases, never raw time
+multiplied by a changing rate. Playback stopping clears the input, then lets the followers release;
+idle size converges to a contracted constant rather than continuing periodic breathing.
 
 **Collisions.** Overlapping bubbles admitted by ``collision_scope`` resolve once per contact, chosen by the
 Fuse / Pop / Bounce shares from the pair's identities: Fuse joins them into a cluster (at most ``CLUSTER_MAX``
@@ -59,9 +58,9 @@ class ExtrudedBubbleControls:
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
-    idle: float = 0.5                       # 0..1 the light energy kept in silence
-    breathing: tuple[float, float] = (0.04, 0.18)        # large bubbles' swell (share of radius)
-    small_pulse: tuple[float, float] = (0.02, 0.10)      # mid bubbles' pulse (share of radius)
+    idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
+    breathing: tuple[float, float] = (0.04, 0.18)        # large reaction strength, quiet..loud
+    small_pulse: tuple[float, float] = (0.02, 0.10)      # mid reaction strength, quiet..loud
     sustained: float = 0.6                  # 0..1 how much a sustained loud passage moves the mid bubbles
     smoothing: float = 0.5                  # 0 snappy .. 1 soft (visual smoothing of level and breath)
     collision: tuple[float, float, float] = (0.4, 0.3, 0.3)   # Fuse, Pop, Bounce shares
@@ -74,7 +73,7 @@ class MusicInput:
     playing: bool
     intensity: float = 0.0                  # passage intensity 0..1
     onsets: tuple[tuple[str, float], ...] = ()   # (kind, weight 0..1) taken this step
-    body_bands: tuple[float, float, float] | None = None  # existing 2D Bubble full-dynamic bass/mid/high feed; None for legacy logical fixtures
+    body_bands: tuple[float, float, float] = (0.0, 0.0, 0.0)  # existing full-dynamic bass/mid/high feed
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +150,20 @@ def _follow(current: float, target: float, dt: float, attack: float, release: fl
     return target + (current - target) * math.exp(-dt / max(tau, 1e-4))
 
 
+def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float) -> float:
+    """Authored strength spans contracted rest and musical expansion; zero disables both.
+
+    Base radius is nominal size, not an uncontractable lower bound. A silent/held
+    input converges to one size; no clock or independent oscillator creates pulses.
+    """
+    strength = max(0.0, min(1.0, max(pair)))
+    # Normal reaction strength must reach a genuinely tiny rest. Accepted 2D's
+    # big population can settle near 0.13x nominal radius; a 0.49x EB floor still
+    # leaves its large shells inflated. Expansion retains the full authored range.
+    rest = max(0.13, 1.0 - 1.45 * strength)
+    return rest + (1.0 - rest) * drive + expansion * _lerp(pair, drive) * drive
+
+
 def _pair_choice(a: int, b: int) -> float:
     """A stable 0..1 number for a pair of identities (the same pair always resolves the same way)."""
     low, high = (a, b) if a < b else (b, a)
@@ -181,13 +194,9 @@ class ExtrudedBubbleSimulation:
         self._travel = 0.0
         self._motion_phase = 0.0
         self._motion_rate: float | None = None
-        self._breathing_phase = 0.0
-        self._body_big_average = 0.0
-        self._body_small_average = 0.0
         self._body_big_envelope = 0.0
         self._body_small_envelope = 0.0
         self._kick_swell = 0.0
-        self._kick_peak = 0.0
         self._ray_lift = 0.0
         self._rays = 0.0
         self._shimmer = 0.0
@@ -252,75 +261,38 @@ class ExtrudedBubbleSimulation:
         self._time += dt
         soft = 0.5 + 1.5 * max(0.0, min(1.0, controls.smoothing))       # visual smoothing scales every follower
 
-        # Music: full-dynamic bands in the admitted production path; onset accents and flash
-        # are supplemental. Scalar-only callers are retained as legacy numerical fixtures.
-        intensity = max(0.0, min(1.0, float(music.intensity))) if music.playing else 0.0
-        if music.playing and music.body_bands is not None:
-            # The all-mode intensity can sit at 1.0 through a whole song: it is useful as
-            # a presence meter, not the modulation input for every Extruded Bubble Range.
-            # Reuse the accepted 2D Bubble full-dynamic band feed for this mode's
-            # continuous controls as well as its separate large/small body responses.
-            bass, mid, high = (max(0.0, min(1.0, float(v))) for v in music.body_bands)
-            intensity = max(0.0, min(1.0, 0.5 * bass + 0.3 * mid + 0.2 * high))
-        self._level = _follow(self._level, intensity, dt, 0.25 * soft, 1.2 * soft)
-        kick = max((w for kind, w in music.onsets if kind == "kick"), default=0.0)
-        snare = max((w for kind, w in music.onsets if kind != "kick"), default=0.0)
-        if kick > 0.0:
-            self._breath = max(self._breath, kick)
-        # Between kicks the breath settles toward a gentle idle sway (stronger in silence, never zero while alive).
-        quietness = 1.0 - self._level
-        idle_breath = (controls.idle * (0.12 + 0.18 * quietness)
-                       * (0.5 + 0.5 * math.sin(self._time * 0.6))
-                       if music.body_bands is None else 0.0)
-        self._breath = _follow(self._breath, idle_breath, dt, 0.04 * soft, 0.35 * soft)
-        # In production a kick accent must decay to zero without an autonomous idle oscillator.
-        # Legacy scalar fixtures keep their historical numerical follower for comparison.
-        if music.body_bands is not None:
-            if kick > 0.0:
-                self._kick_peak = max(self._kick_peak, kick)
-            self._kick_peak = _follow(self._kick_peak, 0.0, dt, 0.05, 0.25 * soft)
-            self._kick_swell = _follow(self._kick_swell, self._kick_peak, dt,
-                                       0.06 * soft, 0.34 * soft)
-        else:
-            self._kick_swell = _follow(self._kick_swell, self._breath, dt, 0.055 * soft, 0.38 * soft)
+        # One band-driven path for live capture and tests. The presence scalar is diagnostic:
+        # it can remain at 1 through music and must not manufacture body motion or an idle sine.
+        bass, mid, high = (max(0.0, min(1.0, float(v))) if music.playing else 0.0
+                           for v in music.body_bands)
+        big_body = max(bass, 0.28 * mid + 0.10 * high)
+        small_body = max(0.70 * mid + 0.35 * high, 0.45 * bass)
+        intensity = max(big_body, small_body)
+        self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
+        onsets = music.onsets if music.playing else ()
+        kick = max((w for kind, w in onsets if kind == "kick"), default=0.0)
+        snare = max((w for kind, w in onsets if kind != "kick"), default=0.0)
+        self._breath = _follow(max(self._breath, kick), 0.0, dt, 0.05, 0.25 * soft)
+        self._kick_swell = _follow(self._kick_swell, self._breath, dt, 0.06 * soft, 0.34 * soft)
         self._pulse = max(self._pulse, snare)
         self._pulse = _follow(self._pulse, 0.0, dt, 0.03, 0.25 * soft)
-        if music.onsets:
-            self._flash = max(self._flash, max(w for _kind, w in music.onsets))
+        if onsets:
+            self._flash = max(self._flash, max(w for _kind, w in onsets))
         self._flash = _follow(self._flash, 0.0, dt, 0.02, 0.6 * soft)
 
         level = self._level
-        # 2D Bubble's existing full-dynamic band feed carries musical *changes* that a global scalar
-        # (frequently at 1.0) cannot encode. Separate bass/body and mid/high lanes, with their own
-        # slow body baseline and fast attack/release. Never manufacture repeated size pulses from a
-        # clock, an adaptive floor, or a per-bubble sine. Keep the legacy scalar fixture fallback below
-        # only for replay callers that have not supplied the audio band's authoritative snapshot.
-        if music.body_bands is not None and music.playing:
-            bass, mid, high = (max(0.0, min(1.0, float(v))) for v in music.body_bands)
-            big_body = max(bass, 0.28 * mid + 0.10 * high)
-            small_body = max(0.70 * mid + 0.35 * high, 0.45 * bass)
-            for body, name, avg_name in ((big_body, "_body_big_envelope", "_body_big_average"),
-                                         (small_body, "_body_small_envelope", "_body_small_average")):
-                average = getattr(self, avg_name)
-                # The existing Bubble solution uses body support AND positive body delta. Without
-                # the latter, a hot steady control lane turns every note into the same sphere size.
-                target = min(1.0, body * 0.38 + max(0.0, body - average - 0.015) * 2.7)
-                setattr(self, name, _follow(getattr(self, name), target, dt,
-                                            0.075 * soft, 0.33 * soft))
-                setattr(self, avg_name, _follow(average, body, dt, 1.8, 2.8))
-        elif music.body_bands is not None:
-            self._body_big_envelope = _follow(self._body_big_envelope, 0.0, dt, 0.08, 0.35 * soft)
-            self._body_small_envelope = _follow(self._body_small_envelope, 0.0, dt, 0.08, 0.35 * soft)
-            self._body_big_average = _follow(self._body_big_average, 0.0, dt, 0.1, 1.4)
-            self._body_small_average = _follow(self._body_small_average, 0.0, dt, 0.1, 1.4)
-        # A loud passage held for seconds: slow to build, slow to fade.
-        self._sustain = _follow(self._sustain, max(0.0, (intensity - 0.45) / 0.55), dt, 2.5, 3.5)
-        sustain = self._sustain
-        # Both phases integrate only on the existing logical clock. Passage energy raises the oscillation's
-        # *frequency* and *depth*, while the quiet floor remains very gentle. No t * changing-rate jumps.
-        self._breathing_phase += dt * math.tau * (0.22 + 0.54 * level + 0.18 * sustain)
-        motion_target = (0.12 + 0.24 * max(0.0, min(1.0, controls.idle))
-                         + 1.40 * level + 0.22 * self._flash + 0.12 * sustain)
+        self._sustain = _follow(self._sustain, max(0.0, min(1.0, (intensity - 0.35) / 0.5)), dt, 1.2, 2.0)
+        sustain = self._sustain * controls.sustained
+        # Sustain strengthens the actual body response, not a discarded legacy snapshot term.
+        # Silence settles gently over seconds; musical phrase changes retain their faster release.
+        body_release = (1.5 if intensity < 0.01 else 0.20) * soft
+        self._body_big_envelope = _follow(self._body_big_envelope,
+            _soft_top(0.75 * big_body + 0.50 * self._kick_swell + 0.10 * sustain * big_body), dt, 0.06 * soft, body_release)
+        self._body_small_envelope = _follow(self._body_small_envelope,
+            _soft_top(0.80 * small_body + 0.40 * self._pulse + 0.25 * sustain * small_body), dt, 0.06 * soft, body_release)
+        # Resting phases barely advance. Sway and shader animation share this integrated musical time.
+        idle_rate = 0.01 + 0.03 * max(0.0, min(1.0, controls.idle))
+        motion_target = idle_rate + 1.60 * level + 0.22 * self._flash + 0.20 * sustain
         if self._motion_rate is None:
             self._motion_rate = motion_target
         self._motion_rate = _follow(self._motion_rate, motion_target, dt, 0.24 * soft, 1.1 * soft)
@@ -329,18 +301,21 @@ class ExtrudedBubbleSimulation:
         # below the top, so a saturated passage (the level held at 1) still moves them with its hits. Their shimmer
         # advances faster on the hits: a phase integral, so a change of rate never makes the pattern jump.
         self._ray_lift = _follow(self._ray_lift, self._flash, dt, 0.1, 0.4 * soft)
-        self._rays = _soft_top(0.65 * level + 0.05 * sustain + 0.3 * self._ray_lift, knee=0.9)
-        self._shimmer += dt * (0.5 + 2.5 * self._ray_lift)
+        # Follow the continuous light separately; do not smear its already-eased onset accent again.
+        self._rays = _follow(self._rays, 0.65 * level + 0.05 * sustain,
+                             dt, 0.08 * soft, 0.65 * soft)
+        self._shimmer += dt * (idle_rate + 0.6 * level + 2.5 * self._ray_lift)
         direction = stream_vector(*controls.stream_direction)
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low, high = controls.stream_speed
-        speed_target = _lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)
-        drift_target = _soft_top(_lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0]))
+        activity = min(1.0, idle_rate + 1.6 * level)
+        speed_target = (_lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)) * activity
+        drift_target = _soft_top(_lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
         emission_target = _soft_top(_lerp(controls.emission, level)
-                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
+                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * activity
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
-        self._speed = _follow(self._speed, speed_target, dt, 0.35 * soft, 3.0 * soft)
+        self._speed = _follow(self._speed, speed_target, dt, 0.36 * soft, 3.0 * soft)
         self._drift = _follow(self._drift, drift_target, dt, 0.5 * soft, 2.5 * soft)
         self._emission = _follow(self._emission, emission_target, dt, 0.1 * soft, 1.5 * soft)
         speed = self._speed
@@ -384,7 +359,7 @@ class ExtrudedBubbleSimulation:
         depth_axis = (direction[1] * across[2] - direction[2] * across[1],
                       direction[2] * across[0] - direction[0] * across[2],
                       direction[0] * across[1] - direction[1] * across[0])
-        t = self._time
+        t = self._motion_phase
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
@@ -428,7 +403,7 @@ class ExtrudedBubbleSimulation:
                 self._contacts = {pair for pair in self._contacts if b.ident not in pair}
         self._bubbles = kept
         self._prune_clusters()
-        return self._snapshot(direction, speed, controls, dt, music.body_bands is not None)
+        return self._snapshot(direction, speed, controls, dt)
 
     # -- collisions --------------------------------------------------------------------------------------------------
 
@@ -547,7 +522,7 @@ class ExtrudedBubbleSimulation:
 
     # -- snapshot ----------------------------------------------------------------------------------------------------
 
-    def _wakes(self, dt: float) -> tuple[float, ...]:
+    def _wakes(self, dt: float, big_scale: float, small_scale: float) -> tuple[float, ...]:
         """Logical emitter identity survives compaction, fusion, pop and surface exit.
 
         Retiring wakes retain their last *own* world-volume source, never rebind to the shell currently occupying
@@ -556,7 +531,8 @@ class ExtrudedBubbleSimulation:
         current: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
-                current[b.ident] = (b.x, b.y, b.z, b.radius, b.ident, -1.0, b.alpha, 0.0)
+                current[b.ident] = (b.x, b.y, b.z, b.radius * (big_scale if b.large else small_scale),
+                                    b.ident, -1.0, b.alpha, 0.0)
         # Advance existing tombstones on the sole logical tick, never in the renderer.
         retained = {}
         for ident, old in self._wake_retiring.items():
@@ -575,34 +551,14 @@ class ExtrudedBubbleSimulation:
         records.extend(retained.values())
         return tuple(value for row in records for value in row)
 
-    def _snapshot(self, direction, speed, controls: ExtrudedBubbleControls, dt: float, body_bands_present: bool) -> ExtrudedBubbleSnapshot:
+    def _snapshot(self, direction, speed, controls: ExtrudedBubbleControls, dt: float) -> ExtrudedBubbleSnapshot:
         level = self._level
-        # The authored Breathing range remains the sole maximum. Its response is a continuous, music-driven
-        # swell (including saturated passages), plus an onset accent: no held constant radius and no kick-only
-        # movement. Each long passage has full excursions, not an always-inflated static sphere.
-        wave = 0.5 + 0.5 * math.sin(self._breathing_phase)
-        passage = min(1.0, 0.58 * level + 0.42 * self._sustain)
-        idle = 0.11 * controls.idle * (1.0 - level) * wave
-        response = min(1.0, idle + passage * (0.12 + 0.88 * wave)
-                       + self._kick_swell * (0.58 - 0.16 * self._sustain))
-        breathing = _lerp(controls.breathing, level) * response
-        pulse = _lerp(controls.small_pulse, level) * self._pulse
-        shimmer = _lerp(controls.small_pulse, 1.0) * controls.sustained * self._sustain
+        big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, 4.0)
+        small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, 3.0)
         index = {b.ident: i for i, b in enumerate(self._bubbles)}
         bubbles: list[float] = []
         for b in self._bubbles:
-            if body_bands_present:
-                # Production: big and mid/small radius each respond to their OWN existing Bubble band lane.
-                # Onsets supply a bounded eased accent, never become the only source of movement.
-                swell = (max(0.0, min(1.0, self._body_big_envelope + 0.30 * self._kick_swell))
-                         * _lerp(controls.breathing, level) if b.large else
-                         max(0.0, min(1.0, self._body_small_envelope + 0.28 * self._pulse))
-                         * _lerp(controls.small_pulse, level))
-            else:
-                # Retain the historical scalar-only deterministic fixtures solely for their
-                # previous numerical comparisons; production always supplies body_bands.
-                swell = breathing * (0.9 + 0.1 * math.sin(b.phase + self._breathing_phase * 0.27)) if b.large else max(
-                    pulse, shimmer * (0.5 + 0.5 * math.sin(self._time * 3.1 + b.phase)))
+            swell = (big_scale if b.large else small_scale) - 1.0
             radius = b.radius * (1.0 + swell + (0.25 * min(1.0, b.popping / _POP_SECONDS) if b.popping >= 0 else 0.0))
             bubbles.extend((b.x, b.y, b.z, radius, b.alpha, swell, float(b.ident), float(b.cluster)))
         clusters: list[float] = []
@@ -611,7 +567,8 @@ class ExtrudedBubbleSimulation:
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
-                                      self._travel, self._rays, self._shimmer, (), self._motion_phase, self._wakes(dt))
+                                      self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, (), self._motion_phase,
+                                      self._wakes(dt, big_scale, small_scale))
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

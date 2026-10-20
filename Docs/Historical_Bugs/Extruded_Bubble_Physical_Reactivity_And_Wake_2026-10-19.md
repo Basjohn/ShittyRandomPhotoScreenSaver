@@ -227,3 +227,116 @@ Do not change accepted/shared DSP based on this hybrid experiment.
 radius reaches native pixels; independently reproduced world/perspective/fade defects. No repair or physical
 acceptance is claimed. Native live input values, component-specific optical flow, coin-like material root,
 fused near DoF, wake/chain continuity and the strong Settings-owner retaining edge remain open.
+
+## 7. First recovery candidate and native minimum-size/ray attribution (2026-10-20)
+
+This is source and native offscreen evidence, **not complete EB acceptance**. The operator subsequently reports
+that most idle motions improved tremendously, but attached beads scale strangely and stream/emission/surface
+water can appear stopped. The live follow-up order and exact requirements remain in `Current_Plan.md` §4B.
+
+### 7.1 Owning-boundary changes
+
+The frame runtime carries authored Breathing/Small Pulse strengths directly rather than reducing them to
+35%/15% first. Only the existing full-dynamic bass/mid/high feed and weighted onsets drive the simulation.
+The obsolete scalar-only sine branch is removed; runtime callers must supply bands, and playing production
+capture requires the canonical getter rather than substituting pre-AGC or zero bands on a missing interface.
+
+Large body support uses bass with limited mid/high support; small body support uses mid/high with limited bass
+support. Onset accents retain headroom. Sustained Response now strengthens actual body/motion state instead of
+a discarded branch. At default smoothing the body follower has 75 ms attack, 250 ms musical release and
+1.875 s silence release. The renderer still consumes immutable logical snapshots; no DSP, clock, polling,
+renderer simulation or authored preset change was added. Original 2D Bubble is untouched.
+
+For strength Range `q,l`, envelope `d` and expansion authority `g` (large 4, mid 3), the candidate is:
+
+```text
+s = clamp(max(q,l), 0, 1)
+rest = max(0.13, 1 - 1.45*s)
+radius / nominal = rest + (1-rest)*d + g*lerp(q,l,d)*d
+```
+
+Thus zero strength disables size reaction; normal strengths permit 0.13× nominal rest. Signed `swell` is this
+factor minus 1. An initial candidate's 0.49× big rest was rejected during the minimum-size audit: 2D's large
+formula permits 0.22× before its additional contraction bias, about 0.132× with the accepted preset's 0.4 bias.
+The actual opening 2D capture already contains a mature big identity at 0.2256× nominal. Minimum size is a
+separate requirement from peak size or percentage excursion.
+
+The simulation now integrates very slow resting motion/shimmer, uses musical phase for sway, and releases
+stream/drift/emission toward low activity. Wakes carry the reacted parent radius to keep their source aligned.
+The latter also exposed excessive attached-bead scaling; that is a confirmed follow-up, not accepted behavior.
+Collision broadphase/reach/fuse/bounce still use nominal radii and need the physical-world correction; they must
+not be mistaken for matching the newly expanded size range.
+
+### 7.2 Evidence and measured limits
+
+Local evidence is under `logs/eb_reactivity_20261020/` (ignored media/custody; retained on this workstation):
+
+- `minimum_p1`: opening 12 s of real `anything_mixed2`, 1,091 logical inputs, 360 native 1672×941 frames at
+  30 fps, same-frame zero-swell controls, silent GIF/MP4, contact sheet, per-ID custody and source hashes.
+- `minimum_p7_1440`: opening 4 s, 120 native 2560×1440 frames at 30 fps, same production path/interventions.
+- `ragdoll_current`, `heavy_current`, `soft_current`: full-minute CPU custody from the real recordings.
+- `pause_resume_p1`: actual first 4 s, an explicitly constructed 12 s playback-off interval holding the last
+  recorded frame, then the remaining real input with shifted logical timestamps. 96 native frames at 4 fps;
+  useful for long settling, **not** high-frequency judder or live audio reconnection proof.
+- `ray_interventions` / `ray_interventions_p7_complete`: identical recorded state with only ray driver and
+  Ray Softness changed, native PNGs plus actual mapped values. Reproducer: `extruded_bubble_ray_probe`.
+
+Relevant source hashes are recorded before the latest forensic runs and checked unchanged afterward. UI tooltip
+wording changed between the P1/P7 captures; simulation/render source is identical. Earlier `candidate_p1`,
+`response_p1` and `final_p1` are superseded candidate runs, not current minimum-size evidence.
+
+Mature, unclustered, nonpopping stable identities (same exclusions as §6):
+
+| Evidence | Median per-ID large excursion | Median per-ID small excursion |
+| --- | ---: | ---: |
+| old EB, opening 12 s | 12.56% | 5.90% |
+| accepted 2D, opening 12 s | 183.76% | 117.42% |
+| candidate EB, opening 12 s | 959.55% | 655.86% |
+| candidate Ragdoll, full minute | 151.00% | 158.80% |
+| candidate Heavy, full minute | 199.40% | 113.57% |
+| candidate soft/acoustic, full minute | 144.87% | 112.04% |
+
+The very large opening percentages include the newly available tiny silent rest; **they do not prove musical
+parity inside an active phrase**. In the stricter ID-1 1.507–3.147 s window, old EB was 1.038–1.131×,
+candidate EB is **0.975–2.086×**, and accepted 2D is **0.707–2.782×**. Main response is substantially restored,
+but this tighter minimum/peak comparison still falls short of 2D and remains actionable. Do not tune against a
+single identity/window alone or use the opening percentage to close the gate.
+
+Mature ordinary projected minimum radii in the candidate P1 opening are approximately **4.74 px large / 1.59 px
+small**. These are first-order projection estimates, not segmented silhouettes; the native images and paired
+interventions establish delivery, while optics/DoF still require their own appearance judgment. During the
+controlled pause, 6 large and 20 small records remain near 0.132× / 0.131× at 15.9 s, then expand again on real
+bands after 16 s without resetting the integrated phase. Stream/drift/emission remain numerically nonzero but
+the operator's apparent-stop report requires pixel-speed/count verification. Rays remain visually bright in
+silence because their Range consumer retains an authored floor: see below.
+
+Final focused response/minimum-size gates: **42 passed**. Native renderer/resource/shader/wake gate:
+**36 passed** (a bounded Qt fixture supplies the production graphics policy without the global environment-
+rewriting conftest). Missing fixtures in an initial `--noconftest` run were harness setup errors, not product
+failures. Legacy false perspective/fade oracles within the renderer suite remain explicitly excluded from
+physical acceptance. No full suite or product build was run.
+
+Sampled offscreen GPU observations are P1 **5.97/8.08 ms median/p90** and P7 at 1440p **16.61/21.02 ms**;
+first compile excluded. These paired readback/PNG runs are not controlled product performance comparisons.
+Recordings contain lossless PCM histories but several adjacent nonzero overlaps are ambiguous; no guessed
+continuous soundtrack was labelled synchronized. Silent captures retain actual recorded feature timestamps.
+
+### 7.3 Rays: dead softness consumer and compressed visible response
+
+Native same-state interventions establish two different mechanisms:
+
+1. **Preset 7 / Deep Light Ray Softness is dead.** `scene_knobs` changes fan frequency/contrast, but Deep Light
+   uses the marched shaft pattern. Its `uShaftSoft` stays at the renderer default 0. For every tested driver
+   (0, 0.5, 1), softness 0 versus 1 produces **byte-identical native RGB output**. Sunlit Surface does change:
+   the same comparison gives mean absolute RGB differences about 23.8–28.9. Do not call the whole setting dead;
+   connect it to the actual consumer in both light types.
+2. **The ray driver cannot collapse the authored quiet floor.** P1's actual Range is `[0.6,0.8]`; driver 0
+   still uploads 0.6. At softness 0, the full 0→1 driver sweep changes central RGB mean only
+   **111.50→116.63** in the fixed native probe. At normal recorded variation it is narrower still. This is a
+   reproduced weak delivery contrast, not absence of a changing simulation field. P7's Range is `[0.1,0.2]`.
+
+The half-resolution blur uses fixed taps, independent of Ray Softness and resolution; fan softness changes
+frequency/contrast rather than a common beam-edge profile. Repair the dead consumer first, then verify native
+driver/softness endpoints and actual real-passage ray ROIs at both resolutions. Quiet music, playback-off rest,
+continuous phase, broad shafts and authored surface/light appearance require distinct checks. No light fix is
+claimed in this checkpoint.

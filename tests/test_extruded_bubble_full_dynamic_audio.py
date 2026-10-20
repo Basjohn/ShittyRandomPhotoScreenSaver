@@ -38,15 +38,17 @@ class FullDynamicAudioOwnership(unittest.TestCase):
 
     def lanes(self, snap):
         records = [snap.bubbles[i:i + 8] for i in range(0, len(snap.bubbles), 8)]
-        # Stable numeric classifications for these authored fixed-radius test settings.
-        big = [r[5] for r in records if r[3] >= 0.075]
-        small = [r[5] for r in records if r[3] < 0.075]
+        kinds = {b.ident: b.large for b in self.sim._bubbles}
+        big = [r[5] for r in records if kinds[int(r[6])]]
+        small = [r[5] for r in records if not kinds[int(r[6])]]
         return (sum(big)/len(big) if big else 0, sum(small)/len(small) if small else 0)
 
     def test_saturated_scalar_does_not_create_permanent_sine_breathing(self):
         values = [self.lanes(self.step(0, 0, 0)) for _ in range(420)]
-        self.assertLess(max(v[0] for v in values[-120:]), 0.002)
-        self.assertLess(max(v[1] for v in values[-120:]), 0.002)
+        for lane in (0, 1):
+            tail = [v[lane] for v in values[-120:]]
+            self.assertLess(max(tail), -0.1)  # contracted, not merely a static full-size sphere
+            self.assertLess(max(tail) - min(tail), 1e-8)
 
     def test_bass_and_vocal_changes_drive_different_bubble_sizes_with_constant_scalar(self):
         for _ in range(240):
