@@ -44,8 +44,14 @@ Healthy reactivity is the immediate priority; required scene architecture remain
 immediate strong changes in `anything_mixed2.jsonl`. In idle EB must slowly settle into a collapsed resting state
 across size, drift/sway, stream, beads/wakes, rays, emission and ambient/surface motion. Nothing remotely fast;
 no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes are subordinate to this requirement.
-Native measurements and reproduced control failures are in the dedicated Extruded Bubble failure ledger §6;
-`Current_Plan.md` §4B owns the current actionable recovery order. Investigation/tooling does not constitute a fix.
+Native measurements, reproduced control failures and the candidate transfer are in the dedicated Extruded Bubble failure ledger §6–7;
+`Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
+
+The simulation's current reaction strength spans contracted rest and musical expansion; nominal size is not a
+lower bound. Normal Breathing/Small Pulse strengths permit a resting radius near 0.13× nominal; zero strength
+disables size reaction. Minimum size and maximum excursion are separate acceptance measures. Compare mature,
+nonpopping stable identities against accepted 2D, including the big population and projected/visible size at fixed
+depth. Do not count entry fade, pop shrinkage, changed perspective or a departing identity as musical contraction.
 
 Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /

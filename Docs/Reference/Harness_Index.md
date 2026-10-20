@@ -391,7 +391,7 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
 only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
 Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
-measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6; work stays in
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–7; work stays in
 `Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
 response comparator, then quiet→loud/heavy/soft recordings.
 
@@ -400,6 +400,7 @@ response comparator, then quiet→loud/heavy/soft recordings.
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_2d --duration 12 --preset 1 --size 1672x941 --fps 12
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_controls --duration 8 --probe-controls
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output logs/eb_forensics/archive_inventory.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_rays --preset 7 --at 3
 ```
 
 Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
@@ -407,6 +408,17 @@ without GL. Stable IDs, alpha/cluster/pop exclusions and body followers distingu
 churn. Native paired zero-swell frames show whether radius reaches pixels; they do not segment a particular
 silhouette. Projected radius/centre fields are first-order estimates. `--passes` serializes draw timing and must not
 be compared to independent total-frame timing as if it were an ordinary frame budget.
+
+`source_receipt.json` records relevant source hashes and a tracked-diff digest before replay; a changed source
+hash rejects the run. Radius `swell` is a **signed offset from nominal radius**: `1+swell` may be below 1.
+The zero-swell intervention therefore removes both contraction and expansion. Compare per-ID minima as well as
+excursion/peaks; use `--fps 30` or `60` for temporal inspection, alongside logical timestamps. These are sampled
+recorded logical states, not interpolated display frames. GIFs are silent. PCM histories may have ambiguous
+overlaps; do not claim a reconstructed soundtrack is verified merely because each individual history is lossless.
+
+The ray probe holds one production snapshot fixed and varies only Ray Softness (0/1) and the simulation ray
+driver (0/.5/1), saving native PNGs, a labelled grid and mapped consumer values. Other layers stay unchanged;
+its central RGB mean is a fixed-region brightness observation, not segmented shaft luminance or musical fidelity.
 
 `--set KEY=JSON` is an in-memory override. Ordinary replay serves recorded post-DSP bands, so technical overrides
 cannot demonstrate live Sensitivity/Floor behavior. Optional `--reanalyze-pcm` explicitly recomputes production

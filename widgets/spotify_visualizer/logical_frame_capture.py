@@ -429,14 +429,8 @@ def _capture_extruded_bubble(
     # a scalar plateau nor an invented dynamic floor can establish musical body movement.
     body_bands = (0.0, 0.0, 0.0)
     if engine is not None and context.playing:
-        band_getter = getattr(engine, "get_bubble_energy_bands", None)
-        if not callable(band_getter):
-            band_getter = getattr(engine, "get_pre_agc_energy_bands", None)
-        if callable(band_getter):
-            bands = band_getter()
-            if bands is not None:
-                body_bands = tuple(float(getattr(bands, name, 0.0) or 0.0)
-                                   for name in ("bass", "mid", "high"))
+        bands = engine.get_bubble_energy_bands()
+        body_bands = (float(bands.bass), float(bands.mid), float(bands.high))
     snapshot = runtime.advance(
         onsets=onsets, now_ts=context.now_ts, playing=context.playing, intensity=intensity,
         body_bands=body_bands,

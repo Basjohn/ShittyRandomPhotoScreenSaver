@@ -38,9 +38,11 @@ for row, name in enumerate(names):
         kicks += [now - t0 for o in onsets if o.kind == "kick"]
         snap = runtime.advance(onsets=onsets, now_ts=now, playing=bool(frame.playing),
                                intensity=engine.get_musical_intensity(), identity=(1, 1, 1), source_identity=(1, 1),
+                               body_bands=tuple(getattr(engine.get_bubble_energy_bands(), n) for n in ('bass', 'mid', 'high')),
                                controls=controls)
         records = [snap.bubbles[i:i + BUBBLE_STRIDE] for i in range(0, len(snap.bubbles), BUBBLE_STRIDE)]
-        mids = [r[5] for r in records if r[3] < 0.07 and r[4] > 0.9]
+        kinds = {b.ident: b.large for b in runtime._simulation._bubbles}
+        mids = [r[5] for r in records if not kinds[int(r[6])] and r[4] > 0.9]
         series["t"].append(now - t0)
         series["intensity"].append(engine.get_musical_intensity())
         series["level"].append(snap.level)
@@ -49,15 +51,15 @@ for row, name in enumerate(names):
         series["speed"].append(snap.stream_speed / controls.stream_speed[1])
         series["drift"].append(snap.drift)
         series["emission"].append(snap.emission)
-        series["mids"].append(sum(mids) / len(mids) / controls.small_pulse[1] if mids else 0.0)
-        large = [r[5] for r in records if r[3] >= 0.07 and r[4] > 0.9]
-        series["large"].append(sum(large) / len(large) / controls.breathing[1] if large else 0.0)
+        series["mids"].append(sum(mids) / len(mids) if mids else 0.0)
+        large = [r[5] for r in records if kinds[int(r[6])] and r[4] > 0.9]
+        series["large"].append(sum(large) / len(large) if large else 0.0)
         series["count"].append(snap.count / 70.0)
     t = series["t"]
     top = row * PANEL
     span = max(t) or 1.0
     def xy(ts, v):
-        return 40 + (W - 60) * ts / span, top + PANEL - 25 - (PANEL - 50) * max(-0.05, min(1.3, v)) / 1.3
+        return 40 + (W - 60) * ts / span, top + PANEL - 25 - (PANEL - 50) * (max(-1.0, min(3.0, v)) + 1.0) / 4.0
     for k in kicks:
         x, _ = xy(k, 0)
         draw.line([(x, top + 20), (x, top + PANEL - 25)], fill=(30, 45, 70))
