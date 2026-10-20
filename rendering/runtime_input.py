@@ -98,6 +98,7 @@ class RuntimeInputOwner(QObject):
     view_orbit_rates_changed = Signal(float, float)
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
+    view_camera_reset_requested = Signal()
     VIEW_ORBIT_DRAG_PIXELS_PER_STEP = 4.0
     # On the same shown 3D Visualizer, Alt + right drag moves it and Alt + wheel resizes it,
     # outside Edit (in interaction or Ctrl mode, like the orbit): the move as the pointer's
@@ -205,6 +206,12 @@ class RuntimeInputOwner(QObject):
         self._view_orbit_hit_test = hit_test
         if hit_test is None:
             self._view_orbit_drag = None
+
+    def cancel_view_orbit_for_camera_reset(self) -> None:
+        """Discard held-key and drag intent; reset must not resume the old orbit."""
+        self._view_orbit_held.clear()
+        self._view_orbit_drag = None
+        self._end_visualizer_gesture()
 
     def _held_view_orbit_rates(self) -> tuple[float, float]:
         turn = sum(self._VIEW_ORBIT_KEYS[key][0] for key in self._view_orbit_held)
@@ -338,6 +345,12 @@ class RuntimeInputOwner(QObject):
             return True
         if key_text == "c" or key == Qt.Key.Key_C or native_vk == 0x43:
             self.cycle_transition_requested.emit()
+            return True
+        if (self._view_orbit_enabled and (key == Qt.Key.Key_R or key_text == "r" or native_vk == 0x52)
+                and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                                            | Qt.KeyboardModifier.AltModifier))):
+            if not event.isAutoRepeat():
+                self.view_camera_reset_requested.emit()
             return True
         if self._view_orbit_enabled:
             orbit_key = self._view_orbit_key(event)

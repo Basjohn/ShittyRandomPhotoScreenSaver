@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
 from functools import cached_property
 from importlib import import_module
 import math
@@ -436,6 +437,51 @@ class Direction:
 
 
 @dataclass(frozen=True)
+class ScenePath(Direction):
+    """Two independently placed 3D endpoints in a fixed world box (normalized xyz).
+
+    Old [around, height] presets are interpreted, never overwritten. The Settings
+    control shows screen x/y plus independent source/end depth handles.
+    """
+    legacy_kind: str = "stream"
+
+    def admit(self, value: object, default: object) -> list[float]:
+        from core.settings.visualizer_paths import admit_path
+        return list(admit_path(value, default, self.legacy_kind))
+
+    def text(self, value: object) -> str:
+        x = self.admit(value, value)
+        return f"Source ({x[0]:+.2f}, {x[1]:+.2f}, {x[2]:+.2f}) → End ({x[3]:+.2f}, {x[4]:+.2f}, {x[5]:+.2f})"
+
+
+@dataclass(frozen=True)
+class SceneVolumePath(ScenePath):
+    """EB-specific oblique 3D world-path editor; persists the SAME six coordinates."""
+
+
+@dataclass(frozen=True)
+class SceneCameraPosition(Direction):
+    """User camera world translation in world-box units, separate from orbit/FOV.
+
+    Values are offsets from the existing physical eye, not an alternate camera;
+    Settings composes the current live pose into the visible camera marker.
+    """
+
+    def admit(self, value: object, default: object) -> list[float]:
+        try:
+            nums = [float(v) for v in value]
+            if len(nums) != 3 or any(not math.isfinite(v) for v in nums):
+                raise ValueError('Camera offset requires finite xyz')
+        except (TypeError, ValueError, OverflowError):
+            nums = [float(v) for v in default]
+        return [round(max(-8.0, min(8.0, v)), 4) for v in nums]
+
+    def text(self, value: object) -> str:
+        x, y, z = self.admit(value, value)
+        return f'Camera translation x {x:+.2f}, y {y:+.2f}, depth {z:+.2f}'
+
+
+@dataclass(frozen=True)
 class Custom:
     """A body part built by the mode's own code: ``build(tab, layout)``, ``load(tab, config)`` and
     ``collect(tab) -> dict`` named as ``"module:function"``. Its persisted keys stay with their
@@ -449,10 +495,10 @@ class Custom:
     keys: tuple[str, ...] = ()
 
 
-Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction]
-Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, Custom]
+Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, SceneVolumePath, SceneCameraPosition]
+Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, SceneVolumePath, SceneCameraPosition, Custom]
 # Controls shown by a shared visual control (``ui/widgets/visual_controls.py``) rather than a stock widget.
-VISUAL_CONTROLS = (Range, Triangle, Direction)
+VISUAL_CONTROLS = (Range, Triangle, Direction, ScenePath, SceneVolumePath, SceneCameraPosition)
 
 
 @dataclass(frozen=True)
@@ -1449,27 +1495,34 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Choice("extruded_bubble_light_type", "Light Type:", ("Sunlit Surface", "Deep Light"), bucket="light",
                tooltip="Sunlit Surface: the sun above the water, seen through the surface. Deep Light: a light "
                        "inside the water, no surface in view."),
-        Direction("extruded_bubble_light_direction", "Light Direction:", 0.0, 90.0, centre_text="Overhead",
-                  marker="light", midline=True, bucket="light", tooltip="Drag the light round the disc; the centre is straight above."),
+        SceneVolumePath("extruded_bubble_light_direction", "Light Source → End:", bucket="light", legacy_kind="light",
+                  tooltip="Drag Source or End in the physical scene. Vertical axis: floor to surface; each node has its own depth slider."),
         Colour("extruded_bubble_light_colour", "Light Colour:", "Light Colour", bucket="light", alpha=False),
         Slider("extruded_bubble_light_strength", "Light Strength:", 0.0, 2.0, bucket="light"),
         Toggle("extruded_bubble_rays_enabled", "", "Light Rays", bucket="rays"),
         Range("extruded_bubble_rays", "Ray Strength:", 0.0, 1.0, percent=True, bucket="rays", when=_EB_RAYS,
               tooltip="Left handle: the rays in quiet music; right handle: in loud music."),
         Slider("extruded_bubble_ray_softness", "Ray Softness:", 0.0, 1.0, bucket="rays", when=_EB_RAYS),
-        Slider("extruded_bubble_ray_reach", "Ray Reach:", 0.0, 1.0, bucket="rays", when=_EB_RAYS),
+        SceneVolumePath("extruded_bubble_ray_path", "Ray Source → End:", bucket="rays", legacy_kind="light",
+                  when=_EB_RAYS, tooltip="Physical beam start/end, with independent depth. Ray Reach separately shapes angular fan spread."),
+        Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
+               tooltip="Legacy Ray Reach: angular spread of the shaft fan, independent of the new physical beam length."),
         Slider("extruded_bubble_ray_flicker", "Ray Flicker:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
                tooltip="How much the rays shimmer with the music."),
         Range("extruded_bubble_large_bubbles", "Large Bubbles:", 0.0, 40.0, scale=1, integer=True, bucket="bubbles"),
         Range("extruded_bubble_mid_bubbles", "Small Bubbles:", 0.0, 150.0, scale=1, integer=True, bucket="bubbles"),
         Range("extruded_bubble_bead_chains", "Bead Chains:", 0.0, 10.0, scale=1, integer=True, bucket="bubbles"),
+        Slider("extruded_bubble_large_size", "Large Size:", 0.5, 2.0, bucket="bubbles",
+               tooltip="Nominal physical radius of the large bubble population. 100% is the original scale."),
+        Slider("extruded_bubble_small_size", "Small Size:", 0.5, 2.0, bucket="bubbles",
+               tooltip="Nominal physical radius of the small bubble population. Independent of Large Size."),
+        Slider("extruded_bubble_bead_size", "Bead/Wake Size:", 0.5, 2.0, bucket="bubbles",
+               tooltip="Physical size of procedural bead-chain beads and attached wake bubbles."),
         Slider("extruded_bubble_size_variety", "Size Variety:", 0.0, 1.0, bucket="bubbles"),
         Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles",
                tooltip="How many bubbles rise in lines along the stream."),
-        Direction("extruded_bubble_stream_direction", "Stream Direction:", -90.0, 90.0, centre_text="Into Scene",
-                  marker="arrow", midline=True, bucket="motion",
-                  tooltip="Drag the arrow: round the disc is the screen direction; toward the centre tips the stream "
-                          "into the scene."),
+        SceneVolumePath("extruded_bubble_stream_direction", "Stream Source → End:", bucket="motion", legacy_kind="stream",
+                  tooltip="Set the spawning SOURCE on the floor, ceiling or side and the END downstream. Nodes carry independent depth."),
         Range("extruded_bubble_stream_speed", "Stream Speed:", 0.0, 1.0, percent=True, bucket="motion"),
         Range("extruded_bubble_drift", "Drift:", 0.0, 1.0, percent=True, bucket="motion"),
         Slider("extruded_bubble_sway", "Sway:", 0.0, 1.0, bucket="motion"),
@@ -1485,6 +1538,11 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Triangle("extruded_bubble_collision", "Collision:", ("Fuse", "Pop", "Bounce"), bucket="collision",
                  tooltip="Place the dot: the nearer a corner, the more often meeting bubbles do that."),
         Choice("extruded_bubble_collision_scope", "Applies To:", ("All", "Big", "Small", "Off"), bucket="collision"),
+        SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
+               tooltip="Place the real camera in the shared 3D volume. This adds physical world translation; orbit, zoom and FOV remain independent."),
+        Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
+               scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
+               tooltip="Vertical camera angle: narrower photographic framing reduces edge stretch, without bending sphere geometry."),
         Toggle("extruded_bubble_auto_rotate", "", "Auto Rotate", bucket="camera"),
         Slider("extruded_bubble_auto_rotate_after", "Auto Rotate After:", 1.0, 120.0, scale=1, integer=True,
                suffix=" s", decimals=0, bucket="camera", when=_EB_AUTO_ROTATE),
@@ -1507,6 +1565,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
                alpha=False),
         Slider("extruded_bubble_particle_warmth", "Warm Share:", 0.0, 1.0, bucket="particles"),
         Slider("extruded_bubble_particle_glow", "Particle Glow:", 0.0, 1.0, bucket="particles"),
+        Slider("extruded_bubble_particle_glow_reactivity", "Glow Reactivity:", 0.0, 1.0, bucket="particles",
+               tooltip="Optional gentle transient/phrase glow lift; zero preserves existing authored particle glow."),
         Toggle("extruded_bubble_particle_bands", "", "Particle Bands", bucket="particles"),
         Slider("extruded_bubble_band_contrast", "Band Contrast:", 0.0, 1.0, bucket="particles", when=_EB_BANDS),
         Slider("extruded_bubble_focus", "Focus:", 0.0, 1.0, bucket="lens"),
@@ -1580,6 +1640,9 @@ __all__ = [
     "Control",
     "Custom",
     "Direction",
+    "ScenePath",
+    "SceneVolumePath",
+    "SceneCameraPosition",
     "ModeSettings",
     "Range",
     "Slider",

@@ -16,12 +16,15 @@ from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
 COMMON = """
 uniform mat3 uViewToWorld;
+uniform vec3 uEye;         // translated camera origin in the fixed world
 uniform vec2 uTan;
 uniform vec2 uLensShift;
 uniform float uTime;
 uniform float uSurfaceTravel;
 uniform vec3 uSun;
 uniform vec3 uSunBelow;
+uniform vec3 uLightSource;  // real physical deep-light position
+uniform vec3 uLightEnd;     // authored far end; directional shape derived by the CPU
 uniform vec3 uDeep;
 uniform vec3 uWater;
 uniform vec3 uSkyTint;
@@ -94,8 +97,8 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
         medium += mix(uShaftColour, vec3(0.9), 0.35) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
     // Below: the abyss, darkening with depth (operator: no ocean floor).
     if (ray.y <= 0.015) return medium;
-    float distance_ = SURFACE_Y / ray.y;
-    vec2 hit = (ray * distance_).xz;
+    float distance_ = (SURFACE_Y - uEye.y) / ray.y;
+    vec2 hit = uEye.xz + (ray * distance_).xz;
     float footprint = length(fwidth(hit)) * detail + (1.0 - detail) * 1.5;
     vec3 n = rippleNormal(hit, uSurfaceTravel, footprint);
     // Light from above leaves through the surface where the slope lets it; the sun's broad lobe through tilted
@@ -221,7 +224,9 @@ void main() {
         colour += veil;
     }
     if (uLightPower > 0.0) {
-        float g = max(dot(ray, uSunBelow), 0.0);
+        // Deep lights are physical emitters. Translating both endpoints now
+        // changes their apparent screen position (not merely their angle).
+        float g = max(dot(ray, normalize(uLightSource - uEye)), 0.0);
         // An area light: a hot core, a broad bright body and the glow of the water round it.
         colour += uLightColour * uLightPower * (pow(g, 2500.0) * 8.0 + pow(g, 180.0) * 1.6 + pow(g, 25.0) * 0.25
                                                + pow(g, 5.0) * 0.06);
@@ -255,6 +260,40 @@ uniform float uFanReach;        // angle (rad) over which the fan fades
 uniform vec2 uFanMix;           // ray contrast 0..1, share of the depth march under the fan
 uniform float uFlicker;         // Ray Flicker's depth now (0: steady rays)
 uniform float uShimmer;         // the shimmer's phase (the simulation's; faster on the hits)
+uniform vec3 uRaySource;        // physical world-space beam segment start
+uniform vec3 uRayEnd;           // physical world-space beam segment end
+uniform vec4 uBlock0;           // up to four scene bubbles (xyz, physical radius; radius 0 = vacant)
+uniform vec4 uBlock1;
+uniform vec4 uBlock2;
+uniform vec4 uBlock3;
+uniform float uParticleAtten;   // bounded aggregate dust opacity; not per-particle shadowing
+
+float beamExtent(vec3 p) {
+    vec3 line = uRayEnd - uRaySource;
+    float lengthLine = max(length(line), 0.001);
+    float along = dot(p - uRaySource, line / lengthLine);
+    // Real authored physical start and end; soft exit to avoid a hard lighting sheet.
+    return smoothstep(-1.8, 1.2, along) * (1.0 - smoothstep(lengthLine - 2.0, lengthLine + 1.5, along));
+}
+float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
+    if (bubble.w <= 0.0) return 1.0;
+    vec3 fromObject = samplePoint - bubble.xyz;
+    float afterObject = dot(fromObject, lightTravel);
+    float lateral = length(fromObject - afterObject * lightTravel);
+    float shadow = (1.0 - smoothstep(bubble.w * 0.8, bubble.w * 3.2, lateral))
+                 * smoothstep(-bubble.w * 0.3, bubble.w * 1.2, afterObject);
+    // Glass does not black out the shafts. Four strongest bubbles at most; diffuse shadow.
+    return 1.0 - 0.16 * shadow;
+}
+float sceneTransmittance(vec3 p) {
+    vec3 lightTravel = normalize(uRayEnd - uRaySource);
+    float t = blockAttenuation(p, uBlock0, lightTravel)
+            * blockAttenuation(p, uBlock1, lightTravel)
+            * blockAttenuation(p, uBlock2, lightTravel)
+            * blockAttenuation(p, uBlock3, lightTravel);
+    return clamp(t * (1.0 - uParticleAtten), 0.60, 1.0);
+}
+
 float labShaftFan(vec3 ray, vec3 sunBelow, float t) {
     // Azimuth round the sun axis, zero pointing down (the seam faces up, behind the sun).
     vec3 down = normalize(vec3(0.0, -1.0, 0.0) - sunBelow * -sunBelow.y + vec3(1e-4, 0.0, 0.0));
@@ -292,10 +331,10 @@ float labShafts(vec3 ray, float maxDistance, vec3 sunBelow, float surfaceY, floa
     float sum = 0.0;
     for (int i = 0; i < samples; ++i) {
         float s = (float(i) + jitter) * stepLength;
-        vec3 p = ray * s;
+        vec3 p = uEye + ray * s;
         float below = surfaceY - p.y;
         if (below <= 0.0) break;
-        sum += labShaftPattern(p.xz + slope * below, t) * exp(-below * 0.07) * exp(-s * 0.035);
+        sum += beamExtent(p) * labShaftPattern(p.xz + slope * below, t) * exp(-below * 0.07) * exp(-s * 0.035);
     }
     return sum * stepLength;
 }
@@ -304,7 +343,12 @@ void main() {
     float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     float toward = pow(max(dot(ray, uSunBelow), 0.0), 2.0);
     float march = labShafts(ray, 45.0, uSunBelow, uShaftY, uTime, 40, jitter) * 0.13 * (0.25 + toward);
-    FragColor = vec4(mix(march, labShaftFan(ray, uSunBelow, uTime) * 0.9 + march * uFanMix.y, uShaftFan));
+    // The angle-fan is finite too: the second node changes its actual 3D reach.
+    // Assess at two depths to avoid a pinhole slice when the camera physically dollies.
+    float fanExtent = max(beamExtent(uEye + ray * 12.0), beamExtent(uEye + ray * 23.0));
+    float fan = labShaftFan(ray, uSunBelow, uTime) * fanExtent;
+    float optical = sceneTransmittance(uEye + ray * 18.0);
+    FragColor = vec4(max(0.0, mix(march, fan * 0.9 + march * uFanMix.y, uShaftFan) * optical));
 }
 """
 BLUR_FRAGMENT = """#version 460 core
@@ -329,6 +373,7 @@ layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
 layout(location=2) in float aOpacity; // logical lifetime, independent of physical radius
 uniform mat3 uWorldToView;
+uniform vec3 uEye;
 uniform mat4 uProjection;
 uniform float uFocus;
 uniform float uAperture;
@@ -345,7 +390,7 @@ flat out float vOpacity;   // procedural chain lifetime and population fades; 1 
 void main() {
     vOpacity = aOpacity;
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
-    vec3 centre = uWorldToView * aSphere.xyz;
+    vec3 centre = uWorldToView * (aSphere.xyz - uEye);
     float depth = -centre.z;
     // Nothing to draw (a generated instance left out, or faded to nothing; one behind the eye): no quad at all. Never
     // the half-pixel floor below, which shaded every such instance as a dot.
@@ -658,6 +703,7 @@ layout(location=2) in vec4 aS2;
 layout(location=3) in vec4 aInfo;     // count, blend, seed, unused
 layout(location=4) in vec3 aAlphas;   // lifetime opacity for each union member
 uniform mat3 uWorldToView;
+uniform vec3 uEye;
 uniform mat4 uProjection;
 uniform float uFocus;
 uniform float uAperture;
@@ -680,13 +726,13 @@ void main() {
     float bound = 0.0;
     vFrontDepth = 1e30;
     for (int i = 0; i < 3; ++i) {
-        vSpheres[i] = vec4(uWorldToView * world[i].xyz, world[i].w);
+        vSpheres[i] = vec4(uWorldToView * (world[i].xyz - uEye), world[i].w);
         if (i < count) {
             bound = max(bound, distance(centre, world[i].xyz) + world[i].w);
             vFrontDepth = min(vFrontDepth, -vSpheres[i].z - vSpheres[i].w);
         }
     }
-    vBound = vec4(uWorldToView * centre, bound + aInfo.y);
+    vBound = vec4(uWorldToView * (centre - uEye), bound + aInfo.y);
     vInfo = aInfo;
     vAlphas = aAlphas;
     float coc = sceneNearCircle(vFrontDepth, uFocus, uAperture, uNearCoc);
@@ -769,9 +815,10 @@ NEAR_CLUSTER_FRAGMENT = ("#version 460 core\n#define NEAR_LAYER\n" + SCENE_DEFOC
                          + CLUSTER_FRAGMENT_BODY)
 
 PARTICLE_VERTEX = """#version 460 core
-layout(location=0) in vec4 aPoint;   // world position (eye at the origin), world radius
+layout(location=0) in vec4 aPoint;   // fixed world position, world radius
 layout(location=1) in vec4 aLook;    // brightness, warm (lit in the light's colour) or neutral, seed, unused
 uniform mat3 uWorldToView;
+uniform vec3 uEye;
 uniform bool uRowMajor;
 uniform mat4 uProjection;
 uniform float uPixel;                // view units per pixel at unit distance
@@ -785,11 +832,11 @@ flat out vec3 vColour;
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     mat3 toView = uRowMajor ? transpose(uWorldToView) : uWorldToView;
-    vec3 c = toView * aPoint.xyz;
+    vec3 c = toView * (aPoint.xyz - uEye);
     float depth = -c.z;
     float drawn = max(aPoint.w, uPixel * depth * 0.75);
     float energy = min((aPoint.w * aPoint.w) / (drawn * drawn), 1.0);
-    float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz), uSunBelow), 0.0), 4.0);
+    float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz - uEye), uSunBelow), 0.0), 4.0);
     vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
     vColour = tint * aLook.x * phase * energy * uSpecks;
     vCorner = corner;
@@ -822,6 +869,8 @@ uniform vec3 uWorldHalf;
 uniform vec3 uStreamWorld;
 uniform vec3 uStreamAcross;
 uniform vec3 uStreamDepth;
+uniform vec3 uStreamSource; // same authored physical source as ordinary bubbles/specks
+uniform vec3 uStreamEnd;    // same authored destination, no interior spawn origin
 uniform float uBeadTravel;     // integrated physical world travel
 uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
@@ -844,7 +893,12 @@ float beadRandom(int index, uint salt) {
     return float(beadHash(uint(index) * 0x9e3779b9u ^ salt * 0x85ebca6bu) & 0xffffffu) / 16777215.0;
 }
 void beadInstance() {
-    vec3 along = normalize(uStreamWorld);
+    vec3 path = uStreamEnd - uStreamSource;
+    float pathLength = length(path);
+    // A zero path is only for isolated legacy GPU diagnostics that do not set
+    // the new uniforms. Production always supplies two distinct authored nodes.
+    bool pathEnabled = pathLength > 0.001;
+    vec3 along = pathEnabled ? path / pathLength : normalize(uStreamWorld);
     vec3 across = uStreamAcross;
     vec3 depthAxis = uStreamDepth;
     if (gl_InstanceID < uBeadCount) {
@@ -853,15 +907,20 @@ void beadInstance() {
         vec3 centre = uWorldCenter + uWorldHalf * (vec3(beadRandom(chain, 1u), beadRandom(chain, 2u),
                                                                      beadRandom(chain, 3u)) * 2.0 - 1.0);
         float scale = 1.0;
-        float span = 2.0 * length(uWorldHalf);
+        float span = pathEnabled ? pathLength : 2.0 * length(uWorldHalf);
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
-        float s = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span) * span;
+        float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span);
+        float s = progress * span;
         float phase = 6.2832 * beadRandom(chain, 6u);
-        // A coherent, gently bending path shared by each bead in the chain (no fast independent
-        // sideways clock). Increase its authored lateral width by 15%; tiny seeded scatter remains.
+        // The same free-chain shape, but travel now follows the authored finite Source -> End.
         float arc = sin(s / scale * 0.23 + phase + uBeadTravel * 0.025) * 0.09
                   + sin(s / scale * 0.45 + phase * 1.7) * 0.01;
-        vec3 p = centre + along * (s - 0.5 * span)
+        float pathWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.28;
+        vec3 sourceLine = pathEnabled ? mix(uStreamSource, uStreamEnd, progress)
+                                      : centre + along * (s - 0.5 * span);
+        vec3 p = sourceLine
+               + across * (pathEnabled ? (beadRandom(chain, 1u) * 2.0 - 1.0) * pathWidth : 0.0)
+               + depthAxis * (pathEnabled ? (beadRandom(chain, 3u) * 2.0 - 1.0) * pathWidth : 0.0)
                + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
                + depthAxis * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
         // A whole-chain lifetime, independent for each stable seed; both population changes and
@@ -872,7 +931,7 @@ void beadInstance() {
         float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
-        float ends = smoothstep(0.0, 0.06, s / span) * (1.0 - smoothstep(0.94, 1.0, s / span));
+        float ends = smoothstep(0.0, 0.10, progress) * (1.0 - smoothstep(0.84, 1.0, progress));
         vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
         float boundary = 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
         vOpacity *= ends * boundary;
@@ -895,7 +954,7 @@ void beadInstance() {
         float retirement = ebWake[owner * 8 + 5]; // -1 live, 0..1 dissolving from front to back
         float sourceAlpha = ebWake[owner * 8 + 6];
         float nominalRadius = ebWake[owner * 8 + 7];
-        vec3 view = uWorldToView * centre;
+        vec3 view = uWorldToView * (centre - uEye);
         float pixels = r / (uPixel * max(-view.z, 0.1));
         // Larger bubbles shed a fuller wake; giants and specks none.
         float share = clamp((r - 0.08) / 0.5, 0.0, 1.0);
@@ -919,7 +978,7 @@ void beadInstance() {
         // Keep even the half-pixel raster footprint strictly below the fading parent's.
         // A tiny/transparent parent cannot acquire equal-sized beads during birth or retirement.
         float parentPixels = pixels;
-        float beadPixels = max(size / (uPixel * max(-(uWorldToView * p).z, 0.1)), 0.5);
+        float beadPixels = max(size / (uPixel * max(-(uWorldToView * (p - uEye)).z, 0.1)), 0.5);
         float parentGuard = smoothstep(1.05, 1.4, parentPixels / beadPixels);
         vOpacity *= parentGuard;
         if (size >= r) { size = 0.0; vOpacity = 0.0; }
@@ -927,13 +986,27 @@ void beadInstance() {
         aExtra = vec2(beadRandom(seed, 23u), 3.0); // micro-glass, same medium and lighting, stable sparkle
         return;
     }
-    // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
+    // Free marine snow: the same source/exit volume as bubbles, chains and
+    // decorative specks. Stable seeds recycle ONLY through zero-opacity ends.
+    // Attached fizz above deliberately remains sourced at its stable parent.
     int i = gl_InstanceID - uBeadCount;
     vOpacity = clamp(uSnowFill - float(i), 0.0, 1.0);
     vec3 seed = vec3(beadRandom(i, 13u), beadRandom(i, 14u), beadRandom(i, 15u));
-    vec3 at = fract(seed + along * uSnowDrift / (2.0 * uWorldHalf));
-    vec3 p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
-    vec3 edge = abs(at * 2.0 - 1.0);
+    vec3 p;
+    if (pathEnabled) {
+        float progress = fract(seed.y + uSnowDrift / pathLength);
+        float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46;
+        p = mix(uStreamSource, uStreamEnd, progress)
+          + across * (seed.x * 2.0 - 1.0) * width
+          + depthAxis * (seed.z * 2.0 - 1.0) * width;
+        vOpacity *= smoothstep(0.0, 0.14, progress)
+                  * (1.0 - smoothstep(0.82, 1.0, progress));
+    } else {
+        // Retains the original contract for old native bead diagnostic tests.
+        vec3 at = fract(seed + along * uSnowDrift / (2.0 * uWorldHalf));
+        p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
+    }
+    vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
     vOpacity *= 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
     aSphere = vec4(p, 0.005);
     aExtra = vec2(beadRandom(i, 17u), 1.0);
@@ -950,7 +1023,9 @@ uniform vec3 uStreamAcross;
 uniform vec3 uWorldCenter;
 uniform vec3 uWorldHalf;
 uniform float uWorldUnit;
-uniform float uSpeckTravel;    // how far the specks have flowed (world units)
+uniform float uSpeckTravel;    // integrated physical travel at 30% of the bubble stream
+uniform vec3 uSpeckSource;       // world source of seeded particulate paths
+uniform vec3 uSpeckEnd;          // world end and fade-out region
 uniform float uWarmShare;      // share lit in the particle colour
 uniform vec3 uClouds;          // cloud contrast, floor, glow
 uniform float uBandFreq;
@@ -979,18 +1054,30 @@ void speckInstance() {
     float phase = a * uBandFreq + 1.4 * sin(b * 2.3 + a * 3.0) + 0.8 * sin(b * 5.1 - a * 7.0);
     float clouds = pow(clamp(0.5 + 0.5 * sin(phase), 0.0, 1.0), uClouds.x);
     bool kept = speckRandom(i, 6u) < uClouds.y + 0.88 * clouds;
-    // Recycle only at fixed world boundaries, invisible at each boundary before wrapping.
-    vec3 at = fract(seed + along * uSpeckTravel / (2.0 * uWorldHalf));
-    vec3 p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
-    vec3 edge = abs(at * 2.0 - 1.0);
-    float ends = 1.0 - smoothstep(0.8, 1.0, max(edge.x, max(edge.y,edge.z)));
+    // Along the exact Stream Source -> End path. Cohorts recycle *after* fading
+    // at End and *before* fading in at Source, avoiding static midpoint debris.
+    vec3 path = uSpeckEnd - uSpeckSource;
+    float lengthPath = max(length(path), 0.001);
+    vec3 pathDir = path / lengthPath;
+    vec3 side = normalize(abs(pathDir.y) < 0.9 ? cross(pathDir, vec3(0.0, 1.0, 0.0))
+                                                   : cross(pathDir, vec3(0.0, 0.0, 1.0)));
+    vec3 depthAxis = normalize(cross(pathDir, side));
+    float progress = fract(seed.y + uSpeckTravel / lengthPath);
+    float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52;
+    vec3 p = mix(uSpeckSource, uSpeckEnd, progress)
+             + side * (seed.x * 2.0 - 1.0) * sideWidth
+             + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
+    vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
+    float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));
+    float ends = smoothstep(0.00, 0.12, progress)
+                 * (1.0 - smoothstep(0.82, 1.0, progress)) * boundsFade;
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float bright = exp(0.7 * speckGauss(i, 9u).x) * (0.35 + uClouds.z * clouds) * ends;
     aPoint = vec4(p, kept ? radius : 0.0);
     aLook = vec4(kept ? bright : 0.0, speckRandom(i, 11u) < uWarmShare ? 1.0 : 0.0, speckRandom(i, 12u), 0.0);
 }
 """
-_SPECK_ATTRIBUTES = """layout(location=0) in vec4 aPoint;   // world position (eye at the origin), world radius
+_SPECK_ATTRIBUTES = """layout(location=0) in vec4 aPoint;   // fixed world position, world radius
 layout(location=1) in vec4 aLook;    // brightness, warm (lit in the light's colour) or neutral, seed, unused
 """
 assert PARTICLE_VERTEX.count(_SPECK_ATTRIBUTES) == 1 and PARTICLE_VERTEX.count("void main() {\n") == 1

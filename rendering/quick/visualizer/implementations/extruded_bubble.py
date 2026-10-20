@@ -32,9 +32,10 @@ from rendering.gl_programs.extruded_bubble_program import (
 )
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
-    SPECKS_FULL, cluster_instances, wake_instances, lens_shift, speck_amount,
+    SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
     glint_proxies, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
+from core.settings.visualizer_paths import admit_path, world_point
 from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick import gl_query
 from rendering.quick.scene3d.defocus import DefocusLayer
@@ -72,7 +73,7 @@ _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # scaled by the tier's particle share). Beads climb by the stream's travel only, with integrated energy response.
 _CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, 2500
 _FIZZ_PER_BUBBLE, _WAKE_BINDING = 64, 7         # wake motes behind stable logical emitters; separate SSBO binding
-_BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 10.0 / WORLD_UNIT
+_BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 0.30  # specks inherit 30% of integrated stream velocity
 
 
 def _near_spread(height: int) -> float:
@@ -186,7 +187,7 @@ class _Instances:
 
 class _Uniforms:
     """Uniform uploads by name for linked programs, each sent only when its value changed (``glProgramUniform*``:
-    no program bind). Values: int/bool, float, 2/3-float tuples, 9 (mat3) or 16 (mat4) floats, column-major."""
+    no program bind). Values: int/bool, float, 2/3/4-float tuples, 9 (mat3) or 16 (mat4) floats, column-major."""
 
     def __init__(self) -> None:
         self._locations: dict[tuple[int, str], int] = {}
@@ -197,11 +198,11 @@ class _Uniforms:
             key = (program, name)
             if self._values.get(key, _UNSET) == value:
                 continue
-            self._values[key] = value
             location = self._locations.get(key)
             if location is None:
                 location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
             if location < 0:
+                self._values[key] = value
                 continue                      # not read by this program (the driver dropped it)
             if isinstance(value, (bool, int)):
                 gl.glProgramUniform1i(program, location, int(value))
@@ -211,12 +212,15 @@ class _Uniforms:
                 gl.glProgramUniform2f(program, location, *value)
             elif len(value) == 3:
                 gl.glProgramUniform3f(program, location, *value)
+            elif len(value) == 4:
+                gl.glProgramUniform4f(program, location, *value)
             elif len(value) == 9:
                 gl.glProgramUniformMatrix3fv(program, location, 1, gl.GL_FALSE, value)
             elif len(value) == 16:
                 gl.glProgramUniformMatrix4fv(program, location, 1, gl.GL_FALSE, value)
             else:
                 raise ValueError(f"uniform {name}: unsupported value {value!r}")
+            self._values[key] = value  # Cache only values actually accepted by the uploader.
 
     def clear(self) -> None:
         self._locations.clear()
@@ -230,13 +234,14 @@ def _floats(values) -> tuple[float, ...]:
     return tuple(float(v) for v in values)
 
 
-def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak) -> dict[str, object]:
+def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, eye=(0.0, 0.0, 0.0)) -> dict[str, object]:
     """What every scene program reads (``COMMON``), as the lab sets it from a scene's knobs."""
     exposure = float(knobs["exposure"])
     values = {
-        "uViewToWorld": _floats(view_to_world), "uTan": _floats(tan), "uTime": float(time),
+        "uViewToWorld": _floats(view_to_world), "uEye": _floats(eye), "uTan": _floats(tan), "uTime": float(time),
         "uSurfaceTravel": float(surface_travel),
         "uSun": _floats(knobs["sun"]), "uSunBelow": _floats(knobs["sun_below"]),
+        "uLightSource": _floats(knobs["light_source"]), "uLightEnd": _floats(knobs["light_end"]),
         "uWisps": 0.0, "uVeils": float(knobs.get("veils", 0.0)),
         "uSurfaceY": float(knobs.get("surface", SURFACE_Y)), "uShaftY": float(knobs.get("shaft_y", SURFACE_Y)),
         "uGlow": float(knobs.get("glow", 1.0)), "uRays": float(rays), "uMist": float(knobs.get("mist", 0.0)),
@@ -362,9 +367,16 @@ class QuickExtrudedBubbleRenderer:
 
         pose = (float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")))
         scale = float(parameter(parameters, "extruded_bubble_scene_scale"))
-        shift = lens_shift(float(parameter(parameters, "extruded_bubble_scene_pan_x")),
-                           float(parameter(parameters, "extruded_bubble_scene_pan_y")))
-        view_to_world, world_to_view, tan, projection = camera(*pose, width / height, scale, shift)
+        fov_y = float(parameter(parameters, "extruded_bubble_camera_fov"))
+        # Orbit = Alt+left drag; Scene Pan = physical lateral/up translation;
+        # Scene Scale = physical dolly. None of these change the centred lens.
+        view_to_world, world_to_view, eye, tan, projection = physical_camera(
+            *pose, width / height, scale,
+            pan_x=float(parameter(parameters, "extruded_bubble_scene_pan_x")),
+            pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
+            position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
+            fov_y_degrees=fov_y)
+        shift = (0.0, 0.0)
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
         shells = bubble_instances(state.bubbles)
@@ -372,34 +384,52 @@ class QuickExtrudedBubbleRenderer:
         wake_count = self._wakes.upload(wake_instances(state.wakes))
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
-                                                         float(knobs.get("proxy_power", 2.5))))
+                                                         float(knobs.get("proxy_power", 2.5)),
+                                                         light_source=(knobs["light_source"] if knobs["mode"] == "deep"
+                                                                       else None)))
         # The rays read the simulation's ray driver and shimmer, never the raw level (it holds at 1 when loud).
         flicker, reach = ray_motion(parameters, state.rays, state.sustain)
-        common = _common({**knobs, "fan_reach": float(knobs.get("fan_reach", 0.6)) * reach}, view_to_world=view_to_world,
+        common = _common({**knobs, "fan_reach": float(knobs.get("fan_reach", 0.6)) * reach}, view_to_world=view_to_world, eye=eye,
                          tan=tan, time=state.motion_phase, surface_travel=state.motion_phase,
                          rays=ray_strength(parameters, state.rays),
                          streak=screen_streak(state.stream))
         for key in programs:
             if key != "blur":
                 self._uniforms.set(programs[key], common)
-        self._uniforms.set(programs["shafts"], {"uLensShift": shift, "uFlicker": flicker,
-                                                "uShimmer": float(state.shimmer)})
+        # Bounded screen-space optical proxy: four dominant physical shells, not
+        # a per-particle shadow pass. Never allocate any extra scene target.
+        leaders = sorted((tuple(float(v) for v in row[:4]) for row in shells if row[3] > 0.0),
+                         key=lambda b: -b[3])[:4]
+        leaders += [(0.0, 0.0, 0.0, 0.0)] * (4 - len(leaders))
+        ray_uniforms = {"uLensShift": shift, "uFlicker": flicker,
+                        "uShimmer": float(state.shimmer),
+                        "uRaySource": _floats(knobs["ray_source"]),
+                        "uRayEnd": _floats(knobs["ray_end"]),
+                        "uParticleAtten": max(0.0, min(0.08, 0.08 * float(state.emission)))}
+        for i, bubble in enumerate(leaders):
+            ray_uniforms[f"uBlock{i}"] = bubble
+        self._uniforms.set(programs["shafts"], ray_uniforms)
         sun_screen = light_on_screen(knobs["sun_below"], world_to_view, projection, (width, height))
-        view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
+        view = {"uWorldToView": _floats(world_to_view), "uEye": _floats(eye), "uProjection": _floats(projection), "uPixel": pixel,
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
                 "uProbeLevels": float(probe.levels), "uLensShift": shift}
         for key, near in (("shells", False), ("clusters", False), ("near", True), ("near_clusters", True), ("beads", False)):
-            self._uniforms.set(programs[key], {**view, **_glass(knobs, near), "uNearCoc": 22.0 * height / 941.0 * scale})
+            self._uniforms.set(programs[key], {**view, **_glass(knobs, near), "uNearCoc": 22.0 * height / 941.0})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
         fizz_per = math.ceil(fizz_fill)
         stream = _floats(state.stream)
         across, depth_axis = stream_basis(stream)
+        stream_path = admit_path(parameter(parameters, "extruded_bubble_stream_direction"), [0., 0.], "stream")
+        stream_source = _floats(world_point(stream_path[:3]))
+        stream_end = _floats(world_point(stream_path[3:]))
         self._uniforms.set(programs["beads"], {
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,
             "uStreamAcross": across, "uStreamDepth": depth_axis,
-            "uStreamWorld": stream, "uBeadsPerChain": _BEADS_PER_CHAIN,
-            "uBeadCount": beads, "uBeadSize": 0.9 + 0.2 * max(0.0, min(1.0, float(state.level))),
+            "uStreamWorld": stream, "uStreamSource": stream_source, "uStreamEnd": stream_end,
+            "uBeadsPerChain": _BEADS_PER_CHAIN,
+            "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
+            * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
             "uChainFill": chain_fill, "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,
@@ -407,14 +437,20 @@ class QuickExtrudedBubbleRenderer:
         fizz = wake_count * fizz_per
         self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(parameters, state.emission)
+        # Optional glow lift never adds another source follower: the same musical
+        # rays/flash state already advances once on the simulation clock.
+        glow_react = max(0.0, min(1.0, float(parameter(parameters, "extruded_bubble_particle_glow_reactivity"))))
+        glow_multiplier = 1.0 + glow_react * (0.50 * float(state.rays) + 0.20 * float(state.flash))
         specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
         self._uniforms.set(programs["specks"], {
             "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
-            "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]), "uSpeckWarm": _floats(knobs["speck_warm"]),
+            "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]) * glow_multiplier, "uSpeckWarm": _floats(knobs["speck_warm"]),
             "uStreamWorld": stream,
             "uStreamAcross": across,
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
-            "uSpeckTravel": _SPECK_CARRY * float(state.travel), "uWarmShare": float(knobs["warm_share"]),
+            "uSpeckTravel": _SPECK_CARRY * float(state.travel),
+            "uSpeckSource": stream_source, "uSpeckEnd": stream_end,
+            "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
             "uBandFreq": float(knobs["band_freq"]), "uSpeckSize": float(knobs["speck_size"])})
         self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0,

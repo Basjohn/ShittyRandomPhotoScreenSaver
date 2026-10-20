@@ -100,7 +100,8 @@ def test_clean_body_onset_grows_large_bubbles_and_smoothing_softens_the_release(
         sim.advance(_music(STEP, True, 0.5, (("kick", 1.0),)), c)
     after_soft = _run(soft, ExtrudedBubbleControls(collision_scope="off", smoothing=1.0), 0.3)
     after_snappy = _run(snappy, ExtrudedBubbleControls(collision_scope="off", smoothing=0.0), 0.3)
-    assert after_soft.flash > after_snappy.flash
+    assert after_soft.flash == pytest.approx(after_snappy.flash)  # display smoothing MUST NOT smooth transients
+    assert after_soft.bubbles[3] != pytest.approx(after_snappy.bubbles[3])  # only displayed radius differs
 
 
 def test_discrete_event_tails_cannot_hold_sizes_up_at_identical_body_input():

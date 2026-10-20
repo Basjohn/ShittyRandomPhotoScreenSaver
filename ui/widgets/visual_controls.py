@@ -411,6 +411,151 @@ class TriangleMapper(_VisualControl):
         super().keyPressEvent(event)
 
 
+class ScenePathMapper(_VisualControl):
+    """Physical 3D scene segment: two independently draggable XY nodes and depth rails.
+
+    The disc maps X left/right and Y floor/surface; the two rails independently
+    map Z front/back. All coordinates normalized to [-1,1]. Tab selects a node;
+    arrows move it in XY and Page Up/Down in depth; Shift makes fine steps.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._coords = [0., -1., 0., 0., 1., 0.]
+        self._active = 0
+        self._drag_axis = ''
+        self.setMinimumSize(200, 236)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setAccessibleDescription(self.describe())
+
+    def sizeHint(self) -> QSize:
+        return QSize(200, 236)
+
+    def value(self) -> tuple[float, ...]:
+        return tuple(self._coords)
+
+    def setValue(self, value) -> None:
+        new = [float(v) for v in value]
+        if len(new) != 6:
+            raise ValueError('Scene path expects source and endpoint xyz')
+        self._coords = [max(-1., min(1., v)) for v in new]
+        self.setAccessibleDescription(self.describe())
+        self.update()
+
+    def describe(self) -> str:
+        s = self._coords
+        return (f'Source x {s[0]:+.2f}, y {s[1]:+.2f}, depth {s[2]:+.2f}; '
+                f'End x {s[3]:+.2f}, y {s[4]:+.2f}, depth {s[5]:+.2f}')
+
+    def _disc(self):
+        return QPointF(self.width() / 2, 83), 73.
+
+    def _node(self, idx: int):
+        c, radius = self._disc()
+        i = idx * 3
+        from core.settings.visualizer_paths import square_to_disc
+        x, y = square_to_disc(self._coords[i], self._coords[i+1])
+        return QPointF(c.x() + x * radius, c.y() - y * radius)
+
+    def _rail(self, idx: int):
+        y = 181 + idx * 31
+        return QRectF(25, y, self.width() - 50, 6)
+
+    def _depth_x(self, idx: int):
+        r = self._rail(idx)
+        return r.left() + (self._coords[idx*3+2] + 1.) * 0.5 * r.width()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        center, rad = self._disc()
+        faint = _colour('slider.groove.bottom_border')
+        p.setPen(QPen(_colour('slider.groove.border'), 1.))
+        p.setBrush(_vertical_gradient('slider.groove.surface', center.y()-rad, center.y()+rad))
+        p.drawEllipse(center, rad, rad)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(faint, 1.))
+        for r in (rad/3, 2*rad/3):
+            p.drawEllipse(center, r, r)
+        p.drawLine(QPointF(center.x()-rad, center.y()), QPointF(center.x()+rad, center.y()))
+        p.drawLine(QPointF(center.x(), center.y()-rad), QPointF(center.x(), center.y()+rad))
+        src, end = self._node(0), self._node(1)
+        pen = QPen(_colour('slider.handle.hover_border'), 2.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawLine(src, end)
+        for i, point in enumerate((src, end)):
+            active = i == self._active
+            _paint_handle(p, point, self._state(primary=active), self.isEnabled(), round_=True)
+            p.setPen(_colour('text.tertiary'))
+            p.drawText(QRectF(point.x()-12, point.y()-22, 24, 14), Qt.AlignmentFlag.AlignCenter,
+                       'S' if i == 0 else 'E')
+        p.setPen(_colour('text.tertiary'))
+        p.drawText(QRectF(10, 163, self.width()-20, 16), Qt.AlignmentFlag.AlignCenter,
+                   'Depth: front −1  ·  back +1')
+        for i in range(2):
+            rail = self._rail(i)
+            _paint_groove(p, rail, fill=False)
+            _paint_handle(p, QPointF(self._depth_x(i), rail.center().y()),
+                          self._state(primary=i == self._active), self.isEnabled(), round_=False)
+            p.setPen(_colour('text.tertiary'))
+            p.drawText(QRectF(3, rail.top()-2, 18, 14), Qt.AlignmentFlag.AlignCenter,
+                       'S' if i == 0 else 'E')
+
+    def _move_to(self, pos):
+        i = self._active * 3
+        if self._drag_axis == 'depth':
+            r = self._rail(self._active)
+            self._coords[i+2] = max(-1., min(1., 2. * (pos.x()-r.left()) / r.width() - 1.))
+        else:
+            c, radius = self._disc()
+            x = (pos.x() - c.x()) / radius
+            y = (c.y() - pos.y()) / radius
+            from core.settings.visualizer_paths import disc_to_square
+            self._coords[i:i+2] = list(disc_to_square(x, y))
+        self._changed(commit=False)
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton or not self.isEnabled():
+            return super().mousePressEvent(event)
+        pos = event.position()
+        self._drag_axis = 'depth' if pos.y() > 167 else 'xy'
+        if self._drag_axis == 'depth':
+            self._active = 0 if pos.y() < 197 else 1
+        else:
+            self._active = min(range(2), key=lambda idx:
+                               (self._node(idx).x()-pos.x())**2 + (self._node(idx).y()-pos.y())**2)
+        self._dragging = True
+        self._moved_in_drag = False
+        self._move_to(pos)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            self._move_to(event.position())
+        else:
+            super().mouseMoveEvent(event)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_Tab:
+            self._active = 1 - self._active
+            self.update()
+            event.accept()
+            return
+        step = 0.015 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 0.05
+        axis, change = {
+            Qt.Key.Key_Left: (0, -step), Qt.Key.Key_Right: (0, step),
+            Qt.Key.Key_Up: (1, step), Qt.Key.Key_Down: (1, -step),
+            Qt.Key.Key_PageUp: (2, step), Qt.Key.Key_PageDown: (2, -step),
+        }.get(key, (None, 0.))
+        if axis is None:
+            return super().keyPressEvent(event)
+        i = self._active*3 + axis
+        self._coords[i] = max(-1., min(1., self._coords[i]+change))
+        self._changed(commit=True)
+        event.accept()
+
+
 class DirectionMapper(_VisualControl):
     """A direction placed on a disc: the angle round it is ``around`` (0 up, clockwise), the distance
     from the centre is ``height`` (centre = the top of the range, rim = its bottom). ``centre_text``
@@ -630,3 +775,215 @@ def _barycentric_clamped(p: QPointF, a: QPointF, b: QPointF, c: QPointF) -> tupl
 
 
 __all__ = ["DirectionMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
+
+class SceneVolumeMapper(_VisualControl):
+    """Oblique 3D world-volume editor, sharing EB's normalized XYZ geometry.
+
+    No FOV-dependent projection or alternate renderer. Drag a point to adjust its
+    X/Y plane; Shift+drag or right-drag adjusts physical depth Z. Source/end
+    use coloured unlettered handles. The live eye is a movable diamond, whether
+    this editor is in a stream, light, ray, or camera Settings bucket.
+    """
+    cameraOffsetChanged = Signal(tuple)
+    cameraOffsetCommitted = Signal(tuple)
+
+    def __init__(self, *, camera_only=False, parent=None):
+        super().__init__(parent)
+        self._camera_only = bool(camera_only)
+        self._coords = [0., -1., 0., 0., 1., 0.] if not camera_only else [0., 0., 0.]
+        self._camera_offset = (0., 0., 0.)
+        self._base_eye = (0., 0., 0.)
+        self._references = {}
+        self._active = 0
+        self._drag_axis = ''
+        self._drag_role = ''
+        self._drag_start = None
+        self._drag_start_z = 0.
+        self.setMinimumSize(268, 290)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setAccessibleDescription(self.describe())
+
+    def sizeHint(self):
+        return QSize(268, 290)
+
+    def value(self):
+        return tuple(self._coords)
+
+    def setValue(self, value):
+        seq = [float(v) for v in value]
+        if len(seq) != (3 if self._camera_only else 6):
+            raise ValueError('Scene volume value must have three camera or six path coordinates')
+        self._coords = [max(-8., min(8., x)) if self._camera_only else max(-1., min(1., x)) for x in seq]
+        if self._camera_only:
+            self._camera_offset = tuple(self._coords)
+        self.setAccessibleDescription(self.describe())
+        self.update()
+
+    def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.)):
+        self._references = dict(paths or {})
+        self._base_eye = tuple(float(x) for x in base_eye)
+        if not self._camera_only:
+            self._camera_offset = tuple(float(x) for x in camera_offset)
+        self.update()
+
+    def describe(self):
+        if self._camera_only:
+            return 'Camera world translation ' + ', '.join(f'{x:+.2f}' for x in self._coords)
+        return 'Source XYZ ' + ', '.join(f'{x:+.2f}' for x in self._coords[:3]) + '; End XYZ ' + ', '.join(f'{x:+.2f}' for x in self._coords[3:])
+
+    def _eye(self):
+        return tuple(self._base_eye[i] + self._camera_offset[i] for i in range(3))
+
+    def _point(self, xyz):
+        # One fixed oblique projection of the same [-1,1]³ world box.
+        x, y, z = (float(t) for t in xyz)
+        return QPointF(self.width()*.5 + 67.*x - 38.*z,
+                       139. - 62.*y + 21.*z + 13.*x)
+
+    def _marker(self, xyz):
+        # Keep an outside camera visible and draggable against the boundary.
+        return self._point(tuple(max(-1., min(1., float(v))) for v in xyz))
+
+    def _paint_wire(self, p, y):
+        path = QPainterPath()
+        import math
+        for i in range(81):
+            t = (2.*math.pi*i)/80.
+            # Circumscribe the normalized square's corners; its full X/Z
+            # authored span remains visible inside the 3/4 elliptical cage.
+            pt = self._point((math.sqrt(2.)*math.cos(t),y,math.sqrt(2.)*math.sin(t)))
+            if i == 0:
+                path.moveTo(pt)
+            else:
+                path.lineTo(pt)
+        p.drawPath(path)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        edge = _colour('slider.groove.border')
+        faint = _colour('slider.groove.bottom_border')
+        active = _colour('slider.handle.hover_border')
+        p.setPen(QPen(edge,1.2))
+        p.setBrush(_vertical_gradient('slider.groove.surface', 60, 215))
+        self._paint_wire(p, -1.)
+        self._paint_wire(p, 1.)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(faint, 1.))
+        for x,z in ((-1.,0.),(1.,0.),(0.,-1.),(0.,1.)):
+            p.drawLine(self._point((x,-1.,z)), self._point((x,1.,z)))
+        self._paint_wire(p, 0.)
+        # Faint neighbouring path references; no second coordinate authority.
+        colors = {'stream': QColor(87, 197, 212, 90), 'light': QColor(250, 183, 92, 90),
+                  'rays': QColor(210, 157, 236, 90)}
+        for role, coords in self._references.items():
+            if not isinstance(coords,(list,tuple)) or len(coords)!=6:
+                continue
+            p.setPen(QPen(colors.get(role, faint),1.5,Qt.PenStyle.DashLine))
+            p.drawLine(self._point(coords[:3]),self._point(coords[3:]))
+        if not self._camera_only:
+            src,end = self._marker(self._coords[:3]),self._marker(self._coords[3:])
+            p.setPen(QPen(active, 2.5))
+            p.drawLine(src,end)
+            for i, pt in enumerate((src,end)):
+                p.setBrush(QColor(94, 223, 231) if i==0 else QColor(255, 195, 99))
+                p.setPen(QPen(edge, 1.5 if self._active!=i else 2.5))
+                p.drawEllipse(pt, 7. if self._active==i else 6., 7. if self._active==i else 6.)
+        eye=self._eye()
+        cp=self._marker(eye)
+        p.setBrush(QColor(236, 156, 237))
+        p.setPen(QPen(edge, 2.))
+        diamond=QPolygonF((QPointF(cp.x(),cp.y()-9),QPointF(cp.x()+9,cp.y()),
+                           QPointF(cp.x(),cp.y()+9),QPointF(cp.x()-9,cp.y())))
+        p.drawPolygon(diamond)
+        if any(abs(t)>1. for t in eye):
+            p.setPen(faint)
+            p.drawText(QRectF(5,12,self.width()-10,20),Qt.AlignmentFlag.AlignCenter,'Camera outside the source volume')
+        p.setPen(_colour('text.tertiary'))
+        p.drawText(QRectF(3,242,self.width()-6,16),Qt.AlignmentFlag.AlignCenter,
+                   '● Source     ● End     ◆ Camera')
+        p.drawText(QRectF(3,260,self.width()-6,23),Qt.AlignmentFlag.AlignCenter,
+                   'Drag XY · Shift/right-drag depth · PgUp/Dn depth')
+
+    def _move_to(self, position):
+        camera = self._drag_role == 'camera'
+        if camera:
+            coords = list(self._eye())
+        else:
+            offset = self._active*3
+            coords = self._coords[offset:offset+3]
+        if self._drag_axis == 'depth':
+            z = self._drag_start_z + (position.x()-self._drag_start.x())/52.
+            coords[2]=max(-1.,min(1.,z))
+        else:
+            z=coords[2]
+            x=(position.x()-self.width()*.5+38.*z)/67.
+            y=(139.+21.*z+13.*x-position.y())/62.
+            coords[0]=max(-1.,min(1.,x))
+            coords[1]=max(-1.,min(1.,y))
+        if camera:
+            self._camera_offset=tuple(max(-8.,min(8.,coords[i]-self._base_eye[i])) for i in range(3))
+            if self._camera_only:
+                self._coords=list(self._camera_offset)
+                self._changed(commit=False)
+            else:
+                self.cameraOffsetChanged.emit(self._camera_offset)
+                self.update()
+        else:
+            self._coords[self._active*3:self._active*3+3]=coords
+            self._changed(commit=False)
+
+    def mousePressEvent(self,event):
+        if event.button() not in (Qt.MouseButton.LeftButton,Qt.MouseButton.RightButton) or not self.isEnabled():
+            return super().mousePressEvent(event)
+        pos=event.position()
+        cam=self._marker(self._eye())
+        is_cam=self._camera_only or (cam.x()-pos.x())**2+(cam.y()-pos.y())**2 < 14.**2
+        if not is_cam:
+            self._active=min(range(2),key=lambda i:(self._marker(self._coords[i*3:i*3+3]).x()-pos.x())**2 + (self._marker(self._coords[i*3:i*3+3]).y()-pos.y())**2)
+        self._drag_role='camera' if is_cam else 'path'
+        self._drag_axis='depth' if event.button()==Qt.MouseButton.RightButton or event.modifiers()&Qt.KeyboardModifier.ShiftModifier else 'xy'
+        self._drag_start=pos
+        self._drag_start_z=(self._eye()[2] if is_cam else self._coords[self._active*3+2])
+        self._dragging=True
+        self._moved_in_drag=False
+        self.update()
+
+    def mouseMoveEvent(self,event):
+        if self._dragging:
+            self._move_to(event.position())
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self,event):
+        if self._dragging and self._drag_role=='camera' and not self._camera_only:
+            self._dragging=False
+            self.cameraOffsetCommitted.emit(self._camera_offset)
+            self.update()
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self,event):
+        key=event.key()
+        if key==Qt.Key.Key_Tab and not self._camera_only:
+            self._active=1-self._active
+            self.update()
+            event.accept()
+            return
+        step=.015 if event.modifiers()&Qt.KeyboardModifier.ShiftModifier else .05
+        axis,delta={Qt.Key.Key_Left:(0,-step),Qt.Key.Key_Right:(0,step),
+                    Qt.Key.Key_Up:(1,step),Qt.Key.Key_Down:(1,-step),
+                    Qt.Key.Key_PageUp:(2,step),Qt.Key.Key_PageDown:(2,-step)}.get(key,(None,0))
+        if axis is None:
+            return super().keyPressEvent(event)
+        index=(0 if self._camera_only else self._active*3)+axis
+        if self._camera_only:
+            # Keyboard editing moves the real eye INSIDE the same authored
+            # world volume, regardless of how far the orbit baseline begins.
+            proposed=self._base_eye[axis]+self._coords[index]+delta
+            self._coords[index]=max(-8.,min(8.,max(-1.,min(1.,proposed))-self._base_eye[axis]))
+            self._camera_offset=tuple(self._coords)
+        else:
+            self._coords[index]=max(-1.,min(1.,self._coords[index]+delta))
+        self._changed(commit=True)
+        event.accept()

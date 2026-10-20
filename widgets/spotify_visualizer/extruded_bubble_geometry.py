@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import math
 
-WORLD_UNIT = 9.0
-WORLD_CENTER = (0.0, 0.0, 0.0)
-WORLD_HALF = (18.0, 8.0, 18.0)
-WORLD_MARGIN = .25 * WORLD_UNIT
-WATER_SURFACE_Y = 9.0
+from core.constants.extruded_bubble_world import (
+    WORLD_UNIT, WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WATER_SURFACE_Y,
+)
 
 
 def stream_basis(direction):

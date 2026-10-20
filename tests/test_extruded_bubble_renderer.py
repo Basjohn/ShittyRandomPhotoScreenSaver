@@ -32,26 +32,50 @@ def test_the_camera_is_a_rotation_pitched_up_and_turned_about_the_vertical(turn,
     assert projection[5] == pytest.approx(1.0 / tan[1])
 
 
-def test_scene_scale_zooms_without_turning_the_view():
-    plain, zoomed = scene.camera(0.2, 0.1, 1.5), scene.camera(0.2, 0.1, 1.5, scale=2.0)
+def _physical_ndc(view, point):
+    orient, wtv, eye, tan, projection = view
+    offset = np.asarray(point, dtype=float) - np.asarray(eye)
+    cam = np.asarray(wtv).reshape(3, 3).T @ offset
+    assert cam[2] < 0.0
+    return (cam[0] / -cam[2] / tan[0], cam[1] / -cam[2] / tan[1])
+
+
+def test_physical_scene_zoom_dollies_without_fov_change_or_rotating():
+    plain = scene.physical_camera(0.0, 0.0, 1.5)
+    zoomed = scene.physical_camera(0.0, 0.0, 1.5, scale=2.0)
     assert zoomed[0] == plain[0]
-    assert zoomed[2][1] == pytest.approx(plain[2][1] / 2.0)
+    assert zoomed[3] == plain[3] and zoomed[4] == plain[4]
+    assert np.linalg.norm(np.asarray(zoomed[2]) - scene.ORBIT_PIVOT) == pytest.approx(scene.ORBIT_DISTANCE / 2.0)
+    assert np.linalg.norm(np.asarray(plain[2]) - scene.ORBIT_PIVOT) == pytest.approx(scene.ORBIT_DISTANCE)
+    point = tuple(scene.ORBIT_PIVOT[i] + (2.0 if i == 0 else 0.0) for i in range(3))
+    assert abs(_physical_ndc(zoomed, point)[0]) > abs(_physical_ndc(plain, point)[0])
 
 
-def test_scene_pan_shifts_everything_on_screen_alike_without_turning_the_view():
-    """Scene Pan is an off-axis frustum: every point (and the light's screen position) moves by the same screen
-    distance, in the card's units (x right, y down), and nothing turns."""
-    shift = scene.lens_shift(0.15, 0.1)
-    plain, panned = scene.camera(0.2, 0.1, 1.6), scene.camera(0.2, 0.1, 1.6, shift=shift)
-    assert panned[0] == plain[0] and panned[2] == plain[2]
-    for point in ((0.3, -0.2, -5.0), (-2.0, 1.0, -20.0)):
-        clip = [np.asarray(m).reshape(4, 4).T @ np.array((*point, 1.0)) for m in (plain[3], panned[3])]
-        moved = clip[1][:2] / clip[1][3] - clip[0][:2] / clip[0][3]
-        assert moved == pytest.approx((0.3, -0.2))                   # right and down by the pan (NDC: y up)
-    light = (0.2, 0.5, -0.8)
-    before = scene.light_on_screen(light, plain[1], plain[3], (1000, 600))
-    after = scene.light_on_screen(light, panned[1], panned[3], (1000, 600))
-    assert (after[0] - before[0], after[1] - before[1]) == pytest.approx((150.0, -60.0))
+def test_pan_is_physical_translation_not_an_additional_rotation_or_lens_shift():
+    plain = scene.physical_camera(.2, .1, 1.6)
+    panned = scene.physical_camera(.2, .1, 1.6, pan_x=.15, pan_y=-.1)
+    assert panned[0] == plain[0] and panned[1] == plain[1]
+    assert panned[3] == plain[3] and panned[4] == plain[4]
+    assert panned[4][8] == panned[4][9] == 0.0
+    assert np.linalg.norm(np.asarray(panned[2]) - plain[2]) > 0.0
+    # Different camera-space distances MUST exhibit different apparent shifts.
+    right = np.asarray(plain[0][:3])
+    back = np.asarray(plain[0][6:9])
+    eye = np.asarray(plain[2])
+    nearer = eye - back * 6 + right * 1.0
+    farther = eye - back * 18 + right * 1.0
+    dx_near = _physical_ndc(panned, nearer)[0] - _physical_ndc(plain, nearer)[0]
+    dx_far = _physical_ndc(panned, farther)[0] - _physical_ndc(plain, farther)[0]
+    assert dx_near * dx_far > 0.0
+    assert abs(dx_near) > abs(dx_far) * 2.0
+
+
+def test_existing_alt_orbit_changes_camera_pose_but_pan_does_not():
+    initial = scene.physical_camera(0., 0., 16 / 9)
+    turned = scene.physical_camera(.25, 0., 16 / 9)
+    assert turned[0] != initial[0] and turned[2] != initial[2]
+    assert np.linalg.norm(np.asarray(turned[2]) - scene.ORBIT_PIVOT) == pytest.approx(scene.ORBIT_DISTANCE)
+    assert scene.physical_camera(0., 0., 16 / 9, pan_x=.2)[0] == initial[0]
 
 def test_physical_radius_has_real_perspective_and_lifetime_does_not_shrink_it():
     records = _record(z=-4.) + _record(z=-16., ident=2.) + _record(z=-4., alpha=.25, ident=3.)

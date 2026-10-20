@@ -1033,3 +1033,738 @@ shell/scene/probe before making a uniform multiplier change. Spherical glass and
 uncompressed). The outgoing full Godzip retains the intentional lab omission and regenerates its manifest from
 **actually included members**, leaving `omission_means_delete=false`. The local canonical EB Lab collection
 and the 11.6 GB evidence archive are not re-created, overwritten or declared deleted.
+
+
+## 21. Camera projection, judder branches and other-lane attribution (2026-10-20; source-level only)
+
+**Latest operator requirement:** EB orbiting left/right visibly stretches spheres into unwanted oblongs.
+The camera must look honest and natural; eliminating visible orbit distortion is the **highest visual priority
+immediately after restoring musical response**. All rejected items remain live in `Current_Plan.md` §4B;
+no operator/agent pixel acceptance or source-level production repair is claimed by this section.
+
+### 21.1 Intentional projection choices versus an actual postprocess lens warp
+
+`rendering/gl_programs/extruded_bubble_scene.py`: `FOV_Y_DEGREES = 62.0`, `camera()` supplies a
+rectilinear perspective/pinhole matrix and `lens_shift()` supplies a two-axis off-centre projection for
+Scene Pan. `extruded_bubble_program.py` uses the corresponding `ndc - uLensShift` ray for backdrop,
+ordinary shells and cluster silhouettes, with a shared perspective matrix for projection/depth.
+The common `scene3d_spheres.py` documentation itself says the rectilinear camera makes spheres at
+large off-axis angles oval. The current path contains **no separate barrel/fisheye lens-distortion pass**;
+the existing off-axis frustum and field of view are deliberately coded choices, not requirements of
+spherical geometry. Refraction *inside* bubble glass is a separate optical mechanism and must be audited
+independently of the camera's outer silhouettes.
+
+An import-free tangent-cone/pinhole reproduction at 1600×900, using a physically spherical radius-0.4
+object ten world units from the eye and the production 62° vertical FOV, gives outer-outline pixel
+width/height ratios:
+
+| Sphere direction off the optical axis | Projected silhouette width ÷ height |
+| --- | ---: |
+| 0° | 1.0000 |
+| 15° | 1.0353 |
+| 30° | 1.1550 |
+| 40° | 1.3061 |
+
+A side orbit pushes previously centred world spheres toward off-axis positions. This mechanism alone
+can produce **~31% horizontal stretch at 40°**, with no malformed sphere or special barrel shader.
+Those are mathematical projected-silhouette bounds, **not measured frames**; location, optical materials,
+pan, depth and clips determine the actual artifact on the user's display.
+
+**Do not fix by merely deleting “lens distortion”:** there is no isolated camera-distortion toggle to
+remove. Prefer a controlled narrower-FOV real-camera move/dolly-back and independently authored camera
+pivot/translation versus the existing wide-FOV lens shift. Maintain the actual framed 3D scene, depth
+parallax and real world/identity, and match composition before judging. An orthographic shortcut would
+lose natural size-with-depth, while a custom nonrectilinear ray projection would burden all depth, shell,
+cluster and near optics. Compare centre/edge/orbit and world-contact renderings at both native resolutions.
+Operator/agent visual judgment decides whether proposed optics are genuinely natural, not a mathematical
+ratio alone. Current camera implementation and material appearance **remain visually rejected**.
+
+### 21.2 A hard 1.5px branch in near-focus appearance
+
+`BUBBLE_VERTEX` performs `near_ = aExtra.y < 0.5 && sceneNearCircle(frontDepth, uFocus,
+uAperture, uNearCoc) > 1.5`; `CLUSTER_VERTEX` uses the same **strict >1.5** gate. One pass
+accepts a sphere, the other excludes it: near and ordinary optical composition are not continuously
+cross-faded, and there is no hysteresis. When actual breathing moves the sphere's front face back and
+forth across that threshold, one physical bubble can change appearance mode on consecutive frames even
+with perfectly continuous physical radius. This must be distinguished from producer-target chatter,
+discrete projected pixel-size changes, Qt scheduling and the separate unresolved defocus lattice.
+
+Controlled counterexample from the existing user-mutable P1/P7 focus/aperture values at a 941px-tall card,
+scale 1 and constant physical centre distance (test-only choice close to each focus threshold):
+
+| Preset | Focus / aperture | Critical front depth for CoC 1.5px | CoC at 0.98 / 1.00 / 1.02 radius |
+| --- | --- | --- | --- |
+| P1 | 4.000 / 1.380 | 3.4836 | 1.4337 / 1.5000 / 1.5671px |
+| P7 | 3.400 / 1.488 | 2.9891 | 1.4175 / 1.5000 / 1.5836px |
+
+These cases demonstrate **branch fragility at small ±2% radius changes**, not recurring passage
+oscillation on the real scene, nor proof of the exact source of the operator's live vibration. The
+strict equality rows are on the floating-point boundary; the unequivocal .98 and 1.02 states are
+ordinary and defocus respectively. `ExtrudedBubbleSimulation.advance` calculates a single big/small
+size envelope, then assigns `b.current_radius = b.radius * scale` to each ID at each logical tick;
+that owner does not separately filter individual displayed silhouettes. It also doesn't prove that
+those envelopes actually alternate in the supplied real recording.
+
+**Next falsifier:** sample the *same* stable IDs and matched sound, retaining their logical timestamp,
+true base/radius/XYZ, body reference/target/envelope, projection depth, CoC, near/pass flag and the
+actual composited bounding mask and frame-present cadence. Correlate 1–2px reversals with
+(a) true world-radius target changes, (b) the >1.5px branch or budget/mip change, (c) Qt scheduling,
+and (d) time-varying glass/glint. Only then choose an owner-correct smoothing, continuous presentation
+or near-layer solution. No per-ID presentation clock or loss of intended downward soft breathing.
+
+### 21.3 The other reactions still share saturating driver paths
+
+The simulation's `level` is followed from `max(bass, 0.70*mid + 0.35*high)`, while `change_drive` blends
+this level, the small-body envelope and flash through `_soft_top`. Population counts, stream speed,
+drift, emission and rays all consume some combination of these aggregate/follower signals. In
+particular, `activity = min(1, idle_rate + 1.6*level)` saturates before `level` is 1; the emission
+target retains `max(0.25, activity)`, and `ray_motion()` retains 30% of authored flicker scale even
+when its reactive `rays` argument is zero. Those are **specific source facts to test**, not proof of
+rendered speed or glow. A fixed-loud-bass recording with changing vocals must demonstrate meaningful
+small bubbles, stream, drift, emission and ray changes, rather than being pinned by the shared floor.
+Trace actual recorded band tuple → individual uncompressed/compressed drivers → Ranges → eased value
+→ uniform/instance → native visual motion. Include silence, held loud, changes inside loud and release
+on P1/P7 and two card sizes. No lane's acceptance status changes until the operator or a capable
+local agent has visually validated the output.
+
+### 21.4 Offscreen capability correction and reproducer
+
+`tools/visualizer_replay/extruded_bubble_projection_gate_probe.py` is a standalone **Qt-free**, source-
+checked diagnostic that reproduces the declared silhouette geometry, projection and near layer gate,
+reads the real mutable authored P1/P7 focus/aperture and prints numeric reproduction. Optional `--json`.
+It does not use real recorded input or produce accepted full native frames.
+
+This container successfully initialized an offscreen EGL **Mesa llvmpipe OpenGL 4.5 core** context
+(`4.5 (Core Profile) Mesa 25.0.7-2`). Thus GPU/offscreen projection and primitive experiments ARE
+possible here: the previous blanket statement that no rendering check was possible was incorrect.
+But the shipped EB shaders use **GLSL 460** and the Qt Quick product framebuffer stack is not present;
+a 4.5 software-context diagnostic would need carefully described shader-version adaptation and remains
+distinct from native Windows RTX/driver shader, composition, recorded presentation and visual sign-off.
+No such full renderer validation is asserted here.
+
+
+## 22. 2026-10-20 superseding implementation candidates, never visual acceptance
+
+All visual failure checkboxes in `Current_Plan.md` remain open. This section updates
+§§20–21 with source changes and Qt-free logical evidence after the operator expressly
+rejected the assumption that most judder came from the camera or near-focus path.
+
+### 22.1 Historical Bubble Temporal Fidelity and causation
+
+Read `Docs/Guardrails/Bubble_Temporal_Fidelity.md` and
+`Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md` first.
+The **accepted 2D Bubble** repair used an immediate rising presentation size
+loudness/body gate with `RENDER_SIZE_RELEASE_S` release, preserving prompt musical
+attack. Its later tiny-breath alternate filter was rejected and removed because it
+worsened same-recording results and altered strong reference extrema; it must not
+be reintroduced. The rejected physical 1–2px jitter is primarily a
+presentation/audio-target/radius/temporal-fidelity problem to be traced using SAME
+identity at true physical DPR and Qt frame presentation cadence. The separate
+hard `sceneNearCircle > 1.5` normal/defocus pass switch (§21.2) is credible
+but **not evidence of the majority** of bubble judder, especially out of focus.
+
+Record for each common ID: real source band timestamps and freshness, raw target,
+reference, body and final envelope, nominal/current physical radius, projected
+radius, pass choice, Qt swap/paint timing, pixel motion and recorded music. Include
+quiet, gentle bass/vocals, changes within held loud, onset, pause/resume and
+Settings/preset swap. No bypass clock or indiscriminate visual filter.
+
+### 22.2 Large-bubble startup: implemented, numerically guarded, still unaccepted
+
+PRE-CHANGE synthetic replay (`§20`) at 60Hz using the **actual mutable P1/P7
+values** gave a peak/final ratio ~2.7 for (1) joining already-playing music,
+and (2) the engine's one-second quadratic playback ramp. Priming the references
+alone repaired case (1) but NOT case (2). Naïvely clamping the big change
+contribution reduced the numerical overshoot but FAILED the existing
+`test_soft_large_breathes_downward...` test. A longer event tail FAILED
+`test_large_size_tracks_changing_body_bands...`. Both candidates were rejected.
+
+CURRENT source candidate in `extruded_bubble_simulation.advance`:
+
+* Prime large-body reference on first meaningful playing sample rather than
+  classifying ongoing music as an initial attack.
+* Pass the **existing BeatEngine's reactivity warmup state** via
+  `is_reactivity_play_ramping` → `logical_frame_capture` → `ExtrudedBubbleFrameRuntime`
+  → `MusicInput.play_ramping`. This is source-owned metadata: the original band
+  calculation and one-second ramp remain unchanged, with no extra timer or floor.
+  Both large and small lanes hold their body-change reference to the source
+  during warmup and through its final transition tick.
+* For gradual unflagged rises, a faster body-reference follower and bounded
+  positive change prevent a repeated false phrase attack. Genuine abrupt
+  musical rises receive a short real-change follower (0.25× authored softness),
+  retaining sharp musical excursion and deliberate soft-breathing descent.
+
+Qt-free focus suite: **39 passed** (`tests/test_extruded_bubble_simulation.py`,
+`tests/test_extruded_bubble_full_dynamic_audio.py`,
+`tests/test_extruded_bubble_startup_and_sizes.py`). Controlled P1/P7 hot-start
+large radius peak/final **1.253/1.253**; source-tagged engine quadratic ramp
+**1.238/1.238** (~1.00×), and untagged negative-control ramp
+**~1.517/~1.238** (~1.23×); a genuine post-idle sudden musical rise still
+reaches a strong excursion (>1.8 peak/final). These are logical test inputs,
+NOT proof of normal musical response, good visual feel, correct preset-switch
+behavior or actual recorded start. **Small-bubble untagged startup and genuine quiet→hot steps still exhibit
+independent huge numerical size peaks (>3× nominal); this does not occur in
+the source-tagged engine warmup case, but its visual behavior and scale remain
+unaccepted.**
+
+The existing `tools/visualizer_replay/extruded_bubble_startup_probe.py --gate`
+checks large and small actual warmup/hot-start gates and the separate unflagged
+large-gradual gate. The unflagged small ramp remains intentionally an
+open/sensitive negative control. Preserve the original-red historical result
+in §20. Test real recorded bands and the play-ramp
+boolean from production, not a synthetic flag assumption, plus repeated source
+activation/deactivation and native visual before sign-off.
+
+### 22.3 True bucket-lazy EB UI and independent size authorship
+
+BEFORE: EB's whole settings page was lazy but, once opened, every bucket
+constructed all controls and signals even if the bucket remained collapsed.
+NOW `ui/tabs/media/spec_mode_builder.py` creates bucket shells and lazily
+constructs each bucket's control rows only on first opening. The whole EB mode
+continues to obey the shared builder/body lifecycle. Unopened controls persist
+through the typed canonical cache; built controls persist through real UI
+widgets. `load_spec_mode_settings` updates closed-bucket cache and built
+widgets; `collect_spec_mode_settings` merges both. Conditional enable/visibility
+bindings are refreshed as dependent controls are constructed.
+
+Canonical slider IDs `extruded_bubble_large_size`,
+`extruded_bubble_small_size`, `extruded_bubble_bead_size` (0.5–2.0,
+default 1.0 each) belong to Bubbles, independent of Size Variety and counts.
+`ExtrudedBubbleFrame` projects large/small values into the simulation's
+nominal radii. Existing SAME-ID sphere radii scale once per changed authoring
+value, and newly admitted bubbles use the same scale. Collision/wake path uses
+current physical radii. `uBeadSize` now multiplies chain and parent-attached
+wake procedural bead radii; unrelated marine snow does not use the multiplier.
+The third type is thus *beads/wakes*, not a third physical large-shell species.
+
+The CAMERA bucket independently authors `extruded_bubble_camera_fov` (35–62°,
+default 45°). Existing JSON presets were **not** mass-edited; canonical
+settings defaults and missing-key runtime fallback preserve owner-authored
+choices without a migration overwrite. Qt integration, real Settings startup,
+Reset/Custom/preset switching, hidden-bucket edit persistence, rendering shape,
+0.5–2.0 endpoints and cross-bucket predicates need native test and visual
+inspection. Added `tests/test_extruded_bubble_lazy_settings.py`, a real VisualizersTab
+Qt test for unopened-bucket hydration, live edits, first-open construction,
+cross-bucket preservation and silent preset reload; it compiles but is NOT
+executable in this environment. The Python environment here lacks PySide6
+and cannot certify that lifecycle. The C++ Qt/Windows build stays operator-owned.
+
+### 22.4 Camera distortion: concrete removal of off-axis shift, unaccepted framing
+
+BEFORE: 62° vertical perspective, and Scene Pan modified the projection's
+`shift[0]/shift[1]` rather than changing a camera viewing direction. Any
+honest projected physical sphere approaching the edges of that wide FOV can
+be horizontally elongated; §21.1 predicts up to ~1.306:1 at 40° from the
+camera axis. Such scene distortion IS objectionable regardless of whether
+it has a separate fish-eye warp pass.
+
+CURRENT CANDIDATE: default FOV **45°**, optional 35–62° control; centred
+projection (zero lens shift), and Scene Pan modifies yaw/pitch
+(`camera_look_pan`), leaving all world bubble IDs/XYZ/physical radii intact.
+This *actually changes* the projection; it is not merely a wording revision.
+However, look-pan alone still rotates around a stationary eye rather than
+physically moving a camera/dolly or independently choosing a pivot. It can
+crop the prior scene. A centred 45° camera does not mathematically guarantee
+no edge stretch, optical-pupil correctness, ideal reflected/refraction glass
+or good usable underwater composition. The actual lens should be judged
+against rendered 62° original at matched camera distance/composition, with
+native near/far/orbit tests and water/abyss framing. Physical placement/pivot
+and further correction stay OPEN until approved.
+
+### 22.5 Offscreen GPU capability is real, not native parity
+
+The container has EGL Mesa llvmpipe GL 4.5 core, so isolated GPU geometry and
+optic diagnostics are feasible, even without PySide6 or a Windows RTX 4090.
+The unmodified GL 4.6 product shaders and Qt Quick presentation, compositor,
+DPR/scheduling, source capture and actual musical screenshots have NOT been
+validated here. Neither CPU nor offscreen primitive checks visually accept
+any of the above candidate changes.
+
+
+## 23. Camera semantic correction, physical world-space eye, and bounded Settings work (2026-10-20)
+
+**All `[~]`; operator/qualified local visual acceptance remains outstanding.** This section
+supersedes the *candidate behavior* in §22.4, **not the retained historical failure**.
+The original Scene Pan was an off-axis lens shift. The first correction accidentally
+changed Scene Pan into `camera_look_pan(turn, tilt, ...)`, duplicating the existing
+Alt+left-click rotation control. That was operator-rejected. The intended contract is:
+
+| Existing input | Source owner | Actual camera behavior (candidate) | Must not do |
+| --- | --- | --- | --- |
+| Alt+left orbit | `extruded_bubble_turn/tilt` | Eye circles a fixed world pivot; look direction tracks it | Pan, move widget card or turn scene geometry |
+| Scene Pan | `extruded_bubble_scene_pan_x/y` | Translate eye and target in local camera right/up plane, preserve orientation/FOV | Add yaw/pitch, shift sensor/frustum or teleport world |
+| Wheel/zoom | `extruded_bubble_scene_scale` | Dolly eye/pivot distance (15 / authored scale), preserve orientation/FOV | Fake focal-length zoom, rescale bubble radii/world |
+| FOV in Camera bucket | `extruded_bubble_camera_fov` | Independently authors centred vertical FOV, default 45°, 35–62° | Change scene geometry or silently rewrite presets |
+
+**Source:** `rendering/gl_programs/extruded_bubble_scene.py` owns
+`physical_camera` and the fixed pivot 15 world units ahead of the original default
+look ray (default eye remains at origin). Its 5-tuple supplies world-rotation matrices,
+**world-space eye**, pixel-angle factors and centred projection; pan uses camera-plane
+translation and dolly shifts physical depth. Underwater surface clearance constrains
+actual motion at extreme upward angles rather than silently adding another camera
+rotation. The baseline camera orientation helper remains solely for orientation,
+no old lens-shift/look-pan APIs exist. Any camera limit, sign or pivot must still be
+compared with operator interaction expectations on Windows.
+
+**Source-propagation audit:** `rendering/quick/visualizer/implementations/extruded_bubble.py`
+uses one `physical_camera` per frame. `extruded_bubble_program.py` now subtracts
+`uEye` before **ordinary shell/union, speck, bead, wake and cube-proxy** world-to-view
+transforms. `uEye` is also included in common/program uniforms, translated world-water
+surface intersections and shaft world-space marching. Proxies captured into the
+cube probe follow the current eye. Near CoC no longer double-counts virtual zoom.
+The bubble/stream physical population is untouched. The shader/camera contract was
+**source/Qt-free checked, not full product GL 4.6 compiled or visually accepted**.
+
+**Geometry limit:** Centred perspective and physical camera translation remove the
+unwanted sensor shift and control duplication. They do **not** remove rectilinear
+off-axis stretching. Existing analytic same-ray sphere ratios: centre 1.000:1,
+30° 1.155:1, 40° 1.306:1; default 45° FOV reduces the available off-axis angle
+at a given card position but does not abolish that effect. An honest decision about
+remaining apparent shape requires **native side-by-side silhouettes plus material
+coverage**, possibly a further documented camera-projection design. Do not call
+"non-distorted" achieved simply because matrices or shaders compile.
+
+**Lazy Settings correction:** `ui/tabs/media/spec_mode_builder.py` previously
+called full `load_spec_mode_settings` on every **first bucket open**, re-admitting
+and writing widgets in ALL previously opened buckets. New `only_buckets` hydration
+reuses authoritative cache and hydrates only the new bucket, while full preset
+updates still refresh both built and unbuilt values and cross-bucket visibility.
+The lifecycle barrier remains strict. The 01:11:43 Settings timeout had one
+`QuickDisplayVisualizerOwner` survivor, not a proven slow bucket control. **Next
+native evidence:** elapsed mode skeleton construction, one-open and all-open bucket
+widget-count/cost, signal hookup count, per-preset save/reload, and failure-only
+Python referrer receipt for the sole owner that blocks retirement; identify precisely
+whether the builder retains it or only consumes time during startup. Do not add a
+polling/timer/timeout workaround. Check an exception halfway through one bucket's
+creation for duplicate rows/signals on retry. The section-only construction,
+cache/unsaved UI guard and last-open-bucket preservation remain mandatory.
+
+**Falsifiers:** run Qt-free `tests/test_extruded_bubble_physical_camera_contract.py`
+via the startup probe bootstrap and `--noconftest`; follow with actual native Qt,
+GL 4.6 build and 1672×941/2560×1440 side-by-side P1/P7 screenshots. Test near and
+far fixed-ID bubble projection across pan/orbit/dolly, independent controls, the
+water surface as the camera moves, near DoF class switching separately, accurate
+cube-probe glints and Settings handoff. Nothing in this section closes the operator's
+camera, judder, reactivity, optics or lifecycle failures.
+
+## 24. 2026-10-20 evening: camera reset, recovered pan signs, 10% rest motion, renewed reaction rejection
+
+**Acceptance state:** **ALL [~] source candidates; ALL visual failures open.** This section does not replace
+§§20–23, the operator's source recordings, R-105, or `Bubble_Temporal_Fidelity.md`.
+
+### 24.1 Camera reset semantics and the avoidable pan reversal
+
+The first physical camera implementation used `eye += right * panX + up * panY`, directly interpreting
+screen-normalized presentation coordinates as camera movement. That is wrong: moving the eye right
+makes the stationary subject move **left**. It also ignored the screen's down-positive Y convention.
+Compare the pre-physical source `lens_shift(pan_x,pan_y)=(2panX,-2panY)` and Qt Alt-right
+`display_manager._move_quick_visualizer(offset.x/width,offset.y/height)`; both mean a positive
+scene pan should move the **subject** right/down, not the eye right/down. Correct physical camera:
+
+```
+dx = -2 * distance * tanX * panX   # camera LEFT gives subject RIGHT
+dy = +2 * distance * tanY * panY   # camera UP gives subject DOWN
+new eye = pivot + back*distance + right*dx + up*dy
+```
+
+The camera's underlying rotation still belongs to Alt+left/WASD. Scene Pan remains Alt+right/Scene
+Pan and keeps orientation/FOV invariant. Zoom remains a dolly rather than FOV multiplication.
+`test_pan_follow_screen_pointer_sign_is_not_inverted_again` and
+`test_physical_pan_screen_axes_match_alt_right_drag` now distinguish physical translation from
+mere rotated view. Test at nonzero turns and near the underwater ceiling on native Windows;
+no operator visual acceptance yet.
+
+**R shortcut + glyph candidate:** An application-wide `R` (when a framed 3D Visualizer is
+admitted, from any active display) now emits one non-repeat reset signal via
+`RuntimeInputOwner` → `QuickDisplayRuntime` → generation-scoped `DisplayManager`. EB also offers
+one translucent lower-right `↺` glyph in the existing `VisualizerPresentation.qml`, revealed
+only on hover during admitted interaction/Ctrl. Its QML signal is bridged through the existing
+Quick scene/runtime reset signal to the **same** handler. No second camera owner and no new
+timer or polling. Screen mode admission is event-published and cached for a QML root created
+lazily later. The route cancels held orbit/drag intents, release inertia, auto rotate, in-flight
+pan/zoom and old pending pose transactions, then writes the reset ONCE using the existing
+`resolve_visualizer_view_orbit` persistence owner and refreshes edit framing. Preview remains
+possible but native click/input/hover/Settings/save/reload/lifecycle acceptance is pending.
+
+**Home source:** all seven on-disk EB presets have valid `starting_view` metadata: P1/P2
+(0 tilt), P3 (+0.022), P4 (-0.022), P5 (-0.111), P6 (-0.500), P7 (-0.133); all pan=(0,0),
+scale=1.0 and turn=0. They have NO stored FOV field in JSON, despite the in-memory Settings
+normalizer being able to fill that key with the canonical default. Presets stay operator-authored
+and mutable. `starting_camera_pose` reads metadata WITHOUT modifying it; Custom resets to
+mode canonical pose (no pretense of an immutable Custom starting view). Reset explicitly restores
+EB's separate canonical *lens* FOV to 45°, so an old live 62° setting cannot survive R unnoticed.
+This reset of the FOV is not an automatic preset migration and does not modify JSON or other
+current artistic settings. Confirm on screen that the lens angle, tilt/pivot and water ceiling
+produce useful desired framing. All failures including rectilinear peripheral stretching remain.
+
+### 24.2 Additional operator observations, not already accepted
+
+- Breathing is noticeably improved overall, **still unaccepted**; large bubbles appear pinned
+  near maximum size far too frequently. Need per-ID percent-near-peak and minimum/peak/run-length
+  compared with music phrase structure; a slower generic release could actually worsen pinning.
+- Small bubbles jump between two apparent size states rather than move continuously between
+  them. Disambiguate source envelope reversal/target discontinuity, direct `current_radius`
+  publishing without per-ID drawn state, representation gate crossing, and presentation
+  starvation. Compare accepted 2D `RENDER_SIZE_RELEASE_S=.10s` / actual BTF contracts;
+  specifically do not restore R-105 rejected tiny-breath directional hold.
+- Light rays show **no perceptible musical reactivity**, including on strong music, regardless
+  of existing source wiring. Need native ray-mask/shaft ROI signal/contrast evidence.
+- Stream/drift behave like one big idle→playing switch. A slow→fast→slow musical *section*
+  within continuous playback has little to no visible motion difference. Need proper fast
+  attack, slow decay and significant projected motion change even under already-high bass.
+- Resting motion should be ~10% greater among moving families, EXCEPT the ocean surface.
+  Operator permits gently increased nonmusical baseline movement, **not** a fake audio band,
+  full-on speed, periodic bubble breathing or a new source/clock.
+
+### 24.3 Source-owner audit and bounded new numerical evidence
+
+`ExtrudedBubbleSimulation.advance` uses normalized `level=max(bass,0.70*mid+0.35*high)`;
+`change_drive=_soft_top(0.60*level+0.60*small_envelope+0.15*flash)`; and
+`activity=min(1,idle_rate+1.6*level)` (prior to a 10% rest-only multiplier).
+That `activity` saturates at level around 0.59, while `_soft_top` and target followers can
+compress/lag intra-song differences. However saturation ALONE is **not** enough to explain
+all the reported visual lack of reaction. Source can vary in an isolated controlled input.
+
+A Qt-free **synthetic**, steady high-bass `.85` sweep at `(mid,high)=(.15,.12)→(.85,.8)
+→(.15,.12)`, each section 2 seconds (average of last 30 frames, 60Hz, P1 settings,
+no onsets), yielded the following logical snapshot averages:
+
+| Phase | Level | Stream world units/s | Drift | Ray driver | Small body envelope |
+|---|---:|---:|---:|---:|---:|
+| high bass / low mid | .850 | 1.213 | .605 | .332 | .027 |
+| high bass / high mid | .875 | 1.789 | .818 | .688 | .637 |
+| high bass / low mid again | .851 | 1.385 | .628 | .341 | .027 |
+
+Thus stream changes by about +47% and drift about +35% IN THE LOGICAL SNAPSHOT, and the ray
+driver roughly doubles. This test **does not falsify** the operator's observed in-game
+stillness: projected optical-flow pixels/s, camera distance, shader contrast, emitter paths,
+per-pixel range and multi-stage latency have not been measured. A 2-second synthetic plateau
+with no onsets is unlike real recordings and cannot certify fast ramp/slow decay. Measure the
+logged same-ID world travel vector and projection into pixel motion; `WORLD_UNIT=9`; then
+compare with accepted 2D on exactly the same recorded slow→fast→slow sections.
+
+For rays, `ray_strength(parameters,state.rays)` applies both the authored Range interpolation
+and an additional `(0.03+0.97*driver)` multiplier; final `uRays` enters the backdrop using
+`texture(uShafts)` and a `uRayCut` smoothstep/focus, mixed with water and bloom.
+`_draw_shafts` renders the fan/depth-march texture independently from the musical driver; the
+backdrop controls how visibly music modulates that pattern. Log all of: `_rays`, `uRays`,
+shaft texture mask mean/p95, cutoff-surviving area, pre/post-water luminance, post-target
+HDR/bloom, and change in a shaft-only ROI. Difference images need synchronized input,
+identical camera and exposure, no motion confound. Don't claim success from an animated
+`uShimmer` texture if steady/faster music does not change perceptible rays.
+
+For sizes, calculate `big_target` and `small_target`, per-ID nominal/current radius,
+class-specific envelope, near-CoC branch, projected radius and display timing on each logical
+revision. Histograms of per-ID frames above 90%/95% of respective local dynamic upper radius,
+mean flat-run duration and 10–90% opening/closing times are important; a global mean washes out
+the distinct large-pinned/small-snapping complaints. Include source-band and onset timestamps
+before any follower changes.
+
+### 24.4 Narrow +10% idle motion source candidate
+
+The simulator now computes `rest_motion_boost = 1.0 + 0.10*quiet` where
+`quiet = max(0,1-intensity/.10)` is an already-existing music/silence blend. Only the
+*resting contributions* to speed/drift admission, wake/bead/snow/speck travel, sway amplitude
+and ray shimmer increment use the multiplier. Do **not** increase the separate shared
+`_motion_phase`: it drives the ocean surface and must remain unchanged. The 10% extra
+speed can be swallowed by downstream projection, and the resting emission minimum
+`max(0.25, activity)` can swallow it entirely for speck population; neither receives an
+unearned visual-acceptance checkbox. The Qt-free idle test checks exact speed and shimmer
+scalars and unchanged surface phase, not actual fluid visuals. No additional source clocks,
+latent channels, timers, or authoring overwrites were introduced.
+
+### 24.5 Native falsification and remaining status
+
+- Verify keyboard R in interaction, Ctrl, Custom/Edit, both displays, while WASD is held,
+  Alt+left is mid-drag, auto-rotate running, Settings open, and mode/preset switch or
+  runtime replacement is pending. Verify only one camera/preset commit, no accidental
+  reset outside framed 3D, and no ordinary previous-image/exit hotkey regressions.
+- Inspect EB glyph under card hover and under edit/resize chrome at normal and tiny sizes:
+  correct z-order, opacity/colour, click target, mouse focus and no event passthrough.
+- Confirm all 7 curated pose homes and Custom, FOV=45 reset, manual FOV retention except
+  when R is explicitly invoked, physical pan signs, side-pan parallax, zoom and water ceiling.
+- Capture 12 seconds of `anything_mixed2`, plus slow→fast→slow, heavy and acoustic recordings
+  with SAME-ID world/render radius, stream velocity, drift, projected optical flow and shaft-only
+  ROI. Distinguish quick attack from slow decay and base/rest behaviour from sustained content.
+- Run native Qt Settings-lifecycle/preset UI tests and actual GL 4.6 render. These are not
+  available in the sandbox, and the Qt-free contract tests do not stand in for them.
+
+**Final status: ZERO operator visual failures closed.**
+
+
+## 25. P7 particle controls and split audio-vs-visual smoothing audit (2026-10-20)
+
+**Investigation only, NO operator/agent visual acceptance.** This section is in
+addition to §24, the existing full 4B checklist and BTF/R-105; nothing is closed.
+No EB Lab, real audio recording, or native production shader context was necessary
+for this source investigation. All numerical comparisons below used synthetic
+piecewise constant band tuples and P7-authored control values, not live gameplay
+or matched native pixel captures.
+
+### 25.1 P7's visible particulate: the exact authoring/renderer wiring
+
+- `core/settings/visualizer_mode_settings.py`, `_EXTRUDED_BUBBLE` Particles bucket:
+  `Particles` range (`extruded_bubble_particles`), `Particle Size`, `Particle
+  Colour`, `Warm Share`, `Particle Glow`, `Particle Bands`, conditional `Band
+  Contrast`. `Sparkle` is a **Glass** control; `Bead Chains` is its own **Bubbles**
+  count range. There is no named mesh-debris emitter control for EB.
+- The on-disk P7 `preset_7_ember_drift.json` snapshot has `Particles` [.85,1.0],
+  `Particle Size` 1.6, `Particle Colour` [255,64,5,255], `Warm Share` .9,
+  `Particle Glow` .6, Bands enabled, Band Contrast 1.0. P1–4: [.1,.35], size
+  1.0, warmth .3, glow 0, bands disabled. P5: [.3,.4], P6: [.5,.6], both
+  bands disabled and particle glow 0. Their ember specks can therefore look
+  absent without the P7 treatment even though they use the same code path.
+- `extruded_bubble_frame_runtime.controls_from_parameters` resolves Particles
+  once to the simulation `emission` pair. `ExtrudedBubbleSimulation.advance`
+  computes and smooths `_emission`; `_procedural_fill` uses that state for
+  marine snow and emitter fizz, while the separate SPECK pass uses
+  `speck_amount(parameters,state.emission)` from `extruded_bubble_scene.py`.
+  The latter outputs `(emission², 2.4 × emission)`; the renderer computes
+  `round(216000 × emission² × scene3d_detail.particles)` submitted instances.
+  Shaders can cull via cloud masks, camera, alpha/light and bloom; instance
+  counts are NOT visible-dot counts.
+- Synthetic comparison at 90 Hz, constant playing bands (.85,.74,.64), four
+  seconds and P1/P7 authored reaction/emission controls: P1 emission ~.248
+  and ~13,235 speck instances (full particle detail); P7 emission ~.900 and
+  ~174,939. At zero bands for four seconds, P1 emission ~.025 (~135
+  submitted), P7 ~.211 (~9,622). Counts ignore the GPU shader's masked
+  fragments and do not prove visually observed density, but clearly identify
+  why P7 is dramatically more aggressive.
+- Safe operator experiment: first change only `Particles` endpoints, then
+  only `Glow`, `Size`, and `Particle Bands` to isolate density versus brightness
+  and diagonal clustering; avoid misdiagnosing Glass/Sparkle as scene debris.
+
+### 25.2 Source-confirmed control contract mismatch: Smoothing changes MUSIC
+
+Source `widgets/spotify_visualizer/extruded_bubble_simulation.py`, `advance`:
+
+```python
+soft = 0.5 + 1.5 * max(0.0, min(1.0, controls.smoothing))
+self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
+self._small_body_reference = _follow(self._small_body_reference, small_body,
+                                     dt, 0.55 * soft, 0.25 * soft)
+small_change = max(0.0, small_body - self._small_body_reference)
+self._body_small_envelope = _follow(self._body_small_envelope,
+    _soft_top(0.18 * small_body + (6.0 + 2.0 * sustain) * small_change),
+    dt, 0.06 * soft, body_release)
+```
+
+The `soft` factor ranges .5–2.0, **a 4× range of audio-following time
+constants**, not simply visual presentation smoothing. It also multiplies
+large body reference, big/small envelope release, motion, stream, drift and
+emission time constants. On a new mid/high phrase, raising Smoothing slows
+`_small_body_reference`, thereby artificially prolonging the positive delta
+multiplied by 6–7.2; slow reference tracking changes both *amplitude* and
+*duration* of actual sound-derived size targets.
+
+Probe used actual P7 `ExtrudedBubbleControls` with collision disabled only to
+prevent object turnover confounding the class envelopes; deterministic 90-Hz
+steps: 1.33 s zero bands → 4.00 s (.85,.74,.64) → 3.33 s (.27,.16,.12)
+→ 2.67 s (.95,.90,.85) → 3.33 s (.27,.16,.12), no onsets, source playing
+throughout. Derived class radius multipliers after each stage:
+
+| Smoothing | quiet large/small | first loud large/small | first soft large/small | second fast large/small | second soft large/small |
+|---:|---:|---:|---:|---:|---:|
+| 0.0 | .130/.130 | 1.870/.341 | .312/.168 | 1.837/.394 | .309/.168 |
+| 0.5 | .130/.130 | 1.867/.377 | .314/.168 | 1.833/.683 | .311/.168 |
+| 1.0 | .130/.130 | 1.869/.710 | .316/.168 | 1.872/2.066 | .313/.168 |
+
+This is a **much stronger falsifiable lead** for the small-bubble size-state
+complaint than generic 'not enough smoothing': the setting itself can produce
+massively greater *logical* inflation after the same musical change. It does
+not establish whether the actual visible steps are also caused by output
+cadence or the known near-DoF branch. Only recorded bands/native size traces
+can confirm on-screen causation. Importantly, the big/large held path barely
+changes between two different high-energy synthetic sections, furnishing a
+lead for musical contrast/pinning without claiming actual max clamp.
+
+### 25.3 Why 2D Bubble is meaningfully different
+
+- 2D Bubble maintains per-bubble `pulse_energy` and `size_gate_energy` and
+  presentation-side `_drawn_body_energy`/`_drawn_loud_energy` that rise
+  immediately and fall over `RENDER_SIZE_RELEASE_S = 0.10s`; underlying
+  musical pulse integration and input are NOT slaved to a visual Smoothing
+  multiplier. Its hero big `display_radius` advances per ID, with smoothly
+  blended near-target rates. BTF and `R-105` expressly forbid resurrecting
+  the rejected tiny-breath hold/dead-band experiment.
+- EB currently derives one `_body_big_envelope` and one
+  `_body_small_envelope` for the entire population; the next capture
+  replaces each bubble's `current_radius` with `radius × class_scale`.
+  There is **no independent per-ID displayed-radius memory** for either
+  population. All same-class silhouettes must expand/shrink in synchrony;
+  2D's per-hero history and size envelope cannot be reproduced simply by
+  increasing EB's global musical smoothing.
+- The big lane receives permanent held component
+  `(0.25 + 0.75*sustain)*big_body` even without new events; `_reaction_scale`
+  converts that one held drive into BOTH baseline re-expansion and a positive
+  expansion term with the same held input. This plausibly produces long
+  plateau occupancy and soft-to-loud binary visual behavior, but further
+  numerical and native probes must distinguish legitimate sustained bass
+  body from musical flatlining, and distinguish intrinsic radius from
+  actual visual-edge clipping or bloom.
+
+### 25.4 Specific next falsifiers and candidate direction (NO source fix yet)
+
+1. **Restore independent authorities.** Smoothing setting should tune only
+   visual-size convergence, *not* `_level`, body reference/delta, `_sustain`,
+   stream/drift/emission or musical phase. Keep the preexisting shared capture
+   clock and real band feed. Measure raw-body/reaction trajectories before
+   and after source correction; smoothing 0 vs 1 must leave the logical
+   musical driver unchanged to numerical tolerance.
+2. **Continuous, per-ID presentation-size evolution at canonical owner.**
+   Add an identity-stable displayed radius per bubble; separate desired
+   musical `target_radius` from its visual convergence. Rise promptly, release
+   with a bounded continuous decay, interpolate rates continuously through
+   small errors, never latch at a percentage dead-zone, and never simply
+   quantize/discretize between two sizes. Preserve geometry SSOT and
+   consistent use of the actual drawn radius in shells, fused contacts and
+   wakes; no second renderer-side simulation or additional clock. Verify
+   a fast attack is visually preserved at smoothing=1, and strong downward
+   contraction on a soft passage is visible without stepping.
+3. **Fix excessive held occupancy separately.** Instrument each stable
+   large ID's time >90% and >95% of its observed passage-local maximum,
+   duration of flat sections, and 10%→90%/90%→10% opening/closing times.
+   Compare 2D's held-body support and separated crest support before
+   adjusting EB's `(0.25+.75*sustain)*big_body`, the positive delta term,
+   `_soft_top` knee or `_reaction_scale`; do not simply globally lower
+   breathing strength, flatten loud peaks or contract every bubble to a dot.
+4. **Line up one actual recorded passage.** Use `anything_mixed2` and at
+   least a slow→fast→slow section (plus quiet/heavy controls). On the SAME
+   stable IDs record captured bass/mid/high and ramp flag, small/big
+   reference, uncapped delta, class envelope, target radius, drawn world
+   radius, near-DoF branch, projected per-pixel radius and Qt presentation
+   timestamp. Compare accepted 2D render-gate/hero traces with EB from the
+   very same source. If target oscillates, fix its cause; if drawn radius
+   jumps despite smooth target, fix temporal presentation and/or view branch.
+5. **Native output remains the acceptance gate.** Identical recorded-audio
+   samples, chosen P1/P7 Settings, same DPR/viewport and visible bubbles,
+   with operator review. A passing synthetic unit test or generated diagram
+   cannot close any of the failures. No preset overwrite, no silent control
+   reroute, no slow build and no environment-variable setup.
+
+**Status: all related EB visual failures remain `[ ]` or `[~]`.**
+
+
+## 26. Interrupted recovery checkpoint: visual-only radius, count admission and ray plateau (2026-10-20; **UNACCEPTED**)
+
+**Archive scope.** The earlier interrupted agent's unarchived work was not available as a ready-to-ship working tree. This checkpoint is rebuilt from the last verified `EB_SPECKS_BREATHING_INVESTIGATION` Godzip, not from a live repository and not from verbal claims about an unverified later source. Only changes actually present in this full handoff count as implemented.
+
+### 26.1 Candidate changes (not visually verified)
+
+- Smoothing multiplies **no musical/flow/light/emission follower**. `soft` in `ExtrudedBubbleSimulation.advance` is now constant 1.0 for these logical followers; `controls.smoothing` is used only in a 10–95 ms displayed-radius rise and 12–177 ms displayed-radius release (per stable bubble ID; dt-invariant exponential). The physical `current_radius` remains unsmoothed for collision and cluster resolution; displayed `visual_radius` feeds snapshot shell and wake emitter. These tau values are candidates, not copied or claimed accepted 2D values.
+- The held-large coefficient is tentatively `(0.22+0.70*sustain)` vs previous `(0.25+0.75*sustain)`. This does **not** duplicate 2D's soft ceiling and separated presentation/hero controls. Operator specifically questions reducing held support instead of making crest activation rarer, preserving continuous rise and fall; retain both hypotheses for visual comparison. Measure amplitude *and fraction of track* held near local peak.
+- Stream-speed musical attack is a fixed 0.68 s to maintain temporal continuity without coupling to display smoothing. Do not apply this visual change to the water-surface phase. Existing prescribed +10% idle motion remains.
+- New `tests/test_extruded_bubble_display_only_smoothing.py` compares 390 same-seed frames under `Smoothing=0` vs `Smoothing=1` for identical musical scalars, flow, rays, emissions, positions, stable IDs, physical sizes, contacts and clusters, allowing only visual radius variation. This is a logical test, not native render acceptance.
+
+### 26.2 Unresolved new count saturation symptom
+
+Operator observes that **both** large and small population counts reach authored loud-end quantities on minimal audible audio. Source `targets` linearly maps the already-normalized, quick-followed `_level` into `(low,high)` range; `_level` follows `intensity=max(bass, 0.7*mid+0.35*high)` with 80 ms attack. Distinct from particle emission (`extruded_bubble_particles`, governing speckle density). That is a concrete possible early-saturation mechanism, not proof of which source stages or presets force the count to maximum. Record target, live, retiring, spawn-credit, source normalized bands, and idle→playing→quiet/loud phrases; compare actual 2D count transfer and admission smoothness. Candidate intervention is an explicit monotonic response curve for *count* with high crest threshold and fast attack/slow decay. Do not conflate number of bubbles with bubble radius and never silently rewrite preset min/max endpoints.
+
+### 26.3 Rays and source/endpoint remain open
+
+Rays rise conspicuously when playback begins but reportedly peg at a high visible brightness during ordinary playing, rather than moving within selected `Ray Strength` quiet/loud endpoints. Request transient-linked subtle lifts with graceful decay, without random rapid flicker. Measure simulation driver → uniform → HDR pixel → post-bloom pixel with the same recorded sections. No definitive bubble/particle shaft attenuation currently established, so test before claiming physical occlusion. Both directional and ray controls are **still one-point in this archive**, as in the verified baseline: the earlier discussion of fully wired two-node source/end controls is not a verified delivered artifact. Next slice requires Settings visual-widget, schema migrations without touching mutable presets, renderer/physics integration, and native coverage as a unit.
+
+### 26.4 Validation status
+
+A test that previously required smoother *musical flash* was explicitly corrected to assert equal flash and different displayed-radius response, because mutating musical flash violates the stated operator contract. The preexisting untagged playback-ramp gate remains red. All visual failures stay `[ ]` or `[~]` until operator or explicitly authorized local agent visual verification.
+
+
+### 26.5 Separate population occupancy candidate (NOT visually accepted)
+
+`ExtrudedBubbleSimulation` now resolves **big/small count occupancy only** from a continuous composite of musical body-band breadth: 52% strongest normalized `max(bass,vocal_body)` plus 48% weighted bass/mid/high (`0.42/0.39/0.19`), raised to the 1.8 power. This deliberately prevents a lone near-peak band from immediately requesting both authored maximum counts. Count eligibility follows on the existing logical capture with 0.28 s fast attack / 1.05 s slow release. The first logical fill uses the current musical eligibility and then the usual bounded entry/fade path applies. Preset count endpoints remain untouched. Musical body energy, size, particles, rays, flow, and water phase are not retuned by this count control.
+
+**Source test trap caught before handoff:** the existing flow owner used `low, high = controls.stream_speed`, shadowing the earlier audio-band `high` name inside `advance`. The initial composite calculation incorrectly read the speed cap as treble, yielding only ~0.84 full-band population eligibility even for `(1,1,1)` synthetic input. Renaming `low_speed, high_speed` restored actual audio-band ownership, making the all-band max 1.0 and restoring all existing 36 tested admission invariants. This was a candidate-code bug discovered during verification, not evidence of a previously present production failure.
+
+`tests/test_extruded_bubble_population_candidate.py` verifies all-band true maximum, absence of one-band count saturation, monotonically differentiated musical contents, smooth slow release, bounded per-frame target change and authored population limits. These are synthetic, not a substitute for actual AGC trace distributions. The 2D Bubble uses stable operator-authored counts rather than EB's audio-interpolated count ranges, so **no literal count transfer function can be copied from 2D**. The accepted 2D continuity and entry/fade principles remain comparison targets. No visual checklist closure permitted.
+
+## 27. Two-ended real-world source controls and ray transport proxy (2026-10-20; **NOT VISUALLY ACCEPTED**)
+
+### 27.1 Implementation boundaries
+
+The source for this checkpoint is the superseding `EB_POPULATION_RESPONSE_CANDIDATE` Godzip, not the live repository and not the aborted, unarchived prior two-node work. `Current_Plan.md` EB-R27 is the ACTIVE checklist; prior §26's historical statement that two-node controls were absent was true of that earlier checkpoint, not a promise that anything in this candidate is accepted.
+
+- **Schema and persistence:** `core/settings/visualizer_mode_settings.ScenePath` subclasses the existing typed Direction contract, persisted under original `extruded_bubble_stream_direction` and `extruded_bubble_light_direction` keys as normalized six-tuples (`source x,y,z; end x,y,z`). `extruded_bubble_ray_path` adds an independent canonical six-tuple, without changing seven preset files. `core/settings/visualizer_paths.py` validates finite noncoincident paths and migrates old `[around,height]` values to physical volume endpoints. Legacy migration preserves the prior world direction, accounting for the world box's nonuniform X/Y/Z extents. The sole volume dimensions now live in `core/constants/extruded_bubble_world.py` and are reexported by `extruded_bubble_geometry.py` rather than duplicated. No environmental configuration.
+- **UI:** `ui/widgets/visual_controls.ScenePathMapper` is a shared double-ended S/E disc (world X/Y, bottom=floor, top=ceiling) and two Z/depth rails, one for each endpoint. Full square→disc reversible mapping permits XY corners; naive circle clipping would mutate oblique preset directions. Node drag produces `valueChanged`, one `valueCommitted` on release; arrow/Page Up/Down and Tab target the chosen endpoint. `spec_mode_builder` chooses this visual control in the existing lazy EB bucket and unchanged persistence owner. **The full native Settings lazy load, preset switch, Reset, Custom and strict owner retirement must still be exercised.**
+- **Ordinary-bubble source ownership:** `extruded_bubble_frame_runtime.controls_from_parameters` projects a scene path into one `ExtrudedBubbleControls.stream_path`. `extruded_bubble_simulation.advance` derives the world-space direction; `_spawn` uses the source node plus a bounded transverse spread, locking exact boundary coordinates, instead of sampling arbitrary entry faces or inventing camera-space source points. The previous immediate `anywhere=True` mature first fill is skipped for path-enabled runtime so no initial bubbles spontaneously appear halfway through the scene. The existing emission-credit / fade admission is used on subsequent captures, without timers. **Risk:** the card may start too empty or spawn source-overlaps too densely; only native material and playback can judge. The free bead-chain, marine snow and particle shader populations still need their own physically coherent origin audit. This slice must NOT be described as solving all emergence locations.
+- **Light:** `scene_knobs` converts light endpoints to the existing directional `sun` for surface light, also carries `light_source` and `light_end` world points. The deep-light visible lobe uses true `uLightSource - uEye` so moving the light without rotating it changes its on-screen position. Deep bubble glint proxies similarly look toward that physical source. The full probe / analytic highlight source is still partly directional: **positional lighting parity is not complete**.
+- **Rays:** `ray_source/end` coordinates are passed into the true production half-res `SHAFT_FRAGMENT`. `beamExtent(p)` softly gates each marched sample to the finite ray segment, plus a separate fan extent evaluated along the translated eye's view ray. Old Ray Reach is not deleted or co-opted: it is relabelled **Ray Fan Spread** for its real angular purpose; potential redundancy can be reviewed AFTER visuals. Source and End form an independent authorable ray path; canonical initial vertical ray segment does **not** automatically inherit P7's angled light source. This is a deliberate unaccepted default and important P7 comparison point, not a hidden claim of perfect visual migration.
+- **Light loss through objects:** four largest ordinary visible bubbles from the current one-copy shell buffer are passed as `vec4(world xyz, radius)` proxies, each able to weaken the shaft by up to about 16% behind an approximate light-path shadow with softened edges. An aggregate 0–8% density-dependent dust attenuator is applied. This is only a bounded approximate **screen-space sampled** loss, not 3D per-particle shadow, no scene-depth voxelization, no direct shadow receiver or true volumetric multiple-scattering. Cost includes extra per-pixel maths at half resolution and selecting four shells in Python; compare GPU timing and screen image before accepting. The ray driver/range transfer itself is not changed, hence the operator's pegged intra-song luminosity failure remains open.
+
+### 27.2 What passed and what has NOT
+
+- Qt-free `tests/test_extruded_bubble_source_end_candidate.py` includes legacy conversion for every EB preset (no file changes), nonfinite/coincident rejection, entire XY square↔disc reach, real floor/ceiling birth, zero halfway mature initial population, physical 3D stream direction, light position and ray path knob ownership and shader uniform-path assertions. The independent prior `test_extruded_bubble_population_candidate.py` and `test_extruded_bubble_display_only_smoothing.py` scripts remain passing. These tests do not run the actual QWidget controls.
+- Optional Linux/Mesa `python tools/visualizer_replay/eb_shaft_mesa_compile.py` compiles **and links** the production shaft vertex/fragment pair in a software OpenGL 4.5 core EGL context with only the `#version` downgraded for this diagnostic. This is neither product GL 4.6 on Windows nor a rendered A/B comparison; none of the material, FPS, occlusion, or ray-reactivity failures are accepted.
+- **Native validation sequence, mandatory before closure:** load all seven originals then move both nodes without accidental Custom value loss; launch from dormant mode and repeatedly open/close the lazy buckets while asserting one surviving Settings owner; test directional near/far and underside/ceiling/floor source placement, with 3D camera orbit/pan/zoom (especially P7); compare free chains, wakes and specks vs ordinary bubble emergence; ray-only HDR and post-bloom captures from fixed camera on the SAME slow→fast→slow recorded passage with independently moved ray endpoints and low/high Ray Strength; examine shadow proxy readability behind foreground glass rather than painted dark discs; record new shaft-pass GPU median/p90 at 1672×941 and 2560×1440 with same density/detail/DPR. Preserve physical camera projection parity, frame timing, water-surface resting speed exclusion and operator preset authoring.
+
+**Explicit acceptance status: ALL related entries remain `[~]` or `[ ]`.** Source improvements, Mesa compile/link and logical tests are evidence about implementation, never evidence that the operator's actual visual complaint is resolved.
+
+
+## 28. Ragdoll 256/512 temporal clue, ray musical contrast, particles and recurring Settings survivor (2026-10-20; UNACCEPTED)
+
+### 28.1 Evidence, not acceptance
+
+Incoming operator log: `logsbae635b6764.zip` (43 files; includes Spotify visualizer, audio, lifecycle, frame-trace binary). `screensaver.log` confirms `negotiated_block=512 requested=512` in earlier Oct 20 sessions and `negotiated_block=256 requested=256` at 22:40:34. The operator reports ~80% less judder with 256, not full correction; the hardest problem is still small-bubble reaction/visual continuity even with Smoothing=1.0. The final 256 session's `screensaver_spotify_vis.log` shows `Runtime stopped (generation=1 steps=12451 skipped_deadlines=8 slow_steps=1 failures=0 joined=True)` at 22:42:50 and overall tick period measurements with `dt_max=29.61 ms`; these aggregate observations are insufficient to identify individual judder events. Need correlate **capture timestamp, normalized bass/mid/high, onset, logical sample, bubble ID, physical target radius, displayed radius, render frame ID and draw interval** with both blocks on the identical recorded passage. A block-size change may alter **source freshness, event batching, spectral windowing, onset cadence or sample timing**; do NOT label one root cause until falsified, and do not conflate BTF source cadence with the near-focus or off-axis camera separately identified defects.
+
+`screen saver lifecycle`: 22:42:50 `armed reason=settings retiring_generation=1 qobjects=948 python_owners=3`; at 22:42:58 `CRITICAL timeout ... qobjects={} python_owners={'QuickDisplayUnit':1,'QuickDisplayVisualizerOwner':1} resources=[] thread_work=[] global_subscriptions=[]`. Also 18:35:58→18:36:06 same two survivors. Successful 22:38:44→22:38:45 and 21:00:06 transitions retired in ~575 and ~533 ms respectively. This isolates surviving Python ownership after Qt teardown. Inspect `QuickDisplayUnit.runtime_retirement_roots`, `QuickDisplayUnit.retire`, `QuickDisplayVisualizerOwner.retire`, `DisplayManager` manager-unit-owner detach / pending lambda lifetimes; do NOT simply raise the eight-second barrier, force object destruction, call gc indiscriminately every frame, or attribute a Python owner leak to bucket construction. Run strict owner destruction tests after high 3D modes and ordinary modes; report exact surviving strong-reference edges and why only this generation retains them.
+
+### 28.2 Ray signal-path candidate, exact changes
+
+Former ray target: `0.35 * level + 0.45 * body_small_envelope + 0.05 * sustain`; positive onsets primarily affected integrated `shimmer`, so the fan might look bright once and then visually unchanged despite music evolving. This pass adds an **independent ray-only body reference**, a bounded **positive phrase-difference follower** (0.07 s attack, 0.62 s release), event `ray_lift` admitted from real onsets once (0.42-s release, then 0.12-s brightness attack), and a held mix with reserved transient headroom (`0.24*level + 0.26*small_envelope + 0.06*sustain + 0.23*ray_phrase + 0.32*ray_lift`, followed 0.12-s attack / slow release). `snapshot.rays` is sent *directly* to existing `ray_strength`; no additional flash lift is added on snapshot and no new audio floor or clock. Synthetic uninterrupted segments (90 Hz, 2 s each, onsets every .5 s, `soft(.10,.10,.10)`, `loud(.72,.65,.58)`, `mid(.46,.48,.33)`, `fast(.85,.89,.70)`, `release(.32,.23,.15)`) show soft-section final driver ~.17 (with synthetic onsets), loud crest ~.76, loud held ~.50, lower section ~.29, fast crest ~.75, and final softer section ~.25. **These are logical uniform drivers, not measured visual intensity.** Need native ray-only frame luminance charts over the same song with stable camera/exposure, deep/surface lenses, Ray Strength endpoints, P1/P7 and bloom, including occlusion interactions. Transient lift must not become strobing. No accepted state change.
+
+### 28.3 Particles were moving, but not from the authored stream source
+
+`SPECK_VERTEX` already generated up to `SPECKS_FULL=216000` glitter instances per frame. The vertex generated deterministic seeds, lit colours and `fract(seed + uStreamWorld * uSpeckTravel / (2 * uWorldHalf))`, which **does move** particles along stream direction and wraps at volume boundaries; unlike ordinary bubbles, each seed starts distributed throughout the box and not at the two-node physical Source. Particle colour and bloom were artistically useful, P7 especially. Candidate changes ONLY speck path progression: admitted legacy/new physical `Stream Source -> End`, progress fract around the finite path, broad seeded transverse scatter, 0.30× existing integrated stream distance (including idle), edge fade from origin and toward exit. No CPU per-particle step, new timers or extra buffer uploads; the vertex shader uses existing per-instance seed and uniforms. User may prefer a different width, density, or relative speed after viewing, particularly at short/diagonal paths. The existing independent procedural snow and fizz are **not** migrated in this slice and must not be claimed coherent. Existing `Particle Glow` remains exactly authored; `Glow Reactivity` default 0 allows optional positive glow lift from already-simulated ray/flash (without an extra envelope). Verify emission threshold temporal fade when the draw **instance count** changes, not only the path edge fade; the current draw count still changes with emission, potentially causing popping at both ends of the range. Compare real 3D movement, not just source-level motion assertions.
+
+### 28.4 Gates, remaining work
+
+Standalone Qt-free gates `python tests/test_extruded_bubble_ray_particle_candidate.py`, `python tests/test_extruded_bubble_display_only_smoothing.py`, and `python tests/test_extruded_bubble_population_candidate.py`. Extend existing optional `python tools/visualizer_replay/eb_shaft_mesa_compile.py`: GLSL 4.5 offscreen syntax/link for **both** shaft pair and new particle pair. Native Windows GL 4.6 at real card sizes, Qt lazy UI/preset save/load, logged Ray Strength luminance A/B, GPU p50/p90/99 and *visual operator acceptance* are all outstanding. The full pytest harness cannot run in this tool container without PySide6. No original presets changed. All original failure checkboxes remain open; this is a source candidate/checkpoint, not a success report.
+
+
+## 29. Uniform vec4 production crash and shared procedural Stream Source/End (2026-10-20; UNACCEPTED)
+
+### 29.1 Operator crash, confirmed causal mismatch
+
+The operator supplied an immediate renderer exception at 23:40:27 after the R28 ray-phrase/attenuation slice. The shaft program's `uBlock0` was a tuple `(x, y, z, radius) = (-10.840106010437012, 1.3623005151748657, -17.55120849609375, 0.052287131547927856)`. `rendering/quick/visualizer/implementations/extruded_bubble.py:_Uniforms.set` accepted 1, 2, 3, 9 or 16 values, not 4, and raised `ValueError` on a *valid* `vec4` uniform. The shader uses `uniform vec4 uBlock0/1/2/3`, introduced for bounded bubble light attenuation, so this is a host-dispatch error, not proof of faulty bubble coordinates, a bad GLSL shader or scene corruption. The code now dispatches length-4 tuples to `glProgramUniform4f` and moves the per-program value cache assignment to **after successful upload**, preventing a failed first attempt from concealing later retries. An exact-value Qt-free test executes the real `_Uniforms` class with a recording fake GL, repeats the upload for cache validation, and checks that unsupported values do not poison the cache. The full native shaft pass including zero-bubble filler and multi-bubble transitions remains `[~]` until native 4.6 render/visual acceptance.
+
+### 29.2 What a spatial fade does and does not guarantee
+
+A seeded GPU particle with `progress = fract(seed + integratedTravel / pathLength)` and opacity `smoothstep(0,begin,progress) * (1-smoothstep(end,1,progress))` is nearly invisible while wrapping from End to Source, provided it retains stable seed, identity and continuous travel. This is already the intended decorator-speck path, whose draw instance count is **fixed for a chosen detail tier**, not tied directly to music. Music affects speck brightness/glow and authored particle response. The earlier generic warning that musical emission changes the *speck instance count* was incorrect; correct that assumption in future investigation.
+
+Free chains and marine snow did NOT yet follow the operator's authored two-node Stream Source/End in R28: their GPU vertices seeded positions across the world and wrapped by axis. The new candidate supplies the same admitted `stream_path` world source/end to the bead generator used for **free** chains and marine snow. A stable per-chain transverse offset and coherent curvature accompany an integrated, finite path, with origin/end fade and world-bound clip. Free marine snow now uses the same physical source and travel direction and per-instance origin/end fade. Existing `uBeadTravel` and `uSnowDrift` retain their independent integrated-speed multipliers. `uChainFill` and `uSnowFill` still interpolate the last fractional allocation; this is not a new emitter owner or admission clock. Preset values are untouched. Camera remains a viewer of the fixed world, not the object-position authority.
+
+**Important exception:** fizz is NOT an independent free stream and must stay attached to its parent bubble. Its producer reads the `EbWakes` stable owner records, already has a tail-progress source/exit fade plus retirement wipe and still travels relative to its parent. Reanchoring those fizz dots at a global scene Source would be a new disconnect bug. Test attached fizz separately from free chain/snow emission and count transitions.
+
+**Open discontinuity:** when `ceil(uChainFill)` or `ceil(uSnowFill)` increases rapidly, GPU instance seeds added that capture already have a nonzero path phase. The path-edge fades do not guarantee a fade-in for such a newly admitted ID. Reducing a count can likewise retire more than the fractional final instance in one logical step. Test stable ID/world progress, active shader opacity and screen pixels across a population step. If observable, a per-ID birth/retirement age on the existing simulation clock or a bounded cohort owner would be needed to guarantee full fade, rather than simply changing two smoothstep cutoffs. Strictly avoid claiming EoL fades imply no pops.
+
+### 29.3 Regression / operator gates
+
+- **Crash regression:** `python tests/test_extruded_bubble_uniform_source_parity.py` executes the actual Python upload dispatcher in isolation and asserts the exact `uBlock0` tuple reaches `glProgramUniform4f`. It also verifies caching only after accepted uploads, shared path wiring, source/end fades and parent-fizz identity separation. The earlier `test_extruded_bubble_ray_particle_candidate.py` assertions are updated from separate speck path normalization to the stronger *one admitted shared path* contract. The existing native speck GPU test is likewise updated to supply actual physical source/end uniforms and test camera-independent live world positions (unrun here: native Qt/PySide6 missing); the former whole-box uniform-distribution oracle is no longer a legitimate requirement for a finite directed stream. Do not weaken native tests or visual checklist items.
+- **Shader diagnostic:** `python tools/visualizer_replay/eb_shaft_mesa_compile.py` compiles and links shaft and speck programs and the procedural bead vertex with a minimal diagnostic fragment on Mesa GL4.5; the diagnostic alone substitutes `#version 450`, plus it neutralizes fragment-only `fwidth` in an otherwise unreachable shared vertex function when testing bead stage. This is **not a production GLSL change** and says nothing about NVIDIA GL4.6, draw correctness, opacity, glass material or frame time.
+- **Native mandatory:** open P1/P7 from dormant and rapid Settings transitions; try finite ray attenuation over bubbles large/small and no-bubbles; test vertical surface↔floor, diagonal, reversed and oblique-depth physical stream paths with active drifting particles/free chains/snow/attached fizz; verify 30% speck carry, native pop-free birth/exit during fast music/count changes and source editing, and camera orbit/parallax. Compare identical Ragdoll 512 and 256 audio capture blocks with per-ID physical target/displayed radius + capture/render cadence; investigate surviving `QuickDisplayUnit` and `QuickDisplayVisualizerOwner` without extending the strict barrier. Entire reaction/art/lifecycle list remains open until visual operator or local-agent acceptance.
+
+**Retained live status:** `[~]` candidate for the vec4 uploader, free-chain and marine-snow physical transport, no-pops property, ray material attenuation and persistent emission; all prior `[ ]` and `[~]` remain unclosed.
+
+
+## 30. Oblique world editor, independently translatable camera and operator log/suite forensic (2026-10-21; UNACCEPTED)
+
+### 30.1 Camera-distance reconstruction
+
+`logsbae635b6766.zip/screensaver_verbose.log`: at 00:02:19, :24, :36 and :50 on 2026-10-21, the live view pose repeatedly persisted `extruded_bubble_scene_scale=2.0`. The spec range is `.5..2.0`, so native gestures hit their numerical ceiling. `physical_camera` had `ORBIT_DISTANCE=15`, one fixed pivot, no explicit XYZ eye input, pan [-.5,+.5], and a `SURFACE_Y-.5` ceiling. A centre dolly distance of 7.5 at Scale 2 doesn't guarantee proximity to particles throughout the world ±18 XZ, ±8 Y. This is a source-owned access restriction consistent with the operator's observation. Log does not contain a measured particle-to-camera range, so do not claim precise eye/pixel distance.
+
+Source candidate: `extruded_bubble_camera_position` is a default-zero normalized *physical translation offset* to the SAME renderer eye. The camera function computes ordinary orbit/pan/dolly first, then adds `offset[i]*WORLD_HALF[i]`, clamping only above the water ceiling. Range ±8 each axis leaves ability to reach any normalized scene point even from extreme legacy orbit positions; direct picker dragging restricts the desired eye to the actual authored scene. Pan translation becomes aspect-independent in world units, which changes world displacement per displayed card pixel relative to earlier builds: explicitly visual-check gestures. Lens FOV has not been modified and no lens-shift code is reintroduced. Shader eye origin already propagates through render passes. Camera Home `R`/glyph now also zeroes this translation and retains the selected operator-authored preset pose plus canonical FOV.
+
+### 30.2 Volume editor architecture and open checks
+
+New EB-only `SceneVolumePath(ScenePath)` displays existing six-element path values through `SceneVolumeMapper`: oblique 3/4 cylindrical world cage, same XYZ SSOT as simulation and shaders, two marker handles in distinct colors, camera diamond, and neighbouring stream/light/ray paths shown faintly in each other's panel. Drag XY at unchanged Z, Shift/right-drag depth at unchanged XY; Tab selects which of the two endpoint nodes for keyboard arrows and PageUp/PageDown. On camera diamond drag in any panel, the same model-owned `extruded_bubble_camera_position` value goes to the existing `collect_spec_mode_settings` and save flow. Camera bucket separately exposes its camera-position editor. `_refresh_eb_volume` reuses the single renderer camera math and values in both built controls and unopened lazy-bucket cache; full preset load and first-open hydration explicitly repaint dependent editors. The older `ScenePathMapper` class remains untouched for future/non-EB consumers. No new time source/renderer ownership or update loop.
+
+Open: PySide6 is absent here, so actual native Qt first-open, hit testing, theme paint, signal connection lifetime, full preset-change/bucket-order saving, 3D perception, eye/near clipping, frame cost, physical particle approach, R reset, perceived pan scale and GL4.6 composition are **NOT** accepted. Source and input math tests only. Avoid adding polling or increasing lifecycle timeout. Preserve the live failures for peripheral perspective stretch and near-field changes that are unrelated to ability to translate the eye.
+
+### 30.3 Chunk result triage / accurate status
+
+The 22:17–23:55 run results provided by operator collected fully, then all four chunks failed. Aggregate 102 failures, 7,993 passes, 1 skipped; complete logs retained in operator handoff, not inside the main Godzip to avoid bloat. Some contracts still expect eager EB buckets or two-value direction arrays and cannot reflect the new documented design. Others are concrete regressions requiring investigation: recorded-large/small breathing excursion under 1.8 threshold (measured median 1.7506), pause first-frame smooth-release failure, and GPU coverage discrepancy ~1.698 versus expected ~1.269. Do NOT unconditionally label these failures stale. The prior `uBlock0..3` four-float upload error was logged repeatedly (693 render-node errors); a candidate fix exists in R29 and needs a targeted native verification instead of re-running the entire suite. Frame-trace/HUD show occasional long frames but the log does not isolate them to camera navigation; no performance improvement can be concluded.
+
+`logsbae635b6766.zip/screensaver_lifecycle.log` shows timeouts for Settings at 22:42:58 on Oct 20 and application exit at 00:03:21 on Oct 21: each records no remaining tracked Qt resources, but one Python `QuickDisplayUnit` and one `QuickDisplayVisualizerOwner`. Keep barrier strict and investigate referrers of the generation-scoped owners after tracked resources retire.
+
+### 30.4 Validation and accountability
+
+Candidate test: `tests/test_extruded_bubble_volume_camera_candidate.py` verifies every existing directional default migrates to same six-number path, world translation of real camera reaches representative physical interior source points without changing lens matrices or orbit basis, pan is aspect-independent in world coordinates, old shared widget is retained and camera Home has one canonical zero offset. The full chunked suite need not be rerun; use minimal Qt-native tests in the next operator/local-agent pass. Keep every visual checklist item `[ ]` or `[~]` until accepted by operator or local agent.

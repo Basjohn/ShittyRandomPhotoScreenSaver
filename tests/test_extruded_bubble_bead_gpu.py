@@ -104,7 +104,7 @@ void main() {
 
 
 @pytest.mark.qt
-def test_glowing_specks_fill_the_fixed_water_domain_without_an_origin_centred_halo(qt_app):
+def test_glowing_specks_follow_authored_finite_stream_without_camera_dependent_world_positions(qt_app):
     from OpenGL import GL as gl
     from rendering.gl_programs.extruded_bubble_program import SPECK_VERTEX
     from rendering.quick.render.gl_resources import compile_program
@@ -112,7 +112,7 @@ def test_glowing_specks_fill_the_fixed_water_domain_without_an_origin_centred_ha
     prefix=SPECK_VERTEX.split('void main() {\n    speckInstance();\n')[0]
     vertex=prefix+'''
 layout(std430,binding=6) buffer Results { vec4 results[]; };
-void main(){speckInstance();results[gl_InstanceID]=aPoint;gl_Position=vec4(0,0,0,1);}
+void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_Position=vec4(0,0,0,1);}
 '''
     target=TransitionCapture(64,64);program=buffer=0
     try:
@@ -123,7 +123,9 @@ void main(){speckInstance();results[gl_InstanceID]=aPoint;gl_Position=vec4(0,0,0
         for name,value in (('uWorldUnit',9.),('uSpeckSize',1.),('uBandFreq',9.),('uSpeckTravel',.2)):
             gl.glUniform1f(loc(name),value)
         gl.glUniform3f(loc('uWorldCenter'),0,0,0);gl.glUniform3f(loc('uWorldHalf'),18,8,18)
-        gl.glUniform3f(loc('uStreamWorld'),.6,.8,0);gl.glUniform3f(loc('uStreamAcross'),.8,-.6,0)
+        gl.glUniform3f(loc('uStreamWorld'),0,.58,.81);gl.glUniform3f(loc('uStreamAcross'),1,0,0)
+        gl.glUniform3f(loc('uSpeckSource'),0,-8,-17)
+        gl.glUniform3f(loc('uSpeckEnd'),0,8,17)
         gl.glUniform3f(loc('uClouds'),1.5,.12,1.3)
         gl.glBindVertexArray(target.vao);gl.glEnable(gl.GL_RASTERIZER_DISCARD)
         samples=[]
@@ -133,9 +135,13 @@ void main(){speckInstance();results[gl_InstanceID]=aPoint;gl_Position=vec4(0,0,0
             data=np.empty((2048,4),dtype='f4');gl.glGetNamedBufferSubData(buffer,0,data.nbytes,data)
             assert np.isfinite(data).all();samples.append(data)
         assert np.array_equal(*samples)
-        assert np.all(np.abs(samples[0][:,:3])<=np.array((18.,8.,18.)))
-        assert (np.linalg.norm(samples[0][:,:3],axis=1)<5).mean()<.05  # former radial source put ~24% here
-        assert (samples[0][:,3]>0).sum()>100
+        live = samples[0][samples[0][:,3] > .0001]
+        assert len(live)>100
+        assert np.all(np.abs(live[:,:3]) <= np.array((18.,8.,18.)) + 1e-4)
+        # Authored source lies at floor/back and destination at ceiling/front;
+        # accepted particles span that finite volume rather than a camera-centred halo.
+        assert (live[:,1] < -2).sum()>10 and (live[:,1] > 2).sum()>10
+        assert np.percentile(np.abs(live[:,0]), 98) < 10.0
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,0)
