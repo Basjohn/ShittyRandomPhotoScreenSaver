@@ -160,3 +160,44 @@ def test_a_callers_masked_draw_buffer_does_not_stop_the_layer_spreading(capture)
     assert np.abs(masked - plain).max() <= 1e-4 * max(1.0, plain.max())
     _spread, d = _evenness(masked, 20.0)
     assert masked[(d > 12.0) & (d < 16.0)].mean() > 0.0          # a disc, not the sharp point
+
+
+@pytest.mark.parametrize("circle", [2.0, 4.0, 6.0, 8.0, 12.0, 20.0])
+def test_mixed_budget_preserves_small_and_large_highlight_energy(capture, circle):
+    disc = _bright_point_disc(capture, circle, 54.0, 0.25)
+    assert np.isfinite(disc).all()
+    assert disc.sum() == pytest.approx(40.0, rel=0.15)
+    # Small circles must remain centred on the actual source, rather than the
+    # coarse mip centre (35.5,35.5) selected by the large budget.
+    if circle <= 4.0:
+        ys, xs = np.mgrid[0:SIZE, 0:SIZE]
+        assert (disc * xs).sum() / disc.sum() == pytest.approx(32.0, abs=0.5)
+        assert (disc * ys).sum() / disc.sum() == pytest.approx(32.0, abs=0.5)
+
+
+def test_small_circles_under_a_large_budget_keep_continuous_light_instead_of_a_mip_grid(capture):
+    # EB's wide near budget selects an 8px mip grid, but individual near
+    # surfaces can have 2px CoC. A uniform bright strip must remain continuous,
+    # not turn into separated grid-centred 2px highlight discs.
+    vertex="""#version 460 core
+    void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0.,1.);}
+    """
+    fragment="#version 460 core\n"+SCENE_DEFOCUS_GLSL+"""
+    void main(){if(gl_FragCoord.x<28. || gl_FragCoord.x>=36.)discard;
+        sceneDefocusWrite(vec3(6.),1.,2.);}
+    """
+    layer=DefocusLayer('mixed circle budget')
+    texture,fbo=_float_target()
+    program=compile_program(vertex,fragment,label='small CoC strip')
+    try:
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,fbo);gl.glViewport(0,0,SIZE,SIZE)
+        gl.glClearColor(0,0,0,0);gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        layer.begin(SIZE,SIZE);gl.glUseProgram(program);gl.glBindVertexArray(capture.vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES,0,3);layer.end();layer.composite(54.)
+        pixels=np.frombuffer(bytes(gl.glReadPixels(0,0,SIZE,SIZE,gl.GL_RGBA,gl.GL_FLOAT)),dtype='f4').reshape(SIZE,SIZE,4)
+        profile=pixels[16:48,24:40,0].sum(axis=1)
+        assert np.isfinite(profile).all() and profile.mean()>30.  # most source light survives
+        assert profile.std()/profile.mean()<.03  # reject the source-proved 8px grid
+    finally:
+        layer.release();gl.glDeleteProgram(program)
+        gl.glDeleteFramebuffers(1,[fbo]);gl.glDeleteTextures(1,[texture])

@@ -36,6 +36,7 @@ from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_program
 
 DEFOCUS_TAPS = 64
+_FINE_TAPS = 32
 
 SCENE_DEFOCUS_GLSL = """
 layout(location=0) out vec4 DefocusColour;
@@ -52,12 +53,32 @@ void main() {
     gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }
 """
+_CIRCLE_BANDS = """
+// The first wide-disc tap is several pixels from the destination at large budgets.
+// Circles smaller than that gap need a full-resolution gather of their own.
+float fineRadius(float maximum) {
+    return min(maximum, max(4.0, maximum * sqrt(0.5 / 64.0) + 0.5));
+}
+float fineShare(float circle, float maximum) {
+    float radius = fineRadius(maximum);
+    return 1.0 - smoothstep(0.75 * radius, radius, circle);
+}
+// A mip texel is not a point source when its circle is smaller than the texel.
+// Only resolved highlights may move from the gather into texel-centred discs.
+float spriteShare(float circle, float maximum, int level) {
+    float resolved = max(fineRadius(maximum), float(1 << level));
+    return smoothstep(resolved, 2.0 * resolved, circle);
+}
+"""
+
 _GATHER = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uColour;
 uniform sampler2D uCircle;
 uniform float uMaxRadius;
 const int TAPS = %d;
+const int FINE_TAPS = %d;
+""" + _CIRCLE_BANDS + """
 float circleAt(vec2 uv, float level) {
     vec2 c = textureLod(uCircle, uv, level).rg;
     return c.y > 1e-4 ? c.x / c.y : 0.0;
@@ -82,21 +103,38 @@ void main() {
         float circle = circleAt(uv, level);
         if (circle < 0.5) continue;
         float reach = clamp(circle - r + 0.5, 0.0, 1.0);          // the circle's edge, antialiased
-        sum += textureLod(uColour, uv, level) * reach * tapArea / (3.14159265 * circle * circle);
+        sum += textureLod(uBelow, uv, 0.0) * (1.0 - fineShare(circle, uMaxRadius))
+               * reach * tapArea / (3.14159265 * circle * circle);
+    }
+    float smallRadius = fineRadius(uMaxRadius);
+    float smallArea = 3.14159265 * smallRadius * smallRadius / float(FINE_TAPS);
+    for (int i = 0; i < FINE_TAPS; ++i) {
+        float r = sqrt((float(i) + 0.5) / float(FINE_TAPS)) * smallRadius;
+        float a = float(i) * 2.39996323;
+        vec2 uv = (gl_FragCoord.xy + vec2(cos(a), sin(a)) * r) / size;
+        if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
+        float circle = circleAt(uv, 0.0);
+        if (circle < 0.5) continue;
+        float reach = clamp(circle - r + 0.5, 0.0, 1.0);
+        sum += textureLod(uColour, uv, 0.0) * fineShare(circle, uMaxRadius)
+               * reach * smallArea / (3.14159265 * circle * circle);
     }
     // Sharp pixels (no circle) stay where they are.
     if (ownRadius < 0.5) sum += own;
     FragColor = sum;
 }
-""" % DEFOCUS_TAPS
+"""
+_GATHER = _GATHER % (DEFOCUS_TAPS, _FINE_TAPS)
 # Each tap gathers only the light below the highlight threshold; the excess goes to the sprites.
-_GATHER = _GATHER.replace("uniform float uMaxRadius;", "uniform float uMaxRadius;\nuniform sampler2D uBelow;"
-                          ).replace("sum += textureLod(uColour, uv, level) * reach", "sum += textureLod(uBelow, uv, 0.0) * reach")
+_GATHER = _GATHER.replace("uniform float uMaxRadius;", "uniform float uMaxRadius;\nuniform sampler2D uBelow;")
 _CLIP = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uColour;
+uniform sampler2D uCircle;
 uniform int uLevel;
 uniform float uHighlight;
+uniform float uMaxRadius;
+""" + _CIRCLE_BANDS + """
 // A highlight is light above its surroundings (the mean two levels coarser) and above the floor.
 float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLevel) {
     vec2 uv = (vec2(texel) + 0.5) / vec2(textureSize(colour, level));
@@ -107,7 +145,10 @@ void main() {
     vec4 c = texelFetch(uColour, ivec2(gl_FragCoord.xy), uLevel);
     float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
     float limit = sceneHighlightAt(uColour, ivec2(gl_FragCoord.xy), uLevel, uHighlight);
-    FragColor = l > limit ? vec4(c.rgb * (limit / l), c.a) : c;
+    vec2 circleData = texelFetch(uCircle, ivec2(gl_FragCoord.xy), uLevel).rg;
+    float circle = circleData.y > 1e-4 ? circleData.x / circleData.y : 0.0;
+    float share = spriteShare(circle, uMaxRadius, uLevel);
+    FragColor = l > limit ? vec4(c.rgb * mix(1.0, limit / l, share), c.a) : c;
 }
 """
 _SPRITE_VERTEX = """#version 460 core
@@ -115,10 +156,12 @@ uniform sampler2D uColour;
 uniform sampler2D uCircle;
 uniform int uLevel;
 uniform float uHighlight;
+uniform float uMaxRadius;
 uniform vec2 uSize;
 out vec2 vOffset;
 flat out float vCircle;
 flat out vec3 vLight;
+""" + _CIRCLE_BANDS + """
 // A highlight is light above its surroundings (the mean two levels coarser) and above the floor.
 float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLevel) {
     vec2 uv = (vec2(texel) + 0.5) / vec2(textureSize(colour, level));
@@ -134,10 +177,11 @@ void main() {
     float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     float limit = sceneHighlightAt(uColour, texel, uLevel, uHighlight);
-    if (l <= limit || circle < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    float share = spriteShare(circle, uMaxRadius, uLevel);
+    if (l <= limit || share <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     float texelPx = float(1 << uLevel);
     // The texel's excess light, in pixel units, spread over its circle's area.
-    vLight = c.rgb * (1.0 - limit / l) * texelPx * texelPx / (3.14159265 * circle * circle);
+    vLight = c.rgb * (1.0 - limit / l) * share * texelPx * texelPx / (3.14159265 * circle * circle);
     vCircle = circle;
     vOffset = corner * (circle + 1.0);
     vec2 centre = (vec2(texel) + 0.5) * texelPx;
@@ -309,8 +353,10 @@ class DefocusLayer:
             gl.glDisablei(gl.GL_BLEND, 0)
             gl.glUseProgram(self._clip)
             gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uColour"), 0)
+            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uCircle"), 1)
             gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uLevel"), level)
             gl.glUniform1f(gl.glGetUniformLocation(self._clip, "uHighlight"), float(highlight))
+            gl.glUniform1f(gl.glGetUniformLocation(self._clip, "uMaxRadius"), float(max_radius))
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
             gl.glViewport(*viewport)
@@ -331,6 +377,7 @@ class DefocusLayer:
                 gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uCircle"), 1)
                 gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uLevel"), level)
                 gl.glUniform1f(gl.glGetUniformLocation(self._sprites, "uHighlight"), float(highlight))
+                gl.glUniform1f(gl.glGetUniformLocation(self._sprites, "uMaxRadius"), float(max_radius))
                 gl.glUniform2f(gl.glGetUniformLocation(self._sprites, "uSize"), float(self._size[0]), float(self._size[1]))
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, width * height)
         finally:

@@ -1,6 +1,10 @@
 # Extruded Bubble — targets, lab and investigation
 
-**This is the one home for EB images and investigation details.** Live tasks remain in
+**This is the one home for EB images and investigation details.** Latest live rejection: activation overshoot/
+yank-down, large/small size judder, unreliable close DoF/pixelation, and about 50% excessive active speck glow.
+Spherical form and readable overlap depth take priority over glow tuning. Details and solution plans:
+[Investigation §19](Investigation.md#19-latest-live-rejection--overshoot-judder-and-near-field-pixels).
+Live tasks remain in
 [`Current_Plan.md`](../../../Current_Plan.md#4b-extruded-bubble--operator-rejected-behavior-every-acceptance-gate-remains-open).
 The native results remain visually rejected. A physical world and passing checks do not establish spherical
 glass, depth, musical response or parity with these targets.
