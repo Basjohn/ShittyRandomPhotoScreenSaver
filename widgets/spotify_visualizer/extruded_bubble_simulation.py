@@ -95,7 +95,6 @@ class ExtrudedBubbleSnapshot:
     travel: float = 0.0                     # how far the stream has carried the water (physical world units, ever rising)
     rays: float = 0.0                       # the light rays' driver (0..1, eased below the top: never pinned)
     shimmer: float = 0.0                    # the rays' shimmer phase (ever rising, faster on the hits)
-    near_bubbles: tuple[float, ...] = ()    # Compatibility transport; the separate near-field cohort is disabled.
     motion_phase: float = 0.0              # Integrated music-owned phase for surface, veils, rays and ambient effects
     wakes: tuple[float, ...] = ()          # stable live/retiring emitter records; immutable, wake-only, 8 floats each
 
@@ -639,7 +638,7 @@ class ExtrudedBubbleSimulation:
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
-                                      self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, (), self._motion_phase,
+                                      self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, self._motion_phase,
                                       self._wakes(dt))
 
 

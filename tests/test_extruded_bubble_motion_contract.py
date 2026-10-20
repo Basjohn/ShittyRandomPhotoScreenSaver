@@ -40,14 +40,6 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
             frames.append(sim.advance(self.mod.MusicInput(self.dt, playing, level, hits, (level,) * 3), controls))
         return frames
 
-    def test_no_synthetic_lens_or_near_population_at_start_or_during_playback(self):
-        sim = self.mod.ExtrudedBubbleSimulation(45)
-        controls = self.mod.ExtrudedBubbleControls(collision_scope="off")
-        for playing, level, seconds in [(False, 0, 3), (True, 1, 12), (False, 0, 3)]:
-            frames = self._run(sim, controls, playing=playing, level=level, seconds=seconds)
-            self.assertTrue(all(not f.near_bubbles for f in frames))
-            self.assertGreater(frames[-1].count, 0)
-
     def test_real_band_changes_have_multi_pixel_motion_at_saturated_presence(self):
         sim = self.mod.ExtrudedBubbleSimulation(72)
         controls = self.mod.ExtrudedBubbleControls(large_count=(14, 14), mid_count=(0, 0),

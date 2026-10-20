@@ -256,10 +256,6 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   exclusive layer admission; true pinhole off-axis elongation is not by itself a new refraction defect or accepted
   art. Focus/aperture and resolution-scaled lens budgets require visual review at both resolutions. Preserve
   prepared allocation/state restoration through camera gestures; no new lens-attached population.
-- [ ] **Bounded transport cleanup after the physical checkpoint:** retire the disabled `near_bubbles` snapshot/frame
-  field and its validation/copy path. The renderer does not consume it; do not preserve an alternate population
-  schema or use its always-empty value as proof that physical placement is correct. Preserve genuine count/world
-  invariance and retirement tests while removing stale field-only oracles.
 
 #### EB-C — Stream, drift, beads, wakes, rays and emission
 
@@ -321,7 +317,8 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 #### EB-A — Glass/material, mock fidelity and authoring
 
 - [ ] **After reactivity: centralize visual target assets and parity mapping.** Preserve original mocks and lab
-  targets from `tmp/Bubbleexamples` / the lab outputs in a durable canonical location with provenance and a
+  targets from `tmp/Bubbleexamples`, `tmp/eb_s4/presets_sheet.png`, its `scenes.json` / `scenes.py`, `lab` / `scenes` /
+  `presets` outputs and paired/comparison images in a durable canonical location with provenance and a
   preset→example→lab mapping, fidelity gaps, owning architecture and verification steps. Preset 7 maps to
   `ExBubble6Diagonal`; it is the operator's strongest current preset but still lacks fire/smoke/fog and other
   fidelity. The other presets are poor and may be mismapped or miss settings relative to their lab targets.

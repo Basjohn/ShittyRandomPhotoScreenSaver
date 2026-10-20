@@ -390,17 +390,6 @@ def test_target_reversal_waits_for_retiring_slots_without_exceeding_the_large_ce
     assert any(b.ident not in before for b in sim._bubbles)
 
 
-def test_only_regular_bubbles_exist_no_synthetic_near_cohort_under_any_playback():
-    controls = ExtrudedBubbleControls(large_count=(9.0, 9.0), mid_count=(0.0, 0.0), collision_scope="off")
-    sim = ExtrudedBubbleSimulation(91)
-    for playing, intensity, seconds in ((False, 0.0, 2.0), (True, 0.9, 10.0), (False, 0.0, 2.0)):
-        for _ in range(int(seconds / STEP)):
-            frame = sim.advance(_music(STEP, playing, intensity), controls)
-            assert not frame.near_bubbles
-            assert frame.count > 0
-
-
-
 def test_water_and_bead_motion_are_slow_in_idle_and_speed_up_during_playback_without_phase_jumps():
     controls = ExtrudedBubbleControls(stream_speed=(0.0625, 0.2), idle=0.5, collision_scope="off")
     sim = ExtrudedBubbleSimulation(101)

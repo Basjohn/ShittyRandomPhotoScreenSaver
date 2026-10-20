@@ -666,15 +666,10 @@ class ExtrudedBubbleFrame:
     rays: float = 0.0
     shimmer: float = 0.0
     parameters: FrozenFields = FrozenFields()
-    near_bubbles: tuple[float, ...] = ()
     motion_phase: float = 0.0  # music-owned integrated visual phase; never elapsed wall time
     wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, 8 floats each
 
     def __post_init__(self) -> None:
-        near = _float_tuple(self.near_bubbles, name="extruded bubble near record")
-        if len(near) % 8:
-            raise ValueError("Extruded Bubble near records must be whole (8 floats a bubble)")
-        object.__setattr__(self, "near_bubbles", near)
         wakes = _float_tuple(self.wakes, name="extruded bubble wake record")
         if len(wakes) % 8:
             raise ValueError("Extruded Bubble wake records must be whole (8 floats per source)")
