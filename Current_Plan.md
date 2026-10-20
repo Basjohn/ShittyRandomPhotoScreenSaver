@@ -133,8 +133,11 @@ runtime-replacement audit as independent work.
 Use the existing framed-camera capability, SceneTarget attachments, depth-aware transparency, probe, traced-shell,
 defocus and HDR facilities. Contracts/cost evidence: `Docs/Reference/Scene3D_Resources.md`. A source defect in EB's
 use of them is not permission for a duplicate compositor, camera, resource owner or speculative full optics engine.
-Deferred G2/S25 shadows, G4/S18 particle/ribbon extensions, G5 volumes and S19–S27 character/world work are routed
-through `Future_Work.md`; no accepted EB shadow receiver exists. Promote only a primitive demanded by measured pixels.
+Generic G2/S25 shadows, later G4/S18 and G5 consumers, and S19–S27 character/world work are routed through
+`Future_Work.md`; no accepted EB shadow receiver exists. **Anything required to reproduce EB's examples/lab scenes
+is active EB scope**, including stream-source/emitter architecture, debris/gas/wisps or volume primitives and more
+capable camera positioning/centring. Extend the shared substrate where needed, with opt-in ownership and measured
+cost. The future-work router must not postpone an EB prerequisite. Healthy reactivity remains the first slice.
 
 ### 4B. Extruded Bubble | operator-rejected behavior; every acceptance gate remains open
 
@@ -185,6 +188,17 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Large and small SAME-ID radius changes must visibly approach the accepted 2D response scale on `anything_mixed2`
   at normal controls. Dynamic Floor on/extreme Sensitivity are negative controls, never required workarounds.
   Reject small rapid nonmusical pulses, held inflation, dead small bubbles, judder and sudden stops.
+- [ ] Gate the **first reactivity implementation slice** on the same opening 12 seconds of `anything_mixed2`
+  used in the native positive comparison, with unchanged authored presets and normal technical controls. Compare
+  large/small SAME-ID radius/base, music-correlated excursions, onset-to-pixel delay and release against accepted
+  2D; include the 1.507–3.147 s window where old EB only reached 1.038–1.131× base against 2D's 0.707–2.782×.
+  Show genuine contracted rest and strong expansion throughout representative populations, not a single selected
+  giant. Capture short passages at source logical cadence/high temporal resolution with synchronized recorded
+  sound where native history permits verified reconstruction; low-fps contact sheets alone cannot prove attack,
+  judder or musical connection. Validate quiet→onset→sustained→pause→resume, Range endpoints and the restored
+  Sustained consumer with production-band-path tests plus native pixels. Then repeat on Ragdoll, heavy and soft
+  clips, both target resolutions and P1/P7 before extending to every preset. Measure timing independently of
+  diagnostic readback/encoding; keep source/dormancy/retirement checks and an operator physical check as distinct gates.
 
 #### EB-B — Real world, camera, entry/death and near field
 
@@ -193,6 +207,11 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   chains/snow. Tilt/zoom also enter volume construction. Preserve SAME-ID world coordinates across yaw, tilt,
   pan, scale, Auto Rotate and aspect changes; rotate/project the view only. Do not simply disable wrapping and
   accept empty angles, copy populations, or reintroduce fixed/camera-following giant cohorts.
+- [ ] Define EB's own camera placement/centring, pivot, movement and usable angle/zoom range against the examples.
+  Its open volume needs substantially more freedom than Neon Lake's basin composition; reuse shared input/pose
+  ownership without inheriting Neon's limits. Extend the shared camera primitive if needed. Keep only justified
+  clipping/resource/numerical constraints; prove useful recentering and coverage with fixed-world identity tests
+  and native all-angle captures, including the surface, abyss, down and diagonal stream compositions.
 - [ ] Replace view-depth-scaled bubble size with a coherent physical size/depth relationship. Current near/far
   mapping cancels perspective. Prove real near-large/far-small perspective, parallax, scene pan/zoom semantics,
   clipping and response amplitude together. Retire false seam-only/constant-projected-size oracles when source
@@ -206,6 +225,11 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 
 #### EB-C — Stream, drift, beads, wakes, rays and emission
 
+- [ ] Establish **proper world-space stream sources**: simulation-owned source points/regions, direction/spread,
+  birth distribution, advection and lifetime for the applicable bubble/chain/particle families. A global direction
+  plus procedural screen columns is not sufficient if it cannot reproduce the examples' coherent streams.
+  Make needed source controls authorable through canonical Settings, preserving one logical clock and stable
+  emitters. Prove source location/direction during orbit, musical acceleration and collapsed slow idle.
 - [ ] Give stream speed and drift a demonstrably broad, smooth musical response through quiet and saturated
   passages. Trace displacement of stable IDs, direction and optical flow; source values alone are insufficient.
   Resolve the extra shared-level/follower attenuation and raw-time sway ownership without adding another clock.
@@ -238,6 +262,12 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   smoky/glowing detail and broad soft light. Every scene must remain authorable through canonical typed controls
   alone. Audit collisions (Fuse/Pop/Bounce and Big/Small/All), Range handles, Direction midpoint guide and FC Auto
   Rotate through their existing shared owners, including native DPR/keyboard behavior and real-body persistence.
+- [ ] Reproduce the fiery/diagonal example's **ember debris and gas/smoky flow**, including source placement,
+  depth/occlusion, glow, coherent advection and musical/idle response. Inventory the lab's `ExBubble6Diagonal`
+  and current production consumers to distinguish a matched still from working runtime architecture. Add the
+  particle/emitter/wisp/volume facilities actually needed for parity; do not treat these as optional future art or
+  substitute a static haze/dust overlay. Compare mock | lab | production motion and close crops, then measure
+  quality-tier GPU/CPU/memory cost and dormant teardown. Reactivity baseline precedes this implementation.
 
 #### EB-L — Strict Settings handoff and native lifecycle | independent correctness gate
 
