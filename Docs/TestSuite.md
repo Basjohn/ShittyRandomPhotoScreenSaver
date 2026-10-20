@@ -1039,3 +1039,8 @@ inflation while retaining event light/motion. It also challenges changing vocals
 the old .01 quiet threshold, gradual silence, and absolute SAME-ID span strictly inside `anything_mixed2`'s active
 4–8 s phrase. The latter cannot pass merely through tiny rest at the recording's start. It does not establish
 relative-excursion or minimum-size parity in the separate first-window comparison; those remain explicit failures.
+
+Passage-role falsifiers additionally hold bass/max-level at .9 while changing only vocal/high bands with no onset
+events: ordinary small size, stream, drift, emission and rays must all change. Soft large bubbles must breathe
+strongly downwards without acquiring loud-passage sustain; the Sustained endpoint must support large loud bodies
+without adding an inflated held-small floor. These logical/control gates do not approve material/depth appearance.

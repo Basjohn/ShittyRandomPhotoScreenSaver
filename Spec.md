@@ -314,6 +314,12 @@ contacts and wake attachment, while nominal size remains independent for mass an
 Ordinary/fused geometry shares projection/depth and the existing near-defocus owner. Lifetime alpha is material
 opacity, including coherent union weights; a pop is a gentle opacity retirement with musical radius independent.
 
+EB large bodies breathe significantly downward in softer passages and carry sustained body specifically during
+sustained loud passages. Ordinary small size follows changing vocal/high body rather than a bass/transient-held
+plateau; emission, drift, stream and rays retain changing authority beneath held bass. Counts remain normalized
+passage occupancy. Sustained Response must strengthen loud large support and change responsiveness without
+inflating held ordinary smalls. Preset/Range controls must produce meaningful, separately verified effects.
+
 EB view-aware overlap interactions supplement physical contacts using the existing camera's derived projection;
 they must not redefine the population around the camera or teleport separated geometry. Pops are extremely
 gentle opacity fades. Correct world/source placement, perspective, transparency, depth attenuation and near DoF

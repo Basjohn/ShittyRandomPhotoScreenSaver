@@ -9,7 +9,7 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Reference/Extruded_Bubble/Investigation.md`
-§6–17; EB images, lab, reports and evidence: `Docs/Reference/Extruded_Bubble/README.md`.
+§6–18; EB images, lab, reports and evidence: `Docs/Reference/Extruded_Bubble/README.md`.
 Durable target: `Docs/Reference/Extruded_Bubble/Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
@@ -174,10 +174,7 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
   of the failing live tuples; do not change accepted/shared DSP based on its plateaus alone.
 - [ ] Measure source-band read/logical-tick CPU cost without introducing a permanent observer. The auxiliary
   `extruded_bubble_traces.py` plot supplies real bands and classifies by identity, but its default-control population
-  means and kick follower are not per-ID radius or native-pixel acceptance. Use forensic custody for those claims.
-- [ ] Retire the now diagnostic-only kick `breath` follower and immutable transport after the clean-body checkpoint.
-  Actual event motion/light uses `flash`; do not present the unused kick follower as a musical size consumer.
-  Preserve onset serial/source-fence checks against the live event consumers and migrate the bounded tools.
+  means are not per-ID radius or native-pixel acceptance. Use forensic custody for those claims.
 
 #### EB-D — Musical size, attack/release and collapsed rest (first recovery priority)
 
@@ -189,15 +186,15 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
   Reject a large percentage excursion that still leaves the minimum inflated or makes musical peaks too small.
 - [ ] **Awaiting Validation — Sustained Response.** The band-path consumer now supports body size and motion;
   prove 0/1 endpoints in actual pixels on sustained real passages without inventing a periodic pulse on held input.
-- [ ] **Rework passage-role separation before landing the pending response candidate.** Check 2D's separate
+- [ ] **Awaiting Validation — passage-role separation (report §18).** Check 2D's separate
   mid/high reference, clean delta, bounded hot/body support and release; it is not literally bass-free. Give large
   bubbles significant downward breathing in soft/changing music and held body in sustained loud music. Avoid
   ordinary small size being held by transients or bass; retain changing-vocal/high response during loud passages.
   Audit the shared `max`-level consumers for pinned stream/drift/emission/rays under held bass with changing vocals.
-  Correct Sustained Response/Range semantics and preset values through canonical Settings where needed, including
-  tooltip wording currently emphasizing held small size. Validate quiet/change/held-loud/changes-within-loud/release
+  Verify the corrected Sustained Response/Range consumers; revise preset values through canonical Settings where
+  needed. Validate quiet/change/held-loud/changes-within-loud/release
   at multiple control endpoints on the same recorded sections as 2D. The latest native screenshots are rejected.
-- [ ] **Awaiting Validation — clean-body phrase response.** Use report §16 and the paired comparison tool to
+- [ ] **Awaiting Validation — clean-body phrase response.** Use report §§16/18 and the paired comparison tool to
   compare the same actual body tuples/cadence in 2D/EB. The candidate removes event tails from size, restores
   vocal contribution under bass and gives changing small-body energy more authority. Verify absolute span,
   minimum, peak, relative excursion and onset/release timing independently: the first-window large minimum and

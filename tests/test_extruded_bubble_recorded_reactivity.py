@@ -65,6 +65,23 @@ def test_sustained_control_changes_actual_recorded_production_output(clip):
                for a, b in zip(left.bubbles[5::8], right.bubbles[5::8])) > .02
 
 
+def test_active_recorded_phrase_has_large_absolute_excursion_in_each_class(clip):
+    # A tiny initial rest can make percentages impressive while 4-8s music remains
+    # almost static. Compare mature SAME IDs strictly inside that active phrase.
+    by_id={}
+    source=states(clip)
+    for feature,state in zip(clip.frames,source,strict=True):
+        at=(feature.timestamp_us-clip.frames[0].timestamp_us)/1e6
+        if not 4.<=at<=8.:
+            continue
+        for i in range(0,len(state.bubbles),8):
+            if state.bubbles[i+4]>.999 and state.bubbles[i+7]<0 and state.bubbles[i+6]<=12:
+                by_id.setdefault(int(state.bubbles[i+6]),[]).append(1+state.bubbles[i+5])
+    for low,high in ((1,4),(5,12)):
+        spans=[max(v)-min(v) for ident,v in by_id.items() if low<=ident<=high and len(v)>200]
+        assert spans and median(spans)>1.8
+
+
 def test_held_real_hot_vocal_frame_keeps_the_small_population_distinct_from_large():
     path=ROOT/'logs/visualizer_recordings/cindarellaman_heavy2.jsonl'
     if not path.is_file():

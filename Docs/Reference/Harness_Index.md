@@ -391,7 +391,7 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
 only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
 Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
-measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–17; work stays in
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–18; work stays in
 `Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
 response comparator, then quiet→loud/heavy/soft recordings.
 
@@ -418,7 +418,9 @@ silhouette. Do not accept the old world-response capture's unqualified near-plan
 be compared to independent total-frame timing as if it were an ordinary frame budget.
 
 `source_receipt.json` records relevant source hashes and a tracked-diff digest before replay; a changed source
-hash rejects the run. Radius `swell` is a **signed offset from nominal radius**: `1+swell` may be below 1.
+hash rejects the run. The EB observer also retains exact bounded producer files under each case's `source/`,
+including the shared defocus owner, so rejected uncommitted attempts remain reproducible after further edits.
+Radius `swell` is a **signed offset from nominal radius**: `1+swell` may be below 1.
 The zero-swell intervention therefore removes both contraction and expansion. Compare per-ID minima as well as
 excursion/peaks; use `--fps 30` or `60` for temporal inspection, alongside logical timestamps. These are sampled
 recorded logical states, not interpolated display frames. GIFs are silent. PCM histories may have ambiguous

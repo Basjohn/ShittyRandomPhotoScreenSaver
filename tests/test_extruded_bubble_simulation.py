@@ -80,13 +80,13 @@ def test_bubbles_travel_along_the_stream_direction_and_stay_near_the_volume():
             assert abs(x) < 25 and abs(y) < 15 and abs(z) < 25
 
 
-def test_kicks_make_the_large_bubbles_breathe_and_smoothing_softens_the_release():
+def test_clean_body_onset_grows_large_bubbles_and_smoothing_softens_the_release():
     controls = ExtrudedBubbleControls(breathing=(0.1, 0.3), collision_scope="off")
     simulation = ExtrudedBubbleSimulation(5)
-    calm = _run(simulation, controls, 3.0)
+    calm = _run(simulation, controls, 3.0, intensity=0.)
     large_ids = {b.ident for b in simulation._bubbles if b.large}
     kicked = simulation.advance(_music(STEP, True, 0.5, (("kick", 1.0),)), controls)
-    assert kicked.breath > calm.breath + 0.5
+    assert kicked.flash > calm.flash + 0.5
     baseline = {int(r[6]): r[5] for r in _records(calm) if int(r[6]) in large_ids}
     for _ in range(12):
         kicked = simulation.advance(_music(STEP, True, 0.5), controls)
@@ -100,7 +100,75 @@ def test_kicks_make_the_large_bubbles_breathe_and_smoothing_softens_the_release(
         sim.advance(_music(STEP, True, 0.5, (("kick", 1.0),)), c)
     after_soft = _run(soft, ExtrudedBubbleControls(collision_scope="off", smoothing=1.0), 0.3)
     after_snappy = _run(snappy, ExtrudedBubbleControls(collision_scope="off", smoothing=0.0), 0.3)
-    assert after_soft.breath > after_snappy.breath
+    assert after_soft.flash > after_snappy.flash
+
+
+def test_discrete_event_tails_cannot_hold_sizes_up_at_identical_body_input():
+    controls = ExtrudedBubbleControls(large_count=(2,2),mid_count=(4,4),
+        breathing=(.15,.6),small_pulse=(.15,.8),stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
+    plain, accented = ExtrudedBubbleSimulation(23), ExtrudedBubbleSimulation(23)
+    for i in range(480):
+        bands=(.6,.4,.2) if i<240 else (.25,.2,.1)
+        a=plain.advance(MusicInput(STEP,True,1.,(),bands),controls)
+        events=(("kick",1.),("snare",1.)) if i%30==0 else ()
+        b=accented.advance(MusicInput(STEP,True,1.,events,bands),controls)
+        assert a.bubbles[3::8]==b.bubbles[3::8]
+    assert b.rays>a.rays and b.shimmer>a.shimmer  # events retain their motion/light consumers
+
+
+def test_vocal_phrase_changes_are_not_masked_by_held_bass_in_large_bodies():
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(0,0),breathing=(.15,.6),
+        stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(24)
+    for _ in range(480):
+        before=sim.advance(MusicInput(STEP,True,1.,(),(.6,.1,.05)),controls)
+    states=[sim.advance(MusicInput(STEP,True,1.,(),(.6,.75,.3)),controls) for _ in range(24)]
+    assert max(s.bubbles[5] for s in states)>before.bubbles[5]+.5
+
+
+def test_very_quiet_phrase_release_has_no_threshold_jump_and_stays_gentle():
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(2,2),breathing=(.15,.6),small_pulse=(.15,.8),
+        stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
+    results=[]
+    for level in (.00999,.01001):
+        sim=ExtrudedBubbleSimulation(25)
+        _run(sim,controls,1.,intensity=.8)
+        states=[sim.advance(MusicInput(STEP,True,1.,(),(level,)*3),controls) for _ in range(60)]
+        results.append(states[-1])
+        assert 1+states[-1].bubbles[5]>.3  # no rapid collapse into silence
+    assert max(abs(a-b) for a,b in zip(results[0].bubbles[5::8],results[1].bubbles[5::8]))<.003
+
+
+def test_soft_large_breathes_downward_instead_of_carrying_a_generic_hold():
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(0,0),breathing=(.15,.6),
+        sustained=1.,stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(26)
+    for _ in range(360):sim.advance(MusicInput(STEP,True,1.,(),(.1,.1,.05)),controls)
+    peak=max(1.+sim.advance(MusicInput(STEP,True,1.,(),(.35,.4,.2)),controls).bubbles[5] for _ in range(24))
+    held=_run(sim,controls,6.,intensity=.2)
+    assert peak>1.5 and 1.+held.bubbles[5]<.5
+    assert held.sustain<.01  # soft music never acquires loud-passage hold
+
+
+def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane():
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(4,4),breathing=(.15,.6),small_pulse=(.15,.8),
+        stream_speed=(.05,.5),drift=(.1,.9),emission=(.1,.9),sway=0,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(27)
+    for _ in range(720):
+        before=sim.advance(MusicInput(STEP,True,1.,(),(.9,.1,.05)),controls)
+    states=[sim.advance(MusicInput(STEP,True,1.,(),(.9,.8,.5)),controls) for _ in range(36)]
+    # Max-level would be exactly .9 throughout: a shared max cannot explain
+    # these changes, and no discrete onset is injected.
+    assert all(abs(s.level-before.level)<1e-9 for s in states)
+    assert max(sim._body_small_envelope,0)>0.4
+    for name,minimum in (('stream_speed',.1),('drift',.08),('emission',.10),('rays',.1)):
+        assert max(getattr(s,name) for s in states)>getattr(before,name)+minimum,name
+    for _ in range(720):
+        held=sim.advance(MusicInput(STEP,True,1.,(),(.9,.8,.5)),controls)
+    kinds={b.ident:b.large for b in sim._bubbles}
+    small=[1.+r[5] for r in _records(held) if not kinds[int(r[6])]]
+    big=[1.+r[5] for r in _records(held) if kinds[int(r[6])]]
+    assert small and max(small)<.7 and big and min(big)>1.5
 
 
 def _crowded(collision, scope="all"):
@@ -182,18 +250,18 @@ def test_the_runtime_steps_on_logical_time_takes_each_onset_once_and_fences_acti
     assert _capture(runtime, 100.05).time == pytest.approx(0.05)
     assert _capture(runtime, 105.0).time == pytest.approx(0.05 + MAX_STEP_SECONDS)   # a stall never leaps
     kicked = _capture(runtime, 105.02, (_onset(7),))
-    assert kicked.breath > 0.5 and runtime.onset_serial == 7
+    assert kicked.flash > 0.5 and runtime.onset_serial == 7
     again = _capture(runtime, 105.04, (_onset(7),))                    # the same onset is not taken twice
-    assert again.breath < kicked.breath
+    assert again.flash < kicked.flash
     quiet = _capture(runtime, 105.06, (_onset(8, loudness=0.1, presence=0.05),))
-    assert runtime.onset_serial == 8 and quiet.breath < kicked.breath  # a near-silent onset barely counts
+    assert runtime.onset_serial == 8 and quiet.flash < kicked.flash  # a near-silent onset barely counts
     # A new activation, or a clock that went back, starts over.
     assert _capture(runtime, 106.0, identity=(1, 2, 4), source=(2, 4)).time == 0.0
     _capture(runtime, 106.1, identity=(1, 2, 4), source=(2, 4))
     assert _capture(runtime, 50.0, identity=(1, 2, 4), source=(2, 4)).time == 0.0
     # A source that is not ready is silent: no level, no onsets.
     silent = [_capture(runtime, 50.0 + i * 0.05, (_onset(20 + i),), source=(9, 9), identity=(1, 2, 4)) for i in range(3)]
-    assert silent[-1].level == 0.0 and silent[-1].breath < 0.2      # only the idle sway, no onsets taken
+    assert silent[-1].level == 0.0 and silent[-1].flash < 0.2      # only the idle sway, no onsets taken
     runtime.retire()
     assert _capture(runtime, 60.0, identity=(1, 2, 4), source=(2, 4)) is None
 
@@ -304,24 +372,27 @@ def test_drift_and_emission_follow_music_then_settle_without_an_idle_size_oscill
     assert loud.drift > quiet.drift + 0.5 and loud.emission > quiet.emission + 0.6
     for _ in range(720):
         idle = simulation.advance(_music(STEP, False), controls)
-    assert idle.breath < 1e-8
+    assert idle.flash < 1e-5
     assert idle.stream_speed < loud.stream_speed * 0.1
     assert idle.emission < loud.emission * 0.1
     assert all(r[5] < 0 for r in _records(idle))
 
 
-def test_sustained_response_changes_the_actual_small_body_lane_without_autonomous_pulses():
+def test_sustained_response_holds_large_loud_bodies_but_does_not_inflate_held_smalls():
     from dataclasses import replace
-    controls = ExtrudedBubbleControls(large_count=(0, 0), mid_count=(16, 16),
-        small_pulse=(0.15, 0.8), collision_scope="off")
+    controls = ExtrudedBubbleControls(large_count=(2, 2), mid_count=(4, 4),
+        breathing=(.15,.6),small_pulse=(0.15, 0.8),stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
     cold, supported = ExtrudedBubbleSimulation(12), ExtrudedBubbleSimulation(12)
     low = _run(cold, replace(controls, sustained=0), 12, intensity=0.8)
     high = _run(supported, replace(controls, sustained=1), 12, intensity=0.8)
-    mean = lambda snap: sum(r[5] for r in _records(snap)) / snap.count
+    large = lambda snap: snap.bubbles[5]
+    small = lambda snap: snap.bubbles[2*8+5]
     assert high.sustain > 0.8
-    assert mean(high) > mean(low) + 0.1
+    assert large(high) > large(low) + 1.
+    assert small(high)==pytest.approx(small(low),abs=.002)
+    assert 1.+small(high)<.7
     later = _run(supported, replace(controls, sustained=1), 4, intensity=0.8)
-    assert abs(mean(later) - mean(high)) < 0.002  # constant sound holds; no fabricated per-bubble sine
+    assert abs(small(later)-small(high))<.002  # constant sound holds; no fabricated per-bubble sine
 
 
 def test_large_size_tracks_changing_body_bands_even_when_presence_stays_saturated():

@@ -105,7 +105,7 @@ class FullDynamicAudioOwnership(unittest.TestCase):
         end = source.index('\ndef ray_strength(', start)
         self.assertNotIn('low, high', source[start:end])
         self.assertIn('float(emission)', source[start:end])
-        self.assertIn('_lerp(controls.emission, level)', MODULE.read_text())
+        self.assertEqual(MODULE.read_text().count('_lerp(controls.emission,'),1)
 
 
 if __name__ == '__main__':

@@ -444,7 +444,7 @@ def _capture_extruded_bubble(
     extra.update(parameters)
     frame = ExtrudedBubbleFrame(
         bubbles=snapshot.bubbles, clusters=snapshot.clusters, time=snapshot.time, level=snapshot.level,
-        breath=snapshot.breath, flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
+        flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
         emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
         travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
         motion_phase=snapshot.motion_phase, wakes=snapshot.wakes,
