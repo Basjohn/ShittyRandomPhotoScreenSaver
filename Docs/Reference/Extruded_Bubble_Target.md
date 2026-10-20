@@ -66,12 +66,22 @@ fade/hide a bead if a tiny/fading parent cannot support that bound. Keep nominal
 than rebinding to a compacted slot. Slow idle must remain visibly alive: motion and emission need separate
 resting activity because particle density squares the emission value. Zero authored amounts remain zero.
 
+Each population resolves its authored Range once. Bead Chains uses normalized musical level independently of
+Particles; snow and attached fizz use already-resolved emission. Continuous budgets fade the fractional final
+mote, including the snow fragment; quality thins each stable wake instead of dropping entire owners. The
+existing 12-chains-per-displayed-step scale remains authored behavior pending the preset/density audit.
+Changing allocations does not establish acceptable musical birth/lifetime or visual density.
+
 Large/Small count Ranges bound new admission including identities still retiring. A lower newly selected ceiling
 allows previously admitted records to fade, then waits for their slots rather than deleting them. Musical
 drivers must remain normalized before count interpolation. Small bubbles primarily track vocal/body changes
 with restrained held support; a sustained vocal plateau must not turn the whole small field into hero-size shells.
 
 View-aware crossing/overlap handling supplements world contacts using the existing camera's derived projection.
+First make depth readable through fixed world/source placement, perspective, transparency, depth attenuation
+and near DoF. The operator's copper mock/product comparison demonstrates that projected overlaps can look
+convincing; preserve those crossings rather than triggering every screen intersection. Intervention should
+address persistent unreadable overlap after the depth defects are corrected.
 It must track stable pairs, depth and relative motion, never redefine the world around the camera or teleport
 distant surfaces into a fusion. Use continuous steering/approach or extremely gentle opacity retirement as the
 authored response permits. Fixed-camera crossing proof precedes the later Auto Rotate challenge. Pops must

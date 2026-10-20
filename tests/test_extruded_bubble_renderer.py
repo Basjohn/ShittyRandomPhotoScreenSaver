@@ -199,20 +199,22 @@ def test_ray_flicker_deepens_as_the_rays_rise_and_a_held_passage_reaches_further
     assert scene.ray_motion({**on, "extruded_bubble_rays_enabled": False}, 1.0, 1.0) == (0.0, 1.0)
 
 
-def test_procedural_counts_read_the_bead_range_at_the_emission_follower_and_the_tier():
+def test_procedural_populations_resolve_each_range_once_and_keep_per_owner_quality():
     from rendering.quick.visualizer.implementations.extruded_bubble import (
-        _BEADS_PER_CHAIN, _procedural_counts,
+        _procedural_fill,
     )
 
     low, high = 2, 7                                               # TEST INPUT: a Bead Chains range
     settings = {**SETTINGS, "extruded_bubble_bead_chains": [low, high], "scene3d_detail": "High"}
-    quiet, _snow = _procedural_counts(settings, 0.0)
-    loud, snow = _procedural_counts(settings, 1.0)
-    assert quiet % _BEADS_PER_CHAIN == 0 and quiet < loud
+    quiet, snow, fizz = _procedural_fill(settings, 0.0, 0.0)
+    loud, _, _ = _procedural_fill(settings, 1.0, 0.0)
+    assert snow == fizz == 0 and quiet < loud  # zero Particles does not kill chain Range modulation
     assert loud / quiet == pytest.approx(high / low)
-    assert _procedural_counts({**settings, "extruded_bubble_bead_chains": [0, 0]}, 1.0)[0] == 0
-    cheaper = _procedural_counts({**settings, "scene3d_detail": "KAK"}, 1.0)
-    assert cheaper[0] < loud and cheaper[1] < snow
+    assert _procedural_fill({**settings, "extruded_bubble_bead_chains": [0, 0]}, 1.0, 1.0)[0] == 0
+    _, snow, fizz = _procedural_fill(settings, 1.0, 1.0)
+    assert snow > 0 and fizz > 0
+    cheaper = _procedural_fill({**settings, "scene3d_detail": "Balanced"}, 1.0, 1.0)
+    assert cheaper[0] < loud and 0 < cheaper[1] < snow and 0 < cheaper[2] < fizz
 
 # --- the renderer through the production host -------------------------------------------------------------------
 
@@ -313,6 +315,35 @@ def test_deep_light_softness_changes_native_shaft_pixels(target):
     sharp = capture.render(host, at(0.))
     soft = capture.render(host, at(1.))
     assert np.abs(soft - sharp).mean() > .5  # previous consumer produced byte-identical images
+
+
+@pytest.mark.qt
+def test_particle_emission_thins_each_wake_at_balanced_instead_of_dropping_owners(target,monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations.extruded_bubble import QuickExtrudedBubbleRenderer
+    capture,host=target
+    renderer=QuickExtrudedBubbleRenderer();host._implementations['extruded_bubble']=renderer
+    values={};draws=[]
+    original=type(renderer._uniforms).set
+    def uniforms(bank,program,mapping):
+        if 'uWakeCount' in mapping:values.update(mapping);values['program']=program
+        return original(bank,program,mapping)
+    monkeypatch.setattr(type(renderer._uniforms),'set',uniforms)
+    draw=gl.glDrawArraysInstanced
+    def observed(*args):
+        if values.get('program')==int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)):draws.append(args[-1])
+        return draw(*args)
+    monkeypatch.setattr(gl,'glDrawArraysInstanced',observed)
+    snapshot=_snapshot(scene3d_detail='Balanced',extruded_bubble_bead_chains=[0,0])
+    sources=(0.,0.,.3,.1,7.,-1.,1.,.1, .2,0.,.3,.1,9.,.4,1.,.1)
+    def at(emission):
+        state=dataclasses.replace(snapshot.logical.mode_state,wakes=sources,emission=emission)
+        return dataclasses.replace(snapshot,logical=dataclasses.replace(snapshot.logical,mode_state=state))
+    capture.render(host,at(1.))
+    assert values['uWakeCount']==2 and 0<values['uFizzPer']<64
+    assert draws[-1]==values['uBeadCount']+values['uSnowCount']+2*values['uFizzPer']
+    draws.clear();capture.render(host,at(0.))
+    assert values['uFizzPer']==values['uSnowCount']==0 and not draws
 
 
 def _frame(snapshot, quad_vao):

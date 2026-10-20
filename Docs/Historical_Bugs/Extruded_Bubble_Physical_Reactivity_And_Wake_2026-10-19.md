@@ -518,3 +518,42 @@ should receive a per-owner quality budget. Snow's fragment branch must actually 
 changing only its vertex output would be a dead consumer. Preserve identity/local seed, zero-budget safety,
 nominal/reacted radius separation, and the existing parent-size safeguard. This section records diagnosis,
 not an implemented or accepted emission repair.
+
+## 13. Emission consumer candidate and depth-first overlap clarification
+
+The bounded correction in §12 is now implemented. `_procedural_fill` is the renderer's sole continuous
+allocation helper: Bead Chains resolves its own Range at normalized simulation level, while snow and each
+attached wake consume the already-resolved emission multiplied by the quality share. Ceil allocation preserves
+the fractional final mote through opacity. The snow fragment now consumes that opacity; it previously ignored
+the varying entirely. Wake allocation uses a per-owner stride, keeping both live and retiring owners at lower
+quality rather than truncating the prefix to whole 64-mote owners. Local seeds remain source ID + mote index;
+zero budget avoids division and draws, with owner bounds checked before SSBO reads. Existing nominal/reacted
+radius separation, ±10% bead sizing and strict parent-size safeguards remain unchanged.
+
+**43 focused native renderer/generator/shader/wake checks pass.** Actual production renderer uniform/draw
+observations cover two reduced-quality wake owners and zero emission. Generator readback covers both owners,
+including a retiring source and fractional last-mote opacity. An isolated production snow-fragment/OIT draw at
+opacity 0/.25/1 proves zero output and increasing fractional output, rejecting the old ignored-varying defect.
+This is a consumer correction, not an independent musical particle-birth model. Integer glowing-speck allocation
+and density/lifetime appearance remain distinct open measurements.
+
+Actual `anything_mixed2.jsonl` native captures use unmodified preset activation:
+`logs/eb_reactivity_20261020/emission_final_p1` contains 16 paired frames over the opening 4 s at 1672×941;
+`emission_final_p7_1440` contains 12 paired frames over 3 s at 2560×1440. Each retains source hashes, clip/settings
+receipts, stable-ID custody and actual same-frame zero-swell controls. The primary inspected both contact
+sheets: onset opens the shell/particulate field, but P7's competing fine bright detail and limited depth hierarchy
+remain visibly short of the mock. These short 4-fps sequences cannot accept musical timing, birth/death, physical
+idle, or cadence/performance. They preserve the real recorded features, not reconstructed synchronized audio.
+No preset files, clocks, DSP, buffers or continuous instrumentation were added. At full emission High retains
+the former maximum per-owner budget; lower emission reduces work. Reduced tiers can allocate one fractional
+extra mote per owner due to ceil rather than discarding whole sources; fixed wake SSBO capacity is unchanged.
+
+The operator's subsequent copper mock/product pair refines overlap policy. The mock has legitimate crossings
+that remain readable through softer large foreground forms, sharper smaller distant forms and restrained
+competing interior detail. The product shows stacks of similarly sharp rims and bright interiors. This visual
+comparison supports depth/source/material causes; it cannot identify the exact depth or membership of every
+shell in the still. Correct fixed-world placement, physical perspective, ordinary/fused projection, material
+alpha, depth attenuation and near DoF before adding screen-space reactions. Preserve convincing overlaps;
+projected intersection alone must not automatically pop, bounce or fuse. The subsequent view-aware policy
+targets persistent unreadable crossings, preserving stable identity, continuous geometry and extremely gentle
+opacity retirement. Auto Rotate remains the later challenge. No overlap-policy implementation is claimed here.

@@ -9,7 +9,7 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6–12; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+§6–13; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -232,9 +232,14 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   more exposed by the restored size range. Derive one physical radius for collision/render/wake geometry and a
   broadphase that cannot miss large extents; verify identity, bounded cost, no jitter and stable fused rest/expansion.
   Do this with world metric correction; scaling contact reach alone cannot fix the present camera-dependent mapping.
-- [ ] Design **view-aware overlap interaction** alongside physical contacts (operator 2026-10-20). Bubbles that
-  visibly cross/overlap in the current viewport must have a smart join/pop/bounce policy even when their world
-  surfaces are separated in depth. Derive projection from the existing live camera owner, not a camera-following
+- [ ] Establish **readable depth before view-aware overlap intervention** (operator mock/product comparison,
+  2026-10-20). Preserve convincing projected overlaps: the copper mock shows near softness, quieter distant
+  detail and clear size/depth layers, whereas the product has competing sharp rims, bright interiors and crowded
+  shell stacks. Correct world/source placement, physical perspective, transparency, near DoF and depth attenuation
+  first; compare matched near/mid/far crossings with the mock. Do not automatically react to every projected
+  intersection or use popping to conceal the renderer defect. Then design a smart join/pop/bounce policy for
+  persistent unreadable crossings, including depth-separated surfaces when justified. Derive projection from
+  the existing live camera owner, not a camera-following
   population. Track stable pairs, projected extents, depth/relative motion and overlap persistence; avoid repeated
   reactions to brief crossings or count churn. Never fuse distant surfaces into a disconnected union or teleport
   geometry to satisfy screen overlap. Resolve via continuous steering/approach and/or gentle opacity retirement
@@ -272,12 +277,13 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   free beads and parent-attached wake beads. Beads are already tiny and use only modest size reaction; speed,
   drift and emission should carry much of their response. Keep non-bubble dust/snow distinct. A count reduction
   or disappearance does not prove contraction; parent attachment and retiring-tail continuity need native proof.
-- [ ] Correct **per-feature Range ownership and tier-stable wake allocation**. Glowing particles consume the
-  resolved Particles Range, but snow/fizz bypass it; free-chain counts incorrectly reuse that resolved value as
-  the Bead Chains Range driver. Resolve chain authoring independently from normalized musical activity. Give
-  snow/fizz explicit smooth emission behavior. Lower tiers must thin each stable wake, rather than drop whole
-  owners (currently two Balanced wakes can become one). Preserve fractional chain opacity, which already
-  softens ceil-based allocation correctly; do not reopen the disproved blanket integer-chain-pop diagnosis.
+- [ ] **Awaiting Validation — per-feature Range ownership and tier-stable wake allocation.** The candidate resolves
+  Bead Chains independently from normalized musical level, and snow/fizz consume the already-resolved Particles
+  emission. Fractional allocation opacity reaches the actual snow fragment; every stable wake receives a per-owner
+  quality budget, including retirement. Native tests cover zero emission, fractional snow opacity, both wake owners
+  at reduced quality and bead size bounds. Review real quiet/live/release at P1/P7, especially high-density retained
+  settings; changed budgets alone do not establish musical birth/lifetime or acceptable density. Preserve fractional
+  chain opacity; do not reopen the disproved blanket integer-chain-pop diagnosis. Report §13 owns bounded evidence.
   Bead Chains currently means 12 generated chains per displayed unit: reconcile user-facing density semantics
   against lab/preset art at the later mapping audit without silently rewriting authored values.
 - [ ] **Awaiting Validation — bounded bead sizing / visible slow rest.** The candidate now carries nominal and
@@ -306,7 +312,7 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Diagnose background-light dominance and shared-level compression without substituting an unmusical time effect.
 - [ ] Measure **emission populations separately**: speck count/brightness, free chain count/opacity and attached
   fizz/wake density/lifetime. Preserve one Particles Range mapping; its removed duplicate mapping did not fix the
-  visible failure. Fizz count currently follows wake owners/quality, not an independently proved musical birth rate.
+  visible failure. Fizz now has a musical per-owner budget, but that is not an independently proved musical birth rate.
   Include quiet/live/release and the high-density authored settings seen in retained logs.
 
 #### EB-A — Glass/material, mock fidelity and authoring

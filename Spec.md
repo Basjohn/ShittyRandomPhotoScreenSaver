@@ -310,7 +310,10 @@ measured failures and native 2D/EB comparison: the Extruded Bubble ledger in `Do
 
 EB view-aware overlap interactions supplement physical contacts using the existing camera's derived projection;
 they must not redefine the population around the camera or teleport separated geometry. Pops are extremely
-gentle opacity fades. Fixed-camera crossing proof comes before the later Auto Rotate challenge; detailed
+gentle opacity fades. Correct world/source placement, perspective, transparency, depth attenuation and near DoF
+must first make depth-separated overlaps readable, as in the copper mock. Preserve convincing crossings;
+projected intersection alone is not an automatic interaction trigger. Fixed-camera crossing proof comes before
+the later Auto Rotate challenge; detailed
 interaction and class/count acceptance gates remain in the focused target and current plan.
 
 Future 3D modes/effects should therefore begin by inventorying the files above, then add the smallest missing substrate

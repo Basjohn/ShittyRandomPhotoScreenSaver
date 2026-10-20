@@ -1009,3 +1009,10 @@ The recorded hot-vocal hold clears new events/transients before comparing small 
 recorded onset every tick is an invalid steady-body oracle. Whole real passages remain necessary to reject
 dead small bubbles or overlarge transient peaks. The native coverage probe documents the independent fused
 off-axis ellipse; it is a negative diagnostic, not an acceptance test blessing that shape.
+
+Emission consumer gates exercise the production renderer's actual uniforms/draw allocation at reduced quality:
+zero Particles removes snow/fizz, and two stable wake owners retain per-owner budgets. Native generator readback
+includes both sources and retirement. A separate production snow-fragment/OIT draw at opacity 0/.25/1 rejects
+the former dead varying; vertex-only opacity assertions cannot protect this defect. Bead Chains Range modulation
+remains independent of the resolved Particles amount. These checks do not accept density, musical birth/lifetime,
+depth readability or performance from a short offscreen recording.
