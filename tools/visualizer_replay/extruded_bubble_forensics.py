@@ -51,10 +51,13 @@ def run(args):
     root = Path(__file__).resolve().parents[2]
     paths = [root / p for p in (
         'widgets/spotify_visualizer/extruded_bubble_simulation.py',
+        'widgets/spotify_visualizer/extruded_bubble_geometry.py',
         'widgets/spotify_visualizer/extruded_bubble_frame_runtime.py',
         'widgets/spotify_visualizer/logical_frame_capture.py',
         'core/settings/visualizer_mode_settings.py',
         'rendering/gl_programs/extruded_bubble_scene.py',
+        'rendering/gl_programs/scene3d_spheres.py',
+        'rendering/gl_programs/scene3d_optics.py',
         'rendering/quick/visualizer/implementations/extruded_bubble.py',
         'tools/visualizer_replay/extruded_bubble_forensics.py')]
     paths.extend((root / 'rendering/gl_programs').glob('extruded_bubble*.py'))
@@ -145,8 +148,8 @@ def run(args):
         _, world_to_view, tan, _ = scene.camera(*pose, size[0] / size[1],
                                                float(parameters['extruded_bubble_scene_scale']))
         records = np.asarray(snapshot.bubbles).reshape(-1, 8)
-        shells = scene.bubble_instances(snapshot.bubbles, tan, pose)
-        eligible = records[(records[:, 7] < 0) & (records[:, 4] > .02)]
+        shells = scene.bubble_instances(snapshot.bubbles)
+        eligible = records[(records[:, 7] < 0) & (records[:, 4] > 0.)]
         mapped = {int(rec[6]): shell for rec, shell in zip(eligible, shells)}
         bases = {bubble.ident: bubble for bubble in runtime._simulation._bubbles}
         bases_at_time[snapshot.time] = {ident: bubble.radius for ident, bubble in bases.items()}
@@ -161,10 +164,13 @@ def run(args):
                 shell = mapped[ident]
                 view = view_matrix @ shell[:3]
                 depth = -float(view[2])
-                if depth > 0:
+                item.update(instance=list(map(float,shell)),view_depth=depth,
+                            projection_regime='fully_in_front_first_order' if depth>float(shell[3])+.05 else 'near_plane_or_behind_no_radius_estimate')
+                if depth > float(shell[3]) + .05:
                     px = float(shell[3]) / (tan[1] * depth) * size[1] / 2
-                    item.update(instance=list(map(float, shell)), view_depth=depth,
-                                projected_radius_px=px,
+                    candidate=(abs(float(view[0])) < tan[0]*depth+float(shell[3])
+                               and abs(float(view[1])) < tan[1]*depth+float(shell[3]))
+                    item.update(projected_radius_px=px,frustum_candidate=candidate,
                                 musical_radius_delta_px=px * float(rec[5]) / (1 + float(rec[5])),
                                 screen_xy=[(float(view[0]) / (tan[0] * depth) + 1) * size[0] / 2,
                                            (1 - float(view[1]) / (tan[1] * depth)) * size[1] / 2])
@@ -237,7 +243,7 @@ def run(args):
     # Stable-ID full-alpha, unclustered, nonpop records exclude births/deaths/collisions as size explanations.
     mature = [obj for row in selected for obj in row['objects']
               if obj['record'][4] > .999 and obj['record'][7] < 0 and obj['popping'] < 0
-              and 'projected_radius_px' in obj]
+              and 'projected_radius_px' in obj and obj['frustum_candidate']]
     by_id = {}
     for row in selected:
         for obj in row['objects']:
@@ -257,7 +263,7 @@ def run(args):
                    scope=('hybrid: production body-band DSP from requested-size PCM tails; recorded onsets/loudness and sampled capture cadence retained; not exact native callback replay'
                           if args.reanalyze_pcm else 'recorded post-DSP features through production logical capture; fixed prerecorded bands, not new live DSP'),
                    pcm_reanalysis=args.reanalyze_pcm,
-                   projection_scope='first-order projected centre/radius estimates; actual paired PNG differences are native pixels, not segmented object silhouettes',
+                   projection_scope='first-order estimates only for fully forward spheres; mature aggregate uses conservative frustum candidates. Near-plane/inside cases retain world instances without a radius estimate. Paired PNG differences are native pixels, not segmented silhouettes',
                    frames=len(selected), size=size,
                    bands={name: distribution([row['bands'][i] for row in selected])
                           for i, name in enumerate(('bass', 'mid', 'high'))},

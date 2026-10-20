@@ -12,6 +12,9 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import numpy as np
+from rendering.gl_error_policy import disable_per_call_gl_error_checking
+if not disable_per_call_gl_error_checking():
+    raise RuntimeError("GL imported before production policy")
 from OpenGL import GL as gl
 from PIL import Image
 
@@ -37,6 +40,7 @@ from rendering.gl_programs.extruded_bubble_program import (  # the product's sha
     BUBBLE_FRAGMENT_BODY,
     BUBBLE_FRAGMENT,
     NEAR_FRAGMENT,
+    NEAR_CLUSTER_FRAGMENT,
     CLUSTER_VERTEX,
     CLUSTER_FRAGMENT,
     PARTICLE_VERTEX,
@@ -447,7 +451,7 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
 
 def render_variant(capture, resources, target, programs, env, env_fbo, settings, seed):
     (env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, particle_program,
-     near_program, shaft_tex, shaft_fbo) = programs
+     near_program, near_cluster_program, shaft_tex, shaft_fbo) = programs
     settings = {**effective(settings), **OVERRIDES}
     pitch = math.radians(settings["pitch"])
     c, s = math.cos(pitch), math.sin(pitch)
@@ -558,6 +562,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                             quad_vao=capture.vao)
 
     def common(program):
+        # Lab-authored six/16-float records are fully opaque; production carries explicit lifetime attributes.
+        gl.glVertexAttrib1f(2, 1.0)
+        gl.glVertexAttrib3f(4, 1.0, 1.0, 1.0)
         gl.glUseProgram(program)
         u = lambda name: gl.glGetUniformLocation(program, name)
         gl.glUniformMatrix3fv(u("uViewToWorld"), 1, gl.GL_FALSE, view_to_world)
@@ -627,12 +634,12 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uProbeLevels"), PROBE.levels)
         gl.glUniform1f(u("uEta"), settings.get("eta", 1.33))
         gl.glUniform1f(u("uBehind"), settings.get("behind", 8.0))
-        gl.glUniform1f(u("uLens"), settings.get("near_lens", 0.5) if program == near_program else settings.get("lens", 0.85))
+        gl.glUniform1f(u("uLens"), settings.get("near_lens", 0.5) if program in (near_program,near_cluster_program) else settings.get("lens", 0.85))
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
-        gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0))
+        gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0) * H / 941.0)
         # Face reflection share (an air bubble's face mirrors ~2%; the rim carries the reflections): per scene.
-        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program == near_program
+        gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program in (near_program,near_cluster_program)
                        else settings.get("face_reflect", 1.0))
         gl.glUniform1f(u("uNearGain"), settings.get("near_gain", 0.5))
         gl.glUniform1f(u("uRough"), settings.get("rough", 0.0))
@@ -642,7 +649,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uSpeckGlow"), settings.get("speck_glow", 0.6))
         gl.glUniform1f(u("uInnerBlur"), settings.get("inner_blur", 0.25))
         gl.glUniform1f(u("uFrameShare"), settings.get("frame_share", 1.0))
-        gl.glUniform1f(u("uNearLayer"), 1.0 if program == near_program else 0.0)
+        gl.glUniform1f(u("uNearLayer"), 1.0 if program in (near_program,near_cluster_program) else 0.0)
         gl.glActiveTexture(gl.GL_TEXTURE3)
         gl.glBindTexture(gl.GL_TEXTURE_2D, env)
         gl.glActiveTexture(gl.GL_TEXTURE5)
@@ -740,78 +747,15 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                 background_tex, _depth = target.background(frame, resources)
                 mark("backdrop+particulate+capture")
                 with target.transparent_writes(frame, resources):
-                    common(shell)
-                    u = lambda name: gl.glGetUniformLocation(shell, name)
-                    gl.glUniformMatrix3fv(u("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
-                    gl.glUniformMatrix4fv(u("uProjection"), 1, gl.GL_FALSE, projection)
-                    gl.glUniform1f(u("uFocus"), settings.get("focus", 4.2))
-                    gl.glUniform1f(u("uAperture"), settings.get("aperture", 3.0))
-                    gl.glUniform1f(u("uPixel"), 2.0 * tan_y / H)
-                    gl.glUniform1f(u("uPixelSize"), 2.0 * tan_y / H)
-                    gl.glActiveTexture(gl.GL_TEXTURE3)
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, env)
-                    gl.glUniform1i(u("uEnvironment"), 3)
-                    gl.glActiveTexture(gl.GL_TEXTURE5)
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, background_tex)
-                    gl.glActiveTexture(gl.GL_TEXTURE0)
-                    for name in ("uBackground",):
-                        gl.glUniform1i(u(name), 5)
-                    gl.glUniform2f(u("uTargetSize"), *target.allocation[:2])
-                    gl.glUniform2f(u("uFrameSize"), W, H)
-                    gl.glUniform3f(u("uSunScreen"), *sun_screen)
-                    gl.glActiveTexture(gl.GL_TEXTURE6)
-                    gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, PROBE.texture)
-                    gl.glActiveTexture(gl.GL_TEXTURE0)
-                    for program in (shell, merged):
-                        gl.glUseProgram(program)
-                        v = lambda name: gl.glGetUniformLocation(program, name)
-                        gl.glUniform1i(v("uProbe"), 6)
-                        gl.glUniform1f(v("uProbeLevels"), PROBE.levels)
-                        gl.glUniform1f(v("uEta"), settings.get("eta", 1.33))
-                        gl.glUniform1f(v("uBehind"), settings.get("behind", 8.0))
-                        gl.glUniform1f(v("uLens"), settings.get("lens", 0.85))
-                        gl.glUniform1f(v("uShell"), settings.get("shell", 0.1))
-                        gl.glUniform3f(v("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
-                        gl.glUniform1f(v("uRough"), settings.get("rough", 0.0))
-                        gl.glUniform1f(v("uShellMin"), settings.get("shell_min", 0.0))
-                        gl.glUniform1i(v("uDiag"), DIAG)
-                        spec_uniforms(v)
-                        gl.glUniform1f(v("uInnerBlur"), settings.get("inner_blur", 0.25))
-                        gl.glUniform1f(v("uReflect"), settings.get("face_reflect", 1.0))
-                        gl.glUniform1f(v("uSpeckGlow"), settings.get("speck_glow", 0.6))
-                        gl.glUniform1f(v("uFrameShare"), settings.get("frame_share", 1.0))
-                    gl.glUseProgram(shell)
+                    bubble_uniforms(shell,background_tex)
                     gl.glBindVertexArray(vao)
                     if not BACKDROP_ONLY:
-                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(items))
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP,0,4,len(items))
                     mark("shells")
-                    common(merged)
-                    m = lambda name: gl.glGetUniformLocation(merged, name)
-                    gl.glUniform1i(m("uProbe"), 6)
-                    gl.glUniform1f(m("uProbeLevels"), PROBE.levels)
-                    gl.glUniform1f(m("uEta"), settings.get("eta", 1.33))
-                    gl.glUniform1f(m("uBehind"), settings.get("behind", 8.0))
-                    gl.glUniform1f(m("uLens"), settings.get("lens", 0.85))
-                    gl.glUniform1f(m("uShell"), settings.get("shell", 0.1))
-                    gl.glUniform3f(m("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
-                    gl.glUniform1f(m("uRough"), settings.get("rough", 0.0))
-                    gl.glUniform1f(m("uShellMin"), settings.get("shell_min", 0.0))
-                    gl.glUniform1i(m("uDiag"), DIAG)
-                    spec_uniforms(m)
-                    gl.glUniform1f(m("uInnerBlur"), settings.get("inner_blur", 0.25))
-                    gl.glUniform1f(m("uReflect"), settings.get("face_reflect", 1.0))
-                    gl.glUniform1f(m("uSpeckGlow"), settings.get("speck_glow", 0.6))
-                    gl.glUniform1f(m("uFrameShare"), settings.get("frame_share", 1.0))
-                    gl.glUniformMatrix3fv(m("uWorldToView"), 1, gl.GL_FALSE, world_to_view)
-                    gl.glUniformMatrix4fv(m("uProjection"), 1, gl.GL_FALSE, projection)
-                    gl.glUniform1f(m("uPixelSize"), 2.0 * tan_y / H)
-                    gl.glUniform1i(m("uEnvironment"), 3)
-                    gl.glUniform1i(m("uBackground"), 5)
-                    gl.glUniform2f(m("uTargetSize"), *target.allocation[:2])
-                    gl.glUniform2f(m("uFrameSize"), W, H)
-                    gl.glUniform3f(m("uSunScreen"), *sun_screen)
+                    bubble_uniforms(merged,background_tex)
                     gl.glBindVertexArray(cvao)
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(clusters))
+                    if not BACKDROP_ONLY:
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP,0,4,len(clusters))
                     mark("clusters")
                     if wakes and not BACKDROP_ONLY:
                         common(ribbon_program)
@@ -835,8 +779,11 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
                     gl.glViewport(0, 0, W, H)
                     gl.glBindVertexArray(vao)
                     gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(items))
+                    bubble_uniforms(near_cluster_program,background_tex)
+                    gl.glBindVertexArray(cvao)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP,0,4,len(clusters))
                     NEAR.end()
-                    NEAR.composite(settings.get("near_coc", 22.0) * 1.6)
+                    NEAR.composite(settings.get("near_coc", 22.0) * 1.6 * H / 941.0)
                     mark("near defocus")
                 if not BACKDROP_ONLY and settings.get("glints", 0.0) > 0.0:
                     blend_on = bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
@@ -941,7 +888,8 @@ def main():
                 compile_program(GLINT_VERTEX, GLINT_FRAGMENT, label="lab glints"),
                 compile_program(RIBBON_VERTEX, RIBBON_FRAGMENT, label="lab ribbons"),
                 compile_program(PARTICLE_VERTEX, PARTICLE_FRAGMENT, label="lab particulate"),
-                compile_program(BUBBLE_VERTEX, NEAR_FRAGMENT, label="lab near layer"))
+                compile_program(BUBBLE_VERTEX, NEAR_FRAGMENT, label="lab near layer"),
+                compile_program(CLUSTER_VERTEX, NEAR_CLUSTER_FRAGMENT, label="lab near clusters"))
     shaft_tex, shaft_fbo = [], []
     for _ in range(2):
         texture = int(np.asarray(gl.glGenTextures(1)).ravel()[0])

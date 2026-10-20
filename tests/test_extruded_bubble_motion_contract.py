@@ -73,7 +73,7 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
             self.assertTrue(all(a.motion_phase <= b.motion_phase and a.travel <= b.travel
                                 for a, b in zip(frames, frames[1:])))
             return (frames[-1].motion_phase - frames[-61].motion_phase,
-                    5 * (frames[-1].travel - frames[-61].travel))
+                    5 / self.mod.WORLD_UNIT * (frames[-1].travel - frames[-61].travel))
         quiet_surface, quiet_beads = phase_rates(False, 0, 5)
         loud_surface, loud_beads = phase_rates(True, 1, 9)
         self.assertLess(quiet_surface, 0.35)
@@ -86,16 +86,14 @@ class ExtrudedBubbleMotionContractTests(unittest.TestCase):
         from rendering.gl_programs import extruded_bubble_scene as scene
         _v, world_to_view, tan, _p = scene.camera(0.0, 0.0, 16 / 9)
         # Normal large bubble, not a separate near-field record, matches the renderer's depth predicate.
-        row = scene.bubble_instances((0, 0, 0.05, 0.17, 1, 0, 1, -1), tan)[0]
-        far = scene.bubble_instances((0, 0, 0.5, 0.17, 1, 0, 2, -1), tan)[0]
+        row = scene.bubble_instances((0, 0, -3., 1., 1, 0, 1, -1))[0]
+        far = scene.bubble_instances((0, 0, -20., 1., 1, 0, 2, -1))[0]
         import numpy as np
         view = np.asarray(world_to_view).reshape(3, 3)
         def circle(shell, focus):
             depth = -(shell[:3] @ view)[2]
-            return 22.0 * max(focus - (depth - shell[3]), 0.0) / max(focus - 2.5, 0.1)
+            return 22.0 * max(focus - (depth - shell[3]), 0.0) / max(depth-shell[3],2.5)
         self.assertEqual(row[5], 0.0)
-        self.assertLess(scene.DEPTH_NEAR, 3.0)
-        self.assertAlmostEqual(scene.DEPTH_NEAR + scene.DEPTH_SPAN, 32.0)
         self.assertGreater(circle(row, 4.0), 1.5)
         self.assertGreater(circle(row, 5.5), circle(row, 4.0))
         self.assertEqual(circle(far, 5.5), 0.0)

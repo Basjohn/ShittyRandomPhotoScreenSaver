@@ -1016,3 +1016,20 @@ includes both sources and retirement. A separate production snow-fragment/OIT dr
 the former dead varying; vertex-only opacity assertions cannot protect this defect. Bead Chains Range modulation
 remains independent of the resolved Particles amount. These checks do not accept density, musical birth/lifetime,
 depth readability or performance from a short offscreen recording.
+
+`test_extruded_bubble_world.py` exercises physical upstream faces/area weighting, production column-source entry,
+near-depth stream bases, expanded versus contracted contacts, continuous admitted-edge fusion, third-member
+growth/pruning, gradual ongoing bounce (including an existing cluster) and gentle opacity-only pops. These tests
+replace the invalid normalized-size/contact assumptions; nominal size cannot stand in for current physical radius.
+
+`test_extruded_bubble_world_gpu.py` executes production ordinary/union shaders with a float OIT readback: shared
+pinhole center/edge silhouettes, finite near-plane/eye-inside coverage, a bound enclosing the eye while all actual
+members remain outside, forward exit normals and real reflected/transmitted material output, separate lifetime
+opacity and exclusive near-layer admission with aperture. Shared optics tests protect core/wall-origin Fresnel
+weights as well as pre-existing external traces. Coverage diagnostics alone cannot validate actual inside shading.
+
+Production renderer observations require invariant shell/wake/union/proxy uploads and world stream during camera
+changes. GPU generator readback independently protects chain/snow/wake positions/radii against pose/pixel changes,
+and glowing specks must occupy the shared fixed volume rather than the former origin-biased radial halo. Prepared
+frames still must compile/allocate nothing through yaw/tilt/zoom. These are bounded architecture/consumer gates;
+operator glass volume, glow/debris/fog, depth hierarchy, density, cadence and physical musical acceptance remain open.

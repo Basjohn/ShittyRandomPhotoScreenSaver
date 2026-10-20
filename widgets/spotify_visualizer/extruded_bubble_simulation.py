@@ -4,8 +4,8 @@ A real mode of its own (original Bubble is only a guideline for gradients, drift
 smoothing). Advanced once per logical capture with dt from the sole Visualizer clock and the existing audio feeds; it
 adds no clock, DSP or floor and never touches Qt or GL. Deterministic: the same inputs give the same frames.
 
-**Volume.** x and y span -1..1 (screen right and up), z spans 0..1 (near to far). The renderer maps it into the
-framed camera's view.
+**World.** Positions and radii are physical world units in the fixed water domain.
+The camera never participates in spawning, movement, contacts or instance placement.
 
 **What it owns.** What music and collisions move: up to ``MAX_BUBBLES`` large and mid bubbles, each with an identity, position, velocity, base radius, a breathing response, a fade, and fuse-cluster membership. Bead chains,
 fizz and particulate are procedural on the GPU from the snapshot's scalars (stream, speed, level, flash).
@@ -30,17 +30,20 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from widgets.spotify_visualizer.extruded_bubble_geometry import (
+    WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis, upstream_source, box_entry,
+)
+
 MAX_BUBBLES = 192
 CLUSTER_MAX = 3
 BUBBLE_STRIDE = 8          # x, y, z, radius, alpha, breath, identity, cluster (-1: none)
 CLUSTER_STRIDE = 4         # members, then up to three member slots (indices into the bubble records), -1 if unused
 _FADE_IN = 0.6             # seconds
 _FADE_OUT = 0.9
-_POP_SECONDS = 0.35
-_LARGE_RADIUS = (0.075, 0.16)
-_MID_RADIUS = (0.025, 0.07)
-_MARGIN = 0.25             # how far outside the volume a bubble may be before it is gone
-_LANE = 0.26               # spacing of the columns across the stream (shares of the half view)
+_POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
+_LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
+_MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
+_LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
 _WAKE_STRIDE = 8           # x, y, z, reacted radius, stable ident, retirement progress (-1 active), alpha, nominal radius
 
@@ -54,7 +57,7 @@ class ExtrudedBubbleControls:
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
     stream_direction: tuple[float, float] = (0.0, 0.0)   # (around, height) degrees: 0 up; height into the scene
-    stream_speed: tuple[float, float] = (0.05, 0.16)     # volume units per second
+    stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
@@ -89,7 +92,7 @@ class ExtrudedBubbleSnapshot:
     drift: float = 0.0
     emission: float = 0.0
     sustain: float = 0.0
-    travel: float = 0.0                     # how far the stream has carried the water (volume units, ever rising)
+    travel: float = 0.0                     # how far the stream has carried the water (physical world units, ever rising)
     rays: float = 0.0                       # the light rays' driver (0..1, eased below the top: never pinned)
     shimmer: float = 0.0                    # the rays' shimmer phase (ever rising, faster on the hits)
     near_bubbles: tuple[float, ...] = ()    # Compatibility transport; the separate near-field cohort is disabled.
@@ -110,9 +113,11 @@ class _Bubble:
     z: float
     radius: float
     phase: float
+    current_radius: float = 0.0
     alpha: float = 0.0
     leaving: bool = False
     popping: float = -1.0       # seconds into its pop, -1 when not popping
+    pop_alpha: float = 1.0
     cluster: int = -1
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0)   # from its cluster's centre
 
@@ -124,12 +129,14 @@ class _Cluster:
     y: float
     z: float
     members: list[int] = field(default_factory=list)
+    # Connected tree: stable member IDs, admitted world direction and distance / summed radii.
+    edges: list[tuple[int, int, tuple[float, float, float], float]] = field(default_factory=list)
 
 
 def stream_vector(around: float, height: float) -> tuple[float, float, float]:
-    """The stream's unit direction: around 0 is up the screen (clockwise), height tips it into the scene."""
+    """Fixed world direction: around 0 is +Y, height tips toward world -Z."""
     a, h = math.radians(around), math.radians(height)
-    return math.sin(a) * math.cos(h), math.cos(a) * math.cos(h), math.sin(h)
+    return math.sin(a) * math.cos(h), math.cos(a) * math.cos(h), -math.sin(h)
 
 
 def _lerp(pair: tuple[float, float], t: float) -> float:
@@ -183,7 +190,7 @@ class ExtrudedBubbleSimulation:
         self._rng = random.Random(self._seed)
         self._bubbles: list[_Bubble] = []
         self._clusters: dict[int, _Cluster] = {}
-        self._contacts: set[tuple[int, int]] = set()
+        self._contacts: dict[tuple[int, int], str] = {}
         self._next_ident = 1
         self._time = 0.0
         self._level = 0.0
@@ -224,36 +231,36 @@ class ExtrudedBubbleSimulation:
 
     def _spawn(self, large: bool, controls: ExtrudedBubbleControls, direction, *, anywhere: bool) -> None:
         rng = self._rng
-        x, y, z = rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(0.05, 1.0)
-        if controls.columns > 0.0 and rng.random() < controls.columns:
-            # Columns (the mocks' lines of bubbles): the place across the stream on screen snaps to a lane, so the
-            # bubble rises along it. A stream straight into the scene has no lanes.
-            dx, dy = direction[0], direction[1]
-            length = math.hypot(dx, dy)
-            if length > 0.2:
-                ax, ay = -dy / length, dx / length
-                across = x * ax + y * ay
-                lane = round(across / _LANE) * _LANE + rng.gauss(0.0, _LANE * 0.06)
-                x, y = x + ax * (lane - across), y + ay * (lane - across)
+        column = controls.columns > 0.0 and rng.random() < controls.columns
+        for _ in range(32):
+            point = tuple(WORLD_CENTER[i] + rng.uniform(-WORLD_HALF[i], WORLD_HALF[i]) for i in range(3)) \
+                if anywhere else upstream_source(rng, direction)
+            if column:
+                across, _ = stream_basis(direction)
+                distance = sum(p * a for p, a in zip(point, across))
+                lane = round(distance / _LANE) * _LANE + rng.gauss(0.0, _LANE * .06)
+                point = tuple(p + a * (lane - distance) for p, a in zip(point, across))
+            if anywhere:
+                if any(abs(p-c)>h for p,c,h in zip(point,WORLD_CENTER,WORLD_HALF)):
+                    continue  # rejection sample the authored lanes within the fixed volume
+            else:
+                point = box_entry(point,direction)
+                if point is None:
+                    continue  # this transverse source line misses the domain
+            break
+        else:
+            raise RuntimeError("Extruded Bubble could not sample a source inside its physical domain")
         if not anywhere:
-            # Upstream: walk back against the stream until just outside the volume.
-            dx, dy, dz = direction
-            steps = []
-            for p, d, low, high in ((x, dx, -1.0, 1.0), (y, dy, -1.0, 1.0), (z, dz, 0.0, 1.0)):
-                if d > 1e-6:
-                    steps.append((p - low) / d)
-                elif d < -1e-6:
-                    steps.append((p - high) / d)
-            back = (min(steps) if steps else 0.0) + 0.08
-            x, y, z = x - dx * back, y - dy * back, z - dz * back
-        bubble = _Bubble(self._next_ident, large, x, y, z, self._radius(large, controls.size_variety),
+            point = tuple(p - d * .08 * WORLD_UNIT for p, d in zip(point, direction))
+        bubble = _Bubble(self._next_ident, large, *point, self._radius(large, controls.size_variety),
                          rng.uniform(0.0, math.tau), alpha=1.0 if anywhere else 0.0)
         self._next_ident += 1
         self._bubbles.append(bubble)
 
     def _outside(self, b: _Bubble) -> bool:
-        return (abs(b.x) > 1.0 + _MARGIN + b.radius or abs(b.y) > 1.0 + _MARGIN + b.radius
-                or b.z < -_MARGIN or b.z > 1.0 + _MARGIN)
+        return (any(abs(p - c) > h + WORLD_MARGIN + b.current_radius
+                    for p, c, h in zip((b.x, b.y, b.z), WORLD_CENTER, WORLD_HALF))
+                or b.y - b.current_radius > WATER_SURFACE_Y)
 
     # -- one step ----------------------------------------------------------------------------------------------------
 
@@ -324,7 +331,7 @@ class ExtrudedBubbleSimulation:
         self._speed = _follow(self._speed, speed_target, dt, 0.36 * soft, 3.0 * soft)
         self._drift = _follow(self._drift, drift_target, dt, 0.5 * soft, 2.5 * soft)
         self._emission = _follow(self._emission, emission_target, dt, 0.1 * soft, 1.5 * soft)
-        speed = self._speed
+        speed = self._speed * WORLD_UNIT
         # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
         # change of speed never makes them jump.
         self._travel += speed * dt
@@ -366,23 +373,22 @@ class ExtrudedBubbleSimulation:
         self._filled = True
 
         # Motion: the stream, sized (big bubbles a little faster), with drift and sway across it.
-        across = (direction[1], -direction[0], 0.0) if abs(direction[2]) < 0.99 else (1.0, 0.0, 0.0)
-        norm = math.hypot(*across) or 1.0
-        across = (across[0] / norm, across[1] / norm, across[2] / norm)
-        depth_axis = (direction[1] * across[2] - direction[2] * across[1],
-                      direction[2] * across[0] - direction[0] * across[2],
-                      direction[0] * across[1] - direction[1] * across[0])
+        across, depth_axis = stream_basis(direction)
+        big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, 4.0)
+        small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, 3.0)
+        for b in self._bubbles:
+            b.current_radius = b.radius * (big_scale if b.large else small_scale)
         t = self._motion_phase
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
             size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
-            wander = self._drift * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
+            wander = self._drift * WORLD_UNIT * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
-            swing = (controls.sway * 0.06 * min(1.0, self._motion_rate)
+            swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate)
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            deep = self._drift * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
+            deep = self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep)
             b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep)
             b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep)
@@ -392,21 +398,21 @@ class ExtrudedBubbleSimulation:
             if not members:
                 continue
             forward = speed * 0.9
-            wander = self._drift * 0.04 * math.sin(t * 0.31 + c.ident)
+            wander = self._drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
             c.x += dt * (direction[0] * forward + across[0] * wander)
             c.y += dt * (direction[1] * forward + across[1] * wander)
             c.z += dt * (direction[2] * forward + across[2] * wander)
-            for m in members:
-                m.x, m.y, m.z = c.x + m.offset[0], c.y + m.offset[1], c.z + m.offset[2]
+            self._place_cluster(c, members)
 
-        self._collide(controls)
+        self._collide(controls, dt)
 
         # Fades, pops and leaving.
         kept: list[_Bubble] = []
         for b in self._bubbles:
             if b.popping >= 0.0:
                 b.popping += dt
-                b.alpha = max(0.0, 1.0 - b.popping / _POP_SECONDS)
+                t = min(1.0, b.popping / _POP_SECONDS)
+                b.alpha = b.pop_alpha * (1.0 - t * t * (3.0 - 2.0 * t))
             elif b.leaving or self._outside(b):
                 b.leaving = True
                 b.alpha = max(0.0, b.alpha - dt / _FADE_OUT)
@@ -415,7 +421,7 @@ class ExtrudedBubbleSimulation:
             if b.alpha > 0.0 or (b.popping < 0.0 and not b.leaving):
                 kept.append(b)
             else:
-                self._contacts = {pair for pair in self._contacts if b.ident not in pair}
+                self._contacts = {pair: response for pair, response in self._contacts.items() if b.ident not in pair}
         self._bubbles = kept
         self._prune_clusters()
         return self._snapshot(direction, speed, controls, dt)
@@ -433,7 +439,7 @@ class ExtrudedBubbleSimulation:
             return False
         return scope == "all" or (scope == "big") == b.large
 
-    def _collide(self, controls: ExtrudedBubbleControls) -> None:
+    def _collide(self, controls: ExtrudedBubbleControls, dt: float) -> None:
         scope = controls.collision_scope
         fuse, pop, bounce = controls.collision
         total = fuse + pop + bounce
@@ -441,112 +447,166 @@ class ExtrudedBubbleSimulation:
             self._contacts.clear()
             return
         fuse, pop = fuse / total, pop / total
-        cell = 0.25
+        # Neighboring cells suffice only when a cell covers the largest contact diameter.
+        cell = max(.1, 2.0 * max((b.current_radius for b in self._bubbles), default=0.0))
         grid: dict[tuple[int, int, int], list[_Bubble]] = {}
         for b in self._bubbles:
             if self._admitted(b, scope):
                 grid.setdefault((int(math.floor(b.x / cell)), int(math.floor(b.y / cell)),
                                  int(math.floor(b.z / cell))), []).append(b)
-        touching: set[tuple[int, int]] = set()
+        # Freeze discovery before any response moves a member or changes cluster ownership.
+        candidates: list[tuple[_Bubble, _Bubble]] = []
         for (cx, cy, cz), bucket in grid.items():
             neighbours = [b for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
                           for b in grid.get((cx + dx, cy + dy, cz + dz), ())]
             for a in bucket:
                 for b in neighbours:
-                    if b.ident <= a.ident or (a.cluster >= 0 and a.cluster == b.cluster):
+                    if b.ident <= a.ident:
                         continue
-                    dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
-                    reach = (a.radius + b.radius) * 0.95
-                    if dx * dx + dy * dy + dz * dz >= reach * reach:
-                        continue
-                    pair = (a.ident, b.ident)
-                    touching.add(pair)
-                    if pair in self._contacts:
-                        continue          # each contact resolves once
-                    self._contacts.add(pair)
-                    choice = _pair_choice(*pair)
-                    if choice < fuse:
-                        self._fuse(a, b)
-                    elif choice < fuse + pop:
-                        loser = a if a.radius < b.radius else b
-                        loser.popping = 0.0
-                    else:
-                        self._bounce(a, b)
+                    candidates.append((a, b))
+        touching: set[tuple[int, int]] = set()
+        for a, b in candidates:
+            if not self._admitted(a, scope) or not self._admitted(b, scope):
+                continue
+            if a.cluster >= 0 and a.cluster == b.cluster:
+                continue
+            dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
+            reach = a.current_radius + b.current_radius
+            pair = (a.ident, b.ident)
+            if pair in self._contacts:
+                reach *= 1.03  # avoid reselecting an event at a grazing numerical boundary
+            if dx * dx + dy * dy + dz * dz >= reach * reach:
+                continue
+            touching.add(pair)
+            if pair not in self._contacts:
+                choice = _pair_choice(*pair)
+                if choice < fuse:
+                    response = "fuse" if self._fuse(a, b) else "bounce"
+                elif choice < fuse + pop:
+                    loser = a if a.current_radius < b.current_radius else b
+                    loser.pop_alpha = loser.alpha
+                    loser.popping = 0.0
+                    response = "pop"
+                else:
+                    response = "bounce"
+                self._contacts[pair] = response
+            if self._contacts[pair] == "bounce":
+                self._bounce(a, b, dt)
         # Contacts end when the pair separates (so a later meeting resolves anew).
-        self._contacts &= touching | {pair for pair in self._contacts if self._clustered(pair)}
+        self._contacts = {pair: response for pair, response in self._contacts.items()
+                          if pair in touching or self._clustered(pair)}
 
     def _clustered(self, pair: tuple[int, int]) -> bool:
         a, b = self._find(pair[0]), self._find(pair[1])
         return a is not None and b is not None and a.cluster >= 0 and a.cluster == b.cluster
 
-    def _fuse(self, a: _Bubble, b: _Bubble) -> None:
+    def _fuse(self, a: _Bubble, b: _Bubble) -> bool:
         members_a = self._clusters[a.cluster].members if a.cluster >= 0 else [a.ident]
         members_b = self._clusters[b.cluster].members if b.cluster >= 0 else [b.ident]
         if len(members_a) + len(members_b) > CLUSTER_MAX:
-            self._bounce(a, b)
-            return
+            return False
         bubbles = [self._find(i) for i in members_a + members_b]
         bubbles = [m for m in bubbles if m is not None]
-        weight = sum(m.radius ** 3 for m in bubbles) or 1.0
-        cx = sum(m.x * m.radius ** 3 for m in bubbles) / weight
-        cy = sum(m.y * m.radius ** 3 for m in bubbles) / weight
-        cz = sum(m.z * m.radius ** 3 for m in bubbles) / weight
-        # Joined with a neck: centres drawn in to 80-90% of their touching distance (it varies by pair).
-        squeeze = 0.8 + 0.1 * _pair_choice(a.ident + 7, b.ident + 13)
+        weight = sum(m.radius ** 3 for m in bubbles)
+        cx, cy, cz = (sum(getattr(m, axis) * m.radius ** 3 for m in bubbles) / weight for axis in ("x", "y", "z"))
+        # Preserve the exact admitted layout, including existing edges when adding a third member.
+        edges = [edge for ident in {a.cluster, b.cluster} - {-1} for edge in self._clusters[ident].edges]
         dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
-        wanted = (a.radius + b.radius) * squeeze
-        shift = (wanted - distance) * 0.5 / distance
-        if a.cluster < 0 and b.cluster < 0:
-            a.x, a.y, a.z = a.x - dx * shift, a.y - dy * shift, a.z - dz * shift
-            b.x, b.y, b.z = b.x + dx * shift, b.y + dy * shift, b.z + dz * shift
+        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        axis = (dx / distance, dy / distance, dz / distance) if distance > 1e-9 else (1.0, 0.0, 0.0)
+        edges.append((a.ident, b.ident, axis, distance / (a.current_radius + b.current_radius)))
         for old in {a.cluster, b.cluster} - {-1}:
             self._clusters.pop(old, None)
         ident = min(m.ident for m in bubbles)
-        cluster = _Cluster(ident, cx, cy, cz, [m.ident for m in bubbles])
+        cluster = _Cluster(ident, cx, cy, cz, [m.ident for m in bubbles], edges)
         self._clusters[ident] = cluster
         for m in bubbles:
             m.cluster = ident
             m.offset = (m.x - cx, m.y - cy, m.z - cz)
+        return True
 
-    def _bounce(self, a: _Bubble, b: _Bubble) -> None:
+    def _place_cluster(self, cluster: _Cluster, members: list[_Bubble]) -> None:
+        """Connected offsets follow the existing smoothed radii; preserve nominal mass center."""
+        by_id = {m.ident: m for m in members}
+        positions = {members[0].ident: (0.0, 0.0, 0.0)}
+        for _ in range(CLUSTER_MAX - 1):
+            for left, right, axis, ratio in cluster.edges:
+                if left not in by_id or right not in by_id:
+                    continue
+                length = ratio * (by_id[left].current_radius + by_id[right].current_radius)
+                if left in positions and right not in positions:
+                    positions[right] = tuple(p + a * length for p, a in zip(positions[left], axis))
+                elif right in positions and left not in positions:
+                    positions[left] = tuple(p - a * length for p, a in zip(positions[right], axis))
+        weight = sum(m.radius ** 3 for m in members)
+        center = tuple(sum(positions[m.ident][i] * m.radius ** 3 for m in members) / weight for i in range(3))
+        for m in members:
+            m.offset = tuple(positions[m.ident][i] - center[i] for i in range(3))
+            m.x, m.y, m.z = (c + d for c, d in zip((cluster.x, cluster.y, cluster.z), m.offset))
+
+    def _bounce(self, a: _Bubble, b: _Bubble, dt: float) -> None:
         dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
-        overlap = (a.radius + b.radius) - distance
+        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        overlap = (a.current_radius + b.current_radius) - distance
         if overlap <= 0.0:
             return
-        # A gentle elastic push: each moves apart in proportion to the other's size.
-        total = a.radius ** 3 + b.radius ** 3
-        for bubble, sign, share in ((a, -1.0, b.radius ** 3 / total), (b, 1.0, a.radius ** 3 / total)):
+        # Continue a gentle dt-bounded response after the once-per-contact event choice.
+        groups = [([self._find(i) for i in self._clusters[bubble.cluster].members]
+                   if bubble.cluster >= 0 else [bubble]) for bubble in (a, b)]
+        weights = [sum(m.radius ** 3 for m in group) for group in groups]
+        move = min(overlap * (1.0 - math.exp(-dt / .35)), WORLD_UNIT * .2 * dt)
+        axis = (dx / distance, dy / distance, dz / distance) if distance > 1e-8 else (1.0, 0.0, 0.0)
+        for bubble, group, sign, share in ((a, groups[0], -1.0, weights[1] / sum(weights)),
+                                          (b, groups[1], 1.0, weights[0] / sum(weights))):
+            delta = tuple(sign * move * share * v for v in axis)
+            for m in group:
+                m.x += delta[0]; m.y += delta[1]; m.z += delta[2]
             if bubble.cluster >= 0:
-                continue
-            push = sign * overlap * share * 1.05 / distance
-            bubble.x += dx * push
-            bubble.y += dy * push
-            bubble.z += dz * push
+                cluster = self._clusters[bubble.cluster]
+                cluster.x += delta[0]; cluster.y += delta[1]; cluster.z += delta[2]
 
     def _prune_clusters(self) -> None:
         live = {b.ident: b for b in self._bubbles}
         for ident in list(self._clusters):
             cluster = self._clusters[ident]
-            cluster.members = [m for m in cluster.members if m in live and live[m].popping < 0.0]
+            previous = len(cluster.members)
+            cluster.members = [m for m in cluster.members if m in live]
+            cluster.edges = [edge for edge in cluster.edges if edge[0] in cluster.members and edge[1] in cluster.members]
+            if len(cluster.members) == 2 and not cluster.edges:
+                # Losing a tree's middle member may separate the remaining surfaces.
+                a, b = (live[i] for i in cluster.members)
+                distance = math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
+                if distance < a.current_radius + b.current_radius:
+                    axis = tuple((v - u) / distance for u, v in zip((a.x, a.y, a.z), (b.x, b.y, b.z))) \
+                        if distance > 1e-9 else (1., 0., 0.)
+                    cluster.edges.append((a.ident, b.ident, axis, distance / (a.current_radius + b.current_radius)))
+                else:
+                    for m in cluster.members:
+                        live[m].cluster = -1
+                    del self._clusters[ident]
+                    continue
             if len(cluster.members) < 2:
                 for m in cluster.members:
                     live[m].cluster = -1
                 del self._clusters[ident]
+            elif previous != len(cluster.members):
+                members = [live[m] for m in cluster.members]
+                weight = sum(m.radius ** 3 for m in members)
+                cluster.x, cluster.y, cluster.z = (sum(getattr(m, axis) * m.radius ** 3 for m in members) / weight
+                                                   for axis in ("x", "y", "z"))
 
     # -- snapshot ----------------------------------------------------------------------------------------------------
 
-    def _wakes(self, dt: float, big_scale: float, small_scale: float) -> tuple[float, ...]:
+    def _wakes(self, dt: float) -> tuple[float, ...]:
         """Logical emitter identity survives compaction, fusion, pop and surface exit.
 
-        Retiring wakes retain their last *own* world-volume source, never rebind to the shell currently occupying
+        Retiring wakes retain their last *own* physical world source, never rebind to the shell currently occupying
         the old GPU instance slot. The shader wipes each wake from the travel-facing head backwards over its life.
         """
         current: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
-                current[b.ident] = (b.x, b.y, b.z, b.radius * (big_scale if b.large else small_scale),
+                current[b.ident] = (b.x, b.y, b.z, b.current_radius,
                                     b.ident, -1.0, b.alpha, b.radius)
         # Advance existing tombstones on the sole logical tick, never in the renderer.
         retained = {}
@@ -568,14 +628,11 @@ class ExtrudedBubbleSimulation:
 
     def _snapshot(self, direction, speed, controls: ExtrudedBubbleControls, dt: float) -> ExtrudedBubbleSnapshot:
         level = self._level
-        big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, 4.0)
-        small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, 3.0)
         index = {b.ident: i for i, b in enumerate(self._bubbles)}
         bubbles: list[float] = []
         for b in self._bubbles:
-            swell = (big_scale if b.large else small_scale) - 1.0
-            radius = b.radius * (1.0 + swell + (0.25 * min(1.0, b.popping / _POP_SECONDS) if b.popping >= 0 else 0.0))
-            bubbles.extend((b.x, b.y, b.z, radius, b.alpha, swell, float(b.ident), float(b.cluster)))
+            swell = b.current_radius / b.radius - 1.0
+            bubbles.extend((b.x, b.y, b.z, b.current_radius, b.alpha, swell, float(b.ident), float(b.cluster)))
         clusters: list[float] = []
         for cluster in self._clusters.values():
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
@@ -583,7 +640,7 @@ class ExtrudedBubbleSimulation:
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
                                       self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, (), self._motion_phase,
-                                      self._wakes(dt, big_scale, small_scale))
+                                      self._wakes(dt))
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

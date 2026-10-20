@@ -10,26 +10,12 @@ strength, rays, water, glass, particles and lens, each mapped as section 9's tab
 ``ray_motion`` read the Light Rays range, Ray Flicker and the fan's reach at the simulation's ray driver and sustain
 (never the raw passage level, which holds at 1 through loud music).
 
-**Camera.** A 62 degree vertical field of view from the eye at the origin; tilt (pitch) and turn (yaw) from the live
-view pose, Scene Scale as a zoom. **Volume.** The simulation's normalised volume (x, y -1..1 across the view, z 0..1
-near to far) maps into the view at depth ``DEPTH_NEAR + z * DEPTH_SPAN`` with radii as shares of the half view height
-(a radius of 0.1 is a tenth of the half height on screen at any depth), as the lab sizes its populations.
+**Camera.** A 62 degree vertical field of view from the eye at the independent scene origin;
+turn, tilt, scale and lens shift affect view/projection only. The simulation and procedural
+populations inhabit the fixed world domain in ``extruded_bubble_geometry``.
 
-**World-fixed under the turn.** The volume is placed in the world by the camera at turn 0 and the current tilt, so
-turning the camera (the orbit's turn, and Auto Rotate's swivel) moves the view across a field fixed in the world,
-with the water and light. To make that field endless, each point is turned about the world vertical by whole
-periods so its azimuth stays within half a period of the camera's heading. A point's period is twice the azimuth at
-which its elevation meets the volume's side plane (the volume's edge, its margin included, at every height and
-depth): everything the camera can see at that elevation lies inside it, also near the top of a pitched view where
-the view spans more azimuth; an elevation the plane never reaches (toward the zenith) has the whole circle. A turn
-keeps a point's elevation and distance, so its period never changes while it moves: a bubble leaving one side
-returns on the other where no one sees it. Tilt stays relative to the view (a tilted
-preset frames the bubbles as authored; a tilt drag carries them with it). The simulation never knows the camera.
-The separate near-field cohort is disabled; the closest part of the *ordinary* volume starts at 2.8
-instead of 6.0 units so authentic large bubbles can enter the focus region. Far end remains 32.0.
-
-**Instances.** Shell records are (world centre, world radius, seed, kind): kind 0 an ordinary bubble, eligible for near defocus based on actual eye depth. Clusters are three member spheres then (members, neck blend, seed, 0). Glint proxies
-are each bubble's highlight as the scene probe sees it (particle records: point, radius, brightness, warm, seed, 0).
+**Instances.** Packing preserves physical position/radius and carries lifetime opacity
+separately. No depth scaling, camera-dependent wrapping or view-relative reinstallation.
 """
 from __future__ import annotations
 
@@ -39,12 +25,12 @@ from collections.abc import Mapping
 import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
+from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y
 
 FOV_Y_DEGREES = 62.0
 NEAR, FAR = 0.05, 200.0
-DEPTH_NEAR, DEPTH_SPAN = 2.8, 29.2
-SURFACE_Y = 9.0
-SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 6, 16, 8
+SURFACE_Y = WATER_SURFACE_Y
+SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 7, 19, 8
 # What a Light Type implies (the lab's "surface" and "deep" modes) and what every scene shares.
 ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
 MODES = {
@@ -200,127 +186,46 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0, shift=(0
     return view_to_world, world_to_view, tan, projection
 
 
-VOLUME_EXTENT = 1.25          # the simulation's volume reaches this far past the view (its margin) before wrapping
-
-
 def lens_shift(pan_x: float, pan_y: float) -> tuple[float, float]:
     """Scene Pan (fractions of the card, y down, as the framed camera's envelope bounds it) as an NDC lens shift."""
     return 2.0 * float(pan_x), -2.0 * float(pan_y)
 
 
-def _wrapped_turn(points: np.ndarray, periods: np.ndarray, turn: float) -> np.ndarray:
-    """``points`` (world, rows) turned about the world vertical by whole ``periods`` so each one's azimuth lies within
-    half its period of the camera's heading at ``turn`` (azimuth: from -z toward +x; the heading is -pi x turn)."""
-    if not len(points):
-        return points
-    heading = -math.pi * float(turn)
-    azimuth = np.arctan2(points[:, 0], -points[:, 2])
-    delta = np.mod(azimuth - heading + 0.5 * periods, periods) - 0.5 * periods + heading - azimuth
-    return _turned(points, delta)
-
-
-def _turned(points: np.ndarray, delta) -> np.ndarray:
-    """``points`` turned about the world vertical so their azimuth grows by ``delta``."""
-    c, s = np.cos(delta), np.sin(delta)
-    x, z = points[:, 0], points[:, 2]
-    return np.column_stack((x * c - z * s, points[:, 1], z * c + x * s))
-
-
-def _axes(view_to_world) -> np.ndarray:
-    """Rows: the view's right, up and back axes in world (a view vector times this is its world vector)."""
-    return np.asarray(view_to_world, dtype=np.float64).reshape(3, 3)
-
-
-def _volume_points(x, y, z, tan, tilt: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Volume points (arrays) in the world as the camera at turn 0 and ``tilt`` sees them, their view depths and their
-    wrap periods."""
-    depth = (DEPTH_NEAR + DEPTH_SPAN * np.asarray(z, dtype=np.float64)).reshape(-1)
-    view = np.column_stack((np.asarray(x, dtype=np.float64).reshape(-1) * 1.12 * tan[0] * depth,
-                            (np.asarray(y, dtype=np.float64) * 1.1 * tan[1]).reshape(-1) * depth, -depth))
-    points = view @ _axes(camera(0.0, tilt, 1.0)[0])
-    return points, depth, _wrap_periods(points, VOLUME_EXTENT * 1.12 * tan[0], tilt)
-
-
-def _wrap_periods(points: np.ndarray, side: float, tilt: float) -> np.ndarray:
-    """Twice the azimuth where each point's elevation meets the side plane x = side x depth of the camera at turn 0
-    (view rays (side, t, -1): world (side, t cos p + sin p, t sin p - cos p) at pitch p), or a full circle where it
-    never does."""
-    pitch = math.radians(16.0 + 90.0 * float(tilt))
-    a, b = math.cos(pitch), math.sin(pitch)
-    sine = points[:, 1] / np.maximum(np.linalg.norm(points, axis=1), 1e-9)
-    # (a t + b)^2 = sine^2 (side^2 + 1 + t^2), with a t + b of the elevation's sign.
-    qa, qb, qc = a * a - sine * sine, 2.0 * a * b, b * b - sine * sine * (side * side + 1.0)
-    periods = np.full(len(points), 2.0 * math.pi)
-    for sign in (1.0, -1.0):
-        disc = qb * qb - 4.0 * qa * qc
-        with np.errstate(invalid="ignore", divide="ignore"):
-            root = np.where(np.abs(qa) > 1e-9, (-qb + sign * np.sqrt(disc)) / (2.0 * qa), -qc / qb)
-        valid = (disc >= 0.0) & np.isfinite(root) & (np.sign(a * root + b) * np.sign(sine) >= 0.0)
-        azimuth = np.abs(np.arctan2(side, a - root * b))
-        periods = np.where(valid & (2.0 * azimuth < periods), 2.0 * azimuth, periods)
-    return periods
-
-
-def volume_to_world(x: float, y: float, z: float, tan, pose=(0.0, 0.0)) -> tuple[tuple[float, float, float], float]:
-    """A point of the simulation's volume in world space (eye at the origin) under the camera ``pose`` (turn, tilt),
-    and its view depth."""
-    points, depth, periods = _volume_points(float(x), float(y), float(z), tan, pose[1])
-    points = _wrapped_turn(points, periods, pose[0])
-    return tuple(float(v) for v in points[0]), float(depth[0])  # type: ignore[return-value]
-
-
-def bubble_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
-    """The simulation's bubble records (x, y, z, radius, alpha, swell, identity, cluster: 8 floats each) as shell
-    instances under the camera ``pose`` (turn, tilt). A fading bubble shrinks with its fade (its light leaves with
-    it); fused members are drawn by the cluster pass, not here."""
+def bubble_instances(records) -> np.ndarray:
+    """Pack physical xyz/radius, stable seed, kind and material opacity."""
     rows = np.asarray(records, dtype=np.float64).reshape(-1, 8)
-    rows = rows[(rows[:, 7] < 0.0) & (rows[:, 4] > 0.02)]
-    points, depth, periods = _volume_points(rows[:, 0], rows[:, 1], rows[:, 2], tan, pose[1])
+    rows = rows[(rows[:, 7] < 0.0) & (rows[:, 4] > 0.0)]
     out = np.empty((len(rows), SHELL_FLOATS), dtype=np.float32)
-    out[:, :3] = _wrapped_turn(points, periods, pose[0])
-    out[:, 3] = rows[:, 3] * tan[1] * depth * np.sqrt(rows[:, 4])
+    out[:, :4] = rows[:, :4]
     out[:, 4] = np.mod(rows[:, 6] * 0.6180339887, 1.0)
     out[:, 5] = 0.0
+    out[:, 6] = rows[:, 4]
     return out
 
 
-def wake_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
-    """Stable simulation-owned wake sources, independent of the compacted visible-shell GPU slots.
+def wake_instances(records) -> np.ndarray:
+    """Pack stable physical emitters unchanged, including frozen retiring anchors.
 
-    8 floats: world centre x/y/z, physical radius, stable identity, retirement progress (-1 active),
-    opacity at retirement/current birth, nominal parent radius. Retirements keep their final world-volume anchor.
+    xyz, reacted radius, stable ID, retirement, opacity, nominal radius.
     """
-    rows = np.asarray(records, dtype=np.float64).reshape(-1, 8)
-    if len(rows) == 0:
-        return np.empty((0, 8), dtype=np.float32)
-    points, depth, periods = _volume_points(rows[:, 0], rows[:, 1], rows[:, 2], tan, pose[1])
-    out = np.empty((len(rows), 8), dtype=np.float32)
-    out[:, :3] = _wrapped_turn(points, periods, pose[0])
-    out[:, 3] = rows[:, 3] * tan[1] * depth
-    out[:, 4:8] = rows[:, 4:8]
-    out[:, 7] *= tan[1] * depth
-    return out
+    return np.asarray(records, dtype=np.float32).reshape(-1, 8)
 
 
-def cluster_instances(records, clusters, tan, pose=(0.0, 0.0)) -> np.ndarray:
-    """Each fused cluster as the cluster pass's instance; it turns as one (by its first member), never split across
-    the seam."""
+def cluster_instances(records, clusters) -> np.ndarray:
+    """Physical union members, blend/seed and each member's lifetime opacity."""
     out = []
     for i in range(0, len(clusters), 4):
         count = int(clusters[i])
         slots = [int(slot) * 8 for slot in clusters[i + 1:i + 1 + count]]
         if len(slots) < 2:
             continue
-        rows = np.asarray([records[j:j + 4] for j in slots], dtype=np.float64)
-        points, depth, periods = _volume_points(rows[:, 0], rows[:, 1], rows[:, 2], tan, pose[1])
-        lead = _wrapped_turn(points[:1], periods[:1], pose[0])
-        delta = np.arctan2(lead[0, 0], -lead[0, 2]) - np.arctan2(points[0, 0], -points[0, 2])
-        points = _turned(points, np.full(len(points), delta))
-        members = [(*points[k], rows[k, 3] * tan[1] * depth[k]) for k in range(len(rows))]
-        blend = 0.15 * max(m[3] for m in members)
+        rows = [records[j:j + 8] for j in slots]
+        members = [tuple(row[:4]) for row in rows]
+        blend = .15 * max(m[3] for m in members)
         padded = members + [(0.0, 0.0, 0.0, 0.0)] * (3 - len(members))
+        alphas = [row[4] for row in rows] + [0.0] * (3 - len(rows))
         out.append(tuple(float(v) for m in padded for v in m) + (float(len(members)), blend,
-                                                                  (clusters[i + 1] * 0.618) % 1.0, 0.0))
+                   (rows[0][6] * .618) % 1.0, 0.0) + tuple(alphas))
     return np.asarray(out, dtype=np.float32).reshape(-1, CLUSTER_FLOATS)
 
 
@@ -331,7 +236,7 @@ def glint_proxies(shells: np.ndarray, sun_below, power: float, size: float = 0.6
     out = np.zeros((len(bubbles), PROXY_FLOATS), dtype=np.float32)
     out[:, :3] = bubbles[:, :3] + np.asarray(sun_below, dtype=np.float32)[None, :] * bubbles[:, 3:4] * 0.7
     out[:, 3] = np.maximum(bubbles[:, 3] * size, 0.004)
-    out[:, 4] = power
+    out[:, 4] = power * bubbles[:, 6]
     out[:, 5] = 1.0
     return out
 
@@ -353,7 +258,7 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
             ((projection[5] * view[1] / -view[2] - projection[9]) * 0.5 + 0.5) * height, 1.0)
 
 
-__all__ = ["CLUSTER_FLOATS", "DEPTH_NEAR", "VOLUME_EXTENT", "DEPTH_SPAN", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
+__all__ = ["CLUSTER_FLOATS", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
            "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
            "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "ray_strength",
-           "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL", "volume_to_world"]
+           "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL"]

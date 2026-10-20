@@ -77,7 +77,7 @@ def test_bubbles_travel_along_the_stream_direction_and_stay_near_the_volume():
         expected = stream_vector(around, height)
         assert sum(a * b for a, b in zip((dx / length, dy / length, dz / length), expected)) > 0.99
         for x, y, z, radius, *_rest in _records(_run(simulation, controls, 10.0)):
-            assert abs(x) <= 1.6 and abs(y) <= 1.6 and -0.4 <= z <= 1.4
+            assert abs(x) < 25 and abs(y) < 15 and abs(z) < 25
 
 
 def test_kicks_make_the_large_bubbles_breathe_and_smoothing_softens_the_release():
@@ -247,7 +247,7 @@ def _lane_offsets(snapshot, stream):
     offsets = []
     for record in _records(snapshot):
         across = (record[0] * ax + record[1] * ay) / length
-        offsets.append(abs(across - round(across / 0.26) * 0.26))
+        offsets.append(abs(across - round(across / 2.34) * 2.34))
     return offsets
 
 
@@ -361,7 +361,7 @@ def test_resting_sway_velocity_is_slow_as_well_as_its_phase():
     after=_run(sim,controls,1,intensity=0)
     previous={r[6]:r for r in _records(before)}
     shifts=[math.dist(r[:3],previous[r[6]][:3]) for r in _records(after) if r[6] in previous]
-    assert shifts and max(shifts)<.005  # under 2.4 first-order pixels/s at 941px, not ~28px/s
+    assert shifts and max(shifts)<.045  # world conversion: the same slow velocity at the fixed reference depth
 
 
 def test_full_normalized_bands_cannot_extrapolate_beyond_authored_population_range():
@@ -411,7 +411,7 @@ def test_water_and_bead_motion_are_slow_in_idle_and_speed_up_during_playback_wit
         assert all(b.motion_phase >= a.motion_phase and b.travel >= a.travel
                    for a, b in zip(data, data[1:]))
         return (data[-1].motion_phase - data[-61].motion_phase,
-                5.0 * (data[-1].travel - data[-61].travel))
+                5.0 / 9.0 * (data[-1].travel - data[-61].travel))
     quiet_surface, quiet_beads = segment(False, 0.0, 5.0)
     loud_surface, loud_beads = segment(True, 1.0, 9.0)
     assert quiet_surface < 0.35 and quiet_beads < 0.4

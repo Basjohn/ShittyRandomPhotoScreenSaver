@@ -17,6 +17,7 @@ from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 COMMON = """
 uniform mat3 uViewToWorld;
 uniform vec2 uTan;
+uniform vec2 uLensShift;
 uniform float uTime;
 uniform float uSurfaceTravel;
 uniform vec3 uSun;
@@ -326,6 +327,7 @@ void main() {
 BUBBLE_VERTEX = """#version 460 core
 layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
+layout(location=2) in float aOpacity; // logical lifetime, independent of physical radius
 uniform mat3 uWorldToView;
 uniform mat4 uProjection;
 uniform float uFocus;
@@ -341,13 +343,13 @@ flat out vec3 vExtra;    // seed, kind, true radius / drawn radius
 flat out float vOpacity;   // procedural chain lifetime and population fades; 1 for all other shells
 """ + SCENE3D_SPHERES_GLSL + """
 void main() {
-    vOpacity = 1.0;
+    vOpacity = aOpacity;
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec3 centre = uWorldToView * aSphere.xyz;
     float depth = -centre.z;
     // Nothing to draw (a generated instance left out, or faded to nothing; one behind the eye): no quad at all. Never
     // the half-pixel floor below, which shaded every such instance as a dot.
-    if (aSphere.w <= 0.0 || depth <= 0.05) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    if (aSphere.w <= 0.0 || vOpacity <= 0.0 || depth + aSphere.w <= 0.05) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     // Blur in proportion to the bubble: a tiny near bubble softens without swelling into a grey disc.
     float blur = min(sceneDefocusRadius(depth, uFocus, uAperture, 0.12, 0.0), aSphere.w * 0.1);
     if (aExtra.y > 1.5 && aExtra.y < 2.5) blur = aSphere.w * 0.3;
@@ -355,7 +357,7 @@ void main() {
     // Ordinary large bubbles are routed exclusively through ONE layer. Their actual front surface, not
     // their identity or a camera-attached fake, decides whether near-focus bokeh is warranted.
     float frontDepth = depth - aSphere.w;
-    float coc = uNearCoc * max(uFocus - frontDepth, 0.0) / max(uFocus - 2.5, 0.1);
+    float coc = sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc);
     bool near_ = aExtra.y < 0.5 && coc > 1.5;
     if (near_) blur = uPixel * depth * 0.5;                  // sharp in its layer; the lens blurs it
     if (near_ != (uNearLayer > 0.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -364,9 +366,9 @@ void main() {
     vSphere = vec4(centre, radius);
     vBlur = blur;
     vExtra = vec3(aExtra, (aSphere.w * aSphere.w) / (radius * radius));
-    // Round on screen wherever it sits (a wide view draws an off-axis sphere as an oval).
+    // One pinhole convention for ordinary and fused geometry, including near crossings.
     vCorner = corner;
-    gl_Position = sceneSphereScreenCorner(centre, radius, blur, corner, uProjection);
+    gl_Position = sceneSphereClipCorner(centre, radius + blur, corner, uProjection);
 }
 """
 SHADE_GLSL = """
@@ -434,21 +436,25 @@ uniform float uFrameShare;       // what is seen through: the frame (1) or the p
 // scene holds.
 // One shading ray through the bubble (premultiplied light, owned alpha).
 vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float blur) {
-    vec3 axis = normalize(sphere.xyz);
+    float eyeDistance = length(sphere.xyz);
+    bool inside = eyeDistance < sphere.w;
+    vec3 axis = eyeDistance > 1e-6 ? sphere.xyz / eyeDistance : rayView;
     float along = dot(rayView, axis);
     vec3 offAxis = rayView - axis * along;
-    float maxSin = (sphere.w / length(sphere.xyz)) * (1.0 - 0.6 / max(pixels, 2.0));
+    float maxSin = (sphere.w / max(eyeDistance,1e-6)) * (1.0 - 0.6 / max(pixels, 2.0));
     float sinNow = length(offAxis);
-    if (sinNow > maxSin)
+    if (!inside && sinNow > maxSin)
         rayView = normalize(axis * sqrt(max(1.0 - maxSin * maxSin, 0.0)) + offAxis / max(sinNow, 1e-6) * maxSin);
     float tN, tF;
-    sceneSphereRay(rayView, sphere.xyz, sphere.w, tN, tF);
-    vec3 frontView = rayView * tN;
+    if (!sceneSphereRay(rayView, sphere.xyz, sphere.w, tN, tF)) return vec4(0.0);
+    float minT = 0.05 / max(-rayView.z,1e-4);
+    vec3 frontView = rayView * (tN >= minT ? tN : tF);
+    vec3 facingNormal = normalize(frontView - sphere.xyz) * (inside ? -1.0 : 1.0);
     // A mirror on a sphere turns the view by twice the normal's turn: one pixel spans ~2 / (radius px x facing) rad.
-    float facingHere = max(dot(-rayView, normalize(frontView - sphere.xyz)), 0.15);
+    float facingHere = max(dot(-rayView, facingNormal), 0.15);
     float lobeFootprint = 2.0 / (max(pixels, 1.0) * facingHere) + soft * 0.6;
     vec4 paths[8];
-    vec3 origin = (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
+    vec3 origin = inside ? -sphere.xyz / sphere.w : (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
     // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
     // single interface (the film still colours what they mirror).
     // Below ~uShellMin px the two walls fall within a couple of pixels of each other: one interface (a single thick
@@ -462,11 +468,11 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     // the hue is kept relative (it recolours reflected scene light, never adds light of its own). Per scene.
     vec3 filmHue = vec3(1.0);
     // Reflections' share: uReflect at the face, full toward the rim (a near giant's face mirrors little).
-    float faceOn = clamp(dot(-rayView, normalize(frontView - sphere.xyz)), 0.0, 1.0);
+    float faceOn = clamp(dot(-rayView, facingNormal), 0.0, 1.0);
     float reflectShare = mix(1.0, uReflect, pow(faceOn, 0.6));
     if (uFilm > 0.0) {
         vec3 local = (frontView - sphere.xyz) / sphere.w;
-        float c = clamp(dot(-rayView, normalize(local)), 0.0, 1.0);
+        float c = clamp(dot(-rayView, facingNormal), 0.0, 1.0);
         float drift = skyNoise2(local.xy * 2.3 + vec2(sphere.w * 37.0, sphere.x * 11.0), 191u);
         float thickness = mix(uFilmRange.x, uFilmRange.y, clamp(0.5 - 0.4 * local.y + 0.6 * (drift - 0.5), 0.0, 1.0));
         // Hue at the true incidence; where the angle swings faster than the pixel can hold (the rim of small
@@ -498,7 +504,7 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             // The frame is read along the smooth lens of the bubble as a whole (refraction through a plain sphere of the
             // outer index): the traced exit through the glass wall swings chaotically near the rim (speckle). The trace
             // still sets how much light comes through.
-            vec3 lensDir = sceneSphereRefraction(rayView, normalize(frontView - sphere.xyz), 1.0 / uIors.x);
+            vec3 lensDir = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, 1.0 / uIors.x);
             vec4 behind = behindAt(frontView + lensDir * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
             // Off the frame's edge the bent view falls back to the scene behind this pixel, never to the probe (its
             // scattered fill lit every bubble at the frame's edge).
@@ -510,7 +516,7 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             // The light itself seen through the bubble's lens: an inset glow where the bending carries the view to it.
             // Only bubbles big enough to show a lens: on a bead the lens view spans every direction (a uniform glow).
             // The light through an air bubble (a diverging lens, water to air): it shows inset on the light's own side.
-            vec3 airLens = sceneSphereRefraction(rayView, normalize(frontView - sphere.xyz), uIors.x / uIors.z);
+            vec3 airLens = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, uIors.x / uIors.z);
             seen += sceneLightLobe(uViewToWorld * airLens, lobeFootprint * 1.5) * uSpecThrough
                   * smoothstep(8.0, 24.0, pixels);
             light += paths[i].w * seen * uLens;
@@ -573,12 +579,15 @@ flat in float vBlur;
 flat in vec3 vExtra;
 flat in float vOpacity;
 void main() {
-    vec3 ray = sceneSphereFacingRay(vSphere.xyz, vSphere.w + vBlur, vCorner);
+    vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
+    vec3 ray = normalize(vec3(ndc * uTan, -1.0));
     float coverage = sceneSphereCoverage(ray, vSphere.xyz, vSphere.w, vBlur);
     if (coverage <= 0.0) discard;
     float tNear, tFar;
     bool hit = sceneSphereRay(ray, vSphere.xyz, vSphere.w, tNear, tFar);
-    vec3 front = hit ? ray * tNear : ray * dot(vSphere.xyz, ray);
+    float minT = 0.05 / max(-ray.z, 1e-4);
+    if ((hit && tFar < minT) || (!hit && dot(vSphere.xyz, ray) < minT)) discard;
+    vec3 front = hit ? ray * (tNear >= minT ? tNear : tFar) : ray * dot(vSphere.xyz, ray);
     vec3 rayW = uViewToWorld * ray;
     float soft = clamp(vBlur / max(vSphere.w, 1e-3), 0.0, 1.0);
     float pixels = vSphere.w / (uPixelSize * max(-front.z, 0.1));
@@ -642,7 +651,7 @@ void main() {
 #ifdef NEAR_LAYER
     // The circle this bubble's light spreads over at the lens, in pixels: grows as it nears the camera.
     float frontDepth = -vSphere.z - vSphere.w;
-    float coc = uNearCoc * max(uFocus - frontDepth, 0.0) / max(uFocus - 2.5, 0.1);
+    float coc = sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc);
     sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, coc);
 #else
     sceneTransparent(shaded.rgb * alpha, alpha, -front.z);
@@ -654,19 +663,26 @@ void main() {
 BUBBLE_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
                    + BUBBLE_FRAGMENT_BODY)
 NEAR_FRAGMENT = ("#version 460 core\n#define NEAR_LAYER\n" + SCENE_DEFOCUS_GLSL
-                 + "uniform float uNearCoc;\nuniform float uFocus;\nuniform float uNearGain;\n" + BUBBLE_FRAGMENT_BODY)
+                 + "uniform float uNearCoc;\nuniform float uFocus;\nuniform float uAperture;\nuniform float uNearGain;\n" + BUBBLE_FRAGMENT_BODY)
 
 CLUSTER_VERTEX = """#version 460 core
 layout(location=0) in vec4 aS0;
 layout(location=1) in vec4 aS1;
 layout(location=2) in vec4 aS2;
 layout(location=3) in vec4 aInfo;     // count, blend, seed, unused
+layout(location=4) in vec3 aAlphas;   // lifetime opacity for each union member
 uniform mat3 uWorldToView;
 uniform mat4 uProjection;
+uniform float uFocus;
+uniform float uAperture;
+uniform float uNearLayer;
+uniform float uNearCoc;
 out vec3 vView;
 flat out vec4 vSpheres[3];
 flat out vec4 vBound;
 flat out vec4 vInfo;
+flat out vec3 vAlphas;
+flat out float vFrontDepth;
 """ + SCENE3D_SPHERES_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
@@ -676,30 +692,41 @@ void main() {
     for (int i = 0; i < 3; ++i) if (i < count) centre += world[i].xyz;
     centre /= float(count);
     float bound = 0.0;
+    vFrontDepth = 1e30;
     for (int i = 0; i < 3; ++i) {
         vSpheres[i] = vec4(uWorldToView * world[i].xyz, world[i].w);
-        if (i < count) bound = max(bound, distance(centre, world[i].xyz) + world[i].w);
+        if (i < count) {
+            bound = max(bound, distance(centre, world[i].xyz) + world[i].w);
+            vFrontDepth = min(vFrontDepth, -vSpheres[i].z - vSpheres[i].w);
+        }
     }
     vBound = vec4(uWorldToView * centre, bound + aInfo.y);
     vInfo = aInfo;
+    vAlphas = aAlphas;
+    float coc = sceneNearCircle(vFrontDepth, uFocus, uAperture, uNearCoc);
+    if ((coc > 1.5) != (uNearLayer > 0.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     vView = sceneSphereCorner(vBound.xyz, vBound.w, 0.0, corner);
-    gl_Position = uProjection * vec4(vView, 1.0);
+    gl_Position = sceneSphereClipCorner(vBound.xyz, vBound.w, corner, uProjection);
 }
 """
-CLUSTER_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
-                    + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + SCENE3D_PROBE_GLSL + COMMON
+CLUSTER_FRAGMENT_BODY = (SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + SCENE3D_PROBE_GLSL + COMMON
                     + SHADE_GLSL + """
 in vec3 vView;
 flat in vec4 vSpheres[3];
 flat in vec4 vBound;
 flat in vec4 vInfo;
+flat in vec3 vAlphas;
+flat in float vFrontDepth;
 void main() {
-    vec3 ray = normalize(vView);
+    vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
+    vec3 ray = normalize(vec3(ndc * uTan, -1.0));
     float tNear, tFar, t, closest;
     vec3 normal;
     if (!sceneSphereRay(ray, vBound.xyz, vBound.w, tNear, tFar)) discard;
     vec4 s[4] = vec4[4](vSpheres[0], vSpheres[1], vSpheres[2], vec4(0.0));
-    bool hit = sceneClusterRay(ray, s, int(vInfo.x), vInfo.y, tNear, tFar, t, normal, closest);
+    float minT = 0.05 / max(-ray.z, 1e-4);
+    if (tFar < minT) discard;
+    bool hit = sceneClusterRay(ray, s, int(vInfo.x), vInfo.y, max(tNear, minT), tFar, t, normal, closest);
     // Antialias the joined silhouette from how closely the ray passed.
     float pixelAngle = uPixelSize;
     float coverage = hit ? 1.0 : clamp(0.5 - closest / pixelAngle, 0.0, 1.0);
@@ -727,12 +754,33 @@ void main() {
     vec4 shaded = shadeBubble(ray, tangent, localPixels, 0.0, point);
     if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
     gl_FragDepth = sceneSphereDepth(point, uProjection);
-    float alpha = shaded.a * coverage;
+    // The same smooth-min weights as the union surface, not the first member's alpha.
+    float distance_ = length(point - s[0].xyz) - s[0].w;
+    float opacity = vAlphas[0];
+    for (int i = 1; i < 3; ++i) {
+        if (i >= int(vInfo.x)) break;
+        float nextDistance = length(point - s[i].xyz) - s[i].w;
+        float weight = vInfo.y > 0.0 ? clamp(0.5 + 0.5 * (nextDistance - distance_) / vInfo.y, 0.0, 1.0)
+                                    : (distance_ < nextDistance ? 1.0 : 0.0);
+        opacity = mix(vAlphas[i], opacity, weight);
+        distance_ = sceneSmoothMin(distance_, nextDistance, vInfo.y);
+    }
+    float alpha = shaded.a * coverage * opacity;
+#ifdef NEAR_LAYER
+    float coc = sceneNearCircle(vFrontDepth, uFocus, uAperture, uNearCoc);
+    sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, coc);
+#else
     sceneTransparent(shaded.rgb * alpha, alpha, -point.z);
     vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6;
     Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
+#endif
 }
 """)
+CLUSTER_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
+                    + CLUSTER_FRAGMENT_BODY)
+NEAR_CLUSTER_FRAGMENT = ("#version 460 core\n#define NEAR_LAYER\n" + SCENE_DEFOCUS_GLSL
+                         + "uniform float uNearCoc;\nuniform float uFocus;\nuniform float uAperture;\nuniform float uNearGain;\n"
+                         + CLUSTER_FRAGMENT_BODY)
 
 PARTICLE_VERTEX = """#version 460 core
 layout(location=0) in vec4 aPoint;   // world position (eye at the origin), world radius
@@ -782,18 +830,13 @@ void main() {
 
 
 # The procedural small bubbles' vertex stage: the bubble vertex stage with its per-instance attributes generated.
-_BEAD_GLSL = """// GPU-procedural small bubbles (S3c): rising bead chains and drifting marine snow, generated from the instance index,
-// fixed seeds, the logical time and the stream, then shaded exactly as the simulation's bubbles (the same fragment
-// stage). World-fixed under the turn as the simulation's bubbles are (``extruded_bubble_scene``): placed by the
-// camera at turn 0, then turned about the vertical by whole periods to stay round the camera's heading.
-uniform mat3 uViewToWorld;
-uniform mat3 uViewToWorldTurn0; // the camera at turn 0 and the current tilt
-uniform vec3 uOrbit;            // the camera's heading (-pi x turn), cos and sin of its pitch
-uniform float uSide;            // the volume's side plane: its extent x 1.12 x the view's tangent across
-uniform vec2 uTan;
-uniform float uTime;
-uniform vec3 uStreamView;      // the stream's unit direction in view space
-uniform float uBeadTravel;     // how far beads have climbed their chains (view units; from the stream's travel)
+_BEAD_GLSL = """// GPU procedural populations in the simulation's fixed physical world.
+uniform vec3 uWorldCenter;
+uniform vec3 uWorldHalf;
+uniform vec3 uStreamWorld;
+uniform vec3 uStreamAcross;
+uniform vec3 uStreamDepth;
+uniform float uBeadTravel;     // integrated physical world travel
 uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
@@ -814,41 +857,17 @@ uint beadHash(uint x) {
 float beadRandom(int index, uint salt) {
     return float(beadHash(uint(index) * 0x9e3779b9u ^ salt * 0x85ebca6bu) & 0xffffffu) / 16777215.0;
 }
-// The turn (about the world vertical) that keeps world point ``p`` within half its period of the camera's heading;
-// the period: twice the azimuth where its elevation meets the volume's side plane (a whole circle where it never does).
-float wrapTurn(vec3 p) {
-    float a = uOrbit.y, b = uOrbit.z;
-    float s = p.y / max(length(p), 1e-9);
-    float qa = a * a - s * s, qb = 2.0 * a * b, qc = b * b - s * s * (uSide * uSide + 1.0);
-    float period = 6.2831853;
-    float disc = qb * qb - 4.0 * qa * qc;
-    if (disc >= 0.0) {
-        for (int k = 0; k < 2; ++k) {
-            float root = abs(qa) > 1e-9 ? (-qb + (k == 0 ? 1.0 : -1.0) * sqrt(disc)) / (2.0 * qa) : -qc / qb;
-            if ((a * root + b) * s >= 0.0) period = min(period, 2.0 * abs(atan(uSide, a - root * b)));
-        }
-    }
-    float azimuth = atan(p.x, -p.z);
-    return mod(azimuth - uOrbit.x + 0.5 * period, period) - 0.5 * period + uOrbit.x - azimuth;
-}
-vec3 turnAbout(vec3 p, float angle) {
-    float c = cos(angle), s = sin(angle);
-    return vec3(p.x * c - p.z * s, p.y, p.z * c + p.x * s);
-}
 void beadInstance() {
-    vec3 along = normalize(uStreamView + vec3(0.0, 1e-4, 0.0));
-    vec3 across = cross(along, vec3(0.0, 0.0, 1.0));
-    across = dot(across, across) > 1e-6 ? normalize(across) : vec3(1.0, 0.0, 0.0);
+    vec3 along = normalize(uStreamWorld);
+    vec3 across = uStreamAcross;
+    vec3 depthAxis = uStreamDepth;
     if (gl_InstanceID < uBeadCount) {
         int chain = gl_InstanceID / uBeadsPerChain;
         int k = gl_InstanceID - chain * uBeadsPerChain;
-        float depth = 7.0 + 26.0 * beadRandom(chain, 3u);
-        vec3 centre = vec3(mix(-1.4, 1.4, beadRandom(chain, 1u)) * uTan.x * depth,
-                           mix(-1.1, 1.1, beadRandom(chain, 2u)) * uTan.y * depth, -depth);
-        float scale = depth / 15.0;
-        float span = 1.7 * depth;
-        // Beads keep their place along the chain and climb it together; one leaving the top re-enters at the foot
-        // (both beyond the frame), so the chain flows without a gap or a jump.
+        vec3 centre = uWorldCenter + uWorldHalf * (vec3(beadRandom(chain, 1u), beadRandom(chain, 2u),
+                                                                     beadRandom(chain, 3u)) * 2.0 - 1.0);
+        float scale = 1.0;
+        float span = 2.0 * length(uWorldHalf);
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
         float s = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span) * span;
         float phase = 6.2832 * beadRandom(chain, 6u);
@@ -858,19 +877,20 @@ void beadInstance() {
                   + sin(s / scale * 0.45 + phase * 1.7) * 0.01;
         vec3 p = centre + along * (s - 0.5 * span)
                + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
-               + vec3(0.0, 0.0, 1.0) * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
+               + depthAxis * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
         // A whole-chain lifetime, independent for each stable seed; both population changes and
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
         float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));
         float lifetimeFade = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.82, 1.0, life));
         vOpacity = clamp(uChainFill - float(chain), 0.0, 1.0) * lifetimeFade;
-        float size = mix(1.4, 4.0, beadRandom(chain, 9u)) * uBeadSize;
+        float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
         float ends = smoothstep(0.0, 0.06, s / span) * (1.0 - smoothstep(0.94, 1.0, s / span));
-        // The whole chain turns with its centre, never split across the seam.
-        aSphere = vec4(turnAbout(uViewToWorldTurn0 * p, wrapTurn(uViewToWorldTurn0 * centre)),
-                       px * uPixel * max(-p.z, 1.0) * ends);
+        vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
+        float boundary = 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
+        vOpacity *= ends * boundary;
+        aSphere = vec4(p, px);
         aExtra = vec2(beadRandom(chain * 977 + k, 12u), 3.0); // stable environment-lit micro-glass
         return;
     }
@@ -892,20 +912,16 @@ void beadInstance() {
         vec3 view = uWorldToView * centre;
         float pixels = r / (uPixel * max(-view.z, 0.1));
         // Larger bubbles shed a fuller wake; giants and specks none.
-        float share = clamp((pixels - 6.0) / 30.0, 0.0, 1.0);
-        if (beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
-            aSphere = vec4(0.0, 0.0, 0.0, 0.0);
-            aExtra = vec2(0.0, 0.0);
-            return;
-        }
+        float share = clamp((r - 0.08) / 0.5, 0.0, 1.0);
+        float population = 1.0 - smoothstep(0.30 + 0.65 * share, 0.40 + 0.65 * share, beadRandom(seed, 18u));
         // Parent reaction moves the attachment point, not the whole trail's size/shape.
         float reach = nominalRadius * 9.0;
         float along_ = pow(fract(beadRandom(seed, 19u) + uBeadTravel * 0.05 / max(reach, 1e-3)), 0.7) * reach;
         float spread = nominalRadius * (0.15 + along_ / reach * 0.8);
         vec2 g = sqrt(-2.0 * log(max(beadRandom(seed, 20u), 1e-6))) * vec2(cos(6.2832 * beadRandom(seed, 21u)),
                                                                          sin(6.2832 * beadRandom(seed, 21u)));
-        vec3 p = view - along * (r + along_) + across * (g.x * spread + sin(along_ / nominalRadius) * nominalRadius * 0.3)
-               + vec3(0.0, 0.0, 1.0) * g.y * spread * 0.6;
+        vec3 p = centre - along * (r + along_) + across * (g.x * spread + sin(along_ / nominalRadius) * nominalRadius * 0.3)
+               + depthAxis * g.y * spread * 0.6;
         float size = nominalRadius * mix(0.04, 0.08, beadRandom(seed, 22u))
                    * uBeadSize * (1.0 - 0.5 * along_ / reach);
         // Front = near the former source (along_/reach = 0). The dissolve walks down the remaining tail.
@@ -913,38 +929,41 @@ void beadInstance() {
         float ends = smoothstep(0.0, 0.08, tail) * (1.0 - smoothstep(0.85, 1.0, tail));
         float headToTail = retirement < 0.0 ? 1.0
                          : smoothstep(retirement - 0.08, retirement + 0.12, tail);
-        vOpacity = sourceAlpha * ends * headToTail * clamp(uFizzFill - float(k), 0.0, 1.0);
+        vOpacity = sourceAlpha * ends * headToTail * population * clamp(uFizzFill - float(k), 0.0, 1.0);
         // Keep even the half-pixel raster footprint strictly below the fading parent's.
         // A tiny/transparent parent cannot acquire equal-sized beads during birth or retirement.
-        float parentPixels = pixels * sqrt(sourceAlpha);
-        float beadPixels = max(size / (uPixel * max(-p.z, 0.1)), 0.5);
+        float parentPixels = pixels;
+        float beadPixels = max(size / (uPixel * max(-(uWorldToView * p).z, 0.1)), 0.5);
         float parentGuard = smoothstep(1.05, 1.4, parentPixels / beadPixels);
         vOpacity *= parentGuard;
-        if (size >= r || parentGuard <= 0.0) size = 0.0;
-        aSphere = vec4(uViewToWorld * p, size);
+        if (size >= r) { size = 0.0; vOpacity = 0.0; }
+        aSphere = vec4(p, size);
         aExtra = vec2(beadRandom(seed, 23u), 3.0); // micro-glass, same medium and lighting, stable sparkle
         return;
     }
     // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
     int i = gl_InstanceID - uBeadCount;
     vOpacity = clamp(uSnowFill - float(i), 0.0, 1.0);
-    vec3 box = vec3(1.4 * uTan.x, 1.2 * uTan.y, 1.0);
-    float depth = 2.5 + 35.0 * fract(beadRandom(i, 13u) + uSnowDrift * along.z * 0.01);
-    vec2 at = vec2(beadRandom(i, 14u), beadRandom(i, 15u)) + uSnowDrift * along.xy / (2.0 * box.xy * depth)
-            + vec2(0.0, 0.004 * sin(uTime * 0.3 + 6.28 * beadRandom(i, 16u)));
-    at = fract(at) * 2.0 - 1.0;
-    vec3 p = uViewToWorldTurn0 * vec3(at * box.xy * depth, -depth);
-    aSphere = vec4(turnAbout(p, wrapTurn(p)), 0.005);
+    vec3 seed = vec3(beadRandom(i, 13u), beadRandom(i, 14u), beadRandom(i, 15u));
+    vec3 at = fract(seed + along * uSnowDrift / (2.0 * uWorldHalf));
+    vec3 p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
+    vec3 edge = abs(at * 2.0 - 1.0);
+    vOpacity *= 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
+    aSphere = vec4(p, 0.005);
     aExtra = vec2(beadRandom(i, 17u), 1.0);
 }
 """
 _ATTRIBUTES = """layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
+layout(location=2) in float aOpacity; // logical lifetime, independent of physical radius
 """
 assert BUBBLE_VERTEX.count(_ATTRIBUTES) == 1 and BUBBLE_VERTEX.count("void main() {\n") == 1
-_SPECK_GLSL = """// GPU-procedural particulate (S3c): specks all round the eye, gathered in clouds stretched along the stream (the
-// lab's ``particulate``), flowing with the water's travel. World-placed, so fixed under the camera's turn.
+_SPECK_GLSL = """// Particulate in the same fixed water domain, with seeded stream-aligned clouds.
 uniform vec3 uStreamWorld;     // the stream's unit direction in the world
+uniform vec3 uStreamAcross;
+uniform vec3 uWorldCenter;
+uniform vec3 uWorldHalf;
+uniform float uWorldUnit;
 uniform float uSpeckTravel;    // how far the specks have flowed (world units)
 uniform float uWarmShare;      // share lit in the particle colour
 uniform vec3 uClouds;          // cloud contrast, floor, glow
@@ -966,21 +985,20 @@ vec2 speckGauss(int index, uint salt) {
 }
 void speckInstance() {
     int i = gl_InstanceID;
-    vec3 direction = normalize(vec3(speckGauss(i, 1u), speckGauss(i, 3u).x) + vec3(0.0, 1e-5, 0.0));
-    float distance_ = 1.2 + 38.0 * pow(speckRandom(i, 5u), 1.6);
+    vec3 seed = vec3(speckRandom(i,1u),speckRandom(i,3u),speckRandom(i,5u));
+    vec3 anchor = (seed * 2.0 - 1.0) * uWorldHalf;
     vec3 along = uStreamWorld;
-    vec3 across = cross(along, vec3(0.0, 0.0, 1.0));
-    across = dot(across, across) > 1e-6 ? normalize(across) : vec3(1.0, 0.0, 0.0);
-    float a = dot(direction, across), b = dot(direction, along);
+    vec3 across = uStreamAcross;
+    float a = dot(anchor, across) / uWorldUnit, b = dot(anchor, along) / uWorldUnit;
     float phase = a * uBandFreq + 1.4 * sin(b * 2.3 + a * 3.0) + 0.8 * sin(b * 5.1 - a * 7.0);
     float clouds = pow(clamp(0.5 + 0.5 * sin(phase), 0.0, 1.0), uClouds.x);
     bool kept = speckRandom(i, 6u) < uClouds.y + 0.88 * clouds;
-    // Each speck flows along the stream over a stretch of water and returns to its start, fading at both ends.
-    float span = 24.0;
-    float s = fract(speckRandom(i, 7u) + uSpeckTravel / span);
-    vec3 p = direction * distance_ + along * (s - 0.5) * span;
-    float ends = smoothstep(0.0, 0.1, s) * smoothstep(1.0, 0.9, s);
-    float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * uPixel * length(p) * uSpeckSize;
+    // Recycle only at fixed world boundaries, invisible at each boundary before wrapping.
+    vec3 at = fract(seed + along * uSpeckTravel / (2.0 * uWorldHalf));
+    vec3 p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
+    vec3 edge = abs(at * 2.0 - 1.0);
+    float ends = 1.0 - smoothstep(0.8, 1.0, max(edge.x, max(edge.y,edge.z)));
+    float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float bright = exp(0.7 * speckGauss(i, 9u).x) * (0.35 + uClouds.z * clouds) * ends;
     aPoint = vec4(p, kept ? radius : 0.0);
     aLook = vec4(kept ? bright : 0.0, speckRandom(i, 11u) < uWarmShare ? 1.0 : 0.0, speckRandom(i, 12u), 0.0);
@@ -994,7 +1012,7 @@ assert PARTICLE_VERTEX.count(_SPECK_ATTRIBUTES) == 1 and PARTICLE_VERTEX.count("
 SPECK_VERTEX = (PARTICLE_VERTEX.replace(_SPECK_ATTRIBUTES, "")
                 .replace("void main() {\n", _SPECK_GLSL + "void main() {\n    speckInstance();\n"))
 BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
-               .replace("void main() {\n    vOpacity = 1.0;\n",
+               .replace("void main() {\n    vOpacity = aOpacity;\n",
                _BEAD_GLSL + "void main() {\n    vOpacity = 1.0;\n    beadInstance();\n"))
 
 __all__ = [
@@ -1009,6 +1027,7 @@ __all__ = [
     "COMMON",
     "FULL_VERTEX",
     "NEAR_FRAGMENT",
+    "NEAR_CLUSTER_FRAGMENT",
     "PARTICLE_FRAGMENT",
     "PARTICLE_VERTEX",
     "SHADE_GLSL",

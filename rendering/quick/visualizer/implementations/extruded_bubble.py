@@ -28,10 +28,10 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    NEAR_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
+    NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
 )
 from rendering.gl_programs.extruded_bubble_scene import (
-    CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, VOLUME_EXTENT, bubble_instances, camera,
+    CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, wake_instances, lens_shift, speck_amount,
     glint_proxies, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
@@ -44,6 +44,7 @@ from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES
+from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER, WORLD_HALF, WORLD_UNIT, stream_basis
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
 
 from ..implementation_values import parameter
@@ -56,6 +57,7 @@ _PROGRAMS = (
     ("clusters", CLUSTER_VERTEX, CLUSTER_FRAGMENT),
     ("beads", BEAD_VERTEX, BUBBLE_FRAGMENT),
     ("near", BUBBLE_VERTEX, NEAR_FRAGMENT),
+    ("near_clusters", CLUSTER_VERTEX, NEAR_CLUSTER_FRAGMENT),
     ("proxies", PARTICLE_VERTEX, PARTICLE_FRAGMENT),
     ("specks", SPECK_VERTEX, PARTICLE_FRAGMENT),
 )
@@ -70,7 +72,12 @@ _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # scaled by the tier's particle share). Beads climb by the stream's travel only, with integrated energy response.
 _CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, 2500
 _FIZZ_PER_BUBBLE, _WAKE_BINDING = 64, 7         # wake motes behind stable logical emitters; separate SSBO binding
-_BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0, 8.0, 10.0
+_BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 10.0 / WORLD_UNIT
+
+
+def _near_spread(height: int) -> float:
+    """Resolution-scaled lens budget; camera gestures do not reallocate its read level."""
+    return _NEAR_SPREAD * height / 941.0
 
 
 def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, float, float]:
@@ -278,9 +285,9 @@ class QuickExtrudedBubbleRenderer:
         self._near = DefocusLayer("Extruded Bubble near layer")
         self._shafts = _ShaftTargets("Extruded Bubble shafts")
         self._probe: SceneProbe | None = None
-        self._shells = _Instances(_SHELL_CAPACITY, (4, 2))
+        self._shells = _Instances(_SHELL_CAPACITY, (4, 2, 1))
         self._wakes = _Instances(MAX_BUBBLES * 2, (4, 4))
-        self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4))
+        self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4, 3))
         self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))
         self._empty_vao = 0                       # the procedural layers read no attributes
         self._uniforms = _Uniforms()
@@ -324,7 +331,7 @@ class QuickExtrudedBubbleRenderer:
             return False
         if not self._probe_for(parameters).warm():
             return False
-        if not self._near.warm(width, height, _NEAR_SPREAD):
+        if not self._near.warm(width, height, _near_spread(height)):
             return False
         return self._target.warm((width, height), samples, overlay=True, bloom=True, depth_texture=True,
                                  background=True, oit=True, hdr=True)
@@ -360,10 +367,10 @@ class QuickExtrudedBubbleRenderer:
         view_to_world, world_to_view, tan, projection = camera(*pose, width / height, scale, shift)
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
-        shells = bubble_instances(state.bubbles, tan, pose)
+        shells = bubble_instances(state.bubbles)
         shell_count = self._shells.upload(shells)
-        wake_count = self._wakes.upload(wake_instances(state.wakes, tan, pose))
-        cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters, tan, pose))
+        wake_count = self._wakes.upload(wake_instances(state.wakes))
+        cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
                                                          float(knobs.get("proxy_power", 2.5))))
         # The rays read the simulation's ray driver and shimmer, never the raw level (it holds at 1 when loud).
@@ -380,19 +387,18 @@ class QuickExtrudedBubbleRenderer:
         sun_screen = light_on_screen(knobs["sun_below"], world_to_view, projection, (width, height))
         view = {"uWorldToView": _floats(world_to_view), "uProjection": _floats(projection), "uPixel": pixel,
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
-                "uProbeLevels": float(probe.levels)}
-        for key, near in (("shells", False), ("clusters", False), ("near", True), ("beads", False)):
-            self._uniforms.set(programs[key], {**view, **_glass(knobs, near)})
+                "uProbeLevels": float(probe.levels), "uLensShift": shift}
+        for key, near in (("shells", False), ("clusters", False), ("near", True), ("near_clusters", True), ("beads", False)):
+            self._uniforms.set(programs[key], {**view, **_glass(knobs, near), "uNearCoc": 22.0 * height / 941.0 * scale})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
         fizz_per = math.ceil(fizz_fill)
         stream = _floats(state.stream)
+        across, depth_axis = stream_basis(stream)
         self._uniforms.set(programs["beads"], {
-            "uViewToWorldTurn0": _floats(camera(0.0, pose[1], width / height, scale)[0]),
-            "uOrbit": (-math.pi * pose[0], math.cos(math.radians(16.0 + 90.0 * pose[1])),
-                       math.sin(math.radians(16.0 + 90.0 * pose[1]))),
-            "uSide": VOLUME_EXTENT * 1.12 * tan[0],
-            "uStreamView": (stream[0], stream[1], -stream[2]), "uBeadsPerChain": _BEADS_PER_CHAIN,
+            "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,
+            "uStreamAcross": across, "uStreamDepth": depth_axis,
+            "uStreamWorld": stream, "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": 0.9 + 0.2 * max(0.0, min(1.0, float(state.level))),
             "uChainFill": chain_fill, "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
@@ -402,11 +408,12 @@ class QuickExtrudedBubbleRenderer:
         self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(parameters, state.emission)
         specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
-        stream_world = np.asarray((stream[0], stream[1], -stream[2])) @ np.asarray(view_to_world).reshape(3, 3)
         self._uniforms.set(programs["specks"], {
             "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
             "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]), "uSpeckWarm": _floats(knobs["speck_warm"]),
-            "uStreamWorld": _floats(stream_world / max(float(np.linalg.norm(stream_world)), 1e-6)),
+            "uStreamWorld": stream,
+            "uStreamAcross": across,
+            "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
             "uSpeckTravel": _SPECK_CARRY * float(state.travel), "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
             "uBandFreq": float(knobs["band_freq"]), "uSpeckSize": float(knobs["speck_size"])})
@@ -427,7 +434,7 @@ class QuickExtrudedBubbleRenderer:
                                                       "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS, "uLensShift": shift,
                                                       "uFrameSize": (float(width), float(height))})
             target_size = (float(allocation[0]), float(allocation[1]))
-            for key in ("shells", "clusters", "near", "beads"):
+            for key in ("shells", "clusters", "near", "near_clusters", "beads"):
                 self._uniforms.set(programs[key], {"uTargetSize": target_size})
             # The card's camera covers the item's pixels (the target's origin), not the window's viewport.
             gl.glViewport(0, 0, width, height)
@@ -474,8 +481,12 @@ class QuickExtrudedBubbleRenderer:
             gl.glUseProgram(programs["near"])
             gl.glBindVertexArray(self._shells.vao)
             gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+            if cluster_count:
+                gl.glUseProgram(programs["near_clusters"])
+                gl.glBindVertexArray(self._clusters.vao)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
             self._near.end()
-            self._near.composite(_NEAR_SPREAD)
+            self._near.composite(_near_spread(height))
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
                 gl.glBindTextureUnit(unit, 0)
             gl.glViewport(*scene_viewport)

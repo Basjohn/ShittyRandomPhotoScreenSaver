@@ -49,6 +49,9 @@ try:
     gl.glActiveTexture(gl.GL_TEXTURE0)
     gl.glBindTexture(gl.GL_TEXTURE_2D,capture.textures[0])
     projection=camera(0,0,W/H)[3]
+    tan=camera(0,0,W/H)[2]
+    gl.glVertexAttrib1f(2,1.0)
+    gl.glVertexAttrib3f(4,1.0,1.0,1.0)
     gl.glDisable(gl.GL_BLEND);gl.glDisable(gl.GL_DEPTH_TEST);gl.glDisable(gl.GL_CULL_FACE)
     vao=int(gl.glGenVertexArrays(1));vbo=int(gl.glGenBuffers(1))
     for kind,vs,fs in [('ordinary',BUBBLE_VERTEX,BUBBLE_FRAGMENT),('cluster',CLUSTER_VERTEX,CLUSTER_FRAGMENT)]:
@@ -58,6 +61,7 @@ try:
         for name,val in [('uDiag',5),('uProbe',2),('uBackground',0),('uEnvironment',0)]:gl.glUniform1i(loc(name),val)
         for name,val in [('uPixel',2*math.tan(math.radians(31))/H),('uPixelSize',2*math.tan(math.radians(31))/H),('uFocus',0),('uAperture',0),('uCrisp',1),('uNearLayer',0),('uNearCoc',0),('uProbeLevels',1),('uBehind',8),('uLens',1),('uShell',.03),('uFrameShare',1)]:gl.glUniform1f(loc(name),val)
         gl.glUniform3f(loc('uIors'),1.15,2,1)
+        gl.glUniform2f(loc('uTan'),*tan)
         gl.glUniform2f(loc('uFrameSize'),W,H);gl.glUniform2f(loc('uTargetSize'),W,H)
         for name in ('uWorldToView','uViewToWorld'):gl.glUniformMatrix3fv(loc(name),1,False,np.eye(3,dtype='f4'))
         gl.glUniformMatrix4fv(loc('uProjection'),1,False,projection)

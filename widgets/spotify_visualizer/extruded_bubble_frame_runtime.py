@@ -20,7 +20,7 @@ from widgets.spotify_visualizer.transient_bus import musical_weight
 
 # The largest step one capture may take (a stalled clock never leaps the population).
 MAX_STEP_SECONDS = 0.1
-# Settings units -> simulation units: speed (volume units/s); breathing/pulse are authored reaction strengths.
+# Settings units -> simulation units: speed (authored normalized length/s; simulation converts once to physical world units); breathing/pulse are authored reaction strengths.
 # Full-dynamic musical body bands are read from the existing 2D Bubble engine, not a new floor/DSP.
 STREAM_SPEED_FULL = 0.25
 _SCOPES = {"All": "all", "Big": "big", "Small": "small", "Off": "off"}

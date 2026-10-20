@@ -65,10 +65,9 @@ class WakeOwnershipTests(unittest.TestCase):
     def test_compaction_never_rebinds_retiring_wake_to_new_bubble(self):
         self.tick()
         ident = self.sim._bubbles[0].ident
-        self.sim._bubbles[0].popping = 0.0
+        self.sim._bubbles[0].popping = self.mod._POP_SECONDS - 1/30
         self.tick()
-        for _ in range(24):
-            self.tick()
+        self.tick()
         # Other bubbles can continue to occupy compacted shell slots, but the wake keeps its own identity.
         self.assertIn(ident, source_records(self.tick()))
         self.assertNotIn(ident, [b.ident for b in self.sim._bubbles])
@@ -110,7 +109,7 @@ class WakeOwnershipTests(unittest.TestCase):
         self.assertNotIn('EbShells { float ebShell[]; }', shader)
         self.assertIn('retirement - 0.08, retirement + 0.12, tail', shader)
         self.assertIn('self._wakes.buffer', renderer)
-        self.assertIn('wake_instances(state.wakes, tan, pose)', renderer)
+        self.assertIn('wake_instances(state.wakes)', renderer)
         self.assertIn('self._wakes.release', renderer)
 
     def test_micro_glass_stays_lit_by_scene_without_radius_dependent_random_switch(self):

@@ -308,6 +308,12 @@ independently of camera pose; projection and material lifetime opacity must not 
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble_Target.md`;
 measured failures and native 2D/EB comparison: the Extruded Bubble ledger in `Docs/Historical_Bugs/`.
 
+EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
+Rendering packs them directly; authored global counts never multiply by camera sector. Reacted radii govern
+contacts and wake attachment, while nominal size remains independent for mass and modest bead dimensions.
+Ordinary/fused geometry shares projection/depth and the existing near-defocus owner. Lifetime alpha is material
+opacity, including coherent union weights; a pop is a gentle opacity retirement with musical radius independent.
+
 EB view-aware overlap interactions supplement physical contacts using the existing camera's derived projection;
 they must not redefine the population around the camera or teleport separated geometry. Pops are extremely
 gentle opacity fades. Correct world/source placement, perspective, transparency, depth attenuation and near DoF

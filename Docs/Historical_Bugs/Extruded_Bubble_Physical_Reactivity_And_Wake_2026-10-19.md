@@ -601,3 +601,101 @@ opacity and near-layer checks need ordinary/fused entry/pop/exit, center/edge/ne
 focus/aperture response and convincing depth-separated crossings. Compare against the latest copper mock;
 screen-space intervention must not conceal these failures. Physical musical-response acceptance remains open
 alongside this geometry work.
+
+## 15. Fixed physical world checkpoint and bounded native evidence
+
+The geometry boundary described in §14 is now corrected at its production owners. The pure
+`extruded_bubble_geometry.py` definition supplies a camera-independent domain centred at the world origin,
+with half extents (18, 8, 18), water plane y=9 and a one-time length calibration of 9. This preserves nominal
+scale near the former 15-unit reference distance, not constant screen size at every depth. The existing logical
+simulation owns physical positions, radii, travel and lifetime. Authored counts remain global; no sector copies,
+camera-following cohorts, hidden multipliers, alternate clock or new scene manager were introduced.
+
+Initial fill occupies the fixed volume. Subsequent sources select real upstream faces weighted by face area
+times inward stream component. Column placement uses the canonical transverse world basis and re-intersects
+the actual upstream boundary; impossible column admission fails loudly after bounded sampling. Shells, stable
+wakes and union members pack physical xyz/radius directly. GPU free chains, snow, attached fizz and glowing
+specks share the world stream/domain rather than a camera wedge or azimuth wrap. Their physical sizes do not
+depend on view depth, aspect or pixels. Camera rotation observes those identities; zoom changes projection.
+Pan is still a lens shift, not a translated camera or independently authored orbit pivot.
+
+An intermediate native capture exposed a remaining radial speck cloud concentrated around the world origin:
+fixed physical sizing made its excessive foreground population obvious. Specks now use seeded anchors in the
+same fixed box, world advection and an opacity/brightness fade at domain boundaries before wrapping. The cloud
+mask follows stable world anchors and the stream basis. Authored glow, particle controls and preset files were
+not retuned to conceal the placement defect. Minimum raster footprints remain rendering coverage, not physical
+radius or source placement; native art acceptance still needs to assess their visible effect.
+
+Current reacted radius is resolved before movement/contacts, then shared with snapshot and wake attachment.
+The broadphase searches extents covered by the largest current diameter, rather than assuming fixed .25 cells
+cover expanded bodies. Contact response is chosen once per contact episode with separation hysteresis. Union
+admission preserves exact centres and a connected edge layout; existing smoothed radii drive connected offsets
+around a nominal-mass centre. Third-member addition/removal keeps the graph coherent; removing its bridge only
+reconnects the two survivors if they physically touch. Bounce separates gradually with a dt-bound and moves an
+existing union as a group. These are mechanism proofs; dense-motion jitter/cost still require observation.
+
+Lifetime now travels as material opacity: ordinary instances carry 7 floats and unions 19, including three
+member opacities blended by surface weights. Pops use a 2.4 s smoothstep opacity retirement, retain the starting
+opacity without brightening and add no pop-only radius expansion. Musical radius remains independent. Ordinary
+and union fragments use the same pinhole rays and conservative physical bounds, including near-plane crossings
+and an eye inside a body. Near/inside shading traces the forward exit surface; the shared hollow-shell tracer
+starts in the actual outside/wall/core medium. Near unions use the existing DefocusLayer once, with the same
+front-depth admission as ordinary shells. The near circle now responds to aperture and uses surface depth in
+its denominator; the prepared/composite budget is resolution-based so camera gestures do not reallocate it.
+Off-axis physical spheres can project as ellipses: consistency with pinhole geometry does not approve objectionable
+artistic distortion or establish foreground softness.
+
+**116 focused checks pass against this source.** They cover physical face/column admission, steep-stream basis,
+reacted broadphase reach, contracted noncontacts, exact union admission, connected contraction and third-member
+removal, gradual repeated bounce, opacity-only pops, immutable world uploads under camera gestures, procedural
+position/radius invariance, and removal of the origin-biased speck halo. Native GL guards exercise ordinary/union
+centre/edge silhouettes, near-plane and inside starts, finite reflected/transmitted output, per-member alpha,
+exclusive normal/near routing and actual aperture consumption. Prepared yaw/tilt/zoom renders compile and allocate
+nothing. Shared optics exterior regressions and analytic core/wall Fresnel starts are included. The migrated lab
+also completed an ExBubble6Diagonal smoke render at 836×470; its authored placements and 23,721 instances are not
+production population, performance or fidelity acceptance. The same single Sol 6.1 Medium read-only reviewer
+checked the boundary and the final speck change; no additional agents were used.
+
+Final-source native artifacts (ignored local evidence, with source/clip/settings receipts):
+
+- `logs/eb_reactivity_20261020/world_final_p7`: 15 frozen real-recorded-snapshot views at 1672×941,
+  unmodified P7, 54 global bubble identities; ordinary yaw-view frustum candidates range 4–22.
+- `logs/eb_reactivity_20261020/world_final_p1_1440`: 15 equivalent views at 2560×1440, unmodified P1,
+  56 global identities; ordinary yaw-view candidates range 2–9. Both include twelve yaw angles, two tilt views
+  and a zoom/pan view. No simulation advance occurs between views. Candidate counts are conservative ordinary
+  frustum estimates, not segmented pixels or procedural/union counts. The primary inspected both contact sheets.
+- `logs/eb_reactivity_20261020/world_final_operator_ranges`: 10 paired frames at 2560×1440 from
+  `anything_mixed2`, 227 selected logical inputs over approximately 1.5–4 s. P7 is activated with selected retained
+  controls in memory: Large [0,4], Small [20,50], Particles [.85,1], Bead Chains [2,4], Ray Softness .81. This is
+  not an exact live-operator configuration reproduction. All logical records, including retirement, stay within
+  Large 0–4 and Small 24–45. This short cold-start interval has **zero mature, fully-forward ordinary large
+  frustum records**, so it cannot validate visible large-class response. A projected large-looking shape must
+  not be classified as a large owner. The primary inspected the contact sheet; excessive point detail remains.
+
+The frozen native views prove a real surrounding population and reveal legitimately sparse directions; they do
+not justify repopulating views around the camera. P7 still lacks the target's restrained glow, convincing glass
+depth, differentiated debris/gas/wisps and foreground/background hierarchy. P1 remains visibly far from target
+parity too. Source-correct physical geometry is a foundation, not appearance acceptance. The operator subsequently
+judged the result significantly better while explicitly retaining the remaining fidelity/reactivity work.
+
+Evidence qualification matters. `world_first_p7` failed metadata serialization and is rejected as a verified run.
+`world_verified_*`, `world_response_p1` and `world_response_p7_1440` belong to earlier producer hashes before the
+last speck correction; retain them for their scoped geometry/reaction evidence, not final-source art acceptance.
+The old first-order projected-radius observer generated meaningless eye-plane extrema: reject those values.
+It now labels projection regimes and limits mature radius aggregates to fully-forward ordinary frustum candidates;
+the archived `projection_validated.json` qualifies the older P1 custody without rewriting it. First-order radius
+estimates still do not measure glass/DoF silhouettes. Captures contain recorded post-DSP features; silent GIFs
+do not supply verified synchronized sound. Cold compile/readback/query timings are not cadence or performance
+benchmarks, and offscreen native output is not operator/display acceptance.
+
+Cost boundary: camera remapping/trigonometric population reconstruction is removed. Fixed shell/union capacities
+gain 1,920 bytes total for lifetime attributes; a lazy near-union program/pass remains with the existing resource
+and DefocusLayer owners. No permanent diagnostics, new timer, DSP/floor changes or authored preset mutations were
+added. Contact work remains bounded by the existing 192-body ceiling, but that bound is not a measured speedup.
+
+Remaining actionable work stays in Current_Plan: water-plane source clearance and gentle breach retirement
+(the current exit waits for the whole sphere to pass); translated camera/pivot and authored source regions;
+dead `near_bubbles` transport cleanup; same-ID big/small native silhouettes on the same sound as 2D, including
+idle/onset/sustain/release and sparse-range visibility; depth/material/near softness and restrained glow;
+fire/smoke/fog/debris architecture and centralized preset/mock provenance; only then a justified persistent
+unreadable-crossing policy, with Auto Rotate later. Keep physical musical, lifecycle and operator gates open.
