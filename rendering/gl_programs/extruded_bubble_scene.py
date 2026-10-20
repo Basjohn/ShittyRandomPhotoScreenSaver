@@ -2,7 +2,7 @@
 
 No GL: the renderer (``rendering/quick/visualizer/implementations/extruded_bubble.py``) uploads what these return,
 and the composition lab (``tools/labs/extruded_bubble_lab.py``) shares ``ENGINE`` and ``MODES`` so a lab scene and a
-preset authored through the Settings are the same knobs (``Extruded_Bubble_Target.md`` section 9).
+preset authored through the Settings are the same knobs (``Extruded_Bubble/Target.md`` section 9).
 
 **Knobs.** ``ENGINE`` is the same for every scene; ``MODES`` holds what a Light Type implies; ``scene_knobs`` reads
 the mode's Settings (``extruded_bubble_*``) on top: colours (0..255 to linear 0..1), the light's direction and

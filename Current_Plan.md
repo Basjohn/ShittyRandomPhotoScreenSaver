@@ -8,8 +8,9 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
-cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6–15; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Reference/Extruded_Bubble/Investigation.md`
+§6–17; EB images, lab, reports and evidence: `Docs/Reference/Extruded_Bubble/README.md`.
+Durable target: `Docs/Reference/Extruded_Bubble/Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -151,6 +152,11 @@ Keep D/B/C/A and all original/additional failures in the target/history; no earl
 leaving room for musical expansion. No periodic idle size-breathing target. Size, drift/sway, stream, water/ambient,
 beads/wakes, rays and emission must all be gentle; nothing remotely fast while idle. No abrupt stop on release.
 
+**Passage roles (latest operator clarification):** large bubbles breathe significantly in softer music, especially
+downward. They carry sustained body specifically in sustained/loud passages. Small bubbles and emission/drift/
+speed/rays must continue expressing changes inside those loud passages, without a shared bass/transient hold.
+Presets and controls may be corrected where needed; prove meaningful controls rather than protect ineffective tuning.
+
 #### EB-F — Evidence fidelity and remaining attribution
 
 - [ ] Extend the existing bounded forensic tools only where an unresolved competing explanation requires it.
@@ -169,6 +175,9 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 - [ ] Measure source-band read/logical-tick CPU cost without introducing a permanent observer. The auxiliary
   `extruded_bubble_traces.py` plot supplies real bands and classifies by identity, but its default-control population
   means and kick follower are not per-ID radius or native-pixel acceptance. Use forensic custody for those claims.
+- [ ] Retire the now diagnostic-only kick `breath` follower and immutable transport after the clean-body checkpoint.
+  Actual event motion/light uses `flash`; do not present the unused kick follower as a musical size consumer.
+  Preserve onset serial/source-fence checks against the live event consumers and migrate the bounded tools.
 
 #### EB-D — Musical size, attack/release and collapsed rest (first recovery priority)
 
@@ -180,11 +189,24 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Reject a large percentage excursion that still leaves the minimum inflated or makes musical peaks too small.
 - [ ] **Awaiting Validation — Sustained Response.** The band-path consumer now supports body size and motion;
   prove 0/1 endpoints in actual pixels on sustained real passages without inventing a periodic pulse on held input.
-- [ ] **Awaiting Validation — small/large separation and count limits.** The normalized driver now cannot exceed
-  1 and retiring records retain their admission slots (old target reversals could show five at a four-large ceiling).
-  The old weighted small mix could also reach 1.05 and admit 51 at a 50-small endpoint. The small-lane candidate
-  separates changing vocal energy from restrained held support; corrected no-event real-band holds reduce
-  small inflation toward the accepted 2D scale. Verify real sustained passages and transient peaks remain
+- [ ] **Rework passage-role separation before landing the pending response candidate.** Check 2D's separate
+  mid/high reference, clean delta, bounded hot/body support and release; it is not literally bass-free. Give large
+  bubbles significant downward breathing in soft/changing music and held body in sustained loud music. Avoid
+  ordinary small size being held by transients or bass; retain changing-vocal/high response during loud passages.
+  Audit the shared `max`-level consumers for pinned stream/drift/emission/rays under held bass with changing vocals.
+  Correct Sustained Response/Range semantics and preset values through canonical Settings where needed, including
+  tooltip wording currently emphasizing held small size. Validate quiet/change/held-loud/changes-within-loud/release
+  at multiple control endpoints on the same recorded sections as 2D. The latest native screenshots are rejected.
+- [ ] **Awaiting Validation — clean-body phrase response.** Use report §16 and the paired comparison tool to
+  compare the same actual body tuples/cadence in 2D/EB. The candidate removes event tails from size, restores
+  vocal contribution under bass and gives changing small-body energy more authority. Verify absolute span,
+  minimum, peak, relative excursion and onset/release timing independently: the first-window large minimum and
+  relative excursion still miss 2D, despite a larger peak. Do not close this using tiny opening-rest percentages.
+  Inspect high-pass small peaks for long ceiling-like holds, additive-mixture clipping, apparent overcrowding and
+  pauses. Include actual native ordinary silhouettes at fixed depth and label raster/near-layer transitions.
+- [ ] **Awaiting Validation — small/large separation and count limits.** Verify the normalized population driver
+  and retiring-slot admission against the Range endpoints; mechanisms/history are in report §10. The small lane
+  separates changing vocal energy from restrained held support. Verify real sustained passages and transient peaks remain
   expressive without turning the entire small field into large-looking shells. Classify by stable owner ID,
   never current radius. Distinguish active count targets, still-visible retirement and fused groups; confirm
   current user's [0,4] large / [20,50] small values at the logical/GPU seam. See report §10, including the rejected
@@ -198,7 +220,7 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Large and small SAME-ID radius changes must visibly approach the accepted 2D response scale on `anything_mixed2`
   at normal controls. Dynamic Floor on/extreme Sensitivity are negative controls, never required workarounds.
   Reject small rapid nonmusical pulses, held inflation, dead small bubbles, judder and sudden stops.
-- [ ] Gate the **first reactivity implementation slice** on the same opening 12 seconds of `anything_mixed2`
+- [ ] Accept the **reactivity baseline** only on the same opening 12 seconds of `anything_mixed2`
   used in the native positive comparison, with unchanged authored presets and normal technical controls. Compare
   large/small SAME-ID radius/base, music-correlated excursions, onset-to-pixel delay and release against accepted
   2D; include the 1.507–3.147 s window where old EB only reached 1.038–1.131× base against 2D's 0.707–2.782×.
@@ -316,13 +338,16 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 
 #### EB-A — Glass/material, mock fidelity and authoring
 
-- [ ] **After reactivity: centralize visual target assets and parity mapping.** Preserve original mocks and lab
-  targets from `tmp/Bubbleexamples`, `tmp/eb_s4/presets_sheet.png`, its `scenes.json` / `scenes.py`, `lab` / `scenes` /
-  `presets` outputs and paired/comparison images in a durable canonical location with provenance and a
-  preset→example→lab mapping, fidelity gaps, owning architecture and verification steps. Preset 7 maps to
-  `ExBubble6Diagonal`; it is the operator's strongest current preset but still lacks fire/smoke/fog and other
-  fidelity. The other presets are poor and may be mismapped or miss settings relative to their lab targets.
-  Audit actual Settings-resolved production scenes, not just preset labels. Organisation follows the live response slice.
+- [ ] Verify the centralized preset→example→lab registry in `Docs/Reference/Extruded_Bubble/README.md` against actual
+  resolved Settings and camera/source composition. P7→ExBubble6Diagonal is operator-confirmed; other associations
+  remain candidates. Use the original/annotated targets, full historical lab material and failed native evidence
+  now housed together there; record parity gaps, owning architecture and proof at that single home. Do not create
+  another image collection or postpone needed EB architecture as optional graphics work.
+- [ ] Confirm/fix the P7 dot lattice at the existing near-defocus owner: Astra's audit finds the 1440p highlight
+  sampler's 8-pixel grid matches the native dot rows/columns. Freeze the current snapshot and A/B that split with
+  all particles/geometry preserved. Do not reduce specks to conceal a near-highlight sampling defect. Then isolate
+  conflicting background/light lens models, missing rear-population refraction, probe/self-proxy blobs and the
+  analytic specular consumer ignoring Light Strength. Exact source leads/falsifiers: the centralized Visual Audit.
 - [ ] Isolate coin-like/edge-on clear shells, especially Preset 7, with native normal/coverage/reflected/transmitted
   diagnostic views and SAME-ID samples. Inspect screen-facing-ray, refraction, film/rim, interior blur and DoF
   separately; analytical sphere intersections do not establish believable spherical glass.

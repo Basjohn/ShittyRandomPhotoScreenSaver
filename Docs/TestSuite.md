@@ -138,7 +138,7 @@ currently have no near-focus routing. Existing source tests do not prove
 what the camera sees or the perceived speed of moving backgrounds.
 
 **Extruded Bubble's 2026-10-18 operator failure ledger is not closed by these green coverage claims.**
-`Docs/Reference/Extruded_Bubble_Target.md` §10 (D → B → C → A) and §11 (five additional findings)
+`Docs/Reference/Extruded_Bubble/Target.md` §10 (D → B → C → A) and §11 (five additional findings)
 are the physical acceptance authority. Extend the targeted tests with stable whole-bead-chain identities and
 birth/retirement opacity envelopes at fractional population changes (not merely per-bead end fades); curved
 world-space advection, 15%-wider chain footprint; no unowned fixed-time acceleration in silence; smooth
@@ -940,7 +940,7 @@ settings retirement, or breathing fixed from source-only or synthetic validation
 
 `python tests/test_extruded_bubble_wake_contract.py` is a dependency-free *contract* test for live/retiring stable emitter identity, pop/compaction stability, source-head-to-tail fade parameters, reset and zero-parent cases, and a scene-lit microglass branch. `tests/test_extruded_bubble_shader_contract.py` protects vertex/fragment outputs. The 9 production shader pairs must also be compiled and linked with the actual Windows OpenGL 4.6 renderer; Mesa GLSL 4.50 compatibility linking is **not** native acceptance. Fixed buffers remain bounded to 2× `MAX_BUBBLES`, and retired sources must be consumed only by the existing simulation and immutable frame seam; no extra clocks, GPU random emitter authority or leaked GL resources.
 
-These checks **cannot** override the operator's confirmed full-mode reactivity failure. Bead shimmer must be assessed while moving under shafts in Presets 1/7; wake termination must be filmed at pop, fuse, surface exit and ordinary disappearance, with the dissolution marching from its travel-facing end backward. The still-open fused-cluster near DoF must have its own real-driver camera/Focus/Aperture acceptance. Follow the detailed live checklist in `Docs/Reference/Extruded_Bubble_Target.md` and the dedicated historical ledger; **do not close `[~]` without operator instruction**. Preserve real-music playback evidence at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` as well as synthetic replay fixtures.
+These checks **cannot** override the operator's confirmed full-mode reactivity failure. Bead shimmer must be assessed while moving under shafts in Presets 1/7; wake termination must be filmed at pop, fuse, surface exit and ordinary disappearance, with the dissolution marching from its travel-facing end backward. The still-open fused-cluster near DoF must have its own real-driver camera/Focus/Aperture acceptance. Follow the detailed live checklist in `Docs/Reference/Extruded_Bubble/Target.md` and the dedicated historical ledger; **do not close `[~]` without operator instruction**. Preserve real-music playback evidence at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` as well as synthetic replay fixtures.
 
 ### Extruded Bubble: negative source probes versus physical acceptance (2026-10-19)
 
@@ -1033,3 +1033,9 @@ changes. GPU generator readback independently protects chain/snow/wake positions
 and glowing specks must occupy the shared fixed volume rather than the former origin-biased radial halo. Prepared
 frames still must compile/allocate nothing through yaw/tilt/zoom. These are bounded architecture/consumer gates;
 operator glass volume, glow/debris/fog, depth hierarchy, density, cadence and physical musical acceptance remain open.
+
+The clean-body response gate pairs identical continuous bands with/without onset events to reject event-tail size
+inflation while retaining event light/motion. It also challenges changing vocals under held bass, continuity around
+the old .01 quiet threshold, gradual silence, and absolute SAME-ID span strictly inside `anything_mixed2`'s active
+4–8 s phrase. The latter cannot pass merely through tiny rest at the recording's start. It does not establish
+relative-excursion or minimum-size parity in the separate first-window comparison; those remain explicit failures.

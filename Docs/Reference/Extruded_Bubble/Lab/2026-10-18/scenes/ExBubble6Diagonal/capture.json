@@ -1,0 +1,102 @@
+{
+  "source": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\logs\\visualizer_recordings\\dontyouseemetrying_mixed.jsonl",
+  "start_s": 20.0,
+  "stop_s": 20.394171,
+  "fps": 2.5,
+  "commit": "ff16d9ab5534fe7f3333f1f97c8e694b0dc921d9",
+  "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+  "logical_size": [
+    1672,
+    941
+  ],
+  "window": [
+    1672,
+    941
+  ],
+  "gpu_ms_median_p90": [
+    12.903424,
+    12.903424
+  ],
+  "preset_path": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\presets\\visualizer_modes\\extruded_bubble\\preset_1_sunlit_surface.json",
+  "overrides": {
+    "extruded_bubble_light_type": "Deep Light",
+    "extruded_bubble_water_colour": [
+      8,
+      33,
+      43,
+      255
+    ],
+    "extruded_bubble_depth_colour": [
+      3,
+      13,
+      15,
+      255
+    ],
+    "extruded_bubble_light_colour": [
+      255,
+      133,
+      51,
+      255
+    ],
+    "extruded_bubble_light_direction": [
+      46.5,
+      28.5
+    ],
+    "extruded_bubble_light_strength": 0.12,
+    "extruded_bubble_rays": [
+      0.1,
+      0.2
+    ],
+    "extruded_bubble_veils": 0.35,
+    "extruded_bubble_haze": 0.6,
+    "extruded_bubble_iridescence": 0.3,
+    "extruded_bubble_clarity": 0.88,
+    "extruded_bubble_rim_glow": 0.5,
+    "extruded_bubble_sparkle": 1.5,
+    "extruded_bubble_softness": 0.2,
+    "extruded_bubble_particles": [
+      0.85,
+      1.0
+    ],
+    "extruded_bubble_particle_colour": [
+      255,
+      64,
+      5,
+      255
+    ],
+    "extruded_bubble_particle_size": 1.6,
+    "extruded_bubble_particle_glow": 0.6,
+    "extruded_bubble_particle_warmth": 0.9,
+    "extruded_bubble_particle_bands": true,
+    "extruded_bubble_band_contrast": 1.0,
+    "extruded_bubble_stream_direction": [
+      106.7,
+      8.2
+    ],
+    "extruded_bubble_sway": 0.25,
+    "extruded_bubble_focus": 0.3,
+    "extruded_bubble_aperture": 0.44,
+    "extruded_bubble_exposure": 0.85,
+    "extruded_bubble_tilt": -0.133
+  },
+  "frames": [
+    {
+      "source_index": 1819,
+      "source_time_s": 20.009133,
+      "gpu_ms": 12.903424,
+      "bubbles": 66,
+      "clusters": 5,
+      "time": 20.009133,
+      "level": 0.9999999999999987,
+      "breath": 0.08225178028007768,
+      "flash": 0.278019163892866,
+      "sustain": 0.9996657606483723,
+      "drift": 0.8786668938660107,
+      "emission": 0.9323886925745921,
+      "stream_speed": 0.24934384708132468,
+      "rays": 0.8142184493349865,
+      "shimmer": 33.77741815101596
+    }
+  ],
+  "scope": "recorded-feature replay through the production host, offscreen; first frame compiles"
+}

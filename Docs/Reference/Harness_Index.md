@@ -391,19 +391,20 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
 only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
 Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
-measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–15; work stays in
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–17; work stays in
 `Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
 response comparator, then quiet→loud/heavy/soft recordings.
 
 ```powershell
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_eb --duration 12 --preset 1 --size 1672x941 --capture --fps 12 --gif
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_2d --duration 12 --preset 1 --size 1672x941 --fps 12
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_controls --duration 8 --probe-controls
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output logs/eb_forensics/archive_inventory.json
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_rays --preset 7 --at 3
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output logs/eb_forensics/new_held_bands.json
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output logs/eb_forensics/new_coverage
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_world --preset 7 --at 4 --size 1672x941
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_eb --duration 12 --preset 1 --size 1672x941 --capture --fps 12 --gif
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_2d --duration 12 --preset 1 --size 1672x941 --fps 12
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_controls --duration 8 --probe-controls
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output Docs/Reference/Extruded_Bubble/Evidence/archive_inventory.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_rays --preset 7 --at 3
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output Docs/Reference/Extruded_Bubble/Evidence/new_held_bands.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output Docs/Reference/Extruded_Bubble/Evidence/new_coverage
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_world --preset 7 --at 4 --size 1672x941
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_paired_body --duration 12
 ```
 
 Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
@@ -432,6 +433,8 @@ it tests steady support rather than repeatedly firing that frame's snare. It is 
 `--simulation-ref <commit>` loads only that simulation module from Git into the tool process, with its compiled
 hash recorded; other source stays current. It never changes checkout state. It rejects pre-world-metric simulation
 overrides; reproduce old normalized-metric receipts with their archived tool rather than mix coordinate systems.
+Its current projected estimates require fully-forward ordinary frustum candidates, while the separate logical
+ratio summary includes mature ordinary identities of each authored class regardless of view.
 The coverage probe instead draws
 one frozen primitive through unmodified ordinary/cluster shaders, with coverage diagnostic/OIT readback and
 center/edge placement. It isolates silhouette conventions, not the identity of a bubble in an operator screenshot.
@@ -442,6 +445,14 @@ PNGs/contact sheet. Global count and conservative ordinary-frustum candidates ar
 not count visible pixels, fused surfaces or procedural populations. No simulation advances between views, so this
 does not validate Auto Rotate, temporal continuity or musical timing. Cold compilation and camera changes also
 make its GPU query values unsuitable as a controlled product benchmark. Use fresh output directories.
+
+The paired body tool replays the identical source samples/cadence through both production simulations and
+records actual 2D clean pulse input, EB band input, resolved presets, per-ID radius/nominal and exclusion state.
+It reports actual input mismatches, preserving data rather than silently repairing them. Window summaries require
+an identity to be mature for at least 80% of the selected samples; 2D promoted and EB fused/popping/leaving bodies
+are excluded. Each identity's own extrema are aggregated by authored class; their times need not coincide.
+Empty classes indicate a coverage gap, not zero reaction. These logical-ratio distributions are not synchronized
+pixel parity, onset latency or listening acceptance. Repeat `--window start,stop` for explicit source sections.
 
 `--set KEY=JSON` is an in-memory override. Ordinary replay serves recorded post-DSP bands, so technical overrides
 cannot demonstrate live Sensitivity/Floor behavior. Optional `--reanalyze-pcm` explicitly recomputes production
@@ -665,7 +676,7 @@ failure rather than hidden by larger timeout values.
 Historical harnesses may describe QOpenGLWidget/QRhiWidget/GLCompositor paths. They remain evidence, not current architecture instructions. A surviving harness that asserts a retired physical presenter is obsolete unless `Docs/TestSuite.md` identifies a still-valid neutral behavior that must first be rehomed to the current owner.
 
 Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is detailed.
-- `tools/labs/extruded_bubble_lab.py` - Extruded Bubble composition lab: the §4A primitives composed per operator mock, rendered offscreen beside the mocks for side-by-side judgement (`Docs/Reference/Extruded_Bubble_Target.md`).
+- `tools/labs/extruded_bubble_lab.py` - Extruded Bubble composition lab: the §4A primitives composed per operator mock, rendered offscreen beside the mocks for side-by-side judgement (`Docs/Reference/Extruded_Bubble/Target.md`).
 
 - `tools/extruded_bubble_capture.py`: Extruded Bubble drawn by the production render host from a real recording (`--clip`, `--start`, `--duration`, `--fps`, `--size`, `--window`, `--set KEY=JSON`, `--gif`, `--passes`, `--preset N`): sampled frames, contact sheet and `capture.json` (simulation scalars and GPU ms per frame; `--passes` times every draw by its program instead: read the shares, the sum runs slower than a frame); offscreen, not physical acceptance.
 - `tools/visualizer_preset_author.py`: writes a curated Visualizer preset from Settings values alone (`--mode`, `--values` scenes JSON, `--scene`, `--index`, `--title`, `--description`): each value must be admitted unchanged by its Settings control, the payload passes the Settings save's normalisers, the view pose becomes `starting_view`, and the file is read back through the activation path.

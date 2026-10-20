@@ -1,0 +1,624 @@
+{
+  "scope": "Byte-preserving organization. Original targets and lab sources are reference, not production acceptance.",
+  "moves": [
+    {
+      "former_path": "tmp/Bubbleexamples",
+      "path": "Targets/Originals",
+      "files": 9,
+      "bytes": 18518286
+    },
+    {
+      "former_path": "tmp/eb_s4",
+      "path": "Lab/2026-10-18",
+      "files": 85,
+      "bytes": 96216048
+    },
+    {
+      "former_path": "logs/eb_forensics_20261020",
+      "path": "Evidence/2026-10-20/forensics",
+      "files": 1029,
+      "bytes": 1926263674
+    },
+    {
+      "former_path": "logs/eb_reactivity_20261020",
+      "path": "Evidence/2026-10-20/recovery",
+      "files": 8009,
+      "bytes": 9668942512
+    },
+    {
+      "former_path": "Docs/Reference/Extruded_Bubble_Target.md",
+      "path": "Target.md",
+      "files": 1,
+      "bytes": 110090
+    },
+    {
+      "former_path": "Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md",
+      "path": "Investigation.md",
+      "files": 1,
+      "bytes": 88646
+    }
+  ],
+  "assets": [
+    {
+      "path": "Targets/Originals/ExBubble1.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble1.png",
+      "bytes": 1931411,
+      "sha256": "66b5e248f5896464295a49636006897567d3a004b2698710a3fc8eee18e3f9a1"
+    },
+    {
+      "path": "Targets/Originals/ExBubble2.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble2.png",
+      "bytes": 2208819,
+      "sha256": "a8c68a982620aa2aea97eac8bc79702858b458cd7c6525cabc7c645a1afcdcd7"
+    },
+    {
+      "path": "Targets/Originals/ExBubble3.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble3.png",
+      "bytes": 2096489,
+      "sha256": "4a4e8ade02c6f3aee8de5918b5013f7c151f1ec6f5b77bb040e78982902cb6d2"
+    },
+    {
+      "path": "Targets/Originals/ExBubble4.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble4.png",
+      "bytes": 2177869,
+      "sha256": "cb541ff0d2102af7dd13ed6b115e7af81b252ee0fadd752e1a0f68ae5ff9c9da"
+    },
+    {
+      "path": "Targets/Originals/ExBubble5CameraAbyss.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble5CameraAbyss.png",
+      "bytes": 2131997,
+      "sha256": "da9acc676a0b88fe6daff0acbd4d51f1013ddcea6807431f72ee0736880c586b"
+    },
+    {
+      "path": "Targets/Originals/ExBubble5Cameradown.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble5Cameradown.png",
+      "bytes": 2148525,
+      "sha256": "d0160a94ab3cb2ccd618b56ffd191473fb0b6f6014c10ea77588febb2a93ddc6"
+    },
+    {
+      "path": "Targets/Originals/ExBubble6Diagonal.png",
+      "former_path": "tmp/Bubbleexamples/ExBubble6Diagonal.png",
+      "bytes": 2046965,
+      "sha256": "68d2731fbf28581ba1025f736b72f6d7350ed89528c55949a1cfbb549d541d9d"
+    },
+    {
+      "path": "Targets/Originals/Informational mock 2.png",
+      "former_path": "tmp/Bubbleexamples/Informational mock 2.png",
+      "bytes": 1890024,
+      "sha256": "5f826424414c74044ecd443d5567b06883b51008c60e79d05d0139f18efa4796"
+    },
+    {
+      "path": "Targets/Originals/Informational mock.png",
+      "former_path": "tmp/Bubbleexamples/Informational mock.png",
+      "bytes": 1886187,
+      "sha256": "af6601e8824e210db8801f87929d3b6cf203d4a46ad88fac25a08c76a6c76a27"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble1.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble1.png",
+      "bytes": 1662966,
+      "sha256": "79f36a7f61db0c1f7adefe63e2affc6a394d3b735bc374ced09938206c4f271d"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble2.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble2.png",
+      "bytes": 1865267,
+      "sha256": "2b4c421effa9fb2627bbbe380468a319f1630e7dc22fd238ebe925407cf49c05"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble3.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble3.png",
+      "bytes": 1784516,
+      "sha256": "be11ce6a32843a0cdc71d43878f463ccbc3a4c275518c7ad58bd8744996662a1"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble4.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble4.png",
+      "bytes": 1727053,
+      "sha256": "874c0fb0ad6c1475693efc15ebf4421ac5a957af1825f11996f4974a4d0fd355"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble5CameraAbyss.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble5CameraAbyss.png",
+      "bytes": 1703175,
+      "sha256": "327e20a4ffbc20fc0570eb8149d6709b135b935f14ea9279dc6ab1e2bb70814c"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble5Cameradown.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble5Cameradown.png",
+      "bytes": 1653591,
+      "sha256": "fba792f7bdafd08fd76193e7609ebadac9480ad1673a8416e8dccdc7b1f8098f"
+    },
+    {
+      "path": "Lab/2026-10-18/cmp_ExBubble6Diagonal.png",
+      "former_path": "tmp/eb_s4/cmp_ExBubble6Diagonal.png",
+      "bytes": 1921249,
+      "sha256": "5cb7fb5412bf572095afb8079061a62ecf2b1f0fffc6865ca730f761962ae154"
+    },
+    {
+      "path": "Lab/2026-10-18/eb_preview.py",
+      "former_path": "tmp/eb_s4/eb_preview.py",
+      "bytes": 1036,
+      "sha256": "a403232fd62fcf0462bfc0827969a860a07a46692a4b2de6e9bfdd2019d99d8f"
+    },
+    {
+      "path": "Lab/2026-10-18/extruded_bubble_bars.png",
+      "former_path": "tmp/eb_s4/extruded_bubble_bars.png",
+      "bytes": 613185,
+      "sha256": "6fe6f210e962999cd17a0df122e552201fb91a5a03d0ca69b0e60d23af4f390b"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/capture.json",
+      "former_path": "tmp/eb_s4/flicker1/capture.json",
+      "bytes": 7016,
+      "sha256": "e822eca430bfaba7a1d496375095cf611e5be45a7bf8b7c82da1b9204ca5d303"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/contact.png",
+      "former_path": "tmp/eb_s4/flicker1/contact.png",
+      "bytes": 316036,
+      "sha256": "ca48d7b0b6d9a03a34422738380379564d7ecffd4db2457ff9290cdc45513f82"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0000.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0000.png",
+      "bytes": 622508,
+      "sha256": "e2a7917b09c3da8953589ab5d7ee700a7966ab751aae4542bbe21ebc94b638f6"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0001.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0001.png",
+      "bytes": 624403,
+      "sha256": "3ab03a4983c557a38a7ca33e0f482e957b63163eddd7013ebc36a5b7360aadfa"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0002.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0002.png",
+      "bytes": 628484,
+      "sha256": "37b6c69f63c3906f29099a31db447e73feb8e504ee0417171630bab11ef33019"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0003.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0003.png",
+      "bytes": 635098,
+      "sha256": "9075262eb57cd0861f1ac4dba0d7f3003612a9d62eff751bbb1479409b927806"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0004.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0004.png",
+      "bytes": 636671,
+      "sha256": "b562474ce4c55674246dc865447cb7826c09c48cdb899105ac809e84b15da811"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0005.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0005.png",
+      "bytes": 639311,
+      "sha256": "ce5f7fa08acf039f7b7b8f17a8a5d2a7da85e803382661c4fa3b241230396039"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0006.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0006.png",
+      "bytes": 639100,
+      "sha256": "ee4b6a3a17bea2ddda5f73dadb4c94e8ef0deeb68d9f70dba130b431d2ef55cc"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0007.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0007.png",
+      "bytes": 637683,
+      "sha256": "e3861897a9c5e46bad56b035d8a9ee8ae61b940cb7d8978e35d736f68b289ba1"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0008.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0008.png",
+      "bytes": 637409,
+      "sha256": "b4bc5b338ed66580f327e7afada8aa88daba8be2ec51d0e983d5d556cb7948a4"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0009.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0009.png",
+      "bytes": 643457,
+      "sha256": "2d7231ee0e255b01fbb1326aaa1f93bda7e1b75e7c19e191da46ffc963062967"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0010.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0010.png",
+      "bytes": 644948,
+      "sha256": "2c1242de6d4a012a85cdf29eb17feeacc7a783778b456467b13a20ace3e72404"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker1/frame_0011.png",
+      "former_path": "tmp/eb_s4/flicker1/frame_0011.png",
+      "bytes": 651173,
+      "sha256": "ff370fded28590880485e7146ccbb7dce996c4d9c4fe6fa4dd902a5b490f2b35"
+    },
+    {
+      "path": "Lab/2026-10-18/flicker_strip.png",
+      "former_path": "tmp/eb_s4/flicker_strip.png",
+      "bytes": 1381926,
+      "sha256": "dc7377daac21c72dac8c17b453768656180a99dd37b78700d20269350f430ca5"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab.png",
+      "former_path": "tmp/eb_s4/lab/lab.png",
+      "bytes": 9179693,
+      "sha256": "10777b74c78613fd05526df490770ad8a010c466518caf04beb73745b43a295b"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble1.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble1.png",
+      "bytes": 2107091,
+      "sha256": "05977e1ab098b61851d87f6d4f08693c33ee895fcba8e6ebc229df34cae51ad0"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble2.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble2.png",
+      "bytes": 2281108,
+      "sha256": "829efbf4676d5c77704aaca7758d2d5be773ba5d0710ecb94fa7085204160202"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble3.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble3.png",
+      "bytes": 2242733,
+      "sha256": "d5d330e0683c2bbc63def051e0084ca974f53821edfcafdf188faeb3fdabd217"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble4.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble4.png",
+      "bytes": 2029849,
+      "sha256": "067f08b8db793a340406a0dbbaf7121355e72d293a015fa3d53812da433ab010"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble5CameraAbyss.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble5CameraAbyss.png",
+      "bytes": 1782651,
+      "sha256": "76ac65728b735f33a3f232735c4b122789f267eb48477f3d5fa81e25d22efb61"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble5Cameradown.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble5Cameradown.png",
+      "bytes": 1521198,
+      "sha256": "5790751e2643bab384989d6b52d008304458b911cd6c16fa1fcb64742eb9954b"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_ExBubble6Diagonal.png",
+      "former_path": "tmp/eb_s4/lab/lab_ExBubble6Diagonal.png",
+      "bytes": 2156311,
+      "sha256": "9f7a9f7c7cb4786c5f9566e03c69701ebb8468722c7d6bbd97d17d5822a5699d"
+    },
+    {
+      "path": "Lab/2026-10-18/lab/lab_timings.json",
+      "former_path": "tmp/eb_s4/lab/lab_timings.json",
+      "bytes": 4103,
+      "sha256": "1608c1ac9b7fc4b3314bc8b73795b0c262a5e88b81e7800b538168b7348a51eb"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble1.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble1.png",
+      "bytes": 3424209,
+      "sha256": "714b2a6531ffc8bda2dde38f1db23a43a7df6bb4414db44317d731f31a34b65a"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble2.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble2.png",
+      "bytes": 3833194,
+      "sha256": "2a88a9d26c14c847058843c43162bb6801d1670a99df649c168cb38cb1f33aa7"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble3.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble3.png",
+      "bytes": 3577567,
+      "sha256": "c37b0820a5627659b21fc9e097156008cde7aef79b01ce4302ae0c5c5e7da9a5"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble4.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble4.png",
+      "bytes": 3567954,
+      "sha256": "1ffadb9cfc41e9fd8b2c6d76fc8d8e67d6e4b72a452cd8c56acf40eae16e26a6"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble5CameraAbyss.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble5CameraAbyss.png",
+      "bytes": 3546107,
+      "sha256": "2c8a424aa153cfe3d09ca182cc41f66823c61c29500ca29d26fcdc2b259723a9"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble5Cameradown.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble5Cameradown.png",
+      "bytes": 3343106,
+      "sha256": "2a074f76b13c55bc02695cca459e4f1dca104e15d59c848bcec295f8bb5676ee"
+    },
+    {
+      "path": "Lab/2026-10-18/pair_ExBubble6Diagonal.png",
+      "former_path": "tmp/eb_s4/pair_ExBubble6Diagonal.png",
+      "bytes": 3870757,
+      "sha256": "5135466fbec7f4d426e5e4a6ac153879d910012f0ab92cf4b541f147d0177004"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p1/capture.json",
+      "former_path": "tmp/eb_s4/presets/p1/capture.json",
+      "bytes": 1254,
+      "sha256": "1d272532af9a705b8f97540be2cfb43d1a18ff522daaefa1f416d12871221d06"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p1/contact.png",
+      "former_path": "tmp/eb_s4/presets/p1/contact.png",
+      "bytes": 139671,
+      "sha256": "4ffb78304b32ea48ea4ab074aa1b96e5a5bfe7879e759ef37cebfe4fdd9a8819"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p1/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p1/frame_0000.png",
+      "bytes": 1420225,
+      "sha256": "1e7e8764354e3a86ec3ab0626d0a299461ace1c82908369d2f3073ea4bddc1e9"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p2/capture.json",
+      "former_path": "tmp/eb_s4/presets/p2/capture.json",
+      "bytes": 1249,
+      "sha256": "8fd5f21584903d5dd9842e373d8ed3e181db0a6362fdd470ccd4b5a750cae7ab"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p2/contact.png",
+      "former_path": "tmp/eb_s4/presets/p2/contact.png",
+      "bytes": 151724,
+      "sha256": "5b68360e27888001d30caa943acf2719cb367834312b4ed77ddcc6c92953f83d"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p2/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p2/frame_0000.png",
+      "bytes": 1533599,
+      "sha256": "4e5a69f380e213c28e684a8d74c4ca4984b396fae1ff9fd8ff0c7fa96933e976"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p3/capture.json",
+      "former_path": "tmp/eb_s4/presets/p3/capture.json",
+      "bytes": 1248,
+      "sha256": "8d9b4bb7d542fb1c364d10650ea048d2d71245cc94e9cf8eba3511321e20e6c7"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p3/contact.png",
+      "former_path": "tmp/eb_s4/presets/p3/contact.png",
+      "bytes": 145847,
+      "sha256": "eeba10c80804f6651d928362115ead7a7a75839d49cc68c9044918573fd1884b"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p3/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p3/frame_0000.png",
+      "bytes": 1442124,
+      "sha256": "a6beaf8bde8a58cf454deebd07bb625a345265aed8b6939efaee66ecd0950624"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p4/capture.json",
+      "former_path": "tmp/eb_s4/presets/p4/capture.json",
+      "bytes": 1249,
+      "sha256": "eeb100fc19289c405649adfb029629087840ae3000e8e281584f012c6bebca00"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p4/contact.png",
+      "former_path": "tmp/eb_s4/presets/p4/contact.png",
+      "bytes": 131488,
+      "sha256": "0488e406c997d7786b2a2f66be200f02870c38a74dd8ab1f7ccd42f6392e6112"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p4/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p4/frame_0000.png",
+      "bytes": 1272816,
+      "sha256": "b45323a07fda312481d58ef55242412419327979de65509885086318717d3ee5"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p5/capture.json",
+      "former_path": "tmp/eb_s4/presets/p5/capture.json",
+      "bytes": 1245,
+      "sha256": "ff726812dc5a96630176d4ae39228e4bd03ad19d38514467628c59333e0093b1"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p5/contact.png",
+      "former_path": "tmp/eb_s4/presets/p5/contact.png",
+      "bytes": 141247,
+      "sha256": "11b99f8a709266184a054e8bd7af7322a9897edb48bd792775a0928e75fec146"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p5/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p5/frame_0000.png",
+      "bytes": 1291498,
+      "sha256": "98069541bd8b959a433e748b843be4fb7698c83f656eaec19a2b0ababf90a12e"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p6/capture.json",
+      "former_path": "tmp/eb_s4/presets/p6/capture.json",
+      "bytes": 1252,
+      "sha256": "49d024e17634d250641510854b1805bb78c95521612d7bdfb4dc8ce27fafbbde"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p6/contact.png",
+      "former_path": "tmp/eb_s4/presets/p6/contact.png",
+      "bytes": 134815,
+      "sha256": "79f0971dc17e6f86e1809d13f5b80561e9d6391d06693ade700dfdcddf4da216"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p6/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p6/frame_0000.png",
+      "bytes": 1041055,
+      "sha256": "70664e54639a533fbcde07de8e8e49cc0e8b3c26f23bac73daabced9a43f5682"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p7/capture.json",
+      "former_path": "tmp/eb_s4/presets/p7/capture.json",
+      "bytes": 1251,
+      "sha256": "4b36483865014bdc72ce4c4addfbf61765cb577df7b1827f8d9c19e53cda068b"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p7/contact.png",
+      "former_path": "tmp/eb_s4/presets/p7/contact.png",
+      "bytes": 172900,
+      "sha256": "8e33d2fa51ba8dc333bbe3afe95565a4fa64f4c13575e31abcbf03b3d82a3263"
+    },
+    {
+      "path": "Lab/2026-10-18/presets/p7/frame_0000.png",
+      "former_path": "tmp/eb_s4/presets/p7/frame_0000.png",
+      "bytes": 1756438,
+      "sha256": "0c24af075812db60f55ec76a0523b11ada4a7f7b972aba55a8b10ae716dc89b8"
+    },
+    {
+      "path": "Lab/2026-10-18/presets_sheet.png",
+      "former_path": "tmp/eb_s4/presets_sheet.png",
+      "bytes": 3884589,
+      "sha256": "b22d1dfbb1cb5d8ac9508fc85b5e5c60583fa981c880ce1dc17345211192b5ac"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble1/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble1/capture.json",
+      "bytes": 1992,
+      "sha256": "65e9d83e71bdf0cee02536fbdfcf9164e49a94851a36a657c1699430f85331ad"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble1/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble1/contact.png",
+      "bytes": 139705,
+      "sha256": "472bab790f7d156c94c3e0092d02b05a6a2c3d55ab5fb64dfd0ebe7e9665cf1a"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble1/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble1/frame_0000.png",
+      "bytes": 1420225,
+      "sha256": "1e7e8764354e3a86ec3ab0626d0a299461ace1c82908369d2f3073ea4bddc1e9"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble2/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble2/capture.json",
+      "bytes": 1991,
+      "sha256": "c55364c8202d8c792a960f393040bb5e13aad30e62a60ce5b7f3236bf77f4d37"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble2/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble2/contact.png",
+      "bytes": 151505,
+      "sha256": "c0a1166b4b167ba3f6ff6f5968a8c0db0d55fce29ef2fded0d0c3352286729a5"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble2/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble2/frame_0000.png",
+      "bytes": 1533599,
+      "sha256": "4e5a69f380e213c28e684a8d74c4ca4984b396fae1ff9fd8ff0c7fa96933e976"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble3/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble3/capture.json",
+      "bytes": 1992,
+      "sha256": "265c80a7b9ac7d6129d704e58521947008861416872ae0e22c02a11a10f6ed88"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble3/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble3/contact.png",
+      "bytes": 145750,
+      "sha256": "63043de4642d189b410665efc191815bedfb6882b2945afa6d4e86a79d44af35"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble3/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble3/frame_0000.png",
+      "bytes": 1442124,
+      "sha256": "fee27c27f034261bad747630595c3cb7d071a3f0bf37c188a538f8151dd08dbe"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble4/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble4/capture.json",
+      "bytes": 2114,
+      "sha256": "f9f424dc838a5d08e128982750989b2ba046d4e5eff355a133e92a26ba200bea"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble4/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble4/contact.png",
+      "bytes": 131445,
+      "sha256": "564bd73f9b2a518f85ea61480cddf98e34c2ffd6a02b073dd490f68cc0d65c42"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble4/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble4/frame_0000.png",
+      "bytes": 1272816,
+      "sha256": "b45323a07fda312481d58ef55242412419327979de65509885086318717d3ee5"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5CameraAbyss/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5CameraAbyss/capture.json",
+      "bytes": 2560,
+      "sha256": "878ee70c6ce54af479e58c070a4847a5b2b0d9f8090731f254822fc92cb57902"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5CameraAbyss/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5CameraAbyss/contact.png",
+      "bytes": 141164,
+      "sha256": "ecc9f6f8df69f8cc65ea7f92a2d24bb2162aba676c9720d90b879127d85f4c33"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5CameraAbyss/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5CameraAbyss/frame_0000.png",
+      "bytes": 1291498,
+      "sha256": "98069541bd8b959a433e748b843be4fb7698c83f656eaec19a2b0ababf90a12e"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5Cameradown/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5Cameradown/capture.json",
+      "bytes": 2240,
+      "sha256": "fb9d238a143bb5cc00b2e6a96c12296e6f949846e5387d877eab471a2f988d96"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5Cameradown/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5Cameradown/contact.png",
+      "bytes": 134699,
+      "sha256": "8b155d217f610ccb0be9ae78418d048b2148092a0ed590eb707cc88573cfec9f"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble5Cameradown/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble5Cameradown/frame_0000.png",
+      "bytes": 1041055,
+      "sha256": "70664e54639a533fbcde07de8e8e49cc0e8b3c26f23bac73daabced9a43f5682"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble6Diagonal/capture.json",
+      "former_path": "tmp/eb_s4/scenes/ExBubble6Diagonal/capture.json",
+      "bytes": 2665,
+      "sha256": "24f53bb7b898bb55c2ffb75696217f9dd90e47f60ced1755a85bba7b8a6ac5b2"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble6Diagonal/contact.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble6Diagonal/contact.png",
+      "bytes": 172704,
+      "sha256": "501d8e1f9e693fe4de41e5d70d7b05947f22d089b820db2489ae37046976ea02"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes/ExBubble6Diagonal/frame_0000.png",
+      "former_path": "tmp/eb_s4/scenes/ExBubble6Diagonal/frame_0000.png",
+      "bytes": 1756438,
+      "sha256": "f0255a7dcb2f1d493d94f6de1eb64654071e7f22c042fd8283b805a4c97dbff1"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes.json",
+      "former_path": "tmp/eb_s4/scenes.json",
+      "bytes": 5015,
+      "sha256": "7a6e68918a7087cecfa289f46127325e7a3e5e90e78d42955f1e4a2523cca966"
+    },
+    {
+      "path": "Lab/2026-10-18/scenes.py",
+      "former_path": "tmp/eb_s4/scenes.py",
+      "bytes": 7076,
+      "sha256": "b6a9a03a493757b7a4a876d96dda016d6a164864f5989c526d2da365cc984187"
+    }
+  ],
+  "provided_images": [
+    {
+      "attachment_id": "ef314339-3317-47c8-98b4-42b3826f70a2",
+      "path": "Targets/Originals/ExBubble6Diagonal.png",
+      "sha256": "68d2731fbf28581ba1025f736b72f6d7350ed89528c55949a1cfbb549d541d9d"
+    },
+    {
+      "attachment_id": "f7ccd77e-e3f5-4e48-aedf-a4d55dcaefda",
+      "path": "Targets/Originals/Informational mock 2.png",
+      "sha256": "5f826424414c74044ecd443d5567b06883b51008c60e79d05d0139f18efa4796"
+    },
+    {
+      "attachment_id": "1f6b0fc2-96b9-4786-b238-4e9bcf573e26",
+      "path": "Targets/Originals/Informational mock.png",
+      "sha256": "af6601e8824e210db8801f87929d3b6cf203d4a46ad88fac25a08c76a6c76a27"
+    }
+  ]
+}

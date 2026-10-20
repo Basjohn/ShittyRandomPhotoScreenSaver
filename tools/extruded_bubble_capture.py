@@ -1,10 +1,10 @@
 """Render Extruded Bubble through the production GL host from a real recorded music clip, without settings writes.
 
-    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip logs/visualizer_recordings/<clip>.jsonl
-    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --size 1672x941 --start 20 --duration 6 --gif
-    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --set extruded_bubble_turn=0.25
-    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --passes
-    .venv/Scripts/python tools/extruded_bubble_capture.py --output tmp/eb_capture --clip <clip> --preset 5
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip logs/visualizer_recordings/<clip>.jsonl
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip <clip> --size 1672x941 --start 20 --duration 6 --gif
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip <clip> --set extruded_bubble_turn=0.25
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip <clip> --passes
+    .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip <clip> --preset 5
 
 The clip's recorded feature frames drive the mode's own simulation through ``replay_clip`` (the production logical
 capture: real intensity and onsets on the logical clock); each sampled snapshot is drawn by the production

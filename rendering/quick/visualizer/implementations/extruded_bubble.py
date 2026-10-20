@@ -1,6 +1,6 @@
 """Extruded Bubble's Qt Quick renderer: an underwater scene of traced glass bubbles in its card.
 
-The composition lab's proven passes (``tools/labs/extruded_bubble_lab.py``; ``Extruded_Bubble_Target.md`` section
+The composition lab's proven passes (``tools/labs/extruded_bubble_lab.py``; ``Extruded_Bubble/Target.md`` section
 10) on the shared Scene3D owners, with the lab's own programs (``extruded_bubble_program``) and the scene mapping
 from Settings (``extruded_bubble_scene``). Each frame:
 

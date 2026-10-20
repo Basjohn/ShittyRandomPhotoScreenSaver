@@ -305,8 +305,8 @@ stream, beads/wakes, rays, emission and ambient/surface motion must all remain g
 Small free-chain bubbles need only modest size contraction; speed, drift and emission carry much of their response.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
-transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble_Target.md`;
-measured failures and native 2D/EB comparison: the Extruded Bubble ledger in `Docs/Historical_Bugs/`.
+transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;
+measured failures and native 2D/EB comparison: `Docs/Reference/Extruded_Bubble/Investigation.md`.
 
 EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
 Rendering packs them directly; authored global counts never multiply by camera sector. Reacted radii govern
