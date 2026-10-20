@@ -557,3 +557,47 @@ alpha, depth attenuation and near DoF before adding screen-space reactions. Pres
 projected intersection alone must not automatically pop, bounce or fuse. The subsequent view-aware policy
 targets persistent unreadable crossings, preserving stable identity, continuous geometry and extremely gentle
 opacity retirement. Auto Rotate remains the later challenge. No overlap-policy implementation is claimed here.
+
+## 14. Next geometry boundary: fixed metric, population domain and depth readability
+
+The same single Sol 6.1 Medium reviewer performed a bounded read-only sequencing audit; the primary re-read
+the production seams. No new probes or geometry edits were used for this architectural finding.
+
+The present mismatch starts before rendering: `_spawn`, upstream entry, `_outside`, motion and cluster offsets
+in `extruded_bubble_simulation.py` operate in normalized view-like coordinates. `_collide` runs before `_snapshot`,
+where reacted radius is currently calculated; its fixed .25 cells search only immediate neighbors and use nominal
+radii. `_fuse` can move centers directly to nominal touching distance and stores fixed offsets. Thus changing
+contact reach alone would neither establish a physical metric nor keep fused surfaces coherent as radii change.
+The first correction must move current physical radius resolution before contacts and share the result with
+snapshot/render/wake attachment. Nominal radius remains separate where it intentionally controls mass or bead
+dimensions. Broadphase must cover the largest admitted reacted extents without missing pairs or unbounded work.
+
+`extruded_bubble_scene.py::_volume_points` constructs a depth-scaled wedge from camera FOV/aspect/tilt;
+`_wrapped_turn` then moves it with yaw. `bubble_instances`, `wake_instances` and `cluster_instances` inherit
+this placement. GPU free chains/snow independently reconstruct the camera-relative wedge and `wrapTurn` in
+`extruded_bubble_program.py`; uniforms come from the renderer's current camera. Correct all these paths to one
+fixed domain and world stream convention in the same coherent checkpoint. The existing simulation remains
+the population/lifetime owner; a pure mode geometry definition shared with packing/GPU uniforms is sufficient.
+No new world manager, camera-following populations, sector copies or silent count multiplier is justified.
+Simply removing wraps leaves the old forward wedge and fails all-angle coverage. Distribute the authored
+population within a fixed domain, test actual sparse/dense authoring and make the visibility consequences
+explicit; sparse settings need not fabricate populated views in every direction.
+
+After the metric is stable, lifetime/projection/near-depth consumers must agree. Ordinary shells currently
+shrink by `sqrt(alpha)`; fused packing discards alpha. `_POP_SECONDS=.35` and snapshot pop-only expansion up to
+25% of nominal are additional violations to review against extremely gentle opacity-only retirement. Union
+opacity needs a coherent surface rule rather than copying the first member. Parent/bead projected-size guards
+currently account for shrinking alpha and must follow the corrected physical silhouette. Ordinary/fused rays,
+bounds and depth must share a convention; clusters currently draw only into OIT while the shared near pass
+draws only ordinary shells. A near union needs one consistent front-depth/layer decision, without split members
+or duplicate rendering. These are active depth-readability work, not deferred fidelity polish.
+
+Required falsifiers for implementation: frozen-ID world positions/radii invariant under yaw/tilt/pan/zoom/aspect;
+equal physical radii at two depths project differently; a large contracting/expanding contact pair spanning
+multiple broadphase cells agrees with rendered surfaces and wake attachment; fused members stay coherent
+without center teleportation; retiring wakes keep their exact world anchor during camera motion/compaction;
+fixed-seed native full orbit retains continuous world geometry and useful actual-count coverage. Subsequent
+opacity and near-layer checks need ordinary/fused entry/pop/exit, center/edge/near-plane silhouettes, shared
+focus/aperture response and convincing depth-separated crossings. Compare against the latest copper mock;
+screen-space intervention must not conceal these failures. Physical musical-response acceptance remains open
+alongside this geometry work.

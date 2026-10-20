@@ -9,7 +9,7 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6–13; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+§6–14; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -212,6 +212,18 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 
 #### EB-B — Real world, camera, entry/death and near field
 
+- [ ] **First coherent geometry checkpoint: one physical world metric and population domain.** Keep the existing
+  simulation as owner; define fixed world position/radius before contacts, snapshots and wake capture. Share a
+  small pure geometry definition with GPU procedural placement, not another scene manager. Correct spawn/source,
+  upstream entry, exit and stream advection together; remove camera-dependent remapping from packing. Preserve
+  authored count ceilings without invisible sector copies or count multipliers. Test useful full-orbit coverage
+  at actual sparse/dense settings; sparse authoring may leave sparse views. Do not demand constant visible counts
+  by moving identities with the camera. Resolve reacted radius once before contacts; fix broadphase reach for
+  expanded extents and continuous fused offsets through contraction/expansion. Include free chains/snow/world
+  stream direction and exact retiring wake anchors in this checkpoint, since leaving their camera wraps in place
+  would create competing worlds. Then carry coherent material alpha, common projection and union near DoF through
+  their existing render owners. See report §14 for exact current seams and falsifiers; do not patch contact reach
+  or disable wrapping in isolation.
 - [ ] Specify a physically fixed **360° covered world** inside which the camera can look freely. Current CPU
   `_wrapped_turn` relocates shells/clusters/wakes with camera yaw; GPU `wrapTurn` independently relocates free
   chains/snow. Tilt/zoom also enter volume construction. Preserve SAME-ID world coordinates across yaw, tilt,
@@ -250,6 +262,9 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 - [ ] Carry logical lifetime alpha as **material opacity**, independently of radius. Ordinary shells currently
   shrink by `sqrt(alpha)` and receive hardcoded opacity 1; fused members lack coherent fade. Prove transparent
   entry/pop/exit, stable identities and orbit with no sudden already-opaque arrivals or resurrected compacted slots.
+  Review the current 0.35 s pop and pop-only +25% nominal expansion against extremely gentle opacity-only retirement;
+  preserve musical radius response independently. Define coherent opacity across the union, not first-member
+  alpha or alpha-scaled member geometry; update parent/bead raster safeguards when physical opacity replaces shrinking.
 - [ ] Route fused clusters through **depth-selected shared near DoF** with coherent SDF union and no duplicate
   draw. Prove ordinary/fused near passes, near-plane safety, focus/aperture, orbit and absence of synthetic giant
   cohorts. Natural near coverage/softness remains unaccepted after removal of the rejected special populations.
