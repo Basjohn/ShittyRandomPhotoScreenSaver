@@ -596,7 +596,7 @@ void main() {
         return;
     }
     if (vExtra.y > 0.5 && vExtra.y < 1.5) {
-        float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7);
+        float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7) * vOpacity;
         float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7));
 #ifndef NEAR_LAYER
         sceneTransparent(mix(uShaftColour, vec3(0.9, 0.95, 1.0), 0.4) * 1.2 * glitter * a, a, -front.z);
@@ -798,6 +798,8 @@ uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
 uniform float uChainFill;       // continuous (possibly fractional) number of visible chains
+uniform float uSnowFill;        // continuous snow allocation; last mote fades at the boundary
+uniform float uFizzFill;        // continuous allocation per stable wake, before ceil to integer stride
 uniform float uSnowDrift;      // how far snow has drifted along the stream (view units)
 uniform int uSnowCount;        // instances past chains and snow are fizz: uFizzPer behind each stable wake emitter
 uniform int uFizzPer;
@@ -876,8 +878,10 @@ void beadInstance() {
         // Fizz: a wake of tiny bubbles streaming off behind each bubble (against the stream), widening as it falls
         // behind and flowing back along it with the water's travel.
         int f = gl_InstanceID - uBeadCount - uSnowCount;
+        if (uFizzPer <= 0) { aSphere = vec4(0.0); aExtra = vec2(0.0); vOpacity = 0.0; return; }
         int owner = f / uFizzPer;
         int k = f - owner * uFizzPer;
+        if (owner >= uWakeCount) { aSphere = vec4(0.0); aExtra = vec2(0.0); vOpacity = 0.0; return; }
         // Stable emitter records survive a parent popping, fusing, leaving or changing shell-array slot.
         vec3 centre = vec3(ebWake[owner * 8], ebWake[owner * 8 + 1], ebWake[owner * 8 + 2]);
         float r = ebWake[owner * 8 + 3];
@@ -889,7 +893,7 @@ void beadInstance() {
         float pixels = r / (uPixel * max(-view.z, 0.1));
         // Larger bubbles shed a fuller wake; giants and specks none.
         float share = clamp((pixels - 6.0) / 30.0, 0.0, 1.0);
-        if (owner >= uWakeCount || beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
+        if (beadRandom(seed, 18u) > 0.35 + 0.65 * share) {
             aSphere = vec4(0.0, 0.0, 0.0, 0.0);
             aExtra = vec2(0.0, 0.0);
             return;
@@ -909,7 +913,7 @@ void beadInstance() {
         float ends = smoothstep(0.0, 0.08, tail) * (1.0 - smoothstep(0.85, 1.0, tail));
         float headToTail = retirement < 0.0 ? 1.0
                          : smoothstep(retirement - 0.08, retirement + 0.12, tail);
-        vOpacity = sourceAlpha * ends * headToTail;
+        vOpacity = sourceAlpha * ends * headToTail * clamp(uFizzFill - float(k), 0.0, 1.0);
         // Keep even the half-pixel raster footprint strictly below the fading parent's.
         // A tiny/transparent parent cannot acquire equal-sized beads during birth or retirement.
         float parentPixels = pixels * sqrt(sourceAlpha);
@@ -923,6 +927,7 @@ void beadInstance() {
     }
     // Marine snow: fine motes all through the water, drifting slowly with the stream, wrapping inside their box.
     int i = gl_InstanceID - uBeadCount;
+    vOpacity = clamp(uSnowFill - float(i), 0.0, 1.0);
     vec3 box = vec3(1.4 * uTan.x, 1.2 * uTan.y, 1.0);
     float depth = 2.5 + 35.0 * fract(beadRandom(i, 13u) + uSnowDrift * along.z * 0.01);
     vec2 at = vec2(beadRandom(i, 14u), beadRandom(i, 15u)) + uSnowDrift * along.xy / (2.0 * box.xy * depth)

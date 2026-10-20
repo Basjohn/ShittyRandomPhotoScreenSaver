@@ -73,18 +73,17 @@ _FIZZ_PER_BUBBLE, _WAKE_BINDING = 64, 7         # wake motes behind stable logic
 _BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0, 8.0, 10.0
 
 
-def _procedural_counts(parameters, emission: float) -> tuple[int, int]:
-    """(beads, snow motes) for the Bead Chains range read at the emission follower (never the raw level)."""
-    share = scene3d_detail(parameter(parameters, "scene3d_detail")).particles
-    chains = math.ceil(_chain_fill(parameters, emission))
-    return chains * _BEADS_PER_CHAIN, round(_SNOW * share)
+def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, float, float]:
+    """Continuous (chains, snow, fizz per owner), each authored Range resolved once.
 
-
-def _chain_fill(parameters, emission: float) -> float:
-    """Continuous chain population for shader-owned lifetime opacity, without discrete pop-in."""
+    Level is the simulation's normalized band-driven follower, not the engine's
+    passage-presence scalar. Particles-resolved emission must not remap Bead Chains.
+    """
     share = scene3d_detail(parameter(parameters, "scene3d_detail")).particles
     low, high = (float(v) for v in parameter(parameters, "extruded_bubble_bead_chains"))
-    return max(0.0, (low + (high - low) * max(0.0, min(1.0, float(emission)))) * _CHAINS_PER_STEP * share)
+    chains = max(0.0, (low + (high - low) * max(0.0, min(1.0, float(level)))) * _CHAINS_PER_STEP * share)
+    amount = max(0.0, min(1.0, float(emission))) * share
+    return chains, _SNOW * amount, _FIZZ_PER_BUBBLE * amount
 
 
 def _scene_samples(parameters) -> int:
@@ -384,7 +383,9 @@ class QuickExtrudedBubbleRenderer:
                 "uProbeLevels": float(probe.levels)}
         for key, near in (("shells", False), ("clusters", False), ("near", True), ("beads", False)):
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near)})
-        beads, snow = _procedural_counts(parameters, state.emission)
+        chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
+        beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
+        fizz_per = math.ceil(fizz_fill)
         stream = _floats(state.stream)
         self._uniforms.set(programs["beads"], {
             "uViewToWorldTurn0": _floats(camera(0.0, pose[1], width / height, scale)[0]),
@@ -393,12 +394,11 @@ class QuickExtrudedBubbleRenderer:
             "uSide": VOLUME_EXTENT * 1.12 * tan[0],
             "uStreamView": (stream[0], stream[1], -stream[2]), "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": 0.9 + 0.2 * max(0.0, min(1.0, float(state.level))),
-            "uChainFill": _chain_fill(parameters, state.emission),
+            "uChainFill": chain_fill, "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
-            "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": _FIZZ_PER_BUBBLE,
+            "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,
             "uWakeCount": wake_count})
-        fizz = round(wake_count * _FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
-        fizz -= fizz % _FIZZ_PER_BUBBLE
+        fizz = wake_count * fizz_per
         self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(parameters, state.emission)
         specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
