@@ -387,6 +387,7 @@ class QuickSceneController(QObject):
 
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
+    visualizer_camera_reset_requested = Signal()
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
     # the retained overlay forwards these to DisplayManager's existing orbit
@@ -432,6 +433,7 @@ class QuickSceneController(QObject):
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_startup_reveal_opacity = 1.0
+        self._visualizer_camera_reset_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._presentation_image_listener: Callable[[], None] | None = None
@@ -2016,6 +2018,12 @@ class QuickSceneController(QObject):
         root.setProperty("cardShadowExtendBottom", float(shadow_extensions[3]))
         root.setProperty("presentationActive", bool(active))
 
+    def set_visualizer_camera_reset_available(self, available: bool) -> None:
+        """Mode-admission edge, retained even before lazy Visualizer creation."""
+        self._visualizer_camera_reset_available = bool(available)
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("cameraResetAvailable", bool(available))
+
     def set_visualizer_presentation_active(self, active: bool) -> None:
         """Change retained presentation visibility without rebuilding it."""
 
@@ -2202,8 +2210,12 @@ class QuickSceneController(QObject):
             self._visualizer_startup_reveal_opacity,
         )
         root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
+        root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
+        camera_reset = getattr(root, "cameraResetRequested", None)
+        if camera_reset is not None and hasattr(camera_reset, "connect"):
+            camera_reset.connect(self.visualizer_camera_reset_requested.emit)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)

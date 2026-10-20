@@ -13,6 +13,8 @@ Item {
     // this stage's saved rectangle, snapping or input ownership.
     property var editContentEnvelope: ({ admitted: false })
     signal appVolumeStepRequested(int direction)
+    property bool cameraResetAvailable: false
+    signal cameraResetRequested()
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
     property bool cardShellEnabled: true
@@ -168,6 +170,50 @@ Item {
         border.color: visualizerPresentationRoot.cardBorderColor
         border.width: visualizerPresentationRoot.cardBorderWidth
         z: 3
+    }
+
+    HoverHandler {
+        id: cameraResetHover
+        enabled: visualizerPresentationRoot.cameraResetAvailable
+            && visualizerPresentationRoot.widgetGlowAdmitted
+        blocking: false
+    }
+
+    Rectangle {
+        id: cameraResetGlyph
+        objectName: "visualizerCameraResetGlyph"
+        width: 26
+        height: 26
+        x: Math.max(6, parent.width - width - 12)
+        y: Math.max(6, parent.height - height - 12)
+        radius: width / 2
+        z: 12
+        color: "#bb20262c"
+        border.width: 1
+        border.color: "#c2ffffff"
+        visible: visualizerPresentationRoot.cameraResetAvailable
+            && visualizerPresentationRoot.widgetGlowAdmitted
+            && visualizerPresentationRoot.visible
+        opacity: cameraResetHover.hovered ? 0.92 : 0.0
+        enabled: visible && opacity > 0.05
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Text {
+            anchors.centerIn: parent
+            text: "↺"
+            color: "white"
+            font.pixelSize: 19
+            font.bold: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            propagateComposedEvents: false
+            onPressed: function(mouse) { mouse.accepted = true }
+            onClicked: function(mouse) {
+                mouse.accepted = true
+                visualizerPresentationRoot.cameraResetRequested()
+            }
+        }
     }
 
     Rectangle {

@@ -808,6 +808,9 @@ class DisplayManager(QObject):
                 continue
             try:
                 display.runtime.input_controller.set_view_orbit_enabled(admitted)
+                display.runtime.scene_controller.set_visualizer_camera_reset_available(bool(
+                    admitted and owner is not None and str(owner.controller.mode_id) == "extruded_bubble"
+                ))
                 owner = self._quick_visualizer_owner
                 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
                 display.runtime.input_controller.set_scene_transform_enabled(bool(
@@ -1013,6 +1016,61 @@ class DisplayManager(QObject):
             ))
         else:
             publish_footprint(resolve_owner_edit_content_envelope(owner, presentation, logical=logical))
+
+    def _reset_quick_visualizer_camera(self) -> None:
+        """Reset the current mode's real camera home, independent of edit/card geometry.
+
+        R and the card glyph share this single generation-scoped route. A reset
+        also cancels held orbit/inertia, pending scene pan/zoom and auto-rotation.
+        Preset starting_view is read but NEVER mutated; Custom uses canonical home.
+        """
+        owner = self._quick_visualizer_owner
+        settings = self.settings_manager
+        if owner is None or owner.is_retired or settings is None:
+            return
+        mode = str(owner.controller.mode_id)
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        if not get_visualizer_mode_descriptor(mode).scene_transform_settings:
+            return
+        section = settings.get("widgets.spotify_visualizer")
+        if not isinstance(section, Mapping):
+            return
+        from core.settings.visualizer_view_orbit import starting_camera_pose
+        from core.settings.visualizer_presets import VISUALIZER_CUSTOM_STORAGE_KEY
+        from core.settings.default_contract import require_canonical_default
+        from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+        pres = owner.controller.presentation_state
+        preset_index = int(section.get(f"preset_{mode}", 0))
+        home = starting_camera_pose(mode, preset_index)
+        for display in tuple(self.displays):
+            if isinstance(display, QuickDisplayUnit) and not display.is_retired:
+                display.runtime.input_controller.cancel_view_orbit_for_camera_reset()
+        for field in ("_view_orbit_motion", "_view_orbit_drag_velocity", "_view_orbit_inertia", "_view_orbit_auto_rotate"):
+            setattr(pres, field, None)
+        self._quick_scene_view_gesture = None
+        self._quick_view_orbit_pending = None
+        self._quick_view_pose_owner = None
+        # Reset of the lens is explicit, not a preset artwork rewrite. The
+        # old 62-degree projection must not survive the Home command unnoticed.
+        lens = {}
+        if mode == "extruded_bubble":
+            lens["extruded_bubble_camera_fov"] = float(require_canonical_default(
+                "widgets.spotify_visualizer.extruded_bubble_camera_fov"))
+            # The editable 3D position is a physical camera translation, not
+            # preset artwork. R/home must restore it with the same authority.
+            lens["extruded_bubble_camera_position"] = list(require_canonical_default(
+                "widgets.spotify_visualizer.extruded_bubble_camera_position"))
+        apply_presentation_vis_mode_kwargs(pres, {**home, **lens})
+        from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
+        custom = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        if not isinstance(custom, Mapping):
+            return
+        saved, cache = resolve_visualizer_view_orbit({**section, **lens}, custom, mode=mode, values=home)
+        settings.replace_visualizer_runtime_preset_state(saved, cache)
+        self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(saved)
+        self._refresh_quick_visualizer_edit_content_envelope()
+        self._refresh_all_quick_context_menus()
+        logger.info("[VIS_ORBIT] Camera reset to preset home mode=%s index=%s view=%s lens=%s", mode, preset_index, home, lens)
 
     def _persist_quick_visualizer_view(self, *, settle_motion: bool = True) -> None:
         """Settle and save a finished orbit once (no key held and no drag on any more)."""
@@ -1918,6 +1976,11 @@ class DisplayManager(QObject):
         )
         runtime.view_orbit_requested.connect(
             lambda *args, callback=self._orbit_quick_visualizer_view: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
+        )
+        runtime.view_camera_reset_requested.connect(
+            lambda *args, callback=self._reset_quick_visualizer_camera: live_unit_route(
                 lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
             )
         )

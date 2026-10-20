@@ -68,3 +68,21 @@ def resolve_visualizer_view_orbit(
     # Custom cache is a separate authority, passed back unchanged. Never
     # normalize/rebuild it simply because someone moved the camera.
     return section, dict(custom_presets)
+
+
+def starting_camera_pose(mode: str, preset_index: int) -> Dict[str, float]:
+    """Read one curated preset's authored starting view, or canonical camera home.
+
+    Custom has no immutable starting pose and resets to mode defaults. Nothing is
+    written to the curated preset nor to the Custom snapshot by this lookup.
+    """
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_presets import get_custom_preset_index, get_presets
+    keys = get_visualizer_view_pose_keys(mode)
+    values = None
+    presets = get_presets(mode)
+    if 0 <= preset_index < len(presets) and preset_index != get_custom_preset_index(mode):
+        values = presets[preset_index].starting_view
+    if values is None:
+        values = {key: require_canonical_default(f"widgets.spotify_visualizer.{key}") for key in keys}
+    return validate_visualizer_starting_view(mode, values)

@@ -13,7 +13,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QCheckBox, QLabel, QSlider
+from PySide6.QtWidgets import QCheckBox, QLabel, QSlider, QWidget
 
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import (
@@ -22,6 +22,9 @@ from core.settings.visualizer_mode_settings import (
     Colour,
     Custom,
     Direction,
+    ScenePath,
+    SceneVolumePath,
+    SceneCameraPosition,
     ModeSettings,
     Range,
     Slider,
@@ -41,7 +44,8 @@ from ui.tabs.media.builder_scaffold import (
 )
 from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
-from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMapper
+from ui.widgets.continuous_border import BucketToggle
+from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
 
 _LABEL_WIDTH = 150
 
@@ -78,6 +82,74 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
             tab, scaffold.advanced_layout if bucket.advanced else scaffold.normal_layout,
             mode_key=mode_id, bucket_key=bucket.key, title=bucket.title, helper_text=bucket.helper,
         )
+    if mode_id == "extruded_bubble":
+        # EB's many controls are *sectionally* lazy, on top of the existing lazy mode host.
+        # Closed buckets allocate neither controls nor signal hookups. Authoritative values
+        # live in the latest hydrated config until a bucket is opened, so Save/Custom/preset
+        # changes cannot overwrite closed buckets with UI defaults.
+        if any(isinstance(entry, Custom) for entry in spec.entries):
+            raise ValueError("Section-lazy EB needs an explicit Custom-control hydration contract")
+        cache_attr = f"_{prefix}_lazy_values"
+        built_attr = f"_{prefix}_lazy_built"
+        values = {entry.key: entry.admit(tab._widget_default("spotify_visualizer", entry.key),
+                                        tab._widget_default("spotify_visualizer", entry.key))
+                  for entry in spec.entries if entry.bucket}
+        setattr(tab, cache_attr, values)
+        setattr(tab, built_attr, set())
+        # A mode body may be rebuilt on the same tab. Its former connection set
+        # referenced previous widgets and must not suppress new subscriptions.
+        setattr(tab, f"_{prefix}_condition_connected", set())
+        rows: dict = {}
+        setattr(tab, f"_{prefix}_rows", rows)
+        bucket_entries = {bucket.key: [entry for entry in spec.entries if entry.bucket == bucket.key]
+                          for bucket in spec.buckets}
+
+        def build_bucket(key: str) -> None:
+            built = getattr(tab, built_attr)
+            if key in built:
+                return
+            # Existing open buckets may contain more recent unsaved UI values than
+            # the last preset hydration. Never re-load their old cache on expansion.
+            getattr(tab, cache_attr).update(collect_spec_mode_settings(tab, mode_id))
+            # Mark only after successful creation/hydration; avoid phantom built state.
+            new_rows = {}
+            grouped = {}
+            for entry in bucket_entries[key]:
+                if isinstance(entry, Toggle) and entry.row_group:
+                    group = entry.row_group
+                    if group not in grouped:
+                        grouped[group] = _row(layouts[key], entry.label)
+                    else:
+                        grouped[group][1].addSpacing(16)
+                    new_rows[entry.key] = _build_control(tab, layouts[key], entry, grouped[group],
+                                                         auto_switch=spec.auto_switch)
+                else:
+                    new_rows[entry.key] = _build_control(tab, layouts[key], entry,
+                                                         auto_switch=spec.auto_switch)
+            for _widget, content in grouped.values():
+                content.addStretch()
+            rows.update(new_rows)
+            built.add(key)
+            # Load the latest hydrated values, never a stale instance's controls.
+            load_spec_mode_settings(tab, mode_id, dict(getattr(tab, cache_attr)),
+                                    only_buckets=frozenset((key,)))
+            # Rebind conditions against ALL constructed rows, including conditions
+            # whose source lives in a different bucket (e.g. water -> light type).
+            _bind_conditions(tab, spec, rows)
+            _refresh_eb_volume(tab)
+
+        for bucket in spec.buckets:
+            host = next(candidate for region in (scaffold.normal_widget, scaffold.advanced_host)
+                        for candidate in region.findChildren(QWidget)
+                        if candidate.objectName() == f"{mode_id}_bucket_{bucket.key}")
+            toggle = host.findChild(BucketToggle)
+            if toggle is None:
+                raise RuntimeError(f"Missing accordion toggle for {mode_id}/{bucket.key}")
+            toggle.toggled.connect(lambda checked, key=bucket.key: build_bucket(key) if checked else None)
+            if toggle.isChecked():
+                build_bucket(bucket.key)
+        return
+
     rows = {}
     toggle_groups = {}
     for entry in spec.entries:
@@ -103,10 +175,11 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
 
 
 def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
-    """One spec-authoritative predicate path for row visibility and widget enablement.
+    """Apply spec conditions to currently constructed rows, including cross-bucket references.
 
-    Both ``when`` and ``enabled_when`` admit one predicate or an AND tuple.
-    Hiding a row never clears its widget value or switches preset authority.
+    For section-lazy EB, a condition source may still be unbuilt. Read its canonical
+    hydrated value and subscribe ONCE when that source's bucket is eventually opened.
+    On a new bucket the one current predicate is replaced, not stacked.
     """
     def terms(condition):
         return (condition,) if isinstance(condition[0], str) else condition
@@ -115,12 +188,17 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
                    if control.when and control.key in rows]
     enabled = [(getattr(tab, f"{control.key}_btn" if isinstance(control, Colour) else control.key), control)
                for control in spec.controls if getattr(control, "enabled_when", ())
-               and hasattr(tab, f"{control.key}_btn" if isinstance(control, Colour) else control.key)]
+               and control.key in rows]
     if not conditional and not enabled:
         return
 
     def matches(key, value):
-        current = _current_value(tab, spec.control(key))
+        control = spec.control(key)
+        if not hasattr(tab, key):
+            current = getattr(tab, f"_{spec.prefix}_lazy_values", {}).get(key,
+                       tab._widget_default("spotify_visualizer", key))
+        else:
+            current = _current_value(tab, control)
         return current in value if isinstance(value, tuple) else current == value
 
     def apply(*_args) -> None:
@@ -130,15 +208,24 @@ def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
             available = not control.availability or bool(_resolve(control.availability[0]))
             widget.setEnabled(available and all(matches(key, value) for key, value in terms(control.enabled_when)))
 
-    setattr(tab, f"_{spec.prefix}_apply_conditions", apply)
+    condition_attr = f"_{spec.prefix}_apply_conditions"
+    setattr(tab, condition_attr, apply)
     condition_keys = {key for _row, conditions in conditional for key, _value in conditions}
     condition_keys.update(key for _widget, control in enabled for key, _value in terms(control.enabled_when))
+    connections_attr = f"_{spec.prefix}_condition_connected"
+    connected = getattr(tab, connections_attr, None)
+    if connected is None:
+        connected = set()
+        setattr(tab, connections_attr, connected)
     for key in condition_keys:
+        if key in connected or not hasattr(tab, key):
+            continue
         control = spec.control(key)
         widget = getattr(tab, control.key)
         signal = (widget.toggled if isinstance(control, Toggle) else widget.valueChanged
                   if isinstance(control, (Slider, *VISUAL_CONTROLS)) else widget.currentIndexChanged)
-        signal.connect(apply)
+        signal.connect(lambda *_args, name=condition_attr: getattr(tab, name)())
+        connected.add(key)
     apply()
 
 
@@ -259,6 +346,12 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
         widget = TriangleMapper(control.corners)
         widget.setValue(value)
         describe = control.text
+    elif isinstance(control, (SceneVolumePath, SceneCameraPosition)):
+        widget = SceneVolumeMapper(camera_only=isinstance(control, SceneCameraPosition))
+    elif isinstance(control, ScenePath):
+        widget = ScenePathMapper()
+        widget.setValue(value)
+        describe = control.text
     else:
         widget = DirectionMapper((control.height_low, control.height_high), centre_text=control.centre_text,
                                  marker=control.marker, midline=control.midline)
@@ -268,7 +361,15 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     label = QLabel(describe(widget.value()))
     setattr(tab, f"{control.key}_label", label)
     widget.valueChanged.connect(lambda current, d=describe, l=label: l.setText(d(current)))
-    bind_setting_signal(tab, widget.valueCommitted, auto_switch=auto_switch)
+    bind_setting_signal(tab, widget.valueCommitted,
+                        auto_switch=auto_switch and not isinstance(control, SceneCameraPosition))
+    if isinstance(control, (SceneVolumePath, SceneCameraPosition)):
+        # Cross-path overlays are driven by the SAME saved settings and live widgets;
+        # never allocate a second Settings camera or world-coordinate owner.
+        widget.valueChanged.connect(lambda *_: _refresh_eb_volume(tab))
+        if isinstance(control, SceneVolumePath):
+            widget.cameraOffsetChanged.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=False))
+            widget.cameraOffsetCommitted.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=True))
     content.addWidget(widget)
     content.addWidget(label)
     if not isinstance(control, Range):
@@ -287,13 +388,30 @@ def _apply_availability(widget, control) -> None:
         widget.setToolTip(control.tooltip if available else unavailable_tooltip)
 
 
-def load_spec_mode_settings(tab, mode_id: str, config) -> None:
+def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozenset[str] | None = None) -> None:
     """Show ``config``'s values (canonical defaults for missing ones), repaired as the model
-    repairs them. Signals are blocked so loading saves nothing and switches no preset."""
+    repairs them. Signals are blocked so loading saves nothing and switches no preset.
+    ``only_buckets`` is strictly for first construction of an EB bucket: it hydrates
+    newly constructed controls from the already-current cache, without resetting
+    unrelated live controls or re-admitting every closed-bucket config value.
+    Real preset loads must continue to update ALL built and unbuilt buckets."""
     spec = require_mode_settings(mode_id)
     config = config if isinstance(config, dict) else {}
+    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None) if mode_id == "extruded_bubble" else None
+    if only_buckets is not None and lazy_built is None:
+        raise ValueError("Partial bucket hydration is reserved for the lazy EB owner")
+    if lazy_built is not None and only_buckets is None:
+        cache = getattr(tab, f"_{spec.prefix}_lazy_values")
+        for entry in spec.entries:
+            if entry.bucket and not isinstance(entry, Custom):
+                default = tab._widget_default("spotify_visualizer", entry.key)
+                cache[entry.key] = entry.admit(read_control_value(entry, config.get, default), default)
     for entry in spec.entries:
         if not entry.bucket:
+            continue
+        if only_buckets is not None and entry.bucket not in only_buckets:
+            continue
+        if lazy_built is not None and entry.bucket not in lazy_built:
             continue
         if isinstance(entry, Custom):
             if entry.load:
@@ -335,6 +453,15 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))
         _apply_availability(widget, entry)
     # Conditions follow their controls' signals, which were blocked.
+    if mode_id == 'extruded_bubble':
+        if only_buckets is None:
+            setattr(tab, '_extruded_bubble_loaded_camera_pose', {
+                key: config.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
+                      tab._widget_default('spotify_visualizer', key)))
+                for key in ('extruded_bubble_turn', 'extruded_bubble_tilt',
+                            'extruded_bubble_scene_scale', 'extruded_bubble_scene_pan_x',
+                            'extruded_bubble_scene_pan_y', 'extruded_bubble_camera_fov')})
+        _refresh_eb_volume(tab)
     apply = getattr(tab, f"_{spec.prefix}_apply_conditions", None)
     if apply is not None:
         apply()
@@ -344,8 +471,14 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
     """The body's values as persisted (sliders unscaled, colours as RGBA lists)."""
     spec: ModeSettings = require_mode_settings(mode_id)
     values: dict[str, Any] = {}
+    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None) if mode_id == "extruded_bubble" else None
+    cache = getattr(tab, f"_{spec.prefix}_lazy_values", {}) if lazy_built is not None else {}
     for entry in spec.entries:
         if not entry.bucket:
+            continue
+        if lazy_built is not None and entry.bucket not in lazy_built:
+            cached = cache[entry.key]
+            values[entry.key] = list(cached) if isinstance(entry, Colour) else cached
             continue
         if isinstance(entry, Custom):
             if entry.collect:
@@ -357,6 +490,79 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
             continue
         values[entry.key] = _current_value(tab, entry)
     return values
+
+
+def _eb_live_value(tab, key):
+    cache = getattr(tab, '_extruded_bubble_lazy_values', {})
+    widget = getattr(tab, key, None)
+    if isinstance(widget, SceneVolumeMapper):
+        return tuple(widget.value())
+    return cache.get(key, tab._widget_default('spotify_visualizer', key))
+
+
+def _eb_base_eye(tab):
+    """Read the SAME physical camera function as rendering, with no lens imitation.
+
+    Only the position offset is excluded, because the editor is authoring it.
+    The existing live pose comes from the most recent Settings hydration.
+    """
+    from rendering.gl_programs.extruded_bubble_scene import physical_camera
+    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
+    def get(key):
+        return float(pose.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
+              tab._widget_default('spotify_visualizer', key))))
+    fov = get('extruded_bubble_camera_fov')
+    fov_widget = getattr(tab, 'extruded_bubble_camera_fov', None)
+    if fov_widget is not None and hasattr(fov_widget, 'value'):
+        fov = float(fov_widget.value())  # FOV edits also affect world pan width
+    return physical_camera(get('extruded_bubble_turn'),get('extruded_bubble_tilt'),1.,
+                           scale=get('extruded_bubble_scene_scale'),
+                           pan_x=get('extruded_bubble_scene_pan_x'),
+                           pan_y=get('extruded_bubble_scene_pan_y'),
+                           fov_y_degrees=fov)[2]
+
+
+def _refresh_eb_volume(tab):
+    """Repaint constructed 3D controls only; never open a closed bucket."""
+    if not hasattr(tab, '_extruded_bubble_lazy_values'):
+        return
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    camera = _eb_live_value(tab, 'extruded_bubble_camera_position')
+    base = tuple(p / h for p, h in zip(_eb_base_eye(tab), WORLD_HALF))
+    keys = {'stream':'extruded_bubble_stream_direction',
+            'light':'extruded_bubble_light_direction',
+            'rays':'extruded_bubble_ray_path'}
+    for role, key in keys.items():
+        widget = getattr(tab, key, None)
+        if not isinstance(widget, SceneVolumeMapper):
+            continue
+        ghosts = {other: _eb_live_value(tab, other_key) for other, other_key in keys.items()
+                  if other != role}
+        widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera)
+    widget = getattr(tab, 'extruded_bubble_camera_position', None)
+    if isinstance(widget, SceneVolumeMapper):
+        widget.setSceneReferences(paths={role:_eb_live_value(tab,key) for role,key in keys.items()},
+                                  base_eye=base, camera_offset=camera)
+
+
+def _set_eb_camera_offset(tab, offset, *, commit):
+    """Camera diamond gestures use the existing Settings persistence owner."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    descriptor = require_mode_settings('extruded_bubble').control('extruded_bubble_camera_position')
+    value = descriptor.admit(offset, (0.,0.,0.))
+    getattr(tab, '_extruded_bubble_lazy_values')['extruded_bubble_camera_position'] = value
+    widget = getattr(tab, 'extruded_bubble_camera_position', None)
+    if isinstance(widget, SceneVolumeMapper):
+        was_blocked = widget.blockSignals(True)
+        try:
+            widget.setValue(value)
+        finally:
+            widget.blockSignals(was_blocked)
+        getattr(tab, 'extruded_bubble_camera_position_label').setText(descriptor.text(value))
+    _refresh_eb_volume(tab)
+    if commit:
+        # Camera movement is a live pose adjustment, not curated preset artwork.
+        tab._save_settings()
 
 
 __all__ = ["build_spec_mode_ui", "collect_spec_mode_settings", "container_attr", "load_spec_mode_settings"]

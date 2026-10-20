@@ -655,6 +655,14 @@ class _SpotifyBeatEngine(QObject):
                 self._last_playback_state_ts
             )
 
+    def is_reactivity_play_ramping(self) -> bool:
+        """The existing source warmup ramp is still active; no independent timer.
+
+        Exposed only as source metadata so EB does not treat the intentional
+        gain ramp in Bubble's already-ramped bands as a sequence of musical hits.
+        """
+        return self._play_ramp_start_ts > 0.0
+
     def _get_play_ramp_factor(self) -> float:
         """Return 0.0→1.0 fade factor during AGC warmup after play detection."""
         if self._play_ramp_start_ts <= 0.0:

@@ -30,6 +30,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from core.settings.visualizer_paths import direction_of, world_point
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
     WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis, upstream_source, box_entry,
 )
@@ -54,9 +55,12 @@ class ExtrudedBubbleControls:
 
     large_count: tuple[float, float] = (6.0, 14.0)
     mid_count: tuple[float, float] = (20.0, 48.0)
+    large_size: float = 1.0                # physical-radius multiplier; existing controls preserve 1.0
+    small_size: float = 1.0                # independent mid population radius multiplier
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
-    stream_direction: tuple[float, float] = (0.0, 0.0)   # (around, height) degrees: 0 up; height into the scene
+    stream_direction: tuple[float, float] = (0.0, 0.0)   # legacy angle for standalone callers
+    stream_path: tuple[float, ...] | None = None       # normalized source/end xyz, authoritative when supplied
     stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
     sway: float = 0.4                       # 0..1 side-to-side swing
@@ -65,7 +69,7 @@ class ExtrudedBubbleControls:
     breathing: tuple[float, float] = (0.04, 0.18)        # large reaction strength, quiet..loud
     small_pulse: tuple[float, float] = (0.02, 0.10)      # mid reaction strength, quiet..loud
     sustained: float = 0.6                  # 0..1 loud-passage large support and change response; no held-small inflation
-    smoothing: float = 0.5                  # 0 snappy .. 1 soft (visual smoothing of level and breath)
+    smoothing: float = 0.5                  # 0 snappy .. 1 soft; DISPLAYED radius only, not audio/physics
     collision: tuple[float, float, float] = (0.4, 0.3, 0.3)   # Fuse, Pop, Bounce shares
     collision_scope: str = "all"            # "all", "big", "small" or "off"
 
@@ -77,6 +81,7 @@ class MusicInput:
     intensity: float = 0.0                  # passage intensity 0..1
     onsets: tuple[tuple[str, float], ...] = ()   # (kind, weight 0..1) taken this step
     body_bands: tuple[float, float, float] = (0.0, 0.0, 0.0)  # existing full-dynamic bass/mid/high feed
+    play_ramping: bool = False               # existing BeatEngine AGC warmup, NOT a new clock
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +116,8 @@ class _Bubble:
     z: float
     radius: float
     phase: float
-    current_radius: float = 0.0
+    current_radius: float = 0.0  # physical target: contacts and collision authority
+    visual_radius: float = 0.0   # display-only follower per stable ID
     alpha: float = 0.0
     leaving: bool = False
     popping: float = -1.0       # seconds into its pop, -1 when not popping
@@ -199,15 +205,23 @@ class ExtrudedBubbleSimulation:
         self._motion_rate: float | None = None
         self._body_big_envelope = 0.0
         self._body_small_envelope = 0.0
+        self._population_drive = 0.0  # separate audio-owned occupancy eligibility; no display Smoothing
         self._big_body_reference = 0.0
+        self._last_big_body: float | None = None
+        self._was_play_ramping = False
+        self._big_phrase_edge = 0.0
         self._small_body_reference = 0.0
+        self._last_small_body: float | None = None
         self._ray_lift = 0.0
+        self._ray_body_reference: float | None = None
+        self._ray_phrase = 0.0
         self._rays = 0.0
         self._shimmer = 0.0
         self._speed: float | None = None
         self._drift: float | None = None
         self._emission: float | None = None
         self._filled = False
+        self._applied_sizes = {True: 1.0, False: 1.0}   # live edits scale SAME-ID radii at the logical owner
         self._spawn_credit = {True: 0.0, False: 0.0}
         self._wake_live: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
         self._wake_retiring: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
@@ -229,8 +243,22 @@ class ExtrudedBubbleSimulation:
         rng = self._rng
         column = controls.columns > 0.0 and rng.random() < controls.columns
         for _ in range(32):
-            point = tuple(WORLD_CENTER[i] + rng.uniform(-WORLD_HALF[i], WORLD_HALF[i]) for i in range(3)) \
-                if anywhere else upstream_source(rng, direction)
+            if controls.stream_path is not None:
+                # Authored physical emission anchor; the Source node is not a
+                # cosmetic vector pivot. Spread within a small transverse patch,
+                # with no random halfway-up source position.
+                across, deep_axis = stream_basis(direction)
+                anchor = world_point(controls.stream_path[:3], WORLD_HALF)
+                noise_a = rng.uniform(-0.55, 0.55) * WORLD_UNIT
+                noise_b = rng.uniform(-0.55, 0.55) * WORLD_UNIT
+                point = tuple(
+                    anchor[i] if abs(controls.stream_path[i]) >= 0.9999
+                    else max(-WORLD_HALF[i], min(WORLD_HALF[i], anchor[i]
+                             + across[i]*noise_a + deep_axis[i]*noise_b))
+                    for i in range(3))
+            else:
+                point = tuple(WORLD_CENTER[i] + rng.uniform(-WORLD_HALF[i], WORLD_HALF[i]) for i in range(3)) \
+                    if anywhere else upstream_source(rng, direction)
             if column:
                 across, _ = stream_basis(direction)
                 distance = sum(p * a for p, a in zip(point, across))
@@ -239,7 +267,7 @@ class ExtrudedBubbleSimulation:
             if anywhere:
                 if any(abs(p-c)>h for p,c,h in zip(point,WORLD_CENTER,WORLD_HALF)):
                     continue  # rejection sample the authored lanes within the fixed volume
-            else:
+            elif controls.stream_path is None:
                 point = box_entry(point,direction)
                 if point is None:
                     continue  # this transverse source line misses the domain
@@ -248,7 +276,8 @@ class ExtrudedBubbleSimulation:
             raise RuntimeError("Extruded Bubble could not sample a source inside its physical domain")
         if not anywhere:
             point = tuple(p - d * .08 * WORLD_UNIT for p, d in zip(point, direction))
-        bubble = _Bubble(self._next_ident, large, *point, self._radius(large, controls.size_variety),
+        bubble = _Bubble(self._next_ident, large, *point,
+                         self._radius(large, controls.size_variety) * self._applied_sizes[large],
                          rng.uniform(0.0, math.tau), alpha=1.0 if anywhere else 0.0)
         self._next_ident += 1
         self._bubbles.append(bubble)
@@ -263,7 +292,9 @@ class ExtrudedBubbleSimulation:
     def advance(self, music: MusicInput, controls: ExtrudedBubbleControls) -> ExtrudedBubbleSnapshot:
         dt = max(0.0, min(0.1, float(music.dt)))
         self._time += dt
-        soft = 0.5 + 1.5 * max(0.0, min(1.0, controls.smoothing))       # visual smoothing scales every follower
+        # Musical analysis, activity, flow, emission, and contacts must NEVER use the display smoother.
+        # The earlier `soft` multiplier cascaded into already-AGC-processed audio.
+        soft = 1.0
 
         # One band-driven path for live capture and tests. The presence scalar is diagnostic:
         # it can remain at 1 through music and must not manufacture body motion or an idle sine.
@@ -284,18 +315,47 @@ class ExtrudedBubbleSimulation:
         sustain = self._sustain * controls.sustained
         # Clean body-delta authority opens each lane on actual phrase changes, not
         # a kick/snare tail that keeps the field inflated between attacks.
-        self._big_body_reference = _follow(self._big_body_reference, big_body, dt, 0.45 * soft, 0.25 * soft)
+        # Activation may join music already playing: its first valid bands are NOT a new onset.
+        # Separately, the engine's legitimate quadratic play-ramp arrives as many small rises;
+        # treating each of those as a fresh transient makes a giant swell then a yank-down.
+        # A genuinely sudden musical step still gets the original fast, full-size response.
+        finishing_source_ramp = self._was_play_ramping and not music.play_ramping
+        self._was_play_ramping = bool(music.playing and music.play_ramping)
+        if music.playing and (self._last_big_body is None or music.play_ramping or finishing_source_ramp):
+            self._big_body_reference = big_body
+        rising_step = max(0.0, big_body - (self._last_big_body if self._last_big_body is not None else big_body))
+        abrupt_step = not (music.play_ramping or finishing_source_ramp) and rising_step > max(0.05, 2.0 * dt)
+        self._last_big_body = big_body if music.playing else None
+        self._big_body_reference = _follow(self._big_body_reference, big_body, dt,
+                                           (0.45 if abrupt_step else 0.10) * soft, 0.25 * soft)
         big_change = max(0.0, big_body - self._big_body_reference)
+        if abrupt_step:
+            self._big_phrase_edge = max(self._big_phrase_edge, rising_step)
+        self._big_phrase_edge = _follow(self._big_phrase_edge, 0.0, dt, 0.01, 0.25 * soft)
+        # A genuine step carries a short, continuous musical body response. A smooth engine
+        # ramp cannot repeatedly fake that step, and a held plateau does not sustain it.
+        if music.play_ramping or finishing_source_ramp:
+            self._big_phrase_edge = 0.0
+            big_change = 0.0
+        else:
+            big_change = min(0.11, big_change) + self._big_phrase_edge
         # Silence still settles over seconds. Blend into that release continuously;
         # the previous .01 threshold abruptly changed release by 7.5x inside music.
         quiet = max(0.0, 1.0 - intensity / 0.10)
         body_release = (0.10 + 1.40 * quiet * quiet) * soft
         self._body_big_envelope = _follow(self._body_big_envelope,
-            _soft_top((0.25 + 0.75 * sustain) * big_body + 3.0 * big_change), dt, 0.06 * soft, body_release)
+            _soft_top((0.22 + 0.70 * sustain) * big_body + 3.0 * big_change), dt, 0.06 * soft, body_release)
         # Small bubbles open on changing vocal/body energy, with restrained held support.
         # A hot mid/high plateau must not inflate the whole small field to hero size.
+        # The small lane had the same zero-reference hot-start problem as large,
+        # amplified by its 6x clean-change coefficient. During the engine's actual
+        # playback warmup, track the source's ramped body without manufacturing
+        # repeated vocal onsets; ordinary musical changes keep the original gain.
+        if music.playing and (self._last_small_body is None or music.play_ramping or finishing_source_ramp):
+            self._small_body_reference = small_body
+        self._last_small_body = small_body if music.playing else None
         self._small_body_reference = _follow(self._small_body_reference, small_body, dt, 0.55 * soft, 0.25 * soft)
-        small_change = max(0.0, small_body - self._small_body_reference)
+        small_change = 0.0 if (music.play_ramping or finishing_source_ramp) else max(0.0, small_body - self._small_body_reference)
         self._body_small_envelope = _follow(self._body_small_envelope,
             _soft_top(0.18 * small_body + (6.0 + 2.0 * sustain) * small_change), dt, 0.06 * soft, body_release)
         # Counts describe passage occupancy. Flow/light/emission must still express
@@ -304,24 +364,48 @@ class ExtrudedBubbleSimulation:
         change_drive = _soft_top(0.60 * level + 0.60 * self._body_small_envelope + 0.15 * self._flash)
         # Resting phases barely advance. Sway and shader animation share this integrated musical time.
         idle_rate = 0.03 + 0.06 * max(0.0, min(1.0, controls.idle))
+        # Operator-requested +10% RESTING activity for moving actors, NOT for
+        # water/surface time or the musical bands. Keep the shared motion_phase
+        # untouched: the ocean surface consumes it and must remain unchanged.
+        rest_motion_boost = 1.0 + 0.10 * quiet
         motion_target = idle_rate + 1.10 * level + 1.10 * self._body_small_envelope + 0.22 * self._flash + 0.20 * sustain
         if self._motion_rate is None:
             self._motion_rate = motion_target
         self._motion_rate = _follow(self._motion_rate, motion_target, dt, 0.24 * soft, 1.1 * soft)
         self._motion_phase += dt * self._motion_rate
-        # The light rays: the passage, a lift from the onsets (quick rise, slow fall) and a held loud passage, eased
-        # below the top, so a saturated passage (the level held at 1) still moves them with its hits. Their shimmer
-        # advances faster on the hits: a phase integral, so a change of rate never makes the pattern jump.
-        self._ray_lift = _follow(self._ray_lift, self._flash, dt, 0.1, 0.4 * soft)
-        # Follow the continuous light separately; do not smear its already-eased onset accent again.
-        self._rays = _follow(self._rays, 0.35 * level + 0.45 * self._body_small_envelope + 0.05 * sustain,
-                             dt, 0.08 * soft, (0.22 + 0.43 * quiet * quiet) * soft)
-        self._shimmer += dt * (idle_rate + 0.6 * change_drive + 2.5 * self._ray_lift)
-        direction = stream_vector(*controls.stream_direction)
+        # The ray brightness has its OWN phrase follower: the held musical presence
+        # opens the fan but cannot consume the whole authored brightening range.
+        # A rising bass/mid/high body, including changes WITHIN playback, adds a
+        # short lift; falls decay gently. This does not touch audio AGC, the
+        # size/body envelopes, or the operator's Ray Strength endpoints.
+        ray_body = 0.34 * bass + 0.46 * mid + 0.20 * high
+        if self._ray_body_reference is None or music.play_ramping:
+            self._ray_body_reference = ray_body
+        self._ray_body_reference = _follow(self._ray_body_reference, ray_body, dt, 0.42, 0.70)
+        positive_phrase = max(0.0, ray_body - self._ray_body_reference)
+        if music.play_ramping:
+            positive_phrase = 0.0
+        self._ray_phrase = _follow(self._ray_phrase, min(1.0, positive_phrase * 2.3), dt,
+                                    0.07, 0.62)
+        # Discrete musical event lifts have their own short life; following the
+        # already-smoothed flash twice blended successive beats into a bright
+        # plateau. Admit the real onset weight once, then decay continuously.
+        if onsets and not music.play_ramping:
+            self._ray_lift = max(self._ray_lift, min(1.0, max(w for _kind, w in onsets)))
+        self._ray_lift = _follow(self._ray_lift, 0.0, dt, 0.08, 0.42)
+        ray_target = (0.24 * level + 0.26 * self._body_small_envelope
+                      + 0.06 * sustain + 0.23 * self._ray_phrase + 0.32 * self._ray_lift)
+        self._rays = _follow(self._rays, min(0.90, ray_target), dt, 0.12,
+                             0.58 + 0.25 * quiet * quiet)
+        # Integrated phase keeps the shimmer pattern continuous. The transient
+        # brightening above is separate from this cosmetic shimmer; no flashing.
+        self._shimmer += dt * (idle_rate * rest_motion_boost + 0.6 * change_drive + 1.4 * self._ray_lift)
+        direction = (direction_of(controls.stream_path, WORLD_HALF) if controls.stream_path is not None
+                     else stream_vector(*controls.stream_direction))
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
-        low, high = controls.stream_speed
-        activity = min(1.0, idle_rate + 1.6 * level)
-        speed_target = (_lerp(controls.stream_speed, change_drive) + (high - low) * (0.35 * self._flash + 0.15 * sustain)) * activity
+        low_speed, high_speed = controls.stream_speed
+        activity = min(1.0, idle_rate * rest_motion_boost + 1.6 * level)
+        speed_target = (_lerp(controls.stream_speed, change_drive) + (high_speed - low_speed) * (0.35 * self._flash + 0.15 * sustain)) * activity
         drift_target = _soft_top(_lerp(controls.drift, change_drive) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
         emission_target = _soft_top(_lerp(controls.emission, change_drive)
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * max(0.25, activity)
@@ -329,7 +413,7 @@ class ExtrudedBubbleSimulation:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         # Flow accelerates continuously, rather than stepping at a vocal accent;
         # release into silence retains the long resting transition.
-        self._speed = _follow(self._speed, speed_target, dt, 0.48 * soft, (0.65 + 2.35 * quiet * quiet) * soft)
+        self._speed = _follow(self._speed, speed_target, dt, 0.68 * soft, (0.65 + 2.35 * quiet * quiet) * soft)
         self._drift = _follow(self._drift, drift_target, dt, 0.20 * soft, (0.35 + 2.15 * quiet * quiet) * soft)
         self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft, (0.25 + 1.25 * quiet * quiet) * soft)
         speed = self._speed * WORLD_UNIT
@@ -337,9 +421,33 @@ class ExtrudedBubbleSimulation:
         # change of speed never makes them jump.
         self._travel += speed * dt
 
-        # Population: fill at once on the first step, then grow toward the target upstream and thin by fading.
-        targets = {True: int(round(min(MAX_BUBBLES, _lerp(controls.large_count, level)))),
-                   False: int(round(min(MAX_BUBBLES, _lerp(controls.mid_count, level))))}
+        # Nominal sizes belong to the physical simulation. Changing Settings acts on existing stable IDs,
+        # and is reflected in contacts, wakes, and rendering; no camera-dependent scaling or respawn.
+        for large, requested in ((True, controls.large_size), (False, controls.small_size)):
+            target_size = max(0.5, min(2.0, requested))
+            previous = self._applied_sizes[large]
+            if target_size != previous:
+                ratio = target_size / previous
+                for bubble in self._bubbles:
+                    if bubble.large is large:
+                        bubble.radius *= ratio
+                self._applied_sizes[large] = target_size
+
+        # Population is a distinct, slowly settling music consumer. The earlier max-band
+        # `level` jumped to its ceiling on a single normalized bass/vocal band and
+        # handed BOTH populations their authored loud-end counts almost continuously.
+        # Broad-body eligibility must be strong to reach that endpoint; unlike a binary
+        # gate, the monotonic curve remains responsive throughout the range. The
+        # follower shares this logical tick and is deliberately independent of the
+        # display-radius Smoothing setting.
+        breadth = 0.52 * intensity + 0.48 * (0.42 * bass + 0.39 * mid + 0.19 * high)
+        population_target = max(0.0, min(1.0, breadth)) ** 1.8
+        self._population_drive = (population_target if not self._filled else
+                                  _follow(self._population_drive, population_target, dt, 0.28, 1.05))
+        # Preserve authored quiet/loud endpoints, operator's identity/fade semantics,
+        # and the existing bounded entry/retirement path. No burst from audio peaks.
+        targets = {True: int(round(min(MAX_BUBBLES, _lerp(controls.large_count, self._population_drive)))),
+                   False: int(round(min(MAX_BUBBLES, _lerp(controls.mid_count, self._population_drive))))}
         if targets[True] + targets[False] > MAX_BUBBLES:
             targets[False] = MAX_BUBBLES - targets[True]
         live = {True: [b for b in self._bubbles if b.large and not b.leaving and b.popping < 0],
@@ -350,8 +458,12 @@ class ExtrudedBubbleSimulation:
                   False: min(MAX_BUBBLES, round(max(controls.mid_count)))}
         for large in (True, False):
             if not self._filled:
-                for _ in range(targets[large]):
-                    self._spawn(large, controls, direction, anywhere=True)
+                # A physical Source node does not imply a mature population has
+                # magically appeared halfway through its journey on startup.
+                # Admit it using the same bounded inflow as later music changes.
+                if controls.stream_path is None:
+                    for _ in range(targets[large]):
+                        self._spawn(large, controls, direction, anywhere=True)
                 continue
             shortage = targets[large] - len(live[large])
             if shortage > 0 and present[large] < limits[large]:
@@ -377,8 +489,17 @@ class ExtrudedBubbleSimulation:
         across, depth_axis = stream_basis(direction)
         big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, 4.0)
         small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, 3.0)
+        # Per-identity visual radius is display-only: no oscillators, no threshold hold/deadband,
+        # no smoothing of music or of the instantaneous physical collision radius.
+        visual_smoothing = max(0.0, min(1.0, float(controls.smoothing)))
+        attack = 0.010 + 0.085 * visual_smoothing
+        release = 0.012 + 0.165 * visual_smoothing
         for b in self._bubbles:
             b.current_radius = b.radius * (big_scale if b.large else small_scale)
+            if b.visual_radius <= 0.0:
+                b.visual_radius = b.current_radius
+            else:
+                b.visual_radius = _follow(b.visual_radius, b.current_radius, dt, attack, release)
         t = self._motion_phase
         for b in self._bubbles:
             if b.cluster >= 0:
@@ -387,7 +508,7 @@ class ExtrudedBubbleSimulation:
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
             wander = self._drift * WORLD_UNIT * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
-            swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate)
+            swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
             deep = self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep)
@@ -607,7 +728,7 @@ class ExtrudedBubbleSimulation:
         current: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
-                current[b.ident] = (b.x, b.y, b.z, b.current_radius,
+                current[b.ident] = (b.x, b.y, b.z, b.visual_radius,
                                     b.ident, -1.0, b.alpha, b.radius)
         # Advance existing tombstones on the sole logical tick, never in the renderer.
         retained = {}
@@ -632,15 +753,15 @@ class ExtrudedBubbleSimulation:
         index = {b.ident: i for i, b in enumerate(self._bubbles)}
         bubbles: list[float] = []
         for b in self._bubbles:
-            swell = b.current_radius / b.radius - 1.0
-            bubbles.extend((b.x, b.y, b.z, b.current_radius, b.alpha, swell, float(b.ident), float(b.cluster)))
+            swell = b.visual_radius / b.radius - 1.0
+            bubbles.extend((b.x, b.y, b.z, b.visual_radius, b.alpha, swell, float(b.ident), float(b.cluster)))
         clusters: list[float] = []
         for cluster in self._clusters.values():
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
-                                      self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, self._motion_phase,
+                                      self._travel, self._rays, self._shimmer, self._motion_phase,
                                       self._wakes(dt))
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 
+from core.settings.visualizer_paths import admit_path, direction_of
 from widgets.spotify_visualizer.extruded_bubble_simulation import (
     ExtrudedBubbleControls,
     ExtrudedBubbleSimulation,
@@ -32,12 +33,19 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         low, high = parameters[key]
         return float(low) * scale, float(high) * scale
 
+    stream_path = admit_path(parameters["extruded_bubble_stream_direction"], [0., 0.], "stream")
+    vector = direction_of(stream_path)
+    stream_angles = (math.degrees(math.atan2(vector[0], vector[1])),
+                     math.degrees(math.atan2(-vector[2], math.hypot(vector[0], vector[1]))))
     return ExtrudedBubbleControls(
         large_count=pair("extruded_bubble_large_bubbles"),
         mid_count=pair("extruded_bubble_mid_bubbles"),
+        large_size=float(parameters.get("extruded_bubble_large_size", 1.0)),
+        small_size=float(parameters.get("extruded_bubble_small_size", 1.0)),
         size_variety=float(parameters["extruded_bubble_size_variety"]),
         columns=float(parameters["extruded_bubble_columns"]),
-        stream_direction=pair("extruded_bubble_stream_direction"),
+        stream_direction=stream_angles,
+        stream_path=stream_path,
         stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),
         drift=pair("extruded_bubble_drift"),
         sway=float(parameters["extruded_bubble_sway"]),
@@ -86,7 +94,8 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
     def advance(self, *, onsets, now_ts: float, playing: bool, intensity: float,
                 identity: tuple[int, int, int], source_identity: tuple[int, int],
                 controls: ExtrudedBubbleControls,
-                body_bands: tuple[float, float, float]) -> ExtrudedBubbleSnapshot | None:
+                body_bands: tuple[float, float, float],
+                play_ramping: bool = False) -> ExtrudedBubbleSnapshot | None:
         now = float(now_ts)
         if not math.isfinite(now):
             raise ValueError("Extruded Bubble capture time must be finite")
@@ -108,7 +117,8 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         dt = 0.0 if self._last_ts is None else min(MAX_STEP_SECONDS, max(0.0, now - self._last_ts))
         self._last_ts = now
         music = MusicInput(dt, live, float(intensity) if live else 0.0, tuple(taken) if live else (),
-                           tuple(body_bands) if live else (0.0, 0.0, 0.0))
+                           tuple(body_bands) if live else (0.0, 0.0, 0.0),
+                           bool(play_ramping) if live else False)
         self._latest = self._simulation.advance(music, controls)
         return self._latest
 

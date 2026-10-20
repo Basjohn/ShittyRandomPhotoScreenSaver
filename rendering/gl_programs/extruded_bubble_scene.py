@@ -10,14 +10,20 @@ strength, rays, water, glass, particles and lens, each mapped as section 9's tab
 ``ray_motion`` read the Light Rays range, Ray Flicker and the fan's reach at the simulation's ray driver and sustain
 (never the raw passage level, which holds at 1 through loud music).
 
-**Camera.** A 62 degree vertical field of view from the eye at the independent scene origin;
-turn, tilt, scale and lens shift affect view/projection only. The simulation and procedural
-populations inhabit the fixed world domain in ``extruded_bubble_geometry``.
+**Camera.** A 45-degree default vertical field of view, now authorable 35–62 degrees.
+The product uses ``physical_camera`` for separate orbit (existing Alt+left drag),
+real lateral/up camera translation (Scene Pan), and dolly distance (Scene Scale).
+The sensor is centred, and the visible FOV is not changed by pan or zoom.
+Native appearance, peripheral perspective and gesture parity require visual acceptance.
+The simulation and procedural populations inhabit the fixed world domain in
+``extruded_bubble_geometry``.
 
 **Instances.** Packing preserves physical position/radius and carries lifetime opacity
 separately. No depth scaling, camera-dependent wrapping or view-relative reinstallation.
 """
 from __future__ import annotations
+
+from core.settings.visualizer_paths import admit_path, direction_of, world_point
 
 import math
 from collections.abc import Mapping
@@ -26,8 +32,9 @@ import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
 from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y
+from core.constants.extruded_bubble_world import WORLD_HALF
 
-FOV_Y_DEGREES = 62.0
+FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
 NEAR, FAR = 0.05, 200.0
 SURFACE_Y = WATER_SURFACE_Y
 SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 7, 19, 8
@@ -85,11 +92,18 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     water, deep = _rgb(_p(parameters, "water_colour")), _rgb(_p(parameters, "depth_colour"))
     water_hue = _hue(water)
     strength = float(_p(parameters, "light_strength"))
-    around, height = (float(v) for v in _p(parameters, "light_direction"))
-    direction = _unit(direction_vector(around, height))
+    light_path = admit_path(_p(parameters, "light_direction"), [0.0, 55.0], 'light')
+    direction = _unit(tuple(-v for v in direction_of(light_path)))
+    # World-space light source/end and its separate authored beam path.
+    ray_path = admit_path(parameters.get('extruded_bubble_ray_path', [0., 1., 0., 0., -1., 0.]),
+                          [0., 1., 0., 0., -1., 0.], 'light')
     knobs.update(water=water, deep=deep, light=light, sky=_mix(water_hue, light, 0.6),
                  shaft=tuple(0.85 * c for c in _mix(water_hue, light, 0.45)), absorb=(0.08, 0.05, 0.035),
-                 exposure=float(_p(parameters, "exposure")))
+                 exposure=float(_p(parameters, "exposure")),
+                 light_source=world_point(light_path[:3]),
+                 light_end=world_point(light_path[3:]),
+                 ray_source=world_point(ray_path[:3]),
+                 ray_end=world_point(ray_path[3:]))
     if mode == "surface":
         knobs.update(sun=direction, sun_below=water_sun_below_safe(direction), spec_dir=(0.0, 1.0, 0.0),
                      surface_gain=2.0 * strength * float(_p(parameters, "surface_brightness")),
@@ -163,11 +177,14 @@ def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) ->
             0.85 + 0.3 * max(0.0, min(1.0, float(sustain))))
 
 
-def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0, shift=(0.0, 0.0)):
+def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
+           fov_y_degrees: float = FOV_Y_DEGREES):
     """(view_to_world, world_to_view, tan, projection): column-major mat3s (GL order) and the mat4 projection.
     ``turn`` -1..1 is a full circle of yaw; ``tilt`` -0.5..0.5 pitches up to +-45 degrees beyond the authored 16
-    degrees up (looking toward the surface, as the mocks do); ``scale`` above 1 zooms in; ``shift`` (NDC, from
-    ``lens_shift``) moves the view's centre on screen (an off-axis frustum: Scene Pan, no parallax)."""
+    degrees up (looking toward the surface, as the mocks do). ``scale`` is a legacy
+    projection-only calculation for the lab; production uses ``physical_camera``
+    with real dolly distance and always calls this helper at scale 1. No off-axis
+    shift is supported: panning must translate the physical eye. """
     pitch = math.radians(16.0 + 90.0 * float(tilt))
     yaw = math.pi * float(turn)
     cp, sp, cy, sy = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
@@ -178,17 +195,64 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0, shift=(0
           back[0] * right[1] - back[1] * right[0])
     view_to_world = (*right, *up, *back)
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
-    tan_y = math.tan(math.radians(FOV_Y_DEGREES) / 2.0) / max(float(scale), 1e-3)
+    tan_y = math.tan(math.radians(max(35.0, min(62.0, float(fov_y_degrees)))) / 2.0) / max(float(scale), 1e-3)
     tan = (tan_y * aspect, tan_y)
     f = 1.0 / tan_y
-    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, -float(shift[0]), -float(shift[1]),
+    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0,
                   (FAR + NEAR) / (NEAR - FAR), -1.0, 0.0, 0.0, 2.0 * FAR * NEAR / (NEAR - FAR), 0.0)
     return view_to_world, world_to_view, tan, projection
 
 
-def lens_shift(pan_x: float, pan_y: float) -> tuple[float, float]:
-    """Scene Pan (fractions of the card, y down, as the framed camera's envelope bounds it) as an NDC lens shift."""
-    return 2.0 * float(pan_x), -2.0 * float(pan_y)
+
+# The stable pivot is 15 units ahead of the historical centre view, so a default
+# camera remains at the historical world origin while orbit has real parallax.
+# This target belongs to the camera, not to mutable sim/world populations.
+ORBIT_DISTANCE = 15.0
+_DEFAULT_PITCH = math.radians(16.0)
+ORBIT_PIVOT = (0.0, ORBIT_DISTANCE * math.sin(_DEFAULT_PITCH),
+               -ORBIT_DISTANCE * math.cos(_DEFAULT_PITCH))
+
+
+def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
+                    pan_x: float = 0.0, pan_y: float = 0.0,
+                    fov_y_degrees: float = FOV_Y_DEGREES,
+                    position_offset=(0.0, 0.0, 0.0)):
+    """World-space physical camera: (view_to_world, world_to_view, eye, tan, projection).
+
+    Orbit rotates around a fixed WORLD pivot while the scene remains stationary;
+    Scene Pan moves the subject WITH the screen drag by translating the physical
+    camera in the opposite direction; it never alters
+    yaw or pitch; Scene Scale dollies the eye toward/away from that pivot, without
+    shrinking the focal angle. Depth-dependent parallax follows automatically.
+    All modes of presentation, including shaders and reflected cube probe, MUST
+    use the returned ``eye`` to express world coordinates relative to the camera.
+    """
+    view_to_world, world_to_view, tan, projection = camera(
+        turn, tilt, aspect, fov_y_degrees=fov_y_degrees)
+    distance = ORBIT_DISTANCE / max(float(scale), 1e-3)
+    right = view_to_world[:3]
+    up = view_to_world[3:6]
+    back = view_to_world[6:9]
+    # One full card's width/height at the target distance would be 2*d*tan.
+    # Confine the under-water eye by LIMITING actual dolly/translation rather than
+    # secretly offsetting its Y afterwards (which would break the declared pivot).
+    ceiling = SURFACE_Y - 0.5
+    if back[1] > 1e-9:
+        distance = min(distance, max(1.0, (ceiling - ORBIT_PIVOT[1]) / back[1]))
+    # Camera translation in WORLD units must not depend on the card's aspect
+    # ratio: the Settings volume view shares this exact physical reference.
+    dx = -2.0 * distance * tan[1] * float(pan_x)
+    dy = 2.0 * distance * tan[1] * float(pan_y)
+    y = ORBIT_PIVOT[1] + distance * back[1] + dx * right[1] + dy * up[1]
+    if y > ceiling and up[1] > 1e-9:
+        dy -= (y - ceiling) / up[1]
+    eye = tuple(ORBIT_PIVOT[i] + distance * back[i] + dx * right[i] + dy * up[i]
+                + float(position_offset[i]) * WORLD_HALF[i] for i in range(3))
+    # A user-moved physical eye can approach any interior source/end point,
+    # but must not jump through the ocean ceiling. No FOV/projection adjustment.
+    eye = (eye[0], min(ceiling, eye[1]), eye[2])
+    return view_to_world, world_to_view, eye, tan, projection
+
 
 
 def bubble_instances(records) -> np.ndarray:
@@ -229,12 +293,16 @@ def cluster_instances(records, clusters) -> np.ndarray:
     return np.asarray(out, dtype=np.float32).reshape(-1, CLUSTER_FLOATS)
 
 
-def glint_proxies(shells: np.ndarray, sun_below, power: float, size: float = 0.6) -> np.ndarray:
+def glint_proxies(shells: np.ndarray, sun_below, power: float, size: float = 0.6, *, light_source=None) -> np.ndarray:
     """Each bubble's glint toward the light as the probe sees it: a small bright point near its surface, so its
     neighbours mirror it (bubbles sparkling in each other)."""
     bubbles = shells[(shells[:, 5] == 0.0) & (shells[:, 3] > 0.01)]
     out = np.zeros((len(bubbles), PROXY_FLOATS), dtype=np.float32)
-    out[:, :3] = bubbles[:, :3] + np.asarray(sun_below, dtype=np.float32)[None, :] * bubbles[:, 3:4] * 0.7
+    light_dirs = np.broadcast_to(np.asarray(sun_below, dtype=np.float32), (len(bubbles), 3))
+    if light_source is not None and len(bubbles):
+        light_dirs = np.asarray(light_source, dtype=np.float32)[None, :] - bubbles[:, :3]
+        light_dirs = light_dirs / np.maximum(np.linalg.norm(light_dirs, axis=1, keepdims=True), 1e-5)
+    out[:, :3] = bubbles[:, :3] + light_dirs * bubbles[:, 3:4] * 0.7
     out[:, 3] = np.maximum(bubbles[:, 3] * size, 0.004)
     out[:, 4] = power * bubbles[:, 6]
     out[:, 5] = 1.0
@@ -259,6 +327,6 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
 
 
 __all__ = ["CLUSTER_FLOATS", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
-           "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera",
-           "cluster_instances", "direction_vector", "glint_proxies", "lens_shift", "light_on_screen", "ray_strength",
+           "ORBIT_DISTANCE", "ORBIT_PIVOT", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera", "physical_camera",
+           "cluster_instances", "direction_vector", "glint_proxies", "light_on_screen", "ray_strength",
            "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL"]

@@ -14,6 +14,13 @@ passages; small bubbles and emission/drift/speed/rays must keep expressing chang
 Do not interpret this as generic large-body hold at all energies. Preset/control corrections are authorized where
 needed; the current pending response attempt is not accepted. Detailed latest findings: [Investigation §17](Investigation.md#17-latest-operator-rejection-passage-roles-and-central-organization).
 
+
+**Current unaccepted source/end candidate (2026-10-20; plan EB-R27, investigation §27):**
+- [~] Physical two-node S/E Settings for Stream, Light and Rays, with independent depth editing and legacy preset conversion. Do not call the source positions/gesture UI accepted until native Qt and rendering checks.
+- [~] Stream ordinary-bubble source patch and first-fill boundary admission are implemented but still need complete procedural chain/wake/particle parity, natural distribution and operator acceptance.
+- [~] Ray finite 3D path and limited bubble/dust light-loss proxy are source candidates, not demonstrated optically or performance-safe. Ray *musical* volume remains visually pegged by the operator's report; evaluate phrase-to-phrase luminance rather than treating idle→playback gain as a success.
+- [ ] Previous small size snapping, large plateau, easy count saturation, ray temporal response, camera distortion, lifecycle and all shader/art failures remain open regardless of synthetic gates. No accepted operator preset is rewritten.
+
 ## 1. Visual target (operator mocks, `Docs/Reference/Extruded_Bubble/Targets/Originals`, 2026-10-17; informational mocks 2026-10-18)
 
 Seven frames in `Docs/Reference/Extruded_Bubble/Targets/Originals` (three looking up toward a sunlit surface, one with wake tendrils, the abyss, camera

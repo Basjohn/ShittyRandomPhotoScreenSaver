@@ -9,8 +9,8 @@ change production controls or accept any visual behavior.
     py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py --json
     py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py --gate
 
---gate is intentionally RED on the original 2026-10-20 source. It tests the
-unwanted startup overshoot, not performance or quality of real audio reactivity.
+--gate was RED on the original 2026-10-20 source. A green candidate must
+not be described as live visual acceptance, musical quality or judder repair.
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def controls_from_authored_preset(mod, slot):
 def input_bands(scenario, i):
     if scenario == "already_hot":
         return HOT_BANDS
-    if scenario == "play_ramp":
+    if scenario in ("play_ramp", "play_ramp_untagged"):
         # beat_engine._get_play_ramp_factor: 1s quadratic ramp.
         factor = min(i / FREQUENCY, 1.) ** 2
         return tuple(v * factor for v in HOT_BANDS)
@@ -81,12 +81,15 @@ def trace(mod, controls, scenario, *, reference_seed=False):
     traces = []
     for i in range(TOTAL_STEPS):
         bands = input_bands(scenario, i)
+        # The *existing* engine quadratic play-ramp is authoritatively tagged by
+        # source metadata, not inferred from the slope of real recorded music.
+        source_ramping = scenario == "play_ramp" and i < FREQUENCY
         if i == 0 and reference_seed:
             bass, mid, high = bands
             sim._big_body_reference = mod._soft_top(bass + 0.28 * mid + 0.10 * high)
             sim._small_body_reference = mod._soft_top(0.70 * mid + 0.35 * high)
         snap = sim.advance(mod.MusicInput(0. if i == 0 else 1 / FREQUENCY,
-                                          True, 1., (), bands), controls)
+                                          True, 1., (), bands, source_ramping), controls)
         # Actual population radii are identical in each class for a common envelope;
         # snapshot swell is current_radius / nominal_radius minus one.
         first_large = next((1 + snap.bubbles[j+5] for j in range(0,len(snap.bubbles),8)
@@ -122,17 +125,17 @@ def summary(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Print machine-readable summaries and selected 10Hz samples")
-    parser.add_argument("--gate", action="store_true", help="Fail if cold/ramped held music overshoots by more than 30 percent")
+    parser.add_argument("--gate", action="store_true", help="Fail on genuine source-start and source-ramp overshoot")
     args = parser.parse_args()
     mod = simulation_module()
     output = {"source": "production simulation + authored P1/P7 controls",
-              "input": "synthetic fixed band levels; quadratic playback ramp mirrors beat_engine duration/shape",
+              "input": "synthetic fixed bands; quadratic playback ramp plus source-owned ramp metadata mirrors beat_engine",
               "scenarios": {}}
     for slot in (1, 7):
         controls = controls_from_authored_preset(mod, slot)
-        for scenario in ("already_hot", "play_ramp", "quiet_then_hot"):
+        for scenario in ("already_hot", "play_ramp", "play_ramp_untagged", "quiet_then_hot"):
             for seeded in (False, True):
-                name = f"P{slot}/{scenario}/" + ("seed_references_only" if seeded else "as_shipped")
+                name = f"P{slot}/{scenario}/" + ("seed_references_only" if seeded else "current_source")
                 rows = trace(mod, controls, scenario, reference_seed=seeded)
                 output["scenarios"][name] = summary(rows)
     if args.json:
@@ -144,11 +147,12 @@ def main():
             print(f"{name:43s}  large peak/final {big['peak']:.3f}/{big['final']:.3f}"
                   f" ({big['peak_to_final']:.2f}x), small {small['peak']:.3f}/{small['final']:.3f}")
     if args.gate:
-        failing = [(name, value["big"]["peak_to_final"])
+        failing = [(name, lane, value[lane]["peak_to_final"])
                    for name, value in output["scenarios"].items()
-                   if name.endswith("/as_shipped") and
-                   any(key in name for key in ("/already_hot/", "/play_ramp/"))
-                   and value["big"]["peak_to_final"] > 1.30]
+                   if name.endswith("/current_source") and
+                   any(key in name for key in ("/already_hot/", "/play_ramp/", "/play_ramp_untagged/"))
+                   for lane in (("big",) if "/play_ramp_untagged/" in name else ("big", "small"))
+                   if value[lane]["peak_to_final"] > 1.30]
         if failing:
             print("GATE RED: held-input startup overshoot " + str(failing), file=sys.stderr)
             return 1

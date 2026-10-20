@@ -431,9 +431,11 @@ def _capture_extruded_bubble(
     if engine is not None and context.playing:
         bands = engine.get_bubble_energy_bands()
         body_bands = (float(bands.bass), float(bands.mid), float(bands.high))
+    ramp_getter = getattr(engine, "is_reactivity_play_ramping", None) if engine is not None else None
     snapshot = runtime.advance(
         onsets=onsets, now_ts=context.now_ts, playing=context.playing, intensity=intensity,
         body_bands=body_bands,
+        play_ramping=bool(ramp_getter()) if context.playing and callable(ramp_getter) else False,
         identity=(context.runtime_generation, context.engine_generation, context.activation_id),
         source_identity=(context.source_generation, context.source_activation_id),
         controls=controls_from_parameters(parameters),
