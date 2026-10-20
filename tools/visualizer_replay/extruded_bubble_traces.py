@@ -1,5 +1,5 @@
 """Extruded Bubble's reactivity on real music: drive its own simulation with recordings through the production
-BeatEngine replay seam and plot every reactive signal over time (intensity, breath, stream speed, drift, emission,
+BeatEngine replay seam and plot every reactive signal over time (intensity, stream speed, drift, emission,
 sustain, mid-bubble pulse, large-bubble swell, population; kicks as faint lines). For checking quick attack / slow decay, sustained loud
 passages and stutter-free motion (Extruded_Bubble_Target.md section 8).
 
@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 
 from tools.visualizer_replay.engine import ReplayBeatEngine
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
-from widgets.spotify_visualizer.extruded_bubble_simulation import BUBBLE_STRIDE, ExtrudedBubbleControls
+from widgets.spotify_visualizer.extruded_bubble_simulation import BUBBLE_STRIDE, ExtrudedBubbleControls, WORLD_UNIT
 from widgets.spotify_visualizer.feature_frame import FeatureClip
 
 ROOT = Path(__file__).resolve().parents[2] / "logs" / "visualizer_recordings"
@@ -27,7 +27,7 @@ for row, name in enumerate(names):
     clip = FeatureClip.from_jsonl_bytes(name, (ROOT / f"{name}.jsonl").read_bytes())
     engine = ReplayBeatEngine(32)
     runtime = ExtrudedBubbleFrameRuntime(1)
-    series = {k: [] for k in ("t", "intensity", "level", "sustain", "breath", "speed", "drift", "emission", "mids", "large", "count")}
+    series = {k: [] for k in ("t", "intensity", "level", "sustain", "speed", "drift", "emission", "mids", "large", "count")}
     kicks = []
     t0 = None
     for frame in clip.frames:
@@ -47,8 +47,7 @@ for row, name in enumerate(names):
         series["intensity"].append(engine.get_musical_intensity())
         series["level"].append(snap.level)
         series["sustain"].append(snap.sustain)
-        series["breath"].append(snap.breath)
-        series["speed"].append(snap.stream_speed / controls.stream_speed[1])
+        series["speed"].append(snap.stream_speed / (WORLD_UNIT * controls.stream_speed[1]))
         series["drift"].append(snap.drift)
         series["emission"].append(snap.emission)
         series["mids"].append(sum(mids) / len(mids) if mids else 0.0)
@@ -63,7 +62,7 @@ for row, name in enumerate(names):
     for k in kicks:
         x, _ = xy(k, 0)
         draw.line([(x, top + 20), (x, top + PANEL - 25)], fill=(30, 45, 70))
-    colours = {"intensity": (150, 150, 150), "breath": (76, 155, 232), "speed": (232, 85, 76), "drift": (76, 232, 122),
+    colours = {"intensity": (150, 150, 150), "speed": (232, 85, 76), "drift": (76, 232, 122),
                "emission": (232, 193, 76), "sustain": (176, 76, 232), "mids": (76, 232, 224), "large": (255, 255, 255), "count": (110, 110, 110)}
     for key, colour in colours.items():
         draw.line([xy(a, b) for a, b in zip(t, series[key])], fill=colour, width=2 if key in ("speed", "sustain", "large") else 1)

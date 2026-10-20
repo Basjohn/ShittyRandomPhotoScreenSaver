@@ -1478,7 +1478,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Range("extruded_bubble_small_pulse", "Small Bubble Pulse:", 0.0, 1.0, percent=True, bucket="reaction",
               tooltip="Small-bubble reaction strength, quiet to loud: contracted rest through musical expansion."),
         Slider("extruded_bubble_sustained", "Sustained Response:", 0.0, 1.0, bucket="reaction",
-               tooltip="How much a long loud passage supports bubble size and motion, especially small bubbles."),
+               tooltip="Large-bubble support in sustained loud passages, and response to changing vocals in small bubbles and motion. Soft passages still breathe downward."),
         Slider("extruded_bubble_smoothing", "Smoothing:", 0.0, 1.0, bucket="reaction"),
         Slider("extruded_bubble_idle", "Idle Energy:", 0.0, 1.0, bucket="reaction",
                tooltip="The very slow resting motion after bubbles gently contract in silence."),

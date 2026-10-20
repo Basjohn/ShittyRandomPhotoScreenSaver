@@ -11,8 +11,8 @@ The camera never participates in spawning, movement, contacts or instance placem
 fizz and particulate are procedural on the GPU from the snapshot's scalars (stream, speed, level, flash).
 
 **Music.** The existing full-dynamic bass/mid/high bands drive separate large and mid envelopes;
-the passage-presence scalar is diagnostic only. Weighted kick/snare events add accents with headroom
-above the body response. Authored reaction strengths span contracted rest and musical expansion,
+the passage-presence scalar is diagnostic only. Clean body changes drive size; discrete events
+accent motion/light instead of holding bodies inflated. Authored reaction strengths span contracted rest and musical expansion,
 with quick attack and slower release. Sustained Response strengthens held body support and motion
 through this same production path. No independent oscillator manufactures size changes.
 Drift, stream speed and emission resolve their authored ranges once and settle slowly to a very low
@@ -64,7 +64,7 @@ class ExtrudedBubbleControls:
     idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
     breathing: tuple[float, float] = (0.04, 0.18)        # large reaction strength, quiet..loud
     small_pulse: tuple[float, float] = (0.02, 0.10)      # mid reaction strength, quiet..loud
-    sustained: float = 0.6                  # 0..1 how much a sustained loud passage moves the mid bubbles
+    sustained: float = 0.6                  # 0..1 loud-passage large support and change response; no held-small inflation
     smoothing: float = 0.5                  # 0 snappy .. 1 soft (visual smoothing of level and breath)
     collision: tuple[float, float, float] = (0.4, 0.3, 0.3)   # Fuse, Pop, Bounce shares
     collision_scope: str = "all"            # "all", "big", "small" or "off"
@@ -85,7 +85,6 @@ class ExtrudedBubbleSnapshot:
     bubbles: tuple[float, ...] = ()         # BUBBLE_STRIDE floats each
     clusters: tuple[float, ...] = ()        # CLUSTER_STRIDE floats each
     level: float = 0.0
-    breath: float = 0.0
     flash: float = 0.0
     stream: tuple[float, float, float] = (0.0, 1.0, 0.0)
     stream_speed: float = 0.0
@@ -193,8 +192,6 @@ class ExtrudedBubbleSimulation:
         self._next_ident = 1
         self._time = 0.0
         self._level = 0.0
-        self._breath = 0.0
-        self._pulse = 0.0
         self._flash = 0.0
         self._sustain = 0.0
         self._travel = 0.0
@@ -202,8 +199,8 @@ class ExtrudedBubbleSimulation:
         self._motion_rate: float | None = None
         self._body_big_envelope = 0.0
         self._body_small_envelope = 0.0
+        self._big_body_reference = 0.0
         self._small_body_reference = 0.0
-        self._kick_swell = 0.0
         self._ray_lift = 0.0
         self._rays = 0.0
         self._shimmer = 0.0
@@ -272,17 +269,12 @@ class ExtrudedBubbleSimulation:
         # it can remain at 1 through music and must not manufacture body motion or an idle sine.
         bass, mid, high = (max(0.0, min(1.0, float(v))) if music.playing else 0.0
                            for v in music.body_bands)
-        big_body = max(bass, 0.28 * mid + 0.10 * high)
-        small_body = min(1.0, max(0.70 * mid + 0.35 * high, 0.45 * bass))
-        intensity = max(big_body, small_body)
+        big_body = _soft_top(bass + 0.28 * mid + 0.10 * high)
+        vocal_body = 0.70 * mid + 0.35 * high
+        small_body = _soft_top(vocal_body)
+        intensity = min(1.0, max(bass, vocal_body))  # population/motion retain their existing normalized driver
         self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
         onsets = music.onsets if music.playing else ()
-        kick = max((w for kind, w in onsets if kind == "kick"), default=0.0)
-        snare = max((w for kind, w in onsets if kind != "kick"), default=0.0)
-        self._breath = _follow(max(self._breath, kick), 0.0, dt, 0.05, 0.25 * soft)
-        self._kick_swell = _follow(self._kick_swell, self._breath, dt, 0.06 * soft, 0.34 * soft)
-        self._pulse = max(self._pulse, snare)
-        self._pulse = _follow(self._pulse, 0.0, dt, 0.03, 0.25 * soft)
         if onsets:
             self._flash = max(self._flash, max(w for _kind, w in onsets))
         self._flash = _follow(self._flash, 0.0, dt, 0.02, 0.6 * soft)
@@ -290,21 +282,29 @@ class ExtrudedBubbleSimulation:
         level = self._level
         self._sustain = _follow(self._sustain, max(0.0, min(1.0, (intensity - 0.35) / 0.5)), dt, 1.2, 2.0)
         sustain = self._sustain * controls.sustained
-        # Sustain strengthens the actual body response, not a discarded legacy snapshot term.
-        # Silence settles gently over seconds; musical phrase changes retain their faster release.
-        body_release = (1.5 if intensity < 0.01 else 0.20) * soft
+        # Clean body-delta authority opens each lane on actual phrase changes, not
+        # a kick/snare tail that keeps the field inflated between attacks.
+        self._big_body_reference = _follow(self._big_body_reference, big_body, dt, 0.45 * soft, 0.25 * soft)
+        big_change = max(0.0, big_body - self._big_body_reference)
+        # Silence still settles over seconds. Blend into that release continuously;
+        # the previous .01 threshold abruptly changed release by 7.5x inside music.
+        quiet = max(0.0, 1.0 - intensity / 0.10)
+        body_release = (0.10 + 1.40 * quiet * quiet) * soft
         self._body_big_envelope = _follow(self._body_big_envelope,
-            _soft_top(0.75 * big_body + 0.50 * self._kick_swell + 0.10 * sustain * big_body), dt, 0.06 * soft, body_release)
+            _soft_top((0.25 + 0.75 * sustain) * big_body + 3.0 * big_change), dt, 0.06 * soft, body_release)
         # Small bubbles open on changing vocal/body energy, with restrained held support.
         # A hot mid/high plateau must not inflate the whole small field to hero size.
-        self._small_body_reference = _follow(self._small_body_reference, small_body, dt, 0.7 * soft, 0.9 * soft)
+        self._small_body_reference = _follow(self._small_body_reference, small_body, dt, 0.55 * soft, 0.25 * soft)
         small_change = max(0.0, small_body - self._small_body_reference)
         self._body_small_envelope = _follow(self._body_small_envelope,
-            _soft_top(0.50 * small_body + 1.10 * small_change + 0.40 * self._pulse
-                      + 0.12 * sustain * small_body), dt, 0.06 * soft, body_release)
+            _soft_top(0.18 * small_body + (6.0 + 2.0 * sustain) * small_change), dt, 0.06 * soft, body_release)
+        # Counts describe passage occupancy. Flow/light/emission must still express
+        # changing vocals while that occupancy is held high by bass. Reuse the
+        # existing clean small-body envelope; no second band read or response clock.
+        change_drive = _soft_top(0.60 * level + 0.60 * self._body_small_envelope + 0.15 * self._flash)
         # Resting phases barely advance. Sway and shader animation share this integrated musical time.
         idle_rate = 0.03 + 0.06 * max(0.0, min(1.0, controls.idle))
-        motion_target = idle_rate + 1.60 * level + 0.22 * self._flash + 0.20 * sustain
+        motion_target = idle_rate + 1.10 * level + 1.10 * self._body_small_envelope + 0.22 * self._flash + 0.20 * sustain
         if self._motion_rate is None:
             self._motion_rate = motion_target
         self._motion_rate = _follow(self._motion_rate, motion_target, dt, 0.24 * soft, 1.1 * soft)
@@ -314,22 +314,24 @@ class ExtrudedBubbleSimulation:
         # advances faster on the hits: a phase integral, so a change of rate never makes the pattern jump.
         self._ray_lift = _follow(self._ray_lift, self._flash, dt, 0.1, 0.4 * soft)
         # Follow the continuous light separately; do not smear its already-eased onset accent again.
-        self._rays = _follow(self._rays, 0.65 * level + 0.05 * sustain,
-                             dt, 0.08 * soft, 0.65 * soft)
-        self._shimmer += dt * (idle_rate + 0.6 * level + 2.5 * self._ray_lift)
+        self._rays = _follow(self._rays, 0.35 * level + 0.45 * self._body_small_envelope + 0.05 * sustain,
+                             dt, 0.08 * soft, (0.22 + 0.43 * quiet * quiet) * soft)
+        self._shimmer += dt * (idle_rate + 0.6 * change_drive + 2.5 * self._ray_lift)
         direction = stream_vector(*controls.stream_direction)
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low, high = controls.stream_speed
         activity = min(1.0, idle_rate + 1.6 * level)
-        speed_target = (_lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)) * activity
-        drift_target = _soft_top(_lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
-        emission_target = _soft_top(_lerp(controls.emission, level)
+        speed_target = (_lerp(controls.stream_speed, change_drive) + (high - low) * (0.35 * self._flash + 0.15 * sustain)) * activity
+        drift_target = _soft_top(_lerp(controls.drift, change_drive) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
+        emission_target = _soft_top(_lerp(controls.emission, change_drive)
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * max(0.25, activity)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
-        self._speed = _follow(self._speed, speed_target, dt, 0.36 * soft, 3.0 * soft)
-        self._drift = _follow(self._drift, drift_target, dt, 0.5 * soft, 2.5 * soft)
-        self._emission = _follow(self._emission, emission_target, dt, 0.1 * soft, 1.5 * soft)
+        # Flow accelerates continuously, rather than stepping at a vocal accent;
+        # release into silence retains the long resting transition.
+        self._speed = _follow(self._speed, speed_target, dt, 0.48 * soft, (0.65 + 2.35 * quiet * quiet) * soft)
+        self._drift = _follow(self._drift, drift_target, dt, 0.20 * soft, (0.35 + 2.15 * quiet * quiet) * soft)
+        self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft, (0.25 + 1.25 * quiet * quiet) * soft)
         speed = self._speed * WORLD_UNIT
         # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
         # change of speed never makes them jump.
@@ -636,7 +638,7 @@ class ExtrudedBubbleSimulation:
         for cluster in self._clusters.values():
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
-        return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level, self._breath,
+        return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
                                       self._travel, _soft_top(self._rays + 0.3 * self._ray_lift, knee=0.9), self._shimmer, self._motion_phase,
                                       self._wakes(dt))

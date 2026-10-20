@@ -68,7 +68,7 @@ mechanisms and native guards do not approve foreground softness, depth hierarchy
 immediate strong changes in `anything_mixed2.jsonl`. In idle EB must slowly settle into a collapsed resting state
 across size, drift/sway, stream, beads/wakes, rays, emission and ambient/surface motion. Nothing remotely fast;
 no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes are subordinate to this requirement.
-Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–16;
+Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–18;
 `Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
 
 The simulation's current reaction strength spans contracted rest and musical expansion; nominal size is not a
@@ -81,6 +81,10 @@ Size follows clean body bands and their changes, with distinct bass-led large an
 Discrete onset events accent motion/light rather than sustaining size between attacks. Very quiet input must
 blend gently into the long collapsed-rest release without an abrupt threshold switch. The current candidate
 improves active span but has not passed matched 2D minima, timing, native silhouette or physical acceptance.
+Large held support develops in sustained loud passages; soft passages must retain significant downward breathing.
+Small change authority and flow/emission/rays must retain headroom under held bass, rather than all following the
+maximum passage level. Sustained Response strengthens large loud support and responsiveness to change, not an
+inflated ordinary-small plateau. Actual range/preset endpoint effects remain part of acceptance.
 
 Ray Softness must reach both the angular sun fan and the marched Deep Light shaft pattern. The Light Rays
 Range is resolved once at the simulation's continuous ray driver, with resting light activity reduced to 3%

@@ -13,7 +13,7 @@ glass, depth, musical response or parity with these targets.
 | Lab preset comparison sheet | [presets_sheet.png](Lab/2026-10-18/presets_sheet.png) | Mock/product comparisons that expose the gap |
 | Complete historical lab material | [Lab/2026-10-18](Lab/2026-10-18) | All 85 original files, including scene recipes and comparisons; reference, not current acceptance |
 | Durable visual/behavior contract and earlier findings | [Target.md](Target.md) | Required appearance, ownership and preserved design provenance |
-| Investigation, attempts, measurements and evidence limits | [Investigation.md](Investigation.md) | Full failure ledger; §§15–17 cover physical world, pending response and latest clarification |
+| Investigation, attempts, measurements and evidence limits | [Investigation.md](Investigation.md) | Full failure ledger; §§15–18 cover physical world, rejected response, clarification and passage-role candidate |
 | Astra High visual audit | [Visual_Audit_2026-10-20.md](Visual_Audit_2026-10-20.md) | Concrete material/defocus leads and native falsifiers |
 | Original forensic captures | [Evidence/2026-10-20/forensics](Evidence/2026-10-20/forensics) | 1,029 files moved from the former logs directory |
 | Recovery captures and paired response custody | [Evidence/2026-10-20/recovery](Evidence/2026-10-20/recovery) | 8,009 files moved from the former logs directory |
@@ -36,8 +36,8 @@ Accepted 2D Bubble is the response-scale comparator on **the same sections of re
 small lane is not literally bass-free: it has bounded hot/body support, a separate mid/high running reference,
 clean positive changes and its own release. Its transient/event lane does not directly own ordinary size.
 Reproduce the useful role separation; do not copy a generic shared loudness hold. Controls and preset settings
-may be corrected where needed, with actual endpoint/Range effects proved. The pending clean-body candidate
-and its captures are not an accepted response baseline.
+may be corrected where needed, with actual endpoint/Range effects proved. The passage-role source candidate
+and its captures are not an accepted physical response baseline.
 
 ## Preset → target → lab registry
 
@@ -66,6 +66,10 @@ reactivity baseline. No camera-attached replacement populations, geometry telepo
 
 ## Evidence worth opening
 
+- Current passage-role candidate: [P1](Evidence/2026-10-20/recovery/passage_roles_native_p1/contact.png),
+  [P7](Evidence/2026-10-20/recovery/passage_roles_native_p7_1440/contact.png),
+  [same-sound logical comparison](Evidence/2026-10-20/recovery/passage_roles_final/summary.json).
+  Reaction delivery is scoped evidence; the glass/depth appearance remains unacceptable.
 - Rejected latest P1: [contact sheet](Evidence/2026-10-20/recovery/clean_body_native_p1/contact.png),
   [full frame](Evidence/2026-10-20/recovery/clean_body_native_p1/frame_0060.png),
   [silent 30-fps sequence](Evidence/2026-10-20/recovery/clean_body_native_p1/motion.gif).

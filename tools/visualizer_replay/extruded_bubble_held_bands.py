@@ -52,7 +52,7 @@ result['bubble_settings']={k:v for k,v in resolve_visualizer_activation_payload(
 classes={};followers={};original_advance=ExtrudedBubbleFrameRuntime.advance
 def observe_eb(runtime,**kw):
     value=original_advance(runtime,**kw);classes.clear();classes.update({b.ident:b.large for b in runtime._simulation._bubbles})
-    followers.update({k:getattr(runtime._simulation,k) for k in ('_body_small_envelope','_pulse','_sustain')})
+    followers.update({k:getattr(runtime._simulation,k) for k in ('_body_small_envelope','_small_body_reference','_sustain')})
     return value
 activation=resolve_visualizer_activation_payload({'mode':'extruded_bubble','preset_extruded_bubble':6},mode='extruded_bubble')
 result['extruded_bubble_settings']={k:v for k,v in activation.resolved_config.items() if k.startswith('extruded_bubble_')}
@@ -64,10 +64,16 @@ parameters=activation.resolved_config
 _,world_to_view,tan,_=scene.camera(parameters['extruded_bubble_turn'],parameters['extruded_bubble_tilt'],1672/941,parameters['extruded_bubble_scene_scale'])
 records=[]
 for r in np.asarray(state.bubbles).reshape(-1,8):
-    depth=-float((r[:3]@np.asarray(world_to_view).reshape(3,3))[2])
-    if r[4]>.999 and r[7]<0 and depth>0:
+    view=r[:3]@np.asarray(world_to_view).reshape(3,3)
+    depth=-float(view[2])
+    candidate=(abs(view[0])<tan[0]*depth+r[3] and abs(view[1])<tan[1]*depth+r[3])
+    if r[4]>.999 and r[7]<0 and depth>r[3]+.05 and candidate:
         records.append((classes[int(r[6])],float(r[3])*941/(2*tan[1]*depth)))
-result['projection_scope']='first-order radius estimate for positive-depth identities; not segmented visible silhouettes'
+result['projection_scope']='first-order radius estimate for fully-forward ordinary frustum candidates; not segmented visible silhouettes'
+from tools.visualizer_replay.extruded_bubble_forensics import distribution
+result['extruded_bubble_logical_ratios']={str(large):distribution([
+    1.+r[5] for r in np.asarray(state.bubbles).reshape(-1,8)
+    if classes[int(r[6])]==large and r[4]>.999 and r[7]<0]) for large in (True,False)}
 result['extruded_bubble']=summary(records);result['followers']=followers
 args.output.write_text(json.dumps(result,indent=2))
 print(json.dumps({k:result[k] for k in ('scope','simulation_override','bands','bubble','extruded_bubble','followers')},indent=2))

@@ -54,11 +54,15 @@ def run(args):
         'widgets/spotify_visualizer/extruded_bubble_geometry.py',
         'widgets/spotify_visualizer/extruded_bubble_frame_runtime.py',
         'widgets/spotify_visualizer/logical_frame_capture.py',
+        'widgets/spotify_visualizer/render_state.py',
         'core/settings/visualizer_mode_settings.py',
         'rendering/gl_programs/extruded_bubble_scene.py',
         'rendering/gl_programs/scene3d_spheres.py',
         'rendering/gl_programs/scene3d_optics.py',
+        'rendering/quick/scene3d/defocus.py',
         'rendering/quick/visualizer/implementations/extruded_bubble.py',
+        'tools/extruded_bubble_capture.py',
+        'tools/visualizer_replay/driver.py',
         'tools/visualizer_replay/extruded_bubble_forensics.py')]
     paths.extend((root / 'rendering/gl_programs').glob('extruded_bubble*.py'))
     hashes = lambda: {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -68,6 +72,15 @@ def run(args):
                    tracked_diff_sha256=hashlib.sha256(subprocess.check_output(['git', 'diff', 'HEAD'])).hexdigest(),
                    source_hashes=source_hashes)
     (output / 'source_receipt.json').write_text(json.dumps(receipt, indent=2)+'\n', encoding='utf-8')
+    # A hash alone cannot reproduce a rejected uncommitted attempt after the next
+    # iteration. Retain exact bounded producer bytes with its ignored evidence.
+    for relative, digest in source_hashes.items():
+        data = (root / relative).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise RuntimeError('source changed while preserving producer bytes; reject this run')
+        destination = output / 'source' / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
     size = tuple(map(int, args.size.split('x')))
     clip = load_clip(args.clip, args.start + args.duration)
     activation = resolve_visualizer_activation_payload(
@@ -184,9 +197,9 @@ def run(args):
                          controls=asdict(kwargs['controls']),
                          dsp=observed.get('dsp'),
                          followers={name: getattr(sim, name) for name in (
-                             '_body_big_envelope', '_body_small_envelope', '_small_body_reference', '_kick_swell', '_pulse')},
+                             '_body_big_envelope', '_body_small_envelope', '_big_body_reference', '_small_body_reference')},
                          state={name: getattr(snapshot, name) for name in (
-                             'level', 'breath', 'flash', 'sustain', 'stream_speed', 'drift',
+                             'level', 'flash', 'sustain', 'stream_speed', 'drift',
                              'emission', 'rays', 'shimmer', 'travel', 'motion_phase')},
                          ray_uniform=scene.ray_strength(parameters, snapshot.rays),
                          speck_density_brightness=scene.speck_amount(parameters, snapshot.emission),

@@ -80,7 +80,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
 | Active Extruded Bubble investigation/recovery and genuine acceptance debt | `Current_Plan.md` §0 / §4B; `Docs/Reference/Extruded_Bubble/README.md` |
-| Extruded Bubble recorded-audio forensics, paired 2D response, count/emission candidates and fixed-world geometry | `Docs/Reference/Extruded_Bubble/Investigation.md` §6–17; `Docs/Reference/Harness_Index.md` → Extruded Bubble forensic tools |
+| Extruded Bubble recorded-audio forensics, paired 2D response, count/emission candidates and fixed-world geometry | `Docs/Reference/Extruded_Bubble/Investigation.md` §6–18; `Docs/Reference/Harness_Index.md` → Extruded Bubble forensic tools |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |

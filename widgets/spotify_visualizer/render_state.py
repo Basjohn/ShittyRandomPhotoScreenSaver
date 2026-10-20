@@ -655,7 +655,6 @@ class ExtrudedBubbleFrame:
     clusters: tuple[float, ...] = ()
     time: float = 0.0
     level: float = 0.0
-    breath: float = 0.0
     flash: float = 0.0
     sustain: float = 0.0
     drift: float = 0.0
@@ -684,7 +683,7 @@ class ExtrudedBubbleFrame:
         if len(stream) != 3:
             raise ValueError("Extruded Bubble stream must be a 3D direction")
         object.__setattr__(self, "stream", stream)
-        for name in ("time", "level", "breath", "flash", "sustain", "drift", "emission", "stream_speed", "travel",
+        for name in ("time", "level", "flash", "sustain", "drift", "emission", "stream_speed", "travel",
                      "rays", "shimmer", "motion_phase"):
             object.__setattr__(self, name, _finite(getattr(self, name), name=f"extruded bubble {name}"))
         object.__setattr__(self, "parameters",

@@ -872,3 +872,61 @@ home. The large raw evidence archive remains ignored locally beside the versione
 The live plan retains passage-role rework and all world/source/camera, near-defocus/material, depth, important
 specks, gas/debris/fog and preset-parity work. Use the registry here; do not scatter another set of investigation
 or target images into temporary/log directories.
+
+## 18. Passage-role source candidate after the clarification
+
+This supersedes the **response mechanism**, not the rejected visual result, in §16. Large size uses bass plus
+limited vocal support and a clean change reference. Its steady support is `.25 + .75*sustain`, where sustain
+develops in a loud passage and is scaled by Sustained Response. Softer passages retain strong change-driven
+growth and deep downward breathing, rather than a generic large-body hold. Spectral mixtures use the existing
+soft top instead of a hard unit ceiling.
+
+Small size removes the pending candidate's direct .25 bass addition and .50 held-body term. It uses vocal/high
+body, a separate reference that resets after falls, restrained .18 steady support and strong positive-change
+authority. Sustained Response increases responsiveness to changes within loud passages; it does not add a held
+small-size floor. Discrete onsets remain with event light/motion. The unused kick `breath` follower, immutable
+field and capture/replay/plot consumers are removed. Onset serial/fence checks observe the actual `flash` consumer.
+
+Maximum passage level remains the count driver. Flow/emission/light instead derive a changing driver from
+occupancy, the existing small-body envelope and event flash, retaining headroom under held bass. No new band
+read, DSP, clock or follower owner is introduced. Stream acceleration stays gentle; active release follows
+passage changes while speed/drift/emission/rays blend into their long quiet release. Movement stays integrated.
+The Sustained Response tooltip now describes large loud-passage support and change responsiveness. Authored
+preset files are unchanged; meaningful endpoint/preset revisions remain authorized when evidence calls for them.
+
+**99 focused checks pass**, including native renderer/shader checks. New falsifiers cover soft large downward
+breathing with no loud sustain acquired; large sustained support without held-small inflation; and changing
+vocals beneath fixed .9 bass driving small size, speed, drift, emission and rays while maximum level stays
+unchanged, with no onset events supplied. Existing slow idle/pause, tiny minima, controls, active SAME-ID span,
+source/activation fences, physical contacts and prepared renderer checks remain green. An initially faster speed
+attack violated the retained per-frame smoothness bound and was repaired without weakening that bar. Migration
+also caught the replay metric's obsolete `breath` read.
+The forensic observer now saves exact producer source beside its hashes (including shared defocus), avoiding
+loss of rejected uncommitted implementations. Both new native cases also retain the exact 11 originally hashed
+producer files, verified against their capture receipts before archival; that is a source-custody improvement,
+not a regenerated or silently relabelled capture.
+
+Evidence in `Evidence/2026-10-20/recovery/`:
+
+- `passage_roles_final`: identical recorded inputs over 12 s; **zero actual body-tuple mismatches**. Median per-ID
+  4–8 s large extrema are **.349–2.774×**, small **.294–2.277×**. First-window large extrema remain
+  **1.088–3.192×** versus 2D **.707–2.750×**; smalls span **.709–3.336×**. Eligibility/timing caveats from §16
+  still apply. Do not infer acceptance from tiny-rest percentages or ignore the first-window timing question.
+- `passage_roles_native_p1`: **240 paired frames at 30 fps**, 728 recorded inputs over 8 s at 1672×941.
+- `passage_roles_native_p7_1440`: **48 paired frames at 12 fps**, 364 inputs over 4 s at 2560×1440. Both retain
+  authored preset activation, source/clip/settings receipts and same-frame zero-swell controls. The primary
+  inspected both contact sheets: strong response reaches shells, but white/busy interiors, flat-looking depth,
+  near forms and glowing point detail remain unacceptable against the targets. P7's sampling cannot establish
+  temporal smoothness. Captures overlapped; their readback timings are not product benchmarks. GIFs are silent.
+
+A bounded DefocusLayer intervention was attempted. Exact baseline pixels differed; follow-up found only 1-LSB
+noise and an ineffective threshold change in the newly frozen scene. Cached reuse was initially suspected, but
+current renderer source does not establish a skipped draw. Pass execution and actual small-circle content were
+not observed, and this is not the old failed producer's exact scene. The result does **not** confirm or falsify
+the highlight-grid lead. Retain `defocus_highlight_ab*` as unsuccessful intervention evidence; establish the
+conditions with explicit pass observation and a meaningful primitive test. No particle suppression or product
+defocus correction is claimed here.
+
+This is a role/consumer correction with scoped proof, not physical reactivity or visual acceptance. Next isolate
+the near-defocus lattice with important specks retained, then the exact optics/light/probe defects from the
+visual audit. Preserve soft/held large separation and small change response in all subsequent comparisons.
