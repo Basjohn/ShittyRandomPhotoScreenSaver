@@ -961,3 +961,75 @@ Merely diverting small highlights into the old wide sparse gather can lose their
 Every one of these failures and its required falsifiers is now actionable in Current_Plan. Keep all new captures,
 logs summaries and investigation artifacts under this canonical folder. The existing numerical/physical-world
 mechanism proofs remain scoped facts, not acceptance of the latest live behavior.
+
+
+## 20. Godzip `54cac99a6a` independent follow-up: startup reference overshoot (2026-10-20)
+
+**Scope:** source inspection and synthetic logical execution against the **supplied Godzip**; no EB Lab, recorded
+clip, Windows native scene, graphics driver or actual visual acceptance. No production source or authored presets
+were changed. Reproducer: `py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py` (optional `--json`).
+A deliberately red, opt-in fail gate is available with `--gate`; it is **not** a passing test on this baseline.
+
+**Source ownership and causal mechanism are now stronger than an untested guess:**
+
+1. `ExtrudedBubbleFrameRuntime.advance` resets the simulation when the activation/source identity changes and
+   advances the first frame with `dt=0`. Simulation `reset` sets both body-change references to zero.
+2. `ExtrudedBubbleSimulation.advance` follows these references on 0.45/0.55-second attack times. Its targets add
+   `3.0 * positive_big_delta` and `(6.0+2.0*sustain) * positive_small_delta` to held body support, then `_soft_top`.
+   The body envelopes attack in 0.06×soft seconds but the positive delta takes much longer to disappear. Thus an
+   **unchanged sustained band** can briefly look like an onset, grow excessively, then contract while sound stays
+   unchanged. A frame-rate-correct pure simulation reproduces this without any shader or DoF.
+3. Crucially, `BeatEngine._get_play_ramp_factor` (`beat_engine.py`) applies an **existing one-second quadratic
+   playback ramp**; the full-dynamic Bubble feed multiplies band outputs by that factor. A controlled one-second
+   quadratic input ramp creates the same logical bulge even if both references were primed to the first sample.
+   Consequently **simply seeding references at activation does not repair the actual playback-ramp case**.
+
+Controlled 60-Hz, 5-second simulation with 0.7/0.5/0.3 held bands, the actual mutable P1/P7 Settings values as
+supplied in this Godzip, a first capture at `dt=0`, and no preset modifications:
+
+| Controlled input and counterfactual | Large peak / final radius ÷ nominal | Small peak / final radius ÷ nominal |
+| --- | --- | --- |
+| Already hot at activation, existing code | 3.365 / 1.254 (**2.68×** peak-to-final) | 3.373 / 0.256 |
+| Already hot, references *manually seeded for probe only* | 1.253 / 1.253 | 0.251 / 0.251 |
+| Quadratic one-second band ramp, existing code | 3.373 / 1.243 (**2.71×**) | 3.381 / 0.263 |
+| Quadratic ramp, references seeded at first zero sample | 3.373 / 1.243 (**2.71×**) | 3.381 / 0.263 |
+| Real quiet (one second) → step to same held input | 3.365 / 1.242 | 3.373 / 0.270 |
+
+These P1/P7 logical radius ratios match because those presets currently author the same Breathing, Small Pulse,
+Sustained Response and Smoothing values. They **do not** establish same projection/glass appearance, nor assert
+that the user's actual bands have these amplitudes. The separate quiet→hot case deliberately remains distinct:
+true musical changes must retain strong visible upward and especially downward response; indiscriminately
+removing positive deltas would suppress useful musical response.
+
+**Next discriminating native capture**, before touching the musical transfer: compare (a) swapping presets during
+already-playing audio with no new engine ramp, (b) resuming music with the actual 1-second engine ramp, and
+(c) a genuine quiet→onset after established playback. Capture per logical frame: generation/activation/source
+IDs, playback ramp factor, actual already-shaped Bubble bands, big/small references, positive deltas, envelope
+target/current, sustain, first and last SAME-ID radius/alpha and shader/near-pass branch. Align logical ticks
+with product presentation and the existing 2D Bubble's very same sound section. Then decide whether to handle
+activation readiness/ramp semantics at the existing data/size owner, not with a timer, clamp, reduced global
+reactivity or renderer-side smoothing. The probe's strong output is **source-derived mechanism proof** only;
+operator-rejected live overshoot and size judder remain `[~]` and completely unaccepted.
+
+**Independent near-defocus caution:** `DefocusLayer._CIRCLE_BANDS` in this snapshot gives a 2px CoC a
+`fineShare` of 1.0 and a `spriteShare` of 0 under a 54px budget at mip level 3. Thus the 2px uniform-strip
+regression **should not** be explained *solely* as 8px-spaced highlight sprites in the current source: the
+full-resolution 32-tap fine gather handles that case. The reported red native uniform-strip test is important,
+but the exact pass/output needs direct GPU instrumentation before blaming the sprite split or making another
+speculative threshold-only fix. For larger CoCs the sprite/grid lead remains viable; preserve both observations.
+Check pass outputs and actual circles/sprite shares at the failed pixels, verify a continuous strip survives the
+layer and clip passes, and then restore energy with a measured, separately benchmarked correction. Missing
+OpenGL/PySide6 here precludes this native A/B; no GPU validation is claimed.
+
+**Independent static material finding:** in `_glass`, `uSpecColour = light_rgb * 300` bypasses `light_strength`,
+while `scene_knobs` applies strength to background/glints (`light_power` and `glint_power`). P7 authors
+`light_strength=0.12` against P1's `1.0`; the unscaled analytic spec term therefore occupies a much larger share
+of P7's illumination than the other light consumers. This is a **confirmed control-consumer inconsistency**,
+not causal proof for all bright interior blobs or excess glow. Use an isolated Light Strength sweep with fixed
+shell/scene/probe before making a uniform multiplier change. Spherical glass and overlap remain prioritized.
+
+**Packaging custody:** input Godzip's `.godzip/manifest.json` listed 85 historical
+`Docs/Reference/Extruded_Bubble/Lab/2026-10-18/` members not present in its physical ZIP (approximately 96 MB
+uncompressed). The outgoing full Godzip retains the intentional lab omission and regenerates its manifest from
+**actually included members**, leaving `omission_means_delete=false`. The local canonical EB Lab collection
+and the 11.6 GB evidence archive are not re-created, overwritten or declared deleted.

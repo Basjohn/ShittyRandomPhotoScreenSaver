@@ -188,6 +188,11 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
   activation/source reset and reveal. Reproduce quiet→music separately from joining already-playing music and
   swapping presets while loud. Seed/retain the correct authorities at their owner; do not suppress real soft
   breathing or add a startup workaround/timer. Preserve gentle birth/reveal and source-generation fencing.
+  **Source-proved follow-up (`Investigation.md` §20):** a 60-Hz controlled P1/P7 trace reproduces ~3.37×
+  peak vs ~1.24× final nominal radius even with fixed musical bands. Zero-initialized references explain
+  already-hot activation, but priming them does **not** repair the separate one-second quadratic engine
+  playback-ramp scenario (~2.71× peak/final). A standalone opt-in `--gate` is intentionally red. Capture actual
+  bands/ramp/activation IDs and both size targets before proposing a change; [~] FAILED remains.
 - [ ] **FAILED live — large and small judder/vibration between sizes.** Use latest logs/traces and identical
   recorded passages to distinguish actual target/radius chatter, pass/DoF switching and display cadence. Inspect
   accepted 2D's historical judder tools, clean-body gate/release and final radius smoothing. Measure SAME-ID
