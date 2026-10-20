@@ -55,6 +55,7 @@ def run(args):
         'widgets/spotify_visualizer/logical_frame_capture.py',
         'core/settings/visualizer_mode_settings.py',
         'rendering/gl_programs/extruded_bubble_scene.py',
+        'rendering/quick/visualizer/implementations/extruded_bubble.py',
         'tools/visualizer_replay/extruded_bubble_forensics.py')]
     paths.extend((root / 'rendering/gl_programs').glob('extruded_bubble*.py'))
     hashes = lambda: {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()

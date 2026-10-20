@@ -82,6 +82,22 @@ class WakeOwnershipTests(unittest.TestCase):
         self.assertEqual(self.sim._wake_retiring, {})
         self.assertEqual(self.sim._wake_live, {})
 
+    def test_nominal_radius_is_preserved_separately_from_parent_reaction_and_retirement(self):
+        from dataclasses import replace
+        controls = replace(self.controls, breathing=(.15,.6))
+        first = source_records(self.sim.advance(self.mod.MusicInput(1/60,False),controls))
+        bases = {b.ident:b.radius for b in self.sim._bubbles}
+        for ident,row in first.items():
+            self.assertAlmostEqual(row[7],bases[ident])
+            self.assertAlmostEqual(row[3]/row[7],.13)
+        for _ in range(90):
+            snap=self.sim.advance(self.mod.MusicInput(1/60,True,1.,(),(.8,.7,.6)),controls)
+        live=source_records(snap)
+        ident=next(iter(live)); self.sim._find(ident).popping=0.
+        retired=source_records(self.sim.advance(self.mod.MusicInput(1/60,False),controls))[ident]
+        self.assertEqual(retired[7],live[ident][7])
+        self.assertEqual(retired[3],live[ident][3])
+
     def test_no_wake_when_no_parent_population(self):
         self.controls = self.mod.ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),
                                                         collision_scope='off')

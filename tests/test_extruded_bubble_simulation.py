@@ -353,6 +353,17 @@ def test_all_large_and_small_bubbles_can_reach_tiny_rest_at_normal_reaction_stre
     assert all(.12 < r[3] / bases[int(r[6])] < .15 for r in _records(snap))
 
 
+def test_resting_sway_velocity_is_slow_as_well_as_its_phase():
+    controls = ExtrudedBubbleControls(large_count=(8,8),mid_count=(0,0),stream_speed=(0,0),
+                                     drift=(0,0),sway=1.,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(19)
+    before=_run(sim,controls,20,intensity=0)
+    after=_run(sim,controls,1,intensity=0)
+    previous={r[6]:r for r in _records(before)}
+    shifts=[math.dist(r[:3],previous[r[6]][:3]) for r in _records(after) if r[6] in previous]
+    assert shifts and max(shifts)<.005  # under 2.4 first-order pixels/s at 941px, not ~28px/s
+
+
 def test_only_regular_bubbles_exist_no_synthetic_near_cohort_under_any_playback():
     controls = ExtrudedBubbleControls(large_count=(9.0, 9.0), mid_count=(0.0, 0.0), collision_scope="off")
     sim = ExtrudedBubbleSimulation(91)

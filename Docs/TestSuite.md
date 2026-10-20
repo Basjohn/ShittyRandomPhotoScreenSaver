@@ -995,3 +995,10 @@ acceptance, collision geometry, camera/perspective/fade/DoF and material parity 
 (previous 0/1 output was identical), both light types' shaft-threshold mapping, dim nonzero ray rest and full
 authored loud strength. The real-recording ray-probe grids are component interventions, not musical or physical
 acceptance. A changed softness image does not alone establish the desired broad shaft profile.
+
+`test_extruded_bubble_bead_gpu.py` runs the actual production procedural bead generator on native GL and reads
+diagnostic geometry. It protects free/attached ±10% musical size bounds and strictly smaller physical/projected
+beads than parents across deep contraction, expansion and low alpha. Wake tests protect independent nominal
+radius retention through retirement. The resting-sway test checks velocity amplitude as well as slow phase;
+recorded pause tests require sparse nonzero emission after downstream density shaping. Native appearance and
+the shared scene's still-open world/projection/fade defects remain independent of these numeric bounds.

@@ -366,3 +366,39 @@ consumer behavior, not full broad-shaft/reference or operator listening acceptan
 real-passage profile/ROI response, world/camera optics and all non-light EB defects remain in the live plan.
 Next operator-requested slice: constrain free/attached bead size to roughly ±10%, always strictly below the
 current parent, and restore visibly very slow nonzero idle stream/emission/water without losing improved settling.
+
+## 9. Bounded bead size and visible slow rest (2026-10-20 candidate)
+
+The operator's retest identifies attached wakes scaling excessively with a reacting parent, and idle
+stream/emission/surface appearing stopped despite much improved settling. The correction keeps the existing
+8-float wake transport, giving its unused final leaf a **nominal parent radius**. Live/retiring records retain
+both nominal and reacted radii; the world mapper scales both consistently. The attachment follows reacted
+radius; bead size, trail reach and width derive from nominal size. Musical bead sizing uses 0.9–1.1× for both
+free chains and attached wakes. Static per-bead variety/tail taper and lifetime opacity remain separate.
+
+Attached nominal bead fractions are kept below the parent's supported resting scale. A GPU visibility guard
+also requires the rendered bead footprint (including half-pixel radius) to stay strictly smaller than its
+current fading parent. Unsupported tiny beads fade/hide rather than grow to parent size. Retirement retains
+its own last source and nominal radius, without slot rebinding. No new buffer, transport stride, draw, clock,
+poller or simulation owner was introduced.
+
+Idle motion now targets 0.03–0.09 phase units/s across Idle Energy (normal 0.06; previous candidate 0.025),
+still far below music and the old 0.24 resting rate. Sway's **velocity amplitude** now settles with the existing
+motion follower: slowing a sine's phase alone had left a near-constant fast lateral velocity. Emission retains
+one-quarter of its authored quiet strength at rest, independently of the smaller motion activity; the old
+0.025 factor was squared again by particle density. P1's 0.1 quiet strength thus supports roughly 135 requested
+specks before quality scaling, rather than roughly one. Zero authored amount remains zero; this is resting
+visual activity, not an audio/DSP floor.
+
+Evidence: `beads_rest_p1` (controlled pause/resume, 96 native frames), `beads_rest_p7_1440` (36 native frames
+across late rest/resume), and `beads_idle_final_p1` (final sway-amplitude correction, 16 native frames).
+The final idle surface-region image changes over a second (mean absolute RGB about 8.62), but this is an image
+difference, not an isolated water optical-flow measurement. Source/identity traces separately establish slow
+nonzero motion. Pixel-speed/count/appearance and physical acceptance remain open.
+
+**44 focused response/simulation/wake checks pass.** Native renderer/shader/generated-bead geometry group:
+**34 passed**; the strengthened free-chain assertions also passed separately. The GPU contract executes the
+actual production `beadInstance()` and reads its output, rather than repeating its equations in Python. It
+checks parent scales 0.13–5×, low/full alpha, ±10% size inputs, strict physical/projected parent bounds, and free
+chain bounds. The ray-only image test now explicitly isolates free/attached beads, since their legitimate
+level-driven size changes must not be misattributed to rays. No full suite or product build was run.

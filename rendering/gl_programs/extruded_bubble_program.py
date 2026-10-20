@@ -802,7 +802,7 @@ uniform float uSnowDrift;      // how far snow has drifted along the stream (vie
 uniform int uSnowCount;        // instances past chains and snow are fizz: uFizzPer behind each stable wake emitter
 uniform int uFizzPer;
 uniform int uWakeCount;
-layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // world xyz, radius, stable id, retire, alpha, reserved
+layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // world xyz, reacted radius, stable id, retire, alpha, nominal radius
 vec4 aSphere;
 vec2 aExtra;
 uint beadHash(uint x) {
@@ -884,6 +884,7 @@ void beadInstance() {
         int seed = int(uint(ebWake[owner * 8 + 4]) * 131u + uint(k));
         float retirement = ebWake[owner * 8 + 5]; // -1 live, 0..1 dissolving from front to back
         float sourceAlpha = ebWake[owner * 8 + 6];
+        float nominalRadius = ebWake[owner * 8 + 7];
         vec3 view = uWorldToView * centre;
         float pixels = r / (uPixel * max(-view.z, 0.1));
         // Larger bubbles shed a fuller wake; giants and specks none.
@@ -893,20 +894,29 @@ void beadInstance() {
             aExtra = vec2(0.0, 0.0);
             return;
         }
-        float reach = r * 9.0;
+        // Parent reaction moves the attachment point, not the whole trail's size/shape.
+        float reach = nominalRadius * 9.0;
         float along_ = pow(fract(beadRandom(seed, 19u) + uBeadTravel * 0.05 / max(reach, 1e-3)), 0.7) * reach;
-        float spread = r * (0.15 + along_ / reach * 0.8);
+        float spread = nominalRadius * (0.15 + along_ / reach * 0.8);
         vec2 g = sqrt(-2.0 * log(max(beadRandom(seed, 20u), 1e-6))) * vec2(cos(6.2832 * beadRandom(seed, 21u)),
                                                                          sin(6.2832 * beadRandom(seed, 21u)));
-        vec3 p = view - along * (r * 0.6 + along_) + across * (g.x * spread + sin(along_ / r) * r * 0.3)
+        vec3 p = view - along * (r + along_) + across * (g.x * spread + sin(along_ / nominalRadius) * nominalRadius * 0.3)
                + vec3(0.0, 0.0, 1.0) * g.y * spread * 0.6;
-        float size = r * mix(0.04, 0.12, beadRandom(seed, 22u)) * (1.0 - 0.5 * along_ / reach);
+        float size = nominalRadius * mix(0.04, 0.08, beadRandom(seed, 22u))
+                   * uBeadSize * (1.0 - 0.5 * along_ / reach);
         // Front = near the former source (along_/reach = 0). The dissolve walks down the remaining tail.
         float tail = along_ / reach;
         float ends = smoothstep(0.0, 0.08, tail) * (1.0 - smoothstep(0.85, 1.0, tail));
         float headToTail = retirement < 0.0 ? 1.0
                          : smoothstep(retirement - 0.08, retirement + 0.12, tail);
         vOpacity = sourceAlpha * ends * headToTail;
+        // Keep even the half-pixel raster footprint strictly below the fading parent's.
+        // A tiny/transparent parent cannot acquire equal-sized beads during birth or retirement.
+        float parentPixels = pixels * sqrt(sourceAlpha);
+        float beadPixels = max(size / (uPixel * max(-p.z, 0.1)), 0.5);
+        float parentGuard = smoothstep(1.05, 1.4, parentPixels / beadPixels);
+        vOpacity *= parentGuard;
+        if (size >= r || parentGuard <= 0.0) size = 0.0;
         aSphere = vec4(uViewToWorld * p, size);
         aExtra = vec2(beadRandom(seed, 23u), 3.0); // micro-glass, same medium and lighting, stable sparkle
         return;

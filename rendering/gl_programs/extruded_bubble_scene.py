@@ -288,7 +288,7 @@ def wake_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
     """Stable simulation-owned wake sources, independent of the compacted visible-shell GPU slots.
 
     8 floats: world centre x/y/z, physical radius, stable identity, retirement progress (-1 active),
-    opacity at retirement/current birth, reserved. Retirements keep their final world-volume anchor.
+    opacity at retirement/current birth, nominal parent radius. Retirements keep their final world-volume anchor.
     """
     rows = np.asarray(records, dtype=np.float64).reshape(-1, 8)
     if len(rows) == 0:
@@ -298,6 +298,7 @@ def wake_instances(records, tan, pose=(0.0, 0.0)) -> np.ndarray:
     out[:, :3] = _wrapped_turn(points, periods, pose[0])
     out[:, 3] = rows[:, 3] * tan[1] * depth
     out[:, 4:8] = rows[:, 4:8]
+    out[:, 7] *= tan[1] * depth
     return out
 
 

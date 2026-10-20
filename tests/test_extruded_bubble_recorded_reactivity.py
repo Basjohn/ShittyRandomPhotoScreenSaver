@@ -73,7 +73,8 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     result = states(combined)
     active, start, end = result[len(clip.frames)-1], result[len(clip.frames)], result[-1]
     assert active.stream_speed > end.stream_speed * 10
-    assert active.emission > end.emission * 10
+    assert active.emission > end.emission * 3
+    assert end.emission > .02  # sparse visible rest survives downstream squared particle density
     assert active.rays > end.rays + .1
     assert start.stream_speed > active.stream_speed * .95  # no pause snap
     initial = dict(zip(active.bubbles[6::8], active.bubbles[5::8]))
@@ -88,6 +89,6 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     assert all(v < -.1 for v in end.bubbles[5::8])
     assert all(1 + v < .15 for v in end.bubbles[5::8])  # minimum size is independent of excursion
     before = result[-92]
-    assert 0 < end.motion_phase - before.motion_phase < .05
-    assert 0 < end.shimmer - before.shimmer < .05
+    assert .04 < end.motion_phase - before.motion_phase < .08
+    assert .04 < end.shimmer - before.shimmer < .08
     assert 0 < end.travel - before.travel < .01
