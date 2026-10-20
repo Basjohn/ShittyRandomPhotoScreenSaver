@@ -128,8 +128,8 @@ no-environment-mutation logical gate for: zero spawned synthetic near bubbles, s
 radius excursions exceeding four equivalent pixels at 1080p, smooth kick onset, and both surface and bead
 phase rates being materially slower at idle than during sustained playback. It deliberately runs
 without Qt fixtures, not on a GPU. `test_extruded_bubble_simulation.py` checks the same physical logic
-through the normal Qt-integrated test suite; `test_extruded_bubble_renderer.py` checks ordinary large
-bubble world-fixed geometry and focus-path prerequisites; `test_extruded_bubble_shader_contract.py`
+through the normal Qt-integrated test suite; `test_extruded_bubble_renderer.py` has legacy projected-seam
+and focus-path checks, which do **not** prove a camera-independent physical world; `test_extruded_bubble_shader_contract.py`
 checks GLSL varying ownership. All nine linked shader pairs in Mesa compatibility mode are **not**
 a native NVIDIA display acceptance. Native test runs must still prove the ordinary shell goes through
 ONE optical pass at the near cutoff (no double-composite, no abrupt change or unblurred newborn lens
@@ -943,6 +943,13 @@ settings retirement, or breathing fixed from source-only or synthetic validation
 These checks **cannot** override the operator's confirmed full-mode reactivity failure. Bead shimmer must be assessed while moving under shafts in Presets 1/7; wake termination must be filmed at pop, fuse, surface exit and ordinary disappearance, with the dissolution marching from its travel-facing end backward. The still-open fused-cluster near DoF must have its own real-driver camera/Focus/Aperture acceptance. Follow the detailed live checklist in `Docs/Reference/Extruded_Bubble_Target.md` and the dedicated historical ledger; **do not close `[~]` without operator instruction**. Preserve real-music playback evidence at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` as well as synthetic replay fixtures.
 
 ### Extruded Bubble: negative source probes versus physical acceptance (2026-10-19)
+
+Native investigation evidence and reproducible tooling now live in the Extruded Bubble failure ledger §6 and
+Harness Index → Extruded Bubble forensic tools. The `anything_mixed2` positive 2D/EB comparison, same-frame GPU
+zero-swell intervention and production control probes are diagnostic evidence, **not new green acceptance tests**.
+Sustained Response has a reproduced dead production consumer; idle means gently collapsed/resting, not an oscillator.
+Legacy seam/no-visible-wrap/constant-projected-radius tests cannot establish world invariance or correct perspective.
+No EB physical failure is closed; follow `Current_Plan.md` §4B for remaining pixel, lifecycle and cost falsifiers.
 
 - [~] `tools/extruded_bubble_source_audit.py` is a **read-only diagnostic with expected negative findings** (camera-origin relocation, projected size cancellation, alpha-as-radius and double Particles Range). Run it as an investigation, **not** in the green test suite, and do not relabel its documented violations as passing assertions.
 - [~] `test_extruded_bubble_renderer.py::test_a_bubble_keeps_its_share_of_the_view_at_any_depth_and_fades_by_shrinking` currently **asserts the wrong product behavior**, and `test_turning_a_full_circle_never_wraps_a_bubble_on_screen` permits camera-dependent world relocations because it only measures onscreen seam continuity. These are **false visual oracles**; neither is proof of proper 3D perspective, material birth/death fade or fixed world-space orbit. When rebuilding camera/opacity, replace these with identity-stable physical coordinates and actual pixel/opacity measures; preserve the old failure history.
