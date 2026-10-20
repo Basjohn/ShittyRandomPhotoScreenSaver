@@ -930,3 +930,34 @@ defocus correction is claimed here.
 This is a role/consumer correction with scoped proof, not physical reactivity or visual acceptance. Next isolate
 the near-defocus lattice with important specks retained, then the exact optics/light/probe defects from the
 visual audit. Preserve soft/held large separation and small change response in all subsequent comparisons.
+
+## 19. Latest live rejection — overshoot, judder and near-field pixels
+
+The operator reports that reactivity remains poor with new, specific failures: large bubbles overinflate on start
+or preset swap, then get yanked down; large and small bubbles judder/vibrate and appear to sit between states;
+approaching bubbles do not always receive proper DoF and can become pixel-like. This is authoritative live
+failure, overriding any implication of acceptance from §18's 99 checks or amplitude statistics. Proper close
+defocus is preferred; if a form is too close to represent, coherent occlusion is allowed rather than malformed
+pixels. Separately active speck glow is estimated approximately **50% too strong**. That is a visual estimate,
+not a measured linear-light gain. Spherical/rounded glass and readable depth when bubbles overlap are more
+pressing than reducing speck glow. Preserve the important speck population.
+
+Investigation order: establish latest log/producer/settings provenance; separate hot activation/preset swap from
+quiet→onset; trace body-reference/sustain/radius initialization and subsequent release. Zero-seeded positive
+change references are a concrete startup-overshoot hypothesis, not yet causal proof. Then compare stable-ID
+body target/current radius and native cadence against accepted 2D's historical judder repairs, final displayed
+radius smoothing and gate release. Distinguish simulation chatter from source/draw timing and from the near
+layer changing as size varies. Strong soft breathing must remain, especially downward; sustained loud large
+support must not replace it. Do not repair this with weaker reactivity or a second clock/presentation simulation.
+
+A meaningful native primitive falsifier is now red in `test_scene3d_defocus`: a uniform bright strip with 2px
+circles under a 54px maximum budget becomes separated 8px-grid discs. Its middle profile alternates zero light
+with peaks approximately 64.5/84.4; relative standard deviation is **1.018** instead of a continuous strip's
+required <.03. This independently proves an unresolved-small-circle sampling defect in the shared primitive,
+including lost continuity; it does not alone attribute every pixel in the failed P7 scene. A proper correction
+must capture small circles and retain their energy, while preserving resolved large bokeh and resource ownership.
+Merely diverting small highlights into the old wide sparse gather can lose their light, so that is not a repair.
+
+Every one of these failures and its required falsifiers is now actionable in Current_Plan. Keep all new captures,
+logs summaries and investigation artifacts under this canonical folder. The existing numerical/physical-world
+mechanism proofs remain scoped facts, not acceptance of the latest live behavior.

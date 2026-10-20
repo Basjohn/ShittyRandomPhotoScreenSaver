@@ -6,6 +6,10 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 
 ## 0. Current scope, order and protected baseline
 
+MERGE INTO PLAN COHESIVELY - ADDITIONAL ISSUE WITH EXTRUDED BUBBLE FIDELITY.
+Camera is distorted and causes distortion. The camera should be honest and natural. Currently orbiting left or right through existing controls distorts bubbles and most of the scene stretching those bubbles (which are spheres!) out into unwanted ooblongs. Highest priority after reactivity.
+
+
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Reference/Extruded_Bubble/Investigation.md`
@@ -178,6 +182,19 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
 
 #### EB-D — Musical size, attack/release and collapsed rest (first recovery priority)
 
+- [ ] **FAILED live — activation/preset-swap size overshoot and yank-down.** Latest operator reports large
+  bubbles overinflate on start/swap, then get pulled down. Establish the actual producer/settings from latest
+  logs. Trace first-ready bands, onset serials, zero-seeded change references, sustain, target/current radius,
+  activation/source reset and reveal. Reproduce quiet→music separately from joining already-playing music and
+  swapping presets while loud. Seed/retain the correct authorities at their owner; do not suppress real soft
+  breathing or add a startup workaround/timer. Preserve gentle birth/reveal and source-generation fencing.
+- [ ] **FAILED live — large and small judder/vibration between sizes.** Use latest logs/traces and identical
+  recorded passages to distinguish actual target/radius chatter, pass/DoF switching and display cadence. Inspect
+  accepted 2D's historical judder tools, clean-body gate/release and final radius smoothing. Measure SAME-ID
+  target/current world radius, projected/segmented size and optical flow at logical/native cadence; current
+  amplitude/continuity fixtures did not falsify this failure. Repair smooth transitions at the canonical logical
+  owner with current radius shared by contacts/wakes; no renderer simulation, extra clock, arbitrary clamp or
+  loss of strong downward soft breathing. Add a real-input jitter regression that fails this producer.
 - [ ] **Awaiting Validation — candidate musical radius transfer.** Use report §7 and the current simulation as the
   implementation reference. Verify real large/small SAME-ID minima as well as excursion/peaks, without treating
   birth/pop/fade as contraction. Normal reaction strengths must let even the big population settle near 0.13× nominal
@@ -275,6 +292,12 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
   exclusive layer admission; true pinhole off-axis elongation is not by itself a new refraction defect or accepted
   art. Focus/aperture and resolution-scaled lens budgets require visual review at both resolutions. Preserve
   prepared allocation/state restoration through camera gestures; no new lens-attached population.
+- [ ] **FAILED live — close bubbles become pixel-like or miss proper DoF.** Record actual near-layer admission,
+  front depth, CoC, budget/mip and material opacity through approach/retreat and breathing. A native shared-DoF
+  strip falsifier already reproduces 2px circles becoming separated 8px-grid discs under the 54px budget; fix
+  mixed small/large CoC sampling with preserved light and prepared resource ownership, not larger fake geometry
+  or reduced specks. Properly defocus close forms wherever feasible; if too close to represent, use coherent
+  gentle occlusion/retirement as justified by the camera/scene, without hard pops or teleportation. See report §19.
 
 #### EB-C — Stream, drift, beads, wakes, rays and emission
 
@@ -348,6 +371,10 @@ Presets and controls may be corrected where needed; prove meaningful controls ra
 - [ ] Isolate coin-like/edge-on clear shells, especially Preset 7, with native normal/coverage/reflected/transmitted
   diagnostic views and SAME-ID samples. Inspect screen-facing-ray, refraction, film/rim, interior blur and DoF
   separately; analytical sphere intersections do not establish believable spherical glass.
+- [ ] **FAILED visual parity — active speck glow is roughly 50% too strong (operator estimate).** Preserve important
+  specks and separate glow from density, refraction/proxy duplication, exposure and near-defocus artifacts. Measure
+  matched active/quiet P1/P7 crops and meaningful control endpoints before retuning; spherical glass and readable
+  overlap depth take priority over this glow adjustment. Keep the source/preset correction in the central registry.
 - [ ] Complete the remaining target §7 material recovery in bounded steps: C01 edge-soft smear, C03 smoothstep,
   C05 cluster normal, C06 depth, then inset highlights/specular, double rim/roundness and shafts in isolation.
   Use already-proven shared optics/OIT/HDR and keep visible depth/translucency at overlap. No hard shadows without
