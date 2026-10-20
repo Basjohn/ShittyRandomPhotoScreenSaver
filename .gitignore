@@ -247,3 +247,8 @@ output/
 
 # Operator-owned onboarding preview source sheets (unshipped, never committed)
 tools/onboarding_sources/
+
+# EB's workstation-native capture archive is centralized beside its versioned targets.
+# Keep multi-gigabyte replay frames/custody local; the evidence index and source receipts
+# are described by Docs/Reference/Extruded_Bubble/README.md and Investigation.md.
+/Docs/Reference/Extruded_Bubble/Evidence/

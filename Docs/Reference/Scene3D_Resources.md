@@ -351,7 +351,7 @@ reflection when the core is empty.
 ## §4A gate status (G0 inventory, 2026-10-18)
 
 What each pre-Extruded-Bubble gate has, what proves it and what is missing. Extruded Bubble's demands come from
-`Extruded_Bubble_Target.md` (§1 target, §7 recovery, §9 preset surface); its lab
+`Extruded_Bubble/Target.md` (§1 target, §7 recovery, §9 preset surface); its lab
 (`tools/labs/extruded_bubble_lab.py`) is the consumer that exercised these primitives.
 
 | Gate | Owner | Proof | Gap |

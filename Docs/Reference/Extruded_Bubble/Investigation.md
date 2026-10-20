@@ -2,7 +2,7 @@
 
 **STRONG RETENTION VALUE DOCUMENT**  
 **Live, source-backed historical bug record.** All statuses below remain `[~]` until the operator expressly accepts a visual result.  
-**Owner of requirements/physical acceptance:** [`../Reference/Extruded_Bubble_Target.md`](../Reference/Extruded_Bubble_Target.md) §§7–11A; sequencing: [`../../Current_Plan.md`](../../Current_Plan.md) §4B. This file holds attempted mechanisms, rejected outcomes, and still-unverified repairs. It does **not** replace the target checklist, weaken `Spec.md`, or become a chronological changelog.
+**Owner of requirements/physical acceptance:** [`Target.md`](Target.md) §§7–11A; sequencing: [`../../../Current_Plan.md`](../../../Current_Plan.md) §4B. This file holds attempted mechanisms, rejected outcomes, and still-unverified repairs. It does **not** replace the target checklist, weaken `Spec.md`, or become a chronological changelog.
 
 **Classification key:** `COMPLETELY FUCKED` = operator-confirmed physical failure; `PARTIAL (BARELY)` = code path exists or a narrow defect changed, but the actual intended visual outcome has not passed. Both deliberately use `[~]`, not `[x]`; neither is clearance. A passing synthetic test is never evidence of displayed reactivity. Every preset is operator-authored and mutable; no retuning a preset simply to mask an implementation failure.
 
@@ -63,7 +63,7 @@
 
 **Tree examined:** `e599387303e282a16953f2d88fab62a854f74efd`, initially clean. No production code, presets,
 Settings, accepted 2D Bubble or lifecycle policy changed. No agents delegated. Evidence is retained locally at
-`logs/eb_forensics_20261020/`; these ignored artifacts are not bundled into source control. Reproduction tooling
+`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/forensics/`; these ignored artifacts are not bundled into source control. Reproduction tooling
 is in `tools/visualizer_replay/{extruded_bubble_forensics,bubble_reference_capture,extruded_bubble_log_inventory}.py`.
 Current work and acceptance remain in `Current_Plan.md` §4B. This report supersedes the earlier *unknown first
 response-loss stage* for the measured offline cases only; it does not erase the operator's failed live retests.
@@ -269,7 +269,7 @@ not be mistaken for matching the newly expanded size range.
 
 ### 7.2 Evidence and measured limits
 
-Local evidence is under `logs/eb_reactivity_20261020/` (ignored media/custody; retained on this workstation):
+Local evidence is under `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/` (ignored media/custody; retained on this workstation):
 
 - `minimum_p1`: opening 12 s of real `anything_mixed2`, 1,091 logical inputs, 360 native 1672×941 frames at
   30 fps, same-frame zero-swell controls, silent GIF/MP4, contact sheet, per-ID custody and source hashes.
@@ -353,7 +353,7 @@ At driver 0 P1 uploads 0.018 rather than 0.6; at driver 1 it still reaches its a
 0.003–0.2. This is a deliberate resting-activity contract, not a changed preset or additional audio floor.
 Continuous simulation followers preserve release/phase; disabled rays remain off.
 
-Evidence: `logs/eb_reactivity_20261020/rays_fixed_p1`, `rays_fixed_p7`, `rays_fixed_p7_1440`, plus the real opening
+Evidence: `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/rays_fixed_p1`, `rays_fixed_p7`, `rays_fixed_p7_1440`, plus the real opening
 12-second `light_passage_p1` native sequence. Fixed-state central RGB mean at softness 0 now spans
 **93.36–114.66** for P1, compared with **111.50–116.63** before. At softness 1 P1 spans **95.27–161.16**.
 P7's scene is intentionally dominated by other light/particulate, so its central-region average remains a weak
@@ -468,7 +468,7 @@ One operator-requested Sol 6.1 Medium agent performed the read-only source audit
 falsifier; the primary inspected its source, images and metadata. The still cannot establish the original
 offending shell's cluster membership, but the renderer discrepancy is independently reproduced.
 
-`logs/eb_reactivity_20261020/distortion_audit/` compares unmodified production ordinary/cluster shaders with
+`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/distortion_audit/` compares unmodified production ordinary/cluster shaders with
 `uDiag=5` at a fixed camera. A radius-0.6 sphere at depth 6 is compared at center and (-4,-2.4,-6). A coincident
 radius-1e-6 second member admits the cluster path without changing the SDF silhouette. Direct RGBA32F OIT
 readback isolates coverage from lighting/refraction/post effects. All four native RTX 4090 draws return GL error 0.
@@ -538,7 +538,7 @@ This is a consumer correction, not an independent musical particle-birth model. 
 and density/lifetime appearance remain distinct open measurements.
 
 Actual `anything_mixed2.jsonl` native captures use unmodified preset activation:
-`logs/eb_reactivity_20261020/emission_final_p1` contains 16 paired frames over the opening 4 s at 1672×941;
+`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/emission_final_p1` contains 16 paired frames over the opening 4 s at 1672×941;
 `emission_final_p7_1440` contains 12 paired frames over 3 s at 2560×1440. Each retains source hashes, clip/settings
 receipts, stable-ID custody and actual same-frame zero-swell controls. The primary inspected both contact
 sheets: onset opens the shell/particulate field, but P7's competing fine bright detail and limited depth hierarchy
@@ -658,13 +658,13 @@ checked the boundary and the final speck change; no additional agents were used.
 
 Final-source native artifacts (ignored local evidence, with source/clip/settings receipts):
 
-- `logs/eb_reactivity_20261020/world_final_p7`: 15 frozen real-recorded-snapshot views at 1672×941,
+- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_p7`: 15 frozen real-recorded-snapshot views at 1672×941,
   unmodified P7, 54 global bubble identities; ordinary yaw-view frustum candidates range 4–22.
-- `logs/eb_reactivity_20261020/world_final_p1_1440`: 15 equivalent views at 2560×1440, unmodified P1,
+- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_p1_1440`: 15 equivalent views at 2560×1440, unmodified P1,
   56 global identities; ordinary yaw-view candidates range 2–9. Both include twelve yaw angles, two tilt views
   and a zoom/pan view. No simulation advance occurs between views. Candidate counts are conservative ordinary
   frustum estimates, not segmented pixels or procedural/union counts. The primary inspected both contact sheets.
-- `logs/eb_reactivity_20261020/world_final_operator_ranges`: 10 paired frames at 2560×1440 from
+- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_operator_ranges`: 10 paired frames at 2560×1440 from
   `anything_mixed2`, 227 selected logical inputs over approximately 1.5–4 s. P7 is activated with selected retained
   controls in memory: Large [0,4], Small [20,50], Particles [.85,1], Bead Chains [2,4], Ray Softness .81. This is
   not an exact live-operator configuration reproduction. All logical records, including retirement, stay within
@@ -715,9 +715,160 @@ can be interior emitters. This is not camera spawning, but it is not proof of ac
 authoring for every family. Source/region unification remains active work. Raster coverage floors and defocus
 can also limit apparent pixel contraction below resolution; record those alongside physical reaction measurements.
 
-The operator identified `tmp/eb_s4/presets_sheet.png` as valuable target evidence. The primary inspected it:
+The operator identified `Docs/Reference/Extruded_Bubble/Lab/2026-10-18/presets_sheet.png` as valuable target evidence. The primary inspected it:
 mock/product pairs show a substantial remaining gap in depth hierarchy, dense fine bubble streams, near softness,
-coherent light and the diagonal scene's glowing particulate/wisps. Preserve the full `tmp/eb_s4` provenance,
+coherent light and the diagonal scene's glowing particulate/wisps. Preserve the full `Docs/Reference/Extruded_Bubble/Lab/2026-10-18` provenance,
 especially `scenes.json`, `scenes.py`, lab/scenes/presets outputs and comparison/pair PNGs, alongside original
-`tmp/Bubbleexamples` assets in the later canonical target organization. Specks remain an important target element;
+`Docs/Reference/Extruded_Bubble/Targets/Originals` assets in the later canonical target organization. Specks remain an important target element;
 neither removal nor disabling is a substitute for correct placement, glow, depth and reachability.
+
+## 16. Clean-body phrase correction and fresh matched comparison
+
+**Pending, uncommitted response attempt; latest operator feedback rejects its native appearance and requires
+further passage-role work before landing.** This is bounded source/native evidence, **not 2D response parity or visual acceptance**. The fixed
+world made response measurement more truthful but did not fix the remaining transfer. Fresh paired replay
+reproduced the first-window large deficit: mature EB identities had median minima/maxima 0.975–2.086× nominal
+against accepted 2D's 0.707–2.750× (individual 2D ID 1 reaches 2.782×). A later active 4–8 s window exposed a
+different small-body weakness: EB only spanned approximately 0.287–1.036×, despite impressive percentages when
+the recording's initial tiny rest was included. This is why opening-rest excursion alone cannot close the gate.
+
+The primary and the same single read-only reviewer identified the owning mechanisms:
+
+- Large body used `max(bass, .28*mid+.10*high)`, discarding vocal changes whenever bass won, then attenuated the
+  continuous term by .75. Unlike the small lane, it had no clean-body change reference.
+- Size was partly restored using kick→breath→kick-swell→body followers and a snare pulse in the small lane.
+  These discrete event tails could hold bodies inflated between attacks; accepted 2D's size authority uses
+  continuous body plus its clean delta, reserving transient event excitement for motion.
+- At default smoothing the active release was 250 ms but abruptly became 1.875 s below intensity .01, including
+  quiet gaps inside playing music. The hard switch created a discontinuity without establishing musical minima.
+
+The EB-local correction retains its own simulation/Settings/clock and the existing recorded/live body feed.
+Large support is bass plus limited vocal energy, with a slow clean-body reference and positive change authority.
+Small support is vocal/high energy plus a modest .25 bass contribution; stronger changing-body authority restores
+active phrase peaks while keeping the former restrained held support. Both additive mixtures are bounded before
+delta extraction. Large/small change gains are 3/5; final authored strength/rest/expansion mapping is unchanged.
+The first candidate removed events but retained insufficient small active span; its receipt is
+`matched_phrase_candidate`. The subsequent actual small-body contribution/change correction is the current source.
+No periodic pulse, preset retune or final-radius workaround was added.
+
+The two obsolete event-size followers are removed. Events still drive existing flash/light/motion. The remaining
+`breath` kick follower is diagnostic transport only, not a size or actual event-motion authority; its retirement
+and tool migration are a bounded cleanup task in Current_Plan. Population/motion intensity is algebraically the
+same normalized driver as before, so this correction does not redefine count Range interpolation. Active body
+attack is still 75 ms at default smoothing; active release is now 125 ms and blends continuously toward the
+1.875 s very-quiet/paused release below intensity .1. Near-silence remains gentle; the change does not mean rapidly
+collapsing an idle scene. Sustained Response still supports actual held body and motion.
+
+`bubble_response_comparison` records both modes at identical source timestamps through production capture,
+including actual 2D clean pulse payload and actual EB body tuples, settings/preset paths, source hashes and
+stable-ID final-radius/nominal ratios. It excludes promoted 2D bodies and fused/popping/leaving EB records.
+Window identities must be mature on at least 80% of the selected input samples. Each identity's own extrema
+are aggregated by class: their times can differ across identities/modes. These are windowed distributions,
+not identical geometry, synchronized pixel extrema or auditory timing. Empty classes remain explicit coverage gaps.
+
+Current `anything_mixed2` results, unmodified authored P1 in each mode (median per-ID minimum → maximum):
+
+| Source window | Class | Accepted 2D | EB before this correction | EB clean-body candidate |
+| --- | --- | ---: | ---: | ---: |
+| 1.507184–3.146924 s | Large | 0.707 → 2.750 | 0.975 → 2.086 | 1.223 → 3.258 |
+| 1.507184–3.146924 s | Small | 1.738 → 3.948 | 0.623 → 2.585 | 1.390 → 3.385 |
+| 4–8 s | Large | 0.792 → 2.294 | 0.697 → 2.338 | 0.392 → 2.864 |
+| 4–8 s | Small | 1.608 → 3.879 | 0.287 → 1.036 | 0.284 → 2.353 |
+
+The first window now has larger large-body peaks but **still has an elevated minimum and lower relative
+excursion than 2D** (median 166% versus 294%). Do not declare parity from the roughly similar absolute span.
+Both minimum observations occur at the window's first sample, so this is not proof of a remaining hard size floor.
+At identical source times, 2D ID 1 / EB ID 1 ratios are 0.707/1.223 at 1.507184 s, 2.457/2.591 at 1.8046 s,
+2.741/2.932 at 2.0022 s, 2.261/1.904 at 2.4971 s and 2.003/1.615 at 3.146924 s. EB ID 1 is a mature
+logical large identity but behind the current camera, so these are transfer/timing observations, not its visible
+silhouette. Distinguish earlier onset growth from an inflated valley before making another response change.
+The 4–8 s small span is substantially restored; its lower nominal ratios are not themselves proof of the same
+visible size. 2D eligibility there is only one large/three small IDs versus five/twenty in EB, and no 2D large
+identity meets the 80% rule across 8–12 s. This is insufficient coverage for a blanket cross-song or full-population
+claim. Current EB first-window eligibility is three large/seventeen small; the comparator has three/fourteen.
+
+Evidence under `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/`:
+
+- `matched_phrase_before` owns the pre-change paired distributions. `matched_body_final` owns the current
+  paired twelve-second result and actual two-seam input custody. `matched_body_soft` and `matched_body_ragdoll`
+  extend it to the soft recording and Ragdoll's full minute with explicit opening/50–54/54–58 s windows.
+  All three current actual-body comparisons have **zero mismatching tuples**. `matched_body_heavy` supplies the
+  heavy opening comparison from the earlier observer version (recorded inputs, before the independent actual-2D
+  payload observation was added). Preserve that qualification. Ragdoll's late windows have no eligible 2D IDs;
+  they do not establish late-section cross-mode parity.
+- `held_bands_clean_body_qualified.json` holds an actual hot vocal tuple for 13.2 s with new events/transients
+  cleared. Mature ordinary large/small ratios settle to **1.204 / 1.523×**. A progress update estimated the small
+  value as 1.43×; the exact custody supersedes that approximation. The projected observer now excludes near-plane
+  and off-frustum cases; earlier positive-depth-only extrema are not valid visible field measurements. Held
+  support remains restrained, but a hold does not test how long changing vocals stay near the soft knee.
+- `clean_body_native_p1`: **360 paired native frames at 30 fps**, opening 12 s at 1672×941, 1,091 actual inputs,
+  unmodified P1, source/clip/settings receipts and same-frame zero-swell images.
+- `clean_body_native_p7_1440`: **120 paired native frames at 30 fps**, opening 4 s at 2560×1440, 364 inputs,
+  unmodified P7 with equivalent receipts/interventions.
+- `clean_body_2d_reference`: fresh **360 native accepted-2D frames at 30 fps** over the same opening 12 s.
+  The primary inspected all three contact sheets and sampled full frames. The EB response reaches actual shells;
+  P7 still shows excessive bright speck detail, large foreground forms and bright interiors with weak depth
+  hierarchy. The latter failures remain art/source/optics tasks, not reasons to suppress specks or size response.
+  `frame_0090.png` also exposes regular dot/lattice patches near P7's upper-right light; identify the responsible
+  procedural family/source before changing density. This new visible side-defect is retained in Current_Plan.
+
+**61 focused checks pass**: event-present/absent identical-band radius equality while event light/shimmer differ;
+vocal changes under held bass; continuous release around the former .01 threshold; gentle silence/pause;
+absolute SAME-ID span strictly within the active 4–8 s passage; held hot-small restraint, tiny rest, controls,
+source/activation/onset fencing, motion and reacted-world contacts. The old event-size expectation was replaced
+with a clean-body onset case because that behavior is intentionally removed; its red was not hidden. This gate
+protects absolute active excursion, not the remaining first-window minimum/relative-excursion failure. Native
+30-fps replay samples logical states; it does not measure installed display judder, onset-to-audible latency or
+physical cadence. GIFs remain silent. The two later native processes overlapped, so their timings are especially
+unsuitable as controlled performance benchmarks.
+
+Cost/ownership: one constant-size clean reference replaces two event-size followers; no extra band read, DSP,
+floor, timer, per-body observer, resource or renderer simulation. Existing world/contact/radius ownership remains.
+Before broadening fidelity work, inspect same-time target/reference/envelope/radius and native ordinary silhouettes
+around the unresolved first-window minimum and release. Challenge mixture clipping and long near-maximum small
+passages rather than selecting only peak frames. Complete physical quiet/onset/sustain/pause/resume and count/density
+acceptance at normal controls; retain all world/camera/source, water-plane, material, speck/debris/fog and target
+organization work from Current_Plan. This checkpoint does not retire any of those requirements.
+
+## 17. Latest operator rejection, passage roles and central organization
+
+The operator rejected the latest two native screenshots as awful and supplied the original diagonal target and
+the blue/copper annotated mocks again. These are byte-identical to the originals now in `Targets/Originals`;
+`asset_manifest.json` records attachment hashes and canonical paths. Their broad curved highlights, front/back
+wall structure, background distortion, spherical volume, soft depth hierarchy and natural microbubble trails
+remain the visual requirements. Physical pinhole projection alone does not meet them.
+
+The clarified response role is precise: **large bubbles breathe significantly, especially downward, in softer
+music; they carry sustained body in sustained/loud passages.** Small bubbles and emission/drift/speed/rays must
+keep expressing changes within loud passages. Do not produce a shared bass/transient-held small field or a
+generic large-bubble hold at every energy. Controls/presets may be changed where needed to remain valuable;
+do not protect ineffective tuning or require users to compensate for broken transfers.
+
+The primary checked accepted 2D's exact current source. It does not feed transient/event excitement directly
+into ordinary size. It keeps a bass running average and a separate mid/high average; ordinary smalls use vocal
+body plus bounded hot-field/bass/body support, clean positive delta, perceptual sustained knees and separate
+attack/release. Thus the implementation is not literally bass-free. Promoted smalls temporarily use the big
+lane with scaled-down authority; the paired tool excludes those when comparing ordinary smalls. The design
+lesson is distinct passage/change authority and bounded support, not one common loudness hold. EB's pending
+direct .25 bass addition, .50 held-small term, stronger delta and shared level consumers require re-evaluation
+against the clarified role. Its 61 passing checks and §16 numeric spans do not close that requirement.
+
+One user-authorized Astra High reviewer inspected the targets and native evidence. Full findings and owning
+source locations are in [Visual_Audit_2026-10-20.md](Visual_Audit_2026-10-20.md). The strongest lead is the P7
+regular dot lattice: actual bright pixels align to the exact 8-pixel near-defocus highlight sampling grid, rather
+than proving a flat particle source. Other concrete discrepancies are opposing background/light lens conventions,
+background capture before rear bubbles/trails, tangent-sphere union optics, analytic specular ignoring Light
+Strength and plausible shared-proxy interior blobs. Perform bounded native interventions with specks retained.
+
+Organization is now implemented, not deferred. This folder contains the 9 original/annotated targets, all 85
+historical lab files (including `presets_sheet.png` and both scene recipes), the target contract, this investigation,
+the visual audit and both complete native evidence trees: 1,029 forensic files and 8,009 recovery files. The former
+two log roots refused a directory rename on Windows despite access rights; moving their children within the same
+volume succeeded and the former roots were removed. No evidence was deleted or overwritten. Target/lab SHA-256
+values were checked before/after; evidence file counts/byte totals were checked across the move. Original capture
+receipts retain their historic path strings and producer hashes. Live document/tool routes now use this canonical
+home. The large raw evidence archive remains ignored locally beside the versioned images/documents.
+
+The live plan retains passage-role rework and all world/source/camera, near-defocus/material, depth, important
+specks, gas/debris/fog and preset-parity work. Use the registry here; do not scatter another set of investigation
+or target images into temporary/log directories.

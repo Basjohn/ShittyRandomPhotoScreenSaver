@@ -7,11 +7,18 @@ primitive inventory below are preserved as the design provenance, **not** as a c
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (BTF) binds the reactivity. Original Bubble remains accepted and separate.
 Visual acceptance cannot be inferred from the lab, green unit tests or authored preset parity.
 
-## 1. Visual target (operator mocks, `tmp/Bubbleexamples`, 2026-10-17; informational mocks 2026-10-18)
+**Canonical images and investigation:** [README.md](README.md). All targets, the full lab material, failure ledger
+and workstation-native evidence now live in this folder. The latest P1/P7 screenshots are operator-rejected.
+Large bubbles must breathe significantly downward in softer music and carry sustained body in sustained/loud
+passages; small bubbles and emission/drift/speed/rays must keep expressing changes within those loud passages.
+Do not interpret this as generic large-body hold at all energies. Preset/control corrections are authorized where
+needed; the current pending response attempt is not accepted. Detailed latest findings: [Investigation §17](Investigation.md#17-latest-operator-rejection-passage-roles-and-central-organization).
 
-Seven frames in `tmp/Bubbleexamples` (three looking up toward a sunlit surface, one with wake tendrils, the abyss, camera
-down, the diagonal orange stream) plus two annotated **informational mocks** (`tmp/Bubbleexamples/Informational mock.png`,
-`tmp/Bubbleexamples/Informational mock 2.png`, blue and copper) whose detail panels name each material requirement: broad specular
+## 1. Visual target (operator mocks, `Docs/Reference/Extruded_Bubble/Targets/Originals`, 2026-10-17; informational mocks 2026-10-18)
+
+Seven frames in `Docs/Reference/Extruded_Bubble/Targets/Originals` (three looking up toward a sunlit surface, one with wake tendrils, the abyss, camera
+down, the diagonal orange stream) plus two annotated **informational mocks** (`Docs/Reference/Extruded_Bubble/Targets/Originals/Informational mock.png`,
+`Docs/Reference/Extruded_Bubble/Targets/Originals/Informational mock 2.png`, blue and copper) whose detail panels name each material requirement: broad specular
 from the light with inset peaks, real front/back double rims with Fresnel and colour separation, spherical volume with
 refracted background, merged bubbles with continuous surfaces, wide soft shafts, and dense micro-bubble trails
 ("no ribbon/sperm lines"). Where a mock shows a seabed or ribbons, the operator's later rulings below win.
@@ -61,7 +68,7 @@ mechanisms and native guards do not approve foreground softness, depth hierarchy
 immediate strong changes in `anything_mixed2.jsonl`. In idle EB must slowly settle into a collapsed resting state
 across size, drift/sway, stream, beads/wakes, rays, emission and ambient/surface motion. Nothing remotely fast;
 no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes are subordinate to this requirement.
-Native measurements, reproduced control failures and the candidate transfer are in the dedicated Extruded Bubble failure ledger §6–7;
+Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–16;
 `Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
 
 The simulation's current reaction strength spans contracted rest and musical expansion; nominal size is not a
@@ -69,6 +76,11 @@ lower bound. Normal Breathing/Small Pulse strengths permit a resting radius near
 disables size reaction. Minimum size and maximum excursion are separate acceptance measures. Compare mature,
 nonpopping stable identities against accepted 2D, including the big population and projected/visible size at fixed
 depth. Do not count entry fade, pop shrinkage, changed perspective or a departing identity as musical contraction.
+
+Size follows clean body bands and their changes, with distinct bass-led large and vocal/high-led small lanes.
+Discrete onset events accent motion/light rather than sustaining size between attacks. Very quiet input must
+blend gently into the long collapsed-rest release without an abrupt threshold switch. The current candidate
+improves active span but has not passed matched 2D minima, timing, native silhouette or physical acceptance.
 
 Ray Softness must reach both the angular sun fan and the marched Deep Light shaft pattern. The Light Rays
 Range is resolved once at the simulation's continuous ray driver, with resting light activity reduced to 3%
@@ -689,7 +701,7 @@ from that path unless a local agent actually runs its contents.
 
 ### 11A. Live recovery checklist (all partial or operator-confirmed failed; no accepted reactivity)
 
-**Operator 2026-10-19 verdict, reconfirmed after full-dynamic-band retest (`logs3a0d4fa1176.zip`):** Every attempted Extruded Bubble **reactivity** repair failed on real display, across breathing, idle/playing contrast, streams, rays and particle response. The current full-dynamic rewire **also failed**. Large and small bubbles remain visually static at ordinary settings; maximum Sensitivity or Dynamic Floor can provoke only a small rapid, regular, non-musical pulse. This is **not partial breathing**, and no reactive feature is accepted. The source-side numerical motion improvements do not contradict this observation. Those entries remain `[~] COMPLETELY FUCKED`, not accepted or implied source success. The discontinued synthetic foreground cohort is removed and that absence was positively verified. For per-attempt failure history and current candidate boundaries see [`../Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`](../Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md).
+**Operator 2026-10-19 verdict, reconfirmed after full-dynamic-band retest (`logs3a0d4fa1176.zip`):** Every attempted Extruded Bubble **reactivity** repair failed on real display, across breathing, idle/playing contrast, streams, rays and particle response. The current full-dynamic rewire **also failed**. Large and small bubbles remain visually static at ordinary settings; maximum Sensitivity or Dynamic Floor can provoke only a small rapid, regular, non-musical pulse. This is **not partial breathing**, and no reactive feature is accepted. The source-side numerical motion improvements do not contradict this observation. Those entries remain `[~] COMPLETELY FUCKED`, not accepted or implied source success. The discontinued synthetic foreground cohort is removed and that absence was positively verified. For per-attempt failure history and current candidate boundaries see [`Investigation.md`](Investigation.md).
 
 The full operator failure descriptions and source findings in §§10–11 remain binding. The details of the earlier
 source attempt below are **retained as failure evidence**, not as the presently running implementation. Do not

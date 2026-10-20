@@ -1,5 +1,5 @@
 """Extruded Bubble composition lab (§4A): every shared primitive composed into one underwater scene per operator mock
-(tmp/Bubbleexamples: bright, mid, dark water, teal), rendered offscreen at the mocks' resolution and laid side by
+(Docs/Reference/Extruded_Bubble/Targets/Originals: bright, mid, dark water, teal), rendered offscreen at the mocks' resolution and laid side by
 side with them. A development harness for judging primitives against the target; not the Extruded Bubble renderer.
 usage: python tools/labs/extruded_bubble_lab.py out_sheet.png [--backdrop]"""
 import ctypes
@@ -924,14 +924,14 @@ def main():
         image, gpu, count = render_variant(capture, resources, target, programs, env, env_fbo, VARIANTS[name], 11 + list(VARIANTS).index(name))
         image.save(sys.argv[1].replace(".png", f"_{name}.png"))
         if CARD:
-            mock_full = Image.open(ROOT / "tmp/Bubbleexamples" / f"{name}.png").convert("RGB").resize((W, H), Image.LANCZOS)
+            mock_full = Image.open(ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png").convert("RGB").resize((W, H), Image.LANCZOS)
             for label, box in CARD_SETS[CARD]["crops"].items():
                 a, b = mock_full.crop(box), image.crop(box)
                 pair = Image.new("RGB", (a.width * 2 + 6, a.height))
                 pair.paste(a, (0, 0))
                 pair.paste(b, (a.width + 6, 0))
                 pair.save(sys.argv[1].replace(".png", f"_card_{label}.png"))
-        mock = Image.open(ROOT / "tmp/Bubbleexamples" / f"{name}.png").convert("RGB").resize(half, Image.LANCZOS)
+        mock = Image.open(ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png").convert("RGB").resize(half, Image.LANCZOS)
         sheet.paste(mock, (0, row * half[1]))
         sheet.paste(image.resize(half, Image.LANCZOS), (half[0], row * half[1]))
         print(f"{name}: GPU median {gpu:.3f} ms (p95 {TIMINGS['total'][1]:.3f}), {count} instances ({W}x{H}, 4x MSAA)")
