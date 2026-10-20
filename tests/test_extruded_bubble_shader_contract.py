@@ -47,7 +47,7 @@ class ExtrudedBubbleShaderContractTests(unittest.TestCase):
     def test_bead_fade_output_is_not_written_by_cluster_or_particle_shaders(self):
         stages = _vertex_stages()
         self.assertIn('flat out float vOpacity;', stages['BUBBLE_VERTEX'])
-        self.assertIn('vOpacity = 1.0;', stages['BUBBLE_VERTEX'])
+        self.assertIn('vOpacity = aOpacity;', stages['BUBBLE_VERTEX'])
         self.assertNotIn('vOpacity', stages['CLUSTER_VERTEX'])
         self.assertNotIn('vOpacity', stages['PARTICLE_VERTEX'])
 
@@ -57,7 +57,7 @@ class ExtrudedBubbleShaderContractTests(unittest.TestCase):
         vertex = stages['BUBBLE_VERTEX']
         self.assertIn('float frontDepth = depth - aSphere.w;', vertex)
         self.assertIn('aExtra.y < 0.5 && coc > 1.5', vertex)
-        self.assertIn('uFocus - frontDepth', vertex)
+        self.assertIn('sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc)', vertex)
         self.assertNotIn('aExtra.y > 2.5 ||', vertex)
         source = _PROGRAM.read_text(encoding='utf-8')
         self.assertIn('float frontDepth = -vSphere.z - vSphere.w;', source)

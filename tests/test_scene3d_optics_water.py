@@ -106,6 +106,20 @@ def test_hollow_sphere_trace_equals_its_mirror_and_conserves_light(probe):
     assert len(guided) >= 2 and len(through) >= 3
 
 
+def test_hollow_trace_admits_real_origins_in_core_and_wall(probe):
+    rows=[[(0.,0.,0.,.9),(1.33,1.5,1.,0.)],[(0.,0.,-.95,.9),(1.33,1.5,1.,0.)]]
+    code=('vec4 a=arg(0);vec4 paths[8];sceneHollowSphereTrace(a.xyz,vec3(0,0,-1),1.0,a.w,arg(1).xyz,paths);'
+          'FragColor=paths[0];')
+    gpu=probe.run(code,rows,DECL)
+    expected=[((1.-1.5)/(1.+1.5))**2,((1.5-1.33)/(1.5+1.33))**2]
+    assert [row[3] for row in gpu]==pytest.approx(expected,abs=1e-5)
+    for (origin,iors),weight in zip(rows,expected):
+        paths=optics.scene3d_hollow_sphere_trace(origin[:3],(0,0,-1),1.,.9,iors[:3])
+        assert paths[0][1]==pytest.approx(weight)
+        assert paths[-1][0]==pytest.approx((0,0,-1))
+        assert sum(w for _,w in paths)==pytest.approx(1.)
+
+
 def test_waves_have_matching_gradients_and_equal_their_mirror(probe):
     rng = random.Random(7)
     points = [(rng.uniform(-5, 5), rng.uniform(-5, 5), rng.uniform(0, 20)) for _ in range(96)]

@@ -38,6 +38,23 @@ exclude needed gas/wisp/volume behavior. EB's open volume need not inherit Neon 
 matching a lab still does not establish production emitter/lifetime/reactivity or physical camera correctness.
 Healthy reactivity is the immediate priority; required scene architecture remains subsequent active EB recovery.
 
+**Current physical-world boundary (2026-10-20):** simulation positions/radii are world units in the fixed domain
+owned by `extruded_bubble_geometry`; all ordinary/union/wake packing preserves them directly. The camera does not
+spawn or place populations. GPU procedural populations use the same world stream/basis; zoom/aspect/pose affect
+projection only. Authored counts are global, with no per-view copies. The fixed length conversion calibrates
+nominal size at one reference distance, allowing genuine near/far perspective elsewhere. Current pan is lens
+shift, not translated-camera parallax; camera placement/pivot/source-region authoring remain live work.
+
+The candidate uses common pinhole rays/bounds for ordinary and fused geometry. This supersedes T2's literal
+all-screen circularity as a numeric oracle: rectilinear off-axis spheres can elongate, but both paths must agree
+and the material must read as a sphere. Near-plane/eye-inside guards cannot collapse a valid bound or shade a
+negative-distance surface behind the eye. Surface clearance, visual distortion and glass volume remain unaccepted.
+Lifetime alpha reaches the material without scaling physical radius. Union opacity follows smooth-min surface
+weights; reacted radii preserve connected admitted contact edges without snapping the initial layout. Pops
+retire smoothly over seconds without a separate radius expansion. Both ordinary/union near surfaces use the
+existing shared defocus pass, with focus/aperture consumers and resolution-scaled lens budget. These source
+mechanisms and native guards do not approve foreground softness, depth hierarchy or mock parity; see ledger §15.
+
 ## 2. Reactivity: its own simulation (operator 2026-10-18, supersedes "reads original Bubble")
 
 **Operator clarification, 2026-10-20:** accepted 2D Bubble sets the minimum *response scale*, especially the

@@ -112,4 +112,5 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     before = result[-92]
     assert .04 < end.motion_phase - before.motion_phase < .08
     assert .04 < end.shimmer - before.shimmer < .08
-    assert 0 < end.travel - before.travel < .01
+    from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_UNIT
+    assert 0 < end.travel - before.travel < .01 * WORLD_UNIT

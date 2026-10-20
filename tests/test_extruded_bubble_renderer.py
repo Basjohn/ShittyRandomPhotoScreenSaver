@@ -14,7 +14,7 @@ from tests._visualizer_frozen_settings import frozen_visualizer_settings
 SETTINGS = frozen_visualizer_settings("extruded_bubble")
 
 
-def _record(x=0.0, y=0.0, z=0.5, radius=0.1, alpha=1.0, ident=1.0, cluster=-1.0):
+def _record(x=0.0, y=0.0, z=-10.0, radius=1.0, alpha=1.0, ident=1.0, cluster=-1.0):
     return (x, y, z, radius, alpha, 0.0, ident, cluster)
 
 
@@ -53,101 +53,48 @@ def test_scene_pan_shifts_everything_on_screen_alike_without_turning_the_view():
     after = scene.light_on_screen(light, panned[1], panned[3], (1000, 600))
     assert (after[0] - before[0], after[1] - before[1]) == pytest.approx((150.0, -60.0))
 
-def test_a_bubble_keeps_its_share_of_the_view_at_any_depth_and_fades_by_shrinking():
-    _v, _w, tan, _p = scene.camera(0.3, 0.2, 1.6)
-    rows = scene.bubble_instances(_record(z=0.0) + _record(z=1.0, ident=2.0) + _record(alpha=0.25, ident=3.0),
-                                  tan, (0.3, 0.2))
-    assert len(rows) == 3
-    for row, z, alpha in zip(rows, (0.0, 1.0, 0.5), (1.0, 1.0, 0.25)):
-        depth = scene.DEPTH_NEAR + scene.DEPTH_SPAN * z
-        assert np.linalg.norm(row[:3]) >= depth * (1 - 1e-6)          # at least its depth from the eye
-        assert row[3] / (tan[1] * depth) == pytest.approx(0.1 * math.sqrt(alpha), rel=1e-5)
-        assert row[5] == 0.0
+def test_physical_radius_has_real_perspective_and_lifetime_does_not_shrink_it():
+    records = _record(z=-4.) + _record(z=-16., ident=2.) + _record(z=-4., alpha=.25, ident=3.)
+    rows = scene.bubble_instances(records)
+    assert rows[:,3] == pytest.approx((1.,1.,1.))
+    assert rows[:,6] == pytest.approx((1.,1.,.25))
+    assert rows[:,:3] == pytest.approx(np.asarray(records).reshape(-1,8)[:,:3])
+    tan = scene.camera(0,0,1.6)[2]
+    radii = rows[:,3] / (-rows[:,2] * tan[1])
+    assert radii[0] == pytest.approx(4*radii[1])
+    assert radii[0] == pytest.approx(radii[2])
 
 
-def test_fused_members_and_faded_bubbles_are_not_shells_and_clusters_carry_their_members():
-    _v, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    records = _record(x=-0.1, cluster=0.0) + _record(x=0.1, ident=2.0, cluster=0.0) + _record(alpha=0.0, ident=3.0)
-    assert len(scene.bubble_instances(records, tan)) == 0
-    clusters = scene.cluster_instances(records, (2.0, 0.0, 1.0, -1.0), tan)
-    assert clusters.shape == (1, scene.CLUSTER_FLOATS)
-    assert clusters[0, 12] == 2.0 and clusters[0, 8:12].tolist() == [0.0] * 4    # two members, third unused
+def test_fused_members_and_faded_bubbles_are_not_shells_and_clusters_carry_physical_members_and_alpha():
+    records = _record(x=-.8, cluster=1.) + _record(x=.8, ident=2., cluster=1., alpha=.25) + _record(alpha=0.,ident=3.)
+    assert len(scene.bubble_instances(records)) == 0
+    clusters = scene.cluster_instances(records,(2.,0.,1.,-1.))
+    assert clusters.shape == (1,scene.CLUSTER_FLOATS)
+    assert clusters[0,:4] == pytest.approx(records[:4])
+    assert clusters[0,4:8] == pytest.approx(records[8:12])
+    assert clusters[0,8:12].tolist() == [0.]*4
+    assert clusters[0,16:] == pytest.approx((1.,.25,0.))
 
 
-def test_ordinary_shells_are_world_fixed_and_no_synthetic_near_population_is_generated():
-    _v, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    record = _record(x=0.17, y=-0.31, z=0.0, radius=0.15, alpha=0.8)
-    now = scene.bubble_instances(record, tan, (0.0, 0.0))
-    turned = scene.bubble_instances(record, tan, (0.03, 0.0))
-    assert now.shape == (1, scene.SHELL_FLOATS) and now[0, 5] == 0.0
-    assert np.allclose(now[:, :4], turned[:, :4], atol=1e-4)
-    x0, _y0 = _on_screen(now, (0.0, 0.0), 1.6)
-    x1, _y1 = _on_screen(turned, (0.03, 0.0), 1.6)
-    assert abs(x0[0] - x1[0]) > 0.02
-    assert scene.bubble_instances((), tan).shape == (0, scene.SHELL_FLOATS)
+def test_ordinary_physical_shells_reach_shared_focus_without_synthetic_near_population():
+    _v, view, _tan, _p = scene.camera(0.,0.,16/9)
+    rows = scene.bubble_instances(_record(z=-3.) + _record(z=-20.,ident=2.))
+    def circle(shell,focus):
+        depth = -(shell[:3] @ np.asarray(view).reshape(3,3))[2]
+        return 22*max(focus-(depth-shell[3]),0)/max(-(shell[:3] @ np.asarray(view).reshape(3,3))[2]-shell[3],2.5)
+    assert rows[:,5].tolist() == [0.,0.]
+    assert circle(rows[0],4.) > 1.5
+    assert circle(rows[0],5.5) > circle(rows[0],4.)
+    assert circle(rows[1],5.5) == 0.
+    assert scene.bubble_instances(()).shape == (0,scene.SHELL_FLOATS)
 
 
-def test_only_authentic_foreground_bubbles_are_eligible_for_depth_based_shared_defocus():
-    _v, view, tan, _p = scene.camera(0.0, 0.0, 16 / 9)
-    near = scene.bubble_instances(_record(z=0.05, radius=0.17), tan)
-    far = scene.bubble_instances(_record(z=0.5, radius=0.17, ident=2.0), tan)
-    to_view = np.asarray(view).reshape(3, 3)
-    def front_depth(shell):
-        return -(shell[:3] @ to_view)[2] - shell[3]
-    def circle(shell, focus):
-        return 22.0 * max(focus - front_depth(shell), 0.0) / max(focus - 2.5, 0.1)
-    assert near.shape == (1, scene.SHELL_FLOATS) and near[0, 5] == 0.0
-    assert scene.DEPTH_NEAR < 6.0                     # physically extends the ordinary population toward the lens
-    assert scene.DEPTH_NEAR + scene.DEPTH_SPAN == pytest.approx(32.0)  # far plane/scene retained
-    assert circle(near[0], 4.0) > 1.5                # normal camera focus can defocus an authentic close bubble
-    assert circle(near[0], 5.5) > circle(near[0], 4.0)
-    assert circle(far[0], 5.5) == 0.0               # distant bubbles do not enter the near layer
-
-
-def test_glint_proxies_follow_bubbles_toward_the_light():
-    view_to_world, _w, tan, _p = scene.camera(0.0, 0.0, 1.6)
-    shells = scene.bubble_instances(_record(), tan)
-    proxies = scene.glint_proxies(shells, (0.0, 1.0, 0.0), 3.0)
-    assert len(proxies) == 1                                          # no invented foreground cohort
-    assert proxies[0, 1] > shells[0, 1] and proxies[0, 4] == 3.0
-
-
-def _on_screen(world, pose, aspect):
-    _v, world_to_view, _t, projection = scene.camera(*pose, aspect)
-    view = np.asarray(world)[:, :3] @ np.asarray(world_to_view).reshape(3, 3)
-    front = view[:, 2] < 0.0
-    return (np.where(front, projection[0] * view[:, 0] / -view[:, 2], 9.0),
-            np.where(front, projection[5] * view[:, 1] / -view[:, 2], 9.0))
-
-
-def test_bubbles_stay_fixed_in_the_world_as_the_camera_turns():
-    _v, _w, tan, _p = scene.camera(0.0, 0.1, 16 / 9)
-    record = _record(x=0.3, y=0.1)
-    start = scene.bubble_instances(record, tan, (0.0, 0.1))[0, :3]
-    for turn in (0.02, -0.05, 0.08):                                 # small turns: no wrap yet
-        assert np.allclose(scene.bubble_instances(record, tan, (turn, 0.1))[0, :3], start, atol=1e-4)
-    x0, _y0 = _on_screen(scene.bubble_instances(record, tan, (0.0, 0.1)), (0.0, 0.1), 16 / 9)
-    x1, _y1 = _on_screen(scene.bubble_instances(record, tan, (0.05, 0.1)), (0.05, 0.1), 16 / 9)
-    assert x1[0] != pytest.approx(x0[0], abs=0.02)                   # and so it moves across the view
-
-
-@pytest.mark.parametrize("aspect, tilt", [(16 / 9, 0.0), (16 / 9, 0.45), (1.0, -0.4), (3.0, 0.3)])
-def test_turning_a_full_circle_never_wraps_a_bubble_on_screen(aspect, tilt):
-    """An endless field: each bubble returns on the far side where no one sees it, also near the top of a pitched
-    view (the view spans more azimuth there)."""
-    _v, _w, tan, _p = scene.camera(0.0, tilt, aspect)
-    xs, ys, zs = np.meshgrid(np.linspace(-1.25, 1.25, 9), np.linspace(-1.3, 1.3, 9), (0.0, 1.0))
-    n = xs.size
-    records = np.column_stack([xs.ravel(), ys.ravel(), zs.ravel(), np.full(n, 0.1), np.ones(n), np.zeros(n),
-                               np.arange(n), np.full(n, -1.0)]).ravel()
-    previous = None
-    for turn in np.linspace(0.0, 2.0, 721):
-        here = _on_screen(scene.bubble_instances(records, tan, (turn, tilt)), (turn, tilt), aspect)
-        if previous is not None:
-            seen = ((np.abs(previous[0]) < 1.15) & (np.abs(previous[1]) < 1.15)) | (
-                (np.abs(here[0]) < 1.15) & (np.abs(here[1]) < 1.15))
-            assert np.hypot(here[0] - previous[0], here[1] - previous[1])[seen].max(initial=0.0) < 0.06
-        previous = here
+def test_glint_proxies_follow_physical_bubbles_and_lifetime_opacity():
+    rows = scene.bubble_instances(_record() + _record(alpha=.25,ident=2.))
+    proxies = scene.glint_proxies(rows,(0.,1.,0.),3.)
+    assert len(proxies) == 2
+    assert np.all(proxies[:,1] > rows[:,1])
+    assert proxies[:,4] == pytest.approx((3.,.75))
 
 
 @pytest.mark.parametrize("light_type", ["Sunlit Surface", "Deep Light"])
@@ -275,7 +222,7 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
                  "glCreateVertexArrays", "glCreateFramebuffers", "glCreateRenderbuffers", "glTextureStorage2D",
                  "glTexStorage2D", "glTextureStorage2DMultisample", "glNamedBufferStorage"):
         monkeypatch.setattr(gl, name, forbidden)
-    turned = _snapshot(extruded_bubble_turn=0.4, extruded_bubble_tilt=0.2)
+    turned = _snapshot(extruded_bubble_turn=0.4, extruded_bubble_tilt=0.2, extruded_bubble_scene_scale=1.7)
     pictures = [capture.render(host, frame_) for frame_ in (snapshot, turned, snapshot)]
     assert renderer._target._names == names and renderer._target.allocation == allocation
     assert np.abs(pictures[0] - pictures[0][0, 0]).max() > 0           # it draws
@@ -315,6 +262,38 @@ def test_deep_light_softness_changes_native_shaft_pixels(target):
     sharp = capture.render(host, at(0.))
     soft = capture.render(host, at(1.))
     assert np.abs(soft - sharp).mean() > .5  # previous consumer produced byte-identical images
+
+
+@pytest.mark.qt
+def test_camera_changes_only_projection_and_keeps_uploaded_world_populations_and_stream(target,monkeypatch):
+    from rendering.quick.visualizer.implementations.extruded_bubble import QuickExtrudedBubbleRenderer, _Instances, _Uniforms
+    capture,host=target
+    renderer=QuickExtrudedBubbleRenderer();host._implementations['extruded_bubble']=renderer
+    uploads={};streams=[]
+    upload=_Instances.upload
+    def observed(instance,data):
+        for name in ('_shells','_wakes','_clusters','_proxies'):
+            if instance is getattr(renderer,name):uploads.setdefault(name,[]).append(np.array(data,copy=True))
+        return upload(instance,data)
+    monkeypatch.setattr(_Instances,'upload',observed)
+    uniforms=_Uniforms.set
+    def observed_uniforms(bank,program,mapping):
+        if 'uStreamWorld' in mapping:streams.append(mapping['uStreamWorld'])
+        return uniforms(bank,program,mapping)
+    monkeypatch.setattr(_Uniforms,'set',observed_uniforms)
+    snapshot=_snapshot()
+    state=dataclasses.replace(snapshot.logical.mode_state,
+        bubbles=_record(z=-8.)+_record(x=.5,z=-8.,ident=2,cluster=3)+_record(x=2.,z=-8.,ident=3,cluster=3),
+        clusters=(2.,1.,2.,-1.),wakes=(0.,0.,-8.,1.,1.,.3,.7,1.),stream=(.6,.8,0.))
+    for turn,tilt,scale,pan in ((0.,0.,1.,0.),(.7,-.4,.6,.2),(-1.,.5,2.,-.1)):
+        parameters={**dict(state.parameters),'extruded_bubble_turn':turn,'extruded_bubble_tilt':tilt,
+                    'extruded_bubble_scene_scale':scale,'extruded_bubble_scene_pan_x':pan}
+        current=dataclasses.replace(state,parameters=parameters)
+        capture.render(host,dataclasses.replace(snapshot,logical=dataclasses.replace(snapshot.logical,mode_state=current)))
+    assert set(uploads)=={'_shells','_wakes','_clusters','_proxies'}
+    for samples in uploads.values():
+        assert len(samples)==3 and all(np.array_equal(samples[0],row) for row in samples[1:])
+    assert streams and all(tuple(v)==(.6,.8,0.) for v in streams)
 
 
 @pytest.mark.qt
@@ -397,6 +376,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
             gl.glVertexAttrib4f(0, 0.0, 0.0, -5.0, radius)      # straight ahead
             gl.glVertexAttrib4f(1, 1.0, 0.0, 0.5, 0.0)
+            gl.glVertexAttrib1f(2, 1.0)                    # explicit lifetime attribute for ordinary shells
             gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, 1)
             gl.glFinish()
             pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)

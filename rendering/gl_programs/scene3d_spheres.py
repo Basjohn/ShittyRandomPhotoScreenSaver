@@ -51,6 +51,21 @@ Vec3 = tuple[float, float, float]
 SCENE3D_SPHERES_GLSL = """
 #ifndef SCENE3D_SPHERES_GLSL
 #define SCENE3D_SPHERES_GLSL
+float sceneNearCircle(float frontDepth, float focus, float aperture, float pixelScale) {
+    return pixelScale * (aperture / 3.0) * max(focus - frontDepth, 0.0) / max(frontDepth, 2.5);
+}
+// Conservative pinhole bounds, including near-plane/eye-inside spheres. A near
+// crossing uses a full-screen quad; actual intersections/depth reject empty pixels.
+vec4 sceneSphereClipCorner(vec3 centre, float reach, vec2 corner, mat4 projection) {
+    float depth = -centre.z;
+    if (reach <= 0.0 || depth + reach <= 0.05) return vec4(2.0, 2.0, 2.0, 1.0);
+    if (depth - reach <= 0.05) return vec4(corner, 0.0, 1.0);
+    float denominator = depth * depth - reach * reach;
+    vec2 root = sqrt(max(centre.xy * centre.xy + denominator, vec2(0.0)));
+    vec2 slopes = (centre.xy * depth + corner * reach * root) / denominator;
+    vec2 ndc = slopes * vec2(projection[0][0], projection[1][1]) - projection[2].xy;
+    return vec4(clamp(ndc, vec2(-1.0), vec2(1.0)), 0.0, 1.0);
+}
 vec3 sceneSphereCorner(vec3 centre, float radius, float blur, vec2 corner) {
     float reach = radius + max(blur, 0.0);
     float d = length(centre);
@@ -128,8 +143,8 @@ bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tS
     normal = vec3(0.0, 0.0, 1.0);
     for (int i = 0; i < 64; ++i) {
         float d = sceneClusterDistance(ray * t, spheres, count, blend);
-        closest = min(closest, d / max(t, 1e-4));
-        if (d < 1e-4 * t) {
+        closest = min(closest, abs(d) / max(t, 1e-4));
+        if (abs(d) < 1e-4 * max(t, 1.0)) {
             vec2 e = vec2(1.0, -1.0) * 1e-4 * max(t, 1.0);
             vec3 p = ray * t;
             normal = normalize(e.xyy * sceneClusterDistance(p + e.xyy, spheres, count, blend)
@@ -139,7 +154,7 @@ bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tS
             closest = 0.0;
             return true;
         }
-        t += d;
+        t += abs(d);  // an eye/near plane inside the union traces its exit surface
         if (t > tEnd) break;
     }
     return false;

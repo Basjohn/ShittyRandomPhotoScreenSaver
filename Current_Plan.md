@@ -9,7 +9,7 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6–14; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+§6–15; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -212,78 +212,66 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
 
 #### EB-B — Real world, camera, entry/death and near field
 
-- [ ] **First coherent geometry checkpoint: one physical world metric and population domain.** Keep the existing
-  simulation as owner; define fixed world position/radius before contacts, snapshots and wake capture. Share a
-  small pure geometry definition with GPU procedural placement, not another scene manager. Correct spawn/source,
-  upstream entry, exit and stream advection together; remove camera-dependent remapping from packing. Preserve
-  authored count ceilings without invisible sector copies or count multipliers. Test useful full-orbit coverage
-  at actual sparse/dense settings; sparse authoring may leave sparse views. Do not demand constant visible counts
-  by moving identities with the camera. Resolve reacted radius once before contacts; fix broadphase reach for
-  expanded extents and continuous fused offsets through contraction/expansion. Include free chains/snow/world
-  stream direction and exact retiring wake anchors in this checkpoint, since leaving their camera wraps in place
-  would create competing worlds. Then carry coherent material alpha, common projection and union near DoF through
-  their existing render owners. See report §14 for exact current seams and falsifiers; do not patch contact reach
-  or disable wrapping in isolation.
-- [ ] Specify a physically fixed **360° covered world** inside which the camera can look freely. Current CPU
-  `_wrapped_turn` relocates shells/clusters/wakes with camera yaw; GPU `wrapTurn` independently relocates free
-  chains/snow. Tilt/zoom also enter volume construction. Preserve SAME-ID world coordinates across yaw, tilt,
-  pan, scale, Auto Rotate and aspect changes; rotate/project the view only. Do not simply disable wrapping and
-  accept empty angles, copy populations, or reintroduce fixed/camera-following giant cohorts.
+- [ ] **Awaiting Validation — fixed physical world and real perspective.** Inspect the candidate against report §15:
+  the simulation owns physical xyz/radius in a fixed water domain; shells/wakes/unions pack those values directly,
+  and GPU chains/snow/specks use fixed world positions and a common world stream. Camera pose, zoom and aspect
+  must never choose births, relocate identities or resize physical geometry. Check the full orbit at authored
+  sparse/dense settings, source entry/exit and real-music movement at both resolutions. Global count ceilings stay
+  global: no hidden sector copies or multipliers, and sparse views may legitimately remain sparse. Uniform/pixel
+  tests and frozen real-snapshot views establish bounded mechanism proof, not camera/art acceptance.
 - [ ] Define EB's own camera placement/centring, pivot, movement and usable angle/zoom range against the examples.
-  Its open volume needs substantially more freedom than Neon Lake's basin composition; reuse shared input/pose
-  ownership without inheriting Neon's limits. Extend the shared camera primitive if needed. Keep only justified
-  clipping/resource/numerical constraints; prove useful recentering and coverage with fixed-world identity tests
-  and native all-angle captures, including the surface, abyss, down and diagonal stream compositions.
-- [ ] Replace view-depth-scaled bubble size with a coherent physical size/depth relationship. Current near/far
-  mapping cancels perspective. Prove real near-large/far-small perspective, parallax, scene pan/zoom semantics,
-  clipping and response amplitude together. Retire false seam-only/constant-projected-size oracles when source
-  implementation is authorized; do not weaken genuine admission/depth/continuity gates.
-- [ ] Align collision/contact geometry with the **current reacted radius** at the physical-world owner. Collision
-  broadphase, reach, bounce separation and fuse offsets currently use nominal base radii even while shells contract
-  or expand. This can produce contact between visibly separated tiny shells or let expanded shells overlap, and is
-  more exposed by the restored size range. Derive one physical radius for collision/render/wake geometry and a
-  broadphase that cannot miss large extents; verify identity, bounded cost, no jitter and stable fused rest/expansion.
-  Do this with world metric correction; scaling contact reach alone cannot fix the present camera-dependent mapping.
-- [ ] Establish **readable depth before view-aware overlap intervention** (operator mock/product comparison,
-  2026-10-20). Preserve convincing projected overlaps: the copper mock shows near softness, quieter distant
-  detail and clear size/depth layers, whereas the product has competing sharp rims, bright interiors and crowded
-  shell stacks. Correct world/source placement, physical perspective, transparency, near DoF and depth attenuation
-  first; compare matched near/mid/far crossings with the mock. Do not automatically react to every projected
-  intersection or use popping to conceal the renderer defect. Then design a smart join/pop/bounce policy for
-  persistent unreadable crossings, including depth-separated surfaces when justified. Derive projection from
-  the existing live camera owner, not a camera-following
-  population. Track stable pairs, projected extents, depth/relative motion and overlap persistence; avoid repeated
-  reactions to brief crossings or count churn. Never fuse distant surfaces into a disconnected union or teleport
-  geometry to satisfy screen overlap. Resolve via continuous steering/approach and/or gentle opacity retirement
-  according to the authored collision mix. An explicit opt-in control is allowed if needed after the policy is
-  demonstrated; do not silently replace world-space contacts. Pops must be extremely gentle opacity fades,
-  without radius implosion/teleport. Prove fixed-camera crossings first; much later, challenge Auto Rotate by
-  distinguishing camera-induced crossings from bubble motion and testing all-angle continuity/cost.
-- [ ] Carry logical lifetime alpha as **material opacity**, independently of radius. Ordinary shells currently
-  shrink by `sqrt(alpha)` and receive hardcoded opacity 1; fused members lack coherent fade. Prove transparent
-  entry/pop/exit, stable identities and orbit with no sudden already-opaque arrivals or resurrected compacted slots.
-  Review the current 0.35 s pop and pop-only +25% nominal expansion against extremely gentle opacity-only retirement;
-  preserve musical radius response independently. Define coherent opacity across the union, not first-member
-  alpha or alpha-scaled member geometry; update parent/bead raster safeguards when physical opacity replaces shrinking.
-- [ ] Route fused clusters through **depth-selected shared near DoF** with coherent SDF union and no duplicate
-  draw. Prove ordinary/fused near passes, near-plane safety, focus/aperture, orbit and absence of synthetic giant
-  cohorts. Natural near coverage/softness remains unaccepted after removal of the rejected special populations.
-- [ ] Repair the proved **ordinary/fused projection mismatch** as part of physical geometry. Native frozen-sphere
-  coverage is circular in the ordinary pass but 1.269× elongated at the same off-axis position in the cluster
-  pass. Keep common silhouette/ray/depth conventions and valid bounds, without clipping the ellipse in a smaller
-  quad or distorting/refitting the world. Verify center/edge/near-plane cases and actual clusters. The operator
-  screenshot's exact bubble class remains unknown; the native component discrepancy is independently proved.
+  Current yaw/pitch observe the fixed world, but pan remains an off-axis frustum and there is no translated camera
+  or independently authored orbit pivot yet. Do not claim translational parallax from lens shift. Reuse the shared
+  pose/input owner with EB-specific freedom, not Neon's basin limits. Prove useful recentering and coverage for
+  surface, abyss, down and diagonal compositions without moving scene populations.
+- [ ] **Awaiting Validation — reacted physical contacts and continuous unions.** Verify ordinary/union/big/small
+  contacts with the same current radii used by snapshots and wakes, including large extents across grid cells.
+  Fusion stores the admitted connected edge layout and follows the existing smoothed radii; it must not snap
+  centers or disconnect on contraction. Bounce continues gradually after a once-per-contact event choice and
+  moves existing clusters as a group. Check repeated grazing contacts, third-member admission/removal, collision
+  mixes/scopes, stable mass center, dense cost and absence of jitter in actual motion, not only numeric fixtures.
+- [ ] **Water-boundary clearance and retirement.** The fixed center domain's top is below the water plane, but
+  expanded shells can still cross that plane: current exit checks wait for the whole sphere to pass above it.
+  Admit physical sources with current-radius clearance and define gentle retirement on actual surface breach;
+  test rising/downward/diagonal streams, initial fill and musical expansion near the surface. Keep the world
+  domain/source independent of the camera; do not fix this by hiding a lens region or scaling geometry.
+- [ ] Establish **readable depth before view-aware overlap intervention**. Preserve convincing projected crossings
+  like the copper mock; competing sharp rims/bright interiors and weak attenuation remain fidelity failures.
+  Review world/source placement, perspective, transparency, near softness and distance attenuation together.
+  Then design stable-pair join/pop/bounce handling for persistent unreadable crossings, including separated depth
+  layers where justified. Use the existing live camera's derived projection; never fuse distant surfaces into a
+  disconnected union, teleport geometry or automatically react to every projected intersection. Prefer continuous
+  steering/approach and extremely gentle opacity retirement according to authored collision mix. An explicit
+  opt-in is allowed if justified after demonstration. Fixed-camera proof precedes the much later Auto Rotate
+  challenge, which must distinguish camera-induced crossings from bubble motion and remain bounded in cost.
+- [ ] **Awaiting Validation — material lifetime and gentle pops.** Current ordinary/union instances carry opacity
+  independently of radius; unions blend member opacity with their surface weights. Pops use a 2.4 s smooth
+  opacity retirement with no pop-only radius expansion, retaining musical size separately. Inspect actual birth,
+  pop, exit and cluster-member removal: no opacity brightening, shell resurrection, neck snap, geometric implosion,
+  parent/bead size violation or detached/rebound wake. The removed `sqrt(alpha)` sizing must not return.
+- [ ] **Awaiting Validation — one projection and shared near DoF.** Ordinary/fused shells now use the same pinhole
+  rays/bounds/depth, with finite near-plane/eye-inside handling. Fused near surfaces use the existing DefocusLayer
+  and one depth-selected route. Verify normal/reflected/transmitted output, center/edge/near-plane views, partial
+  member fades and focus/aperture changes in real scenes. Native checks cover common silhouette conventions and
+  exclusive layer admission; true pinhole off-axis elongation is not by itself a new refraction defect or accepted
+  art. Focus/aperture and resolution-scaled lens budgets require visual review at both resolutions. Preserve
+  prepared allocation/state restoration through camera gestures; no new lens-attached population.
+- [ ] **Bounded transport cleanup after the physical checkpoint:** retire the disabled `near_bubbles` snapshot/frame
+  field and its validation/copy path. The renderer does not consume it; do not preserve an alternate population
+  schema or use its always-empty value as proof that physical placement is correct. Preserve genuine count/world
+  invariance and retirement tests while removing stale field-only oracles.
 
 #### EB-C — Stream, drift, beads, wakes, rays and emission
 
 - [ ] Establish **proper world-space stream sources**: simulation-owned source points/regions, direction/spread,
-  birth distribution, advection and lifetime for the applicable bubble/chain/particle families. A global direction
-  plus procedural screen columns is not sufficient if it cannot reproduce the examples' coherent streams.
+  birth distribution, advection and lifetime for the applicable bubble/chain/particle families. The candidate has
+  actual fixed-volume upstream faces and world procedural paths; expose the point/region controls and localized
+  authored streams needed by the examples rather than treating a global box inflow as full target parity.
   Make needed source controls authorable through canonical Settings, preserving one logical clock and stable
   emitters. Prove source location/direction during orbit, musical acceleration and collapsed slow idle.
 - [ ] Give stream speed and drift a demonstrably broad, smooth musical response through quiet and saturated
   passages. Trace displacement of stable IDs, direction and optical flow; source values alone are insufficient.
-  Resolve the extra shared-level/follower attenuation and raw-time sway ownership without adding another clock.
+  Audit the retained response followers and world-unit conversion in actual pixels without adding another clock.
 - [ ] Prove free chains' complete birth/death fade, curved **15% wider** paths and common world stream direction.
   Preserve the existing ceil/fractional-opacity allocation; inspect its actual entry/exit and lifetime pixels.
   Diagnose heading divergence under camera motion separately from intended curvature. Keep chains distinct

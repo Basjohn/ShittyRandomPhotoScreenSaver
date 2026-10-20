@@ -22,7 +22,7 @@ sphere. Import-safe GLSL plus CPU mirrors (no GL).
   one Fresnel serves every crossing.
 * ``sceneHollowSphereTrace(origin, ray, outerRadius, innerRadius, iors, paths)``: a ray traced through a hollow
   sphere (a shell between two concentric spheres round the origin; ``iors`` = (outside, shell, core)), from an
-  ``origin`` just outside it. At every interface the ray splits by exact Fresnel: the reflected share is handed back
+  ``origin`` in the outside, shell or core medium. At every interface the ray splits by exact Fresnel: the reflected share is handed back
   as a path (its direction, weight) and the refracted share is followed; past the critical angle the ray is totally
   reflected and followed without loss, so light that enters a glass wall near the silhouette is guided round inside
   it (the bright, warped band of a glass bubble) and the edge of the core shows as an inner line. The ray that
@@ -89,7 +89,8 @@ float sceneShellHit(vec3 o, vec3 d, float r) {
 int sceneHollowSphereTrace(vec3 origin, vec3 ray, float outerRadius, float innerRadius, vec3 iors, out vec4 paths[8]) {
     for (int i = 0; i < 8; ++i) paths[i] = vec4(0.0);
     vec3 o = origin, d = normalize(ray);
-    int region = 0;                // 0 outside, 1 shell, 2 core
+    float startRadius = length(origin);
+    int region = startRadius >= outerRadius ? 0 : (innerRadius > 0.0 && startRadius < innerRadius ? 2 : 1);
     float weight = 1.0;
     int count = 0;
     for (int step = 0; step < 12; ++step) {
@@ -207,7 +208,9 @@ def _shell_hit(o, d, r):
 def scene3d_hollow_sphere_trace(origin, ray, outer_radius, inner_radius, iors):
     """CPU mirror of ``sceneHollowSphereTrace``: a list of (direction, weight)."""
     o, d = tuple(origin), _normalize(ray)
-    region, weight, paths = 0, 1.0, []
+    start_radius = math.sqrt(sum(v*v for v in o))
+    region = 0 if start_radius >= outer_radius else (2 if inner_radius > 0 and start_radius < inner_radius else 1)
+    weight, paths = 1.0, []
     for _step in range(12):
         t_outer = _shell_hit(o, d, outer_radius) if region <= 1 else -1.0
         t_inner = _shell_hit(o, d, inner_radius) if region >= 1 and inner_radius > 0.0 else -1.0

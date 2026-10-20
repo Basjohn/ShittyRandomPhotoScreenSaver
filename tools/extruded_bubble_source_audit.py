@@ -23,27 +23,21 @@ import numpy as np
 from rendering.gl_programs import extruded_bubble_scene as scene
 
 
-def _rec(*, x=0.13, y=0.04, z=0.5, radius=0.10, alpha=1.0, ident=1):
+def _rec(*, x=1.3, y=0.4, z=-10., radius=.9, alpha=1.0, ident=1):
     return (x, y, z, radius, alpha, 0.0, float(ident), -1.0)
 
 
 def audit() -> dict:
     _camera, _inverse, tan, _proj = scene.camera(0.0, 0.0, 16 / 9)
     source = _rec()
-    # A physical point's WORLD position must not depend on the camera's yaw. This one does.
-    sample_turns = tuple(float(x) for x in np.linspace(0.0, 2.0, 361))
-    world = np.array([scene.bubble_instances(source, tan, (yaw, 0.0))[0, :3] for yaw in sample_turns])
-    steps = np.linalg.norm(np.diff(world, axis=0), axis=1)
-    moved = np.linalg.norm(world - world[0], axis=1)
-    # Depth-space scaling cancels perspective (r_world = r_normalized * depth * tanY).
-    near = scene.bubble_instances(_rec(z=0.0), tan)[0]
-    far = scene.bubble_instances(_rec(z=1.0, ident=2), tan)[0]
-    projected = lambda row, depth: float(row[3] / (tan[1] * depth))
-    near_r = projected(near, scene.DEPTH_NEAR)
-    far_r = projected(far, scene.DEPTH_NEAR + scene.DEPTH_SPAN)
-    # The logical alpha is not transported as a material-opacity attribute: fade scales radius by sqrt(alpha).
-    opaque = scene.bubble_instances(_rec(alpha=1.0), tan)[0]
-    fading = scene.bubble_instances(_rec(alpha=0.25), tan)[0]
+    # Packing now has no camera inputs. Actual renderer/GPU invariance is tested
+    # independently; these read-only receipts are not pixel acceptance.
+    opaque = scene.bubble_instances(source)[0]
+    near = scene.bubble_instances(_rec(z=-4.))[0]
+    far = scene.bubble_instances(_rec(z=-16., ident=2))[0]
+    near_r = float(near[3] / (tan[1] * 4.))
+    far_r = float(far[3] / (tan[1] * 16.))
+    fading = scene.bubble_instances(_rec(alpha=.25))[0]
     # The old second use of the Particles Range has a source candidate fix; the caller already gives ranged values.
     params = {'extruded_bubble_particles': (0.2, 0.8)}
     particle_quiet, bright_quiet = scene.speck_amount(params, 0.2)
@@ -51,22 +45,22 @@ def audit() -> dict:
     result = {
         'evidence_scope': 'static CPU geometry and Settings mapping; NOT actual rendered frames/audio acceptance',
         'camera_dependence': {
-            'problem': 'world-space position changes with camera yaw due to angle-period wrap',
-            'max_displacement_world_units': float(moved.max()),
-            'largest_one_step_displacement_world_units': float(steps.max()),
-            'offending_source': 'rendering/gl_programs/extruded_bubble_scene.py: _wrapped_turn, bubble_instances, wake_instances, cluster_instances',
+            'state': 'physical xyz/radius packed directly; no camera arguments or wrapping',
+            'packed_world_xyz_radius': opaque[:4].tolist(),
+            'owner': 'simulation physical world; rendering/gl_programs/extruded_bubble_scene.py packing',
             'requires': 'fixed world positions across camera turn and tilt; no camera-following reinstallation',
         },
         'perspective': {
-            'problem': 'pixel radius cancels depth: same normalized radius near/far',
-            'near_depth_units': scene.DEPTH_NEAR,
-            'far_depth_units': scene.DEPTH_NEAR + scene.DEPTH_SPAN,
+            'state': 'equal physical radii retain real perspective',
+            'near_depth_units': 4.,
+            'far_depth_units': 16.,
             'near_projected_radius_normalized': near_r,
             'far_projected_radius_normalized': far_r,
             'requires': 'true 3D size-depth/parallax, without synthetic giant cohorts',
         },
         'fade': {
-            'problem': 'bubble alpha alters geometric radius, is not sent to regular shell material',
+            'state': 'lifetime opacity is a separate instance attribute',
+            'instance_material_opacity': float(fading[6]),
             'logical_alpha': 0.25,
             'world_radius_ratio_to_opaque': float(fading[3] / opaque[3]),
             'requires': 'separate physical size and material opacity; real birth/death transparency, including fused clusters',
@@ -80,8 +74,8 @@ def audit() -> dict:
             'requires': 'capture of actual quiet/music counts and pixels; do not label candidate visually accepted',
         },
         'bead_direction': {
-            'problem': 'each chain gets a camera-relative wrapping rotation independent of fixed stream orientation',
-            'offending_source': 'rendering/gl_programs/extruded_bubble_program.py: _BEAD_GLSL.wrapTurn / turnAbout',
+            'state': 'procedural chains/snow/wakes inhabit the fixed world; transverse axes come from the same pure world geometry',
+            'owner': 'extruded_bubble_geometry.stream_basis; renderer uniforms and production BEAD_VERTEX',
             'requires': 'coherent stream vector in world coordinates and stable chain positions during orbit',
         },
         'acceptance': 'Every item remains [~]. Need operator OR visual-capable agent with offscreen render/capture; GLSL compilation and synthetic output are not visual proof.',

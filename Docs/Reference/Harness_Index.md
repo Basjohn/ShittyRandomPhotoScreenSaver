@@ -391,7 +391,7 @@ Do not regenerate goldens merely because implementation ownership changed. For B
 Use bounded, explicit sidecars for the open EB investigation; production never imports these tools. They write
 only requested evidence directories, preserve Settings/presets, and restore process-local observation patches.
 Native NVIDIA/offscreen frames are pixel evidence, not physical/display/listening acceptance. The full findings,
-measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–12; work stays in
+measurement definitions and known tool limits are in the Extruded Bubble historical ledger §6–15; work stays in
 `Current_Plan.md` §4B. Prefer `anything_mixed2.jsonl`'s opening seconds and accepted 2D Bubble as a positive
 response comparator, then quiet→loud/heavy/soft recordings.
 
@@ -403,12 +403,17 @@ response comparator, then quiet→loud/heavy/soft recordings.
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_rays --preset 7 --at 3
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output logs/eb_forensics/new_held_bands.json
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output logs/eb_forensics/new_coverage
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output logs/eb_forensics/new_world --preset 7 --at 4 --size 1672x941
 ```
 
 Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
 without GL. Stable IDs, alpha/cluster/pop exclusions and body followers distinguish actual response from population
 churn. Native paired zero-swell frames show whether radius reaches pixels; they do not segment a particular
-silhouette. Projected radius/centre fields are first-order estimates. `--passes` serializes draw timing and must not
+silhouette. Projected radius/centre fields are first-order estimates only for spheres fully in front of the near
+plane; eye-inside/near/behind cases retain world instances with an explicit regime flag and no radius estimate.
+Mature projection aggregates also require conservative frustum candidacy; this still does not segment a visible
+silhouette. Do not accept the old world-response capture's unqualified near-plane extrema as huge musical growth.
+`--passes` serializes draw timing and must not
 be compared to independent total-frame timing as if it were an ordinary frame budget.
 
 `source_receipt.json` records relevant source hashes and a tracked-diff digest before replay; a changed source
@@ -425,9 +430,18 @@ its central RGB mean is a fixed-region brightness observation, not segmented sha
 The held-band comparison selects an actual hot vocal frame but clears further discrete events/transient lanes;
 it tests steady support rather than repeatedly firing that frame's snare. It is not continuous music. Optional
 `--simulation-ref <commit>` loads only that simulation module from Git into the tool process, with its compiled
-hash recorded; other source stays current. It never changes checkout state. The coverage probe instead draws
+hash recorded; other source stays current. It never changes checkout state. It rejects pre-world-metric simulation
+overrides; reproduce old normalized-metric receipts with their archived tool rather than mix coordinate systems.
+The coverage probe instead draws
 one frozen primitive through unmodified ordinary/cluster shaders, with coverage diagnostic/OIT readback and
 center/edge placement. It isolates silhouette conventions, not the identity of a bubble in an operator screenshot.
+
+The world probe freezes one real snapshot, then renders twelve yaw views plus tilt/zoom/pan interventions through
+the production host. It retains the exact world bubble/wake/cluster records, settings, clip/source hashes and native
+PNGs/contact sheet. Global count and conservative ordinary-frustum candidates are distinct; those estimates do
+not count visible pixels, fused surfaces or procedural populations. No simulation advances between views, so this
+does not validate Auto Rotate, temporal continuity or musical timing. Cold compilation and camera changes also
+make its GPU query values unsuitable as a controlled product benchmark. Use fresh output directories.
 
 `--set KEY=JSON` is an in-memory override. Ordinary replay serves recorded post-DSP bands, so technical overrides
 cannot demonstrate live Sensitivity/Floor behavior. Optional `--reanalyze-pcm` explicitly recomputes production

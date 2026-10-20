@@ -15,6 +15,8 @@ source=(subprocess.check_output(['git','show',f'{args.simulation_ref}:{path}']) 
 if args.simulation_ref:
     module=types.ModuleType(name);module.__file__=str(root/path);sys.modules[name]=module
     exec(compile(source,module.__file__,'exec'),module.__dict__)
+if args.simulation_ref and b'extruded_bubble_geometry import' not in source:
+    raise ValueError('Historical simulation uses the old normalized metric; run its archived tool to reproduce those receipts')
 from dataclasses import replace,asdict
 from unittest.mock import patch
 import numpy as np
@@ -57,7 +59,15 @@ result['extruded_bubble_settings']={k:v for k,v in activation.resolved_config.it
 result['extruded_bubble_settings'].update(extruded_bubble_large_bubbles=(0,4),extruded_bubble_mid_bubbles=(20,50))
 with patch.object(ExtrudedBubbleFrameRuntime,'advance',observe_eb):
     state=driver.replay_clip(held,'extruded_bubble',settings={**activation.resolved_config,'extruded_bubble_large_bubbles':(0,4),'extruded_bubble_mid_bubbles':(20,50)})['logical_series'][-1].mode_state
-records=[(classes[int(r[6])],float(r[3])*941/2) for r in np.asarray(state.bubbles).reshape(-1,8) if r[4]>.999 and r[7]<0]
+from rendering.gl_programs import extruded_bubble_scene as scene
+parameters=activation.resolved_config
+_,world_to_view,tan,_=scene.camera(parameters['extruded_bubble_turn'],parameters['extruded_bubble_tilt'],1672/941,parameters['extruded_bubble_scene_scale'])
+records=[]
+for r in np.asarray(state.bubbles).reshape(-1,8):
+    depth=-float((r[:3]@np.asarray(world_to_view).reshape(3,3))[2])
+    if r[4]>.999 and r[7]<0 and depth>0:
+        records.append((classes[int(r[6])],float(r[3])*941/(2*tan[1]*depth)))
+result['projection_scope']='first-order radius estimate for positive-depth identities; not segmented visible silhouettes'
 result['extruded_bubble']=summary(records);result['followers']=followers
 args.output.write_text(json.dumps(result,indent=2))
 print(json.dumps({k:result[k] for k in ('scope','simulation_override','bands','bubble','extruded_bubble','followers')},indent=2))
