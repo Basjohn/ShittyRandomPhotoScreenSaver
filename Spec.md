@@ -308,6 +308,11 @@ independently of camera pose; projection and material lifetime opacity must not 
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble_Target.md`;
 measured failures and native 2D/EB comparison: the Extruded Bubble ledger in `Docs/Historical_Bugs/`.
 
+EB view-aware overlap interactions supplement physical contacts using the existing camera's derived projection;
+they must not redefine the population around the camera or teleport separated geometry. Pops are extremely
+gentle opacity fades. Fixed-camera crossing proof comes before the later Auto Rotate challenge; detailed
+interaction and class/count acceptance gates remain in the focused target and current plan.
+
 Future 3D modes/effects should therefore begin by inventorying the files above, then add the smallest missing substrate
 needed by the real vertical feature. Do not cargo-cult Block Spins' transition-specific projection/math, and do not distort
 an existing helper merely to claim reuse.

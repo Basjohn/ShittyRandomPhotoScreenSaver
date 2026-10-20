@@ -9,7 +9,7 @@ Do not duplicate the plan. `[ ]` means work remains; `[~]` means failed or unacc
 **Authorized now (operator 2026-10-20): implement the evidence-backed Extruded Bubble recovery, reactivity first;
 minimal/no subagents.** Preserve per-preset authoring and a real 3D scene observed by the camera: no lens-attached
 cohorts or camera-driven spawning. Continue between verified checkpoints. Latest report: `Docs/Historical_Bugs/Extruded_Bubble_Physical_Reactivity_And_Wake_2026-10-19.md`
-§6–7; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
+§6–12; durable target: `Docs/Reference/Extruded_Bubble_Target.md`. The report owns measurements/failed mechanisms;
 §4B below owns the live recovery checklist. Earlier target/history findings remain accessible, not silently accepted.
 
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
@@ -180,6 +180,15 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Reject a large percentage excursion that still leaves the minimum inflated or makes musical peaks too small.
 - [ ] **Awaiting Validation — Sustained Response.** The band-path consumer now supports body size and motion;
   prove 0/1 endpoints in actual pixels on sustained real passages without inventing a periodic pulse on held input.
+- [ ] **Awaiting Validation — small/large separation and count limits.** The normalized driver now cannot exceed
+  1 and retiring records retain their admission slots (old target reversals could show five at a four-large ceiling).
+  The old weighted small mix could also reach 1.05 and admit 51 at a 50-small endpoint. The small-lane candidate
+  separates changing vocal energy from restrained held support; corrected no-event real-band holds reduce
+  small inflation toward the accepted 2D scale. Verify real sustained passages and transient peaks remain
+  expressive without turning the entire small field into large-looking shells. Classify by stable owner ID,
+  never current radius. Distinguish active count targets, still-visible retirement and fused groups; confirm
+  current user's [0,4] large / [20,50] small values at the logical/GPU seam. See report §10, including the rejected
+  repeated-event hold; do not use that failed probe as evidence of steady body support.
 - [ ] **Awaiting Validation — idle settling across every reactive lane.** The candidate contracts size and reduces
   integrated resting phases, stream, drift and emission. Inspect gentle release over seconds, raw-time bypasses,
   water phase, bead travel, ray shimmer and emission in pixels, including pause→resume without a reset or jump.
@@ -223,12 +232,27 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   more exposed by the restored size range. Derive one physical radius for collision/render/wake geometry and a
   broadphase that cannot miss large extents; verify identity, bounded cost, no jitter and stable fused rest/expansion.
   Do this with world metric correction; scaling contact reach alone cannot fix the present camera-dependent mapping.
+- [ ] Design **view-aware overlap interaction** alongside physical contacts (operator 2026-10-20). Bubbles that
+  visibly cross/overlap in the current viewport must have a smart join/pop/bounce policy even when their world
+  surfaces are separated in depth. Derive projection from the existing live camera owner, not a camera-following
+  population. Track stable pairs, projected extents, depth/relative motion and overlap persistence; avoid repeated
+  reactions to brief crossings or count churn. Never fuse distant surfaces into a disconnected union or teleport
+  geometry to satisfy screen overlap. Resolve via continuous steering/approach and/or gentle opacity retirement
+  according to the authored collision mix. An explicit opt-in control is allowed if needed after the policy is
+  demonstrated; do not silently replace world-space contacts. Pops must be extremely gentle opacity fades,
+  without radius implosion/teleport. Prove fixed-camera crossings first; much later, challenge Auto Rotate by
+  distinguishing camera-induced crossings from bubble motion and testing all-angle continuity/cost.
 - [ ] Carry logical lifetime alpha as **material opacity**, independently of radius. Ordinary shells currently
   shrink by `sqrt(alpha)` and receive hardcoded opacity 1; fused members lack coherent fade. Prove transparent
   entry/pop/exit, stable identities and orbit with no sudden already-opaque arrivals or resurrected compacted slots.
 - [ ] Route fused clusters through **depth-selected shared near DoF** with coherent SDF union and no duplicate
   draw. Prove ordinary/fused near passes, near-plane safety, focus/aperture, orbit and absence of synthetic giant
   cohorts. Natural near coverage/softness remains unaccepted after removal of the rejected special populations.
+- [ ] Repair the proved **ordinary/fused projection mismatch** as part of physical geometry. Native frozen-sphere
+  coverage is circular in the ordinary pass but 1.269× elongated at the same off-axis position in the cluster
+  pass. Keep common silhouette/ray/depth conventions and valid bounds, without clipping the ellipse in a smaller
+  quad or distorting/refitting the world. Verify center/edge/near-plane cases and actual clusters. The operator
+  screenshot's exact bubble class remains unknown; the native component discrepancy is independently proved.
 
 #### EB-C — Stream, drift, beads, wakes, rays and emission
 
@@ -241,14 +265,21 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   passages. Trace displacement of stable IDs, direction and optical flow; source values alone are insufficient.
   Resolve the extra shared-level/follower attenuation and raw-time sway ownership without adding another clock.
 - [ ] Prove free chains' complete birth/death fade, curved **15% wider** paths and common world stream direction.
-  Integer/rounded draw counts cannot fade an instance no longer submitted. Diagnose heading divergence under
-  camera motion separately from intended curvature. Keep chains distinct from bubble-attached wakes.
-- [ ] Give **free bead-chain bubbles** a modest simulation-owned size response through the existing immutable
-  frame; their current procedural sizes are fixed while population/travel respond. They are already tiny: do not
-  apply the large shells' deep contraction to them. Speed/drift/emission should carry much of their reaction.
-  Include every family in the minimum-size audit: ordinary large/mid, fused members, free beads and parent-attached wake beads. Wake
-  source radius now follows its reacted parent, but native surface attachment and retiring tails still need proof.
-  Keep non-bubble dust/snow distinct; a count reduction or disappearance does not prove size contraction.
+  Preserve the existing ceil/fractional-opacity allocation; inspect its actual entry/exit and lifetime pixels.
+  Diagnose heading divergence under camera motion separately from intended curvature. Keep chains distinct
+  from bubble-attached wakes.
+- [ ] Include every bubble family in the **minimum-size/response audit**: ordinary large/mid, fused members,
+  free beads and parent-attached wake beads. Beads are already tiny and use only modest size reaction; speed,
+  drift and emission should carry much of their response. Keep non-bubble dust/snow distinct. A count reduction
+  or disappearance does not prove contraction; parent attachment and retiring-tail continuity need native proof.
+- [ ] Correct **per-feature Range ownership and tier-stable wake allocation**. Glowing particles consume the
+  resolved Particles Range, but snow/fizz bypass it; free-chain counts incorrectly reuse that resolved value as
+  the Bead Chains Range driver. Resolve chain authoring independently from normalized musical activity. Give
+  snow/fizz explicit smooth emission behavior. Lower tiers must thin each stable wake, rather than drop whole
+  owners (currently two Balanced wakes can become one). Preserve fractional chain opacity, which already
+  softens ceil-based allocation correctly; do not reopen the disproved blanket integer-chain-pop diagnosis.
+  Bead Chains currently means 12 generated chains per displayed unit: reconcile user-facing density semantics
+  against lab/preset art at the later mapping audit without silently rewriting authored values.
 - [ ] **Awaiting Validation — bounded bead sizing / visible slow rest.** The candidate now carries nominal and
   reacted parent radii separately: attachment follows the parent, while bead dimensions/trail extent remain
   nominal with at most roughly −10%/+10% musical size variation. GPU tests enforce strictly smaller beads than

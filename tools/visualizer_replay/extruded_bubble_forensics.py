@@ -178,7 +178,7 @@ def run(args):
                          controls=asdict(kwargs['controls']),
                          dsp=observed.get('dsp'),
                          followers={name: getattr(sim, name) for name in (
-                             '_body_big_envelope', '_body_small_envelope', '_kick_swell', '_pulse')},
+                             '_body_big_envelope', '_body_small_envelope', '_small_body_reference', '_kick_swell', '_pulse')},
                          state={name: getattr(snapshot, name) for name in (
                              'level', 'breath', 'flash', 'sustain', 'stream_speed', 'drift',
                              'emission', 'rays', 'shimmer', 'travel', 'motion_phase')},

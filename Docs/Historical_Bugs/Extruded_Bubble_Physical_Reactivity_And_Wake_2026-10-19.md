@@ -402,3 +402,119 @@ actual production `beadInstance()` and reads its output, rather than repeating i
 checks parent scales 0.13–5×, low/full alpha, ±10% size inputs, strict physical/projected parent bounds, and free
 chain bounds. The ray-only image test now explicitly isolates free/attached beads, since their legitimate
 level-driven size changes must not be misattributed to rays. No full suite or product build was run.
+
+## 10. Latest log, population limits and sustained small-size comparison (2026-10-20)
+
+`F:/Programming/Apps/logs324fd07064.zip` is the new archive. Inventory now covers 16 ZIPs; this archive contains
+66 retained EB technical receipts and 12 selected Settings snapshots, including older rotations. The current
+15:10:40/15:16:31 Settings receipts confirm **Large [0,4], Small [20,50]**, Small Pulse [0.15,0.8], Sustained 0.6,
+Particles [0.85,1], Bead Chains [2,4], and Ray Softness 0.53 then 0.81. This proves saved authoring, not each
+rendered class count. Its four retained lifecycle timeouts are dated October 18–19, **not new October 20
+failures**; no owner-referrer receipt is present. Do not conflate retained history with a reproduced new crash.
+
+### 10.1 Two separate count-admission defects
+
+The opening reference replay with Large [0,4] stays at four or fewer large identities, while some small-class
+shells look large. That did not exonerate admission in other passages. Two bounded falsifiers established:
+
+- With each source band within [0,1], the weighted small-body mix could reach 1.05. Its shared level then
+  extrapolated population Ranges: a 20–50 Small setting admitted **51**. The normalized mix is now bounded
+  before it can drive Range interpolation.
+- In a 0–4 Large test (3 s high → 0.35 s low → high), retiring records were excluded from target accounting
+  while still visible. Admission reached **five** while the old pair faded. Retiring records now retain their
+  authored ceiling slots; replacement waits until space exists. Lowering a previous higher setting still
+  lets old identities retire rather than teleport/delete them. Logical retirement is preserved; the separately
+  documented material-alpha/radius defect remains open, so this is not acceptance of current visible fades.
+
+### 10.2 Real-passage scale versus controlled held support
+
+The full real Heavy comparison before the small-lane correction shows why simply reducing all small gain
+would be misleading: accepted 2D small median radius is **21.05 px**, EB **20.47 px** at the matched 1672×941
+viewport. Their nominal small radii differ (medians 9.89 versus 20.17 px), while their response factors differ
+(medians 2.08 versus 1.02). The whole-passage averages can look similar while EB has the wrong held-body behavior.
+
+The first held-frame attempt was **invalid as a steady-body probe**: copying a real feature also repeated its
+recorded snare every 11 ms. `held_hot_comparison.json` / `held_hot_actual_feature.jsonl` are rejected for this
+claim. Corrected `held_bands_baseline_corrected.json` / `held_bands_candidate_corrected.json` explicitly clear
+new onsets, scheduler events and transient lanes while holding the real recorded band tuple
+**(0.500531, 0.971323, 0.587140)** for 13.2 s. This is a controlled hold, not continuous music or a live tuple receipt.
+The baseline uses a process-local simulation-source override from `3c63d31e`, with compiled-source SHA recorded;
+it does not check out, revert or mutate the worktree.
+
+| Mature ordinary small radius at held bands | Median | Maximum |
+| --- | ---: | ---: |
+| accepted 2D | 24.53 px | 40.47 px |
+| previous EB | 50.79 px | 83.00 px |
+| final candidate EB | 24.31 px | 41.43 px |
+
+The small lane now separates positive **changes in existing vocal/body energy** from restrained held support,
+using a simulation-owned visual reference follower; weighted onset accents remain separate. No new DSP, audio
+floor, capture or clock is added. Big response remains independent. The recorded hot-hold test protects class
+separation without depending on current rendered radius to identify a class. Transient small peaks remain
+strong and require native review; the hold result does not close every small-size/hierarchy question.
+
+Latest candidate evidence: `vocal_recovery_p1` (real opening 12 s, 96 paired native frames),
+`vocal_heavy_current` (full-minute CPU custody using latest saved EB settings), and
+`vocal_heavy_p7_pixels` (24 paired native 1440p frames). The later slot-admission guard is covered by its focused
+reversal test. **47 focused simulation/recording/motion/wake checks pass.** Native physical acceptance and the
+camera/geometry/collision work remain open; saved settings and a screenshot alone do not identify each shell.
+`held_bands_final_verified.json` repeats the corrected protocol after the retiring-slot guard; its small
+population median differs slightly from the earlier 25.35 px because admitted identities differ. The underlying
+held small-envelope factor is unchanged. Both corrected artifacts retain their source hash and intervention scope.
+
+## 11. Lower-left distortion: independent native coverage audit
+
+One operator-requested Sol 6.1 Medium agent performed the read-only source audit and a bounded native
+falsifier; the primary inspected its source, images and metadata. The still cannot establish the original
+offending shell's cluster membership, but the renderer discrepancy is independently reproduced.
+
+`logs/eb_reactivity_20261020/distortion_audit/` compares unmodified production ordinary/cluster shaders with
+`uDiag=5` at a fixed camera. A radius-0.6 sphere at depth 6 is compared at center and (-4,-2.4,-6). A coincident
+radius-1e-6 second member admits the cluster path without changing the SDF silhouette. Direct RGBA32F OIT
+readback isolates coverage from lighting/refraction/post effects. All four native RTX 4090 draws return GL error 0.
+
+| Position | Ordinary axis ratio | Cluster axis ratio |
+| --- | ---: | ---: |
+| center | 1.0000 | 1.0000 |
+| edge | 1.0005 | **1.2692** |
+
+The cluster result matches the analytic rectilinear perspective ratio 1.2691. Ordinary shells deliberately use
+screen-round bounds/rays; clusters use true view rays/bounds, producing radial off-axis elongation. Refraction
+can deform the interior but cannot by itself explain this independently captured outer-coverage difference.
+Fix common projection/ray/depth conventions with the physical-world work; reducing the cluster quad alone
+would clip the defect rather than repair it.
+
+The same audit quantifies collision/world mismatch: normalized centers z=.20/.29 with nominal radii .05/.05
+meet the present .095 collision threshold, yet render with a **2.0299-world-unit surface gap** and only .05078
+blend. Thus Fuse can create disconnected members. Existing missing fused fade and near DoF are separate.
+Near-bound/eye-inside guard discrepancies also remain, but are a weaker explanation for this particular still.
+The operator's requested view-aware overlap policy must manage visible crossings continuously without forcing
+distant surfaces into such a disconnected fusion or teleporting geometry; its fixed-camera/Auto-Rotate gates
+remain in the live plan.
+
+## 12. Emission/Range and quality audit: concrete next consumer defects
+
+The same single reviewer traced canonical UI/model/capture and production consumers. Authoring reaches the
+frame; downstream semantics are the defects:
+
+| Population | Existing consumer before correction |
+| --- | --- |
+| main large/small | normalized musical level and their own count Ranges; independent of Particles |
+| free chains | Bead Chains Range read at **Particles-resolved emission**, with 12 chains per displayed unit |
+| attached fizz | wake owners ×64×quality, truncated to whole-owner groups; no emission input |
+| marine snow | fixed 2500×quality, no emission input; full opacity |
+| glowing particles | resolved emission² for allocation, emission×2.4 for brightness |
+
+Therefore Particles [0,0] currently suppresses glowing particles but leaves snow/fizz, and disables the free
+chain Range's musical modulation through cross-Range coupling. At Balanced, two wake sources can be reduced
+to one entire trail; prefix budgeting can drop retiring tails because live records precede tombstones.
+Free-chain ceil allocation **already has fractional opacity** and stable local identities: the earlier blanket
+claim that integer chain removal necessarily pops was not established. Glowing speck integer prefixes lack
+equivalent entry opacity, but their perceptual significance still requires a pixel boundary test.
+
+The bounded correction should resolve chain authoring independently from the normalized simulation level;
+snow/fizz should consume already-resolved emission with fractional allocation opacity, and every stable wake
+should receive a per-owner quality budget. Snow's fragment branch must actually multiply the generated opacity;
+changing only its vertex output would be a dead consumer. Preserve identity/local seed, zero-budget safety,
+nominal/reacted radius separation, and the existing parent-size safeguard. This section records diagnosis,
+not an implemented or accepted emission repair.

@@ -1002,3 +1002,10 @@ beads than parents across deep contraction, expansion and low alpha. Wake tests 
 radius retention through retirement. The resting-sway test checks velocity amplitude as well as slow phase;
 recorded pause tests require sparse nonzero emission after downstream density shaping. Native appearance and
 the shared scene's still-open world/projection/fade defects remain independent of these numeric bounds.
+
+Population gates separately cover normalized driver bounds and down/up target reversals: retiring identities
+retain ceiling slots until their fade completes, so a four-large setting cannot admit a fifth replacement.
+The recorded hot-vocal hold clears new events/transients before comparing small held support; repeating a
+recorded onset every tick is an invalid steady-body oracle. Whole real passages remain necessary to reject
+dead small bubbles or overlarge transient peaks. The native coverage probe documents the independent fused
+off-axis ellipse; it is a negative diagnostic, not an acceptance test blessing that shape.

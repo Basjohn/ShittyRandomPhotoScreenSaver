@@ -364,6 +364,32 @@ def test_resting_sway_velocity_is_slow_as_well_as_its_phase():
     assert shifts and max(shifts)<.005  # under 2.4 first-order pixels/s at 941px, not ~28px/s
 
 
+def test_full_normalized_bands_cannot_extrapolate_beyond_authored_population_range():
+    controls=ExtrudedBubbleControls(large_count=(0,4),mid_count=(20,50),stream_speed=(0,0),
+                                   drift=(0,0),sway=0,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(36)
+    for _ in range(1200):
+        snap=sim.advance(MusicInput(STEP,True,1.,(),(1.,1.,1.)),controls)
+        assert 0 <= snap.level <= 1
+        assert sum(b.large for b in sim._bubbles) <= 4
+        assert sum(not b.large for b in sim._bubbles) <= 50
+    assert snap.count == 54
+
+
+def test_target_reversal_waits_for_retiring_slots_without_exceeding_the_large_ceiling():
+    controls=ExtrudedBubbleControls(large_count=(0,4),mid_count=(0,0),stream_speed=(0,0),
+                                   drift=(0,0),sway=0,collision_scope="off")
+    sim=ExtrudedBubbleSimulation(2)
+    _run(sim,controls,3,intensity=1)
+    before={b.ident for b in sim._bubbles}
+    low=_run(sim,controls,.35,intensity=0)
+    assert low.count==4 and any(0<b.alpha<1 for b in sim._bubbles)  # preserve gentle retirement
+    for _ in range(120):
+        snap=sim.advance(MusicInput(STEP,True,1.,(),(1.,1.,1.)),controls)
+        assert snap.count<=4  # old code reached five while the old pair was still fading
+    assert any(b.ident not in before for b in sim._bubbles)
+
+
 def test_only_regular_bubbles_exist_no_synthetic_near_cohort_under_any_playback():
     controls = ExtrudedBubbleControls(large_count=(9.0, 9.0), mid_count=(0.0, 0.0), collision_scope="off")
     sim = ExtrudedBubbleSimulation(91)
