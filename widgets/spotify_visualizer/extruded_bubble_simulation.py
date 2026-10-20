@@ -42,7 +42,7 @@ _MID_RADIUS = (0.025, 0.07)
 _MARGIN = 0.25             # how far outside the volume a bubble may be before it is gone
 _LANE = 0.26               # spacing of the columns across the stream (shares of the half view)
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
-_WAKE_STRIDE = 8           # x, y, z, radius, stable ident, retirement progress (-1 active), alpha, reserved
+_WAKE_STRIDE = 8           # x, y, z, reacted radius, stable ident, retirement progress (-1 active), alpha, nominal radius
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,7 +291,7 @@ class ExtrudedBubbleSimulation:
         self._body_small_envelope = _follow(self._body_small_envelope,
             _soft_top(0.80 * small_body + 0.40 * self._pulse + 0.25 * sustain * small_body), dt, 0.06 * soft, body_release)
         # Resting phases barely advance. Sway and shader animation share this integrated musical time.
-        idle_rate = 0.01 + 0.03 * max(0.0, min(1.0, controls.idle))
+        idle_rate = 0.03 + 0.06 * max(0.0, min(1.0, controls.idle))
         motion_target = idle_rate + 1.60 * level + 0.22 * self._flash + 0.20 * sustain
         if self._motion_rate is None:
             self._motion_rate = motion_target
@@ -312,7 +312,7 @@ class ExtrudedBubbleSimulation:
         speed_target = (_lerp(controls.stream_speed, level) + (high - low) * (0.35 * self._flash + 0.15 * sustain)) * activity
         drift_target = _soft_top(_lerp(controls.drift, level) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
         emission_target = _soft_top(_lerp(controls.emission, level)
-                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * activity
+                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * max(0.25, activity)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         self._speed = _follow(self._speed, speed_target, dt, 0.36 * soft, 3.0 * soft)
@@ -366,7 +366,9 @@ class ExtrudedBubbleSimulation:
             size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
             wander = self._drift * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
-            swing = controls.sway * 0.06 * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase)
+            # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
+            swing = (controls.sway * 0.06 * min(1.0, self._motion_rate)
+                     * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
             deep = self._drift * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep)
             b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep)
@@ -532,17 +534,17 @@ class ExtrudedBubbleSimulation:
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
                 current[b.ident] = (b.x, b.y, b.z, b.radius * (big_scale if b.large else small_scale),
-                                    b.ident, -1.0, b.alpha, 0.0)
+                                    b.ident, -1.0, b.alpha, b.radius)
         # Advance existing tombstones on the sole logical tick, never in the renderer.
         retained = {}
         for ident, old in self._wake_retiring.items():
             age = old[5] + dt / _WAKE_RETIRE_SECONDS
             if age < 1.0:
-                retained[ident] = (*old[:5], age, old[6], 0.0)
+                retained[ident] = (*old[:5], age, old[6], old[7])
         # Begin retirement immediately when pop/fuse/exit takes its source out of the free population.
         for ident, old in self._wake_live.items():
             if ident not in current and ident not in retained:
-                retained[ident] = (*old[:5], 0.0, old[6], 0.0)
+                retained[ident] = (*old[:5], 0.0, old[6], old[7])
         # The total lifetime history is bounded as well as its GPU upload: intense collisions cannot grow it.
         if len(retained) > MAX_BUBBLES:
             retained = dict(sorted(retained.items(), key=lambda item: item[1][5])[:MAX_BUBBLES])

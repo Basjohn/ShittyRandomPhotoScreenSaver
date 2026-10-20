@@ -290,8 +290,9 @@ def test_the_rays_follow_the_simulation_driver_never_the_raw_level(target):
     capture, host = target
 
     def with_state(**fields):
-        snapshot = _snapshot(extruded_bubble_rays_enabled=True, extruded_bubble_rays=[0.0, 1.0])
-        state = dataclasses.replace(snapshot.logical.mode_state, **fields)
+        snapshot = _snapshot(extruded_bubble_rays_enabled=True, extruded_bubble_rays=[0.0, 1.0],
+                             extruded_bubble_bead_chains=[0., 0.])  # isolate rays from modest level-driven bead sizing
+        state = dataclasses.replace(snapshot.logical.mode_state, wakes=(), **fields)
         return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
     for _ in range(4):                                                  # prepared and warm
         capture.render(host, with_state(level=0.0, rays=0.2))

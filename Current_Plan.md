@@ -249,14 +249,14 @@ beads/wakes, rays and emission must all be gentle; nothing remotely fast while i
   Include every family in the minimum-size audit: ordinary large/mid, fused members, free beads and parent-attached wake beads. Wake
   source radius now follows its reacted parent, but native surface attachment and retiring tails still need proof.
   Keep non-bubble dust/snow distinct; a count reduction or disappearance does not prove size contraction.
-- [ ] **Next after lights — operator retest correction (2026-10-20).** Limit individual free/attached bead-size
-  reaction to at most roughly −10%/+10%. Parent-reacted radius owns the wake's attachment point, not a full-scale
-  multiplication of bead size/trail shape. Every attached bead must stay **strictly smaller than its current
-  parent** throughout contraction/expansion, including retirement. Choose nominal bead sizes that can satisfy
-  both constraints across the parent's supported minimum; prove the bound with native tiny/large parent cases.
-  Preserve stable identities and source-to-tail retirement. Idle motions improved in the operator retest, but
-  stream/emission/surface-water now look stopped: establish visibly very slow nonzero rest, without restoring
-  fast idle motion or an oscillator. Follow the completed light slice before making these changes.
+- [ ] **Awaiting Validation — bounded bead sizing / visible slow rest.** The candidate now carries nominal and
+  reacted parent radii separately: attachment follows the parent, while bead dimensions/trail extent remain
+  nominal with at most roughly −10%/+10% musical size variation. GPU tests enforce strictly smaller beads than
+  current parents, including fading tiny parents and raster-size limits. Inspect actual pop/fuse/retirement,
+  depth and changing parents in P1/P7, preserving stable identities and source-to-tail retirement. The candidate
+  raises nonzero resting motion and separates emission activity from motion attenuation (the latter was then
+  squared into almost no particles). Verify visibly very slow stream/emission/surface-water without a fast
+  idle or oscillator; native/CPU/GPU evidence is in report §9, not a physical acceptance claim.
 - [ ] **Awaiting Validation — Ray Softness.** The candidate now connects the authored setting to the depth-marched
   shaft threshold as well as the fan; native endpoints differ where Deep Light previously ignored the setting.
   Review broad softness in actual P1/P7 passages, measuring angular/pixel units at both

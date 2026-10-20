@@ -59,6 +59,13 @@ at zero drive and full authored strength at drive 1. This lets strong quiet-musi
 silence. Shimmer/phase still comes from the logical simulation, with gentle release rather than a pause reset.
 Broad shaft appearance and reaction remain native/physical acceptance questions, not shader-link assertions.
 
+Free and attached bead bubbles have at most roughly −10%/+10% musical size variation. A changing parent's
+radius moves the wake attachment, while nominal parent size seeds bead dimensions and trail extent. Every
+visible attached bead remains strictly smaller than its current parent, including the half-pixel raster limit;
+fade/hide a bead if a tiny/fading parent cannot support that bound. Keep nominal size through retirement rather
+than rebinding to a compacted slot. Slow idle must remain visibly alive: motion and emission need separate
+resting activity because particle density squares the emission value. Zero authored amounts remain zero.
+
 Extruded Bubble is a real mode with its **own** logical simulation: a 3D population (large/mid bubbles, small
 bubbles, bead chains, fizz, particulate) with its own spawn, streams, drift and sway, collisions (Fuse / Pop /
 Bounce), breathing and reactivity, advanced by its own frame runtime from a logical tick hook on the **sole Visualizer

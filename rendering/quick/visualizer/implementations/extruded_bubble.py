@@ -392,7 +392,8 @@ class QuickExtrudedBubbleRenderer:
                        math.sin(math.radians(16.0 + 90.0 * pose[1]))),
             "uSide": VOLUME_EXTENT * 1.12 * tan[0],
             "uStreamView": (stream[0], stream[1], -stream[2]), "uBeadsPerChain": _BEADS_PER_CHAIN,
-            "uBeadCount": beads, "uBeadSize": 1.0, "uChainFill": _chain_fill(parameters, state.emission),
+            "uBeadCount": beads, "uBeadSize": 0.9 + 0.2 * max(0.0, min(1.0, float(state.level))),
+            "uChainFill": _chain_fill(parameters, state.emission),
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": _FIZZ_PER_BUBBLE,
             "uWakeCount": wake_count})
