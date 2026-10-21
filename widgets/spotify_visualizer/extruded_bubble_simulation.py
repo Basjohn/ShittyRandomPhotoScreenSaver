@@ -480,10 +480,12 @@ class ExtrudedBubbleSimulation:
                     shortage -= 1
             elif shortage < 0:
                 self._spawn_credit[large] = 0.0
-                # The furthest downstream leave first, fading out.
-                ordered = sorted(live[large], key=lambda b: -(b.x * direction[0] + b.y * direction[1] + b.z * direction[2]))
-                for b in ordered[:-shortage]:
-                    b.leaving = True
+                # Reduced musical occupancy closes the inlet; it must NOT kill
+                # already travelling identities midstream. They continue to
+                # their physical end/boundary and release there. The next high
+                # passage opens the same inlet again, without scene-wide pops.
+                # Counts can temporarily exceed the musical target during this
+                # physical drain. MAX_BUBBLES/limits still bound total residency.
         self._filled = True
 
         # Motion: the stream, sized (big bubbles a little faster), with drift and sway across it.
@@ -528,6 +530,21 @@ class ExtrudedBubbleSimulation:
             self._place_cluster(c, members)
 
         self._collide(controls, dt)
+
+        # Finite authored Source -> End: enter the gentle EOL fade only
+        # downstream of the actual End node, never because an audio count fell.
+        # Use projected progress so oblique streams have one physical end plane.
+        # The fade remains time-based, allowing the shell/wake to soften just
+        # beyond that plane instead of abruptly disappearing on crossing it.
+        if controls.stream_path is not None:
+            end = world_point(controls.stream_path[3:], WORLD_HALF)
+            for b in self._bubbles:
+                if b.popping >= 0.0 or b.leaving:
+                    continue
+                passed_end = sum((p - stop) * axis for p, stop, axis in
+                                 zip((b.x, b.y, b.z), end, direction))
+                if passed_end >= 0.0:
+                    b.leaving = True
 
         # Fades, pops and leaving.
         kept: list[_Bubble] = []

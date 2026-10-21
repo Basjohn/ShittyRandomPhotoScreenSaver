@@ -455,11 +455,16 @@ def test_target_reversal_waits_for_retiring_slots_without_exceeding_the_large_ce
     _run(sim,controls,3,intensity=1)
     before={b.ident for b in sim._bubbles}
     low=_run(sim,controls,.35,intensity=0)
-    assert low.count==4 and any(0<b.alpha<1 for b in sim._bubbles)  # preserve gentle retirement
+    # Target reduction closes new admissions, preserving every in-flight ID;
+    # retirement/fade occurs only on reaching the physical EOL or world edge.
+    assert low.count == 4 and {b.ident for b in sim._bubbles} == before
+    assert all(not b.leaving for b in sim._bubbles)
     for _ in range(120):
         snap=sim.advance(MusicInput(STEP,True,1.,(),(1.,1.,1.)),controls)
         assert snap.count<=4  # old code reached five while the old pair was still fading
-    assert any(b.ident not in before for b in sim._bubbles)
+    # A zero-speed stream cannot reach End, so the original identities remain;
+    # their slots MUST prevent admission beyond the authored cap.
+    assert {b.ident for b in sim._bubbles} == before
 
 
 def test_water_and_bead_motion_are_slow_in_idle_and_speed_up_during_playback_without_phase_jumps():

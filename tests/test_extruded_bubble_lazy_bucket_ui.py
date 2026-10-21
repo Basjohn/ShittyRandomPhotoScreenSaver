@@ -110,6 +110,11 @@ def test_every_eb_bucket_constructs_and_hydrates_in_real_settings_page(eb_tab):
                 continue
             assert control.key in tab._extruded_bubble_rows, control.key
             assert hasattr(tab, control.key) or hasattr(tab, f'{control.key}_btn'), control.key
+            widget = getattr(tab, control.key, None)
+            if widget is None:
+                widget = getattr(tab, f'{control.key}_btn', None)
+            assert widget is not None and widget.toolTip() == control.tooltip, control.key
+            assert tab._extruded_bubble_rows[control.key].toolTip() == control.tooltip, control.key
     collected = collect_extruded_bubble_mode_settings(tab)
     assert all(entry.key in collected for entry in spec.controls if entry.bucket)
 
