@@ -798,6 +798,9 @@ class DisplayManager(QObject):
 
         admitted = self._quick_view_orbit_admitted()
         owner = self._quick_visualizer_owner
+        if owner is not None and str(owner.controller.mode_id) != 'extruded_bubble':
+            # An EB flight abandoned by a mode switch must never resume in a new mode.
+            setattr(owner.controller.presentation_state, '_view_framed_flight_motion', None)
         if admitted and owner is not None:
             # A completed startup or mode/preset swap starts Auto Rotate at once (when the mode has it on).
             from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
@@ -808,6 +811,8 @@ class DisplayManager(QObject):
                 continue
             try:
                 display.runtime.input_controller.set_view_orbit_enabled(admitted)
+                display.runtime.input_controller.set_framed_flight_enabled(bool(
+                    admitted and owner is not None and str(owner.controller.mode_id) == 'extruded_bubble'))
                 display.runtime.scene_controller.set_visualizer_camera_reset_available(bool(
                     admitted and owner is not None and str(owner.controller.mode_id) == "extruded_bubble"
                 ))
@@ -838,6 +843,20 @@ class DisplayManager(QObject):
             self._quick_view_pose_owner = owner
             self._refresh_quick_visualizer_edit_content_envelope()
 
+    def _set_quick_framed_flight_rates(self, yaw: float, pitch: float,
+                                       strafe: float, travel: float) -> None:
+        """EB only: physical camera flight and yaw/pitch on the existing capture clock."""
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired or str(owner.controller.mode_id) != 'extruded_bubble':
+            return
+        from widgets.spotify_visualizer.view_orbit import set_framed_flight_rates
+        values = set_framed_flight_rates(owner.controller.presentation_state,
+                                        'extruded_bubble', yaw, pitch, strafe, travel, time.time())
+        if values:
+            self._quick_view_orbit_pending = ('extruded_bubble', values)
+            self._quick_view_pose_owner = owner
+            self._refresh_quick_visualizer_edit_content_envelope()
+
     def _orbit_quick_visualizer_view(self, turn_steps: float, tilt_steps: float) -> None:
         """Step the shown 3D Visualizer's view live (a drag); nothing is saved until orbiting stops."""
 
@@ -847,8 +866,12 @@ class DisplayManager(QObject):
         from widgets.spotify_visualizer.view_orbit import orbit_visualizer_view
 
         mode_id = str(owner.controller.mode_id)
+        now = time.time()
+        if mode_id == 'extruded_bubble':
+            from widgets.spotify_visualizer.view_orbit import rebase_framed_flight_on_drag
+            rebase_framed_flight_on_drag(owner.controller.presentation_state, now)
         values = orbit_visualizer_view(
-            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, time.time()
+            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, now
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
@@ -1045,7 +1068,8 @@ class DisplayManager(QObject):
         for display in tuple(self.displays):
             if isinstance(display, QuickDisplayUnit) and not display.is_retired:
                 display.runtime.input_controller.cancel_view_orbit_for_camera_reset()
-        for field in ("_view_orbit_motion", "_view_orbit_drag_velocity", "_view_orbit_inertia", "_view_orbit_auto_rotate"):
+        for field in ("_view_orbit_motion", "_view_orbit_drag_velocity", "_view_orbit_inertia",
+                      "_view_orbit_auto_rotate", "_view_framed_flight_motion"):
             setattr(pres, field, None)
         self._quick_scene_view_gesture = None
         self._quick_view_orbit_pending = None
@@ -1077,10 +1101,11 @@ class DisplayManager(QObject):
 
         owner = self._quick_visualizer_owner
         if owner is not None and settle_motion:
-            from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion
+            from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion, settle_framed_flight
 
             now = time.time()
             pres = owner.controller.presentation_state
+            settle_framed_flight(pres, now)
             settled = stop_view_orbit_motion(pres, now)
             if settled is not None:
                 self._quick_view_orbit_pending = settled
@@ -1117,6 +1142,10 @@ class DisplayManager(QObject):
         config, cache = resolve_visualizer_view_orbit(
             section, custom_presets, mode=mode_id, values=values
         )
+        if mode_id == 'extruded_bubble':
+            # Persistent camera translation belongs to live view, never a curated preset.
+            config['extruded_bubble_camera_position'] = list(
+                owner.controller.presentation_state._extruded_bubble_camera_position)
         settings.replace_visualizer_runtime_preset_state(config, cache)
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(config)
         self._refresh_all_quick_context_menus()
@@ -1971,6 +2000,11 @@ class DisplayManager(QObject):
         )
         runtime.view_orbit_rates_changed.connect(
             lambda *args, callback=self._set_quick_view_orbit_rates: live_unit_route(
+                lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
+        )
+        runtime.view_framed_flight_rates_changed.connect(
+            lambda *args, callback=self._set_quick_framed_flight_rates: live_unit_route(
                 lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
             )
         )

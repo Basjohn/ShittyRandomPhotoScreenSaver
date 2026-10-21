@@ -88,3 +88,67 @@ def test_cross_bucket_conditional_survives_out_of_order_expansion(eb_tab):
     tab.extruded_bubble_light_type.setCurrentText("Sunlit Surface")
     assert not tab._extruded_bubble_rows["extruded_bubble_surface_brightness"].isHidden()
     assert collect_extruded_bubble_mode_settings(tab)["extruded_bubble_light_type"] == "Sunlit Surface"
+
+
+def test_every_eb_bucket_constructs_and_hydrates_in_real_settings_page(eb_tab):
+    """Native end-to-end catch for a failure in *any* lazily constructed control.
+
+    Earlier tests checked the camera mapper in isolation but missed the full
+    Settings path, where exceptions raised from Qt toggle callbacks can be
+    printed without failing the test directly. The built-set assertion catches
+    those swallowed exceptions as well.
+    """
+    tab, _config = eb_tab
+    spec = __import__('core.settings.visualizer_mode_settings', fromlist=['require_mode_settings']).require_mode_settings('extruded_bubble')
+    assert not tab._extruded_bubble_lazy_built
+    for bucket in spec.buckets:
+        toggle_bucket(tab, bucket.key)
+        assert bucket.key in tab._extruded_bubble_lazy_built, (
+            f'EB bucket {bucket.key!r} did not finish constructing; inspect Qt slot traceback')
+        for control in spec.controls:
+            if control.bucket != bucket.key:
+                continue
+            assert control.key in tab._extruded_bubble_rows, control.key
+            assert hasattr(tab, control.key) or hasattr(tab, f'{control.key}_btn'), control.key
+    collected = collect_extruded_bubble_mode_settings(tab)
+    assert all(entry.key in collected for entry in spec.controls if entry.bucket)
+
+
+def test_r34_volume_aim_edits_existing_pose_without_touching_lens(eb_tab):
+    """Native Qt event routing: draggable aim must save ordinary yaw/pitch only."""
+    tab, _ = eb_tab
+    toggle_bucket(tab, "camera")
+    view = tab.extruded_bubble_camera_position
+    before = collect_extruded_bubble_mode_settings(tab)
+    from ui.tabs.media.spec_mode_builder import _eb_base_eye
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    eye_before = tuple(_eb_base_eye(tab)[i] + view.value()[i]*WORLD_HALF[i] for i in range(3))
+    assert view._marker(view._aim()) is not None
+    angles = (0.18, -0.11)
+    view.cameraAimChanged.emit(angles)
+    assert tab._extruded_bubble_loaded_camera_pose['extruded_bubble_turn'] == pytest.approx(angles[0])
+    assert tab._extruded_bubble_loaded_camera_pose['extruded_bubble_tilt'] == pytest.approx(angles[1])
+    view.cameraAimCommitted.emit(angles)
+    after = collect_extruded_bubble_mode_settings(tab)
+    assert after['extruded_bubble_turn'] == pytest.approx(angles[0])
+    assert after['extruded_bubble_tilt'] == pytest.approx(angles[1])
+    assert after['extruded_bubble_camera_fov'] == before['extruded_bubble_camera_fov']
+    eye_after = tuple(_eb_base_eye(tab)[i] + view.value()[i]*WORLD_HALF[i] for i in range(3))
+    assert eye_after == pytest.approx(eye_before, abs=1e-4)
+    # The lens and physical dolly are independently owned and untouched.
+
+
+def test_r34_deep_ray_source_node_moves_the_one_real_light_source(eb_tab):
+    """Deep linked source is never merely a preview; the Light cache must change."""
+    tab, cfg = eb_tab
+    load_extruded_bubble_mode_settings(tab, {**cfg, 'extruded_bubble_light_type': 'Deep Light'})
+    toggle_bucket(tab, 'rays')
+    ray = tab.extruded_bubble_ray_path
+    assert ray._linked_source is not None
+    source = (0.25, -0.35, 0.65)
+    ray.linkedSourceChanged.emit(source)
+    assert tuple(tab._extruded_bubble_lazy_values['extruded_bubble_light_direction'][:3]) == pytest.approx(source)
+    ray.linkedSourceCommitted.emit(source)
+    assert tuple(collect_extruded_bubble_mode_settings(tab)['extruded_bubble_light_direction'][:3]) == pytest.approx(source)
+    toggle_bucket(tab, 'light')
+    assert tuple(tab.extruded_bubble_light_direction.value()[:3]) == pytest.approx(source)

@@ -56,8 +56,7 @@ Healthy reactivity is the immediate priority; required scene architecture remain
 owned by `extruded_bubble_geometry`; all ordinary/union/wake packing preserves them directly. The camera does not
 spawn or place populations. GPU procedural populations use the same world stream/basis; zoom/aspect/pose affect
 projection only. Authored counts are global, with no per-view copies. The fixed length conversion calibrates
-nominal size at one reference distance, allowing genuine near/far perspective elsewhere. Current pan is lens
-shift, not translated-camera parallax; camera placement/pivot/source-region authoring remain live work.
+nominal size at one reference distance, allowing genuine near/far perspective elsewhere. **Later R30–R34 camera candidates supersede this early snapshot:** authored physical XYZ camera translation, camera-relative flight, independent lens FOV, and a volume Aim marker now exist in source, all still unaccepted. The old off-axis lens-shift pan diagnosis applies to an earlier implementation, **not** the current rendered camera. Camera placement/pivot/source-region fidelity remains live work.
 
 The candidate uses common pinhole rays/bounds for ordinary and fused geometry. This supersedes T2's literal
 all-screen circularity as a numeric oracle: rectilinear off-axis spheres can elongate, but both paths must agree

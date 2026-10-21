@@ -110,6 +110,10 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                      glint_power=float(MODES["surface"]["glint_power"]) * strength, light_power=0.0,
                      surface=SURFACE_Y, shaft_y=SURFACE_Y)
     else:
+        # Deep scene: visible emitter, shaft origin and glint source are one
+        # authored Light Source. The separately editable Ray End still shapes
+        # the shaft segment; the older Ray Source is legacy preset metadata.
+        knobs["ray_source"] = knobs["light_source"]
         # No surface in view: the light is in the water; its highlights face the bubbles from where it is.
         # Its colour carries through the water it lights (its glow, beams and veils take its colour; under a surface
         # the sky's light is mostly the water's own).
@@ -216,7 +220,7 @@ ORBIT_PIVOT = (0.0, ORBIT_DISTANCE * math.sin(_DEFAULT_PITCH),
 def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
                     pan_x: float = 0.0, pan_y: float = 0.0,
                     fov_y_degrees: float = FOV_Y_DEGREES,
-                    position_offset=(0.0, 0.0, 0.0)):
+                    position_offset=(0.0, 0.0, 0.0), surface_bound=True):
     """World-space physical camera: (view_to_world, world_to_view, eye, tan, projection).
 
     Orbit rotates around a fixed WORLD pivot while the scene remains stationary;
@@ -237,20 +241,21 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     # Confine the under-water eye by LIMITING actual dolly/translation rather than
     # secretly offsetting its Y afterwards (which would break the declared pivot).
     ceiling = SURFACE_Y - 0.5
-    if back[1] > 1e-9:
+    if surface_bound and back[1] > 1e-9:
         distance = min(distance, max(1.0, (ceiling - ORBIT_PIVOT[1]) / back[1]))
     # Camera translation in WORLD units must not depend on the card's aspect
     # ratio: the Settings volume view shares this exact physical reference.
     dx = -2.0 * distance * tan[1] * float(pan_x)
     dy = 2.0 * distance * tan[1] * float(pan_y)
     y = ORBIT_PIVOT[1] + distance * back[1] + dx * right[1] + dy * up[1]
-    if y > ceiling and up[1] > 1e-9:
+    if surface_bound and y > ceiling and up[1] > 1e-9:
         dy -= (y - ceiling) / up[1]
     eye = tuple(ORBIT_PIVOT[i] + distance * back[i] + dx * right[i] + dy * up[i]
                 + float(position_offset[i]) * WORLD_HALF[i] for i in range(3))
     # A user-moved physical eye can approach any interior source/end point,
     # but must not jump through the ocean ceiling. No FOV/projection adjustment.
-    eye = (eye[0], min(ceiling, eye[1]), eye[2])
+    if surface_bound:
+        eye = (eye[0], min(ceiling, eye[1]), eye[2])
     return view_to_world, world_to_view, eye, tan, projection
 
 

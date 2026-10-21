@@ -52,6 +52,12 @@ Historical evidence is not current owner map.
 When current source contradicts a durable product contract, do not silently rewrite the contract to match the bug.
 Promote the missing behavior into `Current_Plan.md` unless explicit product intent changed it.
 
+### Archive handoff / operator-run focused verification
+
+When the operator designates a GODZIP as the working tree, the extracted payload is authoritative for source edits. `.godzip/workflow.md` defines archive mechanics; its manifest lists shipped files, not an obligation to reconstruct deliberately excluded Labs, original evidence, or assets. Do not silently switch to a repository copy, reset authored state, commit/push, or treat absent heavy resources as obsolete contracts. For local-repository agents, follow that repository's instructions instead of falsely adopting GODZIP-only packaging.
+
+Operator PowerShell tests use the **current tree's** `& '.\.venv\Scripts\python.exe'` (not the global `py -3.14`) and **never mutate environment variables**. The normal `tests/conftest.py` still violates that requirement by writing `APPDATA`/`LOCALAPPDATA`; treat it as an open harness bug, not permission to disable storage isolation. For narrow self-contained tests, prefer `--noconftest -p tools.pytest_qt_noenv` where the test actually owns its settings/lifetimes. Never claim this opt-in fixture provides full production-QML coverage. Specify `encoding='utf-8'` when source-reading in Windows tests; do not let locale-specific cp1252 decoding mask the assertion under test. A green Qt-free source string search does not establish a native Qt Settings callback, persisted camera eye or finished render.
+
 ### Defaults test-authority guardrail
 
 Mutable product defaults are policy, not test goldens. Tests that validate a user-facing default must derive the expected

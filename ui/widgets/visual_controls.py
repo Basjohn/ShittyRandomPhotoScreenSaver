@@ -786,6 +786,10 @@ class SceneVolumeMapper(_VisualControl):
     """
     cameraOffsetChanged = Signal(tuple)
     cameraOffsetCommitted = Signal(tuple)
+    cameraAimChanged = Signal(tuple)
+    cameraAimCommitted = Signal(tuple)
+    linkedSourceChanged = Signal(tuple)
+    linkedSourceCommitted = Signal(tuple)
 
     def __init__(self, *, camera_only=False, parent=None):
         super().__init__(parent)
@@ -793,18 +797,20 @@ class SceneVolumeMapper(_VisualControl):
         self._coords = [0., -1., 0., 0., 1., 0.] if not camera_only else [0., 0., 0.]
         self._camera_offset = (0., 0., 0.)
         self._base_eye = (0., 0., 0.)
+        self._camera_angles = (0., 0.)
+        self._linked_source = None
         self._references = {}
         self._active = 0
         self._drag_axis = ''
         self._drag_role = ''
         self._drag_start = None
         self._drag_start_z = 0.
-        self.setMinimumSize(268, 290)
+        self.setMinimumSize(268, 265)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setAccessibleDescription(self.describe())
 
     def sizeHint(self):
-        return QSize(268, 290)
+        return QSize(268, 265)
 
     def value(self):
         return tuple(self._coords)
@@ -819,9 +825,12 @@ class SceneVolumeMapper(_VisualControl):
         self.setAccessibleDescription(self.describe())
         self.update()
 
-    def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.)):
+    def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.),
+                           camera_angles=(0., 0.), linked_source=None):
         self._references = dict(paths or {})
         self._base_eye = tuple(float(x) for x in base_eye)
+        self._camera_angles = tuple(float(x) for x in camera_angles)
+        self._linked_source = tuple(linked_source) if linked_source is not None else None
         if not self._camera_only:
             self._camera_offset = tuple(float(x) for x in camera_offset)
         self.update()
@@ -833,6 +842,23 @@ class SceneVolumeMapper(_VisualControl):
 
     def _eye(self):
         return tuple(self._base_eye[i] + self._camera_offset[i] for i in range(3))
+
+    def _forward(self):
+        # Exactly the production camera's yaw/pitch basis, independent of FOV.
+        turn, tilt = self._camera_angles
+        pitch = math.radians(16.0 + 90.0 * tilt)
+        yaw = math.pi * turn
+        return (-math.sin(yaw)*math.cos(pitch), math.sin(pitch), -math.cos(yaw)*math.cos(pitch))
+
+    def _aim(self):
+        from core.constants.extruded_bubble_world import WORLD_HALF
+        eye, forward = self._eye(), self._forward()
+        return tuple(eye[i] + 13.0*forward[i]/WORLD_HALF[i] for i in range(3))
+
+    def _path_point(self, idx):
+        if idx == 0 and self._linked_source is not None:
+            return self._linked_source
+        return self._coords[idx*3:idx*3+3]
 
     def _point(self, xyz):
         # One fixed oblique projection of the same [-1,1]³ world box.
@@ -882,7 +908,7 @@ class SceneVolumeMapper(_VisualControl):
             p.setPen(QPen(colors.get(role, faint),1.5,Qt.PenStyle.DashLine))
             p.drawLine(self._point(coords[:3]),self._point(coords[3:]))
         if not self._camera_only:
-            src,end = self._marker(self._coords[:3]),self._marker(self._coords[3:])
+            src,end = self._marker(self._path_point(0)),self._marker(self._path_point(1))
             p.setPen(QPen(active, 2.5))
             p.drawLine(src,end)
             for i, pt in enumerate((src,end)):
@@ -891,6 +917,21 @@ class SceneVolumeMapper(_VisualControl):
                 p.drawEllipse(pt, 7. if self._active==i else 6., 7. if self._active==i else 6.)
         eye=self._eye()
         cp=self._marker(eye)
+        aim = self._marker(self._aim())
+        # Two sight guides and the true forward point, all derived from the
+        # renderer's current yaw/pitch. The editor never adjusts the FOV.
+        direction = self._forward()
+        from core.constants.extruded_bubble_world import WORLD_HALF
+        side = (math.cos(math.pi*self._camera_angles[0]),0.,-math.sin(math.pi*self._camera_angles[0]))
+        for sign in (-1.,1.):
+            guide = tuple(eye[i] + (13.0*direction[i] + 2.0*sign*side[i])/WORLD_HALF[i] for i in range(3))
+            p.setPen(QPen(QColor(205,165,229,100),1.2))
+            p.drawLine(cp,self._marker(guide))
+        p.setPen(QPen(QColor(205,165,229,145),1.,Qt.PenStyle.DashLine))
+        p.drawLine(cp,aim)
+        p.setBrush(QColor(244,211,253))
+        p.setPen(QPen(QColor(155,100,190),1.4))
+        p.drawEllipse(aim,5.5,5.5)
         p.setBrush(QColor(236, 156, 237))
         p.setPen(QPen(edge, 2.))
         diamond=QPolygonF((QPointF(cp.x(),cp.y()-9),QPointF(cp.x()+9,cp.y()),
@@ -899,19 +940,41 @@ class SceneVolumeMapper(_VisualControl):
         if any(abs(t)>1. for t in eye):
             p.setPen(faint)
             p.drawText(QRectF(5,12,self.width()-10,20),Qt.AlignmentFlag.AlignCenter,'Camera outside the source volume')
-        p.setPen(_colour('text.tertiary'))
-        p.drawText(QRectF(3,242,self.width()-6,16),Qt.AlignmentFlag.AlignCenter,
-                   '● Source     ● End     ◆ Camera')
-        p.drawText(QRectF(3,260,self.width()-6,23),Qt.AlignmentFlag.AlignCenter,
-                   'Drag XY · Shift/right-drag depth · PgUp/Dn depth')
+        # Fully coloured symbols and text; no verbose coordinates or keyboard
+        # instructions cluttering the visual controller (screen readers retain describe()).
+        for x, name, colour in ((9, '● Start', QColor(94,223,231)),
+                                (79, '● End', QColor(255,195,99)),
+                                (143, '◆ Camera', QColor(236,156,237)),
+                                (221, '● Aim', QColor(244,211,253))):
+            p.setPen(colour)
+            p.drawText(QRectF(x,240,85,19),Qt.AlignmentFlag.AlignLeft,name)
 
     def _move_to(self, position):
+        if self._drag_role == 'aim':
+            from core.constants.extruded_bubble_world import WORLD_HALF
+            eye = self._eye()
+            aim = list(self._aim())
+            z = aim[2]
+            x = (position.x()-self.width()*.5+38.*z)/67.
+            y = (139.+21.*z+13.*x-position.y())/62.
+            target = (x*WORLD_HALF[0], y*WORLD_HALF[1], z*WORLD_HALF[2])
+            difference = tuple(target[i]-eye[i]*WORLD_HALF[i] for i in range(3))
+            planar = math.hypot(difference[0], difference[2])
+            if planar < 1e-5:
+                return
+            yaw = math.atan2(-difference[0],-difference[2])/math.pi
+            pitch = math.degrees(math.atan2(difference[1], planar))
+            angles = (max(-1.,min(1.,yaw)),max(-0.5,min(0.5,(pitch-16.)/90.)))
+            self._camera_angles = angles
+            self.cameraAimChanged.emit(angles)
+            self.update()
+            return
         camera = self._drag_role == 'camera'
         if camera:
             coords = list(self._eye())
         else:
             offset = self._active*3
-            coords = self._coords[offset:offset+3]
+            coords = list(self._path_point(self._active))
         if self._drag_axis == 'depth':
             z = self._drag_start_z + (position.x()-self._drag_start.x())/52.
             coords[2]=max(-1.,min(1.,z))
@@ -931,6 +994,9 @@ class SceneVolumeMapper(_VisualControl):
                 self.update()
         else:
             self._coords[self._active*3:self._active*3+3]=coords
+            if self._active == 0 and self._linked_source is not None:
+                self._linked_source = tuple(coords)
+                self.linkedSourceChanged.emit(tuple(coords))
             self._changed(commit=False)
 
     def mousePressEvent(self,event):
@@ -938,10 +1004,12 @@ class SceneVolumeMapper(_VisualControl):
             return super().mousePressEvent(event)
         pos=event.position()
         cam=self._marker(self._eye())
-        is_cam=self._camera_only or (cam.x()-pos.x())**2+(cam.y()-pos.y())**2 < 14.**2
+        aim=self._marker(self._aim())
+        is_aim=(aim.x()-pos.x())**2+(aim.y()-pos.y())**2 < 12.**2
+        is_cam=(self._camera_only or (cam.x()-pos.x())**2+(cam.y()-pos.y())**2 < 14.**2) and not is_aim
         if not is_cam:
-            self._active=min(range(2),key=lambda i:(self._marker(self._coords[i*3:i*3+3]).x()-pos.x())**2 + (self._marker(self._coords[i*3:i*3+3]).y()-pos.y())**2)
-        self._drag_role='camera' if is_cam else 'path'
+            self._active=min(range(2),key=lambda i:(self._marker(self._path_point(i)).x()-pos.x())**2 + (self._marker(self._path_point(i)).y()-pos.y())**2)
+        self._drag_role='aim' if is_aim else ('camera' if is_cam else 'path')
         self._drag_axis='depth' if event.button()==Qt.MouseButton.RightButton or event.modifiers()&Qt.KeyboardModifier.ShiftModifier else 'xy'
         self._drag_start=pos
         self._drag_start_z=(self._eye()[2] if is_cam else self._coords[self._active*3+2])
@@ -956,6 +1024,13 @@ class SceneVolumeMapper(_VisualControl):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self,event):
+        if self._dragging and self._drag_role == 'aim':
+            self._dragging=False
+            self.cameraAimCommitted.emit(self._camera_angles)
+            self.update()
+            return
+        if self._dragging and self._drag_role == 'path' and self._active == 0 and self._linked_source is not None:
+            self.linkedSourceCommitted.emit(tuple(self._linked_source))
         if self._dragging and self._drag_role=='camera' and not self._camera_only:
             self._dragging=False
             self.cameraOffsetCommitted.emit(self._camera_offset)

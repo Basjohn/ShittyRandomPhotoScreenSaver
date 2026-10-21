@@ -567,7 +567,7 @@ keeps the scene inside the border at every pose, scale, viewport and Edit state;
 Applicable 3D geometry/layout-profile contracts still apply, but no overflow option can bypass the interior clip.
 Neon Lake Basin uses this presentation contract; `Docs/Reference/Neon_Lake_Basin.md` owns its terrain and lifecycle detail.
 
-The existing 3D controls retain their bindings: WASD and Alt+left-drag orbit, Alt+right-drag moves, and Alt+scroll scales.
+Free-form 3D (Spectrum/Sphere) retains WASD orbit and Alt+left drag. Framed Extruded Bubble instead uses **plain WASD for physical camera-relative travel**, **Shift+W/S for pitch and Shift+A/D for yaw**, plus Q/E as alternative yaw keys, and Alt+left drag for orbit; Alt+right pan and Alt+scroll card scaling retain their established meanings. EB travel does not alter scene zoom or lens FOV. Neon Lake is pending a separate mode-capability audit, not implicitly changed by this binding.
 For framed 3D modes these operations affect internal scene turn/tilt/pan/scale only; they never change the outer card's
 geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
 Save Preset As can capture the settled pose as optional `starting_view` metadata, outside its artwork snapshot;

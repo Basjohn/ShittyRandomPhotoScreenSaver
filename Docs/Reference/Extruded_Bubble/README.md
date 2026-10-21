@@ -16,6 +16,10 @@ Live tasks remain in
 The native results remain visually rejected. A physical world and passing checks do not establish spherical
 glass, depth, musical response or parity with these targets.
 
+## Slim GODZIP resource boundary (current handoff)
+
+Ordinary GODZIPs **intentionally exclude** bulky `Lab/2026-10-18/` and `Evidence/2026-10-20/` payloads, some original mock image bytes, and the separate workstation 11.6 GB evidence archive. The paths below describe the **full local repository/reference collection**, not files guaranteed to exist in the slim archive. Do not treat an absent Lab/Evidence file as permission to delete its requirement, reconstruct a screenshot or fetch an unrelated checkout. Current source, text Investigation/Target and the live `Current_Plan.md` are sufficient for code/docs handoffs; request a specifically needed image or recording only for a visual acceptance gate. EB Lab remains deliberately out of the archive.
+
 ## Start here
 
 | Material | Canonical location | Meaning |
@@ -92,6 +96,6 @@ reactivity baseline. No camera-attached replacement populations, geometry telepo
 
 The annotated targets are direct acceptance references:
 
-![Blue sphere, light and trail requirements](Targets/Originals/Informational%20mock.png)
+[Blue sphere, light and trail requirements (full local reference set)](Targets/Originals/Informational%20mock.png)
 
-![Copper sphere, light and trail requirements](Targets/Originals/Informational%20mock%202.png)
+[Copper sphere, light and trail requirements (full local reference set)](Targets/Originals/Informational%20mock%202.png)

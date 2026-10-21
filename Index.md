@@ -32,7 +32,7 @@ Local-repo transition concept mock references currently used by the plan live un
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
 
-`.godzip/CHECKPOINT_HANDOFF.md` and `.godzip/CHECKPOINT_LIVE_CHECKLIST.md` are untracked checkpoint orientation and open acceptance evidence, **not** competing architecture, product, persistence, or test authorities. Reconcile them against the current source, `Current_Plan.md`, `Docs/Contracts.md` and `Docs/TestSuite.md`.
+For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy and `.godzip/manifest.json` inventories **only shipped files**. These are metadata, not architecture or source authority. Older optional `.godzip/CHECKPOINT_HANDOFF.md` / `.godzip/CHECKPOINT_LIVE_CHECKLIST.md` exist only if actually included; do not invent or expect them. The extracted GODZIP is the current working tree until superseded, and its source and `Current_Plan.md` outrank stale checkpoint notes. The archive may intentionally omit Lab/Evidence/assets; absence does not authorize removing their contracts, recreating them, or fetching a different repository state.
 
 ## Current authority routing
 
@@ -53,7 +53,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
-| accepted Standard/MC Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md`; `Docs/Guides/Python314_Cutover.md` |
+| accepted Standard/MC Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md` |
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |

@@ -321,6 +321,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         else:
             widget.setCurrentText(control.admit(default, default))
             bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
+            if control.key == 'extruded_bubble_light_type':
+                widget.currentTextChanged.connect(lambda *_: _refresh_eb_volume(tab))
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(control.tooltip)
@@ -338,32 +340,39 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     every move; the setting saves once per gesture or keyboard step (``valueCommitted``)."""
     row, content = _row(layout, control.label)
     value = control.admit(default, default)
+    # EB-R32: formatter is unconditional, including every current/future visual
+    # subtype. A branch-local `describe` previously blocked EB Settings entirely.
+    describe = control.text
     if isinstance(control, Range):
         widget = RangeSlider(round(control.low * control.scale), round(control.high * control.scale))
         widget.setValue(control.positions(value))
-        describe = control.text
     elif isinstance(control, Triangle):
         widget = TriangleMapper(control.corners)
         widget.setValue(value)
-        describe = control.text
     elif isinstance(control, (SceneVolumePath, SceneCameraPosition)):
         widget = SceneVolumeMapper(camera_only=isinstance(control, SceneCameraPosition))
+        widget.setValue(value)
     elif isinstance(control, ScenePath):
         widget = ScenePathMapper()
         widget.setValue(value)
-        describe = control.text
     else:
         widget = DirectionMapper((control.height_low, control.height_high), centre_text=control.centre_text,
                                  marker=control.marker, midline=control.midline)
         widget.setValue(value)
-        describe = control.text
     widget.setAccessibleName(control.label.rstrip(":"))
     label = QLabel(describe(widget.value()))
+    if isinstance(widget, SceneVolumeMapper):
+        label.hide()  # Coordinates remain in the accessible description, not duplicated next to the editor.
     setattr(tab, f"{control.key}_label", label)
     widget.valueChanged.connect(lambda current, d=describe, l=label: l.setText(d(current)))
     bind_setting_signal(tab, widget.valueCommitted,
                         auto_switch=auto_switch and not isinstance(control, SceneCameraPosition))
     if isinstance(control, (SceneVolumePath, SceneCameraPosition)):
+        widget.cameraAimChanged.connect(lambda angles: _set_eb_camera_aim(tab, angles, commit=False))
+        widget.cameraAimCommitted.connect(lambda angles: _set_eb_camera_aim(tab, angles, commit=True))
+        if control.key == 'extruded_bubble_ray_path':
+            widget.linkedSourceChanged.connect(lambda source: _set_eb_light_source(tab, source, commit=False))
+            widget.linkedSourceCommitted.connect(lambda source: _set_eb_light_source(tab, source, commit=True))
         # Cross-path overlays are driven by the SAME saved settings and live widgets;
         # never allocate a second Settings camera or world-coordinate owner.
         widget.valueChanged.connect(lambda *_: _refresh_eb_volume(tab))
@@ -455,6 +464,7 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
     # Conditions follow their controls' signals, which were blocked.
     if mode_id == 'extruded_bubble':
         if only_buckets is None:
+            tab._extruded_bubble_aim_dirty = False
             setattr(tab, '_extruded_bubble_loaded_camera_pose', {
                 key: config.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
                       tab._widget_default('spotify_visualizer', key)))
@@ -489,6 +499,10 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
                                                tab._widget_default("spotify_visualizer", entry.key))
             continue
         values[entry.key] = _current_value(tab, entry)
+    if mode_id == 'extruded_bubble' and getattr(tab, '_extruded_bubble_aim_dirty', False):
+        pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
+        for key in ('extruded_bubble_turn','extruded_bubble_tilt'):
+            values[key] = pose[key]
     return values
 
 
@@ -497,6 +511,8 @@ def _eb_live_value(tab, key):
     widget = getattr(tab, key, None)
     if isinstance(widget, SceneVolumeMapper):
         return tuple(widget.value())
+    if key == 'extruded_bubble_light_type' and widget is not None and hasattr(widget, 'currentText'):
+        return widget.currentText()
     return cache.get(key, tab._widget_default('spotify_visualizer', key))
 
 
@@ -519,7 +535,8 @@ def _eb_base_eye(tab):
                            scale=get('extruded_bubble_scene_scale'),
                            pan_x=get('extruded_bubble_scene_pan_x'),
                            pan_y=get('extruded_bubble_scene_pan_y'),
-                           fov_y_degrees=fov)[2]
+                           fov_y_degrees=fov,
+                           surface_bound=_eb_live_value(tab, 'extruded_bubble_light_type') == 'Sunlit Surface')[2]
 
 
 def _refresh_eb_volume(tab):
@@ -532,17 +549,26 @@ def _refresh_eb_volume(tab):
     keys = {'stream':'extruded_bubble_stream_direction',
             'light':'extruded_bubble_light_direction',
             'rays':'extruded_bubble_ray_path'}
+    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
+    angles = (float(pose.get('extruded_bubble_turn', 0.0)),
+              float(pose.get('extruded_bubble_tilt', 0.0)))
+    deep = _eb_live_value(tab, 'extruded_bubble_light_type') == 'Deep Light'
+    light = _eb_live_value(tab, 'extruded_bubble_light_direction')
+    effective = {role: _eb_live_value(tab, key) for role, key in keys.items()}
+    if deep:
+        effective['rays'] = tuple(light[:3]) + tuple(effective['rays'][3:])
     for role, key in keys.items():
         widget = getattr(tab, key, None)
         if not isinstance(widget, SceneVolumeMapper):
             continue
-        ghosts = {other: _eb_live_value(tab, other_key) for other, other_key in keys.items()
-                  if other != role}
-        widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera)
+        ghosts = {other: effective[other] for other in keys if other != role}
+        widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera,
+                                  camera_angles=angles,
+                                  linked_source=light[:3] if deep and role == 'rays' else None)
     widget = getattr(tab, 'extruded_bubble_camera_position', None)
     if isinstance(widget, SceneVolumeMapper):
-        widget.setSceneReferences(paths={role:_eb_live_value(tab,key) for role,key in keys.items()},
-                                  base_eye=base, camera_offset=camera)
+        widget.setSceneReferences(paths=effective,
+                                  base_eye=base, camera_offset=camera, camera_angles=angles)
 
 
 def _set_eb_camera_offset(tab, offset, *, commit):
@@ -562,6 +588,51 @@ def _set_eb_camera_offset(tab, offset, *, commit):
     _refresh_eb_volume(tab)
     if commit:
         # Camera movement is a live pose adjustment, not curated preset artwork.
+        tab._save_settings()
+
+
+def _set_eb_camera_aim(tab, angles, *, commit):
+    """Aiming edits the existing live turn/tilt, NOT a separate FOV or camera."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', None)
+    if pose is None:
+        return
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    # physical_camera's turn/tilt ordinarily ORBITS a pivot. Aiming must
+    # ROTATE IN PLACE: rebase the existing world-offset against the newly
+    # oriented orbit baseline so the actual eye is invariant.
+    offset_before = tuple(float(v) for v in _eb_live_value(tab, 'extruded_bubble_camera_position'))
+    base_before = _eb_base_eye(tab)
+    physical_eye = tuple(base_before[i] + offset_before[i]*WORLD_HALF[i] for i in range(3))
+    spec = require_mode_settings('extruded_bubble')
+    for key, angle in zip(('extruded_bubble_turn','extruded_bubble_tilt'), angles):
+        pose[key] = spec.control(key).admit(angle, tab._widget_default('spotify_visualizer', key))
+    base_after = _eb_base_eye(tab)
+    rebase = tuple((physical_eye[i] - base_after[i])/WORLD_HALF[i] for i in range(3))
+    _set_eb_camera_offset(tab, rebase, commit=False)
+    if commit:
+        tab._extruded_bubble_aim_dirty = True
+    _refresh_eb_volume(tab)
+    if commit:
+        tab._save_settings()
+
+
+def _set_eb_light_source(tab, source, *, commit):
+    """Deep rays share the actual emitter Source, with a separately authored End."""
+    key='extruded_bubble_light_direction'
+    old = list(_eb_live_value(tab,key))
+    old[:3]=list(source)
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    descriptor=require_mode_settings('extruded_bubble').control(key)
+    updated=descriptor.admit(old,old)
+    tab._extruded_bubble_lazy_values[key]=updated
+    widget=getattr(tab,key,None)
+    if isinstance(widget,SceneVolumeMapper):
+        blocked=widget.blockSignals(True)
+        try: widget.setValue(updated)
+        finally: widget.blockSignals(blocked)
+    _refresh_eb_volume(tab)
+    if commit:
         tab._save_settings()
 
 

@@ -1,4 +1,5 @@
-"""Live view orbiting for 3D freeform Visualizer modes (W/A/S/D, Alt + left drag).
+"""Live 3D view control: freeform WASD orbit, EB Q/E yaw and camera-facing WASD flight,
+plus shared Alt + left drag. No second camera, clock, or FOV manipulation.
 
 A mode opts in through its descriptor's ``view_orbit_settings`` (its turn and tilt
 presentation settings; turn spans -1..1 as a full circle and wraps, tilt clamps to its
@@ -13,9 +14,9 @@ is the only writer; the record is replaced whole, so the capture never sees half
 drag steps the view directly. Nothing here saves: the caller persists once, when orbiting stops
 (``resolve_visualizer_view_orbit`` in ``core.settings.visualizer_view_orbit``).
 
-Keys move the camera around the scene: W up over it, S down, A to the left, D to the right
-(the near end of the row then swings toward the side the camera went); a drag turns the scene
-toward it (rendering/runtime_input.py).
+Legacy freeform keys orbit as before. EB instead flies along its actual forward/right
+basis with W/A/S/D; Q/E yaw and Shift+W/S pitch. A drag still orbits the scene. Both
+forms use one capture clock and a single persistence owner (rendering/runtime_input.py).
 
 Framed-camera policy (turn wrap or clamp, release inertia, scene pan envelope, Auto Rotate) is declared on each
 mode's descriptor; nothing here branches on a mode id. Auto Rotate is one immutable ``AutoRotate`` record the GUI
@@ -33,6 +34,9 @@ from core.settings.visualizer_mode_registry import get_visualizer_mode_descripto
 
 # A held key's pace, in its mode's steps per second (2 degree steps: 60 degrees a second).
 VIEW_ORBIT_STEPS_PER_SECOND = 30.0
+# Constant world-space EB flight speed; the camera FOV, scene scale and zoom stay unchanged.
+FRAMED_CAMERA_TRAVEL_UNITS_PER_SECOND = 5.5
+_FLIGHT = "_view_framed_flight_motion"
 # The presentation-state attribute holding the live motion (absent or None when keys are idle).
 _MOTION = "_view_orbit_motion"
 _DRAG = "_view_orbit_drag_velocity"
@@ -99,6 +103,102 @@ class ViewOrbitMotion:
     turn_rate: float
     tilt_rate: float
     since: float
+
+
+@dataclass(frozen=True, slots=True)
+class FramedFlightMotion:
+    """One immutable keyboard gesture for the EB physical camera, evaluated on capture time."""
+    mode_id: str
+    since: float
+    offset: tuple[float, float, float]
+    turn: float
+    tilt: float
+    turn_rate: float
+    tilt_rate: float
+    strafe: float
+    travel: float
+
+
+def framed_flight_position(motion: FramedFlightMotion, now: float) -> tuple[float, float, float]:
+    """Smooth, camera-facing translation with simultaneous yaw/pitch and constant lens.
+
+    Bounded midpoint quadrature integrates held travel as yaw/pitch change; 24 steps
+    per gesture evaluation, never OS repeat, timers, or GUI-thread per-frame writes.
+    """
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    dt = max(0.0, float(now) - motion.since)
+    if not dt or not (motion.strafe or motion.travel):
+        return motion.offset
+    magnitude = math.hypot(motion.strafe, motion.travel)
+    strafe, travel = motion.strafe / max(1.0, magnitude), motion.travel / max(1.0, magnitude)
+    # More intervals for long-held turns, bounded so capture work remains predictable.
+    spans = min(48, max(12, math.ceil(dt * max(abs(motion.turn_rate), abs(motion.tilt_rate)) * 48)))
+    portion = dt / spans
+    moved = [0.0, 0.0, 0.0]
+    for i in range(spans):
+        t = (i + 0.5) * portion
+        yaw = math.pi * (motion.turn + motion.turn_rate * t)
+        # EB's canonical tilt is [-0.5, 0.5]; no Qt/config imports on the capture path.
+        tilt = max(-0.5, min(0.5, motion.tilt + motion.tilt_rate * t))
+        pitch = math.radians(16.0 + 90.0 * tilt)
+        sy, cy = math.sin(yaw), math.cos(yaw)
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        # Same world axes as extruded_bubble_scene.camera: right and -back.
+        moved[0] += portion * (strafe * cy - travel * sy * cp)
+        moved[1] += portion * (travel * sp)
+        moved[2] += portion * (-strafe * sy - travel * cy * cp)
+    return tuple(max(-8.0, min(8.0, motion.offset[i] +
+                 moved[i] * FRAMED_CAMERA_TRAVEL_UNITS_PER_SECOND / WORLD_HALF[i])) for i in range(3))
+
+
+def set_framed_flight_rates(host: Any, mode_id: str, yaw: float, pitch: float,
+                            strafe: float, travel: float, now: float) -> Dict[str, float]:
+    """One GUI-thread publication per key edge; all held motion is capture-clock owned."""
+    if mode_id != 'extruded_bubble':
+        return {}
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    old = getattr(host, _FLIGHT, None)
+    if isinstance(old, FramedFlightMotion) and old.mode_id == mode_id:
+        offset = framed_flight_position(old, now)
+    else:
+        offset = tuple(float(x) for x in getattr(host, '_extruded_bubble_camera_position'))
+    # Resolve the old orbit before changing its rate, even if travel and yaw are held together.
+    turns = view_orbit_values(host, mode_id, now)
+    apply_presentation_vis_mode_kwargs(host, {'extruded_bubble_camera_position': list(offset)})
+    values = set_view_orbit_rates(host, mode_id, yaw, pitch, now)
+    turn_step, tilt_step = get_visualizer_mode_descriptor(mode_id).view_orbit_steps
+    setattr(host, _FLIGHT, FramedFlightMotion(
+        mode_id, float(now), offset, turns['extruded_bubble_turn'], turns['extruded_bubble_tilt'],
+        float(yaw) * turn_step * VIEW_ORBIT_STEPS_PER_SECOND,
+        float(pitch) * tilt_step * VIEW_ORBIT_STEPS_PER_SECOND,
+        float(strafe), float(travel)))
+    return values
+
+
+def settle_framed_flight(host: Any, now: float) -> tuple[float, float, float] | None:
+    motion = getattr(host, _FLIGHT, None)
+    if not isinstance(motion, FramedFlightMotion):
+        return None
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    offset = framed_flight_position(motion, now)
+    # Freeze first so an intervening capture can never see a half-written value.
+    setattr(host, _FLIGHT, FramedFlightMotion(motion.mode_id, now, offset,
+            motion.turn, motion.tilt, 0., 0., 0., 0.))
+    apply_presentation_vis_mode_kwargs(host, {'extruded_bubble_camera_position': list(offset)})
+    setattr(host, _FLIGHT, None)
+    return offset
+
+
+def rebase_framed_flight_on_drag(host: Any, now: float) -> None:
+    """A simultaneous mouse orbit must not leave travel following the old direction."""
+    motion = getattr(host, _FLIGHT, None)
+    if not isinstance(motion, FramedFlightMotion):
+        return
+    offset = framed_flight_position(motion, now)
+    turns = view_orbit_values(host, motion.mode_id, now)
+    setattr(host, _FLIGHT, FramedFlightMotion(motion.mode_id, now, offset,
+            turns['extruded_bubble_turn'], turns['extruded_bubble_tilt'],
+            motion.turn_rate, motion.tilt_rate, motion.strafe, motion.travel))
 
 
 def view_orbit_settings(mode_id: str) -> tuple[str, str] | tuple[()]:
@@ -195,6 +295,9 @@ def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, flo
 def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object], now: float) -> Dict[str, object]:
     """A capture's ``values`` with the held-key or auto-rotating view at ``now`` (logical thread; read only)."""
     motion = _motion(host, mode_id)
+    flight = getattr(host, _FLIGHT, None)
+    if isinstance(flight, FramedFlightMotion) and flight.mode_id == mode_id:
+        values = {**values, 'extruded_bubble_camera_position': framed_flight_position(flight, now)}
     if motion is not None:
         return {**values, **orbit_motion_values(motion, now)}
     auto = getattr(host, _AUTO, None)
@@ -299,6 +402,13 @@ def rebase_view_orbit_motion(host: Any, now: float) -> None:
     setattr(host, _INERTIA, None)
     setattr(host, _DRAG, None)
     motion = getattr(host, _MOTION, None)
+    flight = getattr(host, _FLIGHT, None)
+    if isinstance(flight, FramedFlightMotion):
+        turn_key, tilt_key = view_orbit_settings(flight.mode_id)
+        setattr(host, _FLIGHT, FramedFlightMotion(flight.mode_id, now,
+                tuple(float(x) for x in getattr(host, '_extruded_bubble_camera_position')),
+                float(getattr(host, f'_{turn_key}')), float(getattr(host, f'_{tilt_key}')),
+                flight.turn_rate, flight.tilt_rate, flight.strafe, flight.travel))
     if motion is None:
         return
     turn_key, tilt_key = view_orbit_settings(motion.mode_id)

@@ -375,7 +375,12 @@ class QuickExtrudedBubbleRenderer:
             pan_x=float(parameter(parameters, "extruded_bubble_scene_pan_x")),
             pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
             position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
-            fov_y_degrees=fov_y)
+            fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface")
+        if knobs["mode"] == "deep":
+            to_emitter = tuple(float(p) - float(e) for p, e in zip(knobs["light_source"], eye))
+            distance = math.sqrt(sum(v*v for v in to_emitter))
+            if distance > 1e-6:
+                knobs = {**knobs, "sun_below": tuple(v/distance for v in to_emitter)}
         shift = (0.0, 0.0)
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
@@ -427,6 +432,7 @@ class QuickExtrudedBubbleRenderer:
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,
             "uStreamAcross": across, "uStreamDepth": depth_axis,
             "uStreamWorld": stream, "uStreamSource": stream_source, "uStreamEnd": stream_end,
+            "uParticleSpread": float(parameter(parameters, "extruded_bubble_particle_spread")),
             "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
@@ -449,6 +455,7 @@ class QuickExtrudedBubbleRenderer:
             "uStreamAcross": across,
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
             "uSpeckTravel": _SPECK_CARRY * float(state.travel),
+            "uParticleSpread": float(parameter(parameters, "extruded_bubble_particle_spread")),
             "uSpeckSource": stream_source, "uSpeckEnd": stream_end,
             "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),

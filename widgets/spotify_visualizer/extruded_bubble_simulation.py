@@ -59,6 +59,7 @@ class ExtrudedBubbleControls:
     small_size: float = 1.0                # independent mid population radius multiplier
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
+    bubble_spread: float = 1.0               # source-patch width; independent from Columns and particle width
     stream_direction: tuple[float, float] = (0.0, 0.0)   # legacy angle for standalone callers
     stream_path: tuple[float, ...] | None = None       # normalized source/end xyz, authoritative when supplied
     stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
@@ -249,8 +250,8 @@ class ExtrudedBubbleSimulation:
                 # with no random halfway-up source position.
                 across, deep_axis = stream_basis(direction)
                 anchor = world_point(controls.stream_path[:3], WORLD_HALF)
-                noise_a = rng.uniform(-0.55, 0.55) * WORLD_UNIT
-                noise_b = rng.uniform(-0.55, 0.55) * WORLD_UNIT
+                noise_a = rng.uniform(-0.55, 0.55) * WORLD_UNIT * max(0.0, controls.bubble_spread)
+                noise_b = rng.uniform(-0.55, 0.55) * WORLD_UNIT * max(0.0, controls.bubble_spread)
                 point = tuple(
                     anchor[i] if abs(controls.stream_path[i]) >= 0.9999
                     else max(-WORLD_HALF[i], min(WORLD_HALF[i], anchor[i]

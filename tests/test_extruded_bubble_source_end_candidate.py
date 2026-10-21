@@ -126,8 +126,14 @@ def test_light_position_and_ray_endpoints_are_real_scene_knobs():
     assert moved['light_end'] != base['light_end']
     v['extruded_bubble_ray_path'] = [0.5, 1, 0, -0.5, -1, 0.3]
     beam = scene.scene_knobs(v)
-    assert beam['ray_source'] == (9.0, 8.0, 0.0)
+    # R34: Deep Light shafts and visible emitter MUST share the single real
+    # source; changing Ray End remains independent and physically authored.
+    assert beam['ray_source'] == beam['light_source'] == (3.6, 4.0, 0.0)
     assert beam['ray_end'] == (-9.0, -8.0, 5.3999999999999995)
+    v['extruded_bubble_light_type'] = 'Sunlit Surface'
+    surface = scene.scene_knobs(v)
+    assert surface['ray_source'] == (9.0, 8.0, 0.0)
+    assert surface['ray_source'] != surface['light_source']
     cleanup()
 
 
