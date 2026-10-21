@@ -262,6 +262,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         setattr(tab, f"_{control.key}", colour)
         button = ColorSwatchButton(title=control.title, show_alpha=control.alpha)
         button.setToolTip(control.tooltip)
+        if control.key.startswith("extruded_bubble_"):
+            row.setToolTip(control.tooltip)  # Label/row hover, even for swatches.
         _apply_availability(button, control)
         bind_color_button(tab, button, f"_{control.key}", auto_switch=auto_switch, initial_color=colour)
         setattr(tab, f"{control.key}_btn", button)
@@ -326,6 +328,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(control.tooltip)
+    if control.key.startswith("extruded_bubble_"):
+        row.setToolTip(control.tooltip)  # Tooltip remains discoverable over the label.
     if isinstance(control, Slider) and control.bottom_padding:
         margins = row.layout().contentsMargins()
         row.layout().setContentsMargins(margins.left(), margins.top(), margins.right(),
@@ -384,6 +388,8 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     if not isinstance(control, Range):
         content.addStretch()            # the mappers keep their size; a range fills the row as a slider does
     widget.setToolTip(control.tooltip)
+    if control.key.startswith("extruded_bubble_"):
+        row.setToolTip(control.tooltip)  # The visual editor's entire row is descriptive.
     _apply_availability(widget, control)
     setattr(tab, control.key, widget)
     return row

@@ -114,7 +114,10 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
         // Away from the sun the window shows dim sky: the bright patches gather round the sun (mocks).
         vec3 light = uSkyTint * (0.28 + 0.3 * out_.y) * uSurfaceSky + white * (pow(s, 6.0) * 0.45 * uSurfaceSky + pow(s, 40.0) * 1.4)
                    + vec3(pow(s, 900.0) * 40.0);
-        float window = smoothstep(0.56, 0.7, ray.y);
+        // Preserve a low, continuous sky/surface across the entire upward hemisphere.
+        // The high-angle sun/refraction lobe remains brighter, but the rest
+        // of the ceiling must not vanish into the water medium.
+        float window = 0.30 + 0.70 * smoothstep(0.12, 0.68, ray.y);
         surface = mix(medium * 0.75, light * uSurfaceGain, transmission * smoothstep(0.0, 0.25, out_.y) * window);
     } else {
         surface = medium * 0.75;
