@@ -474,7 +474,7 @@ class SceneCameraPosition(Direction):
                 raise ValueError('Camera offset requires finite xyz')
         except (TypeError, ValueError, OverflowError):
             nums = [float(v) for v in default]
-        return [round(max(-8.0, min(8.0, v)), 4) for v in nums]
+        return [round(max(-8.0, min(8.0, v)), 6) for v in nums]
 
     def text(self, value: object) -> str:
         x, y, z = self.admit(value, value)
@@ -1521,6 +1521,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_size_variety", "Size Variety:", 0.0, 1.0, bucket="bubbles"),
         Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles",
                tooltip="How many bubbles rise in lines along the stream."),
+        Slider("extruded_bubble_bubble_spread", "Bubble Spread:", 0.0, 4.0, bucket="bubbles",
+               tooltip="Transverse width of bubble births around the physical Stream Source. 1.0 preserves the existing width; no interior births."),
         SceneVolumePath("extruded_bubble_stream_direction", "Stream Source → End:", bucket="motion", legacy_kind="stream",
                   tooltip="Set the spawning SOURCE on the floor, ceiling or side and the END downstream. Nodes carry independent depth."),
         Range("extruded_bubble_stream_speed", "Stream Speed:", 0.0, 1.0, percent=True, bucket="motion"),
@@ -1539,7 +1541,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
                  tooltip="Place the dot: the nearer a corner, the more often meeting bubbles do that."),
         Choice("extruded_bubble_collision_scope", "Applies To:", ("All", "Big", "Small", "Off"), bucket="collision"),
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
-               tooltip="Place the real camera in the shared 3D volume. This adds physical world translation; orbit, zoom and FOV remain independent."),
+               tooltip="Physical world translation. In the running EB scene: WASD fly relative to view, Q/E yaw, Shift+W/S pitch, R reset. Zoom and FOV stay independent."),
         Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
                tooltip="Vertical camera angle: narrower photographic framing reduces edge stretch, without bending sphere geometry."),
@@ -1560,6 +1562,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_softness", "Softness:", 0.0, 1.0, bucket="glass"),
         Slider("extruded_bubble_sparkle", "Sparkle:", 0.0, 2.0, bucket="glass"),
         Range("extruded_bubble_particles", "Particles:", 0.0, 1.0, percent=True, bucket="particles"),
+        Slider("extruded_bubble_particle_spread", "Particle Spread:", 0.0, 4.0, bucket="particles",
+               tooltip="Transverse width of specks, free bead chains and marine snow around Stream Source → End. Attached fizz stays with its bubble. 1.0 preserves the current distribution."),
         Slider("extruded_bubble_particle_size", "Particle Size:", 0.5, 2.0, bucket="particles"),
         Colour("extruded_bubble_particle_colour", "Particle Colour:", "Particle Colour", bucket="particles",
                alpha=False),

@@ -875,6 +875,7 @@ uniform float uBeadTravel;     // integrated physical world travel
 uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
+uniform float uParticleSpread; // free chains and snow only: 1.0 original physical width
 uniform float uChainFill;       // continuous (possibly fractional) number of visible chains
 uniform float uSnowFill;        // continuous snow allocation; last mote fades at the boundary
 uniform float uFizzFill;        // continuous allocation per stable wake, before ceil to integer stride
@@ -915,7 +916,7 @@ void beadInstance() {
         // The same free-chain shape, but travel now follows the authored finite Source -> End.
         float arc = sin(s / scale * 0.23 + phase + uBeadTravel * 0.025) * 0.09
                   + sin(s / scale * 0.45 + phase * 1.7) * 0.01;
-        float pathWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.28;
+        float pathWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.28 * uParticleSpread;
         vec3 sourceLine = pathEnabled ? mix(uStreamSource, uStreamEnd, progress)
                                       : centre + along * (s - 0.5 * span);
         vec3 p = sourceLine
@@ -995,7 +996,7 @@ void beadInstance() {
     vec3 p;
     if (pathEnabled) {
         float progress = fract(seed.y + uSnowDrift / pathLength);
-        float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46;
+        float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
         p = mix(uStreamSource, uStreamEnd, progress)
           + across * (seed.x * 2.0 - 1.0) * width
           + depthAxis * (seed.z * 2.0 - 1.0) * width;
@@ -1024,6 +1025,7 @@ uniform vec3 uWorldCenter;
 uniform vec3 uWorldHalf;
 uniform float uWorldUnit;
 uniform float uSpeckTravel;    // integrated physical travel at 30% of the bubble stream
+uniform float uParticleSpread; // transverse width only; no change to music, lifetime or speed
 uniform vec3 uSpeckSource;       // world source of seeded particulate paths
 uniform vec3 uSpeckEnd;          // world end and fade-out region
 uniform float uWarmShare;      // share lit in the particle colour
@@ -1063,7 +1065,7 @@ void speckInstance() {
                                                    : cross(pathDir, vec3(0.0, 0.0, 1.0)));
     vec3 depthAxis = normalize(cross(pathDir, side));
     float progress = fract(seed.y + uSpeckTravel / lengthPath);
-    float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52;
+    float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52 * uParticleSpread;
     vec3 p = mix(uSpeckSource, uSpeckEnd, progress)
              + side * (seed.x * 2.0 - 1.0) * sideWidth
              + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;

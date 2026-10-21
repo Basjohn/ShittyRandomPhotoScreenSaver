@@ -103,6 +103,10 @@ R128 hard-disables cast shadows after three successive physically rejected treat
 
 
 
+## Neon Lake framed-camera keyboard audit (deferred; operator 2026-10-21)
+
+Audit whether accepted Neon Lake inherited the new EB-only physical navigation or still uses the old WASD orbit. It should eventually support the framed-camera distinction (Q/E yaw, Shift+W/S pitch, camera-facing WASD physical travel) through the *same camera/navigation authority*, never EB-specific underwater offsets pasted into the landscape. The required terrain safety gate is **no vertical orbit below geometry or viewing the underside of the world**; preserve accepted terrain camera, FOV, horizon, authored presets and clip bounds. No Neon Lake camera behavior changes in the current EB keyboard slice. Live tracking: `Current_Plan.md` EB-R31.
+
 ## Neon Lake water extension (operator-requested, deferred 2026-10-18)
 
 Neon Lake is already accepted: extend it **without** changing the current art, existing Water Line Glow semantics,

@@ -209,7 +209,7 @@ Curated Visualizer presets and your authored preset files are separate. **Back u
 **Why?** Because you can actually click the things that are meant to be clicked: Reddit/Gmail/FEEDS/Steam links and media controls. I never clicked the clock or weather though, you probably shouldn't try it.
 
 - **Normal screensaver mode:** Ordinary mouse movement or clicks exit the saver. Hold `Ctrl` to reveal the temporary interaction halo so you can operate supported overlays without exiting.
-- **Interaction Mode:** Ordinary pointer movement and clicks stay inside SRPSS. External-link actions can hand off to the desktop and close the saver cleanly. `Esc`, `Q` and the context menu remain explicit exit paths.
+- **Interaction Mode:** Ordinary pointer movement and clicks stay inside SRPSS. External-link actions can hand off to the desktop and close the saver cleanly. `Esc` and the context menu remain explicit exit paths. `Q` is no longer an exit binding; framed Extruded Bubble reserves it for camera yaw-left.
 - **Media Center builds:** Interaction Mode is enabled by design. You can select one or more displays and leave SRPSS running as a widget dashboard.
 
 While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
@@ -251,12 +251,15 @@ Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. 
 | `C` | Cycle transition type |
 | `Shift+0`–`Shift+9` | Save a layout slot |
 | `0`–`9` | Recall a layout slot |
-| `W` / `A` / `S` / `D` | Orbit a shown Extruded Spectrum or Shockwave Grid in 3D; viewpoint saves on release |
+| `W` / `A` / `S` / `D` | Orbit a free-form 3D visualizer such as Extruded Spectrum; in framed Extruded Bubble these keys fly/strafe instead |
+| `Shift+W` / `Shift+S`; `Shift+A` / `Shift+D` | Extruded Bubble camera pitch up/down; yaw left/right |
+| `Q` / `E` | Extruded Bubble yaw left/right (alternative to Shift+A/D) |
+| `R` | Reset framed 3D camera when admitted |
 | `PgUp` / `PgDown` | System volume up / down |
 | `Space` | Play/pause |
 | `Home` | Global media play/pause |
 | `End` | Global system mute toggle |
-| `Esc` / `Q` | Exit the screensaver |
+| `Esc` | Exit the screensaver (`Q` is reserved for EB yaw; it is not a global exit key) |
 
 </details>
 

@@ -63,6 +63,7 @@ class QuickDisplayRuntime(QObject):
     layout_slot_save_requested = Signal(str)
     # Floats: a drag's steps are fractions (an int signature truncated them all to nothing).
     view_orbit_rates_changed = Signal(float, float)
+    view_framed_flight_rates_changed = Signal(float, float, float, float)
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
     view_camera_reset_requested = Signal()
@@ -248,6 +249,7 @@ class QuickDisplayRuntime(QObject):
             self.layout_slot_save_requested.emit
         )
         self._input.view_orbit_rates_changed.connect(self.view_orbit_rates_changed.emit)
+        self._input.view_framed_flight_rates_changed.connect(self.view_framed_flight_rates_changed.emit)
         self._input.view_orbit_requested.connect(self.view_orbit_requested.emit)
         self._input.view_orbit_finished.connect(self.view_orbit_finished.emit)
         self._input.view_camera_reset_requested.connect(self.view_camera_reset_requested.emit)

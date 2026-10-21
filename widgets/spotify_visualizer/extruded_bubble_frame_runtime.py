@@ -44,6 +44,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         small_size=float(parameters.get("extruded_bubble_small_size", 1.0)),
         size_variety=float(parameters["extruded_bubble_size_variety"]),
         columns=float(parameters["extruded_bubble_columns"]),
+        bubble_spread=float(parameters["extruded_bubble_bubble_spread"]),
         stream_direction=stream_angles,
         stream_path=stream_path,
         stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),

@@ -75,6 +75,16 @@ repair preservation, runtime cycling, the presentation applier and real Settings
 finite framed-only camera metadata, rejects malformed files loudly, preserves adjusted views through ordinary
 hydration, and keeps pose leaves out of artwork/Custom snapshots. All art inputs and output paths are test-owned.
 
+### EB R34 focused Windows regression (without the shared env-mutating fixture)
+
+From the **active extracted Godzip** root in PowerShell:
+
+```powershell
+& '.\.venv\Scripts\python.exe' -m pytest --noconftest -p tools.pytest_qt_noenv -q tests/test_extruded_bubble_lazy_bucket_ui.py tests/test_extruded_bubble_r34_alignment_candidate.py tests/test_extruded_bubble_source_end_candidate.py
+```
+
+The lazy-bucket test owns a temporary SettingsManager and uses the focused Qt fixture. Its R34 Aim invariant preserves the physical camera eye while changing turn/tilt without touching FOV. The Qt-free alignment test now reads source explicitly as UTF-8 (Windows defaults may be cp1252), and independently verifies camera offset round-trip precision. The six-decimal offset candidate and `.read_text(encoding='utf-8')` correction are **pending operator native rerun**; never interpret a Qt-free numerical pass as Settings acceptance. If the native assertion still fails, capture the complete assertion/trace and identify whether eye, pose, FOV, Save or Qt callback failed. Do not broaden to the chunked suite.
+
 ## Visualizer migration and framed-3D proof gates
 
 Original Bubble V5 is a **parity migration**, not a new reactivity version: save an operator-independent
@@ -1044,3 +1054,29 @@ Passage-role falsifiers additionally hold bass/max-level at .9 while changing on
 events: ordinary small size, stream, drift, emission and rays must all change. Soft large bubbles must breathe
 strongly downwards without acquiring loud-passage sustain; the Sustained endpoint must support large loud bodies
 without adding an inflated held-small floor. These logical/control gates do not approve material/depth appearance.
+
+### EB-R32 Settings-entry and Shift+WASD camera smoke (2026-10-21, `[~]` unaccepted)
+
+From the Godzip/repository root on native Windows, use the short targeted command:
+
+```powershell
+py -3.14 -m pytest -q tests/test_extruded_bubble_flight_keyboard_native.py tests/test_extruded_bubble_lazy_bucket_ui.py
+```
+
+The first file constructs all EB visual-control descriptors using real Qt and checks full Shift+A/D flight routing. The second constructs the actual Settings page and expands every lazy bucket while asserting bucket registration, catching callback exceptions that may otherwise only print to stderr. This is a narrow crash gate, **not** a lifecycle/visual acceptance. On a repeat of `describe` line 361 compare the launched app's source/build with the actual R31/R32 Godzip: R30 had the failing line at 361, R31 at 363. Preserve strict retirement barrier and do not rerun chunked suite for this issue.
+
+### EB-R33 quiet→loud Range authority audit (`[~]`, no visual acceptance)
+
+No renderer or Qt required for the controlled calculation:
+
+```powershell
+py -3.14 tools/visualizer_replay/extruded_bubble_range_energy_audit.py
+```
+
+The focused native + logical Settings gate (only if needed):
+
+```powershell
+py -3.14 -m pytest -q tests/test_extruded_bubble_flight_keyboard_native.py tests/test_extruded_bubble_lazy_bucket_ui.py tests/test_extruded_bubble_range_energy_audit.py
+```
+
+This documents all nine current EB Range consumers. A green source probe neither means the left/right handles correspond literally to silent/full output nor means visual reactivity or lifecycle passed. No full chunked suite requested.

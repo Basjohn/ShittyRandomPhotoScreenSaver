@@ -96,6 +96,8 @@ class RuntimeInputOwner(QObject):
     # OS key repeat does); an Alt + left drag on it in interaction/Ctrl mode steps it (a step per
     # DRAG_PIXELS_PER_STEP pixels); orbiting finishes once no key is held and no drag is on.
     view_orbit_rates_changed = Signal(float, float)
+    # EB framed flight: yaw, pitch, strafe, travel. One logical-clock motion, not OS repeats.
+    view_framed_flight_rates_changed = Signal(float, float, float, float)
     view_orbit_requested = Signal(float, float)
     view_orbit_finished = Signal()
     view_camera_reset_requested = Signal()
@@ -115,6 +117,10 @@ class RuntimeInputOwner(QObject):
         Qt.Key.Key_W: (0, 1), Qt.Key.Key_S: (0, -1), Qt.Key.Key_A: (1, 0), Qt.Key.Key_D: (-1, 0),
     }
     _VIEW_ORBIT_VK = {0x57: Qt.Key.Key_W, 0x53: Qt.Key.Key_S, 0x41: Qt.Key.Key_A, 0x44: Qt.Key.Key_D}
+    _FLIGHT_KEYS = frozenset((Qt.Key.Key_W, Qt.Key.Key_A, Qt.Key.Key_S, Qt.Key.Key_D,
+                             Qt.Key.Key_Q, Qt.Key.Key_E))
+    _FLIGHT_VK = {0x57: Qt.Key.Key_W, 0x41: Qt.Key.Key_A, 0x53: Qt.Key.Key_S,
+                  0x44: Qt.Key.Key_D, 0x51: Qt.Key.Key_Q, 0x45: Qt.Key.Key_E}
 
     def __init__(
         self,
@@ -140,6 +146,9 @@ class RuntimeInputOwner(QObject):
         self._context_menu_active = False
         self._view_orbit_enabled = False
         self._view_orbit_held: set[Qt.Key] = set()
+        self._framed_flight_enabled = False
+        self._framed_flight_held: set[Qt.Key] = set()
+        self._framed_shift = False
         # Whether a scene point lies on the shown Visualizer (set by the display's runtime).
         self._view_orbit_hit_test: Callable[[QPointF], bool] | None = None
         self._view_orbit_drag: QPointF | None = None      # the last drag position while dragging
@@ -191,8 +200,10 @@ class RuntimeInputOwner(QObject):
         self._context_menu_active = bool(active)
 
     def set_view_orbit_enabled(self, enabled: bool) -> None:
-        """Event-published fact: a 3D freeform Visualizer is shown, so W/A/S/D orbit it."""
+        """Event-published fact: a 3D mode owns camera keys; routing is mode-scoped."""
         enabled = bool(enabled)
+        if not enabled:
+            self.set_framed_flight_enabled(False)
         if not enabled and self._view_orbiting():
             self._view_orbit_held.clear()
             self._view_orbit_drag = None
@@ -200,6 +211,42 @@ class RuntimeInputOwner(QObject):
         if not enabled:
             self._end_visualizer_gesture()
         self._view_orbit_enabled = enabled
+
+    def set_framed_flight_enabled(self, enabled: bool) -> None:
+        """Only the framed EB physical-camera mode. Freeform 3D keeps legacy WASD orbit."""
+        enabled = bool(enabled)
+        if enabled and not self._framed_flight_enabled and self._view_orbit_held:
+            # Legacy freeform key holds must not become phantom EB orbit intent.
+            self._view_orbit_held.clear()
+        if not enabled and self._framed_flight_held:
+            self._framed_flight_held.clear()
+            self._framed_shift = False
+            self.view_framed_flight_rates_changed.emit(0., 0., 0., 0.)
+            self._finish_view_orbit_if_idle()
+        self._framed_flight_enabled = enabled
+
+    def _framed_flight_rates(self) -> tuple[float, float, float, float]:
+        """EB flight: ordinary WASD translates, Shift+WASD rotates; Q/E always yaw.
+
+        Transitioning Shift while keys are held changes their *role*, not their
+        identity. Rates remain logical-clock driven and freeform mode stays separate.
+        """
+        held = self._framed_flight_held
+        shifted = self._framed_shift
+        return (float((Qt.Key.Key_Q in held) - (Qt.Key.Key_E in held)
+                      + ((Qt.Key.Key_A in held) - (Qt.Key.Key_D in held) if shifted else 0)),
+                float(((Qt.Key.Key_W in held) - (Qt.Key.Key_S in held)) if shifted else 0),
+                float(((Qt.Key.Key_D in held) - (Qt.Key.Key_A in held)) if not shifted else 0),
+                float(((Qt.Key.Key_W in held) - (Qt.Key.Key_S in held)) if not shifted else 0))
+
+    def _flight_key(self, event: QKeyEvent) -> Qt.Key | None:
+        key = event.key()
+        if key in self._FLIGHT_KEYS:
+            return Qt.Key(key)
+        try:
+            return self._FLIGHT_VK.get(int(event.nativeVirtualKey() or 0))
+        except Exception:
+            return None
 
     def set_view_orbit_hit_test(self, hit_test: Callable[[QPointF], bool] | None) -> None:
         """The display runtime's test for a scene point on its shown Visualizer (None at retirement)."""
@@ -210,6 +257,8 @@ class RuntimeInputOwner(QObject):
     def cancel_view_orbit_for_camera_reset(self) -> None:
         """Discard held-key and drag intent; reset must not resume the old orbit."""
         self._view_orbit_held.clear()
+        self._framed_flight_held.clear()
+        self._framed_shift = False
         self._view_orbit_drag = None
         self._end_visualizer_gesture()
 
@@ -219,7 +268,7 @@ class RuntimeInputOwner(QObject):
         return float(turn), float(tilt)
 
     def _view_orbiting(self) -> bool:
-        return bool(self._view_orbit_held) or self._view_orbit_drag is not None
+        return bool(self._view_orbit_held or self._framed_flight_held) or self._view_orbit_drag is not None
 
     @classmethod
     def view_orbit_drag_steps(cls, delta_x: float, delta_y: float) -> tuple[float, float]:
@@ -319,6 +368,9 @@ class RuntimeInputOwner(QObject):
                 return True
             return False
         if key == Qt.Key.Key_Shift:
+            if self._framed_flight_enabled and self._framed_flight_held and not self._framed_shift:
+                self._framed_shift = True
+                self.view_framed_flight_rates_changed.emit(*self._framed_flight_rates())
             return True
         if self._is_media_key(event):
             self._handle_media_key_passthrough(event)
@@ -352,6 +404,18 @@ class RuntimeInputOwner(QObject):
             if not event.isAutoRepeat():
                 self.view_camera_reset_requested.emit()
             return True
+        if self._view_orbit_enabled and self._framed_flight_enabled:
+            flight_key = self._flight_key(event)
+            if flight_key is not None:
+                shifted = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+                changed = shifted != self._framed_shift
+                self._framed_shift = shifted
+                if not event.isAutoRepeat() and flight_key not in self._framed_flight_held:
+                    self._framed_flight_held.add(flight_key)
+                    changed = True
+                if changed:
+                    self.view_framed_flight_rates_changed.emit(*self._framed_flight_rates())
+                return True
         if self._view_orbit_enabled:
             orbit_key = self._view_orbit_key(event)
             if orbit_key is not None:
@@ -381,9 +445,12 @@ class RuntimeInputOwner(QObject):
         if key == Qt.Key.Key_End:
             self.global_mute_toggle_requested.emit()
             return True
-        if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
+        if key == Qt.Key.Key_Escape:
             self._request_exit()
             return True
+        # Q is no longer an exit binding, including in non-flight modes.
+        if key == Qt.Key.Key_Q:
+            return False
         if self.is_interaction_mode_enabled() or self.is_ctrl_mode_active():
             return False
 
@@ -391,6 +458,20 @@ class RuntimeInputOwner(QObject):
         return True
 
     def handle_key_release(self, event: QKeyEvent) -> bool:
+        if event.key() == Qt.Key.Key_Shift and self._framed_flight_enabled:
+            if not event.isAutoRepeat() and self._framed_shift:
+                self._framed_shift = False
+                if self._framed_flight_held:
+                    self.view_framed_flight_rates_changed.emit(*self._framed_flight_rates())
+            return True
+        if self._framed_flight_enabled:
+            flight_key = self._flight_key(event)
+            if flight_key is not None:
+                if not event.isAutoRepeat() and flight_key in self._framed_flight_held:
+                    self._framed_flight_held.discard(flight_key)
+                    self.view_framed_flight_rates_changed.emit(*self._framed_flight_rates())
+                    self._finish_view_orbit_if_idle()
+                return True
         if event.key() == Qt.Key.Key_Control and self._consume_control_key:
             self.set_ctrl_held(False)
             return True
@@ -543,6 +624,9 @@ class RuntimeInputOwner(QObject):
         self._view_orbit_hit_test = None
         self._view_orbit_drag = None
         self._view_orbit_held.clear()
+        self._framed_flight_held.clear()
+        self._framed_flight_enabled = False
+        self._framed_shift = False
         self._view_orbit_enabled = False
         if orbiting:
             self.view_orbit_finished.emit()
