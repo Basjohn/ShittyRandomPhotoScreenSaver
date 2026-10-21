@@ -47,6 +47,11 @@ Item {
     property var customEditableChildRequirementTarget: null
     // Resolved once at admission/Settings/input edges; no pointer-time reads.
     property bool widgetGlowAdmitted: false
+    property bool alwaysShowGlyphs: true
+    property bool hoverEditEligible: false
+    property bool hoverRestoreEligible: false
+    property bool hoverRotateEligible: false
+    signal hoverEditGlyphRequested(string action)
     property bool widgetGlowOnHover: false
     property bool widgetGlowOnClick: false
     property bool widgetGlowClicked: false
@@ -326,18 +331,46 @@ Item {
         // input owner, so feedback never competes with family MouseAreas.
         HoverHandler {
             id: interactionHover
-            enabled: overlayWidget.interactionGlowEligible
+            enabled: (overlayWidget.interactionGlowEligible
                 && overlayWidget.widgetGlowOnHover
                 && (interactionGlowLoader.active
                     || (overlayWidget.widgetGlowJediMode
                         && overlayWidget.widgetGlowAdmitted
-                        && overlayWidget.visible))
+                        && overlayWidget.visible)))
+                || (overlayWidget.alwaysShowGlyphs
+                    && overlayWidget.widgetGlowAdmitted
+                    && overlayWidget.visible)
             blocking: false
             onHoveredChanged: {
-                if (hovered && overlayWidget.interactionGlowEligible
+                if (hovered && overlayWidget.widgetGlowOnHover
+                        && overlayWidget.interactionGlowEligible
                         && overlayWidget.widgetGlowJediMode
                         && overlayWidget.widgetGlowAdmitted)
                     overlayWidget.jediModeRequested("hover")
+            }
+        }
+
+        Loader {
+            objectName: "ordinaryHoverGlyphLoader"
+            // Media and other accessory-bearing widgets have a smaller *real*
+            // card than the retained outer widget. Chrome follows card geometry.
+            anchors.fill: card
+            z: 190
+            active: overlayWidget.alwaysShowGlyphs
+                && overlayWidget.widgetGlowAdmitted
+                && overlayWidget.hoverEditEligible
+                && !overlayWidget.customLayoutInputBlocked
+            sourceComponent: WidgetHoverEditGlyphs {
+                objectName: "ordinaryHoverEditGlyphs"
+                anchors.fill: parent
+                admitted: true
+                hovered: interactionHover.hovered
+                canRestore: overlayWidget.hoverRestoreEligible
+                canRotate: overlayWidget.hoverRotateEligible
+                canLock: overlayWidget.customEditableChildRoles.length > 0
+                onActionRequested: function(action) {
+                    overlayWidget.hoverEditGlyphRequested(action)
+                }
             }
         }
 

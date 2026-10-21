@@ -387,6 +387,7 @@ class QuickSceneController(QObject):
 
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
+    hover_edit_glyph_requested = Signal(str, str)
     visualizer_camera_reset_requested = Signal()
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
@@ -539,6 +540,7 @@ class QuickSceneController(QObject):
             create_shadow_item=factory.create_overlay_card_shadow,
             create_family_item=factory.create_ordinary_widget_family,
             jedi_event_handler=self._publish_jedi_mode_event,
+            hover_edit_glyph_handler=self._publish_hover_edit_glyph,
         )
         window.bind_semantic_double_click_hit_test(
             self._semantic_double_click_hit_test
@@ -708,6 +710,7 @@ class QuickSceneController(QObject):
         )
         values = {
             "widgetGlowOnHover": bool(input_state.widget_glow_on_hover),
+            "alwaysShowGlyphs": bool(input_state.always_show_glyphs),
             "widgetGlowOnClick": bool(input_state.widget_glow_on_click),
             "widgetGlowIntensity": float(input_state.widget_glow_intensity),
             "widgetGlowDistance": float(input_state.widget_glow_distance),
@@ -777,6 +780,23 @@ class QuickSceneController(QObject):
         if normalized == "click" and not state.widget_glow_on_click:
             return
         self.jedi_mode_requested.emit(normalized, str(model_identity or "widget"))
+
+    def _publish_hover_edit_glyph(self, action: str, model_identity: str) -> None:
+        """Admit semantic click edges only under current interaction ownership."""
+        state = self._input_state
+        if (
+            self._custom_layout_session is not None
+            or state is None
+            or not state.admission_open
+            or state.exiting
+            or state.context_menu_active
+            or not (state.interaction_mode_enabled or state.ctrl_held)
+            or not state.always_show_glyphs
+        ):
+            return
+        if action not in {"close", "restore", "rotate", "lock"}:
+            return
+        self.hover_edit_glyph_requested.emit(action, model_identity)
 
     def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
         """Observe an admitted discrete press without participating in actions."""
@@ -1781,6 +1801,36 @@ class QuickSceneController(QObject):
             logger.exception("[VISUALIZER_INPUT] App-volume wheel route failed")
             return False
 
+    def diagnostic_capture_target_at(
+        self, scene_position: Any
+    ) -> tuple[str, tuple[float, float, float, float]] | None:
+        """Read retained hit geometry once for an explicit diagnostic key edge.
+
+        Rectangles are global desktop *logical* coordinates. Neither the
+        screenshot tool nor this method owns widget geometry or pointer state.
+        """
+        from PySide6.QtCore import QPointF
+
+        def screen_rect(item):
+            points = [item.mapToScene(QPointF(x, y)) for x, y in (
+                (0., 0.), (item.width(), 0.),
+                (0., item.height()), (item.width(), item.height()),
+            )]
+            window = self._window
+            desktop = [window.mapToGlobal(point.toPoint()) for point in points]
+            left, right = min(p.x() for p in desktop), max(p.x() for p in desktop)
+            top, bottom = min(p.y() for p in desktop), max(p.y() for p in desktop)
+            return (float(left), float(top), float(right - left), float(bottom - top))
+
+        host = self._ordinary_widget_host
+        if host is not None:
+            found = host.diagnostic_widget_at(scene_position)
+            if found is not None:
+                return (found.model_identity, screen_rect(found.item))
+        if self.visualizer_contains_scene_position(scene_position):
+            return ("visualizer", screen_rect(self._visualizer_root))
+        return None
+
     def visualizer_contains_scene_position(self, scene_position: Any) -> bool:
         """Return whether the live retained visualizer owns this scene point."""
 
@@ -2213,6 +2263,13 @@ class QuickSceneController(QObject):
         root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
+        hover_glyph = getattr(root, "hoverEditGlyphRequested", None)
+        if hover_glyph is not None and hasattr(hover_glyph, "connect"):
+            hover_glyph.connect(
+                lambda action: self._publish_hover_edit_glyph(
+                    str(action), "spotify_visualizer"
+                )
+            )
         camera_reset = getattr(root, "cameraResetRequested", None)
         if camera_reset is not None and hasattr(camera_reset, "connect"):
             camera_reset.connect(self.visualizer_camera_reset_requested.emit)

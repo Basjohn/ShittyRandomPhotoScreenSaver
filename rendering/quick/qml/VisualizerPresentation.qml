@@ -24,6 +24,8 @@ Item {
     property real cardCornerRadius: 8.0
     property bool cardShadowEnabled: true
     property bool widgetGlowAdmitted: false
+    property bool alwaysShowGlyphs: true
+    signal hoverEditGlyphRequested(string action)
     property bool widgetGlowOnHover: false
     property bool widgetGlowOnClick: false
     property bool widgetGlowClicked: false
@@ -81,15 +83,19 @@ Item {
 
     HoverHandler {
         id: visualizerInteractionHover
-        enabled: visualizerPresentationRoot.interactionGlowEligible
+        enabled: (visualizerPresentationRoot.interactionGlowEligible
             && visualizerPresentationRoot.widgetGlowOnHover
             && (visualizerInteractionGlowLoader.active
                 || (visualizerPresentationRoot.widgetGlowJediMode
                     && visualizerPresentationRoot.widgetGlowAdmitted
-                    && visualizerPresentationRoot.visible))
+                    && visualizerPresentationRoot.visible)))
+            || (visualizerPresentationRoot.alwaysShowGlyphs
+                && visualizerPresentationRoot.widgetGlowAdmitted
+                && visualizerPresentationRoot.visible)
         blocking: false
         onHoveredChanged: {
-            if (hovered && visualizerPresentationRoot.interactionGlowEligible
+            if (hovered && visualizerPresentationRoot.widgetGlowOnHover
+                    && visualizerPresentationRoot.interactionGlowEligible
                     && visualizerPresentationRoot.widgetGlowJediMode
                     && visualizerPresentationRoot.widgetGlowAdmitted)
                 visualizerPresentationRoot.jediModeRequested("hover")
@@ -175,8 +181,22 @@ Item {
     HoverHandler {
         id: cameraResetHover
         enabled: visualizerPresentationRoot.cameraResetAvailable
+            && visualizerPresentationRoot.alwaysShowGlyphs
             && visualizerPresentationRoot.widgetGlowAdmitted
         blocking: false
+    }
+
+    // One-shot hover animation for the camera reset glyph. No Timer/polling;
+    // the first 1008ms are entirely invisible, independent of card hover glow.
+    property real cameraResetTipProgress: 0.0
+    NumberAnimation {
+        id: cameraResetTipReveal
+        target: visualizerPresentationRoot
+        property: "cameraResetTipProgress"
+        from: 0.0
+        to: 1.0
+        duration: 1800
+        easing.type: Easing.Linear
     }
 
     Rectangle {
@@ -194,9 +214,16 @@ Item {
         visible: visualizerPresentationRoot.cameraResetAvailable
             && visualizerPresentationRoot.widgetGlowAdmitted
             && visualizerPresentationRoot.visible
-        opacity: cameraResetHover.hovered ? 0.92 : 0.0
-        enabled: visible && opacity > 0.05
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        opacity: (visualizerPresentationRoot.alwaysShowGlyphs
+                  && cameraResetHover.hovered) ? 0.92 : 0.0
+        enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+            && cameraResetHover.hovered && opacity > 0.05
+        Behavior on opacity {
+            NumberAnimation {
+                duration: cameraResetHover.hovered ? 700 : 1200
+                easing.type: Easing.InOutSine
+            }
+        }
         Text {
             anchors.centerIn: parent
             text: "↺"
@@ -206,12 +233,64 @@ Item {
         }
         MouseArea {
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             propagateComposedEvents: false
+            onEntered: cameraResetTipReveal.restart()
+            onExited: {
+                cameraResetTipReveal.stop()
+                visualizerPresentationRoot.cameraResetTipProgress = 0.0
+            }
             onPressed: function(mouse) { mouse.accepted = true }
             onClicked: function(mouse) {
                 mouse.accepted = true
                 visualizerPresentationRoot.cameraResetRequested()
+            }
+        }
+    }
+
+    Rectangle {
+        id: cameraResetTooltip
+        z: 14
+        enabled: false
+        visible: cameraResetGlyph.enabled && opacity > 0.0
+        opacity: Math.max(0.0, Math.min(1.0,
+            (visualizerPresentationRoot.cameraResetTipProgress - 0.56) / 0.44))
+        width: resetTooltipText.implicitWidth + 18
+        height: resetTooltipText.implicitHeight + 12
+        x: Math.max(6, cameraResetGlyph.x + cameraResetGlyph.width - width)
+        y: Math.max(3, cameraResetGlyph.y - height - 7)
+        radius: 7
+        color: "#e51d2634"
+        border.width: 1
+        border.color: "#bdc38e88"
+        Text {
+            id: resetTooltipText
+            anchors.centerIn: parent
+            text: "RESET CAMERA"
+            color: "#f6f6f8"
+            font.pixelSize: 11
+            font.weight: Font.Medium
+        }
+    }
+
+    Loader {
+        objectName: "visualizerHoverGlyphLoader"
+        anchors.fill: parent
+        z: 11
+        active: visualizerPresentationRoot.alwaysShowGlyphs
+            && visualizerPresentationRoot.widgetGlowAdmitted
+            && visualizerPresentationRoot.presentationActive
+        sourceComponent: WidgetHoverEditGlyphs {
+            objectName: "visualizerHoverEditGlyphs"
+            anchors.fill: parent
+            admitted: true
+            hovered: visualizerInteractionHover.hovered
+            canRestore: true
+            canRotate: false
+            canLock: false
+            onActionRequested: function(action) {
+                visualizerPresentationRoot.hoverEditGlyphRequested(action)
             }
         }
     }

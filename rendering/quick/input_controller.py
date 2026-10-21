@@ -25,6 +25,7 @@ class QuickInputController(RuntimeInputOwner):
     custom_layout_cancel_requested = Signal()
     custom_layout_undo_requested = Signal()
     custom_layout_lock_requested = Signal()
+    diagnostic_capture_requested = Signal()
 
     def __init__(
         self,
@@ -158,6 +159,7 @@ class QuickInputController(RuntimeInputOwner):
         color: tuple[int, int, int, int],
         distance: float = 14.0,
         jedi_mode: bool = False,
+        always_show_glyphs: bool = True,
     ) -> bool:
         """Cache resolved presentation options at the Settings event boundary."""
 
@@ -178,6 +180,7 @@ class QuickInputController(RuntimeInputOwner):
             widget_glow_distance=distance_px,
             widget_glow_color=tuple(int(channel) for channel in color),
             widget_glow_jedi_mode=bool(jedi_mode),
+            always_show_glyphs=bool(always_show_glyphs),
         )
 
     def set_ctrl_held(self, held: bool) -> None:
@@ -229,6 +232,14 @@ class QuickInputController(RuntimeInputOwner):
         if custom_active and event.key() == Qt.Key.Key_Escape:
             self.custom_layout_cancel_requested.emit()
             return True
+        # Development/diagnostic-only, single physical key edge. No subscription,
+        # polling or readback in the compiled release build.
+        if event.key() == Qt.Key.Key_Backslash:
+            from .diagnostic_capture import capture_allowed
+            if capture_allowed():
+                if not event.isAutoRepeat():
+                    self.diagnostic_capture_requested.emit()
+                return True
         return super().handle_key_press(event)
 
     def handle_key_release(self, event: QKeyEvent) -> bool:
