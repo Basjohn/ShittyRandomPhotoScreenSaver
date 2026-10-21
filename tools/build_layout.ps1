@@ -818,6 +818,7 @@ function Get-SRPSSQuickPayloadRelativePaths {
         'DisplayScene.qml',
         'VisualizerPresentation.qml',
         'WidgetInteractionGlow.qml',
+        'WidgetHoverEditGlyphs.qml',
         'shaders\widget_glow.frag.qsb'
     )
     foreach ($relativePath in $requiredRelativePaths) {
@@ -854,6 +855,7 @@ function Assert-SRPSSSourceProductAssets {
         'rendering\quick\qml\SystemStatsPresentation.qml',
         'rendering\quick\qml\VisualizerPresentation.qml',
         'rendering\quick\qml\WidgetInteractionGlow.qml',
+        'rendering\quick\qml\WidgetHoverEditGlyphs.qml',
         'rendering\quick\qml\shaders\widget_glow.frag.qsb'
     )
     foreach ($relativePath in $requiredFiles) {

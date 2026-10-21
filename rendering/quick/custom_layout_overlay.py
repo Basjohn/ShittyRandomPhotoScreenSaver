@@ -108,6 +108,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     item_closed = Signal(str, bool, bool)
     save_requested = Signal()
     toggleSelectedChildEditLockRequested = Signal()
+    toggleChildEditLockForWidgetRequested = Signal(str)
     visualizer_edit_orbit_requested = Signal(float, float)
     visualizer_edit_orbit_finished = Signal()
     selection_changed = Signal()
@@ -117,6 +118,16 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         """Ask the retained selected frame to toggle its existing chrome state."""
         if self._session is not None and self._session.selected_item() is not None:
             self.toggleSelectedChildEditLockRequested.emit()
+
+    @Slot(str)
+    def requestToggleChildEditLockForWidget(self, widget_id: str) -> None:
+        """Forward to the existing widget-local Edit chrome, without storing a lock."""
+        if self._session is not None and any(
+            item.source_key.widget_id == widget_id
+            and item.current_enabled and not item.removed
+            for item in self._items
+        ):
+            self.toggleChildEditLockForWidgetRequested.emit(widget_id)
 
     _WIDGET_ID_ROLE = int(Qt.ItemDataRole.UserRole) + 1
     _GEOMETRY_X_ROLE = _WIDGET_ID_ROLE + 1

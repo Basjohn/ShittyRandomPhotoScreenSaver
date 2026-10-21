@@ -60,6 +60,7 @@ class ExtrudedBubbleControls:
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
     bubble_spread: float = 1.0               # source-patch width; independent from Columns and particle width
+    surface_scene: bool = False              # authored Sunlit Surface light mode; only governs real water-plane retirement
     stream_direction: tuple[float, float] = (0.0, 0.0)   # legacy angle for standalone callers
     stream_path: tuple[float, ...] | None = None       # normalized source/end xyz, authoritative when supplied
     stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
@@ -243,45 +244,52 @@ class ExtrudedBubbleSimulation:
     def _spawn(self, large: bool, controls: ExtrudedBubbleControls, direction, *, anywhere: bool) -> None:
         rng = self._rng
         column = controls.columns > 0.0 and rng.random() < controls.columns
+        # A high Spread previously clamped every out-of-bounds coordinate to the
+        # same wall coordinate. That made artificial, tightly stacked birth bands,
+        # especially when Source itself was on a volume face. Resample within the
+        # actual domain; never manufacture a pile of identical edge coordinates.
         for _ in range(32):
             if controls.stream_path is not None:
-                # Authored physical emission anchor; the Source node is not a
-                # cosmetic vector pivot. Spread within a small transverse patch,
-                # with no random halfway-up source position.
                 across, deep_axis = stream_basis(direction)
                 anchor = world_point(controls.stream_path[:3], WORLD_HALF)
                 noise_a = rng.uniform(-0.55, 0.55) * WORLD_UNIT * max(0.0, controls.bubble_spread)
                 noise_b = rng.uniform(-0.55, 0.55) * WORLD_UNIT * max(0.0, controls.bubble_spread)
-                point = tuple(
-                    anchor[i] if abs(controls.stream_path[i]) >= 0.9999
-                    else max(-WORLD_HALF[i], min(WORLD_HALF[i], anchor[i]
-                             + across[i]*noise_a + deep_axis[i]*noise_b))
-                    for i in range(3))
+                point = tuple(anchor[i] + across[i] * noise_a + deep_axis[i] * noise_b for i in range(3))
             else:
-                point = tuple(WORLD_CENTER[i] + rng.uniform(-WORLD_HALF[i], WORLD_HALF[i]) for i in range(3)) \
-                    if anywhere else upstream_source(rng, direction)
+                point = (tuple(WORLD_CENTER[i] + rng.uniform(-WORLD_HALF[i], WORLD_HALF[i]) for i in range(3))
+                         if anywhere else upstream_source(rng, direction))
             if column:
                 across, _ = stream_basis(direction)
                 distance = sum(p * a for p, a in zip(point, across))
                 lane = round(distance / _LANE) * _LANE + rng.gauss(0.0, _LANE * .06)
                 point = tuple(p + a * (lane - distance) for p, a in zip(point, across))
-            if anywhere:
-                if any(abs(p-c)>h for p,c,h in zip(point,WORLD_CENTER,WORLD_HALF)):
-                    continue  # rejection sample the authored lanes within the fixed volume
-            elif controls.stream_path is None:
-                point = box_entry(point,direction)
+            if controls.stream_path is None and not anywhere:
+                point = box_entry(point, direction)
                 if point is None:
-                    continue  # this transverse source line misses the domain
+                    continue
+            elif any(abs(p-c) > h + 1e-8 for p, c, h in zip(point, WORLD_CENTER, WORLD_HALF)):
+                continue
+            if not anywhere:
+                point = tuple(p - d * .08 * WORLD_UNIT for p, d in zip(point, direction))
+            # Entry spacing is independent of musical count changes and camera.
+            # A new bubble cannot materialize already overlapping a recent birth.
+            # If every bounded candidate is crowded, defer admission to a later
+            # logical capture instead of forcing an intersecting spawn or burst.
+            if not anywhere:
+                typical = (sum(_LARGE_RADIUS) if large else sum(_MID_RADIUS)) * .5 * self._applied_sizes[large]
+                spacing = min(WORLD_UNIT * .20, typical * 1.5)
+                if any(sum((p-q)**2 for p, q in zip(point, (b.x, b.y, b.z))) < spacing**2
+                       for b in self._bubbles if b.popping < 0 and not b.leaving):
+                    continue
             break
         else:
-            raise RuntimeError("Extruded Bubble could not sample a source inside its physical domain")
-        if not anywhere:
-            point = tuple(p - d * .08 * WORLD_UNIT for p, d in zip(point, direction))
+            return False  # crowded inlet: no queued burst and no fake mid-volume birth
         bubble = _Bubble(self._next_ident, large, *point,
                          self._radius(large, controls.size_variety) * self._applied_sizes[large],
                          rng.uniform(0.0, math.tau), alpha=1.0 if anywhere else 0.0)
         self._next_ident += 1
         self._bubbles.append(bubble)
+        return True
 
     def _outside(self, b: _Bubble) -> bool:
         return (any(abs(p - c) > h + WORLD_MARGIN + b.current_radius
@@ -475,7 +483,9 @@ class ExtrudedBubbleSimulation:
                     if present[large] >= limits[large]:
                         break  # retiring identities retain their slot until their gentle fade completes
                     self._spawn_credit[large] -= 1.0 / max(1, targets[large])
-                    self._spawn(large, controls, direction, anywhere=False)
+                    if not self._spawn(large, controls, direction, anywhere=False):
+                        self._spawn_credit[large] = 0.0  # never accumulate a source backlog
+                        break
                     present[large] += 1
                     shortage -= 1
             elif shortage < 0:
@@ -531,12 +541,17 @@ class ExtrudedBubbleSimulation:
 
         self._collide(controls, dt)
 
-        # Finite authored Source -> End: enter the gentle EOL fade only
-        # downstream of the actual End node, never because an audio count fell.
-        # Use projected progress so oblique streams have one physical end plane.
-        # The fade remains time-based, allowing the shell/wake to soften just
-        # beyond that plane instead of abruptly disappearing on crossing it.
-        if controls.stream_path is not None:
+        # In Sunlit Surface an upward-travelling shell must almost touch the
+        # ACTUAL water plane before EOL fade; an authored stream End may be far
+        # below the visible ceiling. In Deep Light, retain the finite authored
+        # End plane (including horizontal / descending streams) exactly as before.
+        # Neither camera pose nor musical occupancy can trigger retirement.
+        if controls.surface_scene and direction[1] > 0.1:
+            for b in self._bubbles:
+                if b.popping < 0.0 and not b.leaving:
+                    if b.y + b.visual_radius >= WATER_SURFACE_Y - 0.05 * WORLD_UNIT:
+                        b.leaving = True
+        elif controls.stream_path is not None:
             end = world_point(controls.stream_path[3:], WORLD_HALF)
             for b in self._bubbles:
                 if b.popping >= 0.0 or b.leaving:

@@ -234,6 +234,9 @@ class RetainedOverlayWidget:
         jedi_signal = getattr(item, "jediModeRequested", None)
         if jedi_signal is not None and hasattr(jedi_signal, "connect"):
             jedi_signal.connect(self._on_jedi_mode_requested)
+        edit_signal = getattr(item, "hoverEditGlyphRequested", None)
+        if edit_signal is not None and hasattr(edit_signal, "connect"):
+            edit_signal.connect(self._on_hover_edit_glyph_requested)
 
     @property
     def item(self) -> QQuickItem:
@@ -358,6 +361,7 @@ class RetainedOverlayWidget:
             # differences instead of writing seven QML properties per event.
             for name, value in (
                 ("widgetGlowOnHover", input_state.widget_glow_on_hover),
+                ("alwaysShowGlyphs", input_state.always_show_glyphs),
                 ("widgetGlowOnClick", input_state.widget_glow_on_click),
                 ("widgetGlowIntensity", input_state.widget_glow_intensity),
                 ("widgetGlowDistance", input_state.widget_glow_distance),
@@ -401,6 +405,11 @@ class RetainedOverlayWidget:
             and bool(item.property("cardShellEnabled"))
         ):
             host._emit_jedi_mode_event(str(trigger or "hover"), self._model_identity)
+
+    def _on_hover_edit_glyph_requested(self, action: object) -> None:
+        host = self._host
+        if host is not None and self._item is not None:
+            host._emit_hover_edit_glyph(str(action), self._model_identity)
 
     def _retire(self) -> None:
         item = self._item
@@ -453,6 +462,7 @@ class OrdinaryWidgetPresentationHost:
         ]
         | None = None,
         jedi_event_handler: Callable[[str, str], None] | None = None,
+        hover_edit_glyph_handler: Callable[[str, str], None] | None = None,
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._shadow_host_item: QQuickItem | None = shadow_host_item
@@ -465,6 +475,7 @@ class OrdinaryWidgetPresentationHost:
         self._create_shadow_item = create_shadow_item
         self._create_family_item = create_family_item
         self._jedi_event_handler = jedi_event_handler
+        self._hover_edit_glyph_handler = hover_edit_glyph_handler
         if (shadow_host_item is None) != (create_shadow_item is None):
             raise RuntimeError(
                 "ordinary-widget shadow underlay requires both host and factory"
@@ -642,6 +653,16 @@ class OrdinaryWidgetPresentationHost:
             if not item.setProperty("fadeOpacity", initial_fade):
                 item.deleteLater()
                 raise RuntimeError("OverlayWidget.qml rejected fadeOpacity projection")
+        from rendering.widget_descriptors import get_widget_runtime_descriptor
+        descriptor = get_widget_runtime_descriptor(str(model_identity or ""))
+        if descriptor is not None:
+            for name, flag in (
+                ("hoverEditEligible", descriptor.supports_layout_edit_mode),
+                ("hoverRestoreEligible", descriptor.requires_size_reset_affordance),
+                ("hoverRotateEligible", False),
+            ):
+                if item.property(name) is not None and not item.setProperty(name, bool(flag)):
+                    raise RuntimeError(f"ordinary glyph capability projection failed: {name}")
         if not item.setProperty(
             "customLayoutInputBlocked", bool(self._custom_layout_input_blocked)
         ):
@@ -850,6 +871,13 @@ class OrdinaryWidgetPresentationHost:
         if handler is not None:
             handler(str(trigger), str(model_identity or "ordinary_widget"))
 
+    def _emit_hover_edit_glyph(self, action: str, model_identity: str) -> None:
+        if self._retired or self._custom_layout_input_blocked:
+            return
+        handler = self._hover_edit_glyph_handler
+        if handler is not None:
+            handler(action, model_identity)
+
     def _effective_input_state(self, input_state: object) -> object:
         """Return the family-facing input state after host-level Edit suppression."""
 
@@ -927,6 +955,19 @@ class OrdinaryWidgetPresentationHost:
                 live._retire()
                 return True
         return False
+
+    def diagnostic_widget_at(self, scene_position: QPointF) -> RetainedOverlayWidget | None:
+        """One-shot top visible ordinary card hit; no hover polling or new owner."""
+        if self._retired:
+            return None
+        for widget in sorted(reversed(self._live),
+                             key=lambda w: w.item.z(), reverse=True):
+            if not widget.is_qt_alive:
+                continue
+            item = widget.item
+            if item.isVisible() and item.contains(item.mapFromScene(scene_position)):
+                return widget
+        return None
 
     def widget_glow_click_target_at(
         self, input_state: object, scene_position: QPointF

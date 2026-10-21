@@ -45,6 +45,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         size_variety=float(parameters["extruded_bubble_size_variety"]),
         columns=float(parameters["extruded_bubble_columns"]),
         bubble_spread=float(parameters["extruded_bubble_bubble_spread"]),
+        surface_scene=str(parameters["extruded_bubble_light_type"]) == "Sunlit Surface",
         stream_direction=stream_angles,
         stream_path=stream_path,
         stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),

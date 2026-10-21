@@ -51,10 +51,58 @@ Item {
             }
         }
     }
+    // A normal-mode Lock click can arrive while the newly bound Edit model's
+    // Repeater is still constructing its delegates. Keep exactly one pending
+    // semantic click, scoped to this session model, and apply it when the
+    // corresponding real frame exists. No timers, synthetic clicks or second
+    // ownership of the child lock. Session changes discard the request.
+    property string pendingChildLockWidgetId: ""
+    property var pendingChildLockModel: null
+    function clearPendingChildLock() {
+        pendingChildLockWidgetId = ""
+        pendingChildLockModel = null
+    }
+    function deliverPendingChildLock(candidate) {
+        if (!pendingChildLockWidgetId || !editActive || !sessionModel
+                || pendingChildLockModel !== sessionModel)
+            return
+        function tryFrame(frame) {
+            if (!frame || frame.widgetId !== pendingChildLockWidgetId
+                    || !frame.hasPresentationItem)
+                return false
+            // Only existing, child-capable Edit frames can execute this click.
+            // The model has already checked capability and selected this item.
+            if ((frame.presentationItem.customEditableChildRoles || []).length === 0) {
+                customLayoutOverlay.clearPendingChildLock()
+                return true
+            }
+            customLayoutOverlay.clearPendingChildLock() // one-shot before action, even on reentry
+            frame.toggleChildEditLock()
+            return true
+        }
+        if (tryFrame(candidate))
+            return
+        for (let i = 0; i < editFrameRepeater.count; ++i) {
+            if (tryFrame(editFrameRepeater.itemAt(i)))
+                return
+        }
+    }
+    function toggleChildEditLockForWidget(widgetId) {
+        if (!editActive || !sessionModel || !widgetId)
+            return
+        pendingChildLockModel = sessionModel
+        pendingChildLockWidgetId = widgetId
+        deliverPendingChildLock(null)
+    }
+    onSessionModelChanged: clearPendingChildLock()
+    onEditActiveChanged: if (!editActive) clearPendingChildLock()
     Connections {
         target: customLayoutOverlay.sessionModel || null
         function onToggleSelectedChildEditLockRequested() {
             customLayoutOverlay.toggleSelectedChildEditLock()
+        }
+        function onToggleChildEditLockForWidgetRequested(widgetId) {
+            customLayoutOverlay.toggleChildEditLockForWidget(widgetId)
         }
     }
 
@@ -169,6 +217,9 @@ Item {
     Repeater {
         id: editFrameRepeater
         model: customLayoutOverlay.sessionModel
+        onItemAdded: function(index, item) {
+            customLayoutOverlay.deliverPendingChildLock(item)
+        }
         delegate: Item {
             id: editFrame
             required property int index
@@ -191,6 +242,8 @@ Item {
             // an absent child presentation before their own gesture can begin.
             readonly property bool hasPresentationItem:
                 presentationItem !== null && presentationItem !== undefined
+            Component.onCompleted: customLayoutOverlay.deliverPendingChildLock(editFrame)
+            onHasPresentationItemChanged: customLayoutOverlay.deliverPendingChildLock(editFrame)
             readonly property var contentEnvelope: {
                 const item = contentEnvelopeItem
                 return item && item.editContentEnvelope
@@ -258,7 +311,16 @@ Item {
                     customLayoutOverlay.sessionModel.cancelChildGesture(index)
                 childEditingLocked = !childEditingLocked
             }
-            property real parentGlyphControlsOpacity: parentGlyphControlsHidden ? 0.0 : 1.0
+            HoverHandler {
+                id: editChromeHover
+                enabled: customLayoutOverlay.editActive
+                blocking: false
+            }
+            property real parentGlyphControlsOpacity: parentGlyphControlsHidden
+                ? 0.0 : (editChromeHover.hovered ? 1.0 : 0.0)
+            Behavior on parentGlyphControlsOpacity {
+                NumberAnimation { duration: editChromeHover.hovered ? 700 : 1200; easing.type: Easing.InOutSine }
+            }
             readonly property real controlsWedgeLeftSpace: Math.max(0.0, editFrame.x)
             readonly property real controlsWedgeRightSpace: Math.max(
                 0.0, customLayoutOverlay.width - (editFrame.x + editFrame.width)
@@ -283,9 +345,6 @@ Item {
             onSelectedForChildEditChanged: {
                 if (selectedForChildEdit)
                     parentGlyphControlsHidden = false
-            }
-            Behavior on parentGlyphControlsOpacity {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
             }
 
             // Content-extent side edges for ordinary list/feed widgets, derived
@@ -737,8 +796,7 @@ Item {
             Rectangle {
                 id: childEditLockControl
                 objectName: "customLayoutChildEditLock-" + editFrame.widgetId
-                visible: editFrame.selectedForChildEdit
-                    && editFrame.hasPresentationItem
+                visible: editFrame.hasPresentationItem
                     && (editFrame.presentationItem.customEditableChildRoles || []).length > 0
                 enabled: visible && !editFrame.parentGlyphControlsHidden
                     && opacity > 0.05

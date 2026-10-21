@@ -34,6 +34,28 @@ Use CLI/sidecars, not environment-variable configuration. Smallest meaningful fo
 Nuitka/Build Runner/installer or product build unless requested. Audit dormancy, cost, churn and contradictions.
 Checkpoint confirmed tooling/docs or authorized source slices narrowly and inspect the diff. **GODZIP handoff:** work on extracted tree and return one complete, manifest-verified superseding archive; do not commit/push or read/modify the user's live repository without specific authority. **Local-repository agents:** use their own repo/commit instructions, not the Godzip packaging rule.
 
+## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
+
+Operator visually confirmed that the manual `\` capture works and the hover glyph interaction,
+slow fades, and child-edit handoff are useful. These completed pieces no longer occupy the
+active plan; their source and R38–R40 reference reports remain available, not deleted.
+
+- [~] **Glyph polish candidate:** ordinary hover chrome now follows the actual visible card,
+  not an accessory-bearing outer host (Media screenshot), and Close uses a centred
+  vector X inside its unchanged 24 px hit target. Native visual verification pending
+  on Media, small cards, visualizer and high-DPR displays.
+- [~] **Glyph-only tooltip candidate:** short themed text, after >= 1 second per individual
+  glyph hover via QML animation (no polling/Timer/Python worker). Pointer-passive and
+  interaction-gated. Verify actual dwell/leave/rapid glyph traversal, fade appearance,
+  no input interception, Edit retirement and GPU/text-atlas cost. EB Settings tooltip
+  wrapping is separate and uses Qt rich text, not the compositor glyph presenter.
+- [~] **Native R39 test correction:** detached zero-size QQuickItem did not prove actual
+  scene visibility. Attach to QQuickWindow for visibility assertion; do NOT weaken
+  actual Lock/hover behavior checks. Native rerun pending.
+- [ ] **Transfer/topology glyph parity** remains the one deliberately deferred extension:
+  existing multi-display authority must determine eligibility. Hide Controls remains
+  exclusively Edit-only. No additional runtime or geometry authority is authorized.
+
 ## 4. Graphics | active Extruded Bubble recovery
 
 ### 4A. Shared substrate and deferred demand
@@ -74,6 +96,18 @@ and established size/stream followers as proven design references, but do not co
 microfilter. Operator requests approximately **10% more resting motion** for moving bubble/stream/bead/particle
 actors and ray shimmer, explicitly **not** water/ocean-surface animation. No resolved items in this note.
 
+#### EB-R42 — 2026-10-21 surface EOL, grouped births, weak Bounce and native glyph gates (ALL UNACCEPTED)
+
+**New operator evidence:** paired EB underwater screenshots show a large bubble disappearing while visibly below the water surface and numerous tightly grouped birth bands despite high Bubble Spread, both during startup and music. Camera Position screenshot is supporting geometry context but **does not prove world height from image pixels**. Operator also reports repeated barely separating Bounce contacts. Do not remove the Sunlit Surface vs Deep Light source/shaft interface-authority audit from R41/P4: these are different problems.
+
+- [~] **P3 high-priority premature surface fade, source candidate:** R37 faded ordinary bubbles on `dot(position-End,direction)>=0`, regardless of visible surface. In Sunlit Surface with an upward stream this could fade the bubble at an authored End below the water plane. R42 passes the existing Light Type through the logical control admission; a *surface/upward* bubble now starts 0.9 s EOL opacity release only when its visible upper radius is within 0.05 world units (in WORLD_UNIT multiples) of `WATER_SURFACE_Y`. Deep Light, lateral/descending streams and absent paths retain their former authored End/bounds semantics. Compare actual world camera projection and moving surface pixels across P1, oblique streams, P7, and varying sizes. Do NOT mark accepted because logical height tests passed. Confirm no new lifetime leak in low-speed flows or false plane breach on huge visual radii.
+- [~] **P3 grouped birth bands, source candidate:** the old Source-spread sampler froze any coordinate whose Source was exactly on a world boundary, and clamped other outlying high-Spread samples to ±WORLD_HALF. Thus high Spread could **increase exact-face pileups** and closely spaced linear stacks. R42 rejection-samples actual in-volume transverse births with no coordinate clamp; when the bounded inlet is crowded, it defers admission and drops that tick's credit rather than introducing a coincident new ID or queuing a burst. Author-authored Columns remain purposeful and untouched. This fixes a clear placement defect but **does not prove that all synchronized bands are gone**, especially where music asks for high counts faster than a narrow source can physically pass. Required: startup vs mid-song separate snapshots, per-ID birth timestamps, source/end projected positions, spacing distribution, Compare Columns 0 vs >0 and Spread 0/1/4, source on floor/ceiling/walls and oblique paths; prove bounded population does not permanently starve and camera doesn't relocate births.
+- [ ] **P5 Bounce motion still unacceptable:** `_bounce()` moves each pair by `min(overlap*(1-exp(-dt/.35)), WORLD_UNIT*.2*dt)`; at 90 Hz this caps total separation correction at ~0.02 world units per frame, has **no persisted outward collision velocity**, and re-applies after relative stream motion, consistent with operator-described jittering recontacts. Do NOT merely turn the position cap up: that can teleport/interpenetrate clusters and cause visual popping. Next source slice: stable-ID/cluster-aware bounded separating impulse + sustained, smoothly damped physical recoil on the EXISTING logical clock (no timers, no render physics), retained only for Bounce (not Fuse/Pop); test finite penetration, post-collision minimum separation, rebound impulse, no rapid re-hit, symmetric near/far mass response, 30/60/90 Hz invariance, physical target vs visually eased radius, and existing cluster/wake parity. Keep collision-scope and share authoring unchanged.
+- [~] **UI two native failure gates:** R41 Windows yielded `F........F..` (2 failed, 10 passed). Test 1: `WidgetHoverEditGlyphs.qml` top-level item becomes visible, but `findChild(QQuickItem,'hoverEditGlyph-lock')` reports none. R42 gives the four eligible delegates stable string-model identities and retains real QQuick child visibility assertion via recursive `childItems()` (not a weaker metadata-only check). Test 2: EB native Settings control tooltip expected raw `control.tooltip` after R41 deliberately wrapped it in HTML. R42 compares Qt-rendered, whitespace-normalized `QTextDocument.toPlainText()` against the authoritative spec text for both widget and row; does not discard the tooltip wrapping or any `[NEEDS AUDIT]` warning. Both native tests still need Windows rerun.
+- [~] **Glyph polish:** bottom-left geometry retained. Close X artwork ~10% smaller, Lock ~10% smaller and Restore ~10% larger, with unchanged 24 px circular hit targets and centres. Glyph-only tooltips ALL CAPS and accurate close semantics **CLOSE & DISABLE WIDGET**; >1000 ms delayed event-driven fade stays. Interaction/child Edit, screenshot capture and glyph fade already operator-accepted; do not regress or crowd main EB priority with finished work.
+
+**R42 focused source gates:** `tests/test_extruded_bubble_r42_source_surface_candidates.py` (surface/deep lifetime split, edge distribution, crowded admission and Settings light mode), previous EB lifetime/simulation/stream tests and glyph source tests. **Windows targeted native**: `tests/test_r39_hover_edit_qml_native.py`, `tests/test_extruded_bubble_lazy_bucket_ui.py` with `.venv\Scripts\python.exe --noconftest -p tools.pytest_qt_noenv`. See `Docs/Reference/R42_EB_Surface_Birth_Glyph_Test_Audit.md` for source/geometry rationale and limits. **No EB visual item, bounce collision or native test is accepted.**
+
 #### EB-R37 — 2026-10-21 three-log Settings failures, finite population transport, dolly/surface candidates (ALL UNACCEPTED)
 
 **Priority-ordered next work (the older EB-R36...D/B/C/A checklists remain authoritative and MUST NOT be removed, condensed, or checked off):**
@@ -81,8 +115,45 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 1. - [ ] **P0 Settings lifecycle barrier, strict and fail-closed.** `logs814d70270a.zip`, `...a2.zip`, `...a3.zip` are CUMULATIVE snapshots, **not three independent full histories**. The final snapshot contains **four distinct** `reason=settings` timeouts (~01:38:41, 02:48:48, 02:50:37, 02:55:10), while other Settings retirements apparently complete. Each failure reaches `qobjects={}`, `resources=[]`, `thread_work=[]`, `global_subscriptions=[]` but retains exactly `QuickDisplayUnit:1`, `QuickDisplayVisualizerOwner:1`. Presentation owner retires, so do not call it a control-builder time-budget failure. Attribute surviving strong referrers with the already available failure-only diagnostic ownership snapshot (diagnostic product; no `[PYTHON_OWNER_REFS]` in supplied normal logs); inspect the retirement-completed signal, manager's `_retiring_quick_units`, retained callback/signal closures, and visualizer owner lifetime **per generation**, comparing EB/Neon Lake and lightweight scenes. A code repair needs a recorded retaining edge and native rerun; do not extend eight seconds, force GC on a healthy frame, detach a live owner, bypass barrier, or add a second cleanup poll.
 2. - [~] **P1 audio/timing and per-ID radius/energy.** Current log has 512-sample loopback frames, e.g. 02:55:01 `samples=512`; no parallel controlled 256-sample capture or per-bubble body/visual-radius telemetry is supplied, so the previously reported ~80% judder reduction at 256 remains useful OPERATOR evidence, not numerically isolated proof. Restore exact BTF/R-105 temporal contract with actual music and trace each stable ID's body target/visual radius/capture timestamps; reproduce continuous slow→fast→slow transitions, distinguish 512 block admission from compositor cadence, and verify visual Smoothing=1.0 affects only pixels not musical AGC.
 3. - [~] **P2 stream/drift/musical range authority.** Existing `speed_target`, `drift_target`, `emission_target` multiply interpolation by a separate `activity`; slow→fast→slow remains visually flat and the authored low/high handles are not literal endpoints. Quantify music→logical targets→world velocity and pixel displacement without adding capture DSP/timers. Preserve idle +10% exception (not ocean surface), fast attack and slow decay. Check all nine ranges from EB-R33/R34 (including ray, small and large size/occupancy and bead counts).
+   **New operator capture (2026-10-21, 512 audio block):** Stream and Drift remain
+   perceptually motionless across music passages, changing obviously only idle→playing.
+   Confirmed source route: `extruded_bubble_simulation.advance()` computes
+   `change_drive`, applies `activity = min(1, idle_rate*1.10 + 1.6*level)`,
+   follows speed with 0.68 s attack and much slower decay, follows drift with
+   0.20 s attack / slower decay, then moves ordinary IDs by `speed*dt` and
+   small lateral sine wander. Both ranges are logically connected but endpoint
+   semantics are disputed. **Action:** record timestamped 10–15 s slow→fast→slow
+   with `change_drive`, `activity`, `speed_target`, `self._speed`, `state.stream_speed`,
+   `state.travel`, `drift_target`, `self._drift`, stable-ID XYZ and projected px/sec.
+   Test whether motion plateau is (a) normalized-band saturation, (b) gate multiplication,
+   (c) slow 0.68 s attack/held high, (d) tiny world-unit lateral displacement,
+   (e) projection/camera angle or (f) slow transport through the view. Compare 2D
+   Bubble acceptance with no additional AGC/polling. Do not proclaim fixed on a
+   logical speed test or increase random gain without evidence.
+
 4. - [~] **P3 emission/admission/retirement physical parity.** **R37 candidate**: musical count reductions now stop admitting bubbles at Source instead of marking downstream live IDs `leaving` midstream. Authored Source→End sets an EOL fade trigger for ordinary large/small IDs, preserving .9-second opacity release and wake retirement; absent path retains legacy physical bounds. No existing target count, GL geometry or authored preset changed. This can temporarily leave more live bubbles than their musical target, especially if stream velocity approaches zero; residence remains bounded by per-population limits/MAX_BUBBLES. **Native falsifiers:** target reversal before End, intermittent silence, constant very-low speed, diagonal/end-inside-volume stream, boundary exits before End, path edits while IDs are in flight, clusters and popped IDs, no popping/teleporting at source/end. Requires measuring whether 0.9-second fade after crossing End is perceptually late; do not call it a completed source/end lifecycle. GPU free chains/specks still have the documented persistent-birth ambiguity.
 5. - [~] **P4 physical camera limits, water surface and lens/DoF.** **R37 candidate** increases EB-only `scene_scale` admitted range from 0.5–2.0 to **0.2–5.0**, giving nominal orbit-pivot dolly distances 75→3 world units, no FOV change, no Spectrum/Sphere/Neon modification and no preset rewrite. Surface-only Y clamp remains in `physical_camera`; verify no hidden held-key travel above the plane and no penetration. At near or inside a large sphere, original `coc > 1.5` near-layer switch and lens circles still operate; no explicit giant-covering-lens cull or comprehensive near DoF is proven. Compare on-screen near focus, covering >50% of the viewport, behind-eye cases, fused clusters and occlusion, especially where enlarged dolly allows the lens inside geometry. No camera-relative spawning allowed.
+   **R41 photographic geometry comparison (Sunlit Surface):** operator provided
+   Light, Ray and Stream 3/4 editors showing distinct physical paths, a camera
+   outside the normalized source volume, and one native underwater screenshot
+   looking up at a broad luminous surface. These alone do not prove source→pixel
+   alignment: editor is an oblique WORLD projection, not the camera render, and
+   perspective plus lens/eye position change where the same 3D point lands.
+   **Action:** add a DEV-only static world-axis/source/end/camera/aim marker projection
+   using the *production* `physical_camera` matrices to both editor and image,
+   compare precise 2D pixel coordinates at one captured snapshot, verify handedness,
+   scene origin, normalization, camera offset and surface-bound eye, never use
+   visual guesses or alter FOV to align a view. Screenshot currently shows a
+   pleasing broad surface and clear shafts, not a geometric proof or acceptance.
+   **Sunlit Surface authority distinction:** `scene_knobs` derives a distant sun
+   direction from `light_direction`; independent `ray_path` gates a finite beam
+   region. `light_on_screen` uses sun direction, not the local Light Source marker;
+   hence the two editors need truthful labels and an explicit choice whether
+   Surface rays should inherit the sun axis or remain independently spatial.
+   Deep Light is intentionally different: Ray Source is linked to Light Source,
+   Ray End stays independent. Prove both modes' visible rays/glow against actual
+   camera projection and any translucent-object attenuation before claiming parity.
+
 6. - [~] **P5 collision Fuse/Pop/Bounce visual force/rarity.** `_collide()` creates contacts only when **physical** `distance < sum(current_radius)` and `alpha >= .6`; the `Pop` action does exist but fades alpha over **2.4 seconds**, with no clearly independent visual pop/impulse. `_bounce()` caps correction per step by `min(overlap*(1-exp(-dt/.35)), WORLD_UNIT*.2*dt)`, a deliberately weak overlap-only response that can remain imperceptible until meshes interpenetrate. Do not infer 2D screen overlap equals 3D contact. Capture pair ID, 3D separation/overlap, action chosen, alpha trajectory and screen-space contrast. Provide optional diagnostic per-action forced scene, not a production per-frame logger; no unrequested violence or strong spring action. Popped/fused wakes must keep exact emitter identity and fade.
 7. - [~] **P6 Sunlit Surface coverage.** GLSL `basinWater` previously multiplied the *entire* sky/surface by `window = smoothstep(.56,.7,ray.y)`, which makes oblique upward views largely resemble plain water and only a narrow near-vertical patch read as a surface. **R37 candidate** keeps a low continuous 30% window with a wider raised-angle shoulder (0.12→0.68) while preserving higher sun/refraction highlights. GLSL source edited, NOT compiled here; must inspect a moving camera from many angles, all surface presets, horizon/waterline, physically plausible total reflection, colour consistency, GPU cost and no global blowout. Does not alter Deep Light. Mark [~] even if code compiles.
 8. - [ ] **P7 visual/fidelity regression backlog remains:** P1/P7 glass specular/double rim/roundness and excessive speckles; ray intra-song modulation vs source/shaft/clamping, particle direction/lifetime and optional glow, cluster DoF, near pixelation, frame-time and 3D projection distortion, size-dependent overlap and wake fidelity. Existing authored presets remain editable and untouched. No source test or operator note closes these failures.

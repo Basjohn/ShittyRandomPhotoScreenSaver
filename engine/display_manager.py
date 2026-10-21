@@ -1342,6 +1342,7 @@ class DisplayManager(QObject):
             distance=float(input_options.widget_glow_distance),
             color=resolve_widget_glow_color(input_options.widget_glow_color),
             jedi_mode=input_options.widget_glow_jedi_mode,
+            always_show_glyphs=input_options.always_show_glyphs,
         )
 
         # The retained context menu is a runtime-scene overlay, so its shadow
@@ -2103,6 +2104,11 @@ class DisplayManager(QObject):
         runtime.scene_controller.jedi_mode_requested.connect(
             self.jedi_mode_requested.emit
         )
+        runtime.scene_controller.hover_edit_glyph_requested.connect(
+            lambda action, widget_id: live_unit_route(
+                self._route_hover_edit_glyph, str(action), str(widget_id)
+            )
+        )
         runtime.scene_controller.custom_layout_visualizer_orbit_requested.connect(
             self._orbit_quick_visualizer_view_from_edit_drag
         )
@@ -2268,6 +2274,83 @@ class DisplayManager(QObject):
         from rendering.widget_descriptors import is_global_custom_layout_mode_selected
 
         return not is_global_custom_layout_mode_selected(widgets)
+
+    def _route_hover_edit_glyph(
+        self, source: QuickDisplayUnit, action: str, widget_id: str
+    ) -> bool:
+        """One Interaction/Ctrl click -> existing global Edit -> existing model action.
+
+        The source QML draws chrome only; CUSTOM owns selection, permission,
+        working geometry, undo and persistence. All identities are revalidated
+        after admission, never carried as stale row indices between generations.
+        """
+        if (
+            self._retired or source.is_retired or source not in self.displays
+            or action not in {"close", "restore", "rotate", "lock"}
+        ):
+            return False
+        scene = source.runtime.scene_controller
+        state = getattr(scene, "_input_state", None)
+        if (
+            state is None or not state.admission_open or state.exiting
+            or state.context_menu_active
+            or not (state.interaction_mode_enabled or state.ctrl_held)
+            or not state.always_show_glyphs
+        ):
+            return False
+        owner = self._quick_custom_layout_owner
+        was_editing = owner.is_editing
+        if not self._start_quick_custom_layout_session():
+            return False
+        session = owner.session
+        binding = next(
+            (entry for entry in owner._bindings.values() if entry.unit is source),
+            None,
+        )
+        target = next(
+            (item for item in session.items()
+             if binding is not None
+             and item.current_display_identity == binding.identity
+             and item.source_key.widget_id == widget_id
+             and item.current_enabled and not item.removed
+             and not item.profile_parked),
+            None,
+        ) if session is not None else None
+        if target is None:
+            if not was_editing:
+                self.cancel_custom_layout_session()
+            return False
+        if action == "restore" and not target.size_reset_capable:
+            return False
+        if action == "rotate" and not target.content_rotation_capable:
+            return False
+        if action == "lock":
+            scene_item = scene.ordinary_widget_host.presentation_for_model_identity(widget_id)
+            if scene_item is None or not scene_item.is_qt_alive:
+                return False
+            roles = scene_item.item.property("customEditableChildRoles")
+            if hasattr(roles, "toVariant"):
+                roles = roles.toVariant()
+            if not isinstance(roles, (list, tuple)) or not roles:
+                return False
+        if session.selected_item() is not target:
+            session.select_item(target)
+        model = source.runtime.scene_controller.custom_layout_overlay.model
+        row = next(
+            (index for index, item in enumerate(model._items) if item is target),
+            -1,
+        )
+        if row < 0:
+            return False
+        if action == "close":
+            model.closeItem(row)
+            return True
+        if action == "restore":
+            return bool(model.restoreSize(row))
+        if action == "rotate":
+            return bool(model.rotateContent(row))
+        model.requestToggleChildEditLockForWidget(widget_id)
+        return True
 
     def _start_quick_custom_layout_from_shortcut(
         self, unit: QuickDisplayUnit

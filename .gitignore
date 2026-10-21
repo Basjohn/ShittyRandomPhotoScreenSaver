@@ -252,3 +252,6 @@ tools/onboarding_sources/
 # Keep multi-gigabyte replay frames/custody local; the evidence index and source receipts
 # are described by Docs/Reference/Extruded_Bubble/README.md and Investigation.md.
 /Docs/Reference/Extruded_Bubble/Evidence/
+
+# Explicit diagnostic \ screenshot key; never a Godzip/repo payload.
+/captures/

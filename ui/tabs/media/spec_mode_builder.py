@@ -250,6 +250,21 @@ def _row(layout, label: str):
     return widget, content
 
 
+def _control_tooltip(control):
+    """Bound EB tooltips to readable rows instead of one very wide Qt popup.
+
+    Qt rich-text tooltips need explicit line boundaries on some Windows themes;
+    the source Settings text is still the sole authority. Other modes unchanged.
+    """
+    if not control.key.startswith("extruded_bubble_") or not control.tooltip:
+        return control.tooltip
+    import html
+    import textwrap
+    lines = textwrap.wrap(control.tooltip, width=59, break_long_words=False,
+                          break_on_hyphens=False)
+    return "<html><div style=\"white-space:normal;\">" + "<br/>".join(html.escape(line) for line in lines) + "</div></html>"
+
+
 def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
     """Build one control's row; returns the row widget (hidden with the control)."""
     default = tab._widget_default("spotify_visualizer", control.key)
@@ -261,9 +276,9 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         colour = QColor(*control.admit(default, default))
         setattr(tab, f"_{control.key}", colour)
         button = ColorSwatchButton(title=control.title, show_alpha=control.alpha)
-        button.setToolTip(control.tooltip)
+        button.setToolTip(_control_tooltip(control))
         if control.key.startswith("extruded_bubble_"):
-            row.setToolTip(control.tooltip)  # Label/row hover, even for swatches.
+            row.setToolTip(_control_tooltip(control))  # Label/row hover, even for swatches.
         _apply_availability(button, control)
         bind_color_button(tab, button, f"_{control.key}", auto_switch=auto_switch, initial_color=colour)
         setattr(tab, f"{control.key}_btn", button)
@@ -327,9 +342,9 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
                 widget.currentTextChanged.connect(lambda *_: _refresh_eb_volume(tab))
         content.addWidget(widget)
         content.addStretch()
-    widget.setToolTip(control.tooltip)
+    widget.setToolTip(_control_tooltip(control))
     if control.key.startswith("extruded_bubble_"):
-        row.setToolTip(control.tooltip)  # Tooltip remains discoverable over the label.
+        row.setToolTip(_control_tooltip(control))  # Tooltip remains discoverable over the label.
     if isinstance(control, Slider) and control.bottom_padding:
         margins = row.layout().contentsMargins()
         row.layout().setContentsMargins(margins.left(), margins.top(), margins.right(),
@@ -387,9 +402,9 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     content.addWidget(label)
     if not isinstance(control, Range):
         content.addStretch()            # the mappers keep their size; a range fills the row as a slider does
-    widget.setToolTip(control.tooltip)
+    widget.setToolTip(_control_tooltip(control))
     if control.key.startswith("extruded_bubble_"):
-        row.setToolTip(control.tooltip)  # The visual editor's entire row is descriptive.
+        row.setToolTip(_control_tooltip(control))  # The visual editor's entire row is descriptive.
     _apply_availability(widget, control)
     setattr(tab, control.key, widget)
     return row

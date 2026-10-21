@@ -258,6 +258,7 @@ class QuickDisplayRuntime(QObject):
         self._input.visualizer_move_requested.connect(self.visualizer_move_requested.emit)
         self._input.visualizer_scale_requested.connect(self.visualizer_scale_requested.emit)
         self._input.visualizer_gesture_finished.connect(self.visualizer_gesture_finished.emit)
+        self._input.diagnostic_capture_requested.connect(self._capture_diagnostic_key_edge)
         self._input.custom_layout_edit_requested.connect(
             self.custom_layout_edit_requested.emit
         )
@@ -275,6 +276,17 @@ class QuickDisplayRuntime(QObject):
         self._input.custom_layout_lock_requested.connect(
             self._scene.toggle_selected_child_edit_lock
         )
+
+    def _capture_diagnostic_key_edge(self) -> None:
+        # No persistent capture objects. Reject a late key delivered across the
+        # beginning of retirement (the strict lifecycle barrier is untouched).
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            return
+        if self._window is None or self._scene is None:
+            return
+        from .diagnostic_capture import capture_key_edge
+        capture_key_edge(window=self._window, scene=self._scene,
+                         screen_index=self._screen_index)
 
     @property
     def screen_index(self) -> int:
