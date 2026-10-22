@@ -125,6 +125,11 @@ The legacy `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path is 
 
 ## Settings themes / native backdrop
 
+Settings disclosure rails use the existing widget/layout hierarchy through shared bucket builders. Connect only
+visible relevant rows and nested headers, terminate at the last child and exclude explanatory/status annotations.
+Use semantic border colours and a shared child gutter; preserve values, lazy loading, accordion persistence and
+sibling alignment. Layout/paint events own updates, without polling, refresh timers or a duplicate hierarchy.
+
 Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v6 is the semantic visual
 authority and compiled Default Dark is the unconditional no-file fallback. Complete `.srtheme` files may request
 `off`, `acrylic` or `glass` and must pass strict whole-theme validation.

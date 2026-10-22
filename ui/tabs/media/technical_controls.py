@@ -829,7 +829,8 @@ def _build_bucket_sections(tab, layout: QVBoxLayout, mode_key: str) -> tuple[Dic
         if section_layout is None:
             section_layout = QVBoxLayout()
             section.setLayout(section_layout)
-        section_layout.setContentsMargins(0, 0, 0, 0)
+        from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT
+        section_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
         section_layout.setSpacing(12)
         sections[bucket.key] = section
         toggles[bucket.key] = toggle
@@ -864,9 +865,10 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     shared_styles.apply_shared_label_style(helper, "ADV_HELPER_LABEL_STYLE")
     host_layout.addWidget(helper)
 
-    group = QWidget()
+    from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
+    group = BucketTreeBody()
     layout = QVBoxLayout(group)
-    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     layout.setSpacing(12)
     host_layout.addWidget(group)
 

@@ -1131,3 +1131,12 @@ py -3.14 -m pytest -q tests/test_extruded_bubble_flight_keyboard_native.py tests
 ```
 
 This documents all nine current EB Range consumers. A green source probe neither means the left/right handles correspond literally to silent/full output nor means visual reactivity or lifecycle passed. No full chunked suite requested.
+
+### Settings hierarchy connector rails
+
+`test_settings_bucket_tree.py` uses native widget geometry/pixels to falsify nested last-child termination,
+conditional hiding, collapse, lazy insertion, sibling-column alignment, resize, 1/1.5/2× paint scaling and
+explanatory/status-caption exclusion through the actual shared status owner. Combined with bucket persistence,
+real EB lazy UI and shared-style tests:29 pass. Representative native captures are in `tmp/settings_tree_native/`
+(Steam, Clock, Feeds, EB;150% screen DPR/light and dark theme). These do not replace operator visual review or
+physical mixed-DPI monitor movement.

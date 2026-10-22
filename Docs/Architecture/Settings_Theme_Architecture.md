@@ -224,6 +224,20 @@ title sits 1 px (normal) or 2 px (large) further from the arrow, because the win
 size hint grows by the same amount, so a title never clips at any scale. The header padding is renderer geometry defined once in
 `ui/settings_theme.py` (its QSS and `BucketToggle` both read it; the renderer never imports widgets).
 
+Expanded bucket children use `BucketTreeBody` (`ui/widgets/bucket_tree.py`) through the shared bucket and Visualizer
+scaffold builders. One 18-logical-pixel content gutter per disclosure level preserves each level's sibling label/control
+columns. The body paints a 1-logical-pixel connector using the active `bucket.open.border` colour at 42% of its authored
+alpha. Theme schema, settings values, persistence and accordion ownership are unchanged.
+
+The actual widget/layout tree owns these rails: horizontal form rows contribute their first visible label/control;
+vertical grouping hosts are transparent; a nested bucket contributes its header while its `BucketTreeBody` owns its
+descendants. Shared explanatory label styles and contextual status owners mark their labels as `settingsAnnotation`;
+they remain visible in their existing positions but are not independent tree leaves. Hidden rows, spacers, empty
+alignment labels and these annotations are excluded. Each trunk ends at
+the last visible relevant child, using mapped widget geometry at paint time. Existing Qt layout requests invalidate the
+decoration after lazy insertion, conditions or expansion; ordinary resize/scroll/theme paints handle the rest. There are
+no retained endpoint maps, per-page renderer copies, event filters, subscriptions, timers, polling or geometry writes.
+
 Shared combo typography uses positive point sizes equivalent to its authored 14/13/12 logical-pixel sizes at
 Windows' 96 logical DPI. Qt 6.11's Windows 11 menu-indicator metric reads `QFont.pointSize()` even for a pixel font;
 pixel-only combo QSS therefore produces `QFont::setPointSize(-1)`. Preserve text metrics at the shared style owner,

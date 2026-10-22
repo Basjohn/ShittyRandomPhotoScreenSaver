@@ -1471,6 +1471,7 @@ def _build_card_group(
         )
         refresh_button.clicked.connect(lambda: _on_abandonment_manual_refresh(tab))
         refresh_status = QLabel("")
+        shared_styles.mark_label_annotation(refresh_status)
         refresh_status.setStyleSheet(STATUS_LABEL_STYLE)
         refresh_status.setWordWrap(True)
         tab.abandonment_issues_refresh_btn = refresh_button
@@ -1709,9 +1710,11 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.addWidget(tab.steam_show_connection_info_icon)
 
     tab.steam_access_status = QLabel()
+    shared_styles.mark_label_annotation(tab.steam_access_status)
     connection_layout.addWidget(tab.steam_access_status)
 
     tab.steam_connection_status = QLabel()
+    shared_styles.mark_label_annotation(tab.steam_connection_status)
     connection_layout.addWidget(tab.steam_connection_status)
     _hydrate_saved_connection_status(tab)
 

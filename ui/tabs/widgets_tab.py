@@ -1754,6 +1754,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
             for target in collect_widget_stack_status_targets(self):
                 status_label = target.status_label
+                shared_styles.mark_label_annotation(status_label)
                 widget_type = WidgetType(target.widget_type_key)
 
                 can_stack, message = get_position_status_for_widget(

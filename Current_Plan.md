@@ -36,28 +36,32 @@ Use CLI/sidecars, not environment-variable configuration. Smallest meaningful fo
 Nuitka/Build Runner/installer or product build unless requested. Audit dormancy, cost, churn and contradictions.
 Checkpoint confirmed documentation or authorized changes narrowly, inspect the actual diff, and treat the provided working tree as the only source authority. Delivery mechanics live with the operator workflow, not this visual acceptance plan.
 
-## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
+## Shared camera gestures and control hints
 
 - [ ] **Held-left-drag orbit for bordered 3D visualizers:** after the camera/idle checkpoint, trace the existing
   press/drag/double-click/focus owners and add plain-left orbit inside the visible box only if existing click,
   double-click, child Edit and glyph behavior can be preserved. Reuse camera admission and cursor fade-out/in;
   confine control to the card while held, restore cursor on release/cancel/focus loss. Event-driven only: no
   polling, timers or extra motion owner. Verify cancellation, edges, DPI and interaction conflicts natively.
+- [~] **3D framed control hint in progress:** use `images/bothcontrols.png` at the top right with small crisp
+  viewport scaling. Fade gently with glyph admission, then out after five seconds even while still hovered.
+  Default-on toggle beside Show Glyphs in Widgets → General; reuse shared settings/resource/presentation owners,
+  event-triggered animation only. One reused Sol Medium agent implements; review native appearance, one-shot
+  dwell/leave/re-enter, disabled state, frame/mode eligibility and existing glyph/input behavior before checkpoint.
 
 ## Settings hierarchy connector rails | parallel authorized UI work
 
-- [~] **Shared implementation in progress:** one Sol 6.1 High agent owns reusable hierarchy-aware rails through
-  shared Qt Widgets bucket/layout infrastructure, using `tmp/treemock.png`. Derive branches and last visible child
-  from actual geometry; allow nested/conditional/lazy/collapsed content and a modest consistent child gutter.
-  Use subdued semantic border colours. Preserve values, persistence, alignment, lazy loading and geometry rules.
-- [ ] Review focused tests and native representative-page captures for nesting, collapse, conditions, scrolling,
-  resize and DPI. No per-page duplicates, polling, refresh timers or unnecessary relayout. Operator visual review
-  remains required; implementation-agent screenshots alone do not close visual acceptance.
+- [~] **Hierarchy rails — Awaiting Validation:** shared bucket/Visualizer/Technical builders derive connectors
+  from actual visible widget/layout geometry, skipping explanatory/status captions. Review operator theme and
+  physical mixed-DPI movement; retain values, reopening/persistence, conditional/lazy alignment and last-child
+  termination. Native Steam, Clock, Feeds three-level/scroll and EB Surface/Deep/light-theme captures at150% plus
+  root-reviewed29 focused checks pass. No polling, new timers, observers, separate hierarchy or geometry writes.
+  Native examples/receipt: `tmp/settings_tree_native/`; contract: `Docs/Architecture/Settings_Theme_Architecture.md`.
 - [ ] **Adjacent isolation debt found during native capture:** Steam cache hydration bypasses
   `SettingsManager(storage_base_dir)` for credential metadata and reads the profile AppData path. Investigate the
   canonical storage resolver separately; do not add a silent fallback or weaken the isolated capture boundary.
 
-## UI R41 remainder
+## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
 
 Operator visually confirmed that the manual `\` capture works and the hover glyph interaction,
 slow fades, and child-edit handoff are useful. These completed pieces no longer occupy the
