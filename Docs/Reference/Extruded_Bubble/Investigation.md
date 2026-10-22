@@ -1967,3 +1967,41 @@ coverage; the candidate visibly blurs at half size and fades/culls at extreme si
 controlled white-silhouette/defocus comparison, not real-music or authored-glass acceptance.
 Native off-axis crossing and sparse-union regressions guard against hiding valid grazing geometry;
 logical populations are unchanged. The existing P1/P7 visual and cost gates remain open.
+
+## 41. Native idle comparison against 2D Bubble (22 October; FAILED)
+
+The operator rejected the source-level inference that EB bubbles visibly satisfy idle. Native production-host
+captures at 1672×941 confirm the rejection. `Evidence/2026-10-22_idle_comparison/` retains `run.py`,
+`settings_input.json`, `capture.json`, full-resolution frames, paired contact sheets and `idle_layers.png`.
+The input is the first ten seconds of `anything_mixed2.jsonl`, then explicit paused zero-input for sixty
+seconds at 90 Hz. Frames show music end and 5/30/60 seconds idle. Comparisons cover current curated 2D P1,
+saved EB fields and current curated EB P1/P7; no art controls are retuned. The saved mapping is not proof of
+an unsaved live controller state. Source revision/status, producer hash, input hash, settings and native GPU
+identity are retained. Final capture reads only the saved input mapping and performs no Settings writes.
+
+**Observed failure:** 2D retains a clearly visible small-bubble field. EB's ordinary layer is almost empty;
+the prominent larger shells/vertical strings in the full Surface view are mainly free chains. Diagnostic
+pass isolation uses the exact same idle state/camera and suppresses procedural layers for ordinary-only,
+or ordinary/wake geometry and other procedural layers for chain-only. It does not retune physics or source
+positions. Fading chains alone will expose the nearly empty ordinary field rather than repair it.
+
+At sixty seconds idle, saved EB/P1 contains 28 ordinary records, but the existing physical eye/FOV/sphere
+frustum estimate admits only 3 candidates; P7 contains 26 ordinary records and admits zero. P7 also has zero
+ordinary candidates at music end in this window. These are conservative geometry estimates, not a claim
+that every candidate yields visible pixels. Global residency and nonzero stream speed are insufficient
+visibility evidence. Do not transfer the accepted 2D radius units directly into physical EB world units.
+
+Source/geometry audit explains a concrete coverage confound. Saved EB/P1's BEAM runs from `(0,-8,0)`
+to `(0,8,0)` through the camera's world plane, with a 4.95-unit transverse patch half-width, while the
+default eye looks forward along -Z and upward 16 degrees. P7's left-entry path spans about 38 world units;
+after this warmup/idle window its ordinary cohort is still approaching from the left outside the lens.
+Settled stream speed is about 0.0371 world units/s. This is not a stopped clock, but neither is it proof of
+a visible, continuously replenished field. Trace physical transit/occupancy before changing optical size.
+
+**Next falsifier:** trace the authored physical source patch/path and stable-ID projection against ordinary
+glass-only native pixels, including cold idle and a long physical source-to-exit interval. Separate low
+frustum occupancy from radius/material invisibility. Preserve the camera-independent scene, count endpoints,
+zero authored amounts and strict physical lifetime; do not fill the viewport with camera-relative births.
+Then verify the requested chain opacity fade and retained, smaller, glow-free particle field. Still frames
+do not prove no breathing, slow travel, source births, breach/exit or idle→active recovery. These offscreen
+native renders are not actual compositor-window, mixed-DPR, dual-display or performance acceptance.
