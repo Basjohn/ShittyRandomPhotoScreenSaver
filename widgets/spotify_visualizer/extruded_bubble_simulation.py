@@ -447,8 +447,9 @@ class ExtrudedBubbleSimulation:
         self._ray_lift = _follow(self._ray_lift, 0.0, dt, 0.08, 0.42)
         ray_target = (0.24 * level + 0.26 * self._body_small_envelope
                       + 0.06 * sustain + 0.23 * self._ray_phrase + 0.32 * self._ray_lift)
+        ray_release = 0.58 + 0.25 * quiet * quiet
         self._rays = _follow(self._rays, min(0.90, ray_target), dt, 0.12,
-                             0.58 + 0.25 * quiet * quiet)
+                             ray_release + min(0.15, 0.20 * ray_release))
         # Integrated phase keeps the shimmer pattern continuous. The transient
         # brightening above is separate from this cosmetic shimmer; no flashing.
         self._shimmer += dt * (idle_rate * rest_motion_boost + 0.6 * change_drive + 1.4 * self._ray_lift)
@@ -467,7 +468,9 @@ class ExtrudedBubbleSimulation:
         # release into silence retains the long resting transition.
         self._speed = _follow(self._speed, speed_target, dt, 0.68 * soft, (0.65 + 2.35 * quiet * quiet) * soft)
         self._drift = _follow(self._drift, drift_target, dt, 0.20 * soft, (0.35 + 2.15 * quiet * quiet) * soft)
-        self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft, (0.25 + 1.25 * quiet * quiet) * soft)
+        emission_release = (0.25 + 1.25 * quiet * quiet) * soft
+        self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft,
+                                 emission_release + min(0.15, 0.20 * emission_release))
         speed = self._speed * WORLD_UNIT
         # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
         # change of speed never makes them jump.

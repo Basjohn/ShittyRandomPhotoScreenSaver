@@ -207,9 +207,10 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 - [ ] **G19 Stream Speed Range** (EB-C; R33/R41): one stable cohort, slow→fast→slow *while playing*, record actual XYZ/s and px/s. **Must see** unmistakable velocity change and authored low/high influence.
 - [ ] **G20 Drift Range** (EB-C; R33/R41): track lateral XYZ and px displacement, not just general level. **Must see** perceivable within-song sway against steady main stream, calm idle.
 - [ ] **G21 Particles Range / optional glow** (EB-C/A; R33/R34): independent count vs intensity vs spatial travel. **Must see** visible effect, smooth fades, preservation of P7 attractive debris without pinned glare.
-  - [ ] Apply the operator's modest release extension to the existing light/particle followers only:
-    add min(150ms, 20% of the current release), without another timer, state owner or DSP change. Compare matched
-    release/return frames; preserve attacks and unrelated accepted modes unless their existing owner is implicated.
+  - [~] **Modest release extension — Awaiting Validation:** existing EB ray/particle followers now add
+    min(150ms, 20% of their previous release). Review matched native release/return and live musical transitions;
+    45 focused checks pass, ordinary records are unchanged and settled idle pixels are identical. No new state,
+    timer, clock or DSP change. Evidence/limits: `Investigation.md` §53.
 - [ ] **G22 Large Breathing Range** (EB-D; R33/R34): move quiet/high handles independently. **Must see** resting size not covertly driven by high handle and meaningful smooth loud expansion.
 - [ ] **G23 Small Bubble Pulse Range** (EB-D; R33/R34): independently sweep endpoints. **Must see** smooth, high-value small reactivity versus same-time 2D Bubble, no binary peaks.
 - [ ] **G24 Ray Strength Range** (EB-C; R33/R34): record driver→shaft uniform→HDR pixels in continuous songs. **Must see** reachable range, repeated transient-linked gentle brightening/slow dimming without flicker or pinning.
