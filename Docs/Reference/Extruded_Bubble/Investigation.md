@@ -2431,3 +2431,45 @@ exposed the contradiction. The gate now excludes FOV from starting-view pose met
 through the canonical control, and retains Custom canonical-home/lens and curated reset expectations. No preset,
 camera implementation or reset behavior changed. Thirty-one camera/reset/startup checks pass; operator P1 and
 reference renames remain untouched.
+
+## 56. Lower-frame ordinary coverage and physical SCENE throughput (partial native repair)
+
+The operator correctly flags sparse ordinary bubbles near the bottom of the hint preview and earlier native
+frames. The hint preview used a frozen older EB background; the concern remains valid independently of that
+preview. Current P1 was recaptured after the body fix: first47s recording→paused zero60s→resume4s, same1738×1143
+native production host/settings, EB floor OFF. `Evidence/2026-10-23_current_p1_idle/` retains94 frames/custody.
+At active end it has23 ordinary records, idle25/60 has16/15; ordinary idle60 contributes1658 pixels >=3 levels,
+specks2882, free chains/background byte-identical. Visible fine rings improve on the original rejection but
+remain faint compared with the2D field. This is not full idle acceptance.
+
+The birth path has a concrete normalization defect: SCENE used36 world units (the longest tank dimension) for
+all inlet rates even when the actual upward track is about16. The new pure mean-passage geometry uses the same
+area/component face weights and authored face selection as physical source sampling. On each entry face the two
+other exit distances are independent uniforms; integrating their survival product to the shortest full crossing
+and mixing face weights gives the expected inside path. Exact vertical/horizontal controls are16/36; independent
+sampled floor/corner/oblique tracks agree within1.5%. No camera, sampling in production, retained counter or new
+clock/schema is introduced. Existing resting inlet, per-class12/s and one-birth/frame caps, overlap deferral,
+initial pre-age and global/authored ceilings remain. Mean inside path does not model exit padding/fade or each
+bubble's nominal-size travel factor; it corrects the physical reference, not a promise of exact target occupancy.
+
+`Evidence/2026-10-23_scene_throughput/` retains exact settings and half-second CPU histograms over the same47s
+P1 recording. Real source births excluding startup pre-age rise69→84; median small target remains23, actual21→24
+(the existing policy retains in-flight surplus after the target falls). Mean world bottom/middle/top counts rise
+7.39/6.86/8.84→8.61/7.86/10.22. Conservative mature centre candidates in screen top/middle/bottom rise
+2.05/4.34/3.50→2.46/4.55/4.03. Therefore this fixes underfeeding; it does not establish a universal bottom-only
+spawn failure or guarantee uniform projected density. Do not move sources/populations around the camera.
+A separate constant-target40 low-crowding Surface control averages36.70→39.32 over60–180s, never above40; the
+>=95% steady-occupancy gate fails under the former consumer. Entry fade/retirement/spacing still have real costs.
+
+`Evidence/2026-10-23_scene_rate_candidate/` repeats the native current-P1 producer with the corrected rate.
+Active/idle25/idle60 records become27/21/21. Idle60 ordinary contribution rises1658→8067 pixels while specks remain
+exactly2882; no particle/material/timing change is involved. Native inspection finds more readable rings, including
+lower-frame identities; quiet dust remains weak. Whole-tank moving distribution, composited temporal appearance,
+fused lifecycle and all-angle density remain unaccepted. Same source geometry plus different birth history can
+change contacts/locations/cohorts, so pixel totals are not isolated material-quality attribution.
+
+Eighty-two connected SCENE/source/inlet/surface/world/simulation/recorded checks pass. Geometry source bytes/hashes
+were preserved immediately after the native run (explicitly marked post-capture custody, not falsely pre-capture);
+native producer receipts separately retain simulation/scene/renderer hashes. More physical admissions mean more
+real contact/fragment work: G32 warmed cost remains open. This is not performance-neutral merely because no pass
+or draw-clock was added. Operator presets and goal-image renames stay untouched.

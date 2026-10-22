@@ -32,7 +32,8 @@ from dataclasses import dataclass, field
 
 from core.settings.visualizer_paths import direction_of, world_point
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
-    WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis, upstream_source, box_entry, scene_track_length, scene_source_face_weights,
+    WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis,
+    upstream_source, box_entry, scene_track_length, scene_source_face_weights, scene_mean_passage,
 )
 
 MAX_BUBBLES = 192
@@ -534,7 +535,9 @@ class ExtrudedBubbleSimulation:
                 if controls.emission_geometry == "SCENE":
                     # One finite physical tank. Distributed births admit at
                     # the faces, never through a screen-space viewport.
-                    passage = max(WORLD_UNIT, 2.0 * max(WORLD_HALF))
+                    faces = (scene_source_face_weights(controls.stream_path[:3], direction)
+                             if controls.stream_path is not None else None)
+                    passage = max(WORLD_UNIT, scene_mean_passage(direction, faces))
                 elif controls.stream_path is not None:
                     source = world_point(controls.stream_path[:3], WORLD_HALF)
                     end = world_point(controls.stream_path[3:], WORLD_HALF)

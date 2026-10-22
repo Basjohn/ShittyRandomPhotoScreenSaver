@@ -334,6 +334,9 @@ control in the normal preset snapshot. A reset's canonical lens policy does not 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 
 EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
+SCENE refill derives its passage length from the same selected physical inlet faces and actual box tracks;
+the longest tank dimension is not a substitute for the stream's residence geometry. Existing admission pacing,
+source-only births, overlap rejection and authored population ceilings remain authoritative.
 Rendering packs them directly; authored global counts never multiply by camera sector. Reacted radii govern
 contacts and wake attachment, while nominal size remains independent for mass and modest bead dimensions.
 Ordinary/fused geometry shares projection/depth and the existing near-defocus owner. Lifetime alpha is material
