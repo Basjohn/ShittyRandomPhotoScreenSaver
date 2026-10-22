@@ -49,7 +49,7 @@ def sphere_pixels(qt_app, request):
         for option in (gl.GL_BLEND,gl.GL_DEPTH_TEST,gl.GL_CULL_FACE):gl.glDisable(option)
 
         def draw(kind,centre=(0.,0.,-6.),radius=.6,alpha=1.,second=None,alphas=None,diag=5,
-                 circle=False,composite=False,**uniforms):
+                 circle=False,composite=False,orientation=None,**uniforms):
             from rendering.quick.scene3d.defocus import DefocusLayer
             budget=_near_spread(height)
             layer=DefocusLayer('native EB lens protection') if composite else None
@@ -63,6 +63,7 @@ def sphere_pixels(qt_app, request):
             program=programs[kind];gl.glUseProgram(program)
             loc=lambda key:gl.glGetUniformLocation(program,key)
             for name,value in {'uPixel':2*tan[1]/height,'uPixelSize':2*tan[1]/height,'uCrisp':1.,
+                               'uEye':(0.,0.,0.),
                                'uFocus':0.,'uAperture':0.,'uNearCoc':22.*height/941.,'uNearMax':budget,
                                'uNearLayer':float(kind.startswith('near')),'uNearGain':1.,'uProbeLevels':1.,
                                'uLens':1.,'uReflect':.5,'uBehind':8.,'uFrameShare':1.,'uShell':.03,**uniforms}.items():
@@ -75,7 +76,9 @@ def sphere_pixels(qt_app, request):
             gl.glUniform3f(loc('uIors'),1.15,2.,1.)
             gl.glUniform2f(loc('uFrameSize'),width,height);gl.glUniform2f(loc('uTargetSize'),width,height)
             gl.glUniform2f(loc('uTan'),*tan)
-            for name in ('uWorldToView','uViewToWorld'):gl.glUniformMatrix3fv(loc(name),1,False,np.eye(3,dtype='f4'))
+            basis = np.eye(3) if orientation is None else np.asarray(orientation)
+            for name, matrix in (('uWorldToView', basis.T), ('uViewToWorld', basis)):
+                gl.glUniformMatrix3fv(loc(name), 1, False, np.asarray(matrix, dtype='f4').ravel(order='F'))
             gl.glUniformMatrix4fv(loc('uProjection'),1,False,projection)
             gl.glVertexAttrib4f(0,*centre,radius)
             if kind in ('ordinary','near'):
@@ -139,6 +142,52 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
             ratios.append(math.sqrt(eigen[1]/eigen[0]))
         expected=math.sqrt(1+(centre[0]**2+centre[1]**2)/(centre[2]**2-.6**2))
         assert ratios==pytest.approx((expected,expected),abs=.02)
+
+
+@pytest.mark.qt
+def test_deep_glass_tracks_source_at_physical_points_and_ignores_directional_end(sphere_pixels):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _glass
+
+    base = {**require_canonical_default('widgets.spotify_visualizer'),
+            'extruded_bubble_light_type': 'Deep Light'}
+    paths = ((0., .25, -.1667, -.6, -.6, -.7),
+             (0., .25, -.1667, .6, -.6, -.7),
+             (.5, .25, -.1667, .6, -.6, -.7))
+    for kind in ('ordinary', 'cluster', 'near', 'near_cluster'):
+        for diag in (1, 2):
+            samples = []
+            for path in paths:
+                knobs = scene_knobs({**base, 'extruded_bubble_light_direction': path})
+                material = _glass(knobs, kind.startswith('near'))
+                uniforms = {key: material[key] for key in
+                            ('uLightDir', 'uSpecColour', 'uSpecShape', 'uSpecThrough', 'uReflect')}
+                uniforms.update(uLightSource=knobs['light_source'],
+                                uPositionalLight=material['uPositionalLight'])
+                if kind.startswith('near'):
+                    uniforms.update(uFocus=10., uAperture=1.)
+                lit, _ = sphere_pixels(kind, diag=diag, **uniforms)
+                samples.append(lit)
+            assert np.array_equal(samples[0], samples[1]), 'Deep End changed fixed-source glass lighting'
+            assert np.abs(samples[2] - samples[1]).sum() > .01, 'Moving Deep Source did not move highlights'
+            translation = (3., -2., 4.)
+            translated = {**uniforms, 'uEye': translation,
+                          'uLightSource': tuple(s + t for s, t in zip(uniforms['uLightSource'], translation))}
+            moved, _ = sphere_pixels(kind, centre=(translation[0], translation[1], -6. + translation[2]),
+                                     diag=diag, **translated)
+            assert np.allclose(moved, samples[2], atol=2e-4, rtol=2e-4), (kind, diag)
+            # Rotate the entire physical configuration and camera basis together.
+            # A non-symmetric quarter-turn catches a transposed light transform.
+            basis = np.array(((0., 0., 1.), (0., 1., 0.), (-1., 0., 0.)))
+            rotated = {**uniforms, 'uLightSource': tuple(basis @ uniforms['uLightSource'])}
+            turned, _ = sphere_pixels(kind, centre=tuple(basis @ (0., 0., -6.)),
+                                      orientation=basis, diag=diag, **rotated)
+            assert np.allclose(turned, samples[2], atol=2e-4, rtol=2e-4), (kind, diag)
+    # A point-emitter direction is undefined exactly at its source; it must at
+    # least remain finite near the physical front surface pending area/falloff work.
+    sphere_pixels('ordinary', diag=0, **{**uniforms, 'uFocus':0., 'uAperture':0.,
+                                      'uLightSource': (0., 0., -5.4)})
 
 
 @pytest.mark.qt

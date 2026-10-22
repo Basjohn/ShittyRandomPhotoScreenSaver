@@ -511,11 +511,17 @@ uniform float uInnerBlur;
 uniform float uShellMin;         // radius px below which a bubble is one interface
 uniform int uDiag;               // 0 composed; diagnostic views otherwise
 uniform vec3 uLightDir;          // world direction toward the scene's light (as seen under water)
+uniform float uPositionalLight; // Deep: evaluate Source from each actual interface/exit point
 uniform vec3 uSpecColour;        // the light's colour x strength
 uniform vec3 uSpecShape;
 uniform float uSpecThrough;      // share of the light seen through the lens         // core radius (rad), shoulder radius (rad), shoulder share
-vec3 sceneLightLobe(vec3 dirWorld, float footprint) {
-    float angle = acos(clamp(dot(normalize(dirWorld), uLightDir), -1.0, 1.0));
+vec3 sceneLightLobe(vec3 dirWorld, vec3 pointView, float footprint) {
+    vec3 lightDirection = uLightDir;
+    if (uPositionalLight > 0.5) {
+        vec3 delta = uLightSource - (uEye + uViewToWorld * pointView);
+        lightDirection = delta / max(length(delta), 1e-6);
+    }
+    float angle = acos(clamp(dot(normalize(dirWorld), lightDirection), -1.0, 1.0));
     float f2 = footprint * footprint;
     float core2 = uSpecShape.x * uSpecShape.x, shoulder2 = uSpecShape.y * uSpecShape.y;
     float core = core2 / (core2 + f2) * exp(-angle * angle / (core2 + f2));
@@ -550,13 +556,15 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     float facingHere = max(dot(-rayView, facingNormal), 0.15);
     float lobeFootprint = 2.0 / (max(pixels, 1.0) * facingHere) + soft * 0.6;
     vec4 paths[8];
+    vec3 pathPoints[8];
     vec3 origin = inside ? -sphere.xyz / sphere.w : (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
     // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
     // single interface (the film still colours what they mirror).
     // Below ~uShellMin px the two walls fall within a couple of pixels of each other: one interface (a single thick
     // bright band, as the mocks draw small bubbles) instead of two concentric hoops.
     float shell = pixels < uShellMin ? 0.0 : max(uShell, 1.5 / max(pixels, 1.0));
-    int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths);
+    int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths, pathPoints,
+                                      uPositionalLight > 0.5);
     vec3 light = vec3(0.0);
     float own = 0.0;
     vec3 reflected = vec3(0.0), transmitted = vec3(0.0);
@@ -591,7 +599,10 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
         // source is still a bright highlight (only the mirrored water dims).
         vec3 lobe = vec3(0.0);
         if (i < count - 1) {
-            lobe = sceneLightLobe(uViewToWorld * paths[i].xyz, lobeFootprint * (1.0 + float(i)))
+            vec3 lobePoint = vec3(0.0);
+            if (uPositionalLight > 0.5) lobePoint = sphere.xyz + sphere.w * pathPoints[i];
+            lobe = sceneLightLobe(uViewToWorld * paths[i].xyz, lobePoint,
+                                 lobeFootprint * (1.0 + float(i)))
                  * smoothstep(0.2, 0.5, facingHere) * smoothstep(2.5, 10.0, pixels) * filmHue;
             seen *= filmHue;
         }
@@ -600,7 +611,8 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             // The frame is read along the smooth lens of the bubble as a whole (refraction through a plain sphere of the
             // outer index): the traced exit through the glass wall swings chaotically near the rim (speckle). The trace
             // still sets how much light comes through.
-            vec3 lensDir = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, 1.0 / uIors.x);
+            vec3 lensExit;
+            vec3 lensDir = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, 1.0 / uIors.x, lensExit);
             vec4 behind = behindAt(frontView + lensDir * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
             // Off the frame's edge the bent view falls back to the scene behind this pixel, never to the probe (its
             // scattered fill lit every bubble at the frame's edge).
@@ -612,8 +624,13 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
             // The light itself seen through the bubble's lens: an inset glow where the bending carries the view to it.
             // Only bubbles big enough to show a lens: on a bead the lens view spans every direction (a uniform glow).
             // The light through an air bubble (a diverging lens, water to air): it shows inset on the light's own side.
-            vec3 airLens = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, uIors.x / uIors.z);
-            seen += sceneLightLobe(uViewToWorld * airLens, lobeFootprint * 1.5) * uSpecThrough
+            vec3 airExit = vec3(0.0);
+            if (inside && uPositionalLight > 0.5) airExit = pathPoints[i];
+            vec3 airLens = inside ? paths[i].xyz : sceneSphereRefraction(rayView, facingNormal, uIors.x / uIors.z, airExit);
+            vec3 airPoint = vec3(0.0);
+            if (uPositionalLight > 0.5) airPoint = sphere.xyz + sphere.w * airExit;
+            seen += sceneLightLobe(uViewToWorld * airLens, airPoint,
+                                   lobeFootprint * 1.5) * uSpecThrough
                   * smoothstep(8.0, 24.0, pixels);
             light += paths[i].w * seen * uLens;
             own += paths[i].w * uLens;

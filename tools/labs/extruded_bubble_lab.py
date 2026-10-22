@@ -609,6 +609,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
             gl.glUniform3f(u(name), *(v * exposure for v in settings[key]))
 
     def spec_uniforms(loc):
+        # Lab reference art authors an angular emitter; production Deep uses
+        # physical Source and per-interface points via the renderer's mapping.
+        gl.glUniform1f(loc("uPositionalLight"), 0.0)
         gl.glUniform3f(loc("uLightDir"), *spec_dir)
         colour = np.array(settings.get("light", (1.0, 1.0, 1.0))) * settings.get("spec_power", 300.0)
         gl.glUniform3f(loc("uSpecColour"), *colour)
