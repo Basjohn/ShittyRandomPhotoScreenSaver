@@ -2192,3 +2192,54 @@ the dedicated micro-glass branch. The native threshold bar passes below .1% rela
 connected geometry/near/lifetime/wake checks. No new floor, interpolation, state, pass, timer or random owner
 is introduced; the obsolete radius multiply/add disappears. The small-shell wall policy is unchanged.
 Recorded musical motion, perceived idle visibility and 256/512/2D breathing comparisons remain unaccepted.
+
+## 49. Latest saved-pose active/idle rejection reproduced (22 October; both FAILED)
+
+The operator's latest pair shows a populated upper strip over empty lower water during playback and essentially
+background-only idle. Originals and contemporaneous logs are retained in
+`Evidence/2026-10-22_operator_active_idle_rejection/`. The 22:17:17 source run identifies `f60f9581` and cold
+SCENE/Custom index 7; its saved camera has turn .0506971, tilt -.2253051, scale 1, zero pan, FOV45 and normalized
+position offset (.320911,-1.110771,1.90208). No intervening camera gesture/reset is logged before the pause at
+22:18:09. Clipboard creation times are not exact capture timestamps, and the actual screenshot audio/seed/frame
+timing is unrecovered. Do not claim pixel-identical reconstruction.
+
+The derived physical eye is (8.1487,-7.7674,49.0063). Against the fixed half-extents (18,8,18), 62.71% of viewport
+rays and the entire lower half miss the actor domain. This is an actual camera/world/backdrop mismatch, not a
+uniform sampler test failure or a reason to increase counts. Water/wisps extend beyond the actor box. Neither
+the earlier reset intervention nor preserving positive physical counts satisfies whole-viewable-tank coverage.
+Reconcile the physical camera/offset calibration and fixed populated world with the navigation contract before
+tuning coverage; do not silently reset/clamp poses, relocate actors around the eye or inflate global counts.
+The bounded source audit verifies flight stores world travel divided by `WORLD_HALF`, and camera projection
+multiplies that offset once. The editor legally admits offsets up to +/-8; Z49 is not a doubled-unit defect.
+The background has no larger physical tank authority: abyss/plane/angular mist and camera-relative wisps continue
+outside the finite actor domain. A larger `WORLD_HALF` alone also moves normalized nodes/camera and dilutes global
+counts. Clarification is required between populated open water with density semantics and a visibly bounded tank;
+the existing finite-global-count/unrestricted-travel rules cannot guarantee occupied water in every legal view.
+
+`reproduce.py` asserts the saved controls/pose, uses the production native GL host at 1738×1143, plays the first
+47 seconds of recorded `anything_mixed2`, then advances explicit paused zero input at 90Hz through 5/25/60s.
+`same_saved_pose_layers.png`, full-resolution layers and `reproduction.json` retain state and source/input hashes.
+Layer subtraction freezes full-scene ray-blocker uniforms, preventing altered shaft attenuation from being
+miscounted as direct object pixels. It independently reproduces the active cutoff and almost empty idle without
+changing the profile or resetting the camera. It is offscreen production rendering, not compositor/music playback.
+
+At idle25s twelve ordinary conservative frustum candidates remain, mostly below 1px radius. Their isolated final
+image differs from frozen background by >=3 eight-bit channel levels in only 39 pixels (81 at >=1); corresponding
+specks reach 1073/4184 pixels. These are raster-contribution measurements, not perceptual thresholds or acceptance.
+The full view visibly fails. Preserve quiet source births/travel/exit and zero authored amounts while repairing
+readability; in-view IDs alone are insufficient, and distant subpixel shells confound material-only diagnoses.
+
+`compare_radiance.py`/`radiance_comparison/` isolate amount-dependent particle brightness: identical snapshots,
+density/counts, seed, quarter-radius idle sizing and zero glow, replacing only `2.4*amount` with constant 2.4.
+The quiet field brightens but the same saved-pose image still looks too empty; active art also changes. This is
+a diagnostic, not a landed transfer or accepted standalone repair. Particle amount semantics and ordinary Range
+endpoint coupling remain explicit design/validation work; do not add arbitrary visibility floors to bless it.
+
+`compare_quiet_endpoint.py`/`quiet_endpoint_candidate/` separately test the existing rest law with the quiet
+handle as its owner instead of `max(pair)`. This corrects the proposed authority mapping, but is not landed:
+the saved .15 quiet handle raises rest from .13 to .7825 nominal (about six times the radius) and every subcrest
+scale rises by .6525*(1-drive); drive-one crests remain unchanged. The native replay gives readable small rings
+in the upper field (idle60 ordinary >=3-level contribution rises from 41 to 898 pixels), while overall coverage
+and dust still fail. It changes physical admission/contact/clearance, not just presentation. Judge endpoint
+independence separately from 2D breathing/minimum-size and connected physical lifetime acceptance; do not land
+this merely to compensate for distant framing or silently preserve the former unaccepted .13 test oracle.
