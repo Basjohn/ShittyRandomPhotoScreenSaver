@@ -1,9 +1,9 @@
 # Extruded Bubble | Physical lighting authority and BEAM/SCENE coverage repair
 
-**22 October 2026 | SOURCE-AUDITED DESIGN / ALL UNACCEPTED.** This is the detailed
+**22 October 2026 | SOURCE-AUDITED DESIGN / PARTIAL CANDIDATES, ALL UNACCEPTED.** This is the detailed
 architecture/evidence companion for the **single live** `Current_Plan.md` §4B
-G05/G06/G27/G30/G32/G33 sequence, not a second checklist or permission to alter
-production. No production code was changed for this document. Preserve the full
+G05/G06/G27/G30/G32/G33 sequence, not a second checklist. Surface analytic
+direction now shares refracted sunlight; the larger physical-field repair remains open. Preserve the full
 pre-existing EB-L/F/S/B/C/D/A/P failure inventories and the earlier R-series
 investigation. An implementation, compilation, plausible still, or GPU benchmark
 cannot become `[x]` without operator or capable local visual-agent acceptance.
@@ -21,7 +21,7 @@ This is an **EB prerequisite**, not deferred generic ray tracing or G2 shadow wo
 
 | Existing behavior | Code evidence / underlying limitation | Explicit acceptance question |
 | --- | --- | --- |
-| **Sunlit Surface** uses a directional distant sunlight | `rendering/gl_programs/extruded_bubble_scene.py:scene_knobs` sets `sun`/`sun_below` from `light_direction`, `light_power=0`, `spec_dir=(0,1,0)`; `Light Source` coordinates are still authored | Does moving position falsely imply moving a positional sun? Provide honest control semantics; actual sun direction consistently illuminates surface, water, glints and shafts. |
+| **Sunlit Surface** uses a directional distant sunlight | `rendering/gl_programs/extruded_bubble_scene.py:scene_knobs` sets `sun`/`sun_below` from `light_direction`, `light_power=0`; analytic `spec_dir` now shares refracted `sun_below`, replacing the contradictory world-up lobe. `Light Source` coordinates are still authored | Does moving position falsely imply moving a positional sun? Provide honest control semantics; actual sun direction consistently illuminates surface, water, glints and shafts. Native directional diagnostics establish the narrow glass repair, not complete lighting acceptance. |
 | **Deep Light** carries world-space Light Source, but its visible glow is primarily angular | In `extruded_bubble_scene.py:scene_knobs`, `light_source` is physical and Deep overrides `ray_source=light_source`; `rendering/gl_programs/extruded_bubble_program.py` evaluates visible glow from `dot(viewRay,normalize(uLightSource-uEye))` and high-power lobes, without true spatial falloff of an illuminated water field | Move emitter or a fixed camera: does brightness at known world samples decay with physical distance while visible light core and real glints agree? |
 | Rays have distinct Ray Source → Ray End authoring | `SHAFT_FRAGMENT` has `uRaySource`, `uRayEnd`; Surface allows a separate authored segment; Deep currently forcibly aligns the ray *start* with the Light Source while the ray end remains its authored destination | Ray controls may shape light/scattering extent, but cannot silently become a second emitter. Preserve existing authored choices and explicitly distinguish Surface/Deep semantics. |
 | Surface shafts are view-fan dominated | `MODES["surface"]["shaft_fan"]=1.0`; `SHAFT_FRAGMENT:main` mixes marched volume with `labShaftFan(viewRay,...)`, with a fixed pair of points along each camera ray for extent | Holding the light/volume fixed while orbiting and looking downward must **not** move or reverse the beam volume; anisotropic scattering may vary brightness by view angle, but not physical placement. |
@@ -165,7 +165,7 @@ light coverage, P1/P7 and large/small cards. No narrow patch arrays, no camera
 following, no unexplained bubble loss, stable per-ID fades and native GPU
 p95/p99 within measured budget. A corrected RNG histogram alone is not enough.
 
-**Status:** lighting authority/optics [ ] (new work, not implemented);
+**Status:** lighting authority/optics [ ] (partial Surface analytic-direction/radiance candidates only);
 lighting coverage [ ] (proposed only); SCENE clustering [~] (operator visually
 rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.

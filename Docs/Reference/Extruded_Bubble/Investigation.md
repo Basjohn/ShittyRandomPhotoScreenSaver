@@ -2039,3 +2039,37 @@ The large coverage complaint stays open. Do not mistake the narrower opacity rep
 ordinary-population, physical illumination or backdrop-domain acceptance. The cold-SCENE log also disproves
 inherited BEAM cohorts as a universal explanation for this report. GPU query medians from these offscreen
 captures are not an isolated performance comparison or proof of a speed improvement.
+
+## 43. Surface analytic direction and controlled MC activation (22 October; narrow candidates)
+
+The G05 source map found a second Surface emitter: water/particle/probe glints followed refracted authored
+sunlight, but analytic reflected/transmitted glass lobes used world-up. `scene_knobs` now resolves the
+refracted direction once and shares it with Surface glass, leaving Deep and authored state untouched.
+The native regression crosses authored oblique light paths through `_glass` into ordinary, fused and both
+near variants, subtracting emitter-off float HDR pixels to measure the highlight's directional movement.
+It includes a roughly 3.9px-radius ordinary shell: reflection still moves while the existing sub-8px
+transmitted-lens suppression remains explicit. The near fixture must enable actual aperture/focus admission;
+an otherwise zero near image cannot test direction. Translating both Surface endpoints preserves direction.
+
+`Evidence/2026-10-22_surface_light_direction/` retains the frozen four-second recorded P1/P7 A/B, native
+frames, hashes and producer. Only the former versus shared Surface analytic uniform changes. P1's native
+highlights visibly shift consistently with the directional repair; P7 Deep's mean RGB code delta is about
+4.24e-7 (two total 8-bit channel steps), not a claim of byte identity. First-draw timings include shader
+preparation and are unusable as performance evidence. This does not repair Deep positional analytic light,
+strength-independent glint proxies, the world-space shaft field, SCENE coverage or idle readability.
+
+The earlier fixed-pivot idle capture admits 27/28 P1 and 5/26 P7 ordinary IDs at sixty seconds, compared with
+3/28 and 0/26 before it. P1's median projected radius is only 4.5px. Native ordinary glass remains weak after
+chains fade and particles retain their smaller glow-free idle appearance. Small-shell analytic reflection
+fades over 2.5–10px and transmitted light over 8–24px, so emitter direction cannot alone establish idle
+visibility. No size/count floor, preset rewrite or camera-relative replacement population is introduced.
+
+Latest MC source receipts: `logs/run_matrix/2026-10-22_mc_after_idle_scene_fades/` retains three idle
+Settings restarts after the candidate changes. `2026-10-22_mc_controlled_active/` then invokes canonical
+owner play-state admission four times through a disposable, weak-engine, one-shot driver. Real WASAPI
+loopback capture starts at block size 256 and actual DSP publications occur; no synthetic PCM/source or
+product timer/retirement override is added. Paused canonical Media overrides the stimuli after roughly
+0.05/0.55/1.06/4.06 seconds, so these are controlled activation/warm-capture retirement checks, not sustained
+music or audiovisual acceptance. All six Settings barriers complete in 0.70–4.97 seconds at the unchanged
+eight-second limit, with zero scoped lifecycle errors and normal CLI exit 0. The strict retained-owner
+failure is not reproduced. All useful CLI diagnostics and normal updates stay enabled; no `--noupdates`.

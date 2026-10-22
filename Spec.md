@@ -315,7 +315,7 @@ EB's fixed orbit target is the fixed tank centre, at the nominal 15-world-unit r
 view. It never follows stream nodes or populations. Authored orbit/pan/dolly/offset values remain independent
 of physical simulation; camera reset must look into the authored tank rather than begin in its inlet plane.
 
-EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (source-audited, unimplemented/unaccepted as of 22 October): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not implemented spec compliance.
+EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 
 EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
 Rendering packs them directly; authored global counts never multiply by camera sector. Reacted radii govern
@@ -328,6 +328,8 @@ SCENE procedural opacity fades at physical entry/exit and wall crossing over dis
 footprint. A broad fraction of the tank's transverse width must not hide valid interior populations.
 Existing Light Strength also owns the analytic emitter radiance reflected and transmitted by glass;
 independent environmental fill is not removed when that emitter strength is zero.
+Surface analytic glass highlights share the refracted sunlight direction used by particle lighting
+and probe glint placement. Translating directional-light endpoints together must not move that emitter.
 Near-lens ordinary and fused shells have render-only footprint protection: around half the viewport
 they require strong defocus even at low aperture; near-full-viewport/extreme proximity must gently
 fade/cull rather than become a sharp screen-filling wall. Sensor-clipped extent and per-member union

@@ -107,7 +107,10 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                  ray_source=world_point(ray_path[:3]),
                  ray_end=world_point(ray_path[3:]))
     if mode == "surface":
-        knobs.update(sun=direction, sun_below=water_sun_below_safe(direction), spec_dir=(0.0, 1.0, 0.0),
+        # Surface glass sees the same refracted distant sun as water, particles
+        # and probe glints; a world-up lobe invents a second physical emitter.
+        sun_below = water_sun_below_safe(direction)
+        knobs.update(sun=direction, sun_below=sun_below, spec_dir=sun_below,
                      surface_gain=2.0 * strength * float(_p(parameters, "surface_brightness")),
                      glint_power=float(MODES["surface"]["glint_power"]) * strength, light_power=0.0,
                      surface=SURFACE_Y, shaft_y=SURFACE_Y)
