@@ -746,7 +746,8 @@ void main() {
     vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
     // A bead under a few pixels: a slightly dark core (it bends the darker water below into view) and, on some, a
     // sparkle. Every one adding the same glow turned dense streams into a uniform haze (mocks: glitter, not fog).
-    float sparkle = fract(vExtra.x * 17.31 + vSphere.w * 913.7) > 0.8 ? 2.5 : 0.2;
+    // Material membership follows stable identity, never the breathing radius.
+    float sparkle = fract(vExtra.x * 17.31) > 0.8 ? 2.5 : 0.2;
     vec3 speckLight = behind * (0.55 + 0.45 * centreness)
                     + mix(uSkyTint, uShaftColour, 0.4) * uSpeckGlow * sparkle * (0.7 + 0.6 * centreness);
     shaded = mix(shaded, vec4(speckLight, 0.3 + 0.5 * centreness), speck);

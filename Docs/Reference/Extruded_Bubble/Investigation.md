@@ -2177,3 +2177,18 @@ The latest MC Qt captures also establish zero messages in both valid 21:23 and 2
 including three Settings reopen cycles each. Appended older `QFont`/`QUnifiedTimer` warnings are not current-run
 failures. Shared combo point-size policy is already implemented; editor/bucket-specific warning attribution
 remains conditional work, not a reason for another identical idle launch or a claim of a font repair.
+
+## 48. Tiny-shell radius-dependent sparkle discontinuity (22 October; native candidate)
+
+The sub-2.5px ordinary material mixed in a discrete sparkle value selected by
+`fract(stableSeed*17.31 + changingRadius*913.7) > .8`. A smooth breathing radius therefore repeatedly
+reclassified the same physical identity between brightness .2 and 2.5. The native production-fragment
+regression straddles one threshold with a radius delta of only 2e-7 world units: unchanged camera/identity,
+negligible projected geometry change, but the old integrated RGBA difference is about 12.1% of the two
+frames' combined energy. This is a proved material step, not proof of discontinuous simulation radii.
+
+Sparkle membership now uses the existing stable seed alone, matching the identity policy already used by
+the dedicated micro-glass branch. The native threshold bar passes below .1% relative change, alongside the
+connected geometry/near/lifetime/wake checks. No new floor, interpolation, state, pass, timer or random owner
+is introduced; the obsolete radius multiply/add disappears. The small-shell wall policy is unchanged.
+Recorded musical motion, perceived idle visibility and 256/512/2D breathing comparisons remain unaccepted.
