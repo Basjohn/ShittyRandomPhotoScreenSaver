@@ -25,9 +25,13 @@ def _camera_point(pose, point):
     return np.asarray(wtv).reshape(3, 3).T @ (np.asarray(point) - np.asarray(eye))
 
 
-def test_default_physical_camera_preserves_historical_world_eye_and_centered_lens():
+def test_default_physical_camera_frames_the_fixed_tank_at_reference_depth():
+    from core.constants.extruded_bubble_world import WORLD_CENTER
+
     pose = physical_camera(0.0, 0.0, 16 / 9)
-    assert pose[2] == pytest.approx((0.0, 0.0, 0.0), abs=1e-9)
+    # The former eye at the tank origin looked toward an unrelated forward
+    # pivot: the ordinary source stream was behind/below the framed viewport.
+    assert _camera_point(pose, WORLD_CENTER) == pytest.approx((0., 0., -ORBIT_DISTANCE))
     assert pose[4][8] == pose[4][9] == 0.0
     assert _camera_point(pose, ORBIT_PIVOT)[2] == pytest.approx(-ORBIT_DISTANCE)
 
@@ -63,13 +67,13 @@ def test_orbit_changes_eye_and_axes_while_preserving_fixed_world_pivot():
 def test_camera_pan_moves_near_more_than_far():
     a = physical_camera(0, 0, 16 / 9)
     b = physical_camera(0, 0, 16 / 9, pan_x=0.1)
-    for z, expected in ((-6, 0.5), (-24, 0.125)):
+    for depth in (6., 24.):
         # Camera translation at reference depth yields depth-dependent movement.
-        world = (0, 0, z)
+        world = tuple(a[2][i] - a[0][6+i] * depth for i in range(3))
         a_view, b_view = _camera_point(a, world), _camera_point(b, world)
         delta = (b_view[0] / -b_view[2] - a_view[0] / -a_view[2]) / a[3][0]
         assert delta > 0
-        if z == -6:
+        if depth == 6.:
             near_delta = abs(delta)
         else:
             assert near_delta > abs(delta) * 3.0

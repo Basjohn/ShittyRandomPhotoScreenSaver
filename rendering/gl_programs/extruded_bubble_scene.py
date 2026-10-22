@@ -32,7 +32,7 @@ import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
 from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y
-from core.constants.extruded_bubble_world import WORLD_HALF
+from core.constants.extruded_bubble_world import WORLD_CENTER, WORLD_HALF
 
 FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
 NEAR, FAR = 0.05, 200.0
@@ -210,13 +210,11 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
 
 
 
-# The stable pivot is 15 units ahead of the historical centre view, so a default
-# camera remains at the historical world origin while orbit has real parallax.
-# This target belongs to the camera, not to mutable sim/world populations.
+# Frame the fixed tank at the physical size-calibration distance. The former
+# forward pivot left the default eye inside the inlet plane, looking away from
+# most ordinary bubbles. Orbit never follows live populations or emission nodes.
 ORBIT_DISTANCE = 15.0
-_DEFAULT_PITCH = math.radians(16.0)
-ORBIT_PIVOT = (0.0, ORBIT_DISTANCE * math.sin(_DEFAULT_PITCH),
-               -ORBIT_DISTANCE * math.cos(_DEFAULT_PITCH))
+ORBIT_PIVOT = WORLD_CENTER
 
 
 def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
