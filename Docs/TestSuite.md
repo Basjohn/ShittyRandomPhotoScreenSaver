@@ -1074,6 +1074,8 @@ pinhole center/edge silhouettes, finite near-plane/eye-inside coverage, a bound 
 members remain outside, forward exit normals and real reflected/transmitted material output, separate lifetime
 opacity and exclusive near-layer admission with aperture. Shared optics tests protect core/wall-origin Fresnel
 weights as well as pre-existing external traces. Coverage diagnostics alone cannot validate actual inside shading.
+The small-shell material gate varies authored thickness at the same ~4px ordinary/union geometry; the former
+1.5px minimum substituted identical walls and fails. This protects material authority, not whole-field idle visibility.
 
 Production renderer observations require invariant shell/wake/union/proxy uploads and world stream during camera
 changes. GPU generator readback independently protects chain/snow/wake positions/radii against pose/pixel changes,

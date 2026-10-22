@@ -2243,3 +2243,24 @@ in the upper field (idle60 ordinary >=3-level contribution rises from 41 to 898 
 and dust still fail. It changes physical admission/contact/clearance, not just presentation. Judge endpoint
 independence separately from 2D breathing/minimum-size and connected physical lifetime acceptance; do not land
 this merely to compensate for distant framing or silently preserve the former unaccepted .13 test oracle.
+
+## 50. Authored small-shell wall and native camera sweep (22 October; partial material candidate)
+
+The former wall floor `max(uShell,1.5/radius_px)` changed the traced inner sphere with camera distance. At 4px
+radius it substituted a ~39%-radius wall for authored 3%, and at <=1.5px it could remove the air core. The native
+ordinary/union regression changes authored thickness .03→.3 at identical ~4px geometry: the former shader
+produces identical transmission, while the corrected shader responds. Production now retains `uShell`; the
+lab's explicit `uShellMin` switch remains separate. Existing optical footprint/rim filtering is unchanged.
+
+`Evidence/2026-10-22_authored_wall_motion/` freezes the actual retained P1 idle60 world records, then moves the
+physical camera .08 world units in X over two seconds, sampled at 30fps. Both variants use identical records,
+settings and camera path; shader hashes, full-resolution selected images, crop GIF and five sampled crop pairs
+are retained. The 2.2–3.5px identities read more clearly as small rings through the sampled movement; this is
+bounded offscreen material evidence, not recorded radius-response/compositor/whole-idle acceptance. The latest
+Custom domain failure remains open, and ordinary simulation radii/counts/lifetimes are untouched.
+
+Thirty-six connected geometry/near/lifetime/wake checks pass. No extra pass, program, target, clock or sample
+loop is introduced. Different shell geometry can change actual tracer work inside its existing bounds; do not
+claim neutrality. Sequential full-frame queries during this sweep, after eight warm draws, give previous/new
+p50 3.03/3.17ms and p99 5.08/6.45ms on this workstation. This moving short sample does not isolate shared GPU
+load or establish production p99 cost; retain the warning for G32 and inspect other authored modes/close glass.

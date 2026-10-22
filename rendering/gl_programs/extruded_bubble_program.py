@@ -558,11 +558,11 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
     vec4 paths[8];
     vec3 pathPoints[8];
     vec3 origin = inside ? -sphere.xyz / sphere.w : (frontView - sphere.xyz) / sphere.w - rayView * 1e-3;
-    // Under ~40 px the wall's inner surface is a sub-pixel ring that aliases into dots: draw small bubbles as a
-    // single interface (the film still colours what they mirror).
-    // Below ~uShellMin px the two walls fall within a couple of pixels of each other: one interface (a single thick
-    // bright band, as the mocks draw small bubbles) instead of two concentric hoops.
-    float shell = pixels < uShellMin ? 0.0 : max(uShell, 1.5 / max(pixels, 1.0));
+    // Filter small optical footprints with the probe/rim sampling, not a thicker
+    // physical wall: a pixel-sized minimum changes the inner sphere with distance
+    // and can erase the air core. The lab's explicit single-interface option stays
+    // separate; production traces its authored thickness at every projected size.
+    float shell = pixels < uShellMin ? 0.0 : uShell;
     int count = sceneHollowSphereTrace(origin, rayView, 1.0, max(1.0 - shell, 0.0), uIors, paths, pathPoints,
                                       uPositionalLight > 0.5);
     vec3 light = vec3(0.0);
