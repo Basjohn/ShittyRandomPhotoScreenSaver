@@ -2264,3 +2264,46 @@ loop is introduced. Different shell geometry can change actual tracer work insid
 claim neutrality. Sequential full-frame queries during this sweep, after eight warm draws, give previous/new
 p50 3.03/3.17ms and p99 5.08/6.45ms on this workstation. This moving short sample does not isolate shared GPU
 load or establish production p99 cost; retain the warning for G32 and inspect other authored modes/close glass.
+
+## 51. Shared finite-world camera admission (22 October; native coverage candidate)
+
+The operator chooses populated open water only if populations remain independent of the camera; otherwise the
+boundary must be enforced by camera movement. The current finite-world repair keeps global counts, world actor
+positions and source nodes fixed. `core/settings/extruded_bubble_camera.py` owns the pure axes/orbit baseline and
+joint eye/offset resolution. Three world units of inner clearance preserve the canonical home (minimum clearance
+about 3.58) and guarantee that every unit sightline traverses at least three units of the convex population box.
+This is an explicit camera policy, not a mathematical guarantee of perceptual density.
+
+Runtime admission resolves the complete incoming pose, including partial angle/pan/dolly/FOV/Light Type changes,
+then publishes the effective existing offset. The renderer uses the same resolver. Settings hydrates/collects that
+offset and refreshes every special 3D marker before synchronous saves; Aim rebases against the shared orbit
+baseline to rotate the admitted eye in place. Native Qt tests include actual arrow-key wall/reversal, all four
+editors, closed buckets and nonzero-pan FOV changes inspected inside the save callback. No profile reset or
+second eye, presentation owner or coordinate schema is introduced.
+
+Flight integrates wall saturation rather than retaining invisible outward displacement. Constant-pitch horizontal
+eye motion is circular (orbit plus integrated travel); split at coordinate extrema, clamp monotone increments,
+and evaluate one full cycle plus remainder because the closed-cycle saturation map is idempotent. Y saturates
+linearly. This gives bounded work independent of long hold duration, including negative/tiny yaw. Changing pitch
+uses .015-radian quadrature until the pitch limit, at most 512 intervals; partition accuracy is tested at actual
+keyboard rates, not arbitrary tiny synthetic pitch rates. The limit endpoint is derived once in the existing
+immutable gesture, avoiding repeated prefix work after tilt settles. Orbit/pan/dolly settle and rebase that same
+record at GUI gesture boundaries. No per-frame write, timer, polling, mutable cache or new motion owner is added.
+
+`Evidence/2026-10-22_operator_active_idle_rejection/camera_bounded/` retains the same saved request, admitted
+offset and native active→idle layers. The eye becomes (8.1487,-5,15); ordinary world records at every sampled
+time are exactly identical to the previous failure fixture. Active dust extends through the previously empty
+lower region. Idle still fails: only five ordinary conservative candidates remain visible from this nearer
+view, and at idle60 the ordinary image contributes just 32 pixels at >=3 byte levels against frozen background.
+The repair does not satisfy idle, nor does it promise that unchanged global counts are all visible simultaneously.
+
+`camera_bounds_all_angles/` retains eleven frozen-world views, labelled Surface/Deep settings, native images,
+camera parameters and 129×97 ray-grid receipts, all with >=3 world units of domain path. Some outward views are
+sparse; geometry is no density acceptance. Actual interactive compositor/high-refresh/multi-display and complete
+moving lifetime validation remain open. CPU samples of steady long-held constant-pitch evaluation are about
+.03–.05ms here; changing-pitch evaluation costs more during its short prefix. This does not close full G32 cost.
+
+Focused camera/editor/renderer checks pass; the separate old file-wide FOV-in-preset assertion fails against
+the operator's parallel P1 JSON edit. That preset and simultaneous target-image renames are left untouched;
+reconcile their camera/artwork contract separately, rather than weakening the new camera bounds or editing
+operator authoring to make the test green.

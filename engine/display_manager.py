@@ -867,9 +867,6 @@ class DisplayManager(QObject):
 
         mode_id = str(owner.controller.mode_id)
         now = time.time()
-        if mode_id == 'extruded_bubble':
-            from widgets.spotify_visualizer.view_orbit import rebase_framed_flight_on_drag
-            rebase_framed_flight_on_drag(owner.controller.presentation_state, now)
         values = orbit_visualizer_view(
             owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, now
         )

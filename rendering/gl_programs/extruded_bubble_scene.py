@@ -32,7 +32,7 @@ import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
 from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y
-from core.constants.extruded_bubble_world import WORLD_CENTER, WORLD_HALF
+from core.settings.extruded_bubble_camera import camera_axes, resolve_camera_position, ORBIT_DISTANCE, ORBIT_PIVOT
 
 FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
 NEAR, FAR = 0.05, 200.0
@@ -195,15 +195,8 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     projection-only calculation for the lab; production uses ``physical_camera``
     with real dolly distance and always calls this helper at scale 1. No off-axis
     shift is supported: panning must translate the physical eye. """
-    pitch = math.radians(16.0 + 90.0 * float(tilt))
-    yaw = math.pi * float(turn)
-    cp, sp, cy, sy = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
-    # View axes in world: right, up, back (the camera looks along -back: up and ahead when pitched up).
-    right = (cy, 0.0, -sy)
-    back = (sy * cp, -sp, cy * cp)
-    up = (back[1] * right[2] - back[2] * right[1], back[2] * right[0] - back[0] * right[2],
-          back[0] * right[1] - back[1] * right[0])
-    view_to_world = (*right, *up, *back)
+    view_to_world = camera_axes(turn, tilt)
+    right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
     tan_y = math.tan(math.radians(max(35.0, min(62.0, float(fov_y_degrees)))) / 2.0) / max(float(scale), 1e-3)
     tan = (tan_y * aspect, tan_y)
@@ -212,13 +205,6 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
                   (FAR + NEAR) / (NEAR - FAR), -1.0, 0.0, 0.0, 2.0 * FAR * NEAR / (NEAR - FAR), 0.0)
     return view_to_world, world_to_view, tan, projection
 
-
-
-# Frame the fixed tank at the physical size-calibration distance. The former
-# forward pivot left the default eye inside the inlet plane, looking away from
-# most ordinary bubbles. Orbit never follows live populations or emission nodes.
-ORBIT_DISTANCE = 15.0
-ORBIT_PIVOT = WORLD_CENTER
 
 
 def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
@@ -237,29 +223,8 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     """
     view_to_world, world_to_view, tan, projection = camera(
         turn, tilt, aspect, fov_y_degrees=fov_y_degrees)
-    distance = ORBIT_DISTANCE / max(float(scale), 1e-3)
-    right = view_to_world[:3]
-    up = view_to_world[3:6]
-    back = view_to_world[6:9]
-    # One full card's width/height at the target distance would be 2*d*tan.
-    # Confine the under-water eye by LIMITING actual dolly/translation rather than
-    # secretly offsetting its Y afterwards (which would break the declared pivot).
-    ceiling = SURFACE_Y - 0.5
-    if surface_bound and back[1] > 1e-9:
-        distance = min(distance, max(1.0, (ceiling - ORBIT_PIVOT[1]) / back[1]))
-    # Camera translation in WORLD units must not depend on the card's aspect
-    # ratio: the Settings volume view shares this exact physical reference.
-    dx = -2.0 * distance * tan[1] * float(pan_x)
-    dy = 2.0 * distance * tan[1] * float(pan_y)
-    y = ORBIT_PIVOT[1] + distance * back[1] + dx * right[1] + dy * up[1]
-    if surface_bound and y > ceiling and up[1] > 1e-9:
-        dy -= (y - ceiling) / up[1]
-    eye = tuple(ORBIT_PIVOT[i] + distance * back[i] + dx * right[i] + dy * up[i]
-                + float(position_offset[i]) * WORLD_HALF[i] for i in range(3))
-    # A user-moved physical eye can approach any interior source/end point,
-    # but must not jump through the ocean ceiling. No FOV/projection adjustment.
-    if surface_bound:
-        eye = (eye[0], min(ceiling, eye[1]), eye[2])
+    eye, _ = resolve_camera_position(turn, tilt, scale, pan_x, pan_y, fov_y_degrees,
+                                     position_offset, surface_bound, axes=view_to_world)
     return view_to_world, world_to_view, eye, tan, projection
 
 

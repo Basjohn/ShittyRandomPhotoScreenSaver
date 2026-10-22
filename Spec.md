@@ -314,6 +314,11 @@ measured failures and native 2D/EB comparison: `Docs/Reference/Extruded_Bubble/I
 EB's fixed orbit target is the fixed tank centre, at the nominal 15-world-unit reference distance for a reset
 view. It never follows stream nodes or populations. Authored orbit/pan/dolly/offset values remain independent
 of physical simulation; camera reset must look into the authored tank rather than begin in its inlet plane.
+The finite populated-world option is operator-authorized: movement stops before the eye leaves useful populated
+water. A joint pure resolver admits the actual eye with three world units of clearance from every tank face;
+the effective existing XYZ offset is shared by hydration, flight/orbit/pan/dolly, Aim and all special 3D editors.
+No separate rendered eye, camera-following actors, count multiplication or artificial tank walls implement this
+boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 

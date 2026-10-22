@@ -58,6 +58,13 @@ spawn or place populations. GPU procedural populations use the same world stream
 projection only. Authored counts are global, with no per-view copies. The fixed length conversion calibrates
 nominal size at one reference distance, allowing genuine near/far perspective elsewhere. **Later R30–R34 camera candidates supersede this early snapshot:** authored physical XYZ camera translation, camera-relative flight, independent lens FOV, and a volume Aim marker now exist in source, all still unaccepted. The old off-axis lens-shift pan diagnosis applies to an earlier implementation, **not** the current rendered camera. Camera placement/pivot/source-region fidelity remains live work.
 
+**22 October finite-world navigation refinement:** the operator prefers populated open water without building
+populations around the camera, and authorizes a finite world with camera movement bounds when that cannot be
+met. Every special 3D control must respect the same legal area. The current candidate keeps physical populations
+and global amounts fixed, admitting the eye with three world units of tank clearance through one shared pure
+resolver. It does not add visible walls or populate the camera's surroundings. Native same-world active coverage
+improves; all-angle density, moving controls and idle readability remain acceptance work (Investigation §51).
+
 The candidate uses common pinhole rays/bounds for ordinary and fused geometry. This supersedes T2's literal
 all-screen circularity as a numeric oracle: rectilinear off-axis spheres can elongate, but both paths must agree
 and the material must read as a sphere. Near-plane/eye-inside guards cannot collapse a valid bound or shade a

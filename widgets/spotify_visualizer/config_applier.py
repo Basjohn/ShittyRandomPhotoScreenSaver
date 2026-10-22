@@ -285,6 +285,12 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
             setattr(host, f"_{pan_x_key}", x)
             setattr(host, f"_{pan_y_key}", y)
 
+        from core.settings.extruded_bubble_camera import CAMERA_INPUT_KEYS, admit_camera_parameters
+        if any(key in kwargs for key in CAMERA_INPUT_KEYS):
+            camera = {key: getattr(host, f'_{key}', _visualizer_default(key)) for key in CAMERA_INPUT_KEYS}
+            offset = admit_camera_parameters(camera)
+            setattr(host, '_extruded_bubble_camera_position', offset)
+
 
 def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:
     """A spec'd mode's renderer parameters: every presentation control, under its own key

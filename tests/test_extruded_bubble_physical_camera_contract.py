@@ -51,12 +51,16 @@ def test_dolly_preserves_fov_and_moves_eye_depth():
     assert near[:2] == far[:2]
     assert near[3:] == far[3:]
     assert math.dist(near[2], ORBIT_PIVOT) == pytest.approx(ORBIT_DISTANCE / 2)
-    assert math.dist(far[2], ORBIT_PIVOT) == pytest.approx(ORBIT_DISTANCE * 2)
+    # Dolly stops at the legal tank clearance; the lens remains unchanged.
+    from core.settings.extruded_bubble_camera import CAMERA_CLEARANCE
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    assert all(abs(p) <= h-CAMERA_CLEARANCE for p,h in zip(far[2], WORLD_HALF))
+    assert math.dist(far[2], ORBIT_PIVOT) > math.dist(near[2], ORBIT_PIVOT)
 
 
 def test_orbit_changes_eye_and_axes_while_preserving_fixed_world_pivot():
     a = physical_camera(0, 0, 16 / 9)
-    b = physical_camera(0.3, 0.1, 16 / 9)
+    b = physical_camera(0.3, 0.02, 16 / 9)  # both complete orbits fit the inner box
     assert a[0] != b[0] and a[2] != b[2]
     assert math.dist(a[2], ORBIT_PIVOT) == pytest.approx(ORBIT_DISTANCE)
     assert math.dist(b[2], ORBIT_PIVOT) == pytest.approx(ORBIT_DISTANCE)
