@@ -2005,3 +2005,37 @@ zero authored amounts and strict physical lifetime; do not fill the viewport wit
 Then verify the requested chain opacity fade and retained, smaller, glow-free particle field. Still frames
 do not prove no breathing, slow travel, source births, breach/exit or idle→active recovery. These offscreen
 native renders are not actual compositor-window, mixed-DPR, dual-display or performance acceptance.
+
+## 42. Retained SCENE pose and physical fade isolation (22 October; coverage still FAILED)
+
+The later operator image `Evidence/2026-10-22_SCENE_operator_empty_swath.png` shows a broad empty lower region.
+Local logs archived in `Evidence/2026-10-22_SCENE_retained_pose/logs/` establish cold SCENE at 20:42:17,
+upward floor flow and a nearby saved camera rotation at 20:48:48. They do not establish the exact screenshot's
+loaded source revision, pose or audio. The screenshot file's later creation time is not loaded-code provenance.
+No operator reproduction is required to investigate these retained inputs.
+
+The native reconstructed-pose producer freezes recorded four-second input and the same seeds/counts/travel,
+then separates tank ray length, flat occupancy, entry/exit fade, lateral boundary fade and final lighting.
+It explicitly compares the earlier loaded pivot and the current fixed-tank pivot. With the retained offset,
+the latter eye is outside the near tank face: lower image rays see a much thinner finite population volume,
+while the water backdrop continues. This is a conditional reconstruction, not proof of screenshot equivalence.
+
+An independent defect is proved inside the actual tank. The former percentage-of-tank lateral fade compounds
+with the long percentage-of-track entry fade, almost erasing near-wall interior samples. The native generator
+regression pins valid points at `(0,-7.5,0)` and `(0,-7.5,17.9)` while holding seeded light constant; the old
+near-wall result is roughly 1.17% of the centre result. The physical-fade candidate gives both full interior
+visibility while retaining zero entry/face/outside opacity and a smooth outgoing fade.
+
+SCENE specks, snow and free chains now share footprint-scaled entry/exit/wall-crossing distances, capped on
+short paths. Chain offsets still use their actual positions for containment. BEAM formulas and attached fizz
+are unchanged. `Evidence/2026-10-22_SCENE_physical_fades/` retains the producer, native images, shader hash,
+frozen-population parity and bounded GPU-query samples. Flat occupancy pixels are identical before/after in
+both reconstructed poses; BEAM final pixels are byte-identical in the old/new generator comparison. In the
+thin lower-quarter diagnostic, mean unlit occupancy was 0.0893, old faded output about 0.0005 and candidate
+output 0.0893 (8-bit image means, not physical luminance). Moving birth/exit smoothness and installed costs
+still need validation. No pass, instance count, world position or camera-relative population is added.
+
+The large coverage complaint stays open. Do not mistake the narrower opacity repair for full tank/framing,
+ordinary-population, physical illumination or backdrop-domain acceptance. The cold-SCENE log also disproves
+inherited BEAM cohorts as a universal explanation for this report. GPU query medians from these offscreen
+captures are not an isolated performance comparison or proof of a speed improvement.

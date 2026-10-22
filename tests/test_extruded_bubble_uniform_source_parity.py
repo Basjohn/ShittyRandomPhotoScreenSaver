@@ -64,7 +64,10 @@ class EBSourceAndUploadTests(unittest.TestCase):
         render = RENDER.read_text(encoding='utf-8')
         self.assertIn('uniform vec3 uStreamSource;', glsl)
         self.assertIn('uniform vec3 uStreamEnd;', glsl)
-        self.assertIn('vec3 sourceLine = pathEnabled ? mix(uStreamSource, uStreamEnd, progress)', glsl)
+        self.assertTrue('pathEnabled ? mix(uStreamSource, uStreamEnd, progress)' in glsl,
+                        'BEAM chains must retain their authored path inside the SCENE/BEAM choice')
+        self.assertTrue('sceneEntry.xyz + along * s' in glsl,
+                        'SCENE chains must retain their physical upstream-face path')
         self.assertIn('p = mix(uStreamSource, uStreamEnd, progress)', glsl)
         self.assertIn('1.0 - smoothstep(0.84, 1.0, progress)', glsl)
         self.assertIn('1.0 - smoothstep(0.82, 1.0, progress)', glsl)
