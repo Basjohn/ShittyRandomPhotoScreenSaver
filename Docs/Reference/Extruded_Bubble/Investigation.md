@@ -2422,3 +2422,12 @@ Visual inspection confirms the scoped same-ID contraction improvement; full 2D-O
 soft/heavy/quiet-to-loud passage coverage, idle readability, material fidelity and operator review stay open.
 Two sequential short GPU samples are not neutrality proof: baseline median/p90 9.51/16.85ms, candidate10.81/15.02ms
 (first frame includes shader warmup). G32 needs controlled warmed/interleaved cost; no pass/clock/target was added.
+
+## 55. Authored lens metadata versus starting pose
+
+The stale camera-reset test banned the text `extruded_bubble_camera_fov` anywhere in a preset file, although the
+current Settings control and normal preset snapshot admit that independent intrinsic. Operator P1 authoring
+exposed the contradiction. The gate now excludes FOV from starting-view pose metadata, checks any authored FOV
+through the canonical control, and retains Custom canonical-home/lens and curated reset expectations. No preset,
+camera implementation or reset behavior changed. Thirty-one camera/reset/startup checks pass; operator P1 and
+reference renames remain untouched.

@@ -328,6 +328,8 @@ water. A joint pure resolver admits the actual eye with three world units of cle
 the effective existing XYZ offset is shared by hydration, flight/orbit/pan/dolly, Aim and all special 3D editors.
 No separate rendered eye, camera-following actors, count multiplication or artificial tank walls implement this
 boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
+Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
+control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 

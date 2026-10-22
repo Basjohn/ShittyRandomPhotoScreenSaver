@@ -30,16 +30,21 @@ def test_reset_home_uses_existing_curated_starting_poses_without_mutation():
             'extruded_bubble_scene_pan_x', 'extruded_bubble_scene_pan_y'}
 
 
-def test_custom_reset_has_canonical_pose_and_lens_not_an_artwork_override():
+def test_custom_reset_has_canonical_home_and_starting_view_excludes_lens_intrinsics():
     result = starting_camera_pose(MODE, get_custom_preset_index(MODE))
     assert result == {k: require_canonical_default('widgets.spotify_visualizer.' + k)
                       for k in result}
     assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_fov') == 45.0
-    # Curated presets have no legacy FOV authority whatsoever.
+    # Starting-view metadata owns pose only. Camera FOV is a separately admitted
+    # mode control, which the operator may author in the normal preset snapshot.
     import json
     for path in (ROOT / 'presets/visualizer_modes/extruded_bubble').glob('*.json'):
         assert 'extruded_bubble_camera_fov' not in json.loads(path.read_text()).get('starting_view', {})
-        assert 'extruded_bubble_camera_fov' not in path.read_text()
+        controls = json.loads(path.read_text())['snapshot']['widgets']['spotify_visualizer']
+        if 'extruded_bubble_camera_fov' in controls:
+            from core.settings.visualizer_mode_settings import require_mode_settings
+            control = require_mode_settings(MODE).control('extruded_bubble_camera_fov')
+            assert control.coerce(controls[control.key]) == controls[control.key]
 
 
 def test_physical_pan_screen_axes_match_alt_right_drag():
