@@ -384,13 +384,14 @@ class ExtrudedBubbleSimulation:
         if abrupt_step:
             self._big_phrase_edge = max(self._big_phrase_edge, rising_step)
         self._big_phrase_edge = _follow(self._big_phrase_edge, 0.0, dt, 0.01, 0.25 * soft)
-        # A genuine step carries a short, continuous musical body response. A smooth engine
-        # ramp cannot repeatedly fake that step, and a held plateau does not sustain it.
         if music.play_ramping or finishing_source_ramp:
             self._big_phrase_edge = 0.0
             big_change = 0.0
         else:
-            big_change = min(0.11, big_change) + self._big_phrase_edge
+            # An edge can support the current positive body change, never
+            # survive it: the old independent tail stayed hot through actual
+            # falling bass/body and stacked consecutive rises into inflation.
+            big_change = min(0.11, big_change) + min(self._big_phrase_edge, big_change)
         # Silence still settles over seconds. Blend into that release continuously;
         # the previous .01 threshold abruptly changed release by 7.5x inside music.
         quiet = max(0.0, 1.0 - intensity / 0.10)

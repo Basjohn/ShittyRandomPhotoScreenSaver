@@ -1033,7 +1033,9 @@ remove big identities from a long pause. Zero reaction strength still disables s
 Class metadata comes from actual successful simulation admissions, never assumed ID ranges: paced BEAM births
 interleave large/small identities. Rest/crest endpoint tests, prospective-inlet rejection and quiet contact tests
 cross the shared class transfer; particle Amount tests protect density-only radiance and zero-amount invisibility.
-The two actual-large recorded contraction/excursion assertions remain failing; do not lower their acceptance bars.
+The actual-large recorded contraction/excursion assertions now pass after bounding phrase-edge support by current
+body change; their original <.8 minimum/>1.8 active-span bars remain. Pause continuity compares an identical
+continued frame so that musical contraction already underway is not misclassified as a pause snap.
 Native idle/recovery and 2D comparison scope is recorded in Investigation §52, separately from CPU guarantees.
 
 The old scalar-only oscillator fixtures and positive-only radius expectations are retired. Both tests and tools

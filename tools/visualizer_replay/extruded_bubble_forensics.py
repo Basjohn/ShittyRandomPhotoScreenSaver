@@ -158,8 +158,13 @@ def run(args):
         feature = observed['feature']
         parameters = settings
         pose = (float(parameters['extruded_bubble_turn']), float(parameters['extruded_bubble_tilt']))
-        _, world_to_view, tan, _ = scene.camera(*pose, size[0] / size[1],
-                                               float(parameters['extruded_bubble_scene_scale']))
+        _, world_to_view, eye, tan, _ = scene.physical_camera(
+            *pose, size[0] / size[1], float(parameters['extruded_bubble_scene_scale']),
+            pan_x=float(parameters['extruded_bubble_scene_pan_x']),
+            pan_y=float(parameters['extruded_bubble_scene_pan_y']),
+            fov_y_degrees=float(parameters['extruded_bubble_camera_fov']),
+            position_offset=parameters['extruded_bubble_camera_position'],
+            surface_bound=parameters['extruded_bubble_light_type']=='Sunlit Surface')
         records = np.asarray(snapshot.bubbles).reshape(-1, 8)
         shells = scene.bubble_instances(snapshot.bubbles)
         eligible = records[(records[:, 7] < 0) & (records[:, 4] > 0.)]
@@ -175,7 +180,7 @@ def run(args):
                         record=list(map(float, rec)), popping=base.popping, leaving=base.leaving)
             if ident in mapped:
                 shell = mapped[ident]
-                view = view_matrix @ shell[:3]
+                view = view_matrix @ (shell[:3]-np.asarray(eye))
                 depth = -float(view[2])
                 item.update(instance=list(map(float,shell)),view_depth=depth,
                             projection_regime='fully_in_front_first_order' if depth>float(shell[3])+.05 else 'near_plane_or_behind_no_radius_estimate')
@@ -276,7 +281,7 @@ def run(args):
                    scope=('hybrid: production body-band DSP from requested-size PCM tails; recorded onsets/loudness and sampled capture cadence retained; not exact native callback replay'
                           if args.reanalyze_pcm else 'recorded post-DSP features through production logical capture; fixed prerecorded bands, not new live DSP'),
                    pcm_reanalysis=args.reanalyze_pcm,
-                   projection_scope='first-order estimates only for fully forward spheres; mature aggregate uses conservative frustum candidates. Near-plane/inside cases retain world instances without a radius estimate. Paired PNG differences are native pixels, not segmented silhouettes',
+                   projection_scope='first-order estimates at admitted authored physical eye/pan/dolly/FOV, without flight/auto-orbit integration; fully forward spheres only. Mature aggregate uses conservative frustum candidates. Near-plane/inside cases retain world instances without a radius estimate. Paired PNG differences are native pixels, not segmented silhouettes',
                    frames=len(selected), size=size,
                    bands={name: distribution([row['bands'][i] for row in selected])
                           for i, name in enumerate(('bass', 'mid', 'high'))},

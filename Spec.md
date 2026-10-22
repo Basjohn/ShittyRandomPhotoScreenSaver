@@ -304,7 +304,8 @@ consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualize
 
 **Extruded Bubble** owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
 Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum
-musical response-scale reference. In idle every reactive aspect settles slowly into its collapsed/resting state,
+musical response-scale reference. Large-body phrase-edge support must not outlive the current positive body change
+and pin size through falling music. In idle every reactive aspect settles slowly into its collapsed/resting state,
 leaving room for expansion on music return; an autonomous idle oscillator is not the target. Size, drift/sway,
 stream, rays, emission and ambient/surface motion must all remain gentle while idle. Authored particles remain
 visible while losing glow and most of their active size. Ordinary/fused bubbles remain at their smallest resting
