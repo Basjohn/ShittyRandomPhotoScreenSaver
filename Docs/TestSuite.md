@@ -141,6 +141,13 @@ size and proxy parity without remapping count ranges. Logical idle tests retain 
 zero amounts and five simulated minutes of constant-radius Source births, Surface breach/Deep End and exits.
 Native P1/P7 captures are required for visible ordinary coverage; positive logical residency is insufficient.
 
+`test_extruded_bubble_scene_fade_gpu.py` controls only generator input seeds and executes production speck/snow
+inlet/trajectory/opacity code. It protects near-wall interior brightness, transparent birth/exit and finite
+containment. Repeated SSBO-variant probes use both shader-storage and buffer-update memory barriers: update-only
+probes returned a prior uniform variant on the observed native context; the underlying driver cause is unproved.
+The bead GPU probes use the same complete readback/subsequent-write visibility boundary. The structural source
+test admits the existing SCENE/BEAM ternary rather than requiring its obsolete BEAM-only prefix.
+
 `test_extruded_bubble_exit_authority.py` crosses the logical advance/snapshot seam: Deep BEAM/SCENE
 identities survive above the Surface water plane until their actual exit; all six SCENE world bounds
 and Surface's above-water retirement retain the existing fade. Native projected breach and

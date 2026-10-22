@@ -58,7 +58,7 @@ void main() {
             gl.glUniform1f(gl.glGetUniformLocation(program,'uBeadSize'),amount)
             gl.glUniform1i(gl.glGetUniformLocation(program,'uBeadCount'),64 if free else 0)
             gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,64)
-            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT | gl.GL_SHADER_STORAGE_BARRIER_BIT)
             data=np.empty((64,4),dtype='f4')
             gl.glGetNamedBufferSubData(result,0,data.nbytes,data)
             return data
@@ -102,7 +102,7 @@ void main() {
             gl.glUniform1i(gl.glGetUniformLocation(program,name),value)
         gl.glUniform1f(gl.glGetUniformLocation(program,'uFizzFill'),31.5)
         gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,64)
-        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT | gl.GL_SHADER_STORAGE_BARRIER_BIT)
         rows=np.empty((64,4),dtype='f4');gl.glGetNamedBufferSubData(result,0,rows.nbytes,rows)
         assert np.any((rows[:32,2]>0)&(rows[:32,3]<0))
         assert np.any((rows[32:,2]>0)&(rows[32:,3]>0))
@@ -143,7 +143,7 @@ void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_P
         samples=[]
         for pixel,matrix in ((.001,np.eye(3,dtype='f4')),(.003,np.diag((-1.,1.,-1.)).astype('f4'))):
             gl.glUniform1f(loc('uPixel'),pixel);gl.glUniformMatrix3fv(loc('uWorldToView'),1,False,matrix)
-            gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,2048);gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+            gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,2048);gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT | gl.GL_SHADER_STORAGE_BARRIER_BIT)
             data=np.empty((2048,4),dtype='f4');gl.glGetNamedBufferSubData(buffer,0,data.nbytes,data)
             assert np.isfinite(data).all();samples.append(data)
         assert np.array_equal(*samples)
@@ -262,7 +262,7 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
             gl.glUniform3f(loc('uOrbit'),angle,c,s)
             gl.glUniform1f(loc('uPixel'),pixel);gl.glUniform2f(loc('uTan'),*tan)
             gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,224)
-            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT | gl.GL_SHADER_STORAGE_BARRIER_BIT)
             data=np.empty((224,4),dtype='f4');gl.glGetNamedBufferSubData(result,0,data.nbytes,data)
             assert np.isfinite(data).all();samples.append(data)
         assert all(np.array_equal(samples[0],row) for row in samples[1:])

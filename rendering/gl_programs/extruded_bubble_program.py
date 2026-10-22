@@ -963,6 +963,18 @@ vec4 sceneInlet(float faceSeed, vec2 uv, vec3 direction, vec3 centre, vec3 halfE
     }
     return vec4(p, max(0.001, distanceOut));
 }
+
+// SCENE fades describe physical entry/exit and an actor crossing a wall. A
+// percentage of the whole tank used to erase a wide, otherwise valid lateral
+// interior slab. The small footprint owns these distances, not the camera.
+float scenePathFade(vec3 p, vec3 centre, vec3 halfExt, float travelled, float span, float radius) {
+    vec3 inside = halfExt - abs(p - centre);
+    float clearance = min(inside.x, min(inside.y, inside.z));
+    float wall = smoothstep(0.0, max(2.0 * radius, 1e-5), clearance);
+    float width = min(0.25 * span, max(4.0 * radius, 1e-4));
+    return wall * smoothstep(0.0, width, travelled)
+                * (1.0 - smoothstep(span - width, span, travelled));
+}
 """
 
 # The procedural small bubbles' vertex stage: the bubble vertex stage with its per-instance attributes generated.
@@ -1043,10 +1055,14 @@ void beadInstance() {
         float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
-        float ends = smoothstep(0.0, 0.10, progress) * (1.0 - smoothstep(0.84, 1.0, progress));
-        vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
-        float boundary = 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
-        vOpacity *= ends * boundary;
+        if (uSceneEmission == 1) {
+            vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, s, span, px);
+        } else {
+            float ends = smoothstep(0.0, 0.10, progress) * (1.0 - smoothstep(0.84, 1.0, progress));
+            vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
+            float boundary = 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
+            vOpacity *= ends * boundary;
+        }
         aSphere = vec4(p, px);
         aExtra = vec2(beadRandom(chain * 977 + k, 12u), 3.0); // stable environment-lit micro-glass
         return;
@@ -1109,8 +1125,7 @@ void beadInstance() {
         vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
         float progress = fract(seed.y + uSnowDrift / sceneEntry.w);
         p = sceneEntry.xyz + along * (progress * sceneEntry.w);
-        vOpacity *= smoothstep(0.0, 0.14, progress)
-                  * (1.0 - smoothstep(0.82, 1.0, progress));
+        vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005);
     } else if (pathEnabled) {
         float progress = fract(seed.y + uSnowDrift / pathLength);
         float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
@@ -1124,8 +1139,10 @@ void beadInstance() {
         vec3 at = fract(seed + along * uSnowDrift / (2.0 * uWorldHalf));
         p = uWorldCenter + (at * 2.0 - 1.0) * uWorldHalf;
     }
-    vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
-    vOpacity *= 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
+    if (uSceneEmission != 1) {
+        vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
+        vOpacity *= 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
+    }
     aSphere = vec4(p, 0.005);
     aExtra = vec2(beadRandom(i, 17u), 1.0);
 }
@@ -1198,11 +1215,16 @@ void speckInstance() {
              : mix(uSpeckSource, uSpeckEnd, progress)
                + side * (seed.x * 2.0 - 1.0) * sideWidth
                + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
-    vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
-    float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));
-    float ends = smoothstep(0.00, 0.12, progress)
-                 * (1.0 - smoothstep(0.82, 1.0, progress)) * boundsFade;
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
+    float ends;
+    if (uSceneEmission == 1) {
+        ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, radius);
+    } else {
+        vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
+        float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));
+        ends = smoothstep(0.00, 0.12, progress)
+             * (1.0 - smoothstep(0.82, 1.0, progress)) * boundsFade;
+    }
     float cloudLight = uSceneEmission == 1 ?
         (0.35 + uClouds.z * (0.45 + 0.55 * clouds)) : (0.35 + uClouds.z * clouds);
     float bright = exp(0.7 * speckGauss(i, 9u).x) * cloudLight * ends;

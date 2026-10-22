@@ -324,6 +324,8 @@ Ordinary/fused geometry shares projection/depth and the existing near-defocus ow
 opacity, including coherent union weights; a pop is a gentle opacity retirement with musical radius independent.
 The water-plane exit applies only to Sunlit Surface. Deep Light retains physical world bounds and,
 for BEAM emission, its authored End; an invisible Surface ceiling must not retire Deep identities.
+SCENE procedural opacity fades at physical entry/exit and wall crossing over distances tied to the actor's
+footprint. A broad fraction of the tank's transverse width must not hide valid interior populations.
 Existing Light Strength also owns the analytic emitter radiance reflected and transmitted by glass;
 independent environmental fill is not removed when that emitter strength is zero.
 Near-lens ordinary and fused shells have render-only footprint protection: around half the viewport
