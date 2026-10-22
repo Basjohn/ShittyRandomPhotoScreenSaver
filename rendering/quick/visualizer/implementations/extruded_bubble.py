@@ -265,13 +265,12 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
 
 def _glass(knobs, near: bool) -> dict[str, object]:
     """The traced glass's own knobs (shells, clusters; the near layer's lens and reflection differ)."""
-    light = _floats(knobs["light"])
     return {
         "uEta": 1.33, "uBehind": 8.0, "uShell": float(knobs.get("shell", 0.1)),
         "uLens": float(knobs.get("lens", 0.85)),
         "uIors": _floats(knobs.get("iors", (1.33, 1.5, 1.0))), "uRough": float(knobs.get("rough", 0.0)),
         "uShellMin": 0.0, "uDiag": 0, "uLightDir": _floats(knobs["spec_dir"]),
-        "uSpecColour": tuple(c * 300.0 for c in light), "uSpecThrough": 0.4, "uSpecShape": (0.05, 0.25, 0.012),
+        "uSpecColour": _floats(knobs["specular_light"]), "uSpecThrough": 0.4, "uSpecShape": (0.05, 0.25, 0.012),
         "uInnerBlur": float(knobs.get("inner_blur", 0.25)),
         "uReflect": float(knobs.get("face_reflect", 1.0)),
         "uSpeckGlow": 0.6, "uFrameShare": 1.0, "uNearCoc": 22.0, "uNearGain": 1.0,

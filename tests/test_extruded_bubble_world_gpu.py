@@ -46,7 +46,10 @@ def sphere_pixels(qt_app):
             for name,value in {'uPixel':2*tan[1]/height,'uPixelSize':2*tan[1]/height,'uCrisp':1.,
                                'uFocus':0.,'uAperture':0.,'uNearCoc':22.,'uNearLayer':0.,'uProbeLevels':1.,
                                'uLens':1.,'uReflect':.5,'uBehind':8.,'uFrameShare':1.,'uShell':.03,**uniforms}.items():
-                gl.glUniform1f(loc(name),value)
+                if isinstance(value, tuple):
+                    gl.glUniform3f(loc(name), *value)
+                else:
+                    gl.glUniform1f(loc(name),value)
             gl.glUniform1i(loc('uDiag'),diag)
             gl.glUniform1i(loc('uProbe'),2);gl.glUniform1i(loc('uBackground'),0);gl.glUniform1i(loc('uEnvironment'),0)
             gl.glUniform3f(loc('uIors'),1.15,2.,1.)
@@ -102,6 +105,33 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
             ratios.append(math.sqrt(eigen[1]/eigen[0]))
         expected=math.sqrt(1+(centre[0]**2+centre[1]**2)/(centre[2]**2-.6**2))
         assert ratios==pytest.approx((expected,expected),abs=.02)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("light_type", ("Sunlit Surface", "Deep Light"))
+def test_authored_light_strength_reaches_reflected_and_transmitted_pixels(sphere_pixels, light_type):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _glass
+
+    parameters = {**require_canonical_default("widgets.spotify_visualizer"),
+                  "extruded_bubble_light_type": light_type}
+    for kind in ("ordinary", "cluster"):
+        for diag in (1, 2):
+            energies = []
+            for strength in (0., .5, 1.):
+                knobs = scene_knobs({**parameters, "extruded_bubble_light_strength": strength})
+                material = _glass(knobs, False)
+                # Cross Settings -> scene mapping -> production uniforms -> real shader pixels.
+                for near in (False, True):
+                    assert _glass(knobs, near)["uSpecColour"] == pytest.approx(
+                        tuple(c * 300. * strength for c in knobs["light"]))
+                uniforms = {key: material[key] for key in
+                            ("uLightDir", "uSpecColour", "uSpecShape", "uSpecThrough", "uReflect")}
+                pixels, _ = sphere_pixels(kind, diag=diag, **uniforms)
+                energies.append(float(pixels[:, :, :3].sum()))
+            assert energies[1] > energies[0] + .001
+            assert energies[2] - energies[0] == pytest.approx(2. * (energies[1] - energies[0]), rel=.002)
 
 
 @pytest.mark.qt

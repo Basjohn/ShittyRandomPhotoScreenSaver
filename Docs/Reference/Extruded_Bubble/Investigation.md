@@ -1952,3 +1952,10 @@ These are BEAM/current-preset baselines, not the operator's SCENE reproduction o
 All captures are offscreen; first-draw compilation/readback and changing views invalidate performance
 claims. The former native silhouette red was a clipped fixture at the narrower lens, not demonstrated
 product projection failure; its whole-ellipse oracle now requires analytic sensor clearance.
+
+`Evidence/2026-10-22_light_strength_p7` retains the diagnostic producer and same-recording native
+P7 before/after images (4.004295 seconds, yaw 0.5, 2560×1440, four identical logical bubbles).
+Only the analytic highlight consumer changes from its former strength-independent radiance to the
+authored 0.12 strength. Native isolated reflected/transmitted tests establish proportional intensity;
+this full-frame still does not accept P7 art or the remaining lighting geometry. Cold first draws
+make the recorded GPU times unsuitable as a before/after performance comparison.

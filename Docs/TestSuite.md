@@ -144,6 +144,9 @@ whole-ellipse covariance oracle, with an analytic sensor-margin guard. The forme
 was clipped on two sides at 45 degrees; its visible fragment could not satisfy that oracle.
 `test_extruded_bubble_world_probe_camera.py` protects the evidence tool's physical-eye translation,
 unchanged lens during dolly, Surface/Deep bounds and grazing-sphere frustum candidates.
+Its native glass test also crosses Settings/scene mapping/uniforms into ordinary and union reflected/
+transmitted pixels at 0/0.5/1 Light Strength in both light modes. It isolates analytic emitter radiance
+over unchanged ambient; near-pass appearance, proxy direction/intensity and full-preset bloom remain open.
 
 `& .\.venv\Scripts\python.exe tests\test_extruded_bubble_motion_contract.py` is a dependency-free,
 no-environment-mutation logical gate for: zero spawned synthetic near bubbles, sustained large-bubble

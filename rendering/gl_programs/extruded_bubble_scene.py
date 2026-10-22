@@ -97,7 +97,9 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     # World-space light source/end and its separate authored beam path.
     ray_path = admit_path(parameters.get('extruded_bubble_ray_path', [0., 1., 0., 0., -1., 0.]),
                           [0., 1., 0., 0., -1., 0.], 'light')
-    knobs.update(water=water, deep=deep, light=light, sky=_mix(water_hue, light, 0.6),
+    knobs.update(water=water, deep=deep, light=light,
+                 specular_light=tuple(c * 300.0 * strength for c in light),
+                 sky=_mix(water_hue, light, 0.6),
                  shaft=tuple(0.85 * c for c in _mix(water_hue, light, 0.45)), absorb=(0.08, 0.05, 0.035),
                  exposure=float(_p(parameters, "exposure")),
                  light_source=world_point(light_path[:3]),
