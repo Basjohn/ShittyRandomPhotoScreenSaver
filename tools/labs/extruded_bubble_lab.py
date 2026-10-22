@@ -91,7 +91,7 @@ VARIANTS = {
                       deep=(0.016, 0.03, 0.046), water=(0.024, 0.046, 0.07), sky=(0.52, 0.68, 0.85), shaft=(0.45, 0.5, 0.58),
                       sun=(0.0, 0.8, -1.0), pitch=18.0, exposure=0.82, absorb=(0.09, 0.06, 0.045)),
     # Broad soft rays (operator preferred them to the fine fan here), lighter film, haze, a wider aperture.
-    "ExBubble4": dict(mode="surface", fan_rays=35.0, fan_contrast=0.35, fan_march=0.45, rays=0.45,
+    "ExBubble4": dict(mode="surface", rays=0.45,
                       film=0.5, film_range=(255.0, 345.0), surface_gain=2.5,
                       deep=(0.05, 0.11, 0.2), water=(0.04, 0.1, 0.17), sky=(0.48, 0.66, 0.84), shaft=(0.4, 0.58, 0.8),
                       sun=(0.15, 0.65, -1.0), pitch=14.0, exposure=0.82, absorb=(0.1, 0.05, 0.03), drift=0.12,
@@ -588,10 +588,8 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShaftScale"), settings.get("shaft_scale", 1.0))
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
         gl.glUniform1f(u("uRayRadius"), settings["ray_radius"])
-        gl.glUniform1f(u("uShaftFan"), settings.get("shaft_fan", 0.0))
-        gl.glUniform1f(u("uFanRays"), settings.get("fan_rays", 30.0))
+        gl.glUniform1f(u("uSurfaceShaft"), float(settings["mode"] == "surface"))
         gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))
-        gl.glUniform2f(u("uFanMix"), settings.get("fan_contrast", 0.7), settings.get("fan_march", 0.2))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))
         gl.glUniform1f(u("uGlintPower"), settings.get("glint_power", 0.0))

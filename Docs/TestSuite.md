@@ -1180,3 +1180,12 @@ The infinite-slab negative control fails. Root connected renderer/source/end/geo
 birth test now falsifies the existing0.4/s/class resting inlet at its first2.5s credit rather than expecting an
 obsolete activation burst. Full four-view images/linear shaft fields and timing limits: Investigation §58.
 These do not close the camera-derived fan or positional-light field defects.
+
+### EB world shaft density and actual shadow sample
+
+`test_extruded_bubble_world_shaft_gpu.py` checks actual native pattern coordinates/noise, camera independence,
+Surface parallel projection, Deep normalized cone projection, live softness/flicker/shimmer, canonical mode/basis
+uploads independent of strength and safe empty/degenerate fields. A controlled-density oracle checks the production
+40-step integral and scalar centroid at two jitters. A full production-main test retains real attenuation wiring:
+restoring the18-unit sample incorrectly introduces16% shadow and fails. Root connected gate:62 pass. Diagnostic
+main tests alone cannot establish final wiring, art, moving camera behavior or production cost; §60 records native scope.
