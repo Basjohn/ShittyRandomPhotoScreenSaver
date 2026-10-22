@@ -37,7 +37,8 @@ def test_forward_and_strafe_are_camera_relative_not_fov_or_scene_zoom():
     assert framed_flight_position(yawed, 1.)[2] > -0.01
     reverse = FramedFlightMotion('extruded_bubble', 0, (0., 0., 0.),
                                  0., 0., 0., 0., 0., -1.)
-    for x, y in zip(framed_flight_position(forward, 1.), framed_flight_position(reverse, 1.)):
+    # Compare before either path hits the newly contracted physical camera bound.
+    for x, y in zip(framed_flight_position(forward, .1), framed_flight_position(reverse, .1)):
         assert abs(x + y) < 1e-10
 
 

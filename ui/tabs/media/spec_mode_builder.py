@@ -308,6 +308,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         value.setText(control.text(widget.value()))
         setattr(tab, f"{control.key}_label", value)
         widget.valueChanged.connect(lambda position, c=control, label=value: label.setText(c.text(position)))
+        if control.key == 'extruded_bubble_camera_fov':
+            widget.valueChanged.connect(lambda *_: _refresh_eb_volume(tab))
         bind_setting_signal(tab, widget.valueChanged, auto_switch=auto_switch)
         content.addWidget(widget)
         content.addWidget(value)
@@ -337,9 +339,9 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
             bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)
         else:
             widget.setCurrentText(control.admit(default, default))
-            bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
             if control.key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry'):
                 widget.currentTextChanged.connect(lambda *_: _refresh_eb_volume(tab))
+            bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(_control_tooltip(control))
@@ -524,6 +526,9 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
         pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
         for key in ('extruded_bubble_turn','extruded_bubble_tilt'):
             values[key] = pose[key]
+    if mode_id == 'extruded_bubble':
+        values['extruded_bubble_camera_position'] = list(_admit_eb_camera_offset(
+            tab, values['extruded_bubble_camera_position']))
     return values
 
 
@@ -538,12 +543,12 @@ def _eb_live_value(tab, key):
 
 
 def _eb_base_eye(tab):
-    """Read the SAME physical camera function as rendering, with no lens imitation.
+    """Read the shared orbit/pan baseline, before the editor's existing XYZ offset.
 
     Only the position offset is excluded, because the editor is authoring it.
     The existing live pose comes from the most recent Settings hydration.
     """
-    from rendering.gl_programs.extruded_bubble_scene import physical_camera
+    from core.settings.extruded_bubble_camera import camera_baseline
     pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
     def get(key):
         return float(pose.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
@@ -552,12 +557,12 @@ def _eb_base_eye(tab):
     fov_widget = getattr(tab, 'extruded_bubble_camera_fov', None)
     if fov_widget is not None and hasattr(fov_widget, 'value'):
         fov = float(fov_widget.value())  # FOV edits also affect world pan width
-    return physical_camera(get('extruded_bubble_turn'),get('extruded_bubble_tilt'),1.,
+    return camera_baseline(get('extruded_bubble_turn'),get('extruded_bubble_tilt'),
                            scale=get('extruded_bubble_scene_scale'),
                            pan_x=get('extruded_bubble_scene_pan_x'),
                            pan_y=get('extruded_bubble_scene_pan_y'),
                            fov_y_degrees=fov,
-                           surface_bound=_eb_live_value(tab, 'extruded_bubble_light_type') == 'Sunlit Surface')[2]
+                           surface_bound=_eb_live_value(tab, 'extruded_bubble_light_type') == 'Sunlit Surface')
 
 
 def _refresh_eb_volume(tab):
@@ -565,7 +570,17 @@ def _refresh_eb_volume(tab):
     if not hasattr(tab, '_extruded_bubble_lazy_values'):
         return
     from core.constants.extruded_bubble_world import WORLD_HALF
-    camera = _eb_live_value(tab, 'extruded_bubble_camera_position')
+    camera = _admit_eb_camera_offset(tab, _eb_live_value(tab, 'extruded_bubble_camera_position'))
+    getattr(tab, '_extruded_bubble_lazy_values')['extruded_bubble_camera_position'] = list(camera)
+    position_widget = getattr(tab, 'extruded_bubble_camera_position', None)
+    if isinstance(position_widget, SceneVolumeMapper) and tuple(position_widget.value()) != tuple(camera):
+        blocked = position_widget.blockSignals(True)
+        try:
+            position_widget.setValue(camera)
+        finally:
+            position_widget.blockSignals(blocked)
+        getattr(tab, 'extruded_bubble_camera_position_label').setText(
+            require_mode_settings('extruded_bubble').control('extruded_bubble_camera_position').text(camera))
     base = tuple(p / h for p, h in zip(_eb_base_eye(tab), WORLD_HALF))
     keys = {'stream':'extruded_bubble_stream_direction',
             'light':'extruded_bubble_light_direction',
@@ -598,11 +613,22 @@ def _refresh_eb_volume(tab):
                                   base_eye=base, camera_offset=camera, camera_angles=angles)
 
 
+def _admit_eb_camera_offset(tab, offset):
+    from core.settings.extruded_bubble_camera import CAMERA_INPUT_KEYS, admit_camera_parameters
+    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
+    values = {key: pose[key] if key in pose else _eb_live_value(tab, key) for key in CAMERA_INPUT_KEYS}
+    fov_widget = getattr(tab, 'extruded_bubble_camera_fov', None)
+    if fov_widget is not None and hasattr(fov_widget, 'value'):
+        values['extruded_bubble_camera_fov'] = float(fov_widget.value())
+    values['extruded_bubble_camera_position'] = offset
+    return admit_camera_parameters(values)
+
+
 def _set_eb_camera_offset(tab, offset, *, commit):
     """Camera diamond gestures use the existing Settings persistence owner."""
     from core.settings.visualizer_mode_settings import require_mode_settings
     descriptor = require_mode_settings('extruded_bubble').control('extruded_bubble_camera_position')
-    value = descriptor.admit(offset, (0.,0.,0.))
+    value = list(_admit_eb_camera_offset(tab, descriptor.admit(offset, (0.,0.,0.))))
     getattr(tab, '_extruded_bubble_lazy_values')['extruded_bubble_camera_position'] = value
     widget = getattr(tab, 'extruded_bubble_camera_position', None)
     if isinstance(widget, SceneVolumeMapper):

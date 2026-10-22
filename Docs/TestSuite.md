@@ -1077,6 +1077,13 @@ weights as well as pre-existing external traces. Coverage diagnostics alone cann
 The small-shell material gate varies authored thickness at the same ~4px ordinary/union geometry; the former
 1.5px minimum substituted identical walls and fails. This protects material authority, not whole-field idle visibility.
 
+`test_extruded_bubble_camera_bounds.py` crosses joint world-eye admission, runtime configuration and capture/settlement:
+pose/lens/corner/Light Type extremes retain a three-unit ray path and legal near plane; long outward holds discard
+overshoot before reversal; constant-pitch cycles and production changing-pitch intervals agree with rebased motion;
+mouse orbit and pan/dolly retain one flight gesture. The native lazy-bucket gate verifies all four 3D camera markers,
+Aim, actual arrow events, closed hydration and normalization before synchronous saves with nonzero pan/FOV changes.
+These do not establish whole-field idle readability, actual compositor drag feel or performance neutrality.
+
 Production renderer observations require invariant shell/wake/union/proxy uploads and world stream during camera
 changes. GPU generator readback independently protects chain/snow/wake positions/radii against pose/pixel changes,
 and glowing specks must occupy the shared fixed volume rather than the former origin-biased radial halo. Prepared

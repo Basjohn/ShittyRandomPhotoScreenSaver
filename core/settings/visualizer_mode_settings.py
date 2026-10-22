@@ -1555,7 +1555,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Choice("extruded_bubble_collision_scope", "Applies To:", ("All", "Big", "Small", "Off"), bucket="collision",
                tooltip='Choose which ordinary bubbles can participate in collision behavior: All, Big, Small, or Off.'),
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
-               tooltip='Move the real camera eye within the scene without changing FOV. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native editor aiming/positioning, travel limits and surface-boundary behavior.'),
+               tooltip='Move the real camera eye inside the populated tank without changing FOV. The same water-clearance bounds apply here and during travel. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native drag feel and compositor presentation.'),
         Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
                tooltip='Change the vertical viewing angle independently of camera travel and zoom/dolly. Narrower angles usually reduce peripheral perspective stretch.'),

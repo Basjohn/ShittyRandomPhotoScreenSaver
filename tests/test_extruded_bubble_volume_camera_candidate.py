@@ -28,14 +28,15 @@ def test_3d_editor_consumes_original_path_values_without_rewriting_presets():
     assert spec.control('extruded_bubble_camera_position').admit((0,0,0),(0,0,0)) == [0,0,0]
 
 
-def test_physical_camera_can_reach_stream_sources_without_fov_change():
+def test_physical_camera_approaches_stream_sources_with_legal_water_clearance_without_fov_change():
+    from core.settings.extruded_bubble_camera import bound_camera_eye
     normal = physical_camera(0., 0., 16/9, fov_y_degrees=45.)
     base = normal[2]
     for destination in ((-15., -7., 13.), (16., 7.5, -15.), (0.,0.,0.)):
         offset = tuple((destination[i] - base[i]) / WORLD_HALF[i] for i in range(3))
         assert all(-8 <= x <= 8 for x in offset)
         moved = physical_camera(0.,0.,16/9, fov_y_degrees=45.,position_offset=offset)
-        assert moved[2] == pytest.approx(destination)
+        assert moved[2] == pytest.approx(bound_camera_eye(destination))
         assert moved[3] == pytest.approx(normal[3])
         assert moved[4] == pytest.approx(normal[4])
         assert moved[0] == pytest.approx(normal[0])

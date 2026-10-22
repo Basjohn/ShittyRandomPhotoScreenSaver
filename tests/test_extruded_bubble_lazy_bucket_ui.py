@@ -165,6 +165,79 @@ def test_r34_deep_ray_source_node_moves_the_one_real_light_source(eb_tab):
     assert tuple(tab.extruded_bubble_light_direction.value()[:3]) == pytest.approx(source)
 
 
+def test_all_3d_camera_editors_admit_legal_eye_before_save_and_aim_in_place(eb_tab):
+    from itertools import product
+    from core.constants.extruded_bubble_world import WORLD_HALF
+    from core.settings.extruded_bubble_camera import CAMERA_CLEARANCE, admit_camera_parameters
+    from ui.tabs.media.spec_mode_builder import _eb_base_eye
+
+    tab, config = eb_tab
+    rejected = {**config, 'extruded_bubble_turn': .05069708824, 'extruded_bubble_tilt': -.2253050804,
+                'extruded_bubble_scene_pan_x': .3, 'extruded_bubble_scene_pan_y': -.2,
+                'extruded_bubble_camera_position': [.320911, -1.110771, 1.90208]}
+    load_extruded_bubble_mode_settings(tab, rejected)
+    assert not tab._extruded_bubble_lazy_built
+    collected = collect_extruded_bubble_mode_settings(tab)
+    assert collected['extruded_bubble_camera_position'] == pytest.approx(admit_camera_parameters(rejected))
+    saves = []
+    save = tab._save_settings
+    def record_save(*args):
+        values = collect_extruded_bubble_mode_settings(tab)
+        widget = getattr(tab, 'extruded_bubble_camera_position', None)
+        if widget is not None:
+            # Inspect synchronously, before the real save: post-signal refresh
+            # must not be allowed to repair a stale marker after persistence.
+            offset = tuple(widget.value())
+            eye = tuple(_eb_base_eye(tab)[i]+offset[i]*WORLD_HALF[i] for i in range(3))
+            assert all(abs(v)<=h-CAMERA_CLEARANCE+1e-6 for v,h in zip(eye,WORLD_HALF))
+            assert values['extruded_bubble_camera_position'] == pytest.approx(offset)
+        saves.append(values)
+        return save()
+    tab._save_settings = record_save
+    for bucket in ('motion', 'light', 'rays', 'camera'):
+        toggle_bucket(tab, bucket)
+
+    def check():
+        values = collect_extruded_bubble_mode_settings(tab)
+        offset = tuple(tab.extruded_bubble_camera_position.value())
+        eye = tuple(_eb_base_eye(tab)[i]+offset[i]*WORLD_HALF[i] for i in range(3))
+        assert all(abs(v) <= h-CAMERA_CLEARANCE+1e-6 for v,h in zip(eye,WORLD_HALF))
+        assert values['extruded_bubble_camera_position'] == pytest.approx(offset)
+        for key in ('stream_direction', 'light_direction', 'ray_path', 'camera_position'):
+            widget = getattr(tab, 'extruded_bubble_'+key)
+            assert tuple(v*h for v,h in zip(widget._eye(),WORLD_HALF)) == pytest.approx(eye)
+        return eye
+
+    for corner in product((-8.,8.), repeat=3):
+        tab.extruded_bubble_camera_position.setValue(corner)
+        tab.extruded_bubble_camera_position.valueChanged.emit(corner)
+        check()
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    at_wall = check()
+    QTest.keyClick(tab.extruded_bubble_camera_position, Qt.Key.Key_Right)
+    assert check() == pytest.approx(at_wall)
+    QTest.keyClick(tab.extruded_bubble_camera_position, Qt.Key.Key_Left)
+    assert check()[0] == pytest.approx(at_wall[0]-.05*WORLD_HALF[0])
+    for key in ('stream_direction','light_direction','ray_path'):
+        editor = getattr(tab, 'extruded_bubble_'+key)
+        editor.cameraOffsetChanged.emit((-8.,8.,-8.))
+        before = check()
+        editor.cameraAimChanged.emit((-.35,.4))
+        assert check() == pytest.approx(before, abs=1e-4)
+        editor.cameraOffsetCommitted.emit((8.,-8.,8.))
+        check()
+    # These controls synchronously save: their markers must already agree.
+    tab.extruded_bubble_camera_fov.setValue(62)
+    check()
+    tab.extruded_bubble_light_type.setCurrentText('Deep Light')
+    check()
+    assert saves
+    saved = collect_extruded_bubble_mode_settings(tab)
+    load_extruded_bubble_mode_settings(tab, {**rejected, **saved})
+    check()
+
+
 def test_scene_emission_choice_and_volume_face_repaint_use_one_settings_owner(eb_tab):
     """Native Qt gate: switching the choice updates the real Motion mapper and saves.\n\n    This intentionally does not claim production pixels or performance.\n    """
     from ui.widgets.visual_controls import SceneVolumeMapper
