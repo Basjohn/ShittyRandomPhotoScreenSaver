@@ -8,8 +8,8 @@ primitive inventory below are preserved as the design provenance, **not** as a c
 Visual acceptance cannot be inferred from the lab, green unit tests or authored preset parity.
 
 **Canonical images and investigation:** [README.md](README.md). All targets, the full lab material, failure ledger
-and workstation-native evidence now live in this folder. Operator now considers P1 generally good, with idle
-still lacking; remaining specific defects and other preset acceptance stay open. Renamed `*Goal.png` images in
+and workstation-native evidence now live in this folder. Operator now considers P1 generally good and accepts its latest shown idle capture (23 October;
+Investigation §57). Remaining P1 defects/lifecycle and substantial changes for P7/other presets stay open. Renamed `*Goal.png` images in
 `Targets/Originals` are the current parity references, not a request to overwrite authored presets.
 Large bubbles must breathe significantly downward in softer music and carry sustained body in sustained/loud
 passages; small bubbles and emission/drift/speed/rays must keep expressing changes within those loud passages.
@@ -136,7 +136,9 @@ than rebinding to a compacted slot. Slow idle must remain visibly alive: particl
 quiet endpoint instead of inheriting the stream's resting-motion attenuation (density squares emission).
 Amount now changes density alone at fixed 2.4 per-point radiance, an explicit semantic change from the previous
 density-plus-radiance mapping. This increases active brightness for sub-full amounts too; glare remains a live gate.
-Particle size and glow release separately on the existing logical activity follower. This visible resting population applies
+Displayed particle size and glow release separately on the existing logical activity follower. Authored radius
+owns subpixel energy at the raster floor, so display contraction does not also erase quiet light sixteenfold;
+SCENE entry/wall/exit fades still use the contracted display radius. This visible resting population applies
 to particles and ordinary/fused bubbles, not free bead chains, which fade out at idle. Zero authored amounts remain zero.
 The existing ray-strength and particle-amount followers have the operator-requested modest extra release:
 min(150ms, 20% of their previous release); attacks, bubble motion and other modes retain their existing timing.

@@ -4,8 +4,8 @@ import pytest
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize('population',['specks','snow'])
-def test_scene_particles_keep_near_wall_interior_but_fade_at_real_entry_exit_and_containment(qt_app,population):
+@pytest.mark.parametrize('population,radius_share',[('specks',1.),('specks',.25),('snow',1.)])
+def test_scene_particles_keep_near_wall_interior_but_fade_at_real_entry_exit_and_containment(qt_app,population,radius_share):
     from OpenGL import GL as gl
     from rendering.gl_programs.extruded_bubble_program import SPECK_VERTEX,BEAD_VERTEX
     from rendering.quick.render.gl_resources import compile_program
@@ -35,7 +35,8 @@ void main(){'''+generated+'''gl_Position=vec4(0,0,0,1);}
         gl.glBufferData(gl.GL_SHADER_STORAGE_BUFFER,8*16,None,gl.GL_DYNAMIC_READ)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,buffer)
         gl.glUseProgram(program);loc=lambda name:gl.glGetUniformLocation(program,name)
-        for name,value in (('uWorldUnit',9.),('uSpeckSize',1.),('uSpeckTravel',0.),('uBandFreq',9.)):
+        for name,value in (('uWorldUnit',9.),('uSpeckSize',1.),('uParticleRadiusShare',radius_share),
+                           ('uSpeckTravel',0.),('uBandFreq',9.)):
             gl.glUniform1f(loc(name),value)
         gl.glUniform1i(loc('uSceneEmission'),1)
         assert loc('uSceneEmission')>=0
@@ -70,6 +71,15 @@ void main(){'''+generated+'''gl_Position=vec4(0,0,0,1);}
         assert generated(0.,18.1)[:,3].max()==0
         departing=generated(7.999,0.)[:,3]
         assert 0<departing.max()<centre[:,3].max()
+        if population=='specks' and radius_share==.25:
+            # The split energy/display owners must preserve the former physical
+            # entry/wall/exit fade: contracted authored radius, display share1.
+            probes=((-7.99,0.),(0.,17.99),(7.99,0.))
+            actual=[generated(y,z).copy() for y,z in probes]
+            gl.glUniform1f(loc('uSpeckSize'),radius_share)
+            gl.glUniform1f(loc('uParticleRadiusShare'),1.)
+            for (y,z),expected in zip(probes,actual):
+                assert generated(y,z)==pytest.approx(expected,rel=1e-5,abs=1e-7)
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,0)

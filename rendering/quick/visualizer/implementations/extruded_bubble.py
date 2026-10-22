@@ -469,7 +469,8 @@ class QuickExtrudedBubbleRenderer:
         self._uniforms.set(programs["specks"], {
             "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
             "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]) * glow_multiplier,
-            "uParticleActivity": idle_activity, "uSpeckWarm": _floats(knobs["speck_warm"]),
+            "uParticleActivity": idle_activity, "uParticleRadiusShare": 0.25 + 0.75 * idle_activity,
+            "uSpeckWarm": _floats(knobs["speck_warm"]),
             "uStreamWorld": stream,
             "uStreamAcross": across,
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
@@ -480,8 +481,9 @@ class QuickExtrudedBubbleRenderer:
             "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
             "uBandFreq": float(knobs["band_freq"]),
-            "uSpeckSize": float(knobs["speck_size"]) * (0.25 + 0.75 * idle_activity)})
+            "uSpeckSize": float(knobs["speck_size"])})
         self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0, "uParticleActivity": 1.0,
+                                                 "uParticleRadiusShare": 1.0,
                                                  "uSpeckWarm": _floats(knobs["light"]), "uRowMajor": 1,
                                                  "uPixel": 2.0 / probe.size})
 

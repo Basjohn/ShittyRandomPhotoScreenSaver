@@ -908,6 +908,7 @@ uniform vec3 uLightColour;
 uniform vec3 uSpeckWarm;
 uniform vec3 uWater;
 uniform float uSpecks;
+uniform float uParticleRadiusShare; // display contraction; retain authored subpixel light energy
 out vec2 vCorner;
 flat out vec3 vColour;
 void main() {
@@ -915,7 +916,7 @@ void main() {
     mat3 toView = uRowMajor ? transpose(uWorldToView) : uWorldToView;
     vec3 c = toView * (aPoint.xyz - uEye);
     float depth = -c.z;
-    float drawn = max(aPoint.w, uPixel * depth * 0.75);
+    float drawn = max(aPoint.w * uParticleRadiusShare, uPixel * depth * 0.75);
     float energy = min((aPoint.w * aPoint.w) / (drawn * drawn), 1.0);
     float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz - uEye), uSunBelow), 0.0), 4.0);
     vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
@@ -1236,7 +1237,8 @@ void speckInstance() {
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float ends;
     if (uSceneEmission == 1) {
-        ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, radius);
+        ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w,
+                             radius * uParticleRadiusShare);
     } else {
         vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
         float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));

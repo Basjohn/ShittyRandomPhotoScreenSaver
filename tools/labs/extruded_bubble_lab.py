@@ -677,6 +677,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(q("uSpecks"), 1.0)
         gl.glUniform1f(q("uSpeckBloom"), 0.0 if row_major else settings.get("speck_bloom", 0.0))
         gl.glUniform1f(q("uParticleActivity"), 1.0)  # frozen art lab, not the logical idle driver
+        gl.glUniform1f(q("uParticleRadiusShare"), 1.0)
         sky_ = np.array(settings["sky"])
         gl.glUniform3f(q("uSpeckWarm"), *settings.get("speck_warm", settings.get("light", tuple(sky_ / max(sky_.mean(), 1e-3) * 0.15 + 0.85))))
         blend0 = bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
