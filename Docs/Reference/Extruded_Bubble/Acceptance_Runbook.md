@@ -85,6 +85,14 @@ no synthetic replay or screenshot alone passes this gate.
 
 **G15 Starts, pause/restart, rest and real transients** (EB-D, R25/R26/R31): Compare hot join into already-playing music, engine-tagged ramp, untagged gradual music, preset swaps, pause and resume. Measure peak/final ratio and visual time to resting state across all lanes. **Must see:** no activation inflation/yank-down, no fake repetitive resting breath, genuine subsequent musical transients still visible, slow decay without stale hold. **Reject:** fixing the tagged ramp while leaving untagged rises or pause-to-rest regressions unmeasured.
 
+**G09/G15/G18/G21/G25 idle populations:** compare settled idle and active→idle→active at fixed camera,
+including enabled populations and zero-authored negative controls. Track stable ordinary/fused IDs, source
+births, world travel, Surface breaches/physical exits, particle footprint/glow and free-chain opacity.
+**Must see:** particles remain visible with no idle glow and strongly reduced size; bubbles settle to their
+minimum resting size without breathing while continuing slow birth→travel→exit; free bead chains fade out
+and return smoothly with activity. **Reject:** frozen visible chains, global idle population disappearance,
+breathing at rest, stopped ordinary lifecycle, instance-count popping or opacity used to conceal bad motion.
+
 **G16 Large Bubbles count Range** (R33/R34): With constant physical stream speed, sweep its two handles separately and replay multi-band and single-band loudness. **Must see:** left endpoint is real quiet target, right only approached with meaningful high/broad musical content, and stable admission respects throughput. **Reject:** an easy single-band maximum or abrupt populations midstream.
 
 **G17 Small Bubbles count Range** (R33/R34): Same independent exercise, but track small IDs/size and the 256/512 split. **Must see:** both handles have distinct meaning and count response is not mistaken for size snapping. **Reject:** maximum on nearly any sound or a changing instantaneous target applied as an instant scene population.

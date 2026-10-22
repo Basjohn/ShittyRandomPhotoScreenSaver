@@ -74,6 +74,12 @@ mechanisms and native guards do not approve foreground softness, depth hierarchy
 immediate strong changes in `anything_mixed2.jsonl`. In idle EB must slowly settle into a collapsed resting state
 across size, drift/sway, stream, beads/wakes, rays, emission and ambient/surface motion. Nothing remotely fast;
 no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes are subordinate to this requirement.
+**22 October idle-population refinement:** enabled particles remain visible but lose glow and most of their
+active size. Ordinary/fused bubbles remain visible at their smallest resting size, with no breathing, and
+continue slow physical source births, travel, Surface breach where applicable and real scene exit. Idle is
+not a simulation freeze or a global population fade. Free bead chains instead fade out smoothly during idle
+and fade back in when musical activity returns; visible stalled chains fail this requirement. Preserve zero
+authored amounts, physical identities and ordinary lifetime/near-lens visibility rules.
 Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–18;
 `Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
 
@@ -115,7 +121,8 @@ radius moves the wake attachment, while nominal parent size seeds bead dimension
 visible attached bead remains strictly smaller than its current parent, including the half-pixel raster limit;
 fade/hide a bead if a tiny/fading parent cannot support that bound. Keep nominal size through retirement rather
 than rebinding to a compacted slot. Slow idle must remain visibly alive: motion and emission need separate
-resting activity because particle density squares the emission value. Zero authored amounts remain zero.
+resting activity because particle density squares the emission value. This visible resting population applies
+to particles and ordinary/fused bubbles, not free bead chains, which fade out at idle. Zero authored amounts remain zero.
 
 Each population resolves its authored Range once. Bead Chains uses normalized musical level independently of
 Particles; snow and attached fizz use already-resolved emission. Continuous budgets fade the fractional final

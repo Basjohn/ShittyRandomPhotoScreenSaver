@@ -301,8 +301,12 @@ consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualize
 Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum
 musical response-scale reference. In idle every reactive aspect settles slowly into its collapsed/resting state,
 leaving room for expansion on music return; an autonomous idle oscillator is not the target. Size, drift/sway,
-stream, beads/wakes, rays, emission and ambient/surface motion must all remain gentle while idle.
-Small free-chain bubbles need only modest size contraction; speed, drift and emission carry much of their response.
+stream, rays, emission and ambient/surface motion must all remain gentle while idle. Authored particles remain
+visible while losing glow and most of their active size. Ordinary/fused bubbles remain at their smallest resting
+size without breathing and keep slow physical source births, travel, surface breach where applicable and scene
+exit. Idle must not freeze their lifecycle or hide the population. Free bead chains instead fade out smoothly
+and fade back in with musical activity; a stalled visible chain is not an acceptable idle state.
+Small free-chain bubbles need only modest musical size contraction; their idle disappearance uses opacity.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;
