@@ -2371,3 +2371,16 @@ No new pass/clock/polling/schema/preset edits. Larger quiet-small footprints can
 work and active small crest rises to4.2; G32 native cost remains open. Next requested light/particle release
 extension must use existing followers (min150ms or20% extra); held-left-drag orbit must preserve existing
 input/focus/double-click behavior through shared owners and cursor fades, without new polling/timers.
+
+## 53. Modest ray/particle release extension (native candidate; visual acceptance open)
+
+The existing two EB followers add min(.15 seconds, .20× previous release), without another owner or stage.
+Ray release is .696s during music/.98s in silence (formerly .58/.83); particle amount .30/1.65s (formerly .25/1.50).
+Attacks, underlying musical sources, glow/size activity, bubble radii/motion and other modes are unchanged.
+Forty-five focused simulation/audio/ray-particle/native-idle tests pass, including both formula branches at the
+production call seam. `Evidence/2026-10-22_release_extension/` repeats the exact Custom native producer from §52:
+94 release/idle/resume snapshots, unchanged input/settings, explicit source hashes. All sampled ordinary records
+are exactly equal; idle60 full native pixels are byte-identical. Particle emission at1/3/5s is .2881/.1682/.1230
+versus .2812/.1604/.1187 before. At1s native mean channel difference is .384 levels; the effect is deliberately
+modest. Continuous musical release changes the preceding active state slightly too. This is a scoped timing
+repair, not an idle-readability, glare, whole-scene density or audiovisual acceptance claim.

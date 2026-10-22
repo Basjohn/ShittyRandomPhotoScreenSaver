@@ -62,6 +62,28 @@ def test_class_calibration_retains_large_contraction_and_strong_small_excursion(
     assert _reaction_scale((.15,.8),1.,*_SMALL_REACTION) == pytest.approx(4.2)
 
 
+def test_light_and_particle_release_extension_is_bounded_without_changing_attacks(monkeypatch):
+    import widgets.spotify_visualizer.extruded_bubble_simulation as module
+    original = module._follow
+    calls = []
+    def follow(current,target,dt,attack,release):
+        calls.append((attack,release))
+        return original(current,target,dt,attack,release)
+    monkeypatch.setattr(module,'_follow',follow)
+    controls = ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0))
+    sim = ExtrudedBubbleSimulation(34)
+    sim._rays = .8
+    sim._emission = .9
+    state = sim.advance(MusicInput(.1,False),controls)
+    assert (.12,.98) in calls  # .83s silence release plus the 150ms ceiling
+    assert (.08,1.65) in calls
+    assert state.rays == pytest.approx(.8*math.exp(-.1/.98))
+    calls.clear()
+    sim.advance(MusicInput(.1,True,body_bands=(1.,1.,1.)),controls)
+    assert (.12,pytest.approx(.696)) in calls  # .58s plus 20%
+    assert (.08,.3) in calls
+
+
 def test_the_same_inputs_give_the_same_frames():
     controls = ExtrudedBubbleControls()
     first = _run(ExtrudedBubbleSimulation(7), controls, 4.0, onsets_every=0.5)

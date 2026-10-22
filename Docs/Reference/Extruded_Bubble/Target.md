@@ -138,6 +138,8 @@ Amount now changes density alone at fixed 2.4 per-point radiance, an explicit se
 density-plus-radiance mapping. This increases active brightness for sub-full amounts too; glare remains a live gate.
 Particle size and glow release separately on the existing logical activity follower. This visible resting population applies
 to particles and ordinary/fused bubbles, not free bead chains, which fade out at idle. Zero authored amounts remain zero.
+The existing ray-strength and particle-amount followers have the operator-requested modest extra release:
+min(150ms, 20% of their previous release); attacks, bubble motion and other modes retain their existing timing.
 
 Each population resolves its authored Range once. Bead Chains uses normalized musical level independently of
 Particles; snow and attached fizz use already-resolved emission. Continuous budgets fade the fractional final
