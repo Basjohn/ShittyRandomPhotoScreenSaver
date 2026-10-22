@@ -18,6 +18,33 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 
 
+def camera_space(points, parameters, size):
+    """Use the renderer's physical eye/lens, not the lab's legacy origin camera."""
+    import numpy as np
+    from rendering.gl_programs.extruded_bubble_scene import physical_camera
+
+    _, world_to_view, eye, tan, _ = physical_camera(
+        float(parameters['extruded_bubble_turn']), float(parameters['extruded_bubble_tilt']),
+        size[0] / size[1], float(parameters['extruded_bubble_scene_scale']),
+        pan_x=float(parameters['extruded_bubble_scene_pan_x']),
+        pan_y=float(parameters['extruded_bubble_scene_pan_y']),
+        position_offset=tuple(parameters['extruded_bubble_camera_position']),
+        fov_y_degrees=float(parameters['extruded_bubble_camera_fov']),
+        surface_bound=parameters['extruded_bubble_light_type'] == 'Sunlit Surface')
+    view = (np.asarray(points) - np.asarray(eye)) @ np.asarray(world_to_view).reshape(3, 3)
+    return view, eye, tan
+
+
+def frustum_candidates(view, radii, tan):
+    """Conservative sphere/side-plane intersection, not segmented visibility."""
+    import numpy as np
+
+    depth = -view[:, 2]
+    return ((depth + radii > .05) &
+            (np.abs(view[:, 0]) < tan[0] * depth + radii * math.sqrt(1. + tan[0] ** 2)) &
+            (np.abs(view[:, 1]) < tan[1] * depth + radii * math.sqrt(1. + tan[1] ** 2)))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True)
@@ -45,7 +72,7 @@ def main():
     import numpy as np
     from PIL import Image,ImageDraw
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-    from rendering.gl_programs.extruded_bubble_scene import camera,bubble_instances
+    from rendering.gl_programs.extruded_bubble_scene import bubble_instances
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.extruded_bubble_capture import _draw
     from tools.transition_contact_sheet import TransitionCapture
@@ -69,11 +96,10 @@ def main():
             current=replace(snapshot,logical=replace(snapshot.logical,mode_state=replace(state,parameters=parameters)))
             rgba,gpu_ms=_draw(host,target,current,size,size)
             picture=Image.fromarray(rgba).convert('RGB');picture.save(args.output/f'view_{index:02d}.png')
-            view_to_world,world_to_view,tan,_=camera(turn,tilt,size[0]/size[1],scale)
-            view=points@np.asarray(world_to_view).reshape(3,3)
-            depth=-view[:,2]
-            visible=(depth+radii>.05)&(np.abs(view[:,0])<tan[0]*np.maximum(depth,0)+radii)&(np.abs(view[:,1])<tan[1]*np.maximum(depth,0)+radii)
+            view,eye,tan=camera_space(points,parameters,size)
+            visible=frustum_candidates(view,radii,tan)
             rows.append({'turn':turn,'tilt':tilt,'scale':scale,'pan_x':pan,'gpu_ms':gpu_ms,
+                         'physical_eye':eye,'tan':tan,
                          'ordinary_frustum_candidates':int(visible.sum()),'scope':'conservative center/radius estimate; not segmented pixel count'})
             picture.thumbnail((400,230));tile=Image.new('RGB',(400,260),'#111827');tile.paste(picture,(0,0))
             ImageDraw.Draw(tile).text((8,237),f'yaw {turn*180:.0f}  tilt {tilt:.2f}  visible ~{visible.sum()}',fill='white');tiles.append(tile)

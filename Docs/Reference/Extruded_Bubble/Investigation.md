@@ -1942,3 +1942,13 @@ current authored presets/Custom must not be overwritten.
 `Lighting_Authority_Repair.md`; sole live task ownership remains the G00–G33
 items in `Current_Plan.md` §4B and the corresponding runbook. All previously
 failed/partial tasks and their evidence remain unaccepted.
+
+**Local native measurement receipts (22 October):** `Evidence/2026-10-22_world_authority_p1_verified`
+and `Evidence/2026-10-22_world_authority_p7_verified` retain frozen 4-second `anything_mixed2`
+states, fifteen native NVIDIA views each, source hashes, physical eye/lens and unchanged world IDs.
+These are BEAM/current-preset baselines, not the operator's SCENE reproduction or fixed-eye shaft parity.
+`Evidence/2026-10-22_ray_authority_p1_baseline` independently intervenes on ray driver/softness at
+3 seconds: both controls reach native pixels. It does not establish within-song responsiveness.
+All captures are offscreen; first-draw compilation/readback and changing views invalidate performance
+claims. The former native silhouette red was a clipped fixture at the narrower lens, not demonstrated
+product projection failure; its whole-ellipse oracle now requires analytic sensor clearance.
