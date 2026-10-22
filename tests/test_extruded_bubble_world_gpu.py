@@ -145,6 +145,19 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize('kind', ['ordinary', 'cluster'])
+def test_small_shell_keeps_authored_wall_geometry(sphere_pixels, kind):
+    # ~4px radius: the former 1.5px wall floor silently replaced both material
+    # thicknesses with the same ~39%-radius solid-looking wall. Filtering may
+    # widen the optical lookup, but must not change the traced inner sphere.
+    samples = [sphere_pixels(kind, radius=.06, diag=2, uShell=wall,
+                             uSpecThrough=1., uSpecColour=(1., 1., 1.),
+                             uLightDir=(.25, .8, .5), uSpecShape=(.05, .25, .012))[0]
+               for wall in (.03, .3)]
+    assert np.abs(samples[1] - samples[0]).sum() > .01
+
+
+@pytest.mark.qt
 def test_tiny_same_identity_material_does_not_jump_when_radius_crosses_former_hash_threshold(sphere_pixels):
     # The fixture carries seed=.3. This radius straddles the old 0.8 sparkle
     # threshold while changing projected geometry by much less than one pixel.
