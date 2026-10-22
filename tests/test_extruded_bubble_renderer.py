@@ -264,14 +264,45 @@ def test_the_rays_follow_the_simulation_driver_never_the_raw_level(target):
 
     def with_state(**fields):
         snapshot = _snapshot(extruded_bubble_rays_enabled=True, extruded_bubble_rays=[0.0, 1.0],
+                             extruded_bubble_particles=[0., 0.],
                              extruded_bubble_bead_chains=[0., 0.])  # isolate rays from modest level-driven bead sizing
-        state = dataclasses.replace(snapshot.logical.mode_state, wakes=(), **fields)
+        state = dataclasses.replace(snapshot.logical.mode_state, wakes=(), emission=0., **fields)
         return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
     for _ in range(4):                                                  # prepared and warm
         capture.render(host, with_state(level=0.0, rays=0.2))
     base = capture.render(host, with_state(level=0.0, rays=0.2))
     assert np.array_equal(capture.render(host, with_state(level=1.0, rays=0.2)), base)
     assert np.abs(capture.render(host, with_state(level=0.0, rays=0.9)) - base).mean() > 0.5
+
+
+@pytest.mark.qt
+def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains_and_particle_glow(target, monkeypatch):
+    from rendering.quick.visualizer.implementations.extruded_bubble import _Uniforms
+    capture, host = target
+    recorded=[]
+    original=_Uniforms.set
+    def observe(bank, program, values):
+        if 'uChainFill' in values or 'uSpeckSize' in values or 'uRowMajor' in values:
+            recorded.append(dict(values))
+        return original(bank, program, values)
+    monkeypatch.setattr(_Uniforms,'set',observe)
+    samples=[]
+    for level in (0.,.05,.1,1.):
+        recorded.clear()
+        snapshot=_snapshot(extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[.4,.4])
+        snapshot=dataclasses.replace(snapshot,logical=dataclasses.replace(snapshot.logical,
+            mode_state=dataclasses.replace(snapshot.logical.mode_state,level=level,emission=.4)))
+        capture.render(host,snapshot)
+        chains=next(v for v in recorded if 'uChainFill' in v)
+        specks=next(v for v in recorded if 'uSpeckSize' in v)
+        proxies=next(v for v in recorded if v.get('uRowMajor')==1)
+        samples.append((chains,specks))
+        assert proxies['uParticleActivity']==1.
+    assert samples[0][0]['uChainFill']==samples[-1][0]['uChainFill']>0
+    assert [c['uChainActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
+    assert [s['uParticleActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
+    assert 0 < samples[0][1]['uSpeckSize'] < .5*samples[-1][1]['uSpeckSize']
+    assert len({s['uSpecks'] for c,s in samples})==1  # opacity/size do not remap density
 
 
 @pytest.mark.qt

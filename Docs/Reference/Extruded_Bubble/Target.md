@@ -120,8 +120,9 @@ Free and attached bead bubbles have at most roughly −10%/+10% musical size var
 radius moves the wake attachment, while nominal parent size seeds bead dimensions and trail extent. Every
 visible attached bead remains strictly smaller than its current parent, including the half-pixel raster limit;
 fade/hide a bead if a tiny/fading parent cannot support that bound. Keep nominal size through retirement rather
-than rebinding to a compacted slot. Slow idle must remain visibly alive: motion and emission need separate
-resting activity because particle density squares the emission value. This visible resting population applies
+than rebinding to a compacted slot. Slow idle must remain visibly alive: particle amount retains its authored
+quiet endpoint instead of inheriting the stream's resting-motion attenuation (density squares emission).
+Particle size and glow release separately on the existing logical activity follower. This visible resting population applies
 to particles and ordinary/fused bubbles, not free bead chains, which fade out at idle. Zero authored amounts remain zero.
 
 Each population resolves its authored Range once. Bead Chains uses normalized musical level independently of

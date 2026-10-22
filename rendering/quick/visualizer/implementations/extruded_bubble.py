@@ -81,6 +81,16 @@ def _near_spread(height: int) -> float:
     return _NEAR_SPREAD * height / 941.0
 
 
+def _idle_activity(level: float) -> float:
+    """Release through the logical follower's quiet band; no render-owned clock.
+
+    Ordinary music above the simulation's existing 0.1 quiet band keeps the
+    authored presentation. Only free-chain opacity and particle size/glow rest.
+    """
+    amount = max(0.0, min(1.0, float(level) / 0.1))
+    return amount * amount * (3.0 - 2.0 * amount)
+
+
 def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, float, float]:
     """Continuous (chains, snow, fizz per owner), each authored Range resolved once.
 
@@ -422,6 +432,7 @@ class QuickExtrudedBubbleRenderer:
                                              "uNearCoc": 22.0 * height / 941.0,
                                              "uNearMax": _near_spread(height)})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
+        idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
         fizz_per = math.ceil(fizz_fill)
         stream = _floats(state.stream)
@@ -441,7 +452,8 @@ class QuickExtrudedBubbleRenderer:
             "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
-            "uChainFill": chain_fill, "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
+            "uChainFill": chain_fill, "uChainActivity": idle_activity,
+            "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,
             "uWakeCount": wake_count})
@@ -455,7 +467,8 @@ class QuickExtrudedBubbleRenderer:
         specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
         self._uniforms.set(programs["specks"], {
             "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
-            "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]) * glow_multiplier, "uSpeckWarm": _floats(knobs["speck_warm"]),
+            "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]) * glow_multiplier,
+            "uParticleActivity": idle_activity, "uSpeckWarm": _floats(knobs["speck_warm"]),
             "uStreamWorld": stream,
             "uStreamAcross": across,
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
@@ -465,8 +478,9 @@ class QuickExtrudedBubbleRenderer:
             "uSpeckSource": stream_source, "uSpeckEnd": stream_end,
             "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
-            "uBandFreq": float(knobs["band_freq"]), "uSpeckSize": float(knobs["speck_size"])})
-        self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0,
+            "uBandFreq": float(knobs["band_freq"]),
+            "uSpeckSize": float(knobs["speck_size"]) * (0.25 + 0.75 * idle_activity)})
+        self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0, "uParticleActivity": 1.0,
                                                  "uSpeckWarm": _floats(knobs["light"]), "uRowMajor": 1,
                                                  "uPixel": 2.0 / probe.size})
 

@@ -15,8 +15,8 @@ the passage-presence scalar is diagnostic only. Clean body changes drive size; d
 accent motion/light instead of holding bodies inflated. Authored reaction strengths span contracted rest and musical expansion,
 with quick attack and slower release. Sustained Response strengthens held body support and motion
 through this same production path. No independent oscillator manufactures size changes.
-Drift, stream speed and emission resolve their authored ranges once and settle slowly to a very low
-resting activity. Sway, surface motion and shimmer use integrated musical phases, never raw time
+Drift and stream speed settle slowly to very low resting motion. Particle emission retains its
+authored quiet amount; render-only size/glow carry its idle contraction. Sway, surface motion and shimmer use integrated musical phases, never raw time
 multiplied by a changing rate. Playback stopping clears the input, then lets the followers release;
 idle size converges to a contracted constant rather than continuing periodic breathing.
 
@@ -447,7 +447,7 @@ class ExtrudedBubbleSimulation:
         speed_target = (_lerp(controls.stream_speed, change_drive) + (high_speed - low_speed) * (0.35 * self._flash + 0.15 * sustain)) * activity
         drift_target = _soft_top(_lerp(controls.drift, change_drive) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
         emission_target = _soft_top(_lerp(controls.emission, change_drive)
-                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash) * max(0.25, activity)
+                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         # Flow accelerates continuously, rather than stepping at a vocal accent;
