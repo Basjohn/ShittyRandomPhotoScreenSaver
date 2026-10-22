@@ -307,6 +307,9 @@ size without breathing and keep slow physical source births, travel, surface bre
 exit. Idle must not freeze their lifecycle or hide the population. Free bead chains instead fade out smoothly
 and fade back in with musical activity; a stalled visible chain is not an acceptable idle state.
 Small free-chain bubbles need only modest musical size contraction; their idle disappearance uses opacity.
+Ordinary size reaction resolves quiet contraction independently of loud expansion, with distinct large/small
+rest calibrations. Particle Amount controls squared density at constant per-point radiance; existing logical
+activity separately releases particle radius and glow. Zero authored amount still draws no particles.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;

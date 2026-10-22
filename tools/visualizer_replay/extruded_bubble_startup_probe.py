@@ -42,26 +42,16 @@ def simulation_module():
 
 
 def controls_from_authored_preset(mod, slot):
+    from core.settings.default_settings import DEFAULT_SETTINGS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import controls_from_parameters
     preset = ROOT / "presets/visualizer_modes/extruded_bubble" / (
         "preset_1_sunlit_surface.json" if slot == 1 else "preset_7_ember_drift.json")
     values = json.loads(preset.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
-    def pair(name, scale=1.):
-        return tuple(float(v) * scale for v in values["extruded_bubble_" + name])
-    return mod.ExtrudedBubbleControls(
-        large_count=pair("large_bubbles"), mid_count=pair("mid_bubbles"),
-        size_variety=float(values["extruded_bubble_size_variety"]),
-        columns=float(values["extruded_bubble_columns"]),
-        stream_direction=pair("stream_direction"),
-        stream_speed=pair("stream_speed", .25),
-        drift=pair("drift"), sway=float(values["extruded_bubble_sway"]),
-        emission=pair("particles"), idle=float(values["extruded_bubble_idle"]),
-        breathing=pair("breathing"), small_pulse=pair("small_pulse"),
-        sustained=float(values["extruded_bubble_sustained"]),
-        smoothing=float(values["extruded_bubble_smoothing"]),
-        collision=tuple(float(v) for v in values["extruded_bubble_collision"]),
-        collision_scope={"All": "all", "Big": "big", "Small": "small", "Off": "off"}[
-            values["extruded_bubble_collision_scope"]],
-    )
+    defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
+    parameters = {c.key: c.admit(values.get(c.key, defaults[c.key]), defaults[c.key])
+                  for c in require_mode_settings("extruded_bubble").controls}
+    return controls_from_parameters(parameters)
 
 
 def input_bands(scenario, i):
@@ -111,9 +101,12 @@ def trace(mod, controls, scenario, *, reference_seed=False):
 def summary(rows):
     def collect(name):
         values = [float(row[name]) for row in rows if row[name] is not None]
+        def at(index):
+            value = rows[index][name]
+            return round(float(value), 5) if value is not None else None
         return {"peak": round(max(values), 5),
-                "at_1s": round(float(rows[FREQUENCY][name]), 5),
-                "at_2s": round(float(rows[2*FREQUENCY][name]), 5),
+                "at_1s": at(FREQUENCY),
+                "at_2s": at(2*FREQUENCY),
                 "final": round(values[-1], 5),
                 "peak_to_final": round(max(values) / values[-1], 5) if values[-1] else None}
     return {"big": collect("big_radius_ratio"),

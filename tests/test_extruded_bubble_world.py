@@ -85,6 +85,18 @@ def test_tiny_reacted_surfaces_do_not_collide_just_because_nominal_radii_overlap
     assert not state.clusters
 
 
+def test_quiet_small_contacts_use_the_larger_resting_shell():
+    sim,c = controlled((-.5,0.,-8.),(.5,0.,-8.),collision=(0.,0.,1.))
+    for bubble in sim._bubbles:
+        bubble.large = False
+    c = replace(c,large_count=(0,0),mid_count=(2,2),small_pulse=(.15,.8))
+    sim.advance(MusicInput(1/90,False),c)
+    a,b = sim._bubbles
+    assert a.current_radius == pytest.approx(.7825)
+    assert b.current_radius == pytest.approx(.7825)
+    assert a.x < -.5 and b.x > .5
+
+
 def test_third_member_keeps_existing_union_edges_and_admitted_positions():
     sim, controls = controlled((0., 0., -8.), (1.8, 0., -8.))
     sim.advance(MusicInput(0., False), controls)

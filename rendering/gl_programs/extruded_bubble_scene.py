@@ -152,15 +152,17 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
 SPECKS_FULL = 216000          # specks at the top of the Particles range (the lab's heaviest scene, the sixth mock)
 
 
-def speck_amount(parameters: Mapping[str, object], emission: float) -> tuple[float, float]:
+def speck_amount(emission: float) -> tuple[float, float]:
     """Consume the already Range-resolved emission follower once (never the raw musical level).
 
-    Return (density share, brightness); the authored range is mapped in the simulation,
-    not here. The nonlinear density curve is retained, unvalidated on a real display."""
+    Return (density share, per-point radiance). Amount controls density; it must
+    not dim each remaining point again as its quiet size and glow contract.
+    The existing full-strength radiance calibration and squared density remain.
+    """
     # `emission` is already the smoothed value of the operator's Particles Range,
     # resolved exactly once by ExtrudedBubbleSimulation. Never apply that Range again.
     value = max(0.0, min(1.0, float(emission)))
-    return value * value, 2.4 * value
+    return value * value, 2.4
 
 
 def ray_strength(parameters: Mapping[str, object], rays: float) -> float:

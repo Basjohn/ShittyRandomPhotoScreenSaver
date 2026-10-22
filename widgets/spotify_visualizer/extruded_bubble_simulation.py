@@ -44,6 +44,12 @@ _FADE_OUT = 0.9
 _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
 _LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
 _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
+# (musical expansion, quiet contraction). Large keeps the existing .13 nominal
+# minimum at the normal .15 quiet strength; smalls need their own readable rest.
+# These are response calibrations, not optical/physical constants or 2D mechanics.
+_LARGE_REACTION = (4.0, 5.8)
+_SMALL_REACTION = (4.0, 1.45)
+_MINIMUM_REACTION_RADIUS = .13
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
 _WAKE_STRIDE = 8           # x, y, z, reacted radius, stable ident, retirement progress (-1 active), alpha, nominal radius
@@ -164,18 +170,25 @@ def _follow(current: float, target: float, dt: float, attack: float, release: fl
     return target + (current - target) * math.exp(-dt / max(tau, 1e-4))
 
 
-def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float) -> float:
+def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, contraction: float) -> float:
     """Authored strength spans contracted rest and musical expansion; zero disables both.
 
     Base radius is nominal size, not an uncontractable lower bound. A silent/held
     input converges to one size; no clock or independent oscillator creates pulses.
     """
-    strength = max(0.0, min(1.0, max(pair)))
-    # Normal reaction strength must reach a genuinely tiny rest. Accepted 2D's
-    # big population can settle near 0.13x nominal radius; a 0.49x EB floor still
-    # leaves its large shells inflated. Expansion retains the full authored range.
-    rest = max(0.13, 1.0 - 1.45 * strength)
-    return rest + (1.0 - rest) * drive + expansion * _lerp(pair, drive) * drive
+    # Silence belongs to the quiet handle. A high-handle edit must not secretly
+    # contract the resting population. The shared minimum bounds contraction;
+    # strengths above it still affect intermediate musical expansion.
+    strength = max(0.0, min(1.0, pair[0]))
+    rest = max(_MINIMUM_REACTION_RADIUS, 1.0 - contraction * strength)
+    # Keep the response shape separate from the resting radius: simply lifting
+    # rest makes a larger share of the remaining motion quadratic, accelerating
+    # the perceived release despite unchanged followers. Normalize the existing
+    # .13-reference curve, then span the independently authored rest and crest.
+    reference_rest_span = 1.0 - _MINIMUM_REACTION_RADIUS
+    reference_span = reference_rest_span + expansion * pair[1]
+    response = (reference_rest_span * drive + expansion * _lerp(pair, drive) * drive) / reference_span
+    return rest + (1.0 - rest + expansion * pair[1]) * response
 
 
 def _pair_choice(a: int, b: int) -> float:
@@ -255,7 +268,7 @@ class ExtrudedBubbleSimulation:
         radius = self._radius(large, controls.size_variety) * self._applied_sizes[large]
         envelope = self._body_big_envelope if large else self._body_small_envelope
         strength = controls.breathing if large else controls.small_pulse
-        prospective = radius * _reaction_scale(strength, envelope, 4.0 if large else 3.0)
+        prospective = radius * _reaction_scale(strength, envelope, *(_LARGE_REACTION if large else _SMALL_REACTION))
         scene = controls.emission_geometry == "SCENE"
         face_weights = (scene_source_face_weights(controls.stream_path[:3], direction)
                         if scene and controls.stream_path is not None else None)
@@ -546,8 +559,8 @@ class ExtrudedBubbleSimulation:
 
         # Motion: the stream, sized (big bubbles a little faster), with drift and sway across it.
         across, depth_axis = stream_basis(direction)
-        big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, 4.0)
-        small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, 3.0)
+        big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, *_LARGE_REACTION)
+        small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, *_SMALL_REACTION)
         # Per-identity visual radius is display-only: no oscillators, no threshold hold/deadband,
         # no smoothing of music or of the instantaneous physical collision radius.
         visual_smoothing = max(0.0, min(1.0, float(controls.smoothing)))

@@ -132,16 +132,16 @@ def test_every_light_type_gives_the_knobs_the_renderer_reads(light_type):
     assert knobs["sun_below"][1] > 0.0                                 # the light comes from above
 
 
-def test_particles_read_their_range_at_the_emission_follower_growing_density_and_brightness_together():
+def test_particle_amount_changes_density_without_dimming_each_remaining_point_again():
     low, high = 0.2, 0.8                                           # TEST INPUT: a Particles range
-    settings = {**SETTINGS, "extruded_bubble_particles": [low, high]}
     # Caller already resolved the operator's low/high Range into state.emission. Renderer must not
     # perform an additional interpolation (the old test encoded that exact double-range bug).
-    quiet, loud = scene.speck_amount(settings, low), scene.speck_amount(settings, high)
-    assert quiet[0] < loud[0] and quiet[1] < loud[1]
+    quiet, loud = scene.speck_amount(low), scene.speck_amount(high)
+    assert quiet[0] < loud[0] and quiet[1] == loud[1] == 2.4
     assert loud[0] / quiet[0] == pytest.approx((high / low) ** 2)  # density shaping preserved
-    assert scene.speck_amount({**settings, "extruded_bubble_particles": [1.0, 1.0]}, 0.5) == pytest.approx((0.25, 1.2))
-    assert scene.speck_amount({**settings, "extruded_bubble_particles": [0.0, 0.0]}, 1.0) == pytest.approx((1.0, 2.4))
+    assert scene.speck_amount(0.5) == pytest.approx((0.25, 2.4))
+    assert scene.speck_amount(0.)[0] == 0.
+    assert scene.speck_amount(1.) == pytest.approx((1.,2.4))
 
 def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled():
     low, high = SETTINGS["extruded_bubble_rays"]

@@ -38,10 +38,9 @@ def audit() -> dict:
     near_r = float(near[3] / (tan[1] * 4.))
     far_r = float(far[3] / (tan[1] * 16.))
     fading = scene.bubble_instances(_rec(alpha=.25))[0]
-    # The old second use of the Particles Range has a source candidate fix; the caller already gives ranged values.
-    params = {'extruded_bubble_particles': (0.2, 0.8)}
-    particle_quiet, bright_quiet = scene.speck_amount(params, 0.2)
-    particle_loud, bright_loud = scene.speck_amount(params, 0.8)
+    # Amount owns density; per-point radiance retains its full-strength calibration.
+    particle_quiet, bright_quiet = scene.speck_amount(0.2)
+    particle_loud, bright_loud = scene.speck_amount(0.8)
     result = {
         'evidence_scope': 'static CPU geometry and Settings mapping; NOT actual rendered frames/audio acceptance',
         'camera_dependence': {
@@ -66,7 +65,7 @@ def audit() -> dict:
             'requires': 'separate physical size and material opacity; real birth/death transparency, including fused clusters',
         },
         'emission': {
-            'problem': 'previous double Particles Range mapping removed in source candidate; squared density and visible response still unaccepted',
+            'problem': 'Range resolved once; squared density with constant per-point radiance is an explicit Amount semantic change; idle readability and active glare still unaccepted',
             'example_range': [0.2, 0.8],
             'simulation_quiet_and_loud': [0.2, 0.8],
             'renderer_density_share_quiet_and_loud': [particle_quiet, particle_loud],

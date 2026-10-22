@@ -2307,3 +2307,67 @@ Focused camera/editor/renderer checks pass; the separate old file-wide FOV-in-pr
 the operator's parallel P1 JSON edit. That preset and simultaneous target-image renames are left untouched;
 reconcile their camera/artwork contract separately, rather than weakening the new camera bounds or editing
 operator authoring to make the test green.
+
+## 52. Class-specific quiet size and particle Amount ownership (partial; idle still rejected)
+
+Operator's later report considers P1 generally good, with idle only partly improved and no waiver of remaining
+fidelity work. Latest physical screenshot `captures/2026-10-22_23-13-55_501801_display1_visualizer_55a2e404.png`
+still has very faint small rings/dust against dominant water. Renamed `Targets/Originals/*Goal.png` files own
+subsequent parity comparisons, including more capable 3D optical features; operator authoring is preserved.
+
+The previous common .13 rest incorrectly treated small bubbles like large ones. CPU 2D reference with archived
+controls and floor ON configured gives large settled .132 nominal, small 1.0; active small cohort crest medians
+about3.88/max4.14. These are cohort-normalized values, not same-ID active-to-idle ratios (no ID survives to60s),
+and replay begins at post-DSP features rather than re-exercising adaptive floor/PCM. A common .7825 rest diagnostic
+was rejected for large bubbles. Current separate contraction gains5.8/1.45 give large .13 and small .7825 at quiet
+.15; expansion4 gives authored .6/.8 crests3.4/4.2. The large gain is deliberate calibration, not derived physics.
+The high handle cannot change zero-drive rest; quiet cannot change the full-drive crest. Large quiet values
+above about .15 already reach the .13 minimum, so complete slider authority remains unaccepted.
+
+Response normalizes the old .13-reference curve before spanning independent rest/crest. A naive lifted rest
+accelerated relative pause settling (one-second residual .233 vs prior .269); normalization preserves the
+mathematical shape and passes the retained gradual-release bar. Existing band followers/display smoothing remain
+unchanged. Prospective source admission and actual contacts/wake attachment use the same class policy. Quiet-small
+overlap must defer birth rather than force a bubble into the tank; source/contact tests cross that boundary.
+
+Particle Amount is explicitly changed from squared density plus emission-scaled radiance to squared density
+at fixed2.4 radiance. Existing zero counts, stable seeds, geometry, quarter-radius idle, glow release and quality
+shares remain. This is NOT another double-Range defect repair. Sub-full active authoring becomes brighter too:
+Custom amount .4 gives2.5× per-point radiance; .1 quiet gives10×; archived P7 quiet .844 gives~1.185×. Native active
+glare stays open; no blanket P7 art or performance neutrality claim follows. Tiny positive amounts may still round
+to no instances; zero is intentionally invisible. Tools/callers and Settings tooltips describe the actual owner.
+
+`Evidence/2026-10-22_idle_class_transfer/run.py` / `capture.json` retain producer/input/source hashes, complete
+settings,94 snapshots per case and1738×1143 native RTX4090 images. First47s of `anything_mixed2` → explicit paused
+zero input60s → same-recording resume4s share one runtime. Labelled motion GIFs sample release0–5s/resume0–4s at10fps
+with explicit jumps to idle25/60. Cases are exact saved Custom, archived P7 and archived 2D P1 with floor ON;
+EB floor is OFF. This does not prove raw floor behavior, live audiovisual timing, compositor/DPR or high refresh.
+
+Frozen full-ray blockers permit isolated layer subtraction. Custom idle60 ordinary contribution rises from the
+camera-only candidate32 pixels to961 at >=3 byte-level max-channel delta; specks contribute2209. This is improved
+output, not accepted readability: independent visual audit still finds only a few faint rings/tiny points while
+2D has clearly readable resting bubbles across the frame. P7 is populated at rest but active/recovery is heavily
+luminous. Zero-particle and settled-chain layers are byte-identical to background. The radiance intervention holds
+current world/count/size/glow fixed; it is not a previous-versus-current class-transfer A/B. Contacts demonstrate
+disappearance/return; full temporal smoothness and complete native birth→breach→exit remain open.
+
+Between idle25 and60, Custom retains15 IDs with one retirement/no births; P7 retains32 with no births/retirements.
+Retained displacements .36–.73 and .87–1.63 world units prove slow travel only. `lifecycle_cpu.json` extends each
+authored geometry for3600 logical seconds at .1s steps: Custom17 births/17 exits/17 retired; P7 86 births/57 exits/
+60 retired. This proves continued source admission/retirement in simulation, not native visibility or exact
+physical exit classification for every P7 retirement (collision/cluster outcomes also apply).
+
+Recorded-response instrumentation was wrong: paced BEAM admission interleaves large/small IDs, so numeric ID
+ranges mixed classes. Tests now record actual successful admission metadata. The actual large minimum median
+1.975896 and4–8s span1.398385 FAIL unchanged <.8/>1.8 bars; these failures also exist under the prior transfer.
+Actual small span is1.820475. Do not call class-rest repair musical parity. The no-oscillator scalar-negative
+control asserts the actual authored .05/.03 quiet endpoints rather than obsolete common contraction.
+The startup probe uses canonical parameter admission/runtime controls instead of stale source mapping;
+mutable six-coordinate P1 previously crashed it. Missing class samples stay explicit nulls.
+
+Final connected simulation/recorded/inlet/world/renderer/wake/display-smoothing/full-dynamic/particle-idle/startup/
+tooltip run:114 pass, two retained actual-large acceptance failures. No new candidate contract failure remains.
+No new pass/clock/polling/schema/preset edits. Larger quiet-small footprints can raise contact/admission/fragment
+work and active small crest rises to4.2; G32 native cost remains open. Next requested light/particle release
+extension must use existing followers (min150ms or20% extra); held-left-drag orbit must preserve existing
+input/focus/double-click behavior through shared owners and cursor fades, without new polling/timers.

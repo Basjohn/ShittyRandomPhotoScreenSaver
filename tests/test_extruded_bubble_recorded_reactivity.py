@@ -7,6 +7,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 from statistics import median
+from unittest.mock import patch
 
 import pytest
 
@@ -40,23 +41,38 @@ def settings(**overrides):
 
 
 def states(clip, **overrides):
-    return [f.mode_state for f in replay_clip(clip, 'extruded_bubble', settings=settings(**overrides))['logical_series']]
+    return states_and_kinds(clip, **overrides)[0]
+
+
+def states_and_kinds(clip, **overrides):
+    # Paced BEAM admission interleaves classes. ID ranges are not class metadata.
+    from widgets.spotify_visualizer.extruded_bubble_simulation import ExtrudedBubbleSimulation
+    original = ExtrudedBubbleSimulation._spawn
+    kinds = {}
+    def spawn(simulation, large, *args, **kwargs):
+        admitted = original(simulation, large, *args, **kwargs)
+        if admitted:
+            kinds[simulation._bubbles[-1].ident] = large
+        return admitted
+    with patch.object(ExtrudedBubbleSimulation, '_spawn', spawn):
+        series = replay_clip(clip,'extruded_bubble',settings=settings(**overrides))['logical_series']
+    return [f.mode_state for f in series], kinds
 
 
 def test_recorded_music_reaches_strong_contraction_and_expansion_in_both_populations(clip):
     by_id = {}
-    for state in states(clip):
+    series,kinds = states_and_kinds(clip)
+    for state in series:
         for i in range(0, len(state.bubbles), 8):
             x, y, z, radius, alpha, swell, ident, cluster = state.bubbles[i:i+8]
-            if alpha == 1 and cluster < 0 and ident <= 12:
+            if alpha == 1 and cluster < 0:
                 by_id.setdefault(int(ident), []).append(1 + swell)
-    # IDs identify authored classes even when contraction/expansion crosses their old size thresholds.
-    for low, high, max_rest in ((1, 4, .8), (5, 12, .6)):
-        groups = [v for ident, v in by_id.items() if low <= ident <= high and len(v) >= 100]
+    for large, max_rest in ((True,.8),(False,1.1)):
+        groups = [v for ident,v in by_id.items() if kinds[ident] is large and len(v)>=100]
         assert groups
         assert median(min(v) for v in groups) < max_rest
         assert median((max(v)-min(v))/min(v) for v in groups) > 1.0
-    assert max(max(v) for ident, v in by_id.items() if ident <= 4) > 1.3
+    assert max(max(v) for ident,v in by_id.items() if kinds[ident]) > 1.3
 
 
 def test_sustained_control_changes_actual_recorded_production_output(clip):
@@ -69,16 +85,16 @@ def test_active_recorded_phrase_has_large_absolute_excursion_in_each_class(clip)
     # A tiny initial rest can make percentages impressive while 4-8s music remains
     # almost static. Compare mature SAME IDs strictly inside that active phrase.
     by_id={}
-    source=states(clip)
+    source,kinds=states_and_kinds(clip)
     for feature,state in zip(clip.frames,source,strict=True):
         at=(feature.timestamp_us-clip.frames[0].timestamp_us)/1e6
         if not 4.<=at<=8.:
             continue
         for i in range(0,len(state.bubbles),8):
-            if state.bubbles[i+4]>.999 and state.bubbles[i+7]<0 and state.bubbles[i+6]<=12:
+            if state.bubbles[i+4]>.999 and state.bubbles[i+7]<0:
                 by_id.setdefault(int(state.bubbles[i+6]),[]).append(1+state.bubbles[i+5])
-    for low,high in ((1,4),(5,12)):
-        spans=[max(v)-min(v) for ident,v in by_id.items() if low<=ident<=high and len(v)>200]
+    for large in (True,False):
+        spans=[max(v)-min(v) for ident,v in by_id.items() if kinds[ident] is large and len(v)>200]
         assert spans and median(spans)>1.8
 
 
@@ -96,9 +112,10 @@ def test_held_real_hot_vocal_frame_keeps_the_small_population_distinct_from_larg
     held=FeatureClip('held_actual_hot_vocal',tuple(replace(peak,timestamp_us=peak.timestamp_us+i*11000,
                                                         real=quiet_events,energy=quiet_energy)
                                                 for i in range(1200)))
-    state=states(held,extruded_bubble_stream_speed=(0.,0.),extruded_bubble_drift=(0.,0.),extruded_bubble_sway=0.)[-1]
-    large=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if state.bubbles[i+6]<=4]
-    small=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if 5<=state.bubbles[i+6]<=12]
+    series,kinds=states_and_kinds(held,extruded_bubble_stream_speed=(0.,0.),extruded_bubble_drift=(0.,0.),extruded_bubble_sway=0.)
+    state=series[-1]
+    large=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if kinds[int(state.bubbles[i+6])]]
+    small=[1+state.bubbles[i+5] for i in range(0,len(state.bubbles),8) if not kinds[int(state.bubbles[i+6])]]
     assert large and small
     assert median(small)<1.6  # sustained support, not near 3x inflation of every small bubble
 
@@ -108,10 +125,11 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     paused = tuple(replace(last, timestamp_us=last.timestamp_us + (i+1)*11_000, playing=False)
                    for i in range(1500))
     combined = FeatureClip('real_music_then_pause', clip.frames + paused)
-    result = states(combined)
+    result,kinds = states_and_kinds(combined)
     active, start, end = result[len(clip.frames)-1], result[len(clip.frames)], result[-1]
     assert active.stream_speed > end.stream_speed * 10
-    assert active.emission > end.emission * 3
+    assert active.emission > end.emission + .1
+    assert end.emission == pytest.approx(settings()['extruded_bubble_particles'][0],abs=.002)
     assert end.emission > .02  # sparse visible rest survives downstream squared particle density
     assert active.rays > end.rays + .1
     assert start.stream_speed > active.stream_speed * .95  # no pause snap
@@ -125,7 +143,8 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
                  if i in settling and i in resting and v - resting[i] > .05]
     assert remaining and min(remaining) > .25  # gradual, not instant collapse
     assert all(v < -.1 for v in end.bubbles[5::8])
-    assert all(1 + v < .15 for v in end.bubbles[5::8])  # minimum size is independent of excursion
+    for i in range(0,len(end.bubbles),8):
+        assert 1+end.bubbles[i+5] == pytest.approx(.13 if kinds[int(end.bubbles[i+6])] else .7825,abs=.002)
     before = result[-92]
     assert .04 < end.motion_phase - before.motion_phase < .08
     assert .04 < end.shimmer - before.shimmer < .08

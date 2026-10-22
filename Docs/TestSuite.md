@@ -1026,10 +1026,15 @@ Settings timeout independent gate: the 2026-10-19 `logs3a0d4fa1175.zip` has a fa
 
 `test_extruded_bubble_recorded_reactivity.py` runs the local real `anything_mixed2` clip through production logical
 capture with test-owned settings. It protects large/small stable-ID contraction and expansion, a live Sustained
-Response consumer, and slow pause settling of size/motion/emission/rays followed by a tiny resting radius.
+Response consumer, and slow pause settling of size/motion/emission/rays followed by class-specific resting radii.
 Missing recordings explicitly skip the local gate rather than substitute synthetic music. The simulation's
 normal-strength minimum-radius test covers every big/small record even when population movement would otherwise
 remove big identities from a long pause. Zero reaction strength still disables size modulation.
+Class metadata comes from actual successful simulation admissions, never assumed ID ranges: paced BEAM births
+interleave large/small identities. Rest/crest endpoint tests, prospective-inlet rejection and quiet contact tests
+cross the shared class transfer; particle Amount tests protect density-only radiance and zero-amount invisibility.
+The two actual-large recorded contraction/excursion assertions remain failing; do not lower their acceptance bars.
+Native idle/recovery and 2D comparison scope is recorded in Investigation §52, separately from CPU guarantees.
 
 The old scalar-only oscillator fixtures and positive-only radius expectations are retired. Both tests and tools
 must supply the same required band path used in production; live capture requires the canonical Bubble-band

@@ -18,7 +18,9 @@ Durable target: `Docs/Reference/Extruded_Bubble/Target.md`. The report owns meas
 **Accepted baseline:** original Bubble, Neon Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing,
 landed transitions and Foundry launch buttons stay accepted. Dev Curve has no present reproduced defect.
 Typed Visualizer Settings and the shared G0/G1/FC/G3 substrate are available. Do not redo completed migrations or
-reopen accepted modes as general work. EB's implementation exists, but its reaction/art/idle acceptance has FAILED.
+reopen accepted modes as general work. EB's implementation exists. Operator now considers P1 generally good; its idle remains lacking and all specific
+remaining fidelity/response defects stay actionable. Renamed `Targets/Originals/*Goal.png` files are current
+parity references; they do not authorize preset overwrites or close other gates.
 
 **Order:** use the single G00–G33 dependency queue below: strict lifecycle and evidence first, then
 world/camera/lighting geometry, physical population/lifetime, response, material and acceptance.
@@ -35,6 +37,27 @@ Nuitka/Build Runner/installer or product build unless requested. Audit dormancy,
 Checkpoint confirmed documentation or authorized changes narrowly, inspect the actual diff, and treat the provided working tree as the only source authority. Delivery mechanics live with the operator workflow, not this visual acceptance plan.
 
 ## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
+
+- [ ] **Held-left-drag orbit for bordered 3D visualizers:** after the camera/idle checkpoint, trace the existing
+  press/drag/double-click/focus owners and add plain-left orbit inside the visible box only if existing click,
+  double-click, child Edit and glyph behavior can be preserved. Reuse camera admission and cursor fade-out/in;
+  confine control to the card while held, restore cursor on release/cancel/focus loss. Event-driven only: no
+  polling, timers or extra motion owner. Verify cancellation, edges, DPI and interaction conflicts natively.
+
+## Settings hierarchy connector rails | parallel authorized UI work
+
+- [~] **Shared implementation in progress:** one Sol 6.1 High agent owns reusable hierarchy-aware rails through
+  shared Qt Widgets bucket/layout infrastructure, using `tmp/treemock.png`. Derive branches and last visible child
+  from actual geometry; allow nested/conditional/lazy/collapsed content and a modest consistent child gutter.
+  Use subdued semantic border colours. Preserve values, persistence, alignment, lazy loading and geometry rules.
+- [ ] Review focused tests and native representative-page captures for nesting, collapse, conditions, scrolling,
+  resize and DPI. No per-page duplicates, polling, refresh timers or unnecessary relayout. Operator visual review
+  remains required; implementation-agent screenshots alone do not close visual acceptance.
+- [ ] **Adjacent isolation debt found during native capture:** Steam cache hydration bypasses
+  `SettingsManager(storage_base_dir)` for credential metadata and reads the profile AppData path. Investigate the
+  canonical storage resolver separately; do not add a silent fallback or weaken the isolated capture boundary.
+
+## UI R41 remainder
 
 Operator visually confirmed that the manual `\` capture works and the hover glyph interaction,
 slow fades, and child-edit handoff are useful. These completed pieces no longer occupy the
@@ -170,19 +193,23 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 
 - [ ] **G12 visual-only Smoothing** (EB-D): compare 0/0.5/1 on one recording. **Must see** unchanged DSP/physical state and smooth per-ID display radii that still express attacks.
 - [ ] **G13 large radius, sustained body and crest headroom** (EB-D): synchronized 2D/EB on quiet/held/changing loud. **Must see** actual rise/fall *inside* music, rather than inflated plateau or startup yank-down.
+  - [ ] Repair actual-large recorded contraction/excursion: corrected admission-class instrumentation measures
+    minimum median 1.976× nominal (required <.8) and active 4–8s span 1.398× (required >1.8). Preserve these failing
+    bars; do not classify paced BEAM IDs by number. The current small span is 1.820×, not large-body acceptance.
 - [ ] **G14 small radius and 512/256 judder** (EB-D): frame-by-frame per-ID 2D/EB, match song sample time. **Must see** smooth, expressive small-bubble radius, no shared size-state snapping or spawn/pop confusion.
   - [~] **Tiny material-state candidate — Awaiting Validation:** the sub-2.5px ordinary sparkle choice now uses stable identity alone, removing a changing-radius hash that caused native brightness jumps for negligible geometry changes. Native threshold regression fails before repair and passes with identical physical state policy; inspect recorded moving/sizing identities. This is a material discontinuity fix, not evidence of corrected radius followers, temporal sampling or 2D breathing parity.
 - [ ] **G15 startup, pause, rest and event transients** (EB-D): tagged and untagged ramps/preset swaps. **Must see** gentle non-pulsing idle, no false hot-start peak, and real post-start musical hits.
   - [ ] **G09/G15/G18/G21/G25 idle-population contract:** verify settled idle and active→idle→active against `Target.md` and the runbook: particles remain visible, much smaller and without glow; ordinary/fused bubbles remain minimum-size without breathing and continue slow source birth→travel→breach/exit; free bead chains fade out and smoothly return with activity. Trace each owning scalar/opacity before repair; preserve zero authored amounts, physical IDs and existing near-lens/lifetime visibility rules. Collect local source/native evidence rather than waiting for operator logs.
-  - [~] **Latest saved-pose idle reproduction FAILED:** native 1738×1143 recorded→pause5/25/60s captures match the background-only failure before and after camera admission. The nearer legal view retains five ordinary candidates, mostly around 1px radius, contributing only 32 pixels at >=3 byte levels at idle60. Positive counts do not meet visibility. **Next:** repair independent quiet/high breathing authority and ordinary subpixel/material readability, then isolate particle count/radiance/size losses on the admitted snapshots. Constant per-point particle radiance alone at the former distant pose was an insufficient standalone repair. Producers/limits: `Investigation.md` §49/§51.
-  - [~] **Idle particle/chain candidate — Awaiting Validation:** logical activity releases free-chain opacity and contracts particles to 25% radius with no intrinsic/authored bloom emission, while retaining authored quiet amounts. Native P1/P7 release→idle60s→recorded-resume capture in `Evidence/2026-10-22_idle_recovery/` samples gradual chain fade/return and fine retained P7 dust; ordinary visibility still fails. Review real compositor/high-refresh motion and costs: positive idle speck draw counts can rise 16× after removing former quarter-emission attenuation. No added pass/clock/target; zero amounts and wake ownership remain intact. Full motion artifacts/limits: `Investigation.md` §47.
-  - [~] **Native idle comparison FAILED:** matched 1672×941 2D/EB captures after recorded music then 5/30/60 seconds paused show a visible small-bubble field in 2D but an almost empty ordinary EB layer. The fixed-tank camera candidate raises idle-60s P1 conservative frustum occupancy from 3/28 to 27/28 IDs (median projected radius 4.5px); P7 rises from 0/26 to 5/26. These are geometric candidates, not segmented visible pixels: ordinary readability still fails after chain fade/particle repair. **Next:** isolate physical lighting/material loss for small shells and long source-to-exit coverage before changing idle size/count policy; validate idle→active chain/particle recovery. Do not infer visible compliance from positive counts or solve coverage with camera-relative births/preset overwrites. Method/limits: `Investigation.md` §41–43; local producers: `Evidence/2026-10-22_idle_comparison/`, `2026-10-22_idle_fixed_pivot/` and `2026-10-22_idle_populations/`.
+  - [~] **Class-rest/Amount candidate — partial, idle still FAILED:** native Custom/P7 and 2D-ON recorded→pause60s→resume captures show retained ordinary rings and dust, quarter-radius/no-glow particles, and disappearing/returning chains. Custom remains too faint versus 2D; P7 active glare remains unaccepted. Quiet/loud size handles now have separate endpoint authority and class calibrations; Amount now controls squared density at fixed per-point radiance, an explicit semantic change. Zero particles and settled chains produce background-identical isolated pixels. **Next:** improve actual ordinary/particle readability without a new lighting floor or camera-based populations; verify native long lifecycle and active art. CPU one-hour idle runs prove source births and retirement, not their visible appearance. Complete measurements, prior failures and scoped producers: `Investigation.md` §52; `Evidence/2026-10-22_idle_class_transfer/`.
 - [ ] **G16 Large Bubbles Range** (R33/R34): both handles separately control count targets; **must see** sustained-band breadth requirements and physically paced actual count.
 - [ ] **G17 Small Bubbles Range** (R33/R34): both handles separately control targets; **must see** no easy saturation, no apparent radius snap from count churn.
 - [ ] **G18 Bead Chains Range** (R33/R34): low/high and single-versus-broad band playback. **Must see** controllable visible count with smooth source/lifetime; not upper limit from any loud band.
 - [ ] **G19 Stream Speed Range** (EB-C; R33/R41): one stable cohort, slow→fast→slow *while playing*, record actual XYZ/s and px/s. **Must see** unmistakable velocity change and authored low/high influence.
 - [ ] **G20 Drift Range** (EB-C; R33/R41): track lateral XYZ and px displacement, not just general level. **Must see** perceivable within-song sway against steady main stream, calm idle.
 - [ ] **G21 Particles Range / optional glow** (EB-C/A; R33/R34): independent count vs intensity vs spatial travel. **Must see** visible effect, smooth fades, preservation of P7 attractive debris without pinned glare.
+  - [ ] Apply the operator's modest release extension to the existing light/particle followers only:
+    add min(150ms, 20% of the current release), without another timer, state owner or DSP change. Compare matched
+    release/return frames; preserve attacks and unrelated accepted modes unless their existing owner is implicated.
 - [ ] **G22 Large Breathing Range** (EB-D; R33/R34): move quiet/high handles independently. **Must see** resting size not covertly driven by high handle and meaningful smooth loud expansion.
 - [ ] **G23 Small Bubble Pulse Range** (EB-D; R33/R34): independently sweep endpoints. **Must see** smooth, high-value small reactivity versus same-time 2D Bubble, no binary peaks.
 - [ ] **G24 Ray Strength Range** (EB-C; R33/R34): record driver→shaft uniform→HDR pixels in continuous songs. **Must see** reachable range, repeated transient-linked gentle brightening/slow dimming without flicker or pinning.

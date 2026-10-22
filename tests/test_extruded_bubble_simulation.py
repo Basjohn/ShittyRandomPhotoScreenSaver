@@ -39,6 +39,29 @@ def _records(snapshot):
     return [values[i:i + BUBBLE_STRIDE] for i in range(0, len(values), BUBBLE_STRIDE)]
 
 
+@pytest.mark.parametrize('policy', [(4.,5.8), (4.,1.45)])
+def test_reaction_handles_have_independent_quiet_and_crest_authority(policy):
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale
+    scale = lambda pair, drive: _reaction_scale(pair,drive,*policy)
+    assert scale((.15,.3),0.) == scale((.15,.9),0.)
+    assert scale((.05,.8),0.) > scale((.15,.8),0.)
+    assert scale((.05,.8),1.) == scale((.15,.8),1.)
+    assert scale((.15,.9),1.) > scale((.15,.3),1.)
+    for drive in (0.,.1,.5,.9,1.):
+        assert scale((0.,0.),drive) == 1.
+    samples = [scale((.15,.8),i/100) for i in range(101)]
+    assert samples == sorted(samples)
+    assert max(b-a for a,b in zip(samples,samples[1:])) < .1
+
+
+def test_class_calibration_retains_large_contraction_and_strong_small_excursion():
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _LARGE_REACTION, _SMALL_REACTION
+    assert _reaction_scale((.15,.6),0.,*_LARGE_REACTION) == pytest.approx(.13)
+    assert _reaction_scale((.15,.6),1.,*_LARGE_REACTION) == pytest.approx(3.4)
+    assert _reaction_scale((.15,.8),0.,*_SMALL_REACTION) == pytest.approx(.7825)
+    assert _reaction_scale((.15,.8),1.,*_SMALL_REACTION) == pytest.approx(4.2)
+
+
 def test_the_same_inputs_give_the_same_frames():
     controls = ExtrudedBubbleControls()
     first = _run(ExtrudedBubbleSimulation(7), controls, 4.0, onsets_every=0.5)
@@ -169,7 +192,7 @@ def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane
     kinds={b.ident:b.large for b in sim._bubbles}
     small=[1.+r[5] for r in _records(held) if not kinds[int(r[6])]]
     big=[1.+r[5] for r in _records(held) if kinds[int(r[6])]]
-    assert small and max(small)<.7 and big and min(big)>1.5
+    assert small and max(small)<1.1 and big and min(big)>1.5
 
 
 def _crowded(collision, scope="all"):
@@ -429,7 +452,7 @@ def test_sustained_response_holds_large_loud_bodies_but_does_not_inflate_held_sm
     assert high.sustain > 0.8
     assert large(high) > large(low) + 1.
     assert small(high)==pytest.approx(small(low),abs=.002)
-    assert 1.+small(high)<.7
+    assert 1.+small(high)<1.1  # near nominal smalls, distinct from sustained large bodies
     later = _run(supported, replace(controls, sustained=1), 4, intensity=0.8)
     assert abs(small(later)-small(high))<.002  # constant sound holds; no fabricated per-bubble sine
 
@@ -453,14 +476,16 @@ def test_nothing_pins_flat_at_the_top_of_its_range():
     assert 0.8 < _soft_top(0.95) < _soft_top(1.2) < _soft_top(3.0) < 1.0      # still rising, never flat on 1
 
 
-def test_all_large_and_small_bubbles_can_reach_tiny_rest_at_normal_reaction_strength():
+def test_large_contracts_deeply_while_small_keeps_a_readable_nonpulsing_rest():
     controls = ExtrudedBubbleControls(large_count=(8, 8), mid_count=(16, 16), collision_scope="off",
                                      breathing=(.15, .6), small_pulse=(.15, .8))
     sim = ExtrudedBubbleSimulation(88)
     snap = _run(sim, controls, 20, intensity=0)
-    bases = {b.ident: b.radius for b in sim._bubbles}
+    bases = {b.ident: (b.radius,b.large) for b in sim._bubbles}
     assert snap.count == 24
-    assert all(.12 < r[3] / bases[int(r[6])] < .15 for r in _records(snap))
+    for r in _records(snap):
+        nominal, large = bases[int(r[6])]
+        assert r[3]/nominal == pytest.approx(.13 if large else .7825)
 
 
 def test_resting_sway_velocity_is_slow_as_well_as_its_phase():
