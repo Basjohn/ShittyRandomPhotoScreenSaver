@@ -49,6 +49,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | runtime presentation architecture | `Docs/Architecture/Compositor_Architecture.md` |
 | Qt/OpenGL production floor | `Spec.md` → Accepted runtime presentation; `rendering/quick/bootstrap.py` |
 | Settings theme / Acrylic / Glass / Theme Foundry | `Docs/Architecture/Settings_Theme_Architecture.md` |
+| Settings hierarchy connector rails and semantic annotations | `ui/widgets/bucket_tree.py`; `Docs/Architecture/Settings_Theme_Architecture.md` → bucket children |
 | runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |

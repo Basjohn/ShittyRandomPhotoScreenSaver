@@ -256,6 +256,21 @@ _SHARED_LABEL_STYLE_ROLES = (
 )
 
 
+_ANNOTATION_LABEL_STYLE_ROLES = frozenset((
+    "INFO_LABEL_STYLE", "INFO_LABEL_STYLE_DISABLED", "ADV_HELPER_LABEL_STYLE",
+    "ACCESSIBILITY_DESC_STYLE", "ACCESSIBILITY_SECTION_DESC_STYLE",
+))
+
+
+def mark_label_annotation(label: QLabel, annotation: bool = True) -> None:
+    """Keep explanatory/status copy out of the Settings control hierarchy.
+
+    This semantic marker changes neither the label's style nor its geometry.
+    Status owners with a contextual colour can use it independently of QSS.
+    """
+    label.setProperty("settingsAnnotation", bool(annotation))
+
+
 def _shared_label_style_role(style_sheet: str) -> str | None:
     """Identify a current shared label style when the mapping is unambiguous."""
 
@@ -270,6 +285,7 @@ def _shared_label_style_role(style_sheet: str) -> str | None:
 def _remember_live_label(label: QLabel, role: str | None) -> None:
     """Track only labels whose full style is owned by shared_styles.py."""
 
+    mark_label_annotation(label, role in _ANNOTATION_LABEL_STYLE_ROLES)
     if role is None:
         _LIVE_STYLED_LABELS.pop(label, None)
         return
@@ -1805,9 +1821,10 @@ def build_bucket_toggle(
     toggle_row.addStretch()
     host_layout.addLayout(toggle_row)
 
-    body = QWidget()
+    from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
+    body = BucketTreeBody()
     body_layout = QVBoxLayout(body)
-    body_layout.setContentsMargins(12, 0, 0, 8)
+    body_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 8)
     body_layout.setSpacing(4)
     if not defer_initial_visibility:
         body.setVisible(expanded)

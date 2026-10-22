@@ -58,6 +58,7 @@ from ui.tabs.shared_styles import (
     apply_shared_label_style,
     build_bucket_toggle,
     finalize_bucket_body,
+    mark_label_annotation,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -326,6 +327,7 @@ def _test_row(tab: "WidgetsTab", layout: QVBoxLayout, put, label: str, on_click,
     layout.addLayout(row)
     # Empty and hidden until a test runs: no standing "not tested" text.
     test_status = put("test_status", QLabel(""))
+    mark_label_annotation(test_status)
     test_status.setWordWrap(True)
     test_status.setContentsMargins(indent, 0, 0, 0)
     test_status.setVisible(False)
@@ -379,6 +381,7 @@ def _build_news_source(tab: "WidgetsTab", widget_id: str, layout: QVBoxLayout, p
     grid.setColumnStretch(_PUBLISHER_COLUMNS, 1)
     layout.addLayout(grid)
     hint = put("selection_hint", QLabel("No publisher selected: this card will not appear."))
+    mark_label_annotation(hint)
     hint.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #FF9800;")
     layout.addWidget(hint)
     _update_news_selection_hint(tab, widget_id)

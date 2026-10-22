@@ -12,6 +12,7 @@ from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_swatch_label
 from ui.widgets.continuous_border import BucketToggle
+from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
 
 if TYPE_CHECKING:
     from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
@@ -139,9 +140,9 @@ def _build_collapsible_bucket_core(
     helper.setWordWrap(True)
     host_layout.addWidget(helper)
 
-    body = QWidget()
+    body = BucketTreeBody()
     body_layout = QVBoxLayout(body)
-    body_layout.setContentsMargins(0, 0, 0, 0)
+    body_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     body_layout.setSpacing(12)
     host_layout.addWidget(body)
 
@@ -304,9 +305,9 @@ def build_mode_scaffold(
     setattr(tab, advanced_helper_attr, helper)
     advanced_host_layout.addWidget(helper)
 
-    advanced_widget = QWidget()
+    advanced_widget = BucketTreeBody()
     advanced_layout = QVBoxLayout(advanced_widget)
-    advanced_layout.setContentsMargins(0, 0, 0, 0)
+    advanced_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     advanced_layout.setSpacing(12)
     setattr(tab, advanced_attr, advanced_widget)
     advanced_host_layout.addWidget(advanced_widget)
