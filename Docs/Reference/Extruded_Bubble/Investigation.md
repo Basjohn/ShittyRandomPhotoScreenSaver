@@ -2129,3 +2129,51 @@ samples differ materially. This does not establish a speed improvement or neutra
 increase remains explicit cost debt. The earlier optional-points receipt marked `overlap_possible` may have
 overlapped focused-test warm-up and is excluded from isolated claims. Final native comparisons retain exact
 source hashes after optional metadata omission; P1 remains byte-identical with the directional intervention.
+
+## 46. Same-world SCENE retained pose versus explicit reset (22 October; coverage still FAILED)
+
+The bounded Medium audit froze the reconstructed retained SCENE world, then used the actual camera-reset
+contract (`starting_camera_pose` for the saved Custom index, canonical FOV/position) as a diagnostic intervention.
+No physical records, seeds, count, travel, light or saved profile changed between views. Production final
+images, flat speck occupancy and tank ray-length maps are in `Evidence/2026-10-22_SCENE_reset_comparison/`.
+
+In the retained bottom quarter, 17.06% of rays miss the finite tank and 57.63% traverse at most two world units;
+mean tank path is 1.206. Explicit reset gives zero missing/thin rays there and mean path 34.215. Flat occupancy
+and final native images visibly extend through the lower region after reset. This identifies framing/domain
+geometry as a major contributor to the reconstruction, without claiming exact screenshot/source/pose provenance.
+
+The population tank is finite while water/wisps continue beyond it, and legitimate authored cameras can be
+outside it. Visible water therefore does not imply a long population path. Separate missing-domain rays from
+in-domain opacity/material/lighting loss. Do not darken the backdrop, invent walls, clamp/overwrite saved poses,
+inflate counts or enlarge populations around the eye to conceal this mismatch. A required broader domain would
+need coherent fixed-world extent/node/presentation design, not an incidental constant patch. The user's whole-
+viewable-tank complaint remains failed, with local evidence available rather than a reproduction request.
+
+## 47. Native idle release and recorded recovery (22 October; scoped evidence)
+
+`Evidence/2026-10-22_idle_recovery/` retains the producer, source hash, settings, complete sampled ordinary
+records/scalars, selected full-resolution frames, contact sheets and full/chains-only GIFs for P1/P7 on 82467ae2.
+Input is recorded `anything_mixed2` first ten seconds, explicit paused zero-input sixty seconds at 90Hz, then
+the same recorded passage resumed in the same logical runtime. GIFs show continuous release 0–8 seconds at
+10fps, an explicitly labelled jump to settled idle60s, then continuous resume 0–8 seconds. They are silent
+offscreen native GL captures, not actual compositor/DPR/high-refresh or audiovisual acceptance.
+
+Per-frame activity gives chain opacity 1 at release, .831 at one second, .018 at two, zero from three seconds;
+on resume it is zero initially, .789 at one second and 1 by two. Corresponding native chain-isolated images
+show disappearance and gradual return. Particle presentation reaches quarter radius and zero particle emission
+activity; P7 retains its fine gold dust while the independently visible emitter/ambient remains. P1/P7 quiet
+emission settles to .1/.844 respectively, reflecting their authored low endpoints rather than another activity
+attenuation. The diagnostic chains-only layer suppresses ordinary/wake/snow/fizz/specks on identical full-scene
+snapshots; it never creates a replacement simulation.
+
+Ordinary fields still fail the comparison against 2D Bubble. The wall A/B in `2026-10-22_idle_wall_diagnostic/`
+shows a concrete material contributor: the current 1.5px minimum wall is far thicker than authored for tiny
+shells, and authored 3% walls make several 2–3.5px identities clearer. The existing shell=0 alternative looks
+softer/darker and is not accepted air-interface physics. Moving thin-wall stability and radius-dependent
+sparkle hashing remain actionable before a production material repair. Neither retained IDs nor sampled
+stills prove no physical lifetime/art/motion failure; existing source birth/breach/exit checks are scoped proof.
+
+The latest MC Qt captures also establish zero messages in both valid 21:23 and 21:30 session intervals,
+including three Settings reopen cycles each. Appended older `QFont`/`QUnifiedTimer` warnings are not current-run
+failures. Shared combo point-size policy is already implemented; editor/bucket-specific warning attribution
+remains conditional work, not a reason for another identical idle launch or a claim of a font repair.
