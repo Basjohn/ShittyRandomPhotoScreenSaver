@@ -428,11 +428,15 @@ class QuickExtrudedBubbleRenderer:
         stream_path = admit_path(parameter(parameters, "extruded_bubble_stream_direction"), [0., 0.], "stream")
         stream_source = _floats(world_point(stream_path[:3]))
         stream_end = _floats(world_point(stream_path[3:]))
+        scene_emission = 1 if parameter(parameters, "extruded_bubble_emission_geometry") == "SCENE" else 0
+        from widgets.spotify_visualizer.extruded_bubble_geometry import scene_source_face_weights
+        scene_faces = _floats(scene_source_face_weights(stream_path[:3], stream))
         self._uniforms.set(programs["beads"], {
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,
             "uStreamAcross": across, "uStreamDepth": depth_axis,
             "uStreamWorld": stream, "uStreamSource": stream_source, "uStreamEnd": stream_end,
             "uParticleSpread": float(parameter(parameters, "extruded_bubble_particle_spread")),
+            "uSceneEmission": scene_emission, "uSceneFaces": scene_faces,
             "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
@@ -456,6 +460,7 @@ class QuickExtrudedBubbleRenderer:
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF, "uWorldUnit": WORLD_UNIT,
             "uSpeckTravel": _SPECK_CARRY * float(state.travel),
             "uParticleSpread": float(parameter(parameters, "extruded_bubble_particle_spread")),
+            "uSceneEmission": scene_emission, "uSceneFaces": scene_faces,
             "uSpeckSource": stream_source, "uSpeckEnd": stream_end,
             "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),

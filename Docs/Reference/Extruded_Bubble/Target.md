@@ -77,6 +77,18 @@ no autonomous idle size oscillator. Earlier "light idle energy/breathing" notes 
 Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–18;
 `Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
 
+**22 October breathing-fidelity refinement (operator, unaccepted):** use *visually confirmed* 2D Bubble
+with **Dynamic Floor ON** as the minimum music-correlated breathing benchmark. The ideal EB result
+matches or exceeds it while EB has **Dynamic Floor OFF**, without extreme Sensitivity, periodic fake idle breathing
+or a tiny fast pulse unrelated to musical phrases. This applies separately to large and small stable identities:
+compare relative resting-to-crest size, musical onset/release timing, downward contraction and passage-to-passage
+variation on the same captured recording. The 2D floor can respond adversely when the track's dynamics change
+and the automatic floor engages; do **not** copy that failure or require EB to turn its own floor on.
+The two runs deliberately have different floor settings; document both. Also test 2D floor OFF and EB floor ON
+only as diagnostic contrasts when needed. This is a *quality/fidelity* comparator, not an instruction to share
+the 2D DSP implementation or mutate operator-authored presets. Require synchronized native pixels and visual
+approval; all existing EB reactivity failures remain open.
+
 The simulation's current reaction strength spans contracted rest and musical expansion; nominal size is not a
 lower bound. Normal Breathing/Small Pulse strengths permit a resting radius near 0.13× nominal; zero strength
 disables size reaction. Minimum size and maximum excursion are separate acceptance measures. Compare mature,

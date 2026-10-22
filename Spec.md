@@ -308,6 +308,8 @@ independently of camera pose; projection and material lifetime opacity must not 
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;
 measured failures and native 2D/EB comparison: `Docs/Reference/Extruded_Bubble/Investigation.md`.
 
+EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (source-audited, unimplemented/unaccepted as of 22 October): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep; separately proposed `Lighting Coverage` BEAM/SCENE is **not** the implemented Motion `Emission Geometry` BEAM/SCENE and does not automatically change it. No preset/Custom overwrite or silent new default is permitted. Physical lighting, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not implemented spec compliance.
+
 EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
 Rendering packs them directly; authored global counts never multiply by camera sector. Reacted radii govern
 contacts and wake attachment, while nominal size remains independent for mass and modest bead dimensions.

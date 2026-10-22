@@ -163,3 +163,28 @@ def test_r34_deep_ray_source_node_moves_the_one_real_light_source(eb_tab):
     assert tuple(collect_extruded_bubble_mode_settings(tab)['extruded_bubble_light_direction'][:3]) == pytest.approx(source)
     toggle_bucket(tab, 'light')
     assert tuple(tab.extruded_bubble_light_direction.value()[:3]) == pytest.approx(source)
+
+
+def test_scene_emission_choice_and_volume_face_repaint_use_one_settings_owner(eb_tab):
+    """Native Qt gate: switching the choice updates the real Motion mapper and saves.\n\n    This intentionally does not claim production pixels or performance.\n    """
+    from ui.widgets.visual_controls import SceneVolumeMapper
+    tab, config = eb_tab
+    toggle_bucket(tab, 'motion')
+    editor = tab.extruded_bubble_stream_direction
+    selector = tab.extruded_bubble_emission_geometry
+    assert isinstance(editor, SceneVolumeMapper)
+    assert selector.currentText() == 'BEAM'
+    assert editor._emission_geometry == 'BEAM'
+    selector.setCurrentText('SCENE')
+    assert editor._emission_geometry == 'SCENE'
+    assert editor._scene_direction[1] != 0
+    assert collect_extruded_bubble_mode_settings(tab)['extruded_bubble_emission_geometry'] == 'SCENE'
+    # The operator can toggle back without losing the authored Stream nodes.
+    prior_path = tuple(editor.value())
+    selector.setCurrentText('BEAM')
+    assert editor._emission_geometry == 'BEAM'
+    assert tuple(editor.value()) == prior_path
+    # Saving/hydrating must keep the current choice under the same Settings body.
+    load_extruded_bubble_mode_settings(tab, {**config, 'extruded_bubble_emission_geometry': 'SCENE'})
+    assert selector.currentText() == 'SCENE'
+    assert editor._emission_geometry == 'SCENE'

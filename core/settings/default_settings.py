@@ -1104,6 +1104,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_collision_scope': 'All',
                                     'extruded_bubble_columns': 0.0,
                                     'extruded_bubble_bubble_spread': 1.0,
+                                    'extruded_bubble_emission_geometry': 'BEAM',
                                     'extruded_bubble_particle_spread': 1.0,
                                     'extruded_bubble_depth_colour': [6, 14, 31, 255],
                                     'extruded_bubble_drift': [0.3, 0.8],

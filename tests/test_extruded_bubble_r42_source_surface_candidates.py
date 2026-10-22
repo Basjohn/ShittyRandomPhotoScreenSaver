@@ -31,11 +31,15 @@ def test_sunlit_surface_ignores_premature_end_and_retires_at_real_visible_water_
     sim._filled = True
     # Authored End below the surface, but a visible bubble must not fade there.
     low = _Bubble(1, True, 0., 2.0, 0., .35, 0., alpha=1.)
+    # The old rim-based rule would release this bubble while its centre was
+    # below the water and leave a visibly empty gap at a slow stream velocity.
     near_surface = _Bubble(2, True, 0., WATER_SURFACE_Y - .2, 0., .35, 0., alpha=1.)
-    sim._bubbles = [low, near_surface]
+    at_breach = _Bubble(3, True, 7., WATER_SURFACE_Y + .01, 0., .35, 0., alpha=1.)
+    sim._bubbles = [low, near_surface, at_breach]
     step(sim, controls(surface_scene=True))
     assert not low.leaving and low.alpha == 1.0
-    assert near_surface.leaving and 0.9 < near_surface.alpha < 1.0
+    assert not near_surface.leaving and near_surface.alpha == 1.0
+    assert at_breach.leaving and 0.9 < at_breach.alpha < 1.0
 
 
 def test_deep_scene_still_obeys_authored_end_without_surface_override():
