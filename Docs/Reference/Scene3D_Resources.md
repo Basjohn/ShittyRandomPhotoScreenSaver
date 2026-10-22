@@ -348,8 +348,12 @@ Light paths through spheres (2026-10-17, `scene3d_optics.py`): `sceneSpherePaths
 reflection, through, one inner bounce, exact Fresnel weights) and `sceneHollowSphereTrace` (a ray traced through a
 shell between two concentric spheres, outside/shell/core indices: every interface splits by Fresnel, the reflected
 share handed back as a path and the refracted share followed, total internal reflection followed without loss, so
-light entering a glass wall near the silhouette is guided round inside it; up to eight (direction, weight) paths, the
-last the ray that leaves). Consumers look the directions up in a `SceneProbe`. Tests hold both to CPU mirrors on the
+light entering a glass wall near the silhouette is guided round inside it; up to eight direction/weight paths with
+matching local interface/exit points, the last the ray that leaves). GLSL returns `paths[8]` and `points[8]`;
+`capturePoints=false` omits unused point metadata for directional consumers, which must not read those outputs.
+the CPU mirror returns `(direction, weight, point)` triples. `sceneSphereRefraction` also returns its matching
+unit-sphere chord exit via `exitNormal`, including the front point on entry TIR. EB uses these points to evaluate
+the physical Deep Source direction; directional/probe consumers retain their ray directions. Tests hold both to CPU mirrors on the
 GPU, conservation, the air bubble's mirror band, straight passage with matched indices and a solid sphere's
 reflection when the core is empty.
 

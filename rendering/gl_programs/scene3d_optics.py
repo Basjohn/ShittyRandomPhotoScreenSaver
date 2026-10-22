@@ -8,10 +8,10 @@ sphere. Import-safe GLSL plus CPU mirrors (no GL).
   layer) from two-beam interference with the phase shift of the film's inner reflection, sampled at seven
   wavelengths and folded into RGB with smooth spectral weights, so fringes run through the familiar magenta, gold,
   green and blue as the thickness or angle changes; 0 thickness gives no colour.
-* ``sceneSphereRefraction(ray, normal, eta)``: the direction a ray leaves a homogeneous sphere after refracting in at
+* ``sceneSphereRefraction(ray, normal, eta, exitNormal)``: the direction a ray leaves a homogeneous sphere after refracting in at
   its front surface (normal ``normal``) and out at the back, for consumers that bend what they see through a sphere
   (an air bubble in water diverges the view: the background through it appears shrunk); a ray totally reflected
-  inside returns the in-sphere reflection instead.
+  inside returns the in-sphere reflection instead. Also returns its matching unit-sphere exit point/normal.
 * ``sceneSpherePaths(ray, normal, eta, reflected, transmitted, bounced)``: the three ways light reaches the eye from
   a homogeneous sphere at one point of its front surface, with their exact Fresnel weights (returned as
   (reflected, transmitted, bounced)): mirrored off the front surface (F, 1 past the critical angle: the mirror band
@@ -20,14 +20,16 @@ sphere. Import-safe GLSL plus CPU mirrors (no GL).
   consumer looks each direction up in its scene (a ``SceneProbe``) and sums them by weight; the rest of the light
   (further bounces) is under ``F^2`` and left out. By symmetry the back surface meets the ray at its entry angle, so
   one Fresnel serves every crossing.
-* ``sceneHollowSphereTrace(origin, ray, outerRadius, innerRadius, iors, paths)``: a ray traced through a hollow
+* ``sceneHollowSphereTrace(origin, ray, outerRadius, innerRadius, iors, paths, points, capturePoints)``: a ray traced through a hollow
   sphere (a shell between two concentric spheres round the origin; ``iors`` = (outside, shell, core)), from an
   ``origin`` in the outside, shell or core medium. At every interface the ray splits by exact Fresnel: the reflected share is handed back
   as a path (its direction, weight) and the refracted share is followed; past the critical angle the ray is totally
   reflected and followed without loss, so light that enters a glass wall near the silhouette is guided round inside
   it (the bright, warped band of a glass bubble) and the edge of the core shows as an inner line. The ray that
   finally leaves is the last path. Returns the number of paths (at most 8; ``paths[i].xyz`` direction, ``.w``
-  weight; the weights sum to at most 1). A consumer looks each direction up in its scene (a ``SceneProbe``).
+  weight; the weights sum to at most 1). With ``capturePoints``, ``points[i]`` is the local interface/exit origin;
+  otherwise point outputs are unspecified and must not be read. Directional consumers skip this metadata work.
+  A consumer looks each direction up in its scene (a ``SceneProbe``), or evaluates a positional source there.
 """
 from __future__ import annotations
 
@@ -68,11 +70,12 @@ vec3 sceneThinFilm(float cosIncident, float thicknessNm, float filmIor, float ou
     }
     return colour;
 }
-vec3 sceneSphereRefraction(vec3 ray, vec3 normal, float eta) {
+vec3 sceneSphereRefraction(vec3 ray, vec3 normal, float eta, out vec3 exitNormal) {
+    exitNormal = normal;
     vec3 inside = refract(ray, normal, eta);
     if (dot(inside, inside) < 1e-8) return reflect(ray, normal);
     // The chord through the sphere is symmetric: leaving, the ray meets the surface at the angle it entered with.
-    vec3 exitNormal = reflect(normal, inside);          // outward at the exit point
+    exitNormal = reflect(normal, inside);          // outward at the exit point
     vec3 leaving = refract(inside, -exitNormal, 1.0 / eta);
     return dot(leaving, leaving) < 1e-8 ? reflect(inside, -exitNormal) : leaving;
 }
@@ -86,8 +89,12 @@ float sceneShellHit(vec3 o, vec3 d, float r) {
     float eps = 1e-5 * r;
     return t0 > eps ? t0 : (t1 > eps ? t1 : -1.0);
 }
-int sceneHollowSphereTrace(vec3 origin, vec3 ray, float outerRadius, float innerRadius, vec3 iors, out vec4 paths[8]) {
-    for (int i = 0; i < 8; ++i) paths[i] = vec4(0.0);
+int sceneHollowSphereTrace(vec3 origin, vec3 ray, float outerRadius, float innerRadius, vec3 iors,
+                          out vec4 paths[8], out vec3 points[8], bool capturePoints) {
+    for (int i = 0; i < 8; ++i) {
+        paths[i] = vec4(0.0);
+        if (capturePoints) points[i] = vec3(0.0);
+    }
     vec3 o = origin, d = normalize(ray);
     float startRadius = length(origin);
     int region = startRadius >= outerRadius ? 0 : (innerRadius > 0.0 && startRadius < innerRadius ? 2 : 1);
@@ -115,13 +122,17 @@ int sceneHollowSphereTrace(vec3 origin, vec3 ray, float outerRadius, float inner
             o = p;
             continue;
         }
-        if (count < 7) paths[count++] = vec4(mirrored, weight * f);
+        if (count < 7) {
+            if (capturePoints) points[count] = p;
+            paths[count++] = vec4(mirrored, weight * f);
+        }
         weight *= 1.0 - f;
         d = normalize(refract(d, facing, eta));
         o = p;
         region = next;
         if (region == 0) break;
     }
+    if (capturePoints) points[count] = o;
     paths[count++] = vec4(d, weight);
     return count;
 }
@@ -206,7 +217,7 @@ def _shell_hit(o, d, r):
 
 
 def scene3d_hollow_sphere_trace(origin, ray, outer_radius, inner_radius, iors):
-    """CPU mirror of ``sceneHollowSphereTrace``: a list of (direction, weight)."""
+    """CPU mirror of ``sceneHollowSphereTrace``: (direction, weight, local point) paths."""
     o, d = tuple(origin), _normalize(ray)
     start_radius = math.sqrt(sum(v*v for v in o))
     region = 0 if start_radius >= outer_radius else (2 if inner_radius > 0 and start_radius < inner_radius else 1)
@@ -232,12 +243,12 @@ def scene3d_hollow_sphere_trace(origin, ray, outer_radius, inner_radius, iors):
             d, o = mirrored, p
             continue
         if len(paths) < 7:
-            paths.append((mirrored, weight * f))
+            paths.append((mirrored, weight * f, p))
         weight *= 1.0 - f
         d, o, region = _normalize(_refract(d, facing, eta)), p, nxt
         if region == 0:
             break
-    paths.append((d, weight))
+    paths.append((d, weight, o))
     return paths
 
 

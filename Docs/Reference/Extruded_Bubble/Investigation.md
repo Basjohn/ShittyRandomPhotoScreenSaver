@@ -2089,3 +2089,43 @@ only half-float quantisation. The test also checks unchanged uploaded spatial re
 full-strength gains. Before the repair, both modes fail because zero strength still uploads full power.
 Connected renderer/particle tests pass. Native moving P1/P7 art, self-proxy appearance, small idle visibility,
 Deep per-shading-point direction, shared positional attenuation and the physical shaft field remain open.
+
+## 45. Deep analytic direction at physical glass points (22 October; partial candidate)
+
+The earlier Deep lobe used a single authored Source→End direction even though visible emitter/proxy placement
+used positional Source. Moving End with Source fixed therefore moved native reflected/transmitted highlights.
+The regression reproduces that failure before repair. Deep now resolves Source direction from each local
+interface/exit transformed by sphere radius/centre and the actual camera eye/basis. Surface keeps its shared
+refracted direction. The existing tracer returns its already-computed interface hits and final origin;
+homogeneous lens refraction returns its matching chord exit (front point on entry TIR). All GLSL/CPU callers
+are migrated, without a legacy wrapper or second tracer. The lab explicitly retains its angular reference-art
+emitter; it has no physical Deep Source authoring and is not production positional-light evidence.
+
+Native tests cover ordinary/fused/near reflection and transmission, fixed-Source End invariance, real Source
+movement, rigid translation and a non-symmetric rotated camera/world configuration. The fixture must reset
+its eye between draws; retaining a prior intervention's uniform creates a false invariance failure. Shared
+CPU/GPU mirrors compare all eight path slots and origins, including inside-core/wall and trapped TIR; a
+coincident-source approach stays finite but does not define finite-emitter physics. Fused glass still uses
+its pre-existing tangent-sphere material approximation, not exact secondary rays through the whole union.
+
+`Evidence/2026-10-22_deep_shading_points/` retains frozen recorded P1/P7 final comparisons and source hashes.
+The diagnostic disables only positional analytic direction, reproducing the former global-direction
+consumer in the current tracer. P1 Surface pixels are byte-identical; P7 changes with unchanged physical
+counts. This is source-direction evidence, not proof of shared distance attenuation, complete transport,
+moving art, ordinary idle readability or full-SCENE coverage. The extra eight local vec3 points can increase
+per-fragment register pressure, and Deep adds normalization per lobe (including rim sub-rays). No new
+pass/target/clock is added; performance neutrality must not be inferred. A separate true-baseline shader/
+optics timing producer retains bounded full-frame GPU queries with explicit limitations.
+
+The initial/reversed-order timing warning prompted a narrower correction before landing: Surface no longer
+records or reads unused interface-point metadata. Direction-only tracing keeps exactly the same directions,
+weights and traversal; only Deep requests the point outputs. This avoids adding five specialized program
+variants and their warm-up/storage burden. Register reservation can still reflect the linked shader's worst
+case; this conditional omission alone is not proof of performance neutrality. Preserve the initial, reversed
+and optional-metadata receipts; limited single-card query samples cannot close moving/dual-display G32.
+The final quiet sequential optional-metadata sample is P1 before/after p50 4.02/4.74ms and p99 7.86/6.48ms;
+P7 p50 4.91/4.76ms and p99 6.76/6.87ms (60 samples per condition after eight warm draws). Earlier reversed
+samples differ materially. This does not establish a speed improvement or neutrality, and the P1 median
+increase remains explicit cost debt. The earlier optional-points receipt marked `overlap_possible` may have
+overlapped focused-test warm-up and is excluded from isolated claims. Final native comparisons retain exact
+source hashes after optional metadata omission; P1 remains byte-identical with the directional intervention.

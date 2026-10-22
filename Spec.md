@@ -330,6 +330,10 @@ Existing Light Strength owns glint-proxy radiance and the analytic emitter refle
 independent environmental fill is not removed when that emitter strength is zero.
 Surface analytic glass highlights share the refracted sunlight direction used by particle lighting
 and probe glint placement. Translating directional-light endpoints together must not move that emitter.
+Deep analytic glass uses Source direction at each local traced interface or matching homogeneous
+lens exit, transformed through the actual camera eye/basis. Light End must not redirect a fixed positional
+Source's glass highlight. This is positional direction ownership; shared attenuation/finite-source optics
+and the existing fused tangent-sphere approximation remain separately subject to visual acceptance.
 Near-lens ordinary and fused shells have render-only footprint protection: around half the viewport
 they require strong defocus even at low aperture; near-full-viewport/extreme proximity must gently
 fade/cull rather than become a sharp screen-filling wall. Sensor-clipped extent and per-member union

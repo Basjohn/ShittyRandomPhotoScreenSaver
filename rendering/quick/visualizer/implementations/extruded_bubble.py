@@ -280,6 +280,7 @@ def _glass(knobs, near: bool) -> dict[str, object]:
         "uLens": float(knobs.get("lens", 0.85)),
         "uIors": _floats(knobs.get("iors", (1.33, 1.5, 1.0))), "uRough": float(knobs.get("rough", 0.0)),
         "uShellMin": 0.0, "uDiag": 0, "uLightDir": _floats(knobs["spec_dir"]),
+        "uPositionalLight": 1.0 if knobs["mode"] == "deep" else 0.0,
         "uSpecColour": _floats(knobs["specular_light"]), "uSpecThrough": 0.4, "uSpecShape": (0.05, 0.25, 0.012),
         "uInnerBlur": float(knobs.get("inner_blur", 0.25)),
         "uReflect": float(knobs.get("face_reflect", 1.0)),

@@ -40,12 +40,30 @@ def test_refraction_through_an_air_sphere_passes_the_axis_straight_and_spreads_t
     for offset in (0.0, 0.2, 0.4, 0.6):
         normal = (math.sin(offset), 0.0, math.cos(offset))         # the front surface, facing the eye at +z
         rows.append([(0.0, 0.0, -1.0, 0.0), (*normal, 0.0)])
-    gpu = probe.run("vec3 r = arg(0).xyz; vec3 n = arg(1).xyz; FragColor = vec4(sceneSphereRefraction(r, n, 1.33), 0.0);",
+    gpu = probe.run("vec3 r = arg(0).xyz; vec3 n = arg(1).xyz; vec3 exitN; FragColor = vec4(sceneSphereRefraction(r, n, 1.33, exitN), 0.0);",
                     rows, DECL)
     assert gpu[0][:3] == pytest.approx((0.0, 0.0, -1.0), abs=1e-5)
     # An air bubble in water is a diverging lens: rays further from the axis bend further outward (+x).
     bends = [float(direction[0]) for direction in gpu[1:]]
     assert 0.0 < bends[0] < bends[1] < bends[2]
+
+
+def test_homogeneous_refraction_returns_the_matching_chord_exit_including_tir(probe):
+    rows = [[(math.sin(angle), 0., math.cos(angle), eta)]
+            for eta in (.75, 1.33) for angle in (0., .3, .6, 1.2)]
+    gpu = probe.run('vec4 a=arg(0);vec3 exitN;'
+                    'sceneSphereRefraction(vec3(0,0,-1),a.xyz,a.w,exitN);'
+                    'FragColor=vec4(exitN,length(exitN));', rows, DECL)
+    expected = []
+    for (normal_eta,) in rows:
+        normal, eta = normal_eta[:3], normal_eta[3]
+        inside = optics._refract((0., 0., -1.), normal, eta)
+        # Start at the actual front point and follow its chord to the sphere;
+        # entry TIR reflects at that front point instead of inventing an exit.
+        exit_point = normal if sum(v*v for v in inside) < 1e-8 else tuple(
+            n - 2. * sum(a*b for a,b in zip(normal, inside)) * d for n,d in zip(normal, inside))
+        expected.append((*exit_point, 1.))
+    _check(gpu, expected, tolerance=2e-5)
 
 
 def test_sphere_paths_equal_their_mirror_and_keep_the_physics(probe):
@@ -81,17 +99,22 @@ def test_hollow_sphere_trace_equals_its_mirror_and_conserves_light(probe):
         x, y = rng.uniform(-0.999, 0.999), 0.0
         y = rng.uniform(-1.0, 1.0) * math.sqrt(max(0.0, 1.0 - x * x)) * 0.999
         rows.append([(x, y, 3.0, rng.choice((0.0, 0.85, 0.95))), (1.33, 1.5, 1.0, 0.0)])
-    head = ("vec4 a = arg(0); vec4 paths[8]; int n = sceneHollowSphereTrace(a.xyz, vec3(0.0, 0.0, -1.0), 1.0, a.w,"
-            " arg(1).xyz, paths);")
+    head = ("vec4 a = arg(0); vec4 paths[8]; vec3 points[8]; int n = sceneHollowSphereTrace(a.xyz, vec3(0.0, 0.0, -1.0), 1.0, a.w,"
+            " arg(1).xyz, paths, points, true);")
     gpu_count = probe.run(head + " FragColor = vec4(float(n), 0.0, 0.0, 0.0);", rows, DECL)
     cpu = [optics.scene3d_hollow_sphere_trace(r[:3], (0.0, 0.0, -1.0), 1.0, r[3], i[:3]) for r, i in rows]
     assert [int(round(g[0])) for g in gpu_count] == [len(c) for c in cpu]
-    for index in range(3):
+    for index in range(8):
         gpu = probe.run(head + f" FragColor = paths[{index}];", rows, DECL)
         expected = [(*c[index][0], c[index][1]) if index < len(c) else (0.0, 0.0, 0.0, 0.0) for c in cpu]
         _check(gpu, expected, tolerance=2e-3)
+        directional = probe.run(head.replace('points, true', 'points, false') + f' FragColor = paths[{index}];', rows, DECL)
+        _check(directional, expected, tolerance=2e-3)  # omitting metadata never changes traced light
+        gpu_points = probe.run(head + f" FragColor = vec4(points[{index}], 0.0);", rows, DECL)
+        expected_points = [(*c[index][2], 0.) if index < len(c) else (0., 0., 0., 0.) for c in cpu]
+        _check(gpu_points, expected_points, tolerance=2e-3)
     for paths in cpu:
-        assert sum(w for _, w in paths) <= 1.0 + 1e-6
+        assert sum(w for _, w, _ in paths) <= 1.0 + 1e-6
     # Matched indices everywhere: the light passes straight through untouched.
     straight = optics.scene3d_hollow_sphere_trace((0.3, 0.2, 3.0), (0.0, 0.0, -1.0), 1.0, 0.9, (1.0, 1.0, 1.0))
     assert straight[-1][0] == pytest.approx((0.0, 0.0, -1.0), abs=1e-6) and straight[-1][1] == pytest.approx(1.0)
@@ -108,7 +131,7 @@ def test_hollow_sphere_trace_equals_its_mirror_and_conserves_light(probe):
 
 def test_hollow_trace_admits_real_origins_in_core_and_wall(probe):
     rows=[[(0.,0.,0.,.9),(1.33,1.5,1.,0.)],[(0.,0.,-.95,.9),(1.33,1.5,1.,0.)]]
-    code=('vec4 a=arg(0);vec4 paths[8];sceneHollowSphereTrace(a.xyz,vec3(0,0,-1),1.0,a.w,arg(1).xyz,paths);'
+    code=('vec4 a=arg(0);vec4 paths[8];vec3 points[8];sceneHollowSphereTrace(a.xyz,vec3(0,0,-1),1.0,a.w,arg(1).xyz,paths,points,true);'
           'FragColor=paths[0];')
     gpu=probe.run(code,rows,DECL)
     expected=[((1.-1.5)/(1.+1.5))**2,((1.5-1.33)/(1.5+1.33))**2]
@@ -117,7 +140,28 @@ def test_hollow_trace_admits_real_origins_in_core_and_wall(probe):
         paths=optics.scene3d_hollow_sphere_trace(origin[:3],(0,0,-1),1.,.9,iors[:3])
         assert paths[0][1]==pytest.approx(weight)
         assert paths[-1][0]==pytest.approx((0,0,-1))
-        assert sum(w for _,w in paths)==pytest.approx(1.)
+        assert sum(w for _,w,_ in paths)==pytest.approx(1.)
+        assert paths[0][2] == pytest.approx((0., 0., -.9 if origin[2] == 0. else -1.))
+        assert paths[-1][2] == pytest.approx((0., 0., -1.))
+
+
+def test_hollow_trace_gpu_origins_include_inside_media_and_trapped_tir(probe):
+    rows = [[(0.,0.,0.,.9), (1.33,1.5,1.,0.)],
+            [(0.,0.,-.95,.9), (1.33,1.5,1.,0.)],
+            [(.95,0.,0.,.9), (1.,1.5,1.,0.)]]
+    cpu = [optics.scene3d_hollow_sphere_trace(a[:3], (0.,0.,-1.), 1., a[3], i[:3]) for a,i in rows]
+    head = ('vec4 a=arg(0);vec4 paths[8];vec3 points[8];'
+            'int n=sceneHollowSphereTrace(a.xyz,vec3(0,0,-1),1.,a.w,arg(1).xyz,paths,points,true);')
+    for index in range(8):
+        gpu = probe.run(head + f'FragColor=vec4(points[{index}],float(n));', rows, DECL)
+        expected = [(*(paths[index][2] if index < len(paths) else (0.,0.,0.)), float(len(paths)))
+                    for paths in cpu]
+        _check(gpu, expected, tolerance=2e-4)
+    assert cpu[0][0][2] == pytest.approx((0.,0.,-.9))
+    assert cpu[1][0][2] == pytest.approx((0.,0.,-1.))
+    assert len(cpu[2]) == 1 and cpu[2][0][1] == 1.  # TIR followed without losing energy
+    assert np.linalg.norm(cpu[2][0][2]) == pytest.approx(1.)
+    assert cpu[2][0][2] != pytest.approx(rows[2][0][:3])  # final traced hit, not initial origin
 
 
 def test_waves_have_matching_gradients_and_equal_their_mirror(probe):
