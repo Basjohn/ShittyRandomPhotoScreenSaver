@@ -435,6 +435,7 @@ class QuickSceneController(QObject):
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_camera_reset_available = False
+        self._visualizer_control_hints_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._presentation_image_listener: Callable[[], None] | None = None
@@ -711,6 +712,7 @@ class QuickSceneController(QObject):
         values = {
             "widgetGlowOnHover": bool(input_state.widget_glow_on_hover),
             "alwaysShowGlyphs": bool(input_state.always_show_glyphs),
+            "show3DControlHints": bool(input_state.show_3d_control_hints),
             "widgetGlowOnClick": bool(input_state.widget_glow_on_click),
             "widgetGlowIntensity": float(input_state.widget_glow_intensity),
             "widgetGlowDistance": float(input_state.widget_glow_distance),
@@ -2074,6 +2076,12 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("cameraResetAvailable", bool(available))
 
+    def set_visualizer_control_hints_available(self, available: bool) -> None:
+        """Project framed-camera capability at mode admission, including lazy roots."""
+        self._visualizer_control_hints_available = bool(available)
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("controlHintsAvailable", bool(available))
+
     def set_visualizer_presentation_active(self, active: bool) -> None:
         """Change retained presentation visibility without rebuilding it."""
 
@@ -2261,6 +2269,7 @@ class QuickSceneController(QObject):
         )
         root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
         root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
+        root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
         hover_glyph = getattr(root, "hoverEditGlyphRequested", None)

@@ -112,6 +112,17 @@ For unframed 3D modes, Alt+right starts a native press-scoped origin in the curr
 Basin routes the same Alt inputs to internal scene pan/scale instead, with no CUSTOM geometry transaction; see
 [Neon Lake Basin](Neon_Lake_Basin.md).
 
+Framed 3D modes reuse `VisualizerPresentation.qml` for a noninteractive keyboard/mouse hint at the top right.
+A pointer entry gently reveals the supplied artwork with the hover chrome; fade-out begins after five seconds even
+if the pointer stays inside. Internal movement, menu dismissal and Ctrl changes do not restart the visit;
+leaving/re-entering admits another visit.
+The retained animation is suppressed during Edit/direct layout gestures, menus, hidden/borderless presentations and
+modes without framed scene transforms. Disabling hints or retiring/hiding the presentation also retires its passive observer
+and clears the visit. It adds no input hitbox, polling, Python timer or settings read on pointer motion.
+Widgets → General → Appearance owns **Show Glyphs** (`input.always_show_glyphs`, unchanged storage key) and the
+independent **Show 3D Control Hints** (`input.show_3d_control_hints`, default on). Both use the normal deferred
+Widgets save/close-flush and reset path. Hint artwork is immutable RCC content sourced from `ui/assets/widgets/visualizer/`.
+
 ## 2. Capability model
 
 Capability is mode-owned and registry/test-discovered, not inferred from catalog position or a fixed number of modes. Shared

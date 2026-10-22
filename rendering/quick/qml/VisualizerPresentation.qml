@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Effects
 
 Item {
@@ -25,6 +26,33 @@ Item {
     property bool cardShadowEnabled: true
     property bool widgetGlowAdmitted: false
     property bool alwaysShowGlyphs: true
+    property bool show3DControlHints: true
+    property bool controlHintsAvailable: false
+    readonly property bool controlHintEligible: show3DControlHints && controlHintsAvailable
+        && cardShellEnabled && widgetGlowAdmitted && visible && volumeWheelEnabled
+    // Keep the same passive observer alive through menu/Ctrl suppression so a
+    // visit ends only when the pointer leaves, not when action admission changes.
+    readonly property bool controlHintVisitTracking: show3DControlHints && controlHintsAvailable
+        && cardShellEnabled && visible
+    readonly property bool controlHintHovered: controlHintEligible
+        && controlHintVisitObserver.item !== null && controlHintVisitObserver.item.insideCard
+    property bool controlHintVisitStarted: false
+    property real controlHintOpacity: 0.0
+    onControlHintVisitTrackingChanged: {
+        if (!controlHintVisitTracking) {
+            controlHintVisitStarted = false
+            controlHintReveal.stop()
+            controlHintLeave.stop()
+            controlHintOpacity = 0.0
+        }
+    }
+    onControlHintHoveredChanged: {
+        if (controlHintHovered && !controlHintVisitStarted) {
+            controlHintVisitStarted = true
+            controlHintLeave.stop()
+            controlHintReveal.restart()
+        }
+    }
     signal hoverEditGlyphRequested(string action)
     property bool widgetGlowOnHover: false
     property bool widgetGlowOnClick: false
@@ -293,6 +321,85 @@ Item {
                 visualizerPresentationRoot.hoverEditGlyphRequested(action)
             }
         }
+    }
+
+    // Observe at the common scene ancestor: a menu layered over the card must
+    // not manufacture a leave/re-entry. Loader owns and retires this passive
+    // handler even though its event parent is the window content item.
+    Loader {
+        id: controlHintVisitObserver
+        objectName: "visualizerControlHintVisitObserver"
+        active: visualizerPresentationRoot.controlHintVisitTracking
+            && visualizerPresentationRoot.Window.window !== null
+        sourceComponent: HoverHandler {
+            objectName: "visualizerControlHintWindowHover"
+            parent: visualizerPresentationRoot.Window.window ? visualizerPresentationRoot.Window.window.contentItem : null
+            enabled: visualizerPresentationRoot.controlHintVisitTracking
+                && visualizerPresentationRoot.Window.window !== null
+            blocking: false
+            readonly property point cardPosition: visualizerPresentationRoot.mapFromItem(parent, point.position)
+            readonly property bool insideCard: hovered
+                && cardPosition.x >= 0 && cardPosition.y >= 0
+                && cardPosition.x < visualizerPresentationRoot.width
+                && cardPosition.y < visualizerPresentationRoot.height
+            onInsideCardChanged: {
+                if (!insideCard && visualizerPresentationRoot.controlHintVisitTracking) {
+                    visualizerPresentationRoot.controlHintVisitStarted = false
+                    controlHintReveal.stop()
+                    controlHintLeave.restart()
+                }
+            }
+        }
+    }
+
+    // One animation per entry. Pointer movement never restarts the five-second
+    // visit, and the artwork has no pointer handler or action hitbox.
+    SequentialAnimation {
+        id: controlHintReveal
+        NumberAnimation {
+            target: visualizerPresentationRoot
+            property: "controlHintOpacity"
+            to: 0.90
+            duration: 700
+            easing.type: Easing.InOutSine
+        }
+        PauseAnimation { duration: 4300 }
+        NumberAnimation {
+            target: visualizerPresentationRoot
+            property: "controlHintOpacity"
+            to: 0.0
+            duration: 900
+            easing.type: Easing.InOutSine
+        }
+    }
+    NumberAnimation {
+        id: controlHintLeave
+        target: visualizerPresentationRoot
+        property: "controlHintOpacity"
+        to: 0.0
+        duration: 350
+        easing.type: Easing.InOutSine
+    }
+    Image {
+        objectName: "visualizerControlHint"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        readonly property real inset: Math.max(12, visualizerPresentationRoot.cardBorderWidth + 6)
+        anchors.margins: inset
+        width: Math.min(Math.max(0, parent.width - 2 * inset),
+                        Math.max(0, parent.height - 2 * inset) * artworkAspect,
+                        Math.round(Math.max(48, Math.min(84, Math.min(parent.width, parent.height) * 0.085))))
+        readonly property real artworkAspect: implicitHeight > 0 ? implicitWidth / implicitHeight : 0
+        height: artworkAspect > 0 ? width / artworkAspect : 0
+        source: visualizerPresentationRoot.controlHintsAvailable && visualizerPresentationRoot.show3DControlHints
+                ? "qrc:/srpss/widgets/visualizer/control_hint.png" : ""
+        fillMode: Image.PreserveAspectFit
+        smooth: true
+        mipmap: true
+        enabled: false
+        visible: visualizerPresentationRoot.controlHintEligible && opacity > 0.0
+        opacity: visualizerPresentationRoot.controlHintOpacity
+        z: 10
     }
 
     Rectangle {

@@ -160,6 +160,7 @@ class QuickInputController(RuntimeInputOwner):
         distance: float = 14.0,
         jedi_mode: bool = False,
         always_show_glyphs: bool = True,
+        show_3d_control_hints: bool = True,
     ) -> bool:
         """Cache resolved presentation options at the Settings event boundary."""
 
@@ -181,6 +182,7 @@ class QuickInputController(RuntimeInputOwner):
             widget_glow_color=tuple(int(channel) for channel in color),
             widget_glow_jedi_mode=bool(jedi_mode),
             always_show_glyphs=bool(always_show_glyphs),
+            show_3d_control_hints=bool(show_3d_control_hints),
         )
 
     def set_ctrl_held(self, held: bool) -> None:

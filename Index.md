@@ -90,6 +90,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | EB idle visibility versus 2D, saved-pose rejection, class-rest transfer and native layer evidence | `Docs/Reference/Extruded_Bubble/Investigation.md` §41/§49/§52; active work in `Current_Plan.md` G07/G15 |
 | EB finite-world camera bounds shared by flight, saved poses and all special 3D controls | `core/settings/extruded_bubble_camera.py`; `Docs/Reference/Extruded_Bubble/Investigation.md` §51; active G03/G07 |
 | Reusable framed 3D internal camera and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
+| Framed 3D control hints, hover visit, global glyph/hint preferences and RCC artwork | `Docs/Reference/Visualizer_Reference.md` → framed hints; `ui/assets/widgets/visualizer/control_hint.png` |
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |

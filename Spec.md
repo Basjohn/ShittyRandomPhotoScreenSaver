@@ -129,6 +129,10 @@ Settings disclosure rails use the existing widget/layout hierarchy through share
 visible relevant rows and nested headers, terminate at the last child and exclude explanatory/status annotations.
 Use semantic border colours and a shared child gutter; preserve values, lazy loading, accordion persistence and
 sibling alignment. Layout/paint events own updates, without polling, refresh timers or a duplicate hierarchy.
+Widgets → General → Appearance owns the global Show Glyphs and default-on Show 3D Control Hints preferences.
+The latter reveals noninteractive RCC artwork briefly in eligible bordered 3D views, with one five-second
+physical-hover visit and smooth fades. Suppressed/disabled/retired presentation cannot leave an active observer
+or restart the same visit through menu/Ctrl changes. Settings collection remains with the existing deferred save.
 
 Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v6 is the semantic visual
 authority and compiled Default Dark is the unconditional no-file fallback. Complete `.srtheme` files may request
