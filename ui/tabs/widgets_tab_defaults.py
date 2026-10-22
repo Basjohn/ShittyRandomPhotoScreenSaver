@@ -653,6 +653,26 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._general_layout_toggle = layout_toggle
     tab._general_cache_toggle = cache_toggle
 
+    glyph_row = QHBoxLayout()
+    glyph_row.setContentsMargins(0, 8, 0, 8)
+    glyph_row.setSpacing(18)
+    tab.always_show_glyphs_check = QCheckBox("Show Glyphs")
+    tab.always_show_glyphs_check.setToolTip(
+        "In Interaction Mode or while Ctrl is held, gently reveal eligible widget action glyphs on hover. "
+        "Independent of Widget Glow on Hover; Edit-only actions still require Edit."
+    )
+    tab.show_3d_control_hints_check = QCheckBox("Show 3D Control Hints")
+    tab.show_3d_control_hints_check.setToolTip(
+        "Briefly show keyboard and mouse artwork at the top right of bordered 3D visualizers on hover. "
+        "Fades away after five seconds; leave and re-enter to show it again. Hidden during Edit and menus."
+    )
+    for control in (tab.always_show_glyphs_check, tab.show_3d_control_hints_check):
+        control.setProperty("circleIndicator", True)
+        control.stateChanged.connect(tab._save_settings)
+        glyph_row.addWidget(control)
+    glyph_row.addStretch()
+    appearance_layout.addLayout(glyph_row)
+
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
     row.setSpacing(12)
@@ -973,6 +993,15 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
 
     _sync_general_widget_theme_controls(tab)
 
+    from core.settings.models import InputSettings
+    options = InputSettings.from_settings(tab._settings)
+    for control, value in (
+        (tab.always_show_glyphs_check, options.always_show_glyphs),
+        (tab.show_3d_control_hints_check, options.show_3d_control_hints),
+    ):
+        with QSignalBlocker(control):
+            control.setChecked(value)
+
     shadows_config = widgets_config.get("shadows", {}) if isinstance(widgets_config, Mapping) else {}
     if isinstance(shadows_config, Mapping):
         tab.widget_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "enabled"))
@@ -1029,6 +1058,14 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
     if hasattr(tab, "card_border_width_spin"):
         tab.card_border_width_spin.setValue(border_width)
+
+
+def collect_general_input_settings(tab: WidgetsTab) -> dict[str, bool]:
+    """Pure General input edits, consumed by WidgetsTab's existing save/flush."""
+    return {
+        "input.always_show_glyphs": tab.always_show_glyphs_check.isChecked(),
+        "input.show_3d_control_hints": tab.show_3d_control_hints_check.isChecked(),
+    }
 
 
 def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str, object]]:

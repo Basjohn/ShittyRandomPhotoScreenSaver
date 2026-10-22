@@ -43,11 +43,13 @@ Checkpoint confirmed documentation or authorized changes narrowly, inspect the a
   double-click, child Edit and glyph behavior can be preserved. Reuse camera admission and cursor fade-out/in;
   confine control to the card while held, restore cursor on release/cancel/focus loss. Event-driven only: no
   polling, timers or extra motion owner. Verify cancellation, edges, DPI and interaction conflicts natively.
-- [~] **3D framed control hint in progress:** use `images/bothcontrols.png` at the top right with small crisp
-  viewport scaling. Fade gently with glyph admission, then out after five seconds even while still hovered.
-  Default-on toggle beside Show Glyphs in Widgets → General; reuse shared settings/resource/presentation owners,
-  event-triggered animation only. One reused Sol Medium agent implements; review native appearance, one-shot
-  dwell/leave/re-enter, disabled state, frame/mode eligibility and existing glyph/input behavior before checkpoint.
+- [~] **3D framed control hint — Awaiting Validation:** review the supplied thicker artwork at 90% opacity,
+  crisp viewport scaling and top-right placement in actual runtime/mixed DPI. Fade-out starts after five seconds;
+  movement/menu/Ctrl changes do not restart a physical visit. Widgets → General → Appearance now owns Show Glyphs
+  and the independent default-on Show 3D Control Hints preference. Initial/new-display/lazy-root admission and
+  disabled observer retirement are covered. Artwork is packed/verified in RCC; loose/superseded inputs removed
+  per operator request. Native component scope/receipts: `Evidence/2026-10-23_3d_control_hint/`; shared contract:
+  `Docs/Reference/Visualizer_Reference.md`. This preview's frozen EB background is not scene/idle acceptance.
 
 ## Settings hierarchy connector rails | parallel authorized UI work
 

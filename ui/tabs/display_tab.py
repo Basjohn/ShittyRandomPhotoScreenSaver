@@ -411,21 +411,6 @@ class DisplayTab(QWidget):
         halo_row.addWidget(self.halo_shape_combo)
         halo_row.addStretch()
 
-        glyph_row, _ = add_aligned_row(
-            layout, "", label_width=self._LABEL_WIDTH, wrap=False,
-        )
-        self.always_show_glyphs_check = QCheckBox("Always Show Glyphs")
-        self.always_show_glyphs_check.setProperty("circleIndicator", True)
-        self.always_show_glyphs_check.setToolTip(
-            "In Interaction Mode or while Ctrl is held, gently reveal eligible "
-            "widget action glyphs on hover. Edit-only actions require the "
-            "existing Edit session; Hide Controls stays Edit-only. "
-            "Independent of Widget Glow on Hover."
-        )
-        self.always_show_glyphs_check.stateChanged.connect(self._save_settings)
-        glyph_row.addWidget(self.always_show_glyphs_check)
-        glyph_row.addStretch()
-
         widget_glow_hover_row, _ = add_aligned_row(
             layout,
             "",
@@ -665,7 +650,6 @@ class DisplayTab(QWidget):
         self.sharpen_check.blockSignals(True)
         # Block input toggles
         self.interaction_mode_check.blockSignals(True)
-        self.always_show_glyphs_check.blockSignals(True)
         self.widget_glow_on_hover_check.blockSignals(True)
         self.widget_glow_on_click_check.blockSignals(True)
         self.widget_glow_intensity_slider.blockSignals(True)
@@ -755,7 +739,6 @@ class DisplayTab(QWidget):
 
             # Widget interaction glow
             input_options = InputSettings.from_settings(self._settings)
-            self.always_show_glyphs_check.setChecked(input_options.always_show_glyphs)
             self.widget_glow_on_hover_check.setChecked(
                 input_options.widget_glow_on_hover
             )
@@ -799,7 +782,6 @@ class DisplayTab(QWidget):
             self.resample_filter_combo.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.interaction_mode_check.blockSignals(False)
-            self.always_show_glyphs_check.blockSignals(False)
             self.widget_glow_on_hover_check.blockSignals(False)
             self.widget_glow_on_click_check.blockSignals(False)
             self.widget_glow_intensity_slider.blockSignals(False)
@@ -868,9 +850,6 @@ class DisplayTab(QWidget):
             shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else default_halo_shape,
         )
 
-        # Shared event-driven action chrome, independent of the glow setting.
-        self._settings.set('input.always_show_glyphs',
-                           self.always_show_glyphs_check.isChecked())
         # Widget interaction glow
         self._settings.set(
             'input.widget_glow_on_hover',

@@ -1705,6 +1705,10 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             )
         except Exception:
             pass
+        if any(descriptor.section_id == "defaults" for descriptor in save_descriptors):
+            from ui.tabs.widgets_tab_defaults import collect_general_input_settings
+            for key, value in collect_general_input_settings(self).items():
+                self._settings.set(key, value)
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
         self._refresh_custom_resize_lock_state()

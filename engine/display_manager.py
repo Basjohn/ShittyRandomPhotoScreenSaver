@@ -810,21 +810,27 @@ class DisplayManager(QObject):
             if not isinstance(display, QuickDisplayUnit) or display.is_retired:
                 continue
             try:
-                display.runtime.input_controller.set_view_orbit_enabled(admitted)
-                display.runtime.input_controller.set_framed_flight_enabled(bool(
-                    admitted and owner is not None and str(owner.controller.mode_id) == 'extruded_bubble'))
-                display.runtime.scene_controller.set_visualizer_camera_reset_available(bool(
-                    admitted and owner is not None and str(owner.controller.mode_id) == "extruded_bubble"
-                ))
-                owner = self._quick_visualizer_owner
-                from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-                display.runtime.input_controller.set_scene_transform_enabled(bool(
-                    admitted and owner is not None
-                    and get_visualizer_mode_descriptor(owner.controller.mode_id).scene_transform_settings
-                ), mode_id=owner.controller.mode_id if owner is not None else "")
+                self._configure_quick_visualizer_input_admission(display, admitted=admitted)
             except RuntimeError:
                 # A replacement generation can retire between snapshot and push.
                 continue
+
+    def _configure_quick_visualizer_input_admission(
+        self, unit: QuickDisplayUnit, *, admitted: bool | None = None,
+    ) -> None:
+        """One mode-capability projection for initial/replacement binds and mode edges."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+        admitted = self._quick_view_orbit_admitted() if admitted is None else admitted
+        owner = self._quick_visualizer_owner
+        mode = str(owner.controller.mode_id) if owner is not None and not owner.is_retired else ""
+        framed = bool(admitted and mode and get_visualizer_mode_descriptor(mode).scene_transform_settings)
+        runtime = unit.runtime
+        runtime.input_controller.set_view_orbit_enabled(admitted)
+        runtime.input_controller.set_framed_flight_enabled(bool(admitted and mode == "extruded_bubble"))
+        runtime.scene_controller.set_visualizer_camera_reset_available(bool(admitted and mode == "extruded_bubble"))
+        runtime.scene_controller.set_visualizer_control_hints_available(framed)
+        runtime.input_controller.set_scene_transform_enabled(framed, mode_id=mode)
 
     def _set_quick_view_orbit_rates(self, turn_steps: float, tilt_steps: float) -> None:
         """Held orbit keys changed: the shown 3D view turns at the new rates on the logical clock."""
@@ -1340,6 +1346,7 @@ class DisplayManager(QObject):
             color=resolve_widget_glow_color(input_options.widget_glow_color),
             jedi_mode=input_options.widget_glow_jedi_mode,
             always_show_glyphs=input_options.always_show_glyphs,
+            show_3d_control_hints=input_options.show_3d_control_hints,
         )
 
         # The retained context menu is a runtime-scene overlay, so its shadow
@@ -2041,13 +2048,7 @@ class DisplayManager(QObject):
                 lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
             )
         )
-        runtime.input_controller.set_view_orbit_enabled(self._quick_view_orbit_admitted())
-        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-        owner = self._quick_visualizer_owner
-        runtime.input_controller.set_scene_transform_enabled(bool(
-            owner is not None and not owner.is_retired
-            and get_visualizer_mode_descriptor(owner.controller.mode_id).scene_transform_settings
-        ), mode_id=owner.controller.mode_id if owner is not None else "")
+        self._configure_quick_visualizer_input_admission(unit)
         runtime.context_menu_requested.connect(
             lambda _position: live_unit_route(self._refresh_quick_context_menu)
         )

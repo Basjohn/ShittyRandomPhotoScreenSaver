@@ -142,6 +142,7 @@ class InputSettings:
     )
     widget_glow_jedi_mode: bool = bool(require_canonical_default("input.widget_glow_jedi_mode"))
     always_show_glyphs: bool = bool(require_canonical_default("input.always_show_glyphs"))
+    show_3d_control_hints: bool = bool(require_canonical_default("input.show_3d_control_hints"))
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "InputSettings":
@@ -155,6 +156,7 @@ class InputSettings:
             widget_glow_color=_coerce_widget_glow_color(settings.get("input.widget_glow_color")),
             widget_glow_jedi_mode=settings.get_bool("input.widget_glow_jedi_mode"),
             always_show_glyphs=settings.get_bool("input.always_show_glyphs"),
+            show_3d_control_hints=settings.get_bool("input.show_3d_control_hints"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -168,6 +170,7 @@ class InputSettings:
             "input.widget_glow_color": None if self.widget_glow_color is None else list(self.widget_glow_color),
             "input.widget_glow_jedi_mode": self.widget_glow_jedi_mode,
             "input.always_show_glyphs": self.always_show_glyphs,
+            "input.show_3d_control_hints": self.show_3d_control_hints,
         }
 
 

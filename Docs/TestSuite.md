@@ -1149,3 +1149,16 @@ explanatory/status-caption exclusion through the actual shared status owner. Com
 real EB lazy UI and shared-style tests:29 pass. Representative native captures are in `tmp/settings_tree_native/`
 (Steam, Clock, Feeds, EB;150% screen DPR/light and dark theme). These do not replace operator visual review or
 physical mixed-DPI monitor movement.
+
+### Framed 3D control hints and global glyph preferences
+
+`test_visualizer_control_hints.py` crosses canonical defaults/model, cached scene projection, deferred General
+save/flush/disk reload/reset, initial/new-display mode admission, lazy roots and actual retained QML hover/clicks.
+Native tests cover expiry inside, internal motion, actual menu coverage, Ctrl suppression, re-entry, disabled/
+hidden/mode observer retirement and Loader QObject lifetime. The image adds no input hitbox. RCC freshness and
+immutable asset hashes protect the packaged thicker artwork; a packed-byte receipt precedes source-input cleanup.
+Representative large/small90% hint and General captures in `Evidence/2026-10-23_3d_control_hint/` use production
+retained QML over a frozen EB background; they cannot accept live EB scene/idle appearance or installed/mixed-DPI behavior.
+
+Root connected validation:45 focused hint, glyph, retained hover/input, glow/settings and RCC checks pass;
+resource freshness verifies182 current assets. Operator visual acceptance remains open.
