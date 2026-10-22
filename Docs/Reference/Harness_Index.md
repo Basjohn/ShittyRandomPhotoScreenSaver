@@ -443,7 +443,8 @@ center/edge placement. It isolates silhouette conventions, not the identity of a
 
 The world probe freezes one real snapshot, then renders twelve yaw views plus tilt/zoom/pan interventions through
 the production host. It retains the exact world bubble/wake/cluster records, settings, clip/source hashes and native
-PNGs/contact sheet. Global count and conservative ordinary-frustum candidates are distinct; those estimates do
+PNGs/contact sheet. Per-view estimates use the production physical eye, authored lens/pan/offset/light-mode bound
+and sphere/side-plane margins; metadata records the resolved eye and lens tangents. Global count and conservative ordinary-frustum candidates are distinct; those estimates do
 not count visible pixels, fused surfaces or procedural populations. No simulation advances between views, so this
 does not validate Auto Rotate, temporal continuity or musical timing. Cold compilation and camera changes also
 make its GPU query values unsuitable as a controlled product benchmark. Use fresh output directories.

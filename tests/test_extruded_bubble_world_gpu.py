@@ -80,7 +80,20 @@ def sphere_pixels(qt_app):
 
 @pytest.mark.qt
 def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels):
-    for centre in ((0.,0.,-6.),(-4.,-2.4,-6.)):
+    from rendering.gl_programs.extruded_bubble_scene import camera
+
+    tan = camera(0., 0., 480 / 320)[2]
+    # The former (-4,-2.4,-6) fixture was clipped on two edges at 45 degrees:
+    # a visible ellipse fragment cannot satisfy a whole-ellipse covariance oracle.
+    for centre in ((0.,0.,-6.),(-2.8,-1.6,-6.),(2.8,1.6,-6.)):
+        radius = .6
+        depth = -centre[2]
+        denominator = depth * depth - radius * radius
+        for axis, half_angle in enumerate(tan):
+            root = math.sqrt(centre[axis] ** 2 + denominator)
+            bounds = [(centre[axis] * depth + side * radius * root) /
+                      (denominator * half_angle) for side in (-1., 1.)]
+            assert -0.95 < bounds[0] < bounds[1] < 0.95, "whole silhouette must fit"
         ratios=[]
         for kind in ('ordinary','cluster'):
             _,coverage=sphere_pixels(kind,centre)
