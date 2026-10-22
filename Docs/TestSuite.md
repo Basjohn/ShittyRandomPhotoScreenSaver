@@ -133,6 +133,12 @@ runtime Settings exposure into test setup.
 
 
 **Extruded Bubble recovery gates (standalone and native).**
+
+`test_extruded_bubble_exit_authority.py` crosses the logical advance/snapshot seam: Deep BEAM/SCENE
+identities survive above the Surface water plane until their actual exit; all six SCENE world bounds
+and Surface's above-water retirement retain the existing fade. Native projected breach and
+mode-switch cohort continuity remain separate G04/G09 acceptance work.
+
 `& .\.venv\Scripts\python.exe tests\test_extruded_bubble_motion_contract.py` is a dependency-free,
 no-environment-mutation logical gate for: zero spawned synthetic near bubbles, sustained large-bubble
 radius excursions exceeding four equivalent pixels at 1080p, smooth kick onset, and both surface and bead

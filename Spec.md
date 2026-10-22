@@ -315,6 +315,8 @@ Rendering packs them directly; authored global counts never multiply by camera s
 contacts and wake attachment, while nominal size remains independent for mass and modest bead dimensions.
 Ordinary/fused geometry shares projection/depth and the existing near-defocus owner. Lifetime alpha is material
 opacity, including coherent union weights; a pop is a gentle opacity retirement with musical radius independent.
+The water-plane exit applies only to Sunlit Surface. Deep Light retains physical world bounds and,
+for BEAM emission, its authored End; an invisible Surface ceiling must not retire Deep identities.
 
 EB large bodies breathe significantly downward in softer passages and carry sustained body specifically during
 sustained loud passages. Ordinary small size follows changing vocal/high body rather than a bass/transient-held

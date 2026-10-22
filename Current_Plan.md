@@ -120,12 +120,14 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 
 - [ ] **G00 strict Settings/lifecycle** (EB-L/S): find the actual retained Python owner edge on failure. **Must see** owners retired and the real Settings transition completes repeatedly at the existing barrier; never extend/bypass the barrier.
 - [ ] **G01 lazy Settings/persistence** (EB-S): exercise every bucket and physical editor with real native Qt. **Must see** single build/hydration, no callback exceptions, values/Custom/presets intact after reopening.
+  - [~] Native lazy-bucket/control tests pass on this Windows tree, including unopened-value hydration, cross-bucket conditions, every bucket, Aim, Deep ray source and emission choice. **Awaiting Validation:** repeated actual Settings reopen/Custom/save/reset, partial-build exception cleanup and visual/editor interaction; this is not G00 retirement evidence. Use a fresh workspace `--basetemp` with the no-env fixture if sandbox temp admission fails.
 - [ ] **G02 256-vs-512 source-to-pixel temporal evidence** (EB-F/D): same recording and visual conditions for 2D/EB, with per-ID radius and logical/presentation timestamps. **Must see** where judder first enters; no smoothing/cadence guess counted as proof.
 
 #### P1 | Physical geometry and camera/lighting source-of-truth
 
 - [ ] **G03 camera world-to-pixel parity** (EB-B): project the same fixed 3D targets into real frames during orbit, flight, zoom, pan, Aim and reset. **Must see** correct eye/world position, perspective/parallax and unchanged FOV under movement.
 - [ ] **G04 visible surface and bubble breach** (EB-B; R37/R42/R43): synchronized XYZ/radius/alpha/cause vs *rendered* ceiling at many camera angles. **Must see** no early invisible exit; controlled near-surface fade; no fake ceiling or world-boundary surprise.
+  - [~] **Deep exit authority — Awaiting Validation:** the water-plane outside check is now Surface-only; Deep BEAM/SCENE retain physical world bounds and BEAM's authored End. Verify a stable Deep identity above Y=9 against native pixels, then its real exit/fade, including upward/lateral/oblique tracks. This source repair does not establish the cause of the operator's apparent early Surface disappearance or resolve mode-switch cohort policy (G07/G09).
 - [ ] **G05 Light/Ray/Camera source authority** (EB-B/C; R34/R41): move one light or ray node at a time. **Must see** Deep Light visible emitter/glint/shaft origin coincide; Surface light direction and finite shaft path explicitly distinguished.
 - [ ] **G06 all-angle physical rays** (EB-C; Investigation §38): hold lighting constant, look up/down/side near surface. **Must see** genuinely descending shafts through the same physical region; angular fan and look-toward-light gain may NOT hide/reverse a real down-view volume.
 
