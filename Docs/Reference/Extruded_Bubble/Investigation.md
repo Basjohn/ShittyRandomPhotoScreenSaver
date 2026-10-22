@@ -2556,3 +2556,22 @@ A further settled47s→pause60s P1/P7 A/B (`idle.py`, `idle_receipt.json`) check
 from active views. Main-agent visual inspection preserves the accepted P1 quiet rings/dust; mean RGB change is
 0.77/255 for P1 and0.061/255 for P7, attributable to the narrower ray field. This is scoped preservation of the
 shown quiet look, not transferred operator acceptance of complete lighting or P7.
+
+## 59. World-field replacement pilot and next constraints (2026-10-23)
+
+`Evidence/2026-10-23_world_field_pilot/` changes only the Surface fan-share uniform to0 on frozen current P1,
+keeping the landed cone and all world actors. Main-agent native inspection rejects this as a complete replacement:
+existing march alone loses much of the readable authored shaft structure. Authored shaft mean drops0.08295→0.03746;
+side/away rise0.00953→0.02001 and0.00383→0.01246. It demonstrates the current fan's view bias, not accepted art.
+Two draws/view provide no performance conclusion. Product source remains unchanged by this pilot.
+
+The independent reused Medium audit supports one source-anchored world density within the existing40 samples.
+Surface needs projection perpendicular to authoritative refracted sun; Deep must derive projection from effective
+Ray Source→End. Renderer currently overwrites Deep sun_below from eye→Source for other consumers; do not use that
+vector for world density or globally change it without their audit. A Light-Type-only discriminator must remain
+independent of strength. Share cone widening exactly. Current pattern has FOUR noise calls (including flicker),
+so preserve a bounded evaluated pattern instead of adding both old fan and old march noise at every sample.
+At p=eye+ray*s, accumulate sum(weight*s) alongside sum(weight); reconstruct the identical weighted centroid from
+one scalar moment. Skip proxy attenuation for zero mass. A centroid between separated lit lobes need not itself
+be lit: this remains selective four-proxy attenuation, not integrated volumetric shadowing. Surface's old dominant
+fan calibration and Deep's artificial shaft-height decay also require explicit treatment and native art/cost checks.

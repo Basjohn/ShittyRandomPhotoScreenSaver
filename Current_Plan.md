@@ -243,6 +243,12 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
     reach-driven widening and inward softness; axial fades remain, coincident effective paths emit nothing.
     Frozen P1/P7 four-view captures retain readable art but do not close the angular fan/two-depth sampling,
     positional falloff or full light-field repairs. Evidence/limits: `Investigation.md` §58.
+  - [ ] **Next world-field slice:** replace the camera-derived fan/two-depth gate with one world density in
+    the existing march. Preserve P1's shaft structure: simply setting fan share0 is a visually weaker pilot,
+    not a repair. Surface uses refracted-sun parallel projection; Deep uses effective Source→End, independent
+    of the eye-derived shared sun vector. Use a mode-only discriminator, shared cone law and bounded noise work.
+    Accumulate one scalar weighted sample distance for selective proxy attenuation; retain approximation limits.
+    Pilot and design constraints: `Investigation.md` §59. Then resolve common Deep attenuation before preset tuning.
   - [ ] **Lab physical-uniform debt:** before using frozen-art lab output as a current physical-light reference,
     migrate its manual common upload to admitted physical Light/Ray Source/End. It currently omits those uniforms;
     shared shader bytes alone do not establish current lab/product parity. Use the production-host producers meanwhile.
