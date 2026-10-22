@@ -2473,3 +2473,34 @@ were preserved immediately after the native run (explicitly marked post-capture 
 native producer receipts separately retain simulation/scene/renderer hashes. More physical admissions mean more
 real contact/fragment work: G32 warmed cost remains open. This is not performance-neutral merely because no pass
 or draw-clock was added. Operator presets and goal-image renames stay untouched.
+
+## 57. Idle particle display radius and authored energy (2026-10-23)
+
+The quarter-radius idle consumer also squared the contracted radius in the subpixel energy numerator.
+For points already below the existing raster floor, coverage stayed unchanged while colour lost93.75%.
+The shared production vertex now contracts only displayed radius; authored radius owns energy with the same
+unit cap. Resolved points still shrink, fully subpixel points retain their authored light, and idle emission
+remains zero. Generated SCENE entry/wall/exit fades explicitly use contracted radius to preserve their former
+physical widths. Light proxies and the frozen-art lab explicitly use share1. No settings/preset/population,
+simulation state, pass, clock or timer is added. The shader gains one scalar uniform and vertex multiply;
+whole-scene cost neutrality is not measured by this slice.
+
+The reused Medium agent supplied production-vertex/fragment native HDR regressions. The process-local negative
+control restores contracted energy and fails with exactly1/16 retained colour. Root review runs47 connected
+renderer, vertex, procedural population, shader and fade checks; the final fade counterfactual adds3 passing
+checks proving contracted-radius Source/wall/exit parity. Fully active vertex colour/emission is bitwise equal
+to an independently compiled uncontracted reference; zero authored radius/amount remain invisible and floor
+crossing follows the continuous Gaussian law. Fragment-only tests could not detect this defect.
+
+`Evidence/2026-10-23_idle_particle_energy/` retains the producer, exact current P1/P7 resolved settings, hashes,
+94 frames per case over recorded47s→pause60s→resume4s, motion/contact sheets and isolated layers. A uniform-only
+counterfactual restores former behaviour on identical frozen state: contracted authored size plus display share1.
+P1 idle specks above3-channel-delta increase2882→4282 pixels; ordinary rings remain exactly8067. P7 specks
+increase98745→111901, ordinary39334. Zero-particle and settled free-chain layers remain background-identical.
+P1 active full composition is byte-identical; P7 differs in four pixels by one channel step each between repeated
+full draws, so full-scene bitwise parity is not claimed there. Production vertex share1 is independently exact.
+These are native offscreen production renders, not mixed-DPI compositor/physical audiovisual acceptance.
+
+Operator explicitly accepts the shown P1 idle appearance: "That P1 Idle looks good actually." This is the scoped
+visual milestone; it does not accept long lifecycle, all-angle density, every P1 defect or other preset fidelity.
+P7 and the remaining presets still require substantial changes against their individual renamed targets.

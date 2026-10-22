@@ -298,10 +298,12 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
         proxies=next(v for v in recorded if v.get('uRowMajor')==1)
         samples.append((chains,specks))
         assert proxies['uParticleActivity']==1.
+        assert proxies['uParticleRadiusShare']==1.
     assert samples[0][0]['uChainFill']==samples[-1][0]['uChainFill']>0
     assert [c['uChainActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
     assert [s['uParticleActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
-    assert 0 < samples[0][1]['uSpeckSize'] < .5*samples[-1][1]['uSpeckSize']
+    assert [s['uParticleRadiusShare'] for c,s in samples] == pytest.approx((.25,.625,1.,1.))
+    assert len({s['uSpeckSize'] for c,s in samples})==1  # authored energy is separate from display contraction
     assert len({s['uSpecks'] for c,s in samples})==1  # opacity/size do not remap density
 
 
@@ -464,7 +466,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
                                   label="no-size test")
         gl.glUseProgram(program)
         for name, value in (("uFocus", 10.0), ("uAperture", 0.0), ("uCrisp", 0.0), ("uNearLayer", 0.0),
-                            ("uPixel", 2.0 * tan[1] / height), ("uSpecks", 1.0)):
+                            ("uPixel", 2.0 * tan[1] / height), ("uSpecks", 1.0), ("uParticleRadiusShare", 1.0)):
             location = gl.glGetUniformLocation(program, name)
             if location >= 0:
                 gl.glUniform1f(location, value)

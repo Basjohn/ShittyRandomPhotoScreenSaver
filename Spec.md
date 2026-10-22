@@ -319,7 +319,9 @@ and fade back in with musical activity; a stalled visible chain is not an accept
 Small free-chain bubbles need only modest musical size contraction; their idle disappearance uses opacity.
 Ordinary size reaction resolves quiet contraction independently of loud expansion, with distinct large/small
 rest calibrations. Particle Amount controls squared density at constant per-point radiance; existing logical
-activity separately releases particle radius and glow. Zero authored amount still draws no particles.
+activity separately releases displayed particle radius and glow. Subpixel energy retains the authored radius
+when display contraction reaches the existing raster floor; SCENE physical fades still use the contracted radius.
+Zero authored amount still draws no particles.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;

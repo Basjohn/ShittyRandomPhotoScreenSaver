@@ -1162,3 +1162,12 @@ retained QML over a frozen EB background; they cannot accept live EB scene/idle 
 
 Root connected validation:45 focused hint, glyph, retained hover/input, glow/settings and RCC checks pass;
 resource freshness verifies182 current assets. Operator visual acceptance remains open.
+
+### EB idle particle energy at the raster floor
+
+`test_extruded_bubble_particle_idle_gpu.py` now exercises production vertex AND fragment stages into HDR MRTs:
+subpixel colour retention/no idle glow, resolved contraction, zero radius, exact active reference and continuous
+floor crossing. The contracted-energy negative control loses15/16 light and fails. Connected renderer/procedural/
+shader/fade checks:47 pass; final fade counterfactual:3 pass. Source/wall/exit comparisons preserve contracted
+physical fade widths after authored energy is separated. Native P1/P7 evidence and scoped P1 visual acceptance
+live in `Docs/Reference/Extruded_Bubble/Investigation.md` §57; other-preset and long physical lifecycle gates remain.

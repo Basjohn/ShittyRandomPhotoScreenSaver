@@ -2,7 +2,11 @@
 
 **NEW 22 October independent code audit:** [Additional source-audit findings and falsifiers](Additional_Source_Audit_2026-10-22.md). Verified code behavior includes quiet/high Breathing handle coupling, Deep/SCENE water-plane EOL leakage, SCENE→BEAM cohort premature End retirement, GPU speck photometric masking, stacked quiet range compression and disabled-ray intermediate render work. These are **not visually accepted fixes**. See the single live `Current_Plan.md` §4B G00–G33 gates and [Acceptance Runbook](Acceptance_Runbook.md); retain every existing issue.
 
-**This is the one home for EB images and investigation details.** Latest live rejection: activation overshoot/
+**Latest review (23 October):** P1 is generally good and its latest shown idle capture is operator-accepted
+([Investigation §57](Investigation.md#57-idle-particle-display-radius-and-authored-energy-2026-10-23)).
+Long lifecycle, remaining specific P1 defects and substantial P7/other-preset fidelity changes stay open.
+
+**This is the one home for EB images and investigation details.** Earlier live rejection: activation overshoot/
 yank-down, large/small size judder, unreliable close DoF/pixelation, and about 50% excessive active speck glow.
 Spherical form and readable overlap depth take priority over glow tuning. Details and solution plans:
 [Investigation §19](Investigation.md#19-latest-live-rejection--overshoot-judder-and-near-field-pixels). Reproducible startup/ramp attribution and unresolved DoF/lighting boundaries:
@@ -12,10 +16,10 @@ other-lane driver audit are in [Investigation §21](Investigation.md#21-camera-p
 The latest **unaccepted Settings-size, source-ramp and centred-camera implementation candidates**
 are documented in [Investigation §22](Investigation.md#22-2026-10-20-superseding-implementation-candidates-never-visual-acceptance).
 A Qt-free [projection/near gate probe](../../../tools/visualizer_replay/extruded_bubble_projection_gate_probe.py)
-is numerical attribution only. No camera, material, judder or reaction failure is visually accepted.
+is numerical attribution only. Earlier camera, material, judder and reaction failures are not closed by the scoped P1 idle review.
 Live tasks remain in
 [`Current_Plan.md`](../../../Current_Plan.md#4b-extruded-bubble--operator-rejected-behavior-every-acceptance-gate-remains-open).
-The native results remain visually rejected. A physical world and passing checks do not establish spherical
+Earlier rejected native results remain in the ledger; the scoped P1 idle review above supersedes only its shown appearance. A physical world and passing checks do not establish spherical
 glass, depth, musical response or parity with these targets.
 
 ## Slim GODZIP resource boundary (current handoff)
