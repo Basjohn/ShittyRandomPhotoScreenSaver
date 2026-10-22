@@ -371,6 +371,48 @@ void main() {
 }
 """
 
+EB_LENS_GLSL = """
+// Render-only proximity protection. Physical radii, identities and motion stay logical-owned.
+vec2 ebLensAxis(float coordinate, float depth, float radius, float tangent) {
+    float distance_ = length(vec2(coordinate, depth));
+    if (distance_ <= radius) return vec2(-1.0, 1.0);
+    float middle = atan(coordinate, depth);
+    float halfAngle = asin(clamp(radius / distance_, 0.0, 1.0));
+    float sensor = atan(tangent);
+    return tan(clamp(vec2(middle - halfAngle, middle + halfAngle), -sensor, sensor)) / tangent;
+}
+vec2 ebLens(vec4 sphere, mat4 projection, vec2 frameSize, float focus,
+            float aperture, float circleScale, float maxCircle) {
+    float depth = -sphere.z;
+    if (sphere.w <= 0.0 || depth + sphere.w <= 0.05) return vec2(0.0);
+    vec2 lower = vec2(-1.0), upper = vec2(1.0);
+    if (depth > sphere.w * 1.00001) {
+        float denominator = depth * depth - sphere.w * sphere.w;
+        vec2 root = sqrt(sphere.xy * sphere.xy + denominator);
+        vec2 lens = vec2(projection[0][0], projection[1][1]);
+        lower = (sphere.xy * depth - sphere.w * root) / denominator * lens;
+        upper = (sphere.xy * depth + sphere.w * root) / denominator * lens;
+    } else {
+        // A near-plane crossing need not fill the view: retain finite, continuous
+        // sensor-clipped angular bounds for an eye-outside, off-axis shell.
+        vec2 x = ebLensAxis(sphere.x, depth, sphere.w, 1.0 / projection[0][0]);
+        vec2 y = ebLensAxis(sphere.y, depth, sphere.w, 1.0 / projection[1][1]);
+        lower = vec2(x.x, y.x);
+        upper = vec2(x.y, y.y);
+    }
+    // Sensor-clipped projected extent: an offscreen giant grazing one corner
+    // must not be mistaken for a sphere filling the viewport.
+    vec2 extent = max(vec2(0.0), clamp(upper, -1.0, 1.0) - clamp(lower, -1.0, 1.0))
+                  * 0.5 * frameSize;
+    float share = sqrt(extent.x * extent.y) / max(min(frameSize.x, frameSize.y), 1.0);
+    float wide = smoothstep(0.30, 0.52, share);
+    float circle = max(sceneNearCircle(depth - sphere.w, focus, aperture, circleScale),
+                       maxCircle * wide);
+    float opacity = 1.0 - smoothstep(0.78, 1.0, share);
+    return vec2(min(circle, maxCircle), opacity);
+}
+"""
+
 BUBBLE_VERTEX = """#version 460 core
 layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
@@ -384,12 +426,15 @@ uniform float uPixel;
 uniform float uCrisp;
 uniform float uNearLayer;      // 1: drawing front-of-focus ordinary shells through shared defocus
 uniform float uNearCoc;        // near lens circle scale, shared by both passes
+uniform float uNearMax;        // existing defocus compositor budget in framebuffer pixels
+uniform vec2 uFrameSize;
 out vec2 vCorner;
 flat out vec4 vSphere;
 flat out float vBlur;
 flat out vec3 vExtra;    // seed, kind, true radius / drawn radius
 flat out float vOpacity;   // procedural chain lifetime and population fades; 1 for all other shells
-""" + SCENE3D_SPHERES_GLSL + """
+flat out float vLensCircle;
+""" + SCENE3D_SPHERES_GLSL + EB_LENS_GLSL + """
 void main() {
     vOpacity = aOpacity;
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
@@ -403,8 +448,12 @@ void main() {
     blur = max(blur, uPixel * depth * mix(0.7, 0.2, uCrisp));
     // Ordinary large bubbles are routed exclusively through ONE layer. Their actual front surface, not
     // their identity or a camera-attached fake, decides whether near-focus bokeh is warranted.
-    float frontDepth = depth - aSphere.w;
-    float coc = sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc);
+    vec2 lens = ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize,
+                      uFocus, uAperture, uNearCoc, uNearMax);
+    float coc = lens.x;
+    vLensCircle = coc;
+    if (aExtra.y < 0.5) vOpacity *= lens.y;
+    if (vOpacity <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     bool near_ = aExtra.y < 0.5 && coc > 1.5;
     if (near_) blur = uPixel * depth * 0.5;                  // sharp in its layer; the lens blurs it
     if (near_ != (uNearLayer > 0.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -625,6 +674,9 @@ flat in vec4 vSphere;
 flat in float vBlur;
 flat in vec3 vExtra;
 flat in float vOpacity;
+#ifdef NEAR_LAYER
+flat in float vLensCircle;
+#endif
 void main() {
     vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
     vec3 ray = normalize(vec3(ndc * uTan, -1.0));
@@ -684,9 +736,7 @@ void main() {
     float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck) * vOpacity;
 #ifdef NEAR_LAYER
     // The circle this bubble's light spreads over at the lens, in pixels: grows as it nears the camera.
-    float frontDepth = -vSphere.z - vSphere.w;
-    float coc = sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc);
-    sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, coc);
+    sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, vLensCircle);
 #else
     sceneTransparent(shaded.rgb * alpha, alpha, -front.z);
     vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6 * smoothstep(3.0, 10.0, pixels) * (1.0 - soft * 0.8);
@@ -712,13 +762,15 @@ uniform float uFocus;
 uniform float uAperture;
 uniform float uNearLayer;
 uniform float uNearCoc;
+uniform float uNearMax;
+uniform vec2 uFrameSize;
 out vec3 vView;
 flat out vec4 vSpheres[3];
 flat out vec4 vBound;
 flat out vec4 vInfo;
 flat out vec3 vAlphas;
-flat out float vFrontDepth;
-""" + SCENE3D_SPHERES_GLSL + """
+flat out vec3 vLensCircles;
+""" + SCENE3D_SPHERES_GLSL + EB_LENS_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec4 world[3] = vec4[3](aS0, aS1, aS2);
@@ -727,18 +779,25 @@ void main() {
     for (int i = 0; i < 3; ++i) if (i < count) centre += world[i].xyz;
     centre /= float(count);
     float bound = 0.0;
-    vFrontDepth = 1e30;
+    vAlphas = aAlphas;
+    vLensCircles = vec3(0.0);
+    float coc = 0.0;
     for (int i = 0; i < 3; ++i) {
         vSpheres[i] = vec4(uWorldToView * (world[i].xyz - uEye), world[i].w);
         if (i < count) {
             bound = max(bound, distance(centre, world[i].xyz) + world[i].w);
-            vFrontDepth = min(vFrontDepth, -vSpheres[i].z - vSpheres[i].w);
+            vec2 lens = ebLens(vSpheres[i], uProjection, uFrameSize,
+                              uFocus, uAperture, uNearCoc, uNearMax);
+            vAlphas[i] *= lens.y;
+            vLensCircles[i] = lens.x;
+            if (vAlphas[i] > 0.0) coc = max(coc, lens.x);
         }
     }
     vBound = vec4(uWorldToView * (centre - uEye), bound + aInfo.y);
     vInfo = aInfo;
-    vAlphas = aAlphas;
-    float coc = sceneNearCircle(vFrontDepth, uFocus, uAperture, uNearCoc);
+    if (max(vAlphas.x, max(vAlphas.y, vAlphas.z)) <= 0.0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return;
+    }
     if ((coc > 1.5) != (uNearLayer > 0.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     vView = sceneSphereCorner(vBound.xyz, vBound.w, 0.0, corner);
     gl_Position = sceneSphereClipCorner(vBound.xyz, vBound.w, corner, uProjection);
@@ -751,7 +810,7 @@ flat in vec4 vSpheres[3];
 flat in vec4 vBound;
 flat in vec4 vInfo;
 flat in vec3 vAlphas;
-flat in float vFrontDepth;
+flat in vec3 vLensCircles;
 void main() {
     vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
     vec3 ray = normalize(vec3(ndc * uTan, -1.0));
@@ -792,18 +851,19 @@ void main() {
     // The same smooth-min weights as the union surface, not the first member's alpha.
     float distance_ = length(point - s[0].xyz) - s[0].w;
     float opacity = vAlphas[0];
+    float circle = vLensCircles[0];
     for (int i = 1; i < 3; ++i) {
         if (i >= int(vInfo.x)) break;
         float nextDistance = length(point - s[i].xyz) - s[i].w;
         float weight = vInfo.y > 0.0 ? clamp(0.5 + 0.5 * (nextDistance - distance_) / vInfo.y, 0.0, 1.0)
                                     : (distance_ < nextDistance ? 1.0 : 0.0);
         opacity = mix(vAlphas[i], opacity, weight);
+        circle = mix(vLensCircles[i], circle, weight);
         distance_ = sceneSmoothMin(distance_, nextDistance, vInfo.y);
     }
     float alpha = shaded.a * coverage * opacity;
 #ifdef NEAR_LAYER
-    float coc = sceneNearCircle(vFrontDepth, uFocus, uAperture, uNearCoc);
-    sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, coc);
+    sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, circle);
 #else
     sceneTransparent(shaded.rgb * alpha, alpha, -point.z);
     vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6;

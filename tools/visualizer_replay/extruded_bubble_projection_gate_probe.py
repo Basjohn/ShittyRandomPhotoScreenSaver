@@ -5,7 +5,8 @@
     py -3.14 tools/visualizer_replay/extruded_bubble_projection_gate_probe.py --json
 
 Mirrors the declared pinhole projection, tangent-cone silhouette and sceneNearCircle
-primitive; checks their source signatures before reporting. It does NOT render the full
+primitive's authored focus component; footprint protection can supersede this scalar
+gate and is tested natively. Checks source signatures before reporting. It does NOT render the full
 scene, establish cause of a particular live judder, or accept any visual behavior.
 """
 from __future__ import annotations
@@ -59,13 +60,14 @@ def check_owners():
     shaders = (ROOT / "rendering/gl_programs/extruded_bubble_program.py").read_text(encoding="utf-8")
     renderer = (ROOT / "rendering/quick/visualizer/implementations/extruded_bubble.py").read_text(encoding="utf-8")
     assert "FOV_Y_DEGREES = 45.0" in scene
-    assert 'fov_y_degrees=fov_y)' in renderer
+    assert 'fov_y_degrees=fov_y, surface_bound=' in renderer
     assert 'physical_camera(' in renderer
     assert 'camera_look_pan(' not in renderer
     assert 'uEye' in shaders and 'aSphere.xyz - uEye' in shaders
     assert 'shift = (0.0, 0.0)' in renderer
     assert "float sceneNearCircle(float frontDepth, float focus, float aperture, float pixelScale)" in spheres
-    assert "float coc = sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc);" in shaders
+    assert "sceneNearCircle(depth - sphere.w, focus, aperture, circleScale)" in shaders
+    assert "ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize," in shaders
     assert "bool near_ = aExtra.y < 0.5 && coc > 1.5;" in shaders
     assert "(coc > 1.5) != (uNearLayer > 0.5)" in shaders  # clusters too
     assert '"uNearCoc": 22.0 * height / 941.0' in renderer
@@ -99,12 +101,12 @@ def inspect():
         depth = critical + 1.0
         states = [{"physical_radius": round(r, 3),
                    "circle_px": round(near_circle(depth-r, focus, aperture, scale), 4),
-                   "near_layer": near_circle(depth-r, focus, aperture, scale) > 1.5}
+                   "focus_component_above_gate": near_circle(depth-r, focus, aperture, scale) > 1.5}
                   for r in (0.98, 1.0, 1.02)]
         gates[f'P{slot}'] = {"focus": round(focus, 4), "aperture": round(aperture, 4),
                             "critical_front_depth": round(critical, 5),
                             "held_centre_depth": round(depth, 5), "states": states}
-    return {"claim_scope": "analytic owner-checked geometry; not native full-GL frame or observed judder causation",
+    return {"claim_scope": "analytic geometry and focus component only; footprint protection can supersede this gate; not native pixels or judder causation",
             "projection": projection, "fov_comparison": fov_comparison, "near_layer_gate": gates}
 
 
@@ -127,7 +129,7 @@ def main():
                   f" focus {item['focus']:.3f}, aperture {item['aperture']:.3f}")
             for state in item['states']:
                 print(f"  radius {state['physical_radius']:.2f} -> CoC {state['circle_px']:.4f} px"
-                      f" -> {'defocus' if state['near_layer'] else 'normal'} pass")
+                      f" -> focus component {'above' if state['focus_component_above_gate'] else 'below'} gate (footprint may override)")
     return 0
 
 

@@ -418,7 +418,9 @@ class QuickExtrudedBubbleRenderer:
                 "uPixelSize": pixel, "uFrameSize": (float(width), float(height)), "uSunScreen": sun_screen,
                 "uProbeLevels": float(probe.levels), "uLensShift": shift}
         for key, near in (("shells", False), ("clusters", False), ("near", True), ("near_clusters", True), ("beads", False)):
-            self._uniforms.set(programs[key], {**view, **_glass(knobs, near), "uNearCoc": 22.0 * height / 941.0})
+            self._uniforms.set(programs[key], {**view, **_glass(knobs, near),
+                                             "uNearCoc": 22.0 * height / 941.0,
+                                             "uNearMax": _near_spread(height)})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
         fizz_per = math.ceil(fizz_fill)

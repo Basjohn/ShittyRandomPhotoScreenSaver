@@ -319,6 +319,11 @@ The water-plane exit applies only to Sunlit Surface. Deep Light retains physical
 for BEAM emission, its authored End; an invisible Surface ceiling must not retire Deep identities.
 Existing Light Strength also owns the analytic emitter radiance reflected and transmitted by glass;
 independent environmental fill is not removed when that emitter strength is zero.
+Near-lens ordinary and fused shells have render-only footprint protection: around half the viewport
+they require strong defocus even at low aperture; near-full-viewport/extreme proximity must gently
+fade/cull rather than become a sharp screen-filling wall. Sensor-clipped extent and per-member union
+handling preserve off-axis slivers and smaller neighbours. The physical identities, radii, contacts,
+motion and wake ownership continue independently of this temporary presentation opacity.
 
 EB large bodies breathe significantly downward in softer passages and carry sustained body specifically during
 sustained loud passages. Ordinary small size follows changing vocal/high body rather than a bass/transient-held

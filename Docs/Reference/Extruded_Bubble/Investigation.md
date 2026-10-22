@@ -1959,3 +1959,11 @@ Only the analytic highlight consumer changes from its former strength-independen
 authored 0.12 strength. Native isolated reflected/transmitted tests establish proportional intensity;
 this full-frame still does not accept P7 art or the remaining lighting geometry. Cold first draws
 make the recorded GPU times unsuitable as a before/after performance comparison.
+
+**Near-lens diagnostic A/B:** `Evidence/2026-10-22_near_lens` preserves the producer, baseline
+shader revision and hashes, and native ordinary/fused diagnostic images at 25/50/85/102% of
+viewport short-side diameter. At zero aperture the former shader stays sharp through full-frame
+coverage; the candidate visibly blurs at half size and fades/culls at extreme size. This is a
+controlled white-silhouette/defocus comparison, not real-music or authored-glass acceptance.
+Native off-axis crossing and sparse-union regressions guard against hiding valid grazing geometry;
+logical populations are unchanged. The existing P1/P7 visual and cost gates remain open.

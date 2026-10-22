@@ -150,6 +150,11 @@ over unchanged ambient; near-pass appearance, proxy direction/intensity and full
 `test_scene3d_defocus.py` includes the 5–10 px circle transition under a 54 px budget, preserving
 the existing energy tolerance, small-circle centroid and lattice-strip checks. The fine/wide split
 must not send unresolved intermediate circles exclusively to the wide mip gather.
+The native world-GPU gate additionally checks half-viewport defocus through the actual shared
+compositor at zero aperture, smooth near-full-viewport opacity/culling, eye-inside suppression,
+off-axis near-plane continuity, sparse-union survival and wide/tall/scaled framebuffer admission.
+The operator's near-lens clarification supersedes the old expectation that an eye-inside shell
+remain drawn across the whole viewport. Actual refractive appearance/motion and GPU cost remain G11/G32.
 
 `& .\.venv\Scripts\python.exe tests\test_extruded_bubble_motion_contract.py` is a dependency-free,
 no-environment-mutation logical gate for: zero spawned synthetic near bubbles, sustained large-bubble

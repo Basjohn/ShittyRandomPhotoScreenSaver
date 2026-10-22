@@ -17,6 +17,7 @@ from tools.transition_contact_sheet import TransitionCapture
 from rendering.quick.render.gl_resources import compile_program
 from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT
 from rendering.gl_programs.extruded_bubble_scene import camera
+from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',type=Path,required=True)
@@ -59,7 +60,7 @@ try:
         gl.glUseProgram(program)
         loc=lambda name:gl.glGetUniformLocation(program,name)
         for name,val in [('uDiag',5),('uProbe',2),('uBackground',0),('uEnvironment',0)]:gl.glUniform1i(loc(name),val)
-        for name,val in [('uPixel',2*math.tan(math.radians(31))/H),('uPixelSize',2*math.tan(math.radians(31))/H),('uFocus',0),('uAperture',0),('uCrisp',1),('uNearLayer',0),('uNearCoc',0),('uProbeLevels',1),('uBehind',8),('uLens',1),('uShell',.03),('uFrameShare',1)]:gl.glUniform1f(loc(name),val)
+        for name,val in [('uPixel',2*tan[1]/H),('uPixelSize',2*tan[1]/H),('uFocus',0),('uAperture',0),('uCrisp',1),('uNearLayer',0),('uNearCoc',0),('uNearMax',_near_spread(H)),('uProbeLevels',1),('uBehind',8),('uLens',1),('uShell',.03),('uFrameShare',1)]:gl.glUniform1f(loc(name),val)
         gl.glUniform3f(loc('uIors'),1.15,2,1)
         gl.glUniform2f(loc('uTan'),*tan)
         gl.glUniform2f(loc('uFrameSize'),W,H);gl.glUniform2f(loc('uTargetSize'),W,H)
@@ -87,11 +88,11 @@ try:
             yy,xx=np.nonzero(coverage>.5)
             eigenvalues=np.linalg.eigvalsh(np.cov(np.vstack((xx,yy)),bias=True))
             ratio=float(np.sqrt(eigenvalues[1]/eigenvalues[0]))
-            expected=math.sqrt(1+(centre[0]**2+centre[1]**2)/(centre[2]**2-radius**2))
+            expected=math.sqrt(1+(centre[0]**2+centre[1]**2)/(centre[2]**2-radius**2)) if placement=='centre' else None
             name=kind+'_'+placement
             image=Image.fromarray(np.flipud((coverage*255).astype('u1')))
             image.save(OUT/(name+'.png'))
-            rows.append(dict(name=name,centre=centre,radius=radius,pixels=len(xx),axis_ratio_covariance=ratio,expected_pinhole_ratio=expected,bounds=[int(xx.min()),int(yy.min()),int(xx.max()),int(yy.max())],gl_error=int(gl.glGetError())))
+            rows.append(dict(name=name,centre=centre,radius=radius,pixels=len(xx),axis_ratio_covariance=ratio,expected_pinhole_ratio=expected,oracle_scope='whole ellipse' if placement=='centre' else 'viewport-clipped fragment; no whole-ellipse oracle',bounds=[int(xx.min()),int(yy.min()),int(xx.max()),int(yy.max())],gl_error=int(gl.glGetError())))
             images.append((name,image))
     sheet=Image.new('RGB',(W*2,H*2+80),'#171717');draw=ImageDraw.Draw(sheet)
     for index,(name,image) in enumerate(images):
