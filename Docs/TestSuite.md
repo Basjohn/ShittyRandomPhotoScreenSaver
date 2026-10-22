@@ -1134,6 +1134,13 @@ py -3.14 -m pytest -q tests/test_extruded_bubble_flight_keyboard_native.py tests
 
 This documents all nine current EB Range consumers. A green source probe neither means the left/right handles correspond literally to silent/full output nor means visual reactivity or lifecycle passed. No full chunked suite requested.
 
+### Extruded Bubble SCENE throughput
+
+SCENE geometry tests compare source-conditioned mean passage against independently sampled physical exit tracks
+for floor/corner/oblique flow, plus exact vertical/horizontal distances. A low-crowding Surface flow protects
+steady occupancy near the authored target with unchanged per-class admission and global caps; the former longest-axis
+consumer fails this production gate. Native all-angle density and actual GPU/contact cost remain separate.
+
 ### Settings hierarchy connector rails
 
 `test_settings_bucket_tree.py` uses native widget geometry/pixels to falsify nested last-child termination,

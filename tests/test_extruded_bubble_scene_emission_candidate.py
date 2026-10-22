@@ -10,7 +10,7 @@ simulation_module()
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_settings import require_mode_settings
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
-    WORLD_CENTER, WORLD_HALF, scene_source_face_weights, upstream_source, scene_track_length,
+    WORLD_CENTER, WORLD_HALF, scene_source_face_weights, upstream_source, scene_track_length, scene_mean_passage,
 )
 from widgets.spotify_visualizer.extruded_bubble_simulation import (
     ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput, MAX_BUBBLES,
@@ -65,6 +65,38 @@ def test_floor_scene_emits_over_whole_physical_floor_and_only_floor():
     assert all(abs(p[1] + WORLD_HALF[1]) < 1e-9 for p in samples)
     assert min(p[0] for p in samples) < -15 and max(p[0] for p in samples) > 15
     assert min(p[2] for p in samples) < -15 and max(p[2] for p in samples) > 15
+
+
+def test_scene_passage_matches_actual_inlet_tracks_instead_of_longest_box_axis():
+    import math
+    import pytest
+    assert scene_mean_passage((0.,1.,0.)) == 16.
+    assert scene_mean_passage((1.,0.,0.)) == 36.
+    for raw,source in (((1.,1.,0.),(0.,-1.,0.)),((1.,1.,1.),(-1.,-1.,-1.)),
+                       ((-.2,1.,.3),(0.,-1.,0.))):
+        direction=tuple(d/math.sqrt(sum(v*v for v in raw)) for d in raw)
+        faces=scene_source_face_weights(source,direction)
+        rng=random.Random(78)
+        tracks=[scene_track_length(upstream_source(rng,direction,faces),direction) for _ in range(12000)]
+        assert scene_mean_passage(direction,faces) == pytest.approx(sum(tracks)/len(tracks),rel=.015)
+
+
+def test_vertical_scene_throughput_can_sustain_authored_occupancy_without_bursts():
+    from statistics import mean
+    controls=ExtrudedBubbleControls(large_count=(0.,0.),mid_count=(40.,40.),
+        stream_path=(0.,-1.,0.,0.,1.,0.),emission_geometry='SCENE',
+        stream_speed=(.25,.25),drift=(0.,0.),sway=0.,collision_scope='off',
+        small_pulse=(0.,0.),small_size=.5,surface_scene=True)
+    sim=ExtrudedBubbleSimulation(73)
+    counts=[];previous=set()
+    for step in range(1800):
+        sim.advance(MusicInput(.1,True,body_bands=(.5,.4,.3)),controls)
+        current={b.ident for b in sim._bubbles}
+        assert len(current)<=40
+        if step:assert len(current-previous)<=1
+        previous=current
+        if step>=600:counts.append(len(current))
+    assert mean(counts)>=.95*40  # low-crowding steady flow stays close to its requested occupancy
 
 
 def test_corner_source_uses_each_physically_adjoining_inflow_face():
