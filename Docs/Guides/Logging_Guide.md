@@ -88,6 +88,37 @@ Existing sidecars remain the first destinations for their domains:
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
 
+### Bounded MC source capture
+
+For an ordinary MC reproduction with normal provider updates, use the existing source
+entry point and explicit CLI admissions:
+
+```powershell
+& '.\.venv\Scripts\python.exe' main_mc.py /s --debug --verbose --perf --usage --handle-attribution --viz --geo --set --life --cache --steam --feeds --frame-trace --gui-stall-stacks --viz-switch-telemetry --exit-after 40
+```
+
+`--exit-after` arms normal terminal shutdown after RUN startup, including closure of an
+active Settings dialog. It does not request Settings or drive an interaction sequence;
+record any separate manual or disposable-driver stimulus with the capture. The source
+MC entry point enables interaction mode; it is not proof of the installed MC binary.
+
+Keep automatic updates enabled for ordinary reproductions: `--noupdates` suppresses
+automatic Gmail/Reddit/Weather retrievals and changes the workload. Omit `--fresh` when
+preserving prior evidence. `--devsteam` and `--abc-drive` alter the UI/workload and belong
+only in captures specifically testing those paths. `--viz-switch-telemetry` admits
+boundary telemetry without activating the A/B/C driver. `--gui-stall-stacks` requires
+`--frame-trace`. Full diagnostic logging is evidence collection, not a performance baseline.
+
+`--handle-attribution` implies `--usage` and captures Windows handle types, with an initial
+sample followed by a 60-second cadence outside Diagnostic. It does **not** capture Python
+strong reference edges. Failure-only `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS*]` capture is
+gated by `is_diagnostic_build()` in `engine/runtime_destruction.py`; no existing MC CLI
+flag enables it. Preserve the requested entry point rather than silently changing flavour.
+
+Archive main, Qt/QML, enabled family logs, binary trace and overlapping rotations after
+normal exit. Without `--fresh`, scope findings to the current session/PID/time boundaries;
+old failures retained in a rotation are not new failures.
+
 `[VIS_ROUTING]` is a bounded main-sequence INFO record emitted once when a `DisplayManager`
 generation attempts to admit the single Visualizer. It records the persisted Visualizer/Media route,
 CUSTOM decision, canonical effective monitor, requested screen, participant/binding-loss
