@@ -914,12 +914,14 @@ layout(location=1) out vec4 Emission;
 in vec2 vCorner;
 flat in vec3 vColour;
 uniform float uSpeckBloom;
+uniform float uParticleActivity; // logical quiet release; light proxies explicitly use 1
 void main() {
     float g = exp(-dot(vCorner, vCorner) * 8.0);
     FragColor = vec4(vColour * g * 2.6, 0.0);
     // The embers' own light also feeds the bloom: a smoky glow exactly where they gather (mock 6), never a separate
     // cloud that misses them.
     vec3 glow = max(vColour * g - 1.0, 0.0) * 0.3 + vColour * g * uSpeckBloom;
+    glow *= uParticleActivity;
     Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
 }
 """
@@ -980,6 +982,7 @@ uniform float uParticleSpread; // free chains and snow only: 1.0 original physic
 uniform int uSceneEmission; // SCENE uses whole upstream faces; BEAM remains identical
 uniform vec3 uSceneFaces;    // physically valid face areas selected by Source
 uniform float uChainFill;       // continuous (possibly fractional) number of visible chains
+uniform float uChainActivity;   // all free chains fade together at rest; never affects attached wakes/snow
 uniform float uSnowFill;        // continuous snow allocation; last mote fades at the boundary
 uniform float uFizzFill;        // continuous allocation per stable wake, before ceil to integer stride
 uniform float uSnowDrift;      // how far snow has drifted along the stream (view units)
@@ -1036,7 +1039,7 @@ void beadInstance() {
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
         float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));
         float lifetimeFade = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.82, 1.0, life));
-        vOpacity = clamp(uChainFill - float(chain), 0.0, 1.0) * lifetimeFade;
+        vOpacity = clamp(uChainFill - float(chain), 0.0, 1.0) * lifetimeFade * uChainActivity;
         float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);

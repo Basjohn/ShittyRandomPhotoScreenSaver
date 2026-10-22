@@ -80,6 +80,18 @@ void main() {
         free=generated(1.,free=True)
         valid=free[:,0]>0
         assert valid.any()
+        activity_location=gl.glGetUniformLocation(program,'uChainActivity')
+        assert activity_location >= 0
+        gl.glUniform1f(activity_location,1.)
+        free=generated(1.,free=True)
+        for activity in (0.,.25,1.):
+            gl.glUniform1f(activity_location,activity)
+            rows=generated(1.,free=True)
+            assert np.array_equal(rows[:,[0,1,3]],free[:,[0,1,3]])
+            assert rows[:,2] == pytest.approx(free[:,2]*activity)
+            # An invisible free-chain envelope must not remove attached wakes.
+            assert np.array_equal(generated(1.),nominal)
+        gl.glUniform1f(activity_location,1.)
         for amount in (.9,1.1):
             ratio=generated(1.,amount=amount,free=True)[valid,0]/free[valid,0]
             assert np.all((ratio>=.89999)&(ratio<=1.10001))

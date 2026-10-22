@@ -134,6 +134,13 @@ runtime Settings exposure into test setup.
 
 **Extruded Bubble recovery gates (standalone and native).**
 
+`test_extruded_bubble_particle_idle_gpu.py` reads production colour/emission attachments: idle retains
+particle colour while both intrinsic and authored glow vanish. The bead generator test holds world seeds
+fixed while free-chain opacity releases, protecting attached wakes. Renderer integration checks activity,
+size and proxy parity without remapping count ranges. Logical idle tests retain the particle quiet endpoint,
+zero amounts and five simulated minutes of constant-radius Source births, Surface breach/Deep End and exits.
+Native P1/P7 captures are required for visible ordinary coverage; positive logical residency is insufficient.
+
 `test_extruded_bubble_exit_authority.py` crosses the logical advance/snapshot seam: Deep BEAM/SCENE
 identities survive above the Surface water plane until their actual exit; all six SCENE world bounds
 and Surface's above-water retirement retain the existing fade. Native projected breach and

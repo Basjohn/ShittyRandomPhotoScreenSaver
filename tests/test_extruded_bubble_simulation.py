@@ -370,13 +370,51 @@ def test_drift_and_emission_follow_music_then_settle_without_an_idle_size_oscill
     simulation = ExtrudedBubbleSimulation(4)
     quiet = _run(simulation, controls, 5.0, intensity=0.0)
     loud = _run(simulation, controls, 6.0, intensity=1.0)
-    assert loud.drift > quiet.drift + 0.5 and loud.emission > quiet.emission + 0.6
-    for _ in range(720):
+    # Idle emission now retains its authored .1 endpoint rather than the former
+    # motion-attenuated .025; the active response must still span over .5.
+    assert loud.drift > quiet.drift + 0.5 and loud.emission > quiet.emission + 0.5
+    for _ in range(1440):
         idle = simulation.advance(_music(STEP, False), controls)
     assert idle.flash < 1e-5
     assert idle.stream_speed < loud.stream_speed * 0.1
-    assert idle.emission < loud.emission * 0.1
+    assert idle.emission == pytest.approx(controls.emission[0], abs=1e-5)
     assert all(r[5] < 0 for r in _records(idle))
+
+
+def test_idle_particle_amount_keeps_the_authored_quiet_endpoint_without_motion_attenuation():
+    for amount in (0., .1, .4):
+        controls = ExtrudedBubbleControls(emission=(amount, amount), collision_scope="off")
+        simulation = ExtrudedBubbleSimulation(4)
+        for _ in range(540):
+            idle = simulation.advance(_music(STEP, False), controls)
+        assert idle.emission == pytest.approx(amount, abs=1e-7)
+
+
+@pytest.mark.parametrize('surface_scene',[False,True])
+def test_settled_idle_keeps_source_births_constant_size_and_physical_exits(surface_scene):
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(2,2),
+        breathing=(.15,.6),small_pulse=(.15,.8),stream_speed=(.25,.25),
+        stream_path=(0.,-1.,-.5,0.,1.,-.5),surface_scene=surface_scene,
+        drift=(0.,0.),sway=0.,collision_scope='off')
+    simulation=ExtrudedBubbleSimulation(12)
+    seen=set();first=set();last_y={};radii={};saw_exit=False
+    for step in range(3000):  # Five physical minutes; no real-time waiting.
+        state=simulation.advance(_music(.1,False),controls)
+        for bubble in simulation._bubbles:
+            if bubble.ident not in seen:
+                assert bubble.y < -8.  # Genuine Source admission, including after old IDs leave.
+                seen.add(bubble.ident)
+            if step==100:first.add(bubble.ident)
+            if bubble.ident in last_y:
+                assert bubble.y > last_y[bubble.ident]
+                assert bubble.visual_radius==pytest.approx(radii[bubble.ident],abs=1e-10)
+            last_y[bubble.ident]=bubble.y;radii[bubble.ident]=bubble.visual_radius
+            if bubble.leaving:
+                saw_exit=True
+                assert bubble.y >= (9. if surface_scene else 8.)
+        assert state.level==0 and state.stream_speed>0
+    assert first and saw_exit and len(seen)>len(first)
+    assert first.isdisjoint({b.ident for b in simulation._bubbles})
 
 
 def test_sustained_response_holds_large_loud_bodies_but_does_not_inflate_held_smalls():
