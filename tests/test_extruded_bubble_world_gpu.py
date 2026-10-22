@@ -142,6 +142,48 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
 
 
 @pytest.mark.qt
+def test_surface_authored_direction_moves_all_glass_highlights_with_refracted_sun(sphere_pixels):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _glass
+
+    base = {**require_canonical_default("widgets.spotify_visualizer"),
+            "extruded_bubble_light_type": "Sunlit Surface"}
+    # Mirror-image oblique sunlight. Equal Y/Z preserves refraction elevation;
+    # the mirrored native highlight must move, not remain under world-up.
+    paths = ((-.6, .8, .3, .6, -.8, -.3), (.6, .8, .3, -.6, -.8, -.3))
+    knobs = [scene_knobs({**base, "extruded_bubble_light_direction": path}) for path in paths]
+    for value in knobs:
+        assert value['spec_dir'] == pytest.approx(value['sun_below'])
+    for kind, radius in (('ordinary', .06), ('ordinary', .6), ('cluster', .6),
+                         ('near', .6), ('near_cluster', .6)):
+        for diag in (1, 2):
+            highlights = []
+            for value in knobs:
+                material = _glass(value, kind.startswith('near'))
+                uniforms = {key: material[key] for key in
+                            ('uLightDir', 'uSpecColour', 'uSpecShape', 'uSpecThrough', 'uReflect')}
+                if kind.startswith('near'):
+                    uniforms.update(uFocus=10., uAperture=1.)  # admit the real near-only path
+                lit, _ = sphere_pixels(kind, radius=radius, diag=diag, **uniforms)
+                dark, _ = sphere_pixels(kind, radius=radius, diag=diag, **{**uniforms, 'uSpecColour': (0., 0., 0.)})
+                signal = (lit[:, :, :3] - dark[:, :, :3]).sum(axis=2)
+                if radius < .1 and diag == 2:
+                    assert signal.sum() == 0.  # existing sub-8px lens suppression remains explicit
+                    continue
+                assert signal.sum() > .001, (kind, radius, diag)
+                xx = np.arange(signal.shape[1])[None, :]
+                highlights.append(float((signal * xx).sum() / signal.sum()))
+            # The front mirror normal bisects view-to-eye and light direction;
+            # the diverging transmitted lens also shows it on the source side.
+            if highlights:
+                assert highlights[1] - highlights[0] > (1. if radius < .1 else 5.)
+    translated = tuple(v + d for v, d in zip(paths[0], (.1, 0., -.1, .1, 0., -.1)))
+    moved = scene_knobs({**base, 'extruded_bubble_light_direction': translated})
+    assert moved['spec_dir'] == pytest.approx(knobs[0]['spec_dir'])
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("light_type", ("Sunlit Surface", "Deep Light"))
 def test_authored_light_strength_reaches_reflected_and_transmitted_pixels(sphere_pixels, light_type):
     from core.settings.default_contract import require_canonical_default
