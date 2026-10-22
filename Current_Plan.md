@@ -119,8 +119,10 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 #### P0 | Runtime safety and measurement authority (blocks claims from downstream gates)
 
 - [ ] **G00 strict Settings/lifecycle** (EB-L/S): find the actual retained Python owner edge on failure. **Must see** owners retired and the real Settings transition completes repeatedly at the existing barrier; never extend/bypass the barrier.
+  - [~] **Awaiting Validation:** one MC source handoff with normal updates and all relevant diagnostic flags completed the strict barrier in 1167.4 ms and entered Settings at 1812.8 ms; normal CLI exit returned 0. Local receipt: `logs/run_matrix/2026-10-22_mc_settings_full_cli_retry/receipt.json`. EB was configured/admitted, but playback was false. Repeat cold/warm handoffs with active audio and preset changes; this single idle pass does not reproduce or close the retained-owner failure.
 - [ ] **G01 lazy Settings/persistence** (EB-S): exercise every bucket and physical editor with real native Qt. **Must see** single build/hydration, no callback exceptions, values/Custom/presets intact after reopening.
   - [~] Native lazy-bucket/control tests pass on this Windows tree, including unopened-value hydration, cross-bucket conditions, every bucket, Aim, Deep ray source and emission choice. **Awaiting Validation:** repeated actual Settings reopen/Custom/save/reset, partial-build exception cleanup and visual/editor interaction; this is not G00 retirement evidence. Use a fresh workspace `--basetemp` with the no-env fixture if sandbox temp admission fails.
+  - [ ] Attribute the native Settings `QFont::setPointSize(-1)` warning captured in the full-flag MC receipt above; compare the shared combo-font contract in `Docs/Architecture/Settings_Theme_Architecture.md`. Also retain the startup `QUnifiedTimer::stopAnimationDriver` warning for lifecycle attribution; neither warning was a Qt error/critical or barrier timeout.
 - [ ] **G02 256-vs-512 source-to-pixel temporal evidence** (EB-F/D): same recording and visual conditions for 2D/EB, with per-ID radius and logical/presentation timestamps. **Must see** where judder first enters; no smoothing/cadence guess counted as proof.
 
 #### P1 | Physical geometry and camera/lighting source-of-truth
@@ -203,10 +205,14 @@ The following entries are the detailed failure/attempt and source-contract regis
 
 #### EB-L — Strict Settings handoff and native lifecycle | independent correctness gate
 
-- [ ] **Awaiting Logs:** attribute the surviving `QuickDisplayVisualizerOwner` through actual
-  `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS*]` receipts at a naturally occurring Diagnostic-product failure.
-  Available archives contain no such receipt. The typed builder is not a proved retaining root. Do not soften,
-  lengthen, retry through or bypass the barrier; debug/trace flags alone do not enable Diagnostic-only attribution.
+- [ ] Reproduce the retained `QuickDisplayVisualizerOwner` during repeated actual MC Settings handoffs,
+  using normal provider updates and the bounded CLI capture in `Docs/Guides/Logging_Guide.md`.
+  Collect local logs directly; the idle pass above is not active-audio/preset/repeat coverage.
+- [ ] On recurrence, attribute the exact surviving strong edge. Available archives contain no
+  `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS*]` receipt; existing MC flags do not enable this Diagnostic-only
+  capture. Use MC lifecycle identities first and establish any remaining attribution gap explicitly;
+  do not silently switch product flavour. The typed builder is not a proved retaining root. Do not soften,
+  lengthen, retry through or bypass the barrier.
 - [ ] Once an exact strong edge is proved and source work authorized, sever it at its actual owner, then exercise
   repeated cold/warm EB→Settings handoffs and preset changes. Preserve complete generation retirement, no orphan
   owner, stopped logical runtime and clean scenegraph/context resource release, including failed first build.
