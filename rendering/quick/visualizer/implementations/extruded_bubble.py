@@ -460,7 +460,7 @@ class QuickExtrudedBubbleRenderer:
             "uWakeCount": wake_count})
         fizz = wake_count * fizz_per
         self._uniforms.set(programs["blur"], {"uSource": 0})
-        share, brightness = speck_amount(parameters, state.emission)
+        share, brightness = speck_amount(state.emission)
         # Optional glow lift never adds another source follower: the same musical
         # rays/flash state already advances once on the simulation clock.
         glow_react = max(0.0, min(1.0, float(parameter(parameters, "extruded_bubble_particle_glow_reactivity"))))

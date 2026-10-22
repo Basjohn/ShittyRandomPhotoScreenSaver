@@ -49,6 +49,27 @@ def test_inlet_keeps_reacted_large_shells_separate_at_birth():
             assert math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) >= a.current_radius + b.current_radius
 
 
+def test_quiet_small_inlet_uses_same_readable_radius_as_contacts_and_defers_overlap():
+    sim = ExtrudedBubbleSimulation(63)
+    sim._filled = True
+    sim._radius = lambda *_: .5
+    c = ExtrudedBubbleControls(
+        large_count=(0.,0.),mid_count=(2.,2.),small_pulse=(.15,.8),
+        stream_path=(0.,-1.,0.,0.,1.,0.),bubble_spread=0.,columns=0.,
+        stream_speed=(0.,0.),drift=(0.,0.),sway=0.,collision_scope='off')
+    assert sim._spawn(False,c,(0.,1.,0.),anywhere=False)
+    first = sim._bubbles[0]
+    assert first.current_radius == .5*.7825
+    for _ in range(10):
+        assert not sim._spawn(False,c,(0.,1.,0.),anywhere=False)
+    assert len(sim._bubbles) == 1
+    sim.advance(MusicInput(0.,False),c)
+    assert first.current_radius == .5*.7825
+    first.y += 5.
+    assert sim._spawn(False,c,(0.,1.,0.),anywhere=False)
+    assert len(sim._bubbles) == 2
+
+
 def test_surface_retirement_waits_for_centre_to_reach_shared_water_plane():
     sim = ExtrudedBubbleSimulation(19)
     sim._filled = True

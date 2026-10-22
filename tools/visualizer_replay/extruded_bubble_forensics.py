@@ -202,7 +202,7 @@ def run(args):
                              'level', 'flash', 'sustain', 'stream_speed', 'drift',
                              'emission', 'rays', 'shimmer', 'travel', 'motion_phase')},
                          ray_uniform=scene.ray_strength(parameters, snapshot.rays),
-                         speck_density_brightness=scene.speck_amount(parameters, snapshot.emission),
+                         speck_density_brightness=scene.speck_amount(snapshot.emission),
                          objects=objects))
         return snapshot
 

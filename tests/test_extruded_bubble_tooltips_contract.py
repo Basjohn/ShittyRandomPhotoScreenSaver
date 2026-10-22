@@ -16,7 +16,7 @@ MUSIC_RANGES = {
 
 def test_eb_every_visible_control_has_an_explanatory_tooltip():
     entries = [c for c in require_mode_settings('extruded_bubble').entries if c.bucket]
-    assert len(entries) == 57  # Inventory at EB-R36; review deliberately when the builder grows.
+    assert len(entries) == 58  # Includes the independently authored Lens FOV control.
     assert len({c.key for c in entries}) == len(entries)
     for entry in entries:
         assert entry.tooltip.strip(), entry.key
