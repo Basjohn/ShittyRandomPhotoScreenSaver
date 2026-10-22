@@ -90,7 +90,8 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
     assert 'vec3 p = uEye + ray * s;' in shader
     assert 'float distance_ = (SURFACE_Y - uEye.y) / ray.y;' in shader
     assert 'vec2 hit = uEye.xz + (ray * distance_).xz;' in shader
-    assert '"uNearCoc": 22.0 * height / 941.0}' in owner
+    assert '"uNearCoc": 22.0 * height / 941.0' in owner
+    assert '"uNearMax": _near_spread(height)' in owner
     assert 'shift = (0.0, 0.0)' in owner
 
 

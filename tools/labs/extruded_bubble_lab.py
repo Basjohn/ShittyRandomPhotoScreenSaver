@@ -638,6 +638,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShell"), settings.get("shell", 0.1))
         gl.glUniform3f(u("uIors"), *settings.get("iors", (1.33, 1.5, 1.0)))
         gl.glUniform1f(u("uNearCoc"), settings.get("near_coc", 22.0) * H / 941.0)
+        gl.glUniform1f(u("uNearMax"), settings.get("near_coc", 22.0) * 1.6 * H / 941.0)
         # Face reflection share (an air bubble's face mirrors ~2%; the rim carries the reflections): per scene.
         gl.glUniform1f(u("uReflect"), settings.get("near_reflect", 0.15) if program in (near_program,near_cluster_program)
                        else settings.get("face_reflect", 1.0))

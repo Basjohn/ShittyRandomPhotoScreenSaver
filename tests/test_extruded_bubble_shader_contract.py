@@ -52,15 +52,15 @@ class ExtrudedBubbleShaderContractTests(unittest.TestCase):
         self.assertNotIn('vOpacity', stages['PARTICLE_VERTEX'])
 
 
-    def test_near_dof_is_selected_by_regular_bubbles_true_front_depth_not_an_identity_cohort(self):
+    def test_near_dof_uses_one_depth_and_footprint_policy_not_an_identity_cohort(self):
         stages = _vertex_stages()
         vertex = stages['BUBBLE_VERTEX']
-        self.assertIn('float frontDepth = depth - aSphere.w;', vertex)
+        self.assertIn('ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize,', vertex)
         self.assertIn('aExtra.y < 0.5 && coc > 1.5', vertex)
-        self.assertIn('sceneNearCircle(frontDepth, uFocus, uAperture, uNearCoc)', vertex)
         self.assertNotIn('aExtra.y > 2.5 ||', vertex)
         source = _PROGRAM.read_text(encoding='utf-8')
-        self.assertIn('float frontDepth = -vSphere.z - vSphere.w;', source)
+        self.assertIn('sceneNearCircle(depth - sphere.w, focus, aperture, circleScale)', source)
+        self.assertIn('alpha * uNearGain, vLensCircle)', source)
         self.assertIn('sceneDefocusWrite(', source)
 
 
