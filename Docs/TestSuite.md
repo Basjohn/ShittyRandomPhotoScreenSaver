@@ -147,6 +147,9 @@ unchanged lens during dolly, Surface/Deep bounds and grazing-sphere frustum cand
 Its native glass test also crosses Settings/scene mapping/uniforms into ordinary and union reflected/
 transmitted pixels at 0/0.5/1 Light Strength in both light modes. It isolates analytic emitter radiance
 over unchanged ambient; near-pass appearance, proxy direction/intensity and full-preset bloom remain open.
+`test_scene3d_defocus.py` includes the 5–10 px circle transition under a 54 px budget, preserving
+the existing energy tolerance, small-circle centroid and lattice-strip checks. The fine/wide split
+must not send unresolved intermediate circles exclusively to the wide mip gather.
 
 `& .\.venv\Scripts\python.exe tests\test_extruded_bubble_motion_contract.py` is a dependency-free,
 no-environment-mutation logical gate for: zero spawned synthetic near bubbles, sustained large-bubble

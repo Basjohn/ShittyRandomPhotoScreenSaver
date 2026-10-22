@@ -162,7 +162,7 @@ def test_a_callers_masked_draw_buffer_does_not_stop_the_layer_spreading(capture)
     assert masked[(d > 12.0) & (d < 16.0)].mean() > 0.0          # a disc, not the sharp point
 
 
-@pytest.mark.parametrize("circle", [2.0, 4.0, 6.0, 8.0, 12.0, 20.0])
+@pytest.mark.parametrize("circle", [2.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0, 20.0])
 def test_mixed_budget_preserves_small_and_large_highlight_energy(capture, circle):
     disc = _bright_point_disc(capture, circle, 54.0, 0.25)
     assert np.isfinite(disc).all()

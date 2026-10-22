@@ -316,6 +316,11 @@ level above the floor and above the mean round it (two levels coarser) is taken 
 that level, so gather and sprites split the same texels and light is kept) and drawn as one instanced disc per such
 texel, of its circle, antialiased and slightly brighter at its edge. Cost in the bubble lab: within noise of the
 gather alone (~0.05 ms).
+
+The full-resolution gather must cover at least the wide gather's actual mip-texel width. Otherwise
+an intermediate circle can be too small for that mip while receiving neither fine-gather nor
+resolved-highlight coverage. The split remains smooth, with fixed tap counts and the caller's budget.
+
 `test_scene3d_defocus.py`: a bright point becomes an even filled disc of its circle holding its light, a sharp pixel
 stays exactly in place, state comes back, nothing is left after `release`; a highlight under a wide circle is one
 even round disc (and the gather alone, the case it guards, is measurably lumpier).

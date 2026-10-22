@@ -57,7 +57,12 @@ _CIRCLE_BANDS = """
 // The first wide-disc tap is several pixels from the destination at large budgets.
 // Circles smaller than that gap need a full-resolution gather of their own.
 float fineRadius(float maximum) {
-    return min(maximum, max(4.0, maximum * sqrt(0.5 / 64.0) + 0.5));
+    // A circle smaller than the wide gather's mip texel is unresolved there.
+    // Keep that whole band in the full-resolution gather, not merely circles
+    // smaller than the first wide tap's distance.
+    float tapSpacing = sqrt(3.14159265 * maximum * maximum / 64.0);
+    float wideTexel = exp2(max(floor(log2(max(tapSpacing, 1.0))), 0.0));
+    return min(maximum, max(wideTexel, max(4.0, maximum * sqrt(0.5 / 64.0) + 0.5)));
 }
 float fineShare(float circle, float maximum) {
     float radius = fineRadius(maximum);
