@@ -2073,3 +2073,19 @@ product timer/retirement override is added. Paused canonical Media overrides the
 music or audiovisual acceptance. All six Settings barriers complete in 0.70–4.97 seconds at the unchanged
 eight-second limit, with zero scoped lifecycle errors and normal CLI exit 0. The strict retained-owner
 failure is not reproduced. All useful CLI diagnostics and normal updates stay enabled; no `--noupdates`.
+
+## 44. Glint-proxy intensity authority (22 October; native candidate)
+
+Proxy emission remained fixed at Surface 10 / Deep 2.5 while authored Light Strength already scaled the
+visible emitter and analytic glass. `scene_knobs` now resolves that existing mode gain times Light Strength
+once; the renderer requires the resolved value rather than maintaining a second default. Strength 1 retains
+the former power. Positions, radii, lifetime opacity, source direction, instance counts and draw passes stay
+unchanged; this is an amplitude correction, not a density/performance change.
+
+The native production-host regression captures all six faces of the actual half-float reflection probe,
+subtracting a proxy-zero control at identical scene/light uniforms for each strength. Both light modes now
+give no proxy HDR contribution at zero and twice the half-strength contribution at full strength, allowing
+only half-float quantisation. The test also checks unchanged uploaded spatial records and the existing
+full-strength gains. Before the repair, both modes fail because zero strength still uploads full power.
+Connected renderer/particle tests pass. Native moving P1/P7 art, self-proxy appearance, small idle visibility,
+Deep per-shading-point direction, shared positional attenuation and the physical shaft field remain open.

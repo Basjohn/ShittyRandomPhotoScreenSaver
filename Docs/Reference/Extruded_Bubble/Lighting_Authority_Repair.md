@@ -26,6 +26,7 @@ This is an **EB prerequisite**, not deferred generic ray tracing or G2 shadow wo
 | Rays have distinct Ray Source → Ray End authoring | `SHAFT_FRAGMENT` has `uRaySource`, `uRayEnd`; Surface allows a separate authored segment; Deep currently forcibly aligns the ray *start* with the Light Source while the ray end remains its authored destination | Ray controls may shape light/scattering extent, but cannot silently become a second emitter. Preserve existing authored choices and explicitly distinguish Surface/Deep semantics. |
 | Surface shafts are view-fan dominated | `MODES["surface"]["shaft_fan"]=1.0`; `SHAFT_FRAGMENT:main` mixes marched volume with `labShaftFan(viewRay,...)`, with a fixed pair of points along each camera ray for extent | Holding the light/volume fixed while orbiting and looking downward must **not** move or reverse the beam volume; anisotropic scattering may vary brightness by view angle, but not physical placement. |
 | A finite length is mistaken for a finite 3D beam | `SHAFT_FRAGMENT:beamExtent(p)` projects onto Source→End and gates only longitudinal `along` distance; it never calculates perpendicular separation from the line | Use a bounded radial (or directionally widening conical) cross-section with soft edges, not the infinite slab between two planes. |
+| Emitter intensity had independent glass/proxy gains | Analytic glass and glint-proxy power now both consume existing Light Strength in `scene_knobs`; zero strength retains ambient but no proxy emission. Native isolated glass and HDR probe tests cover Surface/Deep 0/0.5/1 | Check authored art and bloom together; directional coherence alone cannot establish small-shell visibility or shared positional falloff. |
 | Attenuation is an approximation of four physical bubbles | `uBlock0..uBlock3` and `sceneTransmittance()` use at most four proxy blockers plus aggregate particles, currently sampling one representative point for the fan output | Verify coherent attenuation along **the actual field**. Bounded selective occlusion can remain; no demand for expensive shadow maps or full multiple scattering, but no false claim of complete volumetric shadowing. |
 
 These are **source findings**, not proofs that every bright/clumped pixel comes from
@@ -165,7 +166,7 @@ light coverage, P1/P7 and large/small cards. No narrow patch arrays, no camera
 following, no unexplained bubble loss, stable per-ID fades and native GPU
 p95/p99 within measured budget. A corrected RNG histogram alone is not enough.
 
-**Status:** lighting authority/optics [ ] (partial Surface analytic-direction/radiance candidates only);
+**Status:** lighting authority/optics [ ] (partial Surface analytic-direction and emitter/proxy-radiance candidates only);
 lighting coverage [ ] (proposed only); SCENE clustering [~] (operator visually
 rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.

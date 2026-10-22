@@ -44,7 +44,7 @@ MODES = {
     "surface": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55,
                     shaft_soft=0.35, ray_focus=0.3, ray_cut=0.1, surface_sky=0.35, glint_power=120.0,
                     glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, rough=0.05, chains=3.0),
-    "deep": dict(crisp=1.0),
+    "deep": dict(crisp=1.0, proxy_power=2.5),
 }
 _LIGHT_TYPES = {"Sunlit Surface": "surface", "Deep Light": "deep"}
 
@@ -92,6 +92,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     water, deep = _rgb(_p(parameters, "water_colour")), _rgb(_p(parameters, "depth_colour"))
     water_hue = _hue(water)
     strength = float(_p(parameters, "light_strength"))
+    knobs["proxy_power"] = float(knobs["proxy_power"]) * strength
     light_path = admit_path(_p(parameters, "light_direction"), [0.0, 55.0], 'light')
     direction = _unit(tuple(-v for v in direction_of(light_path)))
     # World-space light source/end and its separate authored beam path.
