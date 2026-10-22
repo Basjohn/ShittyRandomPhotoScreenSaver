@@ -2384,3 +2384,41 @@ are exactly equal; idle60 full native pixels are byte-identical. Particle emissi
 versus .2812/.1604/.1187 before. At1s native mean channel difference is .384 levels; the effect is deliberately
 modest. Continuous musical release changes the preceding active state slightly too. This is a scoped timing
 repair, not an idle-readability, glare, whole-scene density or audiovisual acceptance claim.
+
+## 54. Bound large phrase-edge support by actual body change (native candidate)
+
+The first eight recorded seconds expose a held-edge ownership defect: in the4–8s phrase, clean large body falls
+as low as .092 while its radius envelope stays .589–.996. An independently decaying .25s phrase-edge value is
+added even when the actual body is below its tracked reference. Repeated rises stack that value into inflation.
+The consumer now uses min(held edge,current positive body change), preserving the same reference, edge state,
+attack/release times, strength ranges and sustained body authority. Removing the edge entirely weakened soft
+attacks; merely shortening its tail did not recover contracted minima. Supporting only the current positive
+change corrects ownership without inventing another follower, oscillator, floor or threshold policy.
+
+The corrected actual-class recorded gates retain their original bars: large whole-clip minimum median improves
+1.975896→.450600 nominal and active4–8s span1.398385→1.895876 (>1.8 required). Small active span remains1.820475.
+Ninety-one connected recorded/simulation/startup/recovery/audio/display-smoothing/wake/inlet/world checks pass.
+The former pause check incorrectly capped all first-frame contraction at3%, including contraction already
+underway in music. A same-feature/time continuation counterfactual isolates pause: continued large radius falls
+3.51%, paused falls3.22%, with only .30% relative difference. The replacement keeps the3% additional-pause-loss
+bar; subsequent one-second gradual settling and idle endpoint/motion assertions remain unchanged.
+
+`Evidence/2026-10-23_large_response/` retains baseline driver trace, test-owned CPU measurements, current P1 native
+candidate and one-line counterfactual restoring the old independent-edge consumer. Both native runs use unchanged
+operator P1 controls, the same first8s recording,1738×1143 production GL and96 samples at12fps, with custody,
+full settings, source bytes/hashes, native frames/contacts/motion GIFs and same-frame zero-swell interventions.
+`same_id_native_crops.png` follows mature, nonpopping/nonleaving ID1 at2/2.5/3/3.5s without resizing native pixels:
+old nominal ratios3.309/3.343/3.117/3.303 versus2.273/1.317/1.556/1.877. These are actual within-song changes,
+not entrance/exit shrinkage. Crops follow each variant's projected centre; geometry/contact/lifetime may diverge
+between variants, so they are not fixed-region pixel subtraction or an assertion of identical world evolution.
+The counterfactual changes only the edge consumer, not an entire historical checkout; its function is retained.
+
+The forensic tool's old projection report ignored physical eye/pan/FOV and treated scene scale as rotation-camera
+FOV. It now uses the same physical-camera resolver and eye-relative world coordinates as rendering. Estimates
+still exclude integrated flight/auto-orbit and near-plane/inside cases; actual images remain production draws.
+Earlier projection statistics must not be reused as current eye-aware measurements.
+
+Visual inspection confirms the scoped same-ID contraction improvement; full 2D-ON/EB-OFF audiovisual parity,
+soft/heavy/quiet-to-loud passage coverage, idle readability, material fidelity and operator review stay open.
+Two sequential short GPU samples are not neutrality proof: baseline median/p90 9.51/16.85ms, candidate10.81/15.02ms
+(first frame includes shader warmup). G32 needs controlled warmed/interleaved cost; no pass/clock/target was added.

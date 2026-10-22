@@ -197,9 +197,11 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 
 - [ ] **G12 visual-only Smoothing** (EB-D): compare 0/0.5/1 on one recording. **Must see** unchanged DSP/physical state and smooth per-ID display radii that still express attacks.
 - [ ] **G13 large radius, sustained body and crest headroom** (EB-D): synchronized 2D/EB on quiet/held/changing loud. **Must see** actual rise/fall *inside* music, rather than inflated plateau or startup yank-down.
-  - [ ] Repair actual-large recorded contraction/excursion: corrected admission-class instrumentation measures
-    minimum median 1.976× nominal (required <.8) and active 4–8s span 1.398× (required >1.8). Preserve these failing
-    bars; do not classify paced BEAM IDs by number. The current small span is 1.820×, not large-body acceptance.
+  - [~] **Body-supported phrase edge — Awaiting Validation:** the held edge now supports only current positive
+    body change. The existing actual-large contraction/excursion gates pass (.451× minimum,1.896× active span);
+    small span stays1.820×. Review contrasting recordings and same-time 2D-ON/EB-OFF native motion, not only this
+    clip. Native same-ID before/after crops show contraction inside music; full fidelity, pause perception and
+    warmed cost remain open. Source/native evidence and measurement limits: `Investigation.md` §54.
 - [ ] **G14 small radius and 512/256 judder** (EB-D): frame-by-frame per-ID 2D/EB, match song sample time. **Must see** smooth, expressive small-bubble radius, no shared size-state snapping or spawn/pop confusion.
   - [~] **Tiny material-state candidate — Awaiting Validation:** the sub-2.5px ordinary sparkle choice now uses stable identity alone, removing a changing-radius hash that caused native brightness jumps for negligible geometry changes. Native threshold regression fails before repair and passes with identical physical state policy; inspect recorded moving/sizing identities. This is a material discontinuity fix, not evidence of corrected radius followers, temporal sampling or 2D breathing parity.
 - [ ] **G15 startup, pause, rest and event transients** (EB-D): tagged and untagged ramps/preset swaps. **Must see** gentle non-pulsing idle, no false hot-start peak, and real post-start musical hits.

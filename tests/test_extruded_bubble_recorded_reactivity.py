@@ -135,7 +135,13 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     assert start.stream_speed > active.stream_speed * .95  # no pause snap
     initial = dict(zip(active.bubbles[6::8], active.bubbles[5::8]))
     first = dict(zip(start.bubbles[6::8], start.bubbles[5::8]))
-    assert all(1 + first[i] > .97 * (1 + v) for i, v in initial.items() if i in first)
+    # The recording may already be contracting rapidly when pause arrives.
+    # Isolate pause from that existing motion rather than capping musical fall
+    # at 3% per frame (which contradicts the within-song excursion gate).
+    continued = states(FeatureClip('same_frame_without_pause',clip.frames+(
+        replace(last,timestamp_us=last.timestamp_us+11_000),)))[-1]
+    reference = dict(zip(continued.bubbles[6::8],continued.bubbles[5::8]))
+    assert all(1 + first[i] > .97 * (1 + v) for i,v in reference.items() if i in first)
     after_one_second = result[len(clip.frames) + 90]
     settling = dict(zip(after_one_second.bubbles[6::8], after_one_second.bubbles[5::8]))
     resting = dict(zip(end.bubbles[6::8], end.bubbles[5::8]))
