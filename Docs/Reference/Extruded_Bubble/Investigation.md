@@ -2575,3 +2575,48 @@ At p=eye+ray*s, accumulate sum(weight*s) alongside sum(weight); reconstruct the 
 one scalar moment. Skip proxy attenuation for zero mass. A centroid between separated lit lobes need not itself
 be lit: this remains selective four-proxy attenuation, not integrated volumetric shadowing. Surface's old dominant
 fan calibration and Deep's artificial shaft-height decay also require explicit treatment and native art/cost checks.
+
+## 60. One world shaft field and contribution-weighted proxy sample (2026-10-23)
+
+The production shader now integrates one source-anchored world pattern in the existing40-step,45-unit,
+half-resolution march. Surface projects samples parallel to refracted sunlight into Source-relative coordinates;
+Deep uses effective Source→End and the canonical `stream_basis` from physical geometry, divided by the same
+`beamRadius` law as its cone. A Light-Type-only discriminator is independent of Light Strength. Deep's shared
+eye-derived sun vector is preserved for other consumers and phase gain; it cannot steer the density projector.
+No camera-anchored angular fan, two-depth fan mask or fixed18-unit attenuation point remains in this pass.
+
+The same four-noise pattern retains softness and logical flicker/shimmer; outside-cone samples skip that work.
+Obsolete private fan-frequency/contrast/march derivatives and uniforms are deleted, including their lab uploads;
+public settings/ranges, source geometry and logical response timing do not change. Surface's former dominant
+additive fan needs explicit art calibration: gain2.2 multiplies the volume; Deep stays1. This is an acknowledged
+calibration change, not a placement-only claim. Deep shaft falloff now uses actual Source distance rather than
+an artificial global shaft height; shared falloff/intensity across other consumers still needs repair.
+
+One scalar sum(weight*distance) alongside sum(weight) reconstructs the actual illumination centroid along the
+view ray. Empty fields skip proxy attenuation; at most four existing blockers plus aggregate dust remain.
+The centroid can fall between separated lit lobes: this is selective proxy shadowing, not integrated transport.
+Production functions and full-main native tests pass62 connected checks. The full-main controlled-density/jitter
+case places a blocker after the actual lit centroid but before the former18-unit sample: restoring that sample
+creates exactly16% erroneous shadow and fails. The reused Medium supplied13 helper tests; root added final-main
+wiring proof. Independent integral/centroid oracles, zero-mass and mode/basis tests do not accept reference art.
+
+`Evidence/2026-10-23_world_shaft_candidate/` preserves the160d6a78 baseline shader, exact settings/source hashes,
+four legal views for current P1/P7 at frozen recorded5s and separate recorded47s→pause60s quiet comparisons.
+The baseline upload shim explicitly restores deleted private uniforms from identical mode/softness, so it does
+not accidentally compare against a fan disabled by missing uniforms. Main-agent native review retains P1's
+readable overall and quiet appearance; quiet mean RGB changes0.376/255 (P1),0.027/255 (P7). P7 still exhibits
+excess glow/density and materially misses its renamed target; this is no general preset acceptance.
+
+Full-frame interleaved12-sample medians after4 warmups, baseline/new: P1 authored4.98/4.71ms, down3.57/3.33,
+side3.72/3.68, away3.77/3.36; P7 authored3.16/2.93, down2.84/2.67, side3.25/3.12, away3.53/3.38.
+No pass/sample-count/frame-pump/timer is added; old fan evaluation and two extra cone masks disappear, outside-cone
+noise is skipped, and a scalar moment replaces an arbitrary sample. These bounded fixtures look favorable but
+do not establish p99, moving populations, dual-display, first activation, or complete G32 performance acceptance.
+Shared Deep emitter intensity/falloff for medium/core/glints/shafts/particles and final moving art remain next.
+
+The new production source also completes the guarded MC integration with all useful CLI flags, normal updates
+and20s self-exit: `logs/run_matrix/2026-10-23_world_shaft/bound_receipt.json`. One available display/EB owner,
+normal retirement/exit0 and unchanged operator profile hash are recorded using isolated settings/logs. No GUI
+image grab or synthetic audio is involved. The same single startup animation warning remains in Qt session
+ba5361b7a644/pid42156; the timeout stack file stays empty. This is native idle source integration, not music,
+dual-display or a clean-zero-warning acceptance claim.

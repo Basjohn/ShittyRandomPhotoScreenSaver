@@ -35,8 +35,8 @@ def shaft_geometry(qt_app):
 
     # Execute the real functions unchanged, independently of camera marching,
     # angular pattern, representative-depth masks, blur and final composition.
-    start = SHAFT_FRAGMENT.index('float beamExtent(')
-    stop = SHAFT_FRAGMENT.index('float labShaftFan(', start)
+    start = SHAFT_FRAGMENT.index('float beamRadius(')
+    stop = SHAFT_FRAGMENT.index('float shaftPattern(', start)
     functions = SHAFT_FRAGMENT[start:stop]
     vertex = '''#version 460 core
 uniform vec3 uRaySource, uRayEnd, uEye;

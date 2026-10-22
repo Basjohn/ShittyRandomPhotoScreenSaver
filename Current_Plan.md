@@ -241,14 +241,15 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
   - [~] **Finite lateral envelope — Awaiting Validation:** inspect moving/all-angle Source→End cones,
     near/far boundaries and actual cost. Production geometry now has a fixed world-unit source aperture,
     reach-driven widening and inward softness; axial fades remain, coincident effective paths emit nothing.
-    Frozen P1/P7 four-view captures retain readable art but do not close the angular fan/two-depth sampling,
-    positional falloff or full light-field repairs. Evidence/limits: `Investigation.md` §58.
-  - [ ] **Next world-field slice:** replace the camera-derived fan/two-depth gate with one world density in
-    the existing march. Preserve P1's shaft structure: simply setting fan share0 is a visually weaker pilot,
-    not a repair. Surface uses refracted-sun parallel projection; Deep uses effective Source→End, independent
-    of the eye-derived shared sun vector. Use a mode-only discriminator, shared cone law and bounded noise work.
-    Accumulate one scalar weighted sample distance for selective proxy attenuation; retain approximation limits.
-    Pilot and design constraints: `Investigation.md` §59. Then resolve common Deep attenuation before preset tuning.
+    Frozen P1/P7 views retain readable art; moving/peripheral cone boundaries and full light-field consistency
+    remain open. Geometry evidence: `Investigation.md` §58; current world march: §60.
+  - [~] **World shaft density — Awaiting Validation:** inspect continuous native camera/light motion and
+    measured costs against P1/P7 targets. One source-anchored density now replaces the camera fan/two-depth gate
+    in the existing40-step half-resolution march. Surface has explicit2.2 gain calibration; Deep projects through
+    canonical segment axes and source distance. Shadow proxies use a scalar contribution centroid, an approximation
+    that may lie between lit lobes. Preserve P1 quiet readability; P7 art remains far from its target. Then finish
+    shared Deep intensity/falloff across medium, visible core, glints, shafts and particles before coverage/preset tuning.
+    Scope, retired private fan knobs, native/negative-control proof: `Investigation.md` §60.
   - [ ] **Lab physical-uniform debt:** before using frozen-art lab output as a current physical-light reference,
     migrate its manual common upload to admitted physical Light/Ray Source/End. It currently omits those uniforms;
     shared shader bytes alone do not establish current lab/product parity. Use the production-host producers meanwhile.

@@ -31,7 +31,7 @@ from collections.abc import Mapping
 import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
-from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y, WORLD_UNIT
+from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y, WORLD_UNIT, stream_basis
 from core.settings.extruded_bubble_camera import camera_axes, resolve_camera_position, ORBIT_DISTANCE, ORBIT_PIVOT
 
 FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
@@ -41,7 +41,7 @@ SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 7, 19, 8
 # What a Light Type implies (the lab's "surface" and "deep" modes) and what every scene shares.
 ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, ray_radius=0.1 * WORLD_UNIT)
 MODES = {
-    "surface": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55,
+    "surface": dict(near_lens=1.0, near_reflect=0.08, fan_reach=0.65, shaft_scale=0.55,
                     shaft_soft=0.35, ray_focus=0.3, ray_cut=0.1, surface_sky=0.35, glint_power=120.0,
                     glint_sharp=300.0, probe_fill=2.0, proxy_power=10.0, rough=0.05, chains=3.0),
     "deep": dict(crisp=1.0, proxy_power=2.5),
@@ -127,10 +127,11 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                      glint_power=600.0 * strength, light_power=1.2 * strength, surface=60.0, shaft_y=16.0,
                      glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, 0.85),
                      shaft=tuple(0.95 * c for c in _mix(water_hue, light, 0.85)))
+    axis = _unit(tuple(e - s for s, e in zip(knobs["ray_source"], knobs["ray_end"])))
+    across, up = stream_basis(axis)
+    knobs.update(surface_shaft=1.0 if mode == "surface" else 0.0, ray_across=across, ray_up=up)
     softness = float(_p(parameters, "ray_softness"))
-    knobs.update(shaft_soft=softness,
-                 fan_contrast=0.8 + (0.2 - 0.8) * softness, fan_march=0.15 + (0.6 - 0.15) * softness,
-                 fan_rays=80.0 + (30.0 - 80.0) * softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
+    knobs.update(shaft_soft=softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
     knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")))
     clarity, softness = float(_p(parameters, "clarity")), float(_p(parameters, "softness"))
     knobs.update(face_reflect=1.0 + (0.2 - 1.0) * clarity,
