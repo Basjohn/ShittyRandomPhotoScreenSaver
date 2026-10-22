@@ -130,6 +130,7 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 - [ ] **G04 visible surface and bubble breach** (EB-B; R37/R42/R43): synchronized XYZ/radius/alpha/cause vs *rendered* ceiling at many camera angles. **Must see** no early invisible exit; controlled near-surface fade; no fake ceiling or world-boundary surprise.
   - [~] **Deep exit authority — Awaiting Validation:** the water-plane outside check is now Surface-only; Deep BEAM/SCENE retain physical world bounds and BEAM's authored End. Verify a stable Deep identity above Y=9 against native pixels, then its real exit/fade, including upward/lateral/oblique tracks. This source repair does not establish the cause of the operator's apparent early Surface disappearance or resolve mode-switch cohort policy (G07/G09).
 - [ ] **G05 Light/Ray/Camera source authority** (EB-B/C; R34/R41): move one light or ray node at a time. **Must see** Deep Light visible emitter/glint/shaft origin coincide; Surface light direction and finite shaft path explicitly distinguished.
+  - [~] **Analytic highlight intensity — Awaiting Validation:** ordinary/fused/near glass now consumes existing Light Strength for reflected and transmitted emitter lobes; strength 1 preserves the former output. Native isolated pre-bloom pixels verify 0/0.5/1 scaling over unchanged ambient in Surface/Deep. Review actual authored P1/P7 highlights and bloom; physical direction, proxy intensity, positional attenuation and shaft authority remain open.
 - [ ] **G06 all-angle physical rays** (EB-C; Investigation §38): hold lighting constant, look up/down/side near surface. **Must see** genuinely descending shafts through the same physical region; angular fan and look-toward-light gain may NOT hide/reverse a real down-view volume.
 
 **G05/G06 lighting-authority sub-order, 22 October audit (NEW OPEN work, not a second queue):**
@@ -154,6 +155,7 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 
 - [ ] **G10 Fuse / Pop / Bounce physical outcomes** (EB-B/C): capture actual contact and resulting separation. **Must see** readable action and strong smooth Bounce impulse with no overlap vibration or positional teleport.
 - [ ] **G11 giant near-lens / fused DoF and culling** (EB-B/A): move the real camera through very large shells and the 1.5 px CoC threshold. **Must see** smooth near/far transition, no dot lattice/viewport-covering hard wall or erased valid population.
+  - [ ] **Operator clarification, 22 October:** approaching roughly half the viewport must drive substantially stronger blur; at extreme proximity/almost full-viewport size, smoothly occlude/cull the rendered shell before it eats the screen. Reproduce the reported sharp viewport-filling bubbles, including fused members, off-centre passes, low aperture and eye-inside cases. Measure projected footprint, actual near-pass admission/blur and opacity at both card sizes/DPRs. Keep physical IDs, contacts, motion and wakes intact; no simulation death, camera-relative respawn or abrupt threshold pop.
 
 #### P3 | Musical reactivity, temporal fidelity and exact Range endpoints
 

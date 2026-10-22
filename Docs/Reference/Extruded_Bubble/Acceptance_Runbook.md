@@ -52,6 +52,13 @@ The gate IDs below are stable for evidence reports. The ordering represents depe
 
 **G11 Near-lens spheres and mixed depth** (EB-B/A, R27/R37): Approach and pass very near/in front of very large and fused shells at small and 2560×1440 cards, different DPRs. Log per-ID CoC and admission at the 1.5-pixel normal/near switch, defocus texture footprints, shell coverage and culling decision. **Must see:** readable smooth glass/blur and correct occlusion from both sides of the threshold, no giant sharp sphere swallowing the viewport, noisy dot lattice or popping at the branch. **Reject:** lens-attached static cohorts, dropping visible bubbles merely to avoid culling logic, or attributing all 256/512 judder to DoF.
 
+**G11 operator clarification (22 October):** approaching half-viewport projected size requires much
+stronger visible blur; near-full-viewport/extreme proximity requires smooth render-only occlusion/culling.
+Record projected diameter/viewport dimensions, near-layer membership, applied blur footprint and effective
+alpha while moving toward/away and across screen edges, including low aperture and eye-inside unions.
+Reject a sharply viewport-filling shell, instant disappearance at a threshold, or deletion/reseeding of its
+physical identity. This is an explicit correction to the reported current failure, not accepted existing DoF.
+
 **G07/G08/G09 SCENE clustering and mode-switch A/B extension (new visually rejected screenshot):** [22 October operator screenshot](Evidence/2026-10-22_SCENE_operator_rejected_clustering.png) shows ongoing bright clumping while emission is SCENE. The R45 shader-coordinate/rejection changes have **not** passed the visual gate. In a true cold SCENE start, BEAM→SCENE after a long live BEAM interval, and SCENE→BEAM→SCENE, keep source/camera/light/counts identical. Log each ordinary bubble's stable ID, birth mode/time, XYZ/radius/lifetime/exit, compare separate world vs shader speck/free-chain/snow/fizz seed/visibility masks, then pre/post-bloom pixel coverage. Verify running native binary contains R45 before inferring candidate failure mechanism. Older BEAM cohorts are not redistributed by choosing SCENE; this is a **testable conditional cause**, not proof or a reason to teleport/delete them. Population size may explain emptiness, **not concentration conditional on distributed positions**. Reject a fix that covers over clumps by lifting caps or reseeding when camera changes. Keep apparently early Sunlit bubble disappearance separately at G04 with per-ID cause/projection/fade evidence.
 
 ### Stage 3 | Recorded-audio response and every Range's real semantics
