@@ -145,6 +145,21 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
 
 
 @pytest.mark.qt
+def test_tiny_same_identity_material_does_not_jump_when_radius_crosses_former_hash_threshold(sphere_pixels):
+    # The fixture carries seed=.3. This radius straddles the old 0.8 sparkle
+    # threshold while changing projected geometry by much less than one pixel.
+    radius = (32.8 - .3 * 17.31) / 913.7
+    samples = []
+    for offset in (-1e-7, 1e-7):
+        pixels, _ = sphere_pixels('ordinary', radius=radius+offset, diag=0,
+                                  uSkyTint=(.3,.4,.5), uShaftColour=(.5,.6,.7), uSpeckGlow=.6)
+        samples.append(pixels)
+    energy = sum(float(np.abs(p).sum()) for p in samples)
+    assert energy > .01
+    assert float(np.abs(samples[1] - samples[0]).sum()) / energy < .001
+
+
+@pytest.mark.qt
 def test_deep_glass_tracks_source_at_physical_points_and_ignores_directional_end(sphere_pixels):
     from core.settings.default_contract import require_canonical_default
     from rendering.gl_programs.extruded_bubble_scene import scene_knobs

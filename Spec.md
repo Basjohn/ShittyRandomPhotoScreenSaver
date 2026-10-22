@@ -322,6 +322,7 @@ Rendering packs them directly; authored global counts never multiply by camera s
 contacts and wake attachment, while nominal size remains independent for mass and modest bead dimensions.
 Ordinary/fused geometry shares projection/depth and the existing near-defocus owner. Lifetime alpha is material
 opacity, including coherent union weights; a pop is a gentle opacity retirement with musical radius independent.
+Stochastic tiny-shell material membership is stable-ID-owned; a breathing radius must not reseed sparkle state.
 The water-plane exit applies only to Sunlit Surface. Deep Light retains physical world bounds and,
 for BEAM emission, its authored End; an invisible Surface ceiling must not retire Deep identities.
 SCENE procedural opacity fades at physical entry/exit and wall crossing over distances tied to the actor's
