@@ -1171,3 +1171,12 @@ floor crossing. The contracted-energy negative control loses15/16 light and fail
 shader/fade checks:47 pass; final fade counterfactual:3 pass. Source/wall/exit comparisons preserve contracted
 physical fade widths after authored energy is separated. Native P1/P7 evidence and scoped P1 visual acceptance
 live in `Docs/Reference/Extruded_Bubble/Investigation.md` §57; other-preset and long physical lifecycle gates remain.
+
+### EB finite lateral shaft envelope
+
+`test_extruded_bubble_shaft_extent_gpu.py` executes production envelope/transmittance functions on native GL,
+with independent scalar geometry, transform/camera, control, degenerate path and actual Surface/Deep owners.
+The infinite-slab negative control fails. Root connected renderer/source/end/geometry gate:48 pass. The source
+birth test now falsifies the existing0.4/s/class resting inlet at its first2.5s credit rather than expecting an
+obsolete activation burst. Full four-view images/linear shaft fields and timing limits: Investigation §58.
+These do not close the camera-derived fan or positional-light field defects.

@@ -258,6 +258,7 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uSurfaceGain": float(knobs.get("surface_gain", 1.0)), "uSurfaceSky": float(knobs.get("surface_sky", 1.0)),
         "uDust": 0.0, "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
         "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
+        "uRayRadius": float(knobs["ray_radius"]),
         "uShaftFan": float(knobs.get("shaft_fan", 0.0)), "uFanRays": float(knobs.get("fan_rays", 30.0)),
         "uFanReach": float(knobs.get("fan_reach", 0.6)),
         "uFanMix": (float(knobs.get("fan_contrast", 0.7)), float(knobs.get("fan_march", 0.2))),

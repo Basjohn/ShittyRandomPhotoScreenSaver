@@ -1509,7 +1509,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         SceneVolumePath("extruded_bubble_ray_path", "Ray Source → End:", bucket="rays", legacy_kind="light",
                   when=_EB_RAYS, tooltip='Position the physical ray Source and End in all three axes; End controls how far the shafts extend, not the lens FOV. [NEEDS AUDIT] Check source parity with Deep Light and actual visible beam length, attenuation and brightness.'),
         Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
-               tooltip='Change the angular width of the ray fan, not the physical beam length. The ray Source and End nodes determine the beam path.'),
+               tooltip='Change the angular widening of the physical shaft volume and ray fan. The ray Source and End nodes determine the beam path and length.'),
         Slider("extruded_bubble_ray_flicker", "Ray Flicker:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
                tooltip='Set the amount of music-linked shaft shimmer; this should not replace gentle transient-linked ray brightness changes. [NEEDS AUDIT] Verify changes remain smooth rather than flashing or staying visually pinned.'),
         Range("extruded_bubble_large_bubbles", "Large Bubbles:", 0.0, 40.0, scale=1, integer=True, bucket="bubbles",

@@ -2504,3 +2504,55 @@ These are native offscreen production renders, not mixed-DPI compositor/physical
 Operator explicitly accepts the shown P1 idle appearance: "That P1 Idle looks good actually." This is the scoped
 visual milestone; it does not accept long lifecycle, all-angle density, every P1 defect or other preset fidelity.
 P7 and the remaining presets still require substantial changes against their individual renamed targets.
+
+## 58. Finite lateral shaft envelope, not complete world lighting (2026-10-23)
+
+`beamExtent` admitted arbitrarily distant lateral points between the Source→End endpoint planes. It now
+multiplies the same axial fades by a world-space cone. Source aperture is the explicit artistic calibration
+0.1*WORLD_UNIT (0.9 physical radius), independent of End/camera, from shared ENGINE. Existing effective angular
+reach widens the cone; softness feathers20–60% inward without moving its outer boundary. This intentionally
+extends Ray Fan Spread's physical consumer to the marched volume; its tooltip now states that widening and
+keeps Source/End as length owners. No schema/preset, pass, sample count, timer or scene population is changed.
+Effective coincident/sub-threshold paths emit no shafts and have neutral proxy transmittance, avoiding
+normalize(0), including Deep's overridden ray origin. World units are arbitrary; the threshold is0.001 units.
+
+The reused Medium supplied11 native geometry tests executing unchanged production functions via SSBO against
+an independent scalar oracle: core/feather/exterior, rigid transforms, camera independence, reach/softness,
+old axial fades, reverse/short/coincident paths and actual Surface/Deep source ownership. A process-local old
+slab negative control fails. Root review plus renderer/source/end checks passes48 tests. That connected run
+also exposed a stale startup test expecting zero-speed Source births within0.33s. Direct floor/ceiling traces
+show the existing0.4/s/class inlet produces first births at frame225 (2.5s), at y=±8.72. The test now asserts
+absence through224 captures and real Source births at225, retaining the no-mid-volume-activation contract.
+No simulation behavior changed to satisfy the stale timing expectation.
+
+`Evidence/2026-10-23_shaft_extent/` retains the exact former shader, source hashes, current resolved P1/P7,
+frozen recorded5s physical state, full native images, linear half-resolution shaft arrays and twelve
+interleaved timings after four warmups for each of four legal views. Final producer run was isolated from
+other tests. Authored P1 shaft mean0.14794→0.08295; P7 mean0.11717→0.07127. Frozen P1 remains visually coherent;
+P7 is still heavily bright/dense and far from its renamed goal. Directional/full-field artistic acceptance
+is not established by the finite envelope. Small warmed authored-view full-frame medians are P1 baseline/new
+5.84/4.94ms and P7 4.12/4.40ms. Variable other poses and small sample size prohibit a neutrality/p99 claim;
+extra per-sample lateral math must earn its cost in G32, despite no additional pass.
+
+The camera-derived angular fan, two fixed fanExtent depths and representative18-unit attenuation point
+remain independently wrong. This cone cannot fix sample-depth misses, all-angle field continuity or Deep
+positional illumination/falloff. The production-host producer is authoritative for these comparisons;
+inspection found the historical frozen-art lab's manual common upload omits physical Source/End uniforms.
+That tooling debt remains actionable in the live plan; shared GLSL does not make its current output physical parity.
+
+Native MC source integration also runs with normal updates and all useful CLI diagnostics plus20s self-exit.
+The valid run is `logs/run_matrix/2026-10-23_idle_hint_shaft/bound_receipt.json`: one available LG TV display,
+one EB owner, canonical P1 in an isolated settings copy, original profile hash unchanged, normal retirement,
+exit0,76352 trace records/no drops or write errors and no failed settings writes. The saved display2 was absent,
+so unmodified-profile runs admitted no display; they are not render evidence. Settings copy/log isolation uses
+process-local owners, without environment overrides. An unguarded harness worker reentry and intrusive Qt
+`grabWindow` stall were corrected; those aborted probes are explicitly invalid, not product failure attribution.
+An external screenshot landed after exit and was removed. Production-host images above remain the visual proof.
+Valid-session Qt capture reports one recurring startup `QUnifiedTimer::stopAnimationDriver` warning, not a clean
+Qt pass; source attribution remains live. Steam artwork hash9b4a68b51c5f returns404 with updates enabled and stays
+on the independent watchlist. No recorded/audio playback acceptance is inferred from idle MC integration.
+
+A further settled47s→pause60s P1/P7 A/B (`idle.py`, `idle_receipt.json`) checks quiet nonregression separately
+from active views. Main-agent visual inspection preserves the accepted P1 quiet rings/dust; mean RGB change is
+0.77/255 for P1 and0.061/255 for P7, attributable to the narrower ray field. This is scoped preservation of the
+shown quiet look, not transferred operator acceptance of complete lighting or P7.

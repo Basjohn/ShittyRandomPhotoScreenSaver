@@ -31,7 +31,7 @@ from collections.abc import Mapping
 import numpy as np
 
 from rendering.gl_programs.scene3d_water import water_sun_below
-from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y
+from widgets.spotify_visualizer.extruded_bubble_geometry import WATER_SURFACE_Y, WORLD_UNIT
 from core.settings.extruded_bubble_camera import camera_axes, resolve_camera_position, ORBIT_DISTANCE, ORBIT_PIVOT
 
 FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
@@ -39,7 +39,7 @@ NEAR, FAR = 0.05, 200.0
 SURFACE_Y = WATER_SURFACE_Y
 SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 7, 19, 8
 # What a Light Type implies (the lab's "surface" and "deep" modes) and what every scene shares.
-ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
+ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0, ray_radius=0.1 * WORLD_UNIT)
 MODES = {
     "surface": dict(near_lens=1.0, near_reflect=0.08, shaft_fan=1.0, fan_rays=70.0, fan_reach=0.65, shaft_scale=0.55,
                     shaft_soft=0.35, ray_focus=0.3, ray_cut=0.1, surface_sky=0.35, glint_power=120.0,

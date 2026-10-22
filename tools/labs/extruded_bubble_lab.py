@@ -587,6 +587,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uRayCut"), settings.get("ray_cut", 0.25))
         gl.glUniform1f(u("uShaftScale"), settings.get("shaft_scale", 1.0))
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
+        gl.glUniform1f(u("uRayRadius"), settings["ray_radius"])
         gl.glUniform1f(u("uShaftFan"), settings.get("shaft_fan", 0.0))
         gl.glUniform1f(u("uFanRays"), settings.get("fan_rays", 30.0))
         gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))
