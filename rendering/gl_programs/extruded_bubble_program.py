@@ -265,6 +265,7 @@ uniform float uFlicker;         // Ray Flicker's depth now (0: steady rays)
 uniform float uShimmer;         // the shimmer's phase (the simulation's; faster on the hits)
 uniform vec3 uRaySource;        // physical world-space beam segment start
 uniform vec3 uRayEnd;           // physical world-space beam segment end
+uniform float uRayRadius;      // fixed physical source patch; independent of End and observer
 uniform vec4 uBlock0;           // up to four scene bubbles (xyz, physical radius; radius 0 = vacant)
 uniform vec4 uBlock1;
 uniform vec4 uBlock2;
@@ -273,10 +274,20 @@ uniform float uParticleAtten;   // bounded aggregate dust opacity; not per-parti
 
 float beamExtent(vec3 p) {
     vec3 line = uRayEnd - uRaySource;
-    float lengthLine = max(length(line), 0.001);
-    float along = dot(p - uRaySource, line / lengthLine);
+    float lengthLine = length(line);
+    if (lengthLine < 0.001) return 0.0;
+    vec3 delta = p - uRaySource;
+    vec3 axis = line / lengthLine;
+    float along = dot(delta, axis);
+    float lateral = length(delta - along * axis);
+    // Existing angular reach widens the physical cone too. Softness feathers
+    // inward from its outer boundary; changing End never changes source width.
+    float radius = uRayRadius + max(along, 0.0) * tan(clamp(uFanReach, 0.01, 1.2));
+    float feather = radius * mix(0.2, 0.6, clamp(uShaftSoft, 0.0, 1.0));
+    float crossSection = 1.0 - smoothstep(radius - feather, radius, lateral);
     // Real authored physical start and end; soft exit to avoid a hard lighting sheet.
-    return smoothstep(-1.8, 1.2, along) * (1.0 - smoothstep(lengthLine - 2.0, lengthLine + 1.5, along));
+    return crossSection * smoothstep(-1.8, 1.2, along)
+                        * (1.0 - smoothstep(lengthLine - 2.0, lengthLine + 1.5, along));
 }
 float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
     if (bubble.w <= 0.0) return 1.0;
@@ -289,7 +300,10 @@ float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
     return 1.0 - 0.16 * shadow;
 }
 float sceneTransmittance(vec3 p) {
-    vec3 lightTravel = normalize(uRayEnd - uRaySource);
+    vec3 line = uRayEnd - uRaySource;
+    float lengthLine = length(line);
+    if (lengthLine < 0.001) return 1.0;
+    vec3 lightTravel = line / lengthLine;
     float t = blockAttenuation(p, uBlock0, lightTravel)
             * blockAttenuation(p, uBlock1, lightTravel)
             * blockAttenuation(p, uBlock2, lightTravel)

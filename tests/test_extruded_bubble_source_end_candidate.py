@@ -66,8 +66,12 @@ def test_floor_or_ceiling_source_is_real_and_activation_has_no_halfway_populatio
         sim = mod.ExtrudedBubbleSimulation(123)
         sim.advance(mod.MusicInput(0, False), controls)
         assert not sim._bubbles  # no mature half-filled volume on activation
-        for _ in range(30):
+        # Zero-speed inflow has the physical resting budget .4 births/s/class,
+        # not the old target-sized startup burst: first credit matures at2.5s.
+        for _ in range(224):
             sim.advance(mod.MusicInput(1 / 90, False), controls)
+            assert not sim._bubbles
+        sim.advance(mod.MusicInput(1 / 90, False), controls)
         assert sim._bubbles
         assert all(abs(b.y - floor * 8.0) <= 1.0 for b in sim._bubbles)
         assert all(b.alpha <= 1. for b in sim._bubbles)

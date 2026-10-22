@@ -322,6 +322,9 @@ rest calibrations. Particle Amount controls squared density at constant per-poin
 activity separately releases displayed particle radius and glow. Subpixel energy retains the authored radius
 when display contraction reaches the existing raster floor; SCENE physical fades still use the contracted radius.
 Zero authored amount still draws no particles.
+Ray Source→End has a finite lateral cone with a fixed world-unit source aperture; existing angular spread
+widens it and softness feathers inward. Preserve axial fades and suppress coincident effective paths.
+This does not accept the remaining view-based fan or positional-light consumers.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;
