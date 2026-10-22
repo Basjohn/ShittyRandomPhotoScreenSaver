@@ -398,7 +398,7 @@ class QuickExtrudedBubbleRenderer:
         wake_count = self._wakes.upload(wake_instances(state.wakes))
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
-                                                         float(knobs.get("proxy_power", 2.5)),
+                                                         float(knobs["proxy_power"]),
                                                          light_source=(knobs["light_source"] if knobs["mode"] == "deep"
                                                                        else None)))
         # The rays read the simulation's ray driver and shimmer, never the raw level (it holds at 1 when loud).

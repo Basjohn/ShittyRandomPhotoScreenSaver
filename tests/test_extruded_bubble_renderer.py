@@ -306,6 +306,59 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize('light_type', ('Sunlit Surface', 'Deep Light'))
+def test_light_strength_scales_glint_proxy_hdr_without_moving_physical_records(target, monkeypatch, light_type):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations import extruded_bubble as implementation
+
+    capture, host = target
+    renderer = implementation.QuickExtrudedBubbleRenderer()
+    host._implementations['extruded_bubble'] = renderer
+    original = implementation.glint_proxies
+    rows = []
+
+    def observed(*args, **kwargs):
+        data = original(*args, **kwargs)
+        rows.append(data.copy())
+        return data
+
+    monkeypatch.setattr(implementation, 'glint_proxies', observed)
+
+    def probe_pixels():
+        previous = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_CUBE_MAP))
+        try:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, renderer._probe.texture)
+            return np.concatenate([np.frombuffer(bytes(gl.glGetTexImage(
+                gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, gl.GL_RGB, gl.GL_FLOAT)), dtype='f4')
+                for face in range(6)])
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, previous)
+
+    energy = []
+    for strength in (0., .5, 1.):
+        snapshot = _snapshot(extruded_bubble_light_type=light_type, extruded_bubble_light_strength=strength)
+        state = dataclasses.replace(snapshot.logical.mode_state,
+                                    bubbles=_record(z=0., radius=1.), clusters=(), wakes=())
+        snapshot = dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
+        capture.render(host, snapshot)
+        lit = probe_pixels()
+        # Keep all ambient/emitter uniforms identical; remove only proxy radiance.
+        with monkeypatch.context() as control:
+            control.setattr(implementation, 'glint_proxies', lambda shells, direction, power, **kw:
+                            original(shells, direction, 0., **kw))
+            capture.render(host, snapshot)
+            unlit = probe_pixels()
+        energy.append(float((lit - unlit).sum()))
+    assert len(rows) == 3
+    assert all(np.array_equal(rows[0][:, :4], row[:, :4]) for row in rows[1:])
+    assert rows[0][:, 4].sum() == 0.
+    assert rows[2][:, 4] == pytest.approx([10. if light_type == 'Sunlit Surface' else 2.5])
+    assert rows[1][:, 4] == pytest.approx(rows[2][:, 4] * .5)
+    assert energy[0] == 0. and energy[1] > 0.
+    assert energy[2] == pytest.approx(energy[1] * 2., rel=.03)  # half-float probe quantisation
+
+
+@pytest.mark.qt
 def test_deep_light_softness_changes_native_shaft_pixels(target):
     capture, host = target
     def at(softness):
