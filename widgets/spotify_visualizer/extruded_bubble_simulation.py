@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 
 from core.settings.visualizer_paths import direction_of, world_point
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
-    WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis, upstream_source, box_entry,
+    WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis, upstream_source, box_entry, scene_track_length, scene_source_face_weights,
 )
 
 MAX_BUBBLES = 192
@@ -60,6 +60,7 @@ class ExtrudedBubbleControls:
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
     bubble_spread: float = 1.0               # source-patch width; independent from Columns and particle width
+    emission_geometry: str = "BEAM"           # BEAM authored patch / SCENE all physical upstream faces
     surface_scene: bool = False              # authored Sunlit Surface light mode; only governs real water-plane retirement
     stream_direction: tuple[float, float] = (0.0, 0.0)   # legacy angle for standalone callers
     stream_path: tuple[float, ...] | None = None       # normalized source/end xyz, authoritative when supplied
@@ -243,13 +244,37 @@ class ExtrudedBubbleSimulation:
 
     def _spawn(self, large: bool, controls: ExtrudedBubbleControls, direction, *, anywhere: bool) -> None:
         rng = self._rng
-        column = controls.columns > 0.0 and rng.random() < controls.columns
-        # A high Spread previously clamped every out-of-bounds coordinate to the
-        # same wall coordinate. That made artificial, tightly stacked birth bands,
-        # especially when Source itself was on a volume face. Resample within the
-        # actual domain; never manufacture a pile of identical edge coordinates.
+        # Columns are localized BEAM authoring; SCENE has whole-face physical
+        # distribution rather than assembling lane stripes at the inlet.
+        column = (controls.emission_geometry != "SCENE" and controls.columns > 0.0
+                  and rng.random() < controls.columns)
+        # Admit a prospective PHYSICAL shell, not an arbitrary fixed-size dot.
+        # The R42 1.8-world-unit spacing cap was smaller than the sum of two
+        # reacted large radii, so apparently well-separated births still clipped
+        # and stacked into dense bands on the very next frame.
+        radius = self._radius(large, controls.size_variety) * self._applied_sizes[large]
+        envelope = self._body_big_envelope if large else self._body_small_envelope
+        strength = controls.breathing if large else controls.small_pulse
+        prospective = radius * _reaction_scale(strength, envelope, 4.0 if large else 3.0)
+        scene = controls.emission_geometry == "SCENE"
+        face_weights = (scene_source_face_weights(controls.stream_path[:3], direction)
+                        if scene and controls.stream_path is not None else None)
+        # BEAM uses an authored local patch; SCENE samples all real upstream
+        # faces, weighted by their physical projected areas. Never spawn
+        # against the camera and never clamp a rejected birth to a wall.
+        # Resample in the world domain. A crowded inlet MUST defer admission,
+        # never force a mid-volume birth or manufacture a hidden backlog.
         for _ in range(32):
-            if controls.stream_path is not None:
+            if scene:
+                point = upstream_source(rng, direction, face_weights)
+                if anywhere:
+                    # At activation only: a mature tank, not an instant column
+                    # in front of the eye. After startup, births use the same
+                    # source-only admission as BEAM.
+                    fraction = rng.uniform(0.025, 0.965)
+                    distance = scene_track_length(point, direction)
+                    point = tuple(p + d * distance * fraction for p, d in zip(point, direction))
+            elif controls.stream_path is not None:
                 across, deep_axis = stream_basis(direction)
                 anchor = world_point(controls.stream_path[:3], WORLD_HALF)
                 noise_a = rng.uniform(-0.55, 0.55) * WORLD_UNIT * max(0.0, controls.bubble_spread)
@@ -263,7 +288,7 @@ class ExtrudedBubbleSimulation:
                 distance = sum(p * a for p, a in zip(point, across))
                 lane = round(distance / _LANE) * _LANE + rng.gauss(0.0, _LANE * .06)
                 point = tuple(p + a * (lane - distance) for p, a in zip(point, across))
-            if controls.stream_path is None and not anywhere:
+            if controls.stream_path is None and not anywhere and not scene:
                 point = box_entry(point, direction)
                 if point is None:
                     continue
@@ -275,18 +300,23 @@ class ExtrudedBubbleSimulation:
             # A new bubble cannot materialize already overlapping a recent birth.
             # If every bounded candidate is crowded, defer admission to a later
             # logical capture instead of forcing an intersecting spawn or burst.
-            if not anywhere:
-                typical = (sum(_LARGE_RADIUS) if large else sum(_MID_RADIUS)) * .5 * self._applied_sizes[large]
-                spacing = min(WORLD_UNIT * .20, typical * 1.5)
-                if any(sum((p-q)**2 for p, q in zip(point, (b.x, b.y, b.z))) < spacing**2
+            if not anywhere or scene:
+                # Never clip newly admitted bubbles through already visible ones.
+                # Also keep mature SCENE startup shells from intersecting.
+                # Existing BEAM legacy startup distribution is unchanged.
+                # Use the physical radius and the displayed shell's current size;
+                # downstream Smoothing must not affect the musical admission rate.
+                if any(sum((p-q)**2 for p, q in zip(point, (b.x, b.y, b.z))) <
+                       (prospective + max(b.current_radius, b.radius * 0.35) + WORLD_UNIT * .08)**2
                        for b in self._bubbles if b.popping < 0 and not b.leaving):
                     continue
             break
         else:
             return False  # crowded inlet: no queued burst and no fake mid-volume birth
         bubble = _Bubble(self._next_ident, large, *point,
-                         self._radius(large, controls.size_variety) * self._applied_sizes[large],
-                         rng.uniform(0.0, math.tau), alpha=1.0 if anywhere else 0.0)
+                         radius, rng.uniform(0.0, math.tau),
+                         current_radius=prospective, visual_radius=prospective,
+                         alpha=1.0 if anywhere else 0.0)
         self._next_ident += 1
         self._bubbles.append(bubble)
         return True
@@ -470,24 +500,40 @@ class ExtrudedBubbleSimulation:
                 # A physical Source node does not imply a mature population has
                 # magically appeared halfway through its journey on startup.
                 # Admit it using the same bounded inflow as later music changes.
-                if controls.stream_path is None:
+                if controls.stream_path is None or controls.emission_geometry == "SCENE":
                     for _ in range(targets[large]):
+                        # Finite attempts; never weaken spacing just to reach
+                        # authored occupancy or allocate beyond MAX_BUBBLES.
                         self._spawn(large, controls, direction, anywhere=True)
                 continue
             shortage = targets[large] - len(live[large])
             if shortage > 0 and present[large] < limits[large]:
-                # A steady inflow, faster the further below target (never a burst).
-                self._spawn_credit[large] += dt * (0.5 + 1.5 * shortage / max(1, targets[large]))
-                while self._spawn_credit[large] >= 1.0 / max(1, targets[large]) and shortage > 0 \
-                        and len(self._bubbles) < MAX_BUBBLES:
-                    if present[large] >= limits[large]:
-                        break  # retiring identities retain their slot until their gentle fade completes
-                    self._spawn_credit[large] -= 1.0 / max(1, targets[large])
-                    if not self._spawn(large, controls, direction, anywhere=False):
-                        self._spawn_credit[large] = 0.0  # never accumulate a source backlog
-                        break
-                    present[large] += 1
-                    shortage -= 1
+                # Population handles are an OCCUPANCY ceiling, not permission to
+                # generate an entire deficit in a few frames. The old threshold
+                # 1/target made the inlet deliver O(target) bubbles per second,
+                # causing musical and startup bands even with large Spread.
+                # Admit by actual stream throughput (distance/s) over authored
+                # path length, with a small resting inlet. No new timer/clock.
+                if controls.emission_geometry == "SCENE":
+                    # One finite physical tank. Distributed births admit at
+                    # the faces, never through a screen-space viewport.
+                    passage = max(WORLD_UNIT, 2.0 * max(WORLD_HALF))
+                elif controls.stream_path is not None:
+                    source = world_point(controls.stream_path[:3], WORLD_HALF)
+                    end = world_point(controls.stream_path[3:], WORLD_HALF)
+                    passage = max(WORLD_UNIT, math.dist(source, end))
+                else:
+                    passage = 2.0 * WORLD_HALF[1]
+                inlet_per_second = min(12.0, 0.4 + max(0.0, speed) * targets[large] / passage)
+                self._spawn_credit[large] = min(1.0, self._spawn_credit[large] + dt * inlet_per_second)
+                # At most one birth per logical capture; never accumulate a
+                # multi-birth burst while Source is blocked.
+                if self._spawn_credit[large] >= 1.0 and len(self._bubbles) < MAX_BUBBLES:
+                    self._spawn_credit[large] -= 1.0
+                    if self._spawn(large, controls, direction, anywhere=False):
+                        present[large] += 1
+                    else:
+                        self._spawn_credit[large] = 0.0
             elif shortage < 0:
                 self._spawn_credit[large] = 0.0
                 # Reduced musical occupancy closes the inlet; it must NOT kill
@@ -541,16 +587,23 @@ class ExtrudedBubbleSimulation:
 
         self._collide(controls, dt)
 
-        # In Sunlit Surface an upward-travelling shell must almost touch the
-        # ACTUAL water plane before EOL fade; an authored stream End may be far
-        # below the visible ceiling. In Deep Light, retain the finite authored
+        # In Sunlit Surface, let the bubble visibly REACH the ACTUAL water plane
+        # before starting its EOL fade. R42 triggered on the upper rim, then
+        # spent the entire 0.9 s fade while the centre was still submerged.
+        # At low stream speed that looked like an early death far below the sky. In Deep Light, retain the finite authored
         # End plane (including horizontal / descending streams) exactly as before.
         # Neither camera pose nor musical occupancy can trigger retirement.
         if controls.surface_scene and direction[1] > 0.1:
             for b in self._bubbles:
                 if b.popping < 0.0 and not b.leaving:
-                    if b.y + b.visual_radius >= WATER_SURFACE_Y - 0.05 * WORLD_UNIT:
+                    if b.y >= WATER_SURFACE_Y:
                         b.leaving = True
+        elif controls.emission_geometry == "SCENE":
+            # SCENE's exit is the far physical box face for each individual
+            # track, not the global End dot acting as a sink. The ordinary
+            # world-boundary EOL below already handles this, and retains
+            # stable identities through their gentle fade.
+            pass
         elif controls.stream_path is not None:
             end = world_point(controls.stream_path[3:], WORLD_HALF)
             for b in self._bubbles:

@@ -1,5 +1,7 @@
 # Extruded Bubble — targets, lab and investigation
 
+**NEW 22 October independent code audit:** [Additional source-audit findings and falsifiers](Additional_Source_Audit_2026-10-22.md). Verified code behavior includes quiet/high Breathing handle coupling, Deep/SCENE water-plane EOL leakage, SCENE→BEAM cohort premature End retirement, GPU speck photometric masking, stacked quiet range compression and disabled-ray intermediate render work. These are **not visually accepted fixes**. See the single live `Current_Plan.md` §4B G00–G33 gates and [Acceptance Runbook](Acceptance_Runbook.md); retain every existing issue.
+
 **This is the one home for EB images and investigation details.** Latest live rejection: activation overshoot/
 yank-down, large/small size judder, unreliable close DoF/pixelation, and about 50% excessive active speck glow.
 Spherical form and readable overlap depth take priority over glow tuning. Details and solution plans:
@@ -39,6 +41,12 @@ local and ignored, **inside this folder**. Capture receipts preserve the paths a
 original runs; those historical receipt strings were not rewritten. The original recorded sound inputs stay
 with the recorder at `logs/visualizer_recordings`, not in a competing audio library.
 
+**Active work and visual evidence:** [Execution & visual acceptance runbook](Acceptance_Runbook.md) documents every open gate in architectural order (G00–G33). The authoritative task statuses remain in `Current_Plan.md` §4B; past implementation notes and this README are not alternative task queues. A source test or attractive still never closes a visual failure.
+
+## 22 October active architectural repair and continued SCENE rejection
+
+The [newer operator screenshot](Evidence/2026-10-22_SCENE_operator_rejected_clustering.png) shows **SCENE still visibly clustered** after the R45 handoff: bright islands and wide empty gaps. This is rejected native appearance `[~]`, not a passed SCENE distribution fix. New audit also establishes Surface's dominant view-angular fan, source/end shafts without lateral beam width, inconsistent Deep positional light/glow and approximate four-bubble attenuation. Lighting-authority consolidation **precedes** adding a distinct Lighting Coverage BEAM/SCENE control. Full new findings, exact code owners, mode-switch bubble-cohort hypothesis and the test matrix: [Lighting Authority Repair](Lighting_Authority_Repair.md). Only `Current_Plan.md` G05/G06/G07/G08/G09/G27/G30/G32/G33 owns work/status; [Acceptance Runbook](Acceptance_Runbook.md) owns the necessary native evidence. R45's implementation candidate and the existing full failure inventories remain unaccepted and intact.
+
 ## Response roles — operator clarification, 2026-10-20
 
 | Passage | Large bubbles | Small bubbles and other lanes |
@@ -53,6 +61,13 @@ clean positive changes and its own release. Its transient/event lane does not di
 Reproduce the useful role separation; do not copy a generic shared loudness hold. Controls and preset settings
 may be corrected where needed, with actual endpoint/Range effects proved. The passage-role source candidate
 and its captures are not an accepted physical response baseline.
+
+**Operator clarification, 22 October:** the ideal *visual* comparison is **2D Bubble with Dynamic Floor
+ON** (accepted reference) versus **Extruded Bubble with Dynamic Floor OFF** (required EB goal), at matching
+recorded musical timestamps. Dynamic Floor can even hurt response when song dynamics change, so EB must match
+the useful musical breathing, not blindly reproduce the floor's adaptive behavior. See the active G13/G14/G25
+items in `Current_Plan.md`, the detailed `Target.md` reactivity contract and the `Acceptance_Runbook.md` gate.
+This is not operator acceptance of any current EB build.
 
 ## Preset → target → lab registry
 

@@ -6,6 +6,21 @@
 
 **Classification key:** `COMPLETELY FUCKED` = operator-confirmed physical failure; `PARTIAL (BARELY)` = code path exists or a narrow defect changed, but the actual intended visual outcome has not passed. Both deliberately use `[~]`, not `[x]`; neither is clearance. A passing synthetic test is never evidence of displayed reactivity. Every preset is operator-authored and mutable; no retuning a preset simply to mask an implementation failure.
 
+
+## 38. All-angle world lighting audit and agent-first validation protocol (unaccepted)
+
+**Question:** At a physical camera position just beneath Sunlit Surface, if the camera turns to look *down* along the underwater sun shafts, will shafts occupy the same world space as when observed looking upward or from the side? **Source answer: partial true 3D plus a deliberate view-direction approximation; native all-angle behavior not verified.**
+
+- `rendering/gl_programs/extruded_bubble_scene.py::physical_camera` supplies world eye, rotation and unchanged projection/FOV; the surface-bound camera eye is clipped beneath `SURFACE_Y - 0.5`. The backdrop in `rendering/gl_programs/extruded_bubble_program.py::basinWater` intersects view rays with `SURFACE_Y` for positive ray Y, shading an actual fixed *plane* with noisy/rippled surface normals. It is not separate polygonal displaced water geometry. Changing the normals can shift the apparent glint/bright patch; don't confuse that view appearance with a different physical Y plane.
+- The shaft pass `labShafts` ray-marches **world positions** `uEye + ray*s`, checks each against the authored `surfaceY`, samples water/shaft patterns in world X/Z and fades below the surface. `beamExtent` uses the physical Ray Source→End segment, and the renderer receives the same eye from the physical camera contract. This gives a real physical basis for a downward view, but does not prove the final pixel appearance.
+- In the **same shader**, `labShaftFan` builds an angular sun-relative pattern from `ray`, not a ray-marched 3D scatterer; its visibility is gated by `max(beamExtent(uEye+ray*12), beamExtent(uEye+ray*23))`. The march also has the view weight `(0.25 + pow(max(dot(ray,uSunBelow),0),2))`; the backdrop additionally applies an even stronger look-toward-light factor through `uRayFocus`. The fan may strongly diminish when looking *away* from the light. Both masks can make physically present shafts appear absent, alter their apparent direction or follow the camera view more than the scene. This is a **known approximation, not cleared geometry parity**.
+- In **Sunlit Surface**, distant sun illumination and independently authored `Ray Source→End` are two different semantics, so do not assume a real positional lamp at Light Source. In **Deep Light**, renderer explicitly links its shaft origin to authored Light Source and leaves Ray End independent. The earlier operator Light/Ray mismatch remains an active source/UI/renderer parity check, despite this intended distinction.
+- The renderer's `sceneTransmittance` attenuates shafts with at most four dominant shell proxies and a bounded **aggregate** dust term; this is not full per-shell or per-particle path tracing. Do not call it correct geometry simply because a GL program links or one screenshot looks plausible.
+
+**Mandatory falsifier G06:** hold scene, song instant, 3D rays, Light/End path, FOV and ray Range fixed. Capture from four eye poses (below sun facing upward, same eye looking downward, near the surface looking down, oblique/cross-axis) and project Ray Source/End and any occluding bubble to the actual rendered frame. Separate and, if necessary, temporarily isolate march-only and fan-only terms using test-owned diagnostic shader arguments **without introducing a second production lighting path**. Verify that brightness/visibility can vary naturally with scattering angle while the underlying physical shaft region does **not** teleport, vanish unreasonably or flip direction. Report time-coded final HDR pixels and cost. A proper downward render is **unproven** until visually compared at the same world points.
+
+**Queue and validation mapping:** `Current_Plan.md` G00–G33 and `Acceptance_Runbook.md` are the sole execution order and evidence protocol. This section only adds concrete source findings and does **not** replace old investigations or revise any acceptance state. No runtime/shader change was made during this audit.
+
 ## 37. Three cumulative log archives and R37 source candidates (2026-10-21; ALL UNACCEPTED)
 
 The user supplied `logs814d70270a.zip`, `logs814d70270a2.zip`, and `logs814d70270a3.zip`. The latter archives extend the earlier logs: the distinct errors in the final cumulative `screensaver_lifecycle.log` are at 01:38:41, 02:48:48, 02:50:37 and 02:55:10 (four distinct Settings barrier failures, not 2+3+4=9). The newest run includes multiple `screensaver_spotify_vis.log` entries `loopback frame: samples=512`; neither pixel brightness nor per-ID physical vs displayed radii are logged, and the user earlier observed ~80% better judder at 256 on Ragdoll. Therefore no faithful quantitative within-song reactivity improvement/worsening can be deduced from these logs. Periodic callback/tick spikes do not prove the cause of continuous body-size judder. Recorded music comparison remains necessary.
@@ -130,6 +145,14 @@ motion. Nothing should remain remotely fast in idle. An autonomous periodic idle
 requirement. Earlier mentions of missing "idle breathing" must not be read as a request to restore a sine.
 `anything_mixed2.jsonl` should give impressive response immediately; accepted 2D Bubble supplies the minimum
 response-scale reference, without becoming EB's simulation/settings owner.
+
+**2026-10-22 operator comparator refinement (NOT an accepted EB outcome):** specifically compare visually
+confirmed 2D Bubble **Dynamic Floor ON** to EB **Dynamic Floor OFF** on the same recording and musical moments.
+EB should ideally match or exceed 2D's audible-phrase-linked size response at ordinary controls even without
+its own automatic floor. Dynamic Floor may worsen a song's responsiveness once its dynamic tracking engages,
+so the target is meaningful musical breathing across changing passages, not imitation of 2D floor excursions or
+a claim that an adaptive floor is required. Capture both settings separately with native synchronized pixels,
+large/small stable-ID radius histories and actual floor state; retain all existing FAILED reactivity verdicts.
 
 ### 6.2 Evidence and fidelity checks
 
@@ -1841,3 +1864,81 @@ Operator stack at 2026-10-21 00:44: `_select_mode_page → VisualizerModeBodyHos
 Pure mathematical/source regression `tests/test_extruded_bubble_flight_navigation_candidate.py` covers camera-relative forward/strafe, reverse, simultaneous yaw+travel continuity, fixed FOV, settled single-owner offset, mode exclusion and the `describe` branch. `tests/test_extruded_bubble_flight_keyboard_native.py` is a focused Windows PySide6 keyboard/Settings-construction test: unrun here because PySide6 is absent. Also validate Windows native pressing Q/E and Shift+W/S from both displays, mouse-plus-key overlaps, key-auto-repeat and focus loss, Ctrl interaction and Edit mode, reset during held keys, mode/preset swapping, customized authored camera pose persistence and scene bounds. Test movement inside P1/P7 streams without unexpected FOV/zoom, and judge feel/constant-speed and clipping physically on-screen; synthetic records DO NOT amount to visual acceptance.
 
 **No existing defect or milestone is marked accepted.** All EB size, temporal, reactivity, rays, particles, emission, projection, large/small bubble, native Settings lifecycle and previous log failures remain active exactly as documented in the live plan and preceding sections. Do not demand another chunked suite.
+
+
+## 39. SCENE floor inlet distribution and alleged early bubble death (22 October; all unaccepted)
+
+**Operator evidence.** Two SCENE captures at 00:52:32 and 00:53:12 show decorative particle groups remaining in conspicuously localized regions, only sparse physical bubbles across the frame, and an apparent absence of bubbles near the visible Sunlit Surface. The focused native Settings test reports 9 passes; it tests mode admission and controller construction, not whether pixels satisfy an aquarium-wide distribution or whether bubbles physically die at the observed screen height.
+
+**Log provenance.** The 22 October run selected `extruded_bubble_emission_geometry='SCENE'`, an authored floor/upward stream (Source Y = -1; End Y about 0.87–1), Sunlit Surface, large-count handles [1,8], small-count handles [7,55], 256-sample audio. These current operator-authored values can legitimately leave a sparse 36×16×36 volume. Do not overwrite them or automatically raise `MAX_BUBBLES`. No per-ID world-position/exit-reason trace is available in the supplied runtime log, so it cannot prove a collision death or even true death rather than leaving the camera view.
+
+**Confirmed shader shortcuts relevant to clumping.** The SCENE `sceneInlet` sampler previously generated a floor-face Z coordinate by applying `fract` to a mixture of independent UV samples; that introduces transverse correlation/nonuniformity absent from the CPU physical-face sampler. More importantly, the speck shader always applied BEAM's sine-cloud *visibility mask* on the global seed before sampling the actual SCENE path. Hence a world-wide source could still produce isolated bright cloud patches. The R45 source candidate maps each face's two transverse coordinates directly from separate uniform seed components and, for SCENE only, applies a bounded seed-based visibility threshold, retaining authored band/cloud variation in brightness rather than dropping spatial patches. BEAM math, source/exit identities and preset choices are unchanged. Tests must still inspect actual native pixels and costs. No new render passes, clocks or persistent allocations.
+
+**Early surface claim remains separate and serious.** Simulation logic normally starts Sunlit Surface departure when centre Y reaches the shared world plane `WATER_SURFACE_Y=9`, but camera projection, render-layer branch, world side bounds and logical death causes must be distinguished before concluding why large bubbles appear to vanish halfway up the screenshot. SCENE distribution means collision is not a credible default explanation; do not use it as one without a recorded Pop/contact. The R44 G04 and G09 gates require a captured stable ID, alpha and true world→pixel projection at the same time as the visible water. Do not move the surface Y, fiddle with FOV, weaken lifetime fades, or mark this accepted from the new distribution correction.
+
+
+## 40. 22 October source audit: lighting authority, finite beam width and persistently clustered SCENE (UNACCEPTED)
+
+This section supplements §39 and all earlier measurements; it closes **nothing**.
+The operator supplied a new screenshot (preserved at `Evidence/2026-10-22_SCENE_operator_rejected_clustering.png`) showing SCENE emission **still visibly
+clumped** after the R45 handoff. Narrow bright islands across the lower water
+remain, with dark gaps; the larger bubbles are sparse. A still validates the
+visible grouping complaint, not physical world coordinates or the exact current
+exe commit. R45 source changes may or may not be the exact binary used: capture
+the native build/source provenance alongside screen and uniform evidence. The
+clustered visual result is rejected `[~]`; G07/G08/G09/G32 remain open.
+
+**Important correction to former reasoning:** low population demand explains
+sparsity, **not narrow groups of actually distributed points**. Do not present
+counts as the source of spatial grouping. Do not quietly conflate emission
+clumps with light/bloom-localized visibility or the still-separate apparent
+Sunlit Surface premature bubble disappearance (G04/G09).
+
+**Additional possible mechanism: historical cohorts on emission-mode change.**
+Ordinary simulation bubbles persist as `_bubbles` across controls changes;
+`_spawn` consults the current `emission_geometry` only for a *new* birth.
+Switching BEAM→SCENE is not a command to relocate already-living BEAM
+bubbles. This explains why a scene *could* remain grouped after switching, but
+**cannot** explain clustering on an independent direct-cold SCENE start without
+a different mechanism. Tag stable IDs with admission geometry and age for the
+three controlled source-mode histories; preserve continuity, never forcibly
+teleport/delete or visually hide old populations to make a quick fix. Compare
+physical bubbles, procedural free chains/marine snow/specks, attached fizz and
+actual HDR/luminance pixels separately; the latter can group even with a
+well-distributed physical inlet because of masks/light/occlusion.
+
+**New source findings for P1 and P4, not yet implemented:**
+- `extruded_bubble_scene.py:MODES["surface"]["shaft_fan"] = 1.0` favors
+  a view-direction-based fan. Its `SHAFT_FRAGMENT` camera-relative `fanExtent`
+  probes at 12 and 23 units and `labShaftFan(viewRay, ...)` can dominate the
+  marched world component; seeing thin/wrong/down-view beams follows plausibly
+  from this architecture but still needs native camera A/B.
+- `extruded_bubble_program.py:SHAFT_FRAGMENT:beamExtent` gates projection
+  `along` the Source→End axis only. It does **not** measure lateral distance,
+  so the raw extent is a pair of parallel slab boundaries rather than a real
+  bounded tube/cone. Procedural noise only disguises that geometric defect.
+- Surface light is directional (correct for the sun) while the Settings light
+  source **position** is misleading. Deep uses physical source coordinates,
+  but its visible glow is primarily the angular `dot(viewRay, normalize(
+  lightSource-eye))` and high exponents with no proper world-space distance
+  attenuation. `scene_knobs` aligns deep ray start to light start, not all
+  water/glint/shaft illumination consumers into a coherent positional field.
+- Existing shaft attenuation uses four physical bubble `vec4` proxies
+  (`uBlock0..3`) plus an aggregate particle term; this is a bounded
+  approximation, not volumetric shadow parity. No expensive shadow-map
+  mandate follows from noticing the limitation.
+
+**Next architectural repair order (not a second task queue):** G05 audit all
+light-to-pixel consumers → G05/G06/G27 unify physical emitter and truthful
+light field → replace angular placement with bounded world-space scattering,
+lateral extent and Deep distance falloff while keeping existing half-resolution
+optics → G05/G27/G30 add a separate proposed Lighting Coverage BEAM/SCENE
+under existing Light Type only after correctness → G06/G27/G32/G33 native
+all-angle, shader, pre/post-bloom, CPU/GPU p95/p99 and P1–P7 acceptance.
+Lighting Coverage is entirely separate from Motion Emission Geometry, and
+current authored presets/Custom must not be overwritten.
+
+**Primary detailed plan with fixed falsifiers:**
+`Lighting_Authority_Repair.md`; sole live task ownership remains the G00–G33
+items in `Current_Plan.md` §4B and the corresponding runbook. All previously
+failed/partial tasks and their evidence remain unaccepted.

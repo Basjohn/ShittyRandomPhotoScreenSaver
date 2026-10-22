@@ -799,6 +799,9 @@ class SceneVolumeMapper(_VisualControl):
         self._base_eye = (0., 0., 0.)
         self._camera_angles = (0., 0.)
         self._linked_source = None
+        self._emission_geometry = 'BEAM'
+        self._scene_direction = (0., 1., 0.)
+        self._scene_source = (0., -1., 0.)
         self._references = {}
         self._active = 0
         self._drag_axis = ''
@@ -826,8 +829,13 @@ class SceneVolumeMapper(_VisualControl):
         self.update()
 
     def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.),
-                           camera_angles=(0., 0.), linked_source=None):
+                           camera_angles=(0., 0.), linked_source=None,
+                           emission_geometry='BEAM', scene_direction=(0., 1., 0.),
+                           scene_source=(0., -1., 0.)):
         self._references = dict(paths or {})
+        self._emission_geometry = emission_geometry
+        self._scene_direction = tuple(float(v) for v in scene_direction)
+        self._scene_source = tuple(float(v) for v in scene_source)
         self._base_eye = tuple(float(x) for x in base_eye)
         self._camera_angles = tuple(float(x) for x in camera_angles)
         self._linked_source = tuple(linked_source) if linked_source is not None else None
@@ -899,6 +907,30 @@ class SceneVolumeMapper(_VisualControl):
         for x,z in ((-1.,0.),(1.,0.),(0.,-1.),(0.,1.)):
             p.drawLine(self._point((x,-1.,z)), self._point((x,1.,z)))
         self._paint_wire(p, 0.)
+        if not self._camera_only and self._emission_geometry == 'SCENE':
+            # These are real box inlet/outlet FACES, not a fabricated point
+            # source. Direction, area and volume come from the existing stream
+            # path and normalized world cube. Pure UI paint; no extra owner.
+            from widgets.spotify_visualizer.extruded_bubble_geometry import scene_source_face_weights
+            faces = scene_source_face_weights(self._scene_source, self._scene_direction)
+            for axis, component in enumerate(self._scene_direction):
+                if faces[axis] < 1e-6:
+                    continue
+                for is_inlet in (True, False):
+                    side = (-1. if component > 0 else 1.) * (1. if is_inlet else -1.)
+                    vertices = []
+                    others = [k for k in range(3) if k != axis]
+                    for u, v in ((-1., -1.), (1., -1.), (1., 1.), (-1., 1.)):
+                        point = [0., 0., 0.]
+                        point[axis] = side
+                        point[others[0]], point[others[1]] = u, v
+                        vertices.append(self._point(point))
+                    col = QColor(94, 223, 231, 32) if is_inlet else QColor(255, 195, 99, 23)
+                    outline = QColor(94, 223, 231, 100) if is_inlet else QColor(255, 195, 99, 85)
+                    p.setBrush(col)
+                    p.setPen(QPen(outline, 1.4))
+                    p.drawPolygon(QPolygonF(vertices))
+            p.setBrush(Qt.BrushStyle.NoBrush)
         # Faint neighbouring path references; no second coordinate authority.
         colors = {'stream': QColor(87, 197, 212, 90), 'light': QColor(250, 183, 92, 90),
                   'rays': QColor(210, 157, 236, 90)}

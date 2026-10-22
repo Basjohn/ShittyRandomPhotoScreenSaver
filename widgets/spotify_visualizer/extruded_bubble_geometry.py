@@ -23,7 +23,7 @@ def stream_basis(direction):
                     z * across[0] - x * across[2], x * across[1] - y * across[0])
 
 
-def upstream_source(rng, direction):
+def upstream_source(rng, direction, face_weights=None):
     """Uniform physical inflow: face area times inward stream component.
 
     A sampled ray through the interior would bias diagonal faces. Select actual
@@ -31,6 +31,8 @@ def upstream_source(rng, direction):
     """
     weights = [abs(direction[i]) * WORLD_HALF[(i + 1) % 3] * WORLD_HALF[(i + 2) % 3]
                for i in range(3)]
+    if face_weights is not None:
+        weights = [max(0.0, float(weight)) for weight in face_weights]
     choice = rng.random() * sum(weights)
     axis = 2
     for i, weight in enumerate(weights):
@@ -58,3 +60,33 @@ def box_entry(point, direction):
         a, b = (c - h - p) / d, (c + h - p) / d
         enter, leave = max(enter, min(a, b)), min(leave, max(a, b))
     return tuple(p + d * enter for p, d in zip(point, direction)) if enter <= leave else None
+
+
+def scene_track_length(point, direction):
+    """Inside distance to the outgoing face from a real upstream boundary sample.
+
+    The only geometric authority is WORLD_CENTER/WORLD_HALF; the camera and
+    authored End marker do not attract/steer individual SCENE bubbles.
+    """
+    candidates = []
+    for coordinate, component, centre, half in zip(point, direction, WORLD_CENTER, WORLD_HALF):
+        if component > 1e-12:
+            candidates.append((centre + half - coordinate) / component)
+        elif component < -1e-12:
+            candidates.append((centre - half - coordinate) / component)
+    return max(0.0, min(candidates)) if candidates else 0.0
+
+
+def scene_source_face_weights(source, direction):
+    """Upstream physical faces selected by the authored normalized Source.
+
+    Floor -> floor face; adjoining floor/wall/corner -> each incident face
+    whose inward normal admits the directed stream. If the point is interior,
+    or the operator authors an outward-facing impossible inlet, fall back to
+    the true weighted upstream faces. Same three weights feed CPU and GPU.
+    """
+    baseline = tuple(abs(d) * WORLD_HALF[(i + 1) % 3] * WORLD_HALF[(i + 2) % 3]
+                     for i, d in enumerate(direction))
+    chosen = tuple(weight if (abs(float(src)) >= 0.7 and float(src) * d < -1e-7) else 0.0
+                   for src, d, weight in zip(source, direction, baseline))
+    return chosen if sum(chosen) > 1e-9 else baseline

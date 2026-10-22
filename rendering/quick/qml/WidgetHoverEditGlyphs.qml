@@ -47,7 +47,8 @@ Item {
         // Keep the lane inside the card, clear of its outside header chrome.
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        anchors.margins: 8
+        anchors.leftMargin: 10  // 2 px farther inside the actual card
+        anchors.bottomMargin: 8
         spacing: 5
         Repeater {
             // Stable delegate identities: eligibility changes without rebuilding
@@ -95,10 +96,10 @@ Item {
                         ctx.lineWidth = 2.3
                         ctx.lineCap = "round"
                         ctx.beginPath()
-                        ctx.moveTo(5.14, 5.14)
-                        ctx.lineTo(14.86, 14.86)
-                        ctx.moveTo(14.86, 5.14)
-                        ctx.lineTo(5.14, 14.86)
+                        ctx.moveTo(5.38, 5.38)
+                        ctx.lineTo(14.62, 14.62)
+                        ctx.moveTo(14.62, 5.38)
+                        ctx.lineTo(5.38, 14.62)
                         ctx.stroke()
                     }
                 }
@@ -114,7 +115,7 @@ Item {
                         ctx.clearRect(0, 0, width, height)
                         ctx.save()
                         ctx.translate(10, 10)
-                        ctx.scale(0.9, 0.9)
+                        ctx.scale(0.855, 0.855)
                         ctx.translate(-10, -10)
                         ctx.strokeStyle = "#f2f4f7"
                         ctx.lineWidth = 1.6

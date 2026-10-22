@@ -865,6 +865,44 @@ void main() {
 """
 
 
+_SCENE_INLET_GLSL = """
+// Shared physical inlet geometry for SCENE. The same weighted upstream
+// face law is used by the CPU bubble sampler. Camera-independent and bounded.
+vec4 sceneInlet(float faceSeed, vec2 uv, vec3 direction, vec3 centre, vec3 halfExt, vec3 faceWeights) {
+    vec3 d = normalize(direction);
+    // Weights already resolved once by the authored CPU world authority.
+    vec3 area = faceWeights;
+    float choice = faceSeed * max(0.000001, area.x + area.y + area.z);
+    int axis = choice < area.x ? 0 : (choice < area.x + area.y ? 1 : 2);
+    // Two independent coordinates span whichever physical face was chosen.
+    // The former construction derived Z from a blend of UV.x/UV.y, even for
+    // the floor face, correlating its transverse coordinates and concentrating
+    // rendered cohorts despite whole-face CPU admission.
+    vec3 p = centre;
+    if (axis == 0) {
+        p.x -= sign(d.x) * halfExt.x;
+        p.y += (uv.x * 2.0 - 1.0) * halfExt.y;
+        p.z += (uv.y * 2.0 - 1.0) * halfExt.z;
+    } else if (axis == 1) {
+        p.x += (uv.x * 2.0 - 1.0) * halfExt.x;
+        p.y -= sign(d.y) * halfExt.y;
+        p.z += (uv.y * 2.0 - 1.0) * halfExt.z;
+    } else {
+        p.x += (uv.x * 2.0 - 1.0) * halfExt.x;
+        p.y += (uv.y * 2.0 - 1.0) * halfExt.y;
+        p.z -= sign(d.z) * halfExt.z;
+    }
+    vec3 toFar = centre + halfExt;
+    vec3 toNear = centre - halfExt;
+    float distanceOut = 1e10;
+    for (int k = 0; k < 3; ++k) {
+        if (d[k] > 1e-6) distanceOut = min(distanceOut, (toFar[k] - p[k]) / d[k]);
+        else if (d[k] < -1e-6) distanceOut = min(distanceOut, (toNear[k] - p[k]) / d[k]);
+    }
+    return vec4(p, max(0.001, distanceOut));
+}
+"""
+
 # The procedural small bubbles' vertex stage: the bubble vertex stage with its per-instance attributes generated.
 _BEAD_GLSL = """// GPU procedural populations in the simulation's fixed physical world.
 uniform vec3 uWorldCenter;
@@ -879,6 +917,8 @@ uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
 uniform float uParticleSpread; // free chains and snow only: 1.0 original physical width
+uniform int uSceneEmission; // SCENE uses whole upstream faces; BEAM remains identical
+uniform vec3 uSceneFaces;    // physically valid face areas selected by Source
 uniform float uChainFill;       // continuous (possibly fractional) number of visible chains
 uniform float uSnowFill;        // continuous snow allocation; last mote fades at the boundary
 uniform float uFizzFill;        // continuous allocation per stable wake, before ceil to integer stride
@@ -911,7 +951,11 @@ void beadInstance() {
         vec3 centre = uWorldCenter + uWorldHalf * (vec3(beadRandom(chain, 1u), beadRandom(chain, 2u),
                                                                      beadRandom(chain, 3u)) * 2.0 - 1.0);
         float scale = 1.0;
-        float span = pathEnabled ? pathLength : 2.0 * length(uWorldHalf);
+        vec4 sceneEntry = sceneInlet(beadRandom(chain, 31u),
+                                     vec2(beadRandom(chain, 32u), beadRandom(chain, 33u)),
+                                     along, uWorldCenter, uWorldHalf, uSceneFaces);
+        float span = uSceneEmission == 1 ? sceneEntry.w
+                   : (pathEnabled ? pathLength : 2.0 * length(uWorldHalf));
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
         float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span);
         float s = progress * span;
@@ -920,11 +964,12 @@ void beadInstance() {
         float arc = sin(s / scale * 0.23 + phase + uBeadTravel * 0.025) * 0.09
                   + sin(s / scale * 0.45 + phase * 1.7) * 0.01;
         float pathWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.28 * uParticleSpread;
-        vec3 sourceLine = pathEnabled ? mix(uStreamSource, uStreamEnd, progress)
-                                      : centre + along * (s - 0.5 * span);
+        vec3 sourceLine = uSceneEmission == 1 ? sceneEntry.xyz + along * s
+                        : (pathEnabled ? mix(uStreamSource, uStreamEnd, progress)
+                                       : centre + along * (s - 0.5 * span));
         vec3 p = sourceLine
-               + across * (pathEnabled ? (beadRandom(chain, 1u) * 2.0 - 1.0) * pathWidth : 0.0)
-               + depthAxis * (pathEnabled ? (beadRandom(chain, 3u) * 2.0 - 1.0) * pathWidth : 0.0)
+               + across * ((pathEnabled && uSceneEmission == 0) ? (beadRandom(chain, 1u) * 2.0 - 1.0) * pathWidth : 0.0)
+               + depthAxis * ((pathEnabled && uSceneEmission == 0) ? (beadRandom(chain, 3u) * 2.0 - 1.0) * pathWidth : 0.0)
                + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
                + depthAxis * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
         // A whole-chain lifetime, independent for each stable seed; both population changes and
@@ -997,7 +1042,13 @@ void beadInstance() {
     vOpacity = clamp(uSnowFill - float(i), 0.0, 1.0);
     vec3 seed = vec3(beadRandom(i, 13u), beadRandom(i, 14u), beadRandom(i, 15u));
     vec3 p;
-    if (pathEnabled) {
+    if (uSceneEmission == 1) {
+        vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
+        float progress = fract(seed.y + uSnowDrift / sceneEntry.w);
+        p = sceneEntry.xyz + along * (progress * sceneEntry.w);
+        vOpacity *= smoothstep(0.0, 0.14, progress)
+                  * (1.0 - smoothstep(0.82, 1.0, progress));
+    } else if (pathEnabled) {
         float progress = fract(seed.y + uSnowDrift / pathLength);
         float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
         p = mix(uStreamSource, uStreamEnd, progress)
@@ -1029,6 +1080,8 @@ uniform vec3 uWorldHalf;
 uniform float uWorldUnit;
 uniform float uSpeckTravel;    // integrated physical travel at 30% of the bubble stream
 uniform float uParticleSpread; // transverse width only; no change to music, lifetime or speed
+uniform int uSceneEmission; // world-wide boundary inlet when SCENE
+uniform vec3 uSceneFaces;    // physically valid face areas selected by Source
 uniform vec3 uSpeckSource;       // world source of seeded particulate paths
 uniform vec3 uSpeckEnd;          // world end and fade-out region
 uniform float uWarmShare;      // share lit in the particle colour
@@ -1058,7 +1111,13 @@ void speckInstance() {
     float a = dot(anchor, across) / uWorldUnit, b = dot(anchor, along) / uWorldUnit;
     float phase = a * uBandFreq + 1.4 * sin(b * 2.3 + a * 3.0) + 0.8 * sin(b * 5.1 - a * 7.0);
     float clouds = pow(clamp(0.5 + 0.5 * sin(phase), 0.0, 1.0), uClouds.x);
-    bool kept = speckRandom(i, 6u) < uClouds.y + 0.88 * clouds;
+    // BEAM retains its authored, cloud-shaped particle bands. SCENE's whole-
+    // face inlet must not turn into a few isolated patches merely because the
+    // old BEAM cloud rejection mask drops whole instances. In SCENE the same
+    // authored band variation modulates light, not spatial admission; a stable
+    // deterministic threshold bounds speck work without camera-dependent births.
+    float sceneKeep = clamp(uClouds.y + 0.45 * uClouds.z, 0.35, 0.9);
+    bool kept = speckRandom(i, 6u) < (uSceneEmission == 1 ? sceneKeep : uClouds.y + 0.88 * clouds);
     // Along the exact Stream Source -> End path. Cohorts recycle *after* fading
     // at End and *before* fading in at Source, avoiding static midpoint debris.
     vec3 path = uSpeckEnd - uSpeckSource;
@@ -1067,17 +1126,23 @@ void speckInstance() {
     vec3 side = normalize(abs(pathDir.y) < 0.9 ? cross(pathDir, vec3(0.0, 1.0, 0.0))
                                                    : cross(pathDir, vec3(0.0, 0.0, 1.0)));
     vec3 depthAxis = normalize(cross(pathDir, side));
-    float progress = fract(seed.y + uSpeckTravel / lengthPath);
+    vec4 sceneEntry = sceneInlet(speckRandom(i, 23u), seed.xz, pathDir,
+                                  uWorldCenter, uWorldHalf, uSceneFaces);
+    float progress = fract(seed.y + uSpeckTravel /
+                           (uSceneEmission == 1 ? sceneEntry.w : lengthPath));
     float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52 * uParticleSpread;
-    vec3 p = mix(uSpeckSource, uSpeckEnd, progress)
-             + side * (seed.x * 2.0 - 1.0) * sideWidth
-             + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
+    vec3 p = uSceneEmission == 1 ? sceneEntry.xyz + pathDir * (progress * sceneEntry.w)
+             : mix(uSpeckSource, uSpeckEnd, progress)
+               + side * (seed.x * 2.0 - 1.0) * sideWidth
+               + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
     vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
     float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));
     float ends = smoothstep(0.00, 0.12, progress)
                  * (1.0 - smoothstep(0.82, 1.0, progress)) * boundsFade;
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
-    float bright = exp(0.7 * speckGauss(i, 9u).x) * (0.35 + uClouds.z * clouds) * ends;
+    float cloudLight = uSceneEmission == 1 ?
+        (0.35 + uClouds.z * (0.45 + 0.55 * clouds)) : (0.35 + uClouds.z * clouds);
+    float bright = exp(0.7 * speckGauss(i, 9u).x) * cloudLight * ends;
     aPoint = vec4(p, kept ? radius : 0.0);
     aLook = vec4(kept ? bright : 0.0, speckRandom(i, 11u) < uWarmShare ? 1.0 : 0.0, speckRandom(i, 12u), 0.0);
 }
@@ -1088,10 +1153,10 @@ layout(location=1) in vec4 aLook;    // brightness, warm (lit in the light's col
 assert PARTICLE_VERTEX.count(_SPECK_ATTRIBUTES) == 1 and PARTICLE_VERTEX.count("void main() {\n") == 1
 # The procedural particulate's vertex stage: the particle vertex stage with its per-instance attributes generated.
 SPECK_VERTEX = (PARTICLE_VERTEX.replace(_SPECK_ATTRIBUTES, "")
-                .replace("void main() {\n", _SPECK_GLSL + "void main() {\n    speckInstance();\n"))
+                .replace("void main() {\n", _SCENE_INLET_GLSL + _SPECK_GLSL + "void main() {\n    speckInstance();\n"))
 BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
                .replace("void main() {\n    vOpacity = aOpacity;\n",
-               _BEAD_GLSL + "void main() {\n    vOpacity = 1.0;\n    beadInstance();\n"))
+               _SCENE_INLET_GLSL + _BEAD_GLSL + "void main() {\n    vOpacity = 1.0;\n    beadInstance();\n"))
 
 __all__ = [
     "BACKDROP_FRAGMENT",
