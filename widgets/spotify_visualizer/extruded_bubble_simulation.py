@@ -321,10 +321,10 @@ class ExtrudedBubbleSimulation:
         self._bubbles.append(bubble)
         return True
 
-    def _outside(self, b: _Bubble) -> bool:
+    def _outside(self, b: _Bubble, *, surface_scene: bool) -> bool:
         return (any(abs(p - c) > h + WORLD_MARGIN + b.current_radius
                     for p, c, h in zip((b.x, b.y, b.z), WORLD_CENTER, WORLD_HALF))
-                or b.y - b.current_radius > WATER_SURFACE_Y)
+                or (surface_scene and b.y - b.current_radius > WATER_SURFACE_Y))
 
     # -- one step ----------------------------------------------------------------------------------------------------
 
@@ -621,7 +621,7 @@ class ExtrudedBubbleSimulation:
                 b.popping += dt
                 t = min(1.0, b.popping / _POP_SECONDS)
                 b.alpha = b.pop_alpha * (1.0 - t * t * (3.0 - 2.0 * t))
-            elif b.leaving or self._outside(b):
+            elif b.leaving or self._outside(b, surface_scene=controls.surface_scene):
                 b.leaving = True
                 b.alpha = max(0.0, b.alpha - dt / _FADE_OUT)
             else:
