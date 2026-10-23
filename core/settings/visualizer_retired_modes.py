@@ -44,6 +44,9 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     "oscilloscope_bar_fill_color", "oscilloscope_dynamic_range_enabled", "oscilloscope_kick_lane_gain",
     "oscilloscope_rainbow_enabled", "oscilloscope_rainbow_speed", "oscilloscope_transient_pulse_gain",
     "oscilloscope_transient_width_mix", "osc_sensitivity", "oscilloscope_transient_clamp",
+    # Spectrum fill/border link state: serialized but never read by any UI or
+    # renderer; Fill and Border stay independent controls (2026-10-24, SC3).
+    "spectrum_link_fill_border",
 })
 _RETIRED_VISUALIZER_PREFIXES = ("blob_",)
 
