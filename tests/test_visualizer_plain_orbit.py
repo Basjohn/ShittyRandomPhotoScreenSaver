@@ -630,6 +630,44 @@ Item { x:20; y:20; width:300; height:200; property int taps:0
 
 
 @pytest.mark.qt
+def test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release(orbit_card):
+    """A lower control's exclusive grab declines orbit; its release is never consumed."""
+    from rendering.quick.scene_controller import QuickSceneController
+    card = orbit_card
+    engine = QQmlEngine.contextForObject(card.card).engine()
+    component = QQmlComponent(engine)
+    component.setData(b'''import QtQuick
+Item { x:20; y:20; width:300; height:200; z:-1
+    property int presses: 0
+    property int releases: 0
+    property alias held: area.pressed
+    MouseArea { id: area; anchors.fill: parent
+        onPressed: parent.presses++
+        onReleased: parent.releases++ }
+}''', QUrl())
+    lower = component.create()
+    assert lower is not None, component.errors()
+    lower.setParent(card.window)
+    lower.setParentItem(card.window.contentItem())
+    scene = SimpleNamespace(_visualizer_root=card.card, _custom_layout_session=None,
+        _ordinary_widget_host=SimpleNamespace(diagnostic_widget_at=lambda p: SimpleNamespace(item=lower)))
+    scene.visualizer_contains_scene_position = lambda p: QuickSceneController.visualizer_contains_scene_position(scene, p)
+    card.window.bind_plain_orbit_target(lambda p: QuickSceneController._plain_orbit_target_at(scene, p),
+        grabber_blocks=lambda grabber, root: QuickSceneController._plain_orbit_grabber_blocks(scene, grabber, root))
+
+    _press(card)
+    assert lower.property('presses') == 1 and lower.property('held') is True
+    _move(card)
+    _move(card, 250, 155)
+    assert card.window._plain_orbit_card is None
+    assert not card.capture.acquisitions and not card.turns
+    _release(card, 250, 155)
+    assert lower.property('releases') == 1
+    assert lower.property('held') is False
+    assert card.window._plain_orbit_pending is None and card.cursor.starts == 0
+
+
+@pytest.mark.qt
 def test_retained_ordinary_overlap_uses_actual_parent_stacking(orbit_card):
     from PySide6.QtQuick import QQuickItem
     from rendering.quick.scene_controller import QuickSceneController

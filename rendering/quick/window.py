@@ -307,7 +307,10 @@ class QuickDisplayWindow(QQuickWindow):
         if (self._plain_orbit_pending is not None and grabber is not None
                 and transition in (QPointingDevice.GrabTransition.GrabPassive,
                                    QPointingDevice.GrabTransition.GrabExclusive)):
-            if not self._plain_orbit_grab_blocks(grabber):
+            # Any exclusive grab owns the press and its release. Only passive
+            # grabs (which orbit may clear) use the retained stacking policy.
+            if (transition == QPointingDevice.GrabTransition.GrabPassive
+                    and not self._plain_orbit_grab_blocks(grabber)):
                 return
             logger.debug('[ORBIT_CAPTURE] Retained press owned by %s name=%r transition=%s',
                          grabber.metaObject().className(), grabber.objectName(), transition)
@@ -331,9 +334,12 @@ class QuickDisplayWindow(QQuickWindow):
             return False
         controller = self._input_controller
         target = self._plain_orbit_target
+        # An existing exclusive grab declines orbit wherever it sits in the
+        # stack: promotion clears passive grabs only, so taking the gesture
+        # would consume that control's release and leave it pressed.
         if (controller is None or not controller.plain_orbit_admitted or target is None
-                or self._plain_orbit_grab_blocks(self.mouseGrabberItem())
-                or self._plain_orbit_grab_blocks(event.exclusiveGrabber(event.point(0)))
+                or self.mouseGrabberItem() is not None
+                or event.exclusiveGrabber(event.point(0)) is not None
                 or target(origin) is not card):
             self.cancel_plain_orbit()
             return False

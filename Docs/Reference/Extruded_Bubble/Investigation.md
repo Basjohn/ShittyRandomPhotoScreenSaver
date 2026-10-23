@@ -2798,8 +2798,11 @@ mode/menu/Edit/focus/topology/hide/close edges unwind the gesture without a new 
 An audit subsequently identified a remaining ownership hole: the lower-handler stacking exception also admits
 an existing exclusive MouseArea grab, but promotion only clears passive grabs and can consume that control's
 release. Decline promotion for any existing exclusive/mouse grab and verify the lower MouseArea returns to
-unpressed normally. This correction is not yet implemented or tested; preserve the operator-confirmed working
-orbit path while fixing that narrow edge. Do not describe all overlap/ownership safety as accepted.
+unpressed normally. **Implemented 2026-10-23:** `_promote_plain_orbit` and the press-scoped grab observer now
+decline on any exclusive grab regardless of stacking; only passive grabs use the retained stacking comparison.
+A real retained lower MouseArea falsifier reproduced the stolen press (orbit card acquired, release consumed)
+before the fix and passes after it, alongside the existing orbit/framed-camera suites. Physical overlap and
+ownership acceptance remain open.
 
 The operator's native release error exposed an incorrect success test: Qt's boolean return alone cannot
 establish that native capture remains owned. Release now verifies actual GetCapture after the Qt call. A
