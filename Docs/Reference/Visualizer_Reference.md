@@ -472,6 +472,8 @@ Historical/current `BeatEngine` retains the same cold-Play ramp and warm-capture
 
 Normal Pause/Play must not turn into renderer/window recreation. Current timing/reactivity authoring guidance lives in `Docs/Guides/Visualizer_Reactivity_Authoring.md`; Bubble-specific temporal evidence remains in `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
+**Reactivity without Dynamic Floor:** no mode may depend on Dynamic Floor (it learns a level from the track and degrades as a song continues). `get_bubble_energy_bands` divides by `_raw_bass_avg`, which only adapts while the floor is ON; floor-OFF it equals the manual floor and pins the lanes. A mode needing floor-independent body response reads raw lanes on fixed real-scale references through its own getter, as Extruded Bubble does with `get_extruded_bubble_body_bands`, and is measured against 2D Bubble with Dynamic Floor ON (Parity+). Method, measurements and tools: `Docs/Guides/Visualizer_Reactivity_Authoring.md` §13A.
+
 ## 14. CUSTOM / Edit
 
 CUSTOM/Edit preserves one authoritative committed geometry.

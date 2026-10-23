@@ -1566,6 +1566,45 @@ class _SpotifyBeatEngine(QObject):
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
+    # Fixed real-scale references for Extruded Bubble's body lanes (raw bass, mid,
+    # treble after gate-floor subtraction). Measured 2026-10-24 on native PCM of four
+    # full songs at EB's authored gain: about p90 of playing frames maps near 0.75,
+    # leaving soft headroom for loud crests. These are anchors, never learned levels.
+    EXTRUDED_BUBBLE_BODY_RAW_REFERENCE = (5.0, 3.0, 1.2)
+
+    def get_extruded_bubble_body_bands(self) -> EnergyBands:
+        """Return Extruded Bubble's floor-independent body feed on a fixed real scale.
+
+        ``get_bubble_energy_bands`` normalises mid/high (and part of bass) by
+        ``_raw_bass_avg``. That average adapts only while Dynamic Floor is ON; with
+        it OFF it stays equal to the manual-floor setting, so ordinary music pins
+        those lanes at their ceilings and leaves no contrast to breathe with. With
+        the floor ON it is a level learned from the track, which drifts as a song
+        continues. EB instead reads the same raw lanes against fixed references:
+        no learned level, no dependence on the floor mode, Sensitivity still scales
+        the raw input. Accepted 2D Bubble keeps its own feed unchanged.
+        """
+        w = self._audio_worker
+        ramp = self._get_play_ramp_factor()
+
+        def _raw(name: str, fallback_name: str) -> float:
+            return max(0.0, float(getattr(w, name, getattr(w, fallback_name, 0.0)) or 0.0))
+
+        def _lane(raw_value: float, reference: float) -> float:
+            # Linear below 0.8, then an exponential approach to 1 that never
+            # flattens on it, so loud crests still move.
+            value = raw_value / reference
+            if value > 0.8:
+                value = 0.8 + 0.2 * (1.0 - math.exp(-(value - 0.8) / 0.2))
+            return max(0.0, min(1.0, value * ramp))
+
+        bass_ref, mid_ref, high_ref = self.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE
+        bass = _lane(_raw("_last_raw_bass", "_pre_agc_live_bass"), bass_ref)
+        mid = _lane(_raw("_last_raw_mid", "_pre_agc_live_mid"), mid_ref)
+        high = _lane(_raw("_last_raw_treble", "_pre_agc_live_treble"), high_ref)
+        overall = max(0.0, min(1.0, bass * 0.46 + mid * 0.34 + high * 0.20))
+        return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
+
     def get_bubble_energy_bands(self) -> EnergyBands:
         """Return Bubble's support-aware continuous energy feed.
 

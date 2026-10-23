@@ -74,6 +74,8 @@ class _Engine:
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.15)
 
+    get_extruded_bubble_body_bands = get_bubble_energy_bands
+
     def get_transient_energy_bands(self):
         return SimpleNamespace(
             bass_transient=0.0, mid_transient=0.0, high_transient=0.0,

@@ -2816,6 +2816,54 @@ In particular, copying the MC entry/profile while forcing ALL displays changed r
 incorrect reproduction setup. The agent is stopped from launching apps. Physical focus-loss/capture theft,
 close/reset and mixed-DPI acceptance remain open; no new real-input polling is justified by the probe failures.
 
+## 65. Floor-independent body feed and 2D-ON breathing parity (24 October; candidate, visual acceptance open)
+
+**Root cause found:** EB consumed `get_bubble_energy_bands`, which divides raw mid/high (and part of bass) by
+`_raw_bass_avg`. That average adapts only while Dynamic Floor is ON; with EB's floor OFF it equals the manual
+floor (0.12), so EB's body bands sat on their ceilings. Native PCM of four full songs at EB's authored gain:
+band mid ≥ 0.96 for 52–78% of playing frames, band bass ≥ 0.76 for 30–73%, raw bass p10/p50/p90 ≈ 1.3/2.8/3.7.
+This explains "large bubbles stay near maximum too often" and why population/flow barely followed sections.
+
+**Source candidate (all EB-owned; accepted 2D's feed untouched):**
+- `beat_engine.get_extruded_bubble_body_bands()`: raw lanes on fixed references (5.0, 3.0, 1.2), linear below
+  0.8 with an exponential approach above, times the play ramp; independent of floor mode, manual floor and
+  `_raw_bass_avg`. `logical_frame_capture` reads it; ordinary replay serves the recorded shared feed.
+- Large held body: smooth knee (`_smooth_above`, knee 0.45, softness 0.08, exactly 0 at silence) on the
+  unsquashed `bass + .28 mid + .10 high`, span 0.62; large release 0.30 s in music, attack 0.12 s, change
+  weight 2.2. Small lane timing unchanged.
+- Per-identity response: excursion above the authored (unchanged) rest scaled by normalized size within class
+  (large 1.12→0.88, small 1.18→0.82); display-follower time constants × 0.75–1.25.
+
+**Measured against 2D Bubble with Dynamic Floor ON** (`bubble_response_comparison --reanalyze-pcm`, 60 s each;
+per-segment medians from `bubble_breathing_continuity`):
+
+| song | large range 2D / EB before / EB now | large top reversals before → now | small range 2D / EB now |
+| --- | --- | --- | --- |
+| anything_mixed2 | 0.88 / 0.22 / 0.73 | 0.000 → 0.000 | 0.76 / 1.42 |
+| nightsolong_acousticsoft1 | 0.73 / 0.40 / 0.71 | 0.067 → 0.000 | 0.67 / 1.23 |
+| ragdoll_quiet_intro_loud_end1 | 1.02 / 0.42 / 0.95 | 0.000 → 0.000 | 0.87 / 1.39 |
+| cindarellaman_heavy2 | 0.89 / 0.73 / 1.20 | 0.027 → 0.000 | 0.81 / 1.37 |
+
+Absolute large radius/nominal p05/median/p95 on anything_mixed2: 2D 0.73/1.54/2.25, EB before 1.55/1.72/1.97,
+EB now 0.92/1.50/1.96. Large swings/s now 1.1–1.8 vs 2D 1.0–1.9. Small "flat" share 35% → 20%.
+Downstream on the same clip: level median 0.91 → 0.75, bubble count 47–52 → median 34 (8–39), stream speed p10
+1.03 → 0.22: passages now set occupancy and flow instead of the loud ends being held throughout (visible
+density change). Native before/after frames: `logs/eb_breathing/2026-10-24/pixels/before_after.png`.
+
+**Rejected while measuring:** an even ease of the held body (τ 0.4 s) lowered range without reducing swings;
+a linear quiet base (0.25) cost ~15% range; per-ID scaling of the deviation from 1.0 moved resting shells.
+
+**Tests:** recorded-reactivity gates now run through PCM reanalysis (the production feed). The absolute
+`> 1.8` large-span phrase gate exceeded accepted 2D itself (1.22 in that window) and only passed on the pinned
+recorded feed; it is replaced by a relative oracle (EB ≥ 0.9 × 2D per class on the same phrase), which fails the
+pre-change code (0.36 vs 1.22). `test_soft_large_breathes_downward...` now steps to the pooled median music
+level because (.35,.4,.2) is ~p5–p10 on the fixed scale.
+
+**Open:** large dynamic span 2.1–2.6× (p95/p05) vs 2D's 2.6–9× (2D crest boosts and very deep quiet
+contraction would need a deliberate authored-curve change); swing rate still above 2D on the soft song; native
+installed motion, 256/512 block sizes and operator acceptance. Method for future modes:
+`Docs/Guides/Visualizer_Reactivity_Authoring.md` §13A.
+
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).

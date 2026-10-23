@@ -92,14 +92,38 @@ class FullDynamicAudioOwnership(unittest.TestCase):
             snap = self.sim.advance(mod.MusicInput(1/60, False, 1.0, (), (1.0, 1.0, 1.0)), self.controls)
         self.assertLess(max((snap.bubbles[i + 5] for i in range(0, len(snap.bubbles), 8)), default=0.0), 0.002)
 
-    def test_capture_uses_existing_bubble_feed_not_a_new_floor_or_clock(self):
+    def test_capture_uses_eb_fixed_scale_feed_not_a_floor_or_clock(self):
         text = CAPTURE.read_text()
         start = text.index('def _capture_extruded_bubble(')
         end = text.index('\ndef _capture_spectrum_family(', start)
         excerpt = text[start:end]
-        self.assertIn('get_bubble_energy_bands', excerpt)
+        self.assertIn('get_extruded_bubble_body_bands', excerpt)
+        self.assertNotIn('get_bubble_energy_bands()', excerpt)
         self.assertIn('body_bands=body_bands', excerpt)
         self.assertNotIn('dynamic_floor', excerpt)
+
+    def test_eb_body_feed_ignores_floor_state_and_keeps_headroom(self):
+        from types import SimpleNamespace
+        from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+
+        def bands(raw, **floor):
+            state = dict(_use_dynamic_floor=False, _raw_bass_avg=0.12, _manual_floor=0.12)
+            state.update(floor)
+            worker = SimpleNamespace(_last_raw_bass=raw[0], _last_raw_mid=raw[1], _last_raw_treble=raw[2], **state)
+            engine = SimpleNamespace(
+                _audio_worker=worker, _get_play_ramp_factor=lambda: 1.0,
+                EXTRUDED_BUBBLE_BODY_RAW_REFERENCE=_SpotifyBeatEngine.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE)
+            result = _SpotifyBeatEngine.get_extruded_bubble_body_bands(engine)
+            return (result.bass, result.mid, result.high)
+
+        typical = (3.0, 1.6, 0.45)  # about the median of real playing music at EB's authored gain
+        reference = bands(typical)
+        for floor in ({'_use_dynamic_floor': True}, {'_raw_bass_avg': 2.5}, {'_manual_floor': 0.4}):
+            self.assertEqual(bands(typical, **floor), reference, floor)
+        # Typical music sits mid-range, not pinned at a ceiling, and louder raw input still moves it.
+        self.assertTrue(all(0.25 < value < 0.8 for value in reference), reference)
+        louder = bands(tuple(value * 1.4 for value in typical))
+        self.assertTrue(all(b > a for a, b in zip(reference, louder)), (reference, louder))
 
     def test_particle_range_is_consumed_only_by_simulation_not_by_renderer(self):
         source = SCENE.read_text()

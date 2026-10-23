@@ -2,6 +2,8 @@
 
 Native pixel/motion and physical acceptance remain separate. Missing local recordings
 are explicitly skipped; no synthetic clip is substituted or operator preset used as a golden.
+EB reads its production fixed-scale body feed: recordings carry no raw lanes, so each replay
+recomputes the body DSP from the recorded native PCM (tools/visualizer_replay/pcm_reanalysis.py).
 """
 from dataclasses import replace
 import json
@@ -13,6 +15,7 @@ import pytest
 
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from tools.visualizer_replay.driver import replay_clip
+from tools.visualizer_replay.pcm_reanalysis import reanalyzed_bubble_bands
 from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +57,7 @@ def states_and_kinds(clip, **overrides):
         if admitted:
             kinds[simulation._bubbles[-1].ident] = large
         return admitted
-    with patch.object(ExtrudedBubbleSimulation, '_spawn', spawn):
+    with patch.object(ExtrudedBubbleSimulation, '_spawn', spawn), reanalyzed_bubble_bands():
         series = replay_clip(clip,'extruded_bubble',settings=settings(**overrides))['logical_series']
     return [f.mode_state for f in series], kinds
 
@@ -81,21 +84,30 @@ def test_sustained_control_changes_actual_recorded_production_output(clip):
                for a, b in zip(left.bubbles[5::8], right.bubbles[5::8])) > .02
 
 
-def test_active_recorded_phrase_has_large_absolute_excursion_in_each_class(clip):
-    # A tiny initial rest can make percentages impressive while 4-8s music remains
-    # almost static. Compare mature SAME IDs strictly inside that active phrase.
-    by_id={}
-    source,kinds=states_and_kinds(clip)
-    for feature,state in zip(clip.frames,source,strict=True):
-        at=(feature.timestamp_us-clip.frames[0].timestamp_us)/1e6
-        if not 4.<=at<=8.:
-            continue
-        for i in range(0,len(state.bubbles),8):
-            if state.bubbles[i+4]>.999 and state.bubbles[i+7]<0:
-                by_id.setdefault(int(state.bubbles[i+6]),[]).append(1+state.bubbles[i+5])
-    for large in (True,False):
-        spans=[max(v)-min(v) for ident,v in by_id.items() if kinds[ident] is large and len(v)>200]
-        assert spans and median(spans)>1.8
+def _phrase_spans(rows, start=4., stop=8.):
+    """Median absolute span (max - min radius/nominal) of mature same IDs inside one phrase."""
+    by_id = {}
+    for row in rows:
+        if start <= row['time_s'] <= stop:
+            for obj in row['objects']:
+                if obj['mature']:
+                    by_id.setdefault((obj['id'], obj['large']), []).append(obj['ratio'])
+    return {large: median(max(v) - min(v) for (ident, kind), v in by_id.items() if kind is large and len(v) > 200)
+            for large in (True, False)}
+
+
+def test_active_recorded_phrase_breathes_at_least_like_accepted_2d_in_each_class(clip):
+    # Parity+ oracle: the same 4-8 s real phrase through both production simulations,
+    # with accepted 2D Bubble's Dynamic Floor ON as the reference and EB on its own
+    # fixed-scale feed. A tiny initial rest cannot inflate an absolute span.
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from tools.visualizer_replay.bubble_response_comparison import observe_mode
+
+    reference = {**frozen_visualizer_settings('bubble'), 'bubble_dynamic_floor': True}
+    bubble = _phrase_spans(observe_mode(clip, 'bubble', reference, (1672, 941), reanalyze=True))
+    extruded = _phrase_spans(observe_mode(clip, 'extruded_bubble', settings(), (1672, 941), reanalyze=True))
+    for large in (True, False):
+        assert extruded[large] >= 0.9 * bubble[large], (large, extruded[large], bubble[large])
 
 
 def test_held_real_hot_vocal_frame_keeps_the_small_population_distinct_from_large():
