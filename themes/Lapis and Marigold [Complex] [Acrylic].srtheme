@@ -1,1155 +1,1155 @@
 {
   "format": "srpss.settings-theme",
   "schema_version": 6,
-  "name": "Brushed Nickel [Two-Tone] [Acrylic]",
+  "name": "Lapis and Marigold [Complex] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
     "tint": [
-      214,
-      210,
-      199,
-      132
+      17,
+      30,
+      66,
+      78
     ]
   },
   "colors": {
     "window.dialog_glass": [
-      204,
-      201,
-      193,
-      216
+      17,
+      30,
+      66,
+      36
     ],
     "window.titlebar.surface": [
-      227,
-      224,
-      217,
-      222
+      17,
+      30,
+      66,
+      248
     ],
     "window.titlebar.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "window.titlebar.button.surface": [
-      227,
-      224,
-      217,
+      28,
+      43,
+      86,
       0
     ],
     "window.titlebar.button.hover": [
-      216,
-      211,
-      200,
+      102,
+      97,
+      97,
       188
     ],
     "window.titlebar.button.pressed": [
-      186,
-      180,
-      166,
+      102,
+      97,
+      97,
       218
     ],
     "window.titlebar.close.hover": [
-      175,
-      75,
-      66,
+      102,
+      97,
+      97,
       230
     ],
     "navigation.sidebar.surface": [
-      227,
-      224,
-      217,
-      64
+      23,
+      37,
+      77,
+      242
     ],
     "navigation.tab.surface": [
-      185,
-      182,
-      174,
-      74
+      23,
+      37,
+      77,
+      255
     ],
     "navigation.tab.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "navigation.tab.hover_surface": [
-      216,
-      211,
-      200,
-      118
+      79,
+      82,
+      98,
+      255
     ],
     "navigation.tab.hover_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "navigation.tab.selected_surface": [
-      186,
-      180,
-      166,
-      145
+      102,
+      97,
+      97,
+      255
     ],
     "navigation.tab.selected_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "navigation.subtab.surface": [
-      204,
-      201,
-      193,
-      230
+      28,
+      43,
+      86,
+      255
     ],
     "navigation.subtab.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "navigation.subtab.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "navigation.subtab.hover_surface": [
-      216,
-      211,
-      200,
-      230
+      79,
+      82,
+      98,
+      255
     ],
     "navigation.subtab.selected_surface": [
-      186,
-      180,
-      166,
-      230
+      102,
+      97,
+      97,
+      255
     ],
     "bucket.closed.surface": [
-      204,
-      201,
-      193,
-      235
+      28,
+      43,
+      86,
+      255
     ],
     "bucket.closed.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "bucket.closed.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       165
     ],
     "bucket.closed.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       242
     ],
     "bucket.closed.hover_border": [
-      115,
-      110,
-      100,
+      79,
+      82,
+      98,
       205
     ],
     "bucket.open.surface": [
-      227,
-      224,
-      217,
-      242
+      17,
+      30,
+      66,
+      255
     ],
     "bucket.open.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "bucket.open.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       215
     ],
     "bucket.open.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       246
     ],
     "content.surface": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       0
     ],
     "panel.group.surface": [
-      204,
-      201,
-      193,
-      112
+      28,
+      43,
+      86,
+      242
     ],
     "panel.subsection.surface": [
-      204,
-      201,
-      193,
-      100
+      31,
+      47,
+      92,
+      242
     ],
     "panel.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "text.primary": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "text.disabled": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       255
     ],
     "text.secondary": [
-      72,
-      73,
-      68,
+      204,
+      207,
+      218,
       255
     ],
     "text.tertiary": [
-      101,
-      101,
-      94,
+      179,
+      184,
+      200,
       255
     ],
     "text.helper": [
-      72,
-      73,
-      68,
-      255
+      204,
+      207,
+      218,
+      170
     ],
     "text.helper_disabled": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       255
     ],
     "control.input.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       255
     ],
     "control.input.hover_surface": [
-      216,
-      211,
-      200,
+      50,
+      58,
+      86,
       255
     ],
     "control.input.focus_surface": [
-      186,
-      180,
-      166,
+      47,
+      69,
+      114,
       255
     ],
     "control.input.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.input.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "control.input.disabled_text": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       125
     ],
     "control.input.disabled_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       255
     ],
     "control.stepper.surface": [
-      185,
-      182,
-      174,
+      28,
+      43,
+      86,
       255
     ],
     "control.stepper.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       255
     ],
     "control.stepper.pressed_surface": [
-      186,
-      180,
-      166,
+      102,
+      97,
+      97,
       255
     ],
     "control.stepper.disabled_surface": [
-      185,
-      182,
-      174,
+      28,
+      43,
+      86,
       255
     ],
     "combo.popup.surface": [
-      227,
-      224,
-      217,
-      240
+      17,
+      30,
+      66,
+      255
     ],
     "combo.popup.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "combo.popup.selection_surface": [
-      186,
-      180,
-      166,
+      127,
+      187,
+      207,
       62
     ],
     "combo.popup.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "combo.popup.selection_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "tooltip.surface": [
-      227,
-      224,
-      217,
-      208
+      17,
+      30,
+      66,
+      255
     ],
     "tooltip.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "tooltip.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       220
     ],
     "control.list.surface": [
-      185,
-      182,
-      174,
-      224
+      28,
+      43,
+      86,
+      255
     ],
     "control.list.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.list.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       165
     ],
     "control.list.selected_surface": [
-      186,
-      180,
-      166,
-      205
+      102,
+      97,
+      97,
+      255
     ],
     "control.list.selected_accent": [
-      135,
-      107,
-      67,
+      127,
+      187,
+      207,
       215
     ],
     "control.list.hover_surface": [
-      216,
-      211,
-      200,
-      190
+      79,
+      82,
+      98,
+      255
     ],
     "control.button.surface": [
-      204,
-      201,
-      193,
-      230
+      28,
+      43,
+      86,
+      255
     ],
     "control.button.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.button.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "control.button.hover_surface": [
-      216,
-      211,
-      200,
-      230
+      79,
+      82,
+      98,
+      255
     ],
     "control.button.pressed_surface": [
-      186,
-      180,
-      166,
-      230
+      102,
+      97,
+      97,
+      255
     ],
     "control.button.pressed_border": [
-      115,
-      110,
-      100,
+      102,
+      97,
+      97,
       205
     ],
     "control.setup_action.surface": [
-      204,
-      201,
-      193,
-      230
+      28,
+      43,
+      86,
+      255
     ],
     "control.setup_action.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.setup_action.border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "control.setup_action.hover_surface": [
-      164,
-      143,
-      110,
+      79,
+      82,
+      98,
       230
     ],
     "control.setup_action.pressed_surface": [
-      181,
-      166,
-      140,
+      102,
+      97,
+      97,
       230
     ],
     "control.ghost_action.surface": [
-      185,
-      182,
-      174,
-      230
+      23,
+      37,
+      77,
+      255
     ],
     "control.ghost_action.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.ghost_action.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       100
     ],
     "control.ghost_action.hover_surface": [
-      216,
-      211,
-      200,
-      230
+      79,
+      82,
+      98,
+      255
     ],
     "control.ghost_action.hover_border": [
-      115,
-      110,
-      100,
+      79,
+      82,
+      98,
       140
     ],
     "control.ghost_action.pressed_surface": [
-      186,
-      180,
-      166,
+      102,
+      97,
+      97,
       230
     ],
     "control.ghost_action.disabled_text": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       95
     ],
     "control.ghost_action.disabled_surface": [
-      185,
-      182,
-      174,
+      127,
+      187,
+      207,
       230
     ],
     "control.ghost_action.disabled_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       40
     ],
     "control.mode.surface": [
-      227,
-      224,
-      217,
+      23,
+      37,
+      77,
       255
     ],
     "control.mode.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.mode.border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "control.mode.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       255
     ],
     "control.mode.checked_surface": [
-      181,
-      166,
-      140,
+      54,
+      80,
+      122,
       255
     ],
     "control.mode.checked_border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "control.mode.disabled_text": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       255
     ],
     "control.mode.disabled_border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "control.checkbox.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "control.checkbox.indicator.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       205
     ],
     "control.checkbox.indicator.highlight_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       195
     ],
     "control.checkbox.indicator.right_shadow_border": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       175
     ],
     "control.checkbox.indicator.bottom_shadow_border": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       190
     ],
     "control.checkbox.checked.surface": [
-      181,
-      166,
-      140,
+      102,
+      97,
+      97,
       225
     ],
     "control.checkbox.checked.highlight_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       220
     ],
     "control.checkbox.checked.right_shadow_border": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       175
     ],
     "control.checkbox.checked.bottom_shadow_border": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       190
     ],
     "panel.group.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "panel.group.title_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "sources.ratio.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       255
     ],
     "sources.ratio.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "sources.ratio.disabled_surface": [
-      204,
-      201,
-      193,
+      127,
+      187,
+      207,
       255
     ],
     "sources.ratio.disabled_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       255
     ],
     "sources.rss_input.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       220
     ],
     "sources.rss_input.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       170
     ],
     "sources.rss_input.focus_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       215
     ],
     "shadow.direction.surface": [
-      185,
-      182,
-      174,
+      23,
+      37,
+      77,
       228
     ],
     "shadow.direction.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       220
     ],
     "shadow.direction.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       235
     ],
     "shadow.direction.hover_border": [
-      115,
-      110,
-      100,
+      79,
+      82,
+      98,
       255
     ],
     "shadow.direction.pressed_surface": [
-      186,
-      180,
-      166,
+      102,
+      97,
+      97,
       242
     ],
     "shadow.direction.checked_surface": [
-      181,
-      166,
-      140,
+      54,
+      80,
+      122,
       74
     ],
     "shadow.direction.checked_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       255
     ],
     "slider.groove.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       235
     ],
     "slider.groove.top_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       180
     ],
     "slider.groove.bottom_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       80
     ],
     "slider.fill.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       220
     ],
     "slider.fill.top_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       185
     ],
     "slider.fill.bottom_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       95
     ],
     "slider.handle.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "slider.handle.hover_border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "slider.handle.pressed_border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "slider.handle.disabled_surface": [
-      185,
-      182,
-      174,
+      127,
+      187,
+      207,
       255
     ],
     "slider.handle.active_border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "slider.recommended_mark": [
-      170,
-      126,
-      67,
+      127,
+      187,
+      207,
       185
     ],
     "about.card.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       190
     ],
     "about.card.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       255
     ],
     "about.blurb.text": [
-      72,
-      73,
-      68,
+      204,
+      207,
+      218,
       255
     ],
     "about.hotkeys.text": [
-      72,
-      73,
-      68,
+      204,
+      207,
+      218,
       255
     ],
     "about.link.surface": [
-      185,
-      182,
-      174,
+      28,
+      43,
+      86,
       230
     ],
     "about.link.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "about.link.border": [
       127,
-      104,
-      72,
+      187,
+      207,
       255
     ],
     "about.link.hover_surface": [
-      164,
-      143,
-      110,
+      79,
+      82,
+      98,
       230
     ],
     "about.link.pressed_surface": [
-      181,
-      166,
-      140,
+      102,
+      97,
+      97,
       230
     ],
     "about.link.pressed_border": [
-      127,
-      104,
-      72,
+      102,
+      97,
+      97,
       215
     ],
     "about.more.surface": [
-      185,
-      182,
-      174,
+      28,
+      43,
+      86,
       230
     ],
     "about.more.text": [
-      38,
-      39,
-      37,
-      230
+      246,
+      245,
+      247,
+      255
     ],
     "about.more.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       165
     ],
     "about.more.hover_surface": [
-      216,
-      211,
-      200,
+      79,
+      82,
+      98,
       230
     ],
     "about.notice.surface": [
-      181,
-      166,
-      140,
+      54,
+      80,
+      122,
       225
     ],
     "about.notice.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "about.art.liquid": [
-      115,
-      110,
-      100,
+      246,
+      245,
+      247,
       255
     ],
     "popup.container.surface": [
-      227,
-      224,
-      217,
-      230
+      17,
+      30,
+      66,
+      255
     ],
     "popup.container.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       190
     ],
     "popup.icon.info": [
-      61,
-      99,
-      128,
+      91,
+      179,
+      239,
       255
     ],
     "popup.icon.warning": [
-      145,
-      103,
-      30,
+      244,
+      188,
+      86,
       255
     ],
     "popup.icon.error": [
-      168,
-      65,
-      61,
+      234,
+      102,
+      115,
       255
     ],
     "popup.icon.success": [
-      61,
-      112,
-      72,
+      94,
+      204,
+      149,
       255
     ],
     "popup.icon.question": [
-      98,
-      81,
-      126,
+      180,
+      146,
+      246,
       255
     ],
     "popup.title.text": [
-      38,
-      39,
-      37,
-      245
+      246,
+      245,
+      247,
+      255
     ],
     "popup.message.text": [
-      72,
-      73,
-      68,
-      230
+      204,
+      207,
+      218,
+      255
     ],
     "popup.button.surface": [
-      204,
-      201,
-      193,
-      230
+      28,
+      43,
+      86,
+      255
     ],
     "popup.button.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       195
     ],
     "popup.button.text": [
-      38,
-      39,
-      37,
-      240
+      246,
+      245,
+      247,
+      255
     ],
     "popup.button.hover_surface": [
-      216,
-      211,
-      200,
-      230
+      79,
+      82,
+      98,
+      255
     ],
     "popup.button.pressed_surface": [
-      186,
-      180,
-      166,
-      230
+      102,
+      97,
+      97,
+      255
     ],
     "popup.input.surface": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       225
     ],
     "popup.input.border": [
-      115,
-      110,
-      100,
+      220,
+      189,
+      113,
       100
     ],
     "popup.input.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "popup.input.focus_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       255
     ],
     "swatch.hover_mix": [
-      186,
-      180,
-      166,
+      127,
+      187,
+      207,
       255
     ],
     "swatch.pressed_mix": [
-      181,
-      166,
-      140,
+      127,
+      187,
+      207,
       255
     ],
     "swatch.inner_highlight": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       30
     ],
     "swatch.inner_shade": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       35
     ],
     "swatch.border": [
       127,
-      104,
-      72,
+      187,
+      207,
       235
     ],
     "swatch.light_accent": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       70
     ],
     "swatch.dark_accent": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       100
     ],
     "color_picker.window": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       255
     ],
     "color_picker.window_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "color_picker.base": [
-      227,
-      224,
-      217,
+      17,
+      30,
+      66,
       255
     ],
     "color_picker.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "color_picker.button": [
-      204,
-      201,
-      193,
+      28,
+      43,
+      86,
       255
     ],
     "color_picker.button_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "context.menu.surface": [
-      227,
-      224,
-      217,
-      215
+      17,
+      30,
+      66,
+      255
     ],
     "context.menu.border": [
-      115,
-      110,
-      100,
+      246,
+      245,
+      247,
       230
     ],
     "context.menu.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "context.menu.selected_surface": [
-      186,
-      180,
-      166,
-      224
+      102,
+      97,
+      97,
+      255
     ],
     "context.menu.disabled_text": [
-      135,
-      135,
-      127,
+      130,
+      139,
+      167,
       160
     ],
     "context.menu.separator": [
-      115,
-      110,
-      100,
+      246,
+      245,
+      247,
       165
     ],
     "context.submenu.surface": [
-      227,
-      224,
-      217,
-      215
+      17,
+      30,
+      66,
+      255
     ],
     "context.submenu.border": [
-      115,
-      110,
-      100,
+      246,
+      245,
+      247,
       230
     ],
     "context.submenu.text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "context.submenu.selected_surface": [
-      186,
-      180,
-      166,
-      224
+      102,
+      97,
+      97,
+      255
     ],
     "context.submenu.checked_text": [
-      38,
-      39,
-      37,
+      246,
+      245,
+      247,
       255
     ],
     "context.submenu.checked_surface": [
-      186,
-      180,
-      166,
-      224
+      102,
+      97,
+      97,
+      255
     ],
     "chrome.outer_border": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       255
     ],
     "chrome.size_grip": [
-      115,
-      110,
-      100,
+      127,
+      187,
+      207,
       215
     ]
   },
@@ -1159,10 +1159,10 @@
       "offset_x": 6.0,
       "offset_y": 8.0,
       "color": [
-        47,
-        45,
-        40,
-        120
+        30,
+        49,
+        83,
+        102
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1171,10 +1171,10 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
-        47,
-        45,
-        40,
-        95
+        30,
+        49,
+        83,
+        81
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1183,10 +1183,10 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
-        47,
-        45,
-        40,
-        110
+        30,
+        49,
+        83,
+        94
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1195,10 +1195,10 @@
       "offset_x": 3.0,
       "offset_y": 4.0,
       "color": [
-        47,
-        45,
-        40,
-        60
+        30,
+        49,
+        83,
+        51
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1207,46 +1207,46 @@
       "offset_x": 5.0,
       "offset_y": 6.0,
       "color": [
-        47,
-        45,
-        40,
-        105
+        30,
+        49,
+        83,
+        89
       ],
       "disabled_alpha_scale": 0.4
     },
     "text.section": {
       "blur_radius": 0.0,
-      "offset_x": 1.0,
-      "offset_y": 1.0,
+      "offset_x": 2.0,
+      "offset_y": 2.0,
       "color": [
-        47,
-        45,
-        40,
-        36
+        30,
+        49,
+        83,
+        106
       ],
       "disabled_alpha_scale": 0.4
     },
     "text.page": {
       "blur_radius": 0.0,
-      "offset_x": 1.0,
-      "offset_y": 1.0,
+      "offset_x": 2.0,
+      "offset_y": 3.0,
       "color": [
-        47,
-        45,
-        40,
-        40
+        30,
+        49,
+        83,
+        119
       ],
       "disabled_alpha_scale": 0.4
     },
     "text.title": {
       "blur_radius": 0.0,
-      "offset_x": 2.0,
-      "offset_y": 2.0,
+      "offset_x": 3.0,
+      "offset_y": 4.0,
       "color": [
-        47,
-        45,
-        40,
-        44
+        30,
+        49,
+        83,
+        119
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1255,10 +1255,10 @@
       "offset_x": 6.0,
       "offset_y": 8.0,
       "color": [
-        47,
-        45,
-        40,
-        96
+        30,
+        49,
+        83,
+        82
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1267,10 +1267,10 @@
       "offset_x": 4.0,
       "offset_y": 5.0,
       "color": [
-        47,
-        45,
-        40,
-        110
+        30,
+        49,
+        83,
+        94
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1279,10 +1279,10 @@
       "offset_x": 6.0,
       "offset_y": 8.0,
       "color": [
-        47,
-        45,
-        40,
-        90
+        30,
+        49,
+        83,
+        76
       ],
       "disabled_alpha_scale": 0.4
     },
@@ -1291,10 +1291,10 @@
       "offset_x": 0.0,
       "offset_y": 4.0,
       "color": [
-        47,
-        45,
-        40,
-        150
+        30,
+        49,
+        83,
+        128
       ],
       "disabled_alpha_scale": 0.4
     }
@@ -1305,36 +1305,36 @@
         {
           "position": 0.0,
           "color": [
-            227,
-            224,
-            217,
+            17,
+            30,
+            66,
             242
           ]
         },
         {
           "position": 0.35,
           "color": [
-            185,
-            182,
-            174,
+            23,
+            37,
+            77,
             230
           ]
         },
         {
           "position": 0.65,
           "color": [
-            204,
-            201,
-            193,
+            28,
+            43,
+            86,
             217
           ]
         },
         {
           "position": 1.0,
           "color": [
-            216,
-            211,
-            200,
+            79,
+            82,
+            98,
             179
           ]
         }
@@ -1346,26 +1346,26 @@
           "position": 0.0,
           "color": [
             216,
-            211,
-            200,
+            171,
+            86,
             232
           ]
         },
         {
           "position": 0.5,
           "color": [
-            151,
-            132,
-            101,
+            243,
+            190,
+            89,
             220
           ]
         },
         {
           "position": 1.0,
           "color": [
-            181,
-            166,
-            140,
+            202,
+            189,
+            130,
             198
           ]
         }
@@ -1376,27 +1376,27 @@
         {
           "position": 0.0,
           "color": [
-            119,
-            114,
-            104,
+            127,
+            187,
+            207,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            204,
-            201,
-            193,
+            28,
+            43,
+            86,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            227,
-            224,
-            217,
+            17,
+            30,
+            66,
             255
           ]
         }
@@ -1407,27 +1407,27 @@
         {
           "position": 0.0,
           "color": [
-            127,
-            104,
-            72,
+            153,
+            201,
+            217,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            135,
-            107,
-            67,
+            127,
+            187,
+            207,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            186,
-            180,
-            166,
+            102,
+            97,
+            97,
             255
           ]
         }
@@ -1438,18 +1438,18 @@
         {
           "position": 0.0,
           "color": [
-            135,
-            107,
-            67,
+            127,
+            187,
+            207,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            186,
-            180,
-            166,
+            243,
+            190,
+            89,
             255
           ]
         }
@@ -1460,27 +1460,27 @@
         {
           "position": 0.0,
           "color": [
-            170,
-            126,
-            67,
+            127,
+            187,
+            207,
             255
           ]
         },
         {
           "position": 0.85,
           "color": [
-            135,
-            107,
-            67,
+            185,
+            188,
+            148,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            186,
-            180,
-            166,
+            243,
+            190,
+            89,
             255
           ]
         }

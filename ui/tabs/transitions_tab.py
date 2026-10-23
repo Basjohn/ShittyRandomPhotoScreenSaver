@@ -727,7 +727,12 @@ class TransitionsTab(QWidget):
         # stay on the page.
         if not spec.advanced:
             return
-        toggle, body, advanced = shared_styles.build_bucket_toggle(layout, "Advanced", expanded=False)
+        bucket_id = f"transitions:{spec.section}"
+        toggle, body, advanced = shared_styles.build_bucket_toggle(
+            layout, "Advanced",
+            expanded=self._settings.get("ui.basic_bucket_path") == bucket_id,
+            on_toggle=lambda checked, k=bucket_id: self._set_transition_bucket(k, checked),
+        )
         toggle.setToolTip("Quality and optional effects for this transition.")
         setattr(self, f"{spec.section}_advanced_toggle", toggle)
         setattr(self, f"{spec.section}_advanced_body", body)
@@ -1283,6 +1288,16 @@ class TransitionsTab(QWidget):
             self._loading = previous_loading
         self._reset_view_scroll()
 
+    def _set_transition_bucket(self, bucket_id: str, checked: bool) -> None:
+        previous = self._settings.get("ui.basic_bucket_path")
+        if checked or previous == bucket_id:
+            self._settings.set("ui.basic_bucket_path", bucket_id if checked else "", emit_change=False)
+
+    def retire_bucket_context(self) -> None:
+        shared_styles.collapse_settings_bucket_tree(self)
+        if str(self._settings.get("ui.basic_bucket_path") or "").startswith("transitions:"):
+            self._settings.set("ui.basic_bucket_path", "", emit_change=False)
+
     def _on_nav_selected(self, key: str) -> None:
         """Show either the SETUP page or one transition's settings groups."""
         # Admission first: a deactivated transition redirects to SETUP before any
@@ -1293,6 +1308,11 @@ class TransitionsTab(QWidget):
             if button is not None:
                 button.setChecked(True)
         key = admitted
+        old_key = getattr(self, "_active_bucket_nav_key", None)
+        if (old_key is not None and old_key != key
+                and not getattr(self, "_loading", False)):
+            self.retire_bucket_context()
+        self._active_bucket_nav_key = key
         show_setup = key == _SETUP_NAV_KEY
         self._setup_page.setVisible(show_setup)
         for group in getattr(self, "_transition_setting_groups", []):

@@ -16,6 +16,7 @@ from core.settings.visualizer_mode_settings import (
     Colour,
     Custom,
     Direction,
+    ScenePath,
     Range,
     Slider,
     Toggle,
@@ -93,6 +94,12 @@ def test_a_spec_is_a_registered_mode_and_owns_canonical_keys(spec):
         default = DEFAULTS[control.key]
         if isinstance(control, Colour):
             assert control.admit(default, default) == [int(c) for c in default][:4] + [255] * (4 - len(default))
+        elif isinstance(control, ScenePath):
+            # Legacy [around, height] values are accepted and projected into
+            # six-coordinate scene paths; authored values are not fixed goldens.
+            admitted = control.admit(default, default)
+            assert len(admitted) == 6
+            assert control.admit(admitted, admitted) == admitted, control.key
         else:
             assert control.admit(default, default) == default, control.key
         if isinstance(control, Slider):

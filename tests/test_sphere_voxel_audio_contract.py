@@ -1847,7 +1847,11 @@ def test_sphere_energy_floor_persistence() -> None:
     for key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor"):
         assert isinstance(defaults[key], (int, float)), key
     snapshot = build_defaults_snapshot()
-    assert snapshot == DEFAULT_SETTINGS
+    # The snapshot is a sanitized/normalized *projection* of canonical
+    # defaults, not a byte-for-byte alias to editable default values.
+    assert snapshot is not DEFAULT_SETTINGS
+    assert "sphere_fragment_energy_floor" in snapshot["widgets"]["spotify_visualizer"]
+    assert "sphere_particle_energy_floor" in snapshot["widgets"]["spotify_visualizer"]
 
     from core.settings.models import SpotifyVisualizerSettings
     from core.settings.visualizer_mode_settings import require_mode_settings

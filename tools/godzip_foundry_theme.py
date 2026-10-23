@@ -119,7 +119,7 @@ def _color(theme: SettingsThemeSpec, token: str) -> str:
     return render_qss_color(theme.color(token))
 
 
-def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
+def render_foundry_stylesheet(theme: SettingsThemeSpec, *, use_settings_controls: bool = False) -> str:
     """Render Foundry chrome entirely from Settings ``ThemeSpec`` semantics.
 
     Foundry deliberately owns its QSS structure while consuming the same semantic
@@ -180,6 +180,33 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
     warning = _color(theme, "popup.icon.warning")
     error = _color(theme, "popup.icon.error")
 
+    # Legacy Foundry tools use their own generic control rules. The Theme
+    # Sorter deliberately opts out and appends the real shared Settings skins.
+    # Do not apply competing QComboBox/SpinBox/Slider geometry to that preview.
+    generic_slider = "" if use_settings_controls else f"""
+        QSlider::groove:horizontal {{ height: 5px; background: {input_surface}; border: 1.5px solid {border}; border-radius: 2px; }}
+        QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: {action_surface}; }}
+    """
+    generic_controls = "" if use_settings_controls else f"""
+        QCheckBox {{ color: {checkbox_text}; spacing: 8px; min-height: 20px; }}
+        /* Even indicator dimensions + vertical breathing room prevent Qt/Windows
+           fractional-DPI clipping that made empty circles render like “( )”. */
+        QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 7px; margin: 2px 1px; background-color: {checkbox_surface}; border: 1.5px solid {checkbox_border}; }}
+        QCheckBox::indicator:checked {{ background-color: {checkbox_checked}; border: 1.5px solid {checkbox_checked_border}; }}
+        QCheckBox::indicator:disabled {{ background-color: {subsection}; border-color: {helper}; }}
+
+        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1.75px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
+        QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
+        /* The CMD editor and transcript retain the same dark surface on focus. */
+        QPlainTextEdit#cmdScriptInput, QPlainTextEdit#cmdScriptInput:focus, QPlainTextEdit#cmdScriptOutput, QPlainTextEdit#cmdScriptOutput:focus {{ background: {input_surface}; color: {input_text}; border-color: {input_border}; }}
+        QComboBox {{ padding-right: 30px; }}
+        QComboBox::drop-down {{ subcontrol-origin: border; subcontrol-position: top right; width: 26px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-top-right-radius: 6px; border-bottom-right-radius: 6px; }}
+        QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1.75px solid {list_border}; border-radius: 6px; padding: 3px; selection-background-color: {list_selected}; outline: none; }}
+        QSpinBox, QDoubleSpinBox {{ padding-right: 28px; }}
+        QSpinBox::up-button, QDoubleSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 23px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-bottom: 1.5px solid {input_border}; border-top-right-radius: 6px; }}
+        QSpinBox::down-button, QDoubleSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 23px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-bottom-right-radius: 6px; }}
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{ background: {tab_hover}; }}
+    """
     return base + f"""
         QMainWindow {{ background: transparent; }}
         QWidget#root, QWidget#defaultsFoundryRoot, QWidget#themeFoundryRoot, QWidget#widgetThemeFoundryRoot {{ background: {dialog}; color: {primary}; border: 2px solid {border}; border-radius: 8px; }}
@@ -247,8 +274,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QLabel#defaultsFoundryStatus {{ color: {success}; }}
         QPushButton#defaultsFoundryPrimary, QPushButton#themeFoundryPrimary, QPushButton#widgetThemeFoundryPrimary {{ background: {action_surface}; color: {action_text}; border: 1.75px solid {action_border}; font-weight: 800; }}
         QPushButton#defaultsFoundryPrimary:hover, QPushButton#themeFoundryPrimary:hover, QPushButton#widgetThemeFoundryPrimary:hover {{ background: {action_hover}; }}
-        QSlider::groove:horizontal {{ height: 5px; background: {input_surface}; border: 1.5px solid {border}; border-radius: 2px; }}
-        QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: {action_surface}; }}
+        {generic_slider}
         QStatusBar {{ background: {titlebar}; color: {secondary}; border-top: 1.5px solid {border}; }}
 
         QPushButton {{ background: {button_surface}; color: {button_text}; border: 1.5px solid {button_border}; border-radius: 8px; padding: 7px 13px; min-height: 20px; font-weight: 600; }}
@@ -264,24 +290,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QPushButton#expandButton {{ background: {tab_surface}; color: {primary}; border: 1.5px solid {border}; border-radius: 6px; padding: 4px 9px; min-height: 20px; }}
         QPushButton#expandButton:hover {{ background: {tab_hover}; }}
 
-        QCheckBox {{ color: {checkbox_text}; spacing: 8px; min-height: 20px; }}
-        /* Even indicator dimensions + vertical breathing room prevent Qt/Windows
-           fractional-DPI clipping that made empty circles render like “( )”. */
-        QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 7px; margin: 2px 1px; background-color: {checkbox_surface}; border: 1.5px solid {checkbox_border}; }}
-        QCheckBox::indicator:checked {{ background-color: {checkbox_checked}; border: 1.5px solid {checkbox_checked_border}; }}
-        QCheckBox::indicator:disabled {{ background-color: {subsection}; border-color: {helper}; }}
-
-        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1.75px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
-        QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
-        /* The CMD editor and transcript retain the same dark surface on focus. */
-        QPlainTextEdit#cmdScriptInput, QPlainTextEdit#cmdScriptInput:focus, QPlainTextEdit#cmdScriptOutput, QPlainTextEdit#cmdScriptOutput:focus {{ background: {input_surface}; color: {input_text}; border-color: {input_border}; }}
-        QComboBox {{ padding-right: 30px; }}
-        QComboBox::drop-down {{ subcontrol-origin: border; subcontrol-position: top right; width: 26px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-top-right-radius: 6px; border-bottom-right-radius: 6px; }}
-        QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1.75px solid {list_border}; border-radius: 6px; padding: 3px; selection-background-color: {list_selected}; outline: none; }}
-        QSpinBox, QDoubleSpinBox {{ padding-right: 28px; }}
-        QSpinBox::up-button, QDoubleSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 23px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-bottom: 1.5px solid {input_border}; border-top-right-radius: 6px; }}
-        QSpinBox::down-button, QDoubleSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 23px; background: {tab_surface}; border: none; border-left: 1.5px solid {input_border}; border-bottom-right-radius: 6px; }}
-        QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{ background: {tab_hover}; }}
+        {generic_controls}
         QMenu {{ background: {list_surface}; color: {list_text}; border: 1.75px solid {popup_border}; border-radius: 7px; padding: 4px; }}
         QMenu::item {{ padding: 6px 18px 6px 10px; border-radius: 4px; }}
         QMenu::item:selected {{ background: {list_selected}; }}

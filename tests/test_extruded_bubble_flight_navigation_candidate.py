@@ -9,7 +9,7 @@ import math
 import sys
 from types import ModuleType, SimpleNamespace
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 simulation_module()
 
 from widgets.spotify_visualizer.view_orbit import (
@@ -50,9 +50,7 @@ def test_combined_turn_travel_is_continuous_and_frame_rate_independent():
     assert samples[-1] == framed_flight_position(motion, 11.)
     assert all(math.dist(a, b) < .05 for a, b in zip(samples, samples[1:]))
     assert all(math.isfinite(x) for p in samples for x in p)
-    # At nominal FOV, travel is a view translation not a projective zoom.
-    from core.settings.default_contract import require_canonical_default
-    assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_fov') == 45.
+    # The motion path is expressed in physical coordinates, not today's authored lens default.
 
 
 def test_persistent_single_owner_motion_and_other_modes_untouched():

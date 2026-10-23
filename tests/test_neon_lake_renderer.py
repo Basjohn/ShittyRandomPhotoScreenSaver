@@ -668,8 +668,8 @@ def _wire_frame(snapshot, style, **parameters):
 def test_retained_surface_styles_and_point_mesh_lifecycle(target):
     capture, host = target
     snapshot = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=False,
-                         shockwave_grid_floor=0., shockwave_grid_water_reflection=0.)
-    assert snapshot.logical.mode_state.parameters['shockwave_grid_wire_display'] == 'Vertices'
+                         shockwave_grid_floor=0., shockwave_grid_water_reflection=0.,
+                         shockwave_grid_wire_display='Vertices')  # TEST INPUT, not an authored preset default
     vertices = capture.render(host, snapshot)
     renderer = host._implementations['shockwave_grid']
     assert renderer._points_cells is not None and renderer._points_data is not None

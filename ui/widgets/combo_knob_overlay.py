@@ -81,6 +81,14 @@ class ComboKnobOverlay(QWidget):
         host = getattr(self, "_host", None)
         if host is None or not host.isEnabled():
             return QColor("#6a6a6a")
+        # Opt-in tool-local colour override: Foundries preview selected themes
+        # without changing SRPSS's active application theme. Other combos
+        # retain the existing knob rendering unchanged.
+        key = {"normal": "Normal", "hover": "Hover", "pressed": "Pressed", "disabled": "Disabled"}
+        state = self._state if host.isEnabled() else "disabled"
+        authored = host.property(f"previewKnob{key[state]}")
+        if isinstance(authored, str) and QColor(authored).isValid():
+            return QColor(authored)
         if self._state == "pressed":
             return QColor("#2d2d2d")
         if self._state == "hover":

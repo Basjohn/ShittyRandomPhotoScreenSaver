@@ -13,8 +13,8 @@ import pytest
 from widgets.spotify_visualizer.extruded_bubble_simulation import (
     ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput,
 )
-from tools.visualizer_replay.extruded_bubble_startup_probe import (
-    controls_from_authored_preset, simulation_module, summary, trace,
+from tools.visualizer_replay.eb_simulation_support import (
+    synthetic_controls, simulation_module, summary, trace,
 )
 
 
@@ -42,14 +42,14 @@ def test_new_sizes_are_three_independent_controls_with_identity_stable_physical_
         assert b.radius == pytest.approx(before[b.ident][1])
 
 
-@pytest.mark.parametrize("slot", [1, 7])
+@pytest.mark.parametrize("profile", ["gentle", "strong"])
 @pytest.mark.parametrize("scenario", ["already_hot", "play_ramp"])
-def test_engine_ramp_metadata_prevents_unearned_hot_start_or_warmup_swell(slot, scenario):
+def test_engine_ramp_metadata_prevents_unearned_hot_start_or_warmup_swell(profile, scenario):
     mod = simulation_module()
-    controls = controls_from_authored_preset(mod, slot)
+    controls = synthetic_controls(mod, profile)
     result = summary(trace(mod, controls, scenario))
     for lane in ("big", "small"):
-        assert result[lane]["peak_to_final"] <= 1.30, (slot, scenario, lane, result)
+        assert result[lane]["peak_to_final"] <= 1.30, (profile, scenario, lane, result)
 
 
 def test_real_non_ramp_music_can_still_drive_big_and_small_changes():
@@ -84,10 +84,12 @@ def test_canonical_spec_includes_sizes_and_narrower_camera_as_mutable_settings()
         control = spec.control(key)
         assert control.bucket == bucket
         assert control.low < defaults[key] < control.high
-    assert defaults["extruded_bubble_large_size"] == 1.0
-    assert defaults["extruded_bubble_small_size"] == 1.0
-    assert defaults["extruded_bubble_bead_size"] == 1.0
-    assert defaults["extruded_bubble_camera_fov"] == 45.0
+    # Mutable canonical values are never pinned to today's authoring choices.
+    # Control schema and admissibility are the contract, not the exact value.
+    for suffix in ("large_size", "small_size", "bead_size", "camera_fov"):
+        key = "extruded_bubble_" + suffix
+        control = spec.control(key)
+        assert control.admit(defaults[key], defaults[key]) == pytest.approx(defaults[key])
 
 
 def test_camera_pan_translates_world_eye_and_does_not_change_orbit():

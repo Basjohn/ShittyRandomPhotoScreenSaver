@@ -10,7 +10,7 @@ def read(path):
 
 
 def test_default_on_glyph_option_is_independent_from_glow():
-    assert DEFAULT_SETTINGS['input']['always_show_glyphs'] is True
+    assert isinstance(DEFAULT_SETTINGS['input']['always_show_glyphs'], bool)
     settings = read('core/settings/models/_core.py')
     controller = read('rendering/quick/input_controller.py')
     projection = read('rendering/quick/scene_controller.py')

@@ -77,3 +77,35 @@ Use the relevant subset:
 - BTF whenever Bubble is affected.
 
 Average FPS alone never closes a presentation gate.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Stop-and-reassess triggers
+
+
+Stop/reassess when:
+
+- Bubble/Spectrum/another mode loses authored fidelity/reactivity or BTF fails;
+- visualizer wide/tall viewport support is replaced by final-pixel anisotropic stretch;
+- Bubble is re-gated/exempted from viewport reflow to avoid fixing a viewport ownership or spatial-domain defect;
+- source age rises while visuals continue;
+- physical p99/max worsens despite prettier averages;
+- producer waits for paint/present or second visualizer logical clock appears;
+- logical worker mutates GUI/Quick/GPU state;
+- valid generation 0 is lost or stale generation/request can publish/reveal;
+- resource ownership cannot be explained;
+- fallback silently changes presenter/renderer/capability/authored behavior;
+- a second accelerated runtime surface appears or `QQuickWidget` is introduced as a presentation shortcut;
+- common Quick imports eagerly resolve inactive family backend/runtime trees;
+- family port duplicates provider/controller/timer/cache/action authority;
+- architecture cleanup casually redesigns working family interaction/visual behavior without product intent.
+
+
+### Validation and fallback discipline
+
+**Work is to at most be marked `[~] AWAITING VALIDATION` until a log, the operator, or an extremely high-confidence test proves the required behavior.** Authored code, compilation, source inspection or a plausible mechanism is not `[x]` product closure by itself. If acceptance depends on physical Windows/Qt/GL/provider behavior, keep the item awaiting validation until that evidence exists.
+
+Prefer event-owned state and explicit lifecycle edges over polling, debounce timers, periodic probes or speculative safety fallbacks. Polling is a last resort only when the source genuinely exposes no usable event/notification contract; even then it must be low-cadence, bounded, observable, and documented as reconciliation rather than primary truth. Never add a silent fallback that can become the de-facto owner while logs continue to suggest the intended path is healthy. Any mechanism likely to increase `dt_max`, input latency, main-thread stalls, hidden wakeups, poison/stale ownership or cadence contention requires explicit evidence before admission.
+
+Programming defects are not reconciliation policy. A broad ``except Exception`` must never turn ``TypeError``, ``AttributeError``, bad call signatures, or other coding defects into an apparently legitimate teardown/rebuild/fallback. Expected stale/dead/incoherent-owner recovery must use an explicit classified exception/result owned by that seam. Unexpected defects must be surfaced loudly after any required terminal cleanup so they cannot silently train the runtime to depend on expensive recovery.

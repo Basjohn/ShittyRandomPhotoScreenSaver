@@ -186,6 +186,39 @@ def _function_string_constants(node: ast.AST) -> set[str]:
     }
 
 
+def _is_named_curated_theme_oracle(node: ast.AST) -> bool:
+    """Detect *explicit named* repo theme files used as an artistic oracle.
+
+    Generated/temp fixture paths are intentionally not included. More complex
+    dynamic catalogue readers remain a review task, not a blanket failure.
+    """
+    values = _function_string_constants(node)
+    named = any(
+        (v.lower().endswith(('.srtheme', '.srwtheme')) and '{' not in v
+         and v not in {'Default Dark.srtheme', 'Default Dark.srwtheme'})
+        for v in values
+    )
+    return named and 'themes' in values and any(
+        isinstance(n, ast.Name) and n.id in {'ROOT', '__file__'}
+        for n in ast.walk(node)
+    )
+
+
+def _has_art_value_assert(node: ast.AST) -> bool:
+    # Schema and stable identity checks are valid even for named user files;
+    # only assertions about the hand-authored contents (colour, shadow, etc.)
+    # are forbidden from using a shipped theme as oracle.
+    artistic_fields = {'colors', 'shadows', 'gradients', 'backdrop'}
+    for item in ast.walk(node):
+        if isinstance(item, ast.Assert):
+            if any(
+                isinstance(sub, ast.Constant) and sub.value in artistic_fields
+                for sub in ast.walk(item.test)
+            ):
+                return True
+    return False
+
+
 def _uses_repo_authored_preset_path(node: ast.AST) -> bool:
     constants = _function_string_constants(node)
     has_catalogue = "presets" in constants and "visualizer_modes" in constants
@@ -237,6 +270,7 @@ def _canonical_snapshot_names(node: ast.AST) -> set[str]:
         "build_defaults_snapshot",
         "get_default_settings",
         "get_base_default_settings",
+        "get_raw_default_settings",
     }
     assignments: list[tuple[list[ast.AST], ast.AST]] = []
     for child in ast.walk(node):
@@ -431,7 +465,6 @@ def audit_test_file(path: Path) -> list[Finding]:
             if (
                 any(_root_name(side) in canonical_names or _root_name(side) in {"DEFAULT_SETTINGS", "CANONICAL_DEFAULTS"} for side in sides)
                 and any(_is_literal(side) for side in sides)
-                and not _source_has_exact_marker(lines, child.lineno)
             ):
                 findings.append(
                     Finding(
@@ -442,6 +475,11 @@ def audit_test_file(path: Path) -> list[Finding]:
                     )
                 )
 
+        if _is_named_curated_theme_oracle(node) and _has_art_value_assert(node):
+            findings.append(Finding(
+                "named-shipped-theme-art-oracle", path, node.lineno,
+                "a named operator-authored theme is used as an artistic value golden; use test-owned theme data",
+            ))
         if path.name not in _PRESET_INFRASTRUCTURE_FILES and _uses_repo_authored_preset_path(node):
             findings.append(
                 Finding(

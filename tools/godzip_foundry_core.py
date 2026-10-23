@@ -72,12 +72,12 @@ def is_generated_qrc_python(path: str) -> bool:
 
 NEVER_TRANSFER_PREFIXES = (
     "ui/assets/",
+    "themes/",     # operator-authored and locally curated; never transfer or overwrite
     "assets/webp/",   # release showcase WebPs (tools/release_media.py)
 )
 
 HEAVY_DEFAULT_PREFIXES = (
     "images/",
-    "themes/",
     "tools/godzip_themes/",
     "golden/",
     "goldens/",
@@ -433,8 +433,9 @@ def is_never_transfer_payload(path: str) -> bool:
     """Return True for payloads that normal GODZIP handoffs must never carry.
 
     These paths are intentionally omitted even when dirty and even when callers
-    try to select them explicitly. They are either huge transfer-only baggage or
-    otherwise outside the normal source handoff contract.
+    try to select them explicitly. They include operator-owned theme files whose
+    local edits and deletions must never be overwritten by a handoff, and bulky
+    transfer-only baggage otherwise outside the normal source handoff contract.
     """
 
     lower = path.replace("\\", "/").lower().lstrip("./")
@@ -449,7 +450,8 @@ def workflow_default_selected(path: str, status: str = "") -> bool:
 
     The transfer profile intentionally keeps all documentation and direct
     ``tests/*`` files because those are valuable handoff context, while
-    excluding test fixture/subfolder payloads, themes, images and goldens.
+    excluding test fixture/subfolder payloads, images and goldens. The authored
+    ``themes/`` tree is a hard non-transfer path handled separately.
     Gitignored files never reach this decision point.
     """
     lower = path.replace("\\", "/").lower().lstrip("./")
@@ -699,7 +701,7 @@ This archive is a **full working-tree handoff**. These rules apply when an agent
 - Preserve unrelated dirty state and existing authored behavior. A later/superseding full GODZIP replaces an earlier handoff as working-tree authority; smaller context/handoff archives do not override the newer full tree unless explicitly stated.
 - Archive omission never means delete. Only explicit debris instructions in `.godzip/manifest.json` authorize moving a path to `/deleteme`.
 - `.godzip/manifest.json` and `.godzip/workflow.md` are archive metadata, not repository replacement targets.
-- Normal GODZIPs intentionally omit heavyweight/generated payloads. In particular, `ui/assets/` is never part of a normal GODZIP handoff. Do not re-add excluded bulk assets just to make the archive self-contained.
+- Normal GODZIPs intentionally omit heavyweight/generated payloads. In particular, `ui/assets/` and the operator-owned `themes/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets or locally curated themes.
 - Before returning a GODZIP, run the relevant focused tests/audits and keep any operator-required physical acceptance steps explicit.
 
 Archive baseline: `{short}`  \nDirty worktree at creation: `{dirty}`

@@ -9,7 +9,7 @@ from core.settings.visualizer_mode_settings import (
     SceneVolumePath, SceneCameraPosition, require_mode_settings,
 )
 from core.settings.visualizer_paths import admit_path, world_point
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 simulation_module()  # import pure GL camera without requiring the GUI Spotify runtime
 from rendering.gl_programs.extruded_bubble_scene import physical_camera
 
@@ -68,8 +68,8 @@ def test_preset_camera_starts_are_unchanged_and_home_resets_new_position():
     manager = (ROOT/'engine/display_manager.py').read_text(encoding='utf-8')
     assert '"extruded_bubble_camera_position"' in manager
     assert 'lens["extruded_bubble_camera_position"] = list(require_canonical_default(' in manager
-    assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_position') == [0.,0.,0.]
-    assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_fov') == 45.
+    # Home Reset must source the current canonical authority, not a fixed old
+    # artistic value (which the operator can freely edit).
 
 
 def test_original_scene_path_mapper_kept_for_other_visualizers():

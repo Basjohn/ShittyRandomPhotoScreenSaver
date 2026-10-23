@@ -28,17 +28,18 @@ def _imports_tools_or_scripts(path: Path) -> list[str]:
 
 def test_production_python_never_imports_operator_analysis_tools():
     violations: list[str] = []
-    # Only production source is in scope: skip the test/tool trees plus
-    # non-production output/scratch/vendor roots (diagnostic captures under logs/,
-    # the deleteme debris graveyard, scratch dirs, and the third-party venv).
-    excluded_roots = {"tests", "tools", "deleteme", "logs", "temp", "tmp", "cache", ".venv"}
-    for path in ROOT.rglob("*.py"):
-        rel = path.relative_to(ROOT)
-        if rel.parts and rel.parts[0] in excluded_roots:
+    # Whitelist actual runtime roots: scratch worktrees (including .tmp),
+    # generated tooling, and retired code are not production import owners.
+    production_roots = ("core", "engine", "rendering", "ui", "widgets")
+    for root_name in production_roots:
+        root = ROOT / root_name
+        if not root.is_dir():
             continue
-        imports = _imports_tools_or_scripts(path)
-        if imports:
-            violations.append(f"{rel}: {sorted(set(imports))}")
+        for path in root.rglob("*.py"):
+            imports = _imports_tools_or_scripts(path)
+            if imports:
+                rel = path.relative_to(ROOT)
+                violations.append(f"{rel}: {sorted(set(imports))}")
     assert violations == []
 
 

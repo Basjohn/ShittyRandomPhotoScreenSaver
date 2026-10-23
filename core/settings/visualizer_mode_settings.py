@@ -1474,6 +1474,7 @@ _BUBBLE = ModeSettings(
 _EB_RAYS = ("extruded_bubble_rays_enabled", True)
 _EB_BEAM_RAYS = (_EB_RAYS, ("extruded_bubble_lighting_coverage", "BEAM"))
 _EB_SURFACE = ("extruded_bubble_light_type", "Sunlit Surface")
+_EB_SURFACE_RAYS = (_EB_RAYS, _EB_SURFACE)
 _EB_BANDS = ("extruded_bubble_particle_bands", True)
 _EB_AUTO_ROTATE = ("extruded_bubble_auto_rotate", True)
 
@@ -1513,7 +1514,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
                decimals=2, suffix="x", tooltip='Widen or narrow the BEAM light footprint. The default 1x retains the accepted original footprint. This does not move the source or change stream emission.'),
         SceneVolumePath("extruded_bubble_ray_path", "Ray Source → End:", bucket="rays", legacy_kind="light",
                   when=_EB_BEAM_RAYS, tooltip='Position the physical beam Source and End in all three axes; End controls how far it extends. Deep Light shares the physical Light Source.'),
-        Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
+        Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_SURFACE_RAYS,
                tooltip='Change how far the sunlight fan spreads from the light direction. BEAM Source and End limit its illuminated path; SCENE uses the fixed tank.'),
         Slider("extruded_bubble_ray_flicker", "Ray Flicker:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
                tooltip='Set the amount of music-linked shaft shimmer; this should not replace gentle transient-linked ray brightness changes. [NEEDS AUDIT] Verify changes remain smooth rather than flashing or staying visually pinned.'),

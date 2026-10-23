@@ -636,3 +636,13 @@ authority. Wheel/outer resize must carry the *current* order, not resurrect a
 baseline permutation after Restore. Test the actual painted rows, not just the
 model list, in both orientations and after Save/reopen and slot hydration. Qt
 and physical acceptance are separate from pure schema/source tests.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Ordinary widget geometry extension and teardown
+
+
+Ordinary widgets share one normalization/session geometry system. Whole-card uniform scaling remains the default. A family may opt into shared CUSTOM `content_extent` axes only when presentation reflow is genuinely useful; that is an extension of the same CUSTOM session, not permission for family-local geometry persistence, timers, alternate normalization, or Settings mutation. Side gestures may use family-owned logical floors through the shared policy seam; an admitted diagonal content corner may change both logical axes through that same owner, while **square** corner/wheel resize remains uniform. Restore Size must use separately retained authored geometry and must never learn its target from a committed CUSTOM extent.
+
+Lazy family Settings/runtime teardown is an ownership boundary. Invalidate queued/coalesced UI work, close admission, clear retained child references before Qt deletion, and reject stale wrappers/completions. A future widget should extend the generic family lifetime contract rather than grow a widget-name unload exception.

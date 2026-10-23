@@ -1,5 +1,7 @@
 # Neon Lake Basin
 
+**23 October addendum (not yet visually accepted):** the [operator reconciliation](2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) requires camera/control-hint parity with Extruded Bubble (while preventing entry into terrain and allowing almost flat horizon views), a square editor preserving existing heightmap/brush results with desirable angled pseudo-3D preview, layered water/water glow, and improved relevant shared 3D controls. Only presets 1–4 are currently useful artistic study cases; all presets remain mutable. Existing baseline acceptance is not a claim these additions have been implemented or visually accepted. [Current Plan](../../Current_Plan.md) owns status.
+
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID, settings prefix and layout profile remain
 `shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. The operator accepted the existing mode and its existing graphics/behavior baseline;
 `Current_Plan.md` §2A is the current status authority. Its future water/brush/glow extensions below are **not**

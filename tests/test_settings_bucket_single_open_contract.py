@@ -14,6 +14,9 @@ from core.settings.ui_bucket_state import (
     flat_bucket_scope,
     normalize_single_open_bucket_states,
     normalize_widget_bucket_states,
+    normalize_active_widget_bucket_path,
+    normalize_active_visualizer_leaf_path,
+    set_active_widget_bucket_path,
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     visualizer_bucket_scope,
@@ -136,21 +139,21 @@ def test_full_map_bucket_profile_projects_to_current_sparse_state_idempotently()
     assert sparse_open_bucket_states(gmail) == {"layout": True}
 
     widget_keys = tuple(DEFAULT_SETTINGS["ui"]["widget_bucket_states"])
-    widgets = normalize_widget_bucket_states(widget_keys, ui["widget_bucket_states"])
+    widgets = normalize_active_widget_bucket_path(widget_keys, ui["widget_bucket_states"], "steam")
     widget_sparse = sparse_open_bucket_states(widgets)
-    # Current identities in one Reddit accordion scope collapse deterministically
-    # to the last persisted true member. Unknown identities are dropped.
-    assert "reddit:reddit1" not in widget_sparse
-    assert "reddit:interaction" not in widget_sparse
-    assert widget_sparse["reddit:shared_layout"] is True
-    assert widget_sparse["media:controls"] is True
-    assert widget_sparse["steam:achievement_pulse"] is True
-    assert widget_sparse["steam:achievement_pulse_appearance"] is True
+    # Only the currently selected Steam editing path survives legacy migration.
+    # A saved Reddit/Media bucket is an INACTIVE pill, not another valid open.
+    assert widget_sparse == {
+        "steam:achievement_pulse": True,
+        "steam:achievement_pulse_appearance": True,
+    }
+    assert "reddit:shared_layout" not in widget_sparse
+    assert "media:controls" not in widget_sparse
     assert "retired:ghost" not in widget_sparse
 
     # Current sparse output is a fixed point. A second load cannot resurrect
     # false members, stale keys, or a second open bucket in one scope.
-    widgets_second = normalize_widget_bucket_states(widget_keys, widget_sparse)
+    widgets_second = normalize_active_widget_bucket_path(widget_keys, widget_sparse, "steam")
     assert sparse_open_bucket_states(widgets_second) == widget_sparse
 
     custom_keys = tuple(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
@@ -183,47 +186,33 @@ def test_legacy_full_widget_map_normalizes_to_one_open_per_local_scope() -> None
         "steam:achievement_pulse_layout": True,
         "steam:achievement_pulse_appearance": True,
     }
-    states = normalize_single_open_bucket_states(
-        canonical,
-        raw,
-        scope_for_key=lambda key: widget_bucket_scope(key, canonical),
-    )
+    states = normalize_active_widget_bucket_path(canonical, raw, "steam")
 
-    assert states["reddit:reddit1"] is False
-    assert states["reddit:secondary"] is True
-    assert states["steam:achievement_pulse"] is False
-    assert states["steam:abandonment_issues"] is True
-    # Nested card buckets are a separate local accordion scope from the card.
+    assert not states["reddit:reddit1"]
+    assert not states["reddit:secondary"]
+    assert states["steam:achievement_pulse"] is True
+    assert states["steam:abandonment_issues"] is False
+    # The remembered nested child keeps its actual root, never an orphan.
     assert states["steam:achievement_pulse_layout"] is False
     assert states["steam:achievement_pulse_appearance"] is True
 
 
-def test_widget_state_persists_only_current_open_key_per_scope() -> None:
+def test_widget_state_persists_only_one_active_editing_path() -> None:
     canonical = (
-        "media:appearance",
-        "media:controls",
-        "steam:achievement_pulse",
-        "steam:achievement_pulse_layout",
-        "steam:achievement_pulse_appearance",
+        "media:appearance", "media:controls", "steam:achievement_pulse",
+        "steam:achievement_pulse_layout", "steam:achievement_pulse_appearance",
     )
     states = {key: False for key in canonical}
-    scope = lambda key: widget_bucket_scope(key, canonical)
-
-    set_single_open_bucket_state(states, "media:appearance", True, scope_for_key=scope)
-    set_single_open_bucket_state(states, "media:controls", True, scope_for_key=scope)
-    set_single_open_bucket_state(states, "steam:achievement_pulse", True, scope_for_key=scope)
-    set_single_open_bucket_state(
-        states,
-        "steam:achievement_pulse_layout",
-        True,
-        scope_for_key=scope,
-    )
-
+    set_active_widget_bucket_path(states, "media:appearance", True)
+    set_active_widget_bucket_path(states, "media:controls", True)
+    set_active_widget_bucket_path(states, "steam:achievement_pulse", True)
+    set_active_widget_bucket_path(states, "steam:achievement_pulse_layout", True)
     assert sparse_open_bucket_states(states) == {
-        "media:controls": True,
-        "steam:achievement_pulse": True,
-        "steam:achievement_pulse_layout": True,
+        "steam:achievement_pulse": True, "steam:achievement_pulse_layout": True,
     }
+    # Closing an ancestor synchronously retires its previously hidden child.
+    set_active_widget_bucket_path(states, "steam:achievement_pulse", False)
+    assert sparse_open_bucket_states(states) == {}
 
 
 def test_flat_and_visualizer_scopes_replace_previous_open_bucket() -> None:
@@ -259,6 +248,12 @@ def test_flat_and_visualizer_scopes_replace_previous_open_bucket() -> None:
         "spectrum:shape": True,
         "bubble:appearance": True,
     }
+    # The real persisted projection additionally excludes inactive modes.
+    custom, technical = normalize_active_visualizer_leaf_path(
+        visualizer, {}, visualizer, {}, "bubble"
+    )
+    assert sparse_open_bucket_states(custom) == {"bubble:appearance": True}
+    assert sparse_open_bucket_states(technical) == {}
 
 
 def test_shared_rainbow_and_bar_appearance_are_real_bucket_schema() -> None:
@@ -345,6 +340,12 @@ def test_visualizer_technical_leaf_sections_use_real_sparse_buckets() -> None:
         "spectrum:transient": True,
         "bubble:agc": True,
     }
+    selected_custom, selected_tech = normalize_active_visualizer_leaf_path(
+        {}, canonical,
+        {}, {"spectrum:transient": True, "bubble:agc": True}, "bubble",
+    )
+    assert sparse_open_bucket_states(selected_custom) == {}
+    assert sparse_open_bucket_states(selected_tech) == {"bubble:agc": True}
 
     # Custom and Technical are separate schema maps but one logical leaf accordion
     # per mode. A legacy dual-open profile therefore normalizes to one winner.
@@ -444,12 +445,14 @@ def test_visualizer_parent_disclosures_remain_independent_from_leaf_accordions()
     assert "get_visualizer_adv_state(mode_key)" in scaffold
     assert 'setter = getattr(tab, "set_visualizer_adv_state", None)' in scaffold
     assert "setter(mode_key, checked)" in scaffold
-    assert "bind_bucket_accordion(" not in scaffold
+    assert 'scope_key=("visualizer_outer", mode_key)' in scaffold
 
     assert "get_visualizer_tech_state(mode_key)" in technical
     assert 'setter = getattr(tab, "set_visualizer_tech_state", None)' in technical
     assert "setter(mode_key, checked)" in technical
-    assert "bind_bucket_accordion(" not in technical
+    assert 'scope_key=("visualizer_outer", mode_key)' in technical
+    # Outer disclosures coordinate with each other, but never share the
+    # leaf accordion's ("visualizer", mode) scope.
 
 
 def test_explicit_non_bucket_surfaces_stay_outside_collapsible_contract() -> None:
@@ -472,3 +475,11 @@ def test_explicit_non_bucket_surfaces_stay_outside_collapsible_contract() -> Non
     assert "build_bucket_toggle(" not in setup_source
     assert "build_collapsible_bucket(" not in setup_source
 
+
+
+def test_shared_bucket_builder_does_not_expose_unparented_widgets() -> None:
+    """Qt-free guard for the Settings startup transient-window regression."""
+    source = _function_source(ROOT / "ui" / "tabs" / "shared_styles.py", "build_bucket_toggle")
+    assert "body.hide()" in source
+    assert source.index("host_layout.addWidget(body)") < source.index("body.show()")
+    assert "body.parentWidget() is not None" in source

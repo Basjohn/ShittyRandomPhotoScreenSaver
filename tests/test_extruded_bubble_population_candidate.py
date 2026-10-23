@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 
 def _steady(bands: tuple[float,float,float], seconds: float = 6.0):

@@ -91,18 +91,12 @@ def test_cross_bucket_conditional_survives_out_of_order_expansion(eb_tab):
 
 
 def test_lighting_coverage_is_independent_and_survives_lazy_hydration(eb_tab):
-    """The new light choice must not rewrite physical emission or old presets."""
-    from core.settings.models import SpotifyVisualizerSettings
-    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    """Test-owned BEAM/SCENE edits must round-trip independently of emission.
 
+    Authored preset contents are intentionally NEVER loaded or asserted. Each
+    operator-authored preset may legally use different coverage and beam width.
+    """
     tab, config = eb_tab
-    for preset in range(7):
-        payload = resolve_visualizer_activation_payload(
-            {"mode": "extruded_bubble", "preset_extruded_bubble": preset},
-            mode="extruded_bubble").resolved_config
-        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
-        assert model.extruded_bubble_lighting_coverage == "BEAM"
-        assert model.extruded_bubble_beam_width == 1.0
     payload = {**config, "extruded_bubble_lighting_coverage": "SCENE",
                "extruded_bubble_beam_width": 1.75,
                "extruded_bubble_emission_geometry": "BEAM"}

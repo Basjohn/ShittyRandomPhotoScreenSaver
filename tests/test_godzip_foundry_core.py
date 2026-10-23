@@ -190,6 +190,28 @@ def test_created_godzip_embeds_workflow_and_hard_excludes_ui_assets(tmp_path: Pa
         core.create_godzip(repo, ["ui/assets/huge.bin"], tmp_path / "forbidden.zip")
 
 
+def test_operator_themes_are_hard_excluded_even_when_explicitly_selected(tmp_path: Path) -> None:
+    # Only test-authored dummy paths: the operator's real mutable themes are never inspected.
+    repo = _repo(tmp_path)
+    settings = repo / "themes" / "Scratch.srtheme"
+    widget = repo / "themes" / "widgets" / "Scratch.srwtheme"
+    widget.parent.mkdir(parents=True)
+    settings.write_text("scratch", encoding="utf-8")
+    widget.write_text("scratch", encoding="utf-8")
+
+    assert core.is_never_transfer_payload("themes/")
+    assert core.is_never_transfer_payload("Themes/Scratch.srtheme")
+    assert core.is_never_transfer_payload("themes/widgets/Scratch.srwtheme")
+    assert core.workflow_default_selected("themes/Scratch.srtheme", "MODIFIED") is False
+    listed = {entry.path for entry in core.collect_repo_files(repo)}
+    assert not any(path.lower().startswith("themes/") for path in listed)
+
+    with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
+        core.create_godzip(repo, ["themes/Scratch.srtheme"], tmp_path / "blocked.zip")
+    with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
+        core.create_godzip(repo, ["themes/widgets/Scratch.srwtheme"], tmp_path / "blocked2.zip")
+
+
 def test_archive_cleanup_relation_uses_core_hidden_git_path(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     base = core.git_head(repo)

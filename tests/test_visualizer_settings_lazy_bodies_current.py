@@ -170,9 +170,12 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
 
             if mode == "shockwave_grid":
                 terrain_host = normal.findChild(type(normal), "shockwave_grid_bucket_terrain")
-                response_host = advanced.findChild(type(advanced), "shockwave_grid_bucket_response")
-                assert terrain_host.isAncestorOf(tab.shockwave_grid_terrain_editor)
-                assert response_host.isAncestorOf(tab.shockwave_grid_shape_editor)
+                from PySide6.QtWidgets import QWidget
+                # Frequency Response is an advanced spec-owned bucket. Search
+                # for its QWidget host, not for another copy of the parent type.
+                response_host = advanced.findChild(QWidget, "shockwave_grid_bucket_response")
+                assert terrain_host is not None and terrain_host.isAncestorOf(tab.shockwave_grid_terrain_editor)
+                assert response_host is not None and response_host.isAncestorOf(tab.shockwave_grid_shape_editor)
                 assert not hasattr(tab, "shockwave_grid_allow_overflow")
 
             technical = get_per_mode_controls_for_mode(tab, mode)

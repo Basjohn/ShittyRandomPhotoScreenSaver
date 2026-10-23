@@ -321,3 +321,12 @@ The main log is the spine. The sidecars are the detailed forensic payload. And t
 - no console formatting that becomes a persistence dependency;
 - no Quick/QML physical acceptance based only on the Python log;
 - no OS-level stderr tee without explicit crash/subprocess/console semantics.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Diagnostic screenshot and Edit glyph gate
+
+
+- A diagnostic screenshot is a **single explicit operator key edge** (`\`) in Python source or the exact dedicated diagnostic executable only. The standard frozen executable must not register a screenshot action, hook render/frame callbacks, create a screenshot worker at idle or write captures. One-off QScreen grabs may return QPixmap at the Qt boundary; convert to an owned QImage immediately, then perform PNG encoding away from the GUI thread. `captures/` is ignored and excluded from distributed source payloads. Verify actual OpenGL scene pixels on Windows instead of assuming a successful PNG is correct.
+- Glyph visibility is subject to **Interaction Mode or Ctrl-held admission**, never the ordinary exit-click path. Hover is event-driven and independent of Widget Glow on Hover/Jedi Mode. Every Edit-only glyph must eventually dispatch via the existing CustomLayoutSession and model, with one identity/generation, entry acknowledgment and fail-closed cancellation. Never duplicate Edit/session/geometry owner, use fake clicks, show the Edit Hide Controls wedge outside Edit, or install timers/polling. The initial R38 hover wiring covers the Camera Reset glyph only; do not infer full action parity until implemented and tested.

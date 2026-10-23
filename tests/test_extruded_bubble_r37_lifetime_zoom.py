@@ -1,7 +1,7 @@
 """R37 narrowly scoped logical checks. Native appearance remains unaccepted."""
 from __future__ import annotations
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()  # Same Qt-free package admission as existing R34 probes.
 from core.settings.visualizer_mode_settings import require_mode_settings

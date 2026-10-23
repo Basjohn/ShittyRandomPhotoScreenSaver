@@ -197,3 +197,20 @@ SCENE world shaft density [~] (source/radial helper proof; continuous support, f
 lighting coverage [~] (implemented independent selector/width; moving art and complete optics unaccepted); SCENE clustering [~] (operator visually
 rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.
+
+
+## 2026-10-23 SCENE editing parity clarification (OPEN)
+
+The operator's actual Settings screenshot shows Motion → Emission Geometry **SCENE**
+with face/region/edge visualization, while Lighting Coverage **SCENE** does not
+provide an equivalent authoring/editor model. The presence of a SCENE toggle or
+physical Light Source/End is **not** sufficient controller parity. Inspect the
+Motion SCENE mapper, marker hit-testing, 3D box faces/regions, projection,
+world-boundary snapping and camera/aim indicators; reuse the shared physical
+coordinate authority for the SCENE lighting *coverage footprint*, with controls
+that genuinely edit which spatial surfaces/regions receive/scatter light.
+Surface remains physically directional, Deep has a located emitter. Light Coverage
+and Motion emission remain independent; do not graft the Motion particle
+birth policy into lighting. Preserve the restored BEAM mode and all authored
+preset values. Agent executes native GUI drag/keyboard/persistence and fixed
+world all-angle scattering captures; visual acceptance remains open.

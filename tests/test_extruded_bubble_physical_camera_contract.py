@@ -1,7 +1,7 @@
 """Qt-free contract for EB's physical camera and per-pass eye ownership.
 
 Run on a machine without Qt using a test runner with --noconftest, after the
-simulator's dependency-light package bootstrap (see extruded_bubble_startup_probe).
+simulator's dependency-light package bootstrap (see eb_simulation_support).
 Native GPU render, Windows gesture and operator visual acceptance are separate.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 simulation_module()
 from rendering.gl_programs.extruded_bubble_scene import ORBIT_DISTANCE, ORBIT_PIVOT, physical_camera
 

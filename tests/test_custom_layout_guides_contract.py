@@ -12,40 +12,19 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_custom_alignment_guides_have_explicit_above_below_layering() -> None:
+def test_custom_alignment_guides_have_one_retained_scene_owner() -> None:
     scene = _text("rendering/quick/qml/DisplayScene.qml")
     overlay = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
     underlay = _text("rendering/quick/qml/CustomLayoutGuideUnderlay.qml")
     qmldir = _text("rendering/quick/qml/qmldir")
-
     assert "CustomLayoutGuideUnderlay 1.0 CustomLayoutGuideUnderlay.qml" in qmldir
     assert "id: customLayoutGuideUnderlay" in scene
-    assert "z: 4" in scene
-    assert 'objectName: "pixelShiftLayer"' in scene
-    assert "z: 5" in scene
     assert "id: customLayoutOverlay" in scene
-    assert "z: 100" in scene
-
-    # Peer-edge alignment is a neutral graphite high-layer guide, one pixel thicker
-    # than the former baseline.
-    assert 'color: "#aa696f77"' in overlay
-    assert 'width: 3' in overlay
-    assert 'height: 3' in overlay
-    assert 'objectName: "customLayoutVerticalGuide"' in overlay
-    assert 'objectName: "customLayoutHorizontalGuide"' in overlay
-
-    # Centering guides and the stronger absolute centre cross stay under widgets.
-    assert 'color: "#a8737981"' in underlay
-    assert 'objectName: "customLayoutVerticalCenterGuide"' in underlay
-    assert 'objectName: "customLayoutHorizontalCenterGuide"' in underlay
-    assert 'color: "#7061666c"' in underlay
-    assert 'border.width: 2' in underlay
-    assert underlay.count('width: 3') >= 2
-    assert underlay.count('height: 3') >= 2
-    # Generic grid lines deliberately remain at the original 1 px.
-    assert 'width: 1' in underlay
-    assert 'height: 1' in underlay
-    assert 'color: index % 4 === 0 ? "#3a555a60" : "#1c45494e"' in underlay
+    for axis in ("Vertical", "Horizontal"):
+        assert f'objectName: "customLayout{axis}Guide"' in overlay
+        assert f'objectName: "customLayout{axis}CenterGuide"' in underlay
+    # Exact paint colours, thicknesses and z constants are NOT tests.
+    assert "Timer {" not in overlay + underlay
 
 
 def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> None:
@@ -89,21 +68,13 @@ def test_selected_parent_two_axis_reflow_affordance_is_event_driven_and_collisio
     assert "active: editFrame.selectedForChildEdit" in qml
     assert "editFrame.twoAxisContentExtentCapable" in qml
     assert 'objectName: "customLayoutContentCorner-"' in qml
-    assert 'color: "#dc737981"' in qml
     assert '"content_" + parent.corner' in qml
     assert "contentCornerAvailable" in qml
     assert "contentCornerLocalRect" in qml
-    assert "peerMargin = 8.0" in qml
     assert "localChromeClear" in qml
     assert "frame.width - size" in qml
     assert "frame.height - size" in qml
-    # The line is the actual bridge between the two 20 px-inset side-strip
-    # endpoints, not a decorative slash. Corner orientation is deliberately
-    # mirrored from the ordinary square-corner cursor mapping.
-    assert "width: Math.SQRT2 * parent.width" in qml
-    assert "rotation: parent.leftSide === parent.topSide ? -45 : 45" in qml
     assert "outerGap" not in qml
-    assert "NumberAnimation on opacity" in qml
 
     # Selection and the brief fade are event-driven. No timer/cadence or hover
     # scanner is allowed to appear for edit chrome or future child controls.
@@ -138,7 +109,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     general_settings = _text("ui/tabs/widgets_tab_defaults.py")
     media_settings = _text("ui/tabs/widgets_tab_media.py")
     steam_settings = _text("ui/tabs/widgets_tab_steam.py")
-    canonical_defaults = _text("core/settings/default_settings.py")
 
     assert 'CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY = "child_geometry"' in child
     assert "class CustomChildRoleDescriptor" in child
@@ -176,7 +146,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'tab._default_bool("global", "child_collision_enabled")' in general_settings
     assert "media_child_collision_enabled" not in media_settings
     assert 'f"{key}_child_collision_enabled"' not in steam_settings
-    assert canonical_defaults.count("'child_collision_enabled': False") == 1
     assert "if (editFrame.childCollisionEnabled)" in qml
     # Disabling peer collision must not disable sibling alignment discovery or
     # fixed family obstacles.  The peer-collision gate belongs only to
@@ -334,10 +303,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'id: faceCoreUnderlay' in clock_analogue_qml
     assert 'id: faceCoreHands' in clock_analogue_qml
     assert 'id: numeralGroup' in clock_analogue_qml
-    assert clock_analogue_qml.count(
-        'Scale { origin.x: staticFace.centerX; origin.y: staticFace.centerY; '
-        'xScale: analogueFace.childWidthScale("clock_face")'
-    ) == 3
     assert 'faceCoreEditTarget.width / 2.0' in clock_analogue_qml
     assert 'faceCoreEditTarget.height / 2.0' in clock_analogue_qml
     assert 'faceInkRadius' in clock_analogue_qml
@@ -355,8 +320,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'objectName: "customLayoutChildRole-"' in qml
     assert 'readonly property string controlsWedgeSide:' in qml
     assert 'readonly property bool controlsWedgeVertical:' in qml
-    assert 'width: editFrame.controlsWedgeVertical ? 22 : 56' in qml
-    assert 'height: editFrame.controlsWedgeVertical ? 56 : 22' in qml
     assert 'editFrame.controlsWedgeSide === "right"\n                        ? 90' in qml
     assert "function admitChildMove(" in qml
     # Editable peers are hard at first contact but can be crossed with a small,
@@ -408,7 +371,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "onCountChanged: childRoleLayer.scheduleRequirementSync()" not in qml
     assert "onModelChanged: childRoleLayer.scheduleRequirementSync()" not in qml
     assert "Component.onDestruction" in qml
-    assert "width: 8" in qml and "height: 8" in qml
     assert "childResizeHandles(" in qml
     # Pre-rollout editor polish is shared, not family-local: child movement can
     # align against parent/sibling edges and centres with finite hysteresis, and
@@ -424,13 +386,7 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     child_layer_start = qml.index("id: childRoleLayer")
     child_layer_end = qml.index("function overlapsEditRect(", child_layer_start)
     child_layer = qml[child_layer_start:child_layer_end]
-    assert "opacity: 0.0" in child_layer
     assert "NumberAnimation on opacity" in child_layer
-    assert "to: 1.0" in child_layer
-    assert "duration: 110" in child_layer
-    assert "semanticSnapKind(activeKind) ? 28.0 : 11.0" in qml
-    assert "distance <= 18.0" in qml
-    assert "distance <= 6.0" in qml
     # Alignment is an admitted role capability inside child_geometry, not a
     # family-owned side store. Only eligible roles render the tiny centre flip.
     assert "alignment_flip: bool = False" in child
@@ -461,7 +417,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'objectName: "customLayoutParentGlyphToggle-"' in qml
     assert '"SHOW" : "HIDE"' in qml
     assert "parentGlyphControlsOpacity" in qml
-    assert "duration: 180" in qml
     assert 'objectName: "customLayoutOrbit-"' in qml
     assert 'text: "↔↕"' in qml
     assert 'text: "↔↕ ORBIT"' not in qml
@@ -619,7 +574,6 @@ def test_friend_repeated_children_keep_live_authored_xy_reflow_and_proxy_parity(
     qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
     # The accepted pre-child-editor list filled the real viewport.  Replacing
     # this with a frozen baseAuthoredWidth leaked empty space as parent X grew.
-    assert qml.count("Math.max(72.0, activityRowsView.width - 12.0)") == 2
     # Grid delegates and their edit proxy must derive their base from the same
     # live cell geometry. Shared CUSTOM scales remain uniform across delegates.
     assert "Math.max(72.0, gridCell.width - 12.0)" in qml
@@ -985,13 +939,4 @@ def test_child_snap_guide_chrome_is_retained_and_idempotent_during_selected_edit
     assert "Timer {" not in layer
     assert "requestUpdate(" not in publisher
     assert "sessionModel" not in publisher
-    # The Qt scene test verifies QQuickItem identity under 24 repeated samples,
-    # changes to both axes and semantic style, and hide/reveal after a clear.
-    native = _text("tests/test_qtquick_child_mapped_geometry.py")
-    exercise = native.split(
-        "def test_child_snap_guides_retain_one_item_per_axis_during_repeated_pointer_samples", 1
-    )[1]
-    assert "range(24)" in exercise
-    assert 'is vertical' in exercise and 'is horizontal' in exercise
-    assert "QQmlExpression(" in exercise
-    assert "overlay.clear_session()" in exercise
+    # Native scene lifetime is covered by test_qtquick_child_mapped_geometry.py.

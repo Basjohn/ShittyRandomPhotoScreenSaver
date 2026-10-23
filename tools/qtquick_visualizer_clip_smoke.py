@@ -912,6 +912,20 @@ def _spectrum_snapshot(case: str, presentation):
     )
 
 
+def _oscilloscope_smoke_packed_points(waveform, previous_waveform) -> bytes:
+    """Encode the live and optional ghost traces in the current std430 contract."""
+    import numpy as np
+    from rendering.gl_programs.oscilloscope_program import TRACE_POINTS
+
+    def trace(samples):
+        array = np.asarray(samples, dtype=np.float32)
+        x = np.linspace(0.0, 1.0, TRACE_POINTS, dtype=np.float32)
+        y = np.interp(x, np.linspace(0.0, 1.0, len(array)), array).astype(np.float32)
+        return np.stack((x * 2.0 - 1.0, y), axis=1).astype(np.float32).tobytes()
+
+    return (trace(previous_waveform) if previous_waveform else b"") + trace(waveform)
+
+
 def _oscilloscope_snapshot(case: str, presentation):
     sample_count = 128
     runtime = OscilloscopeFrameRuntime()
@@ -991,10 +1005,11 @@ def _oscilloscope_snapshot(case: str, presentation):
             ),
         ),
         mode_state=OscilloscopeFrame(
-            previous_waveform=tuple(previous_waveform),
-            ghost_waveforms=(
-                (tuple(previous_waveform),) if previous_waveform else ()
-            ),
+            points=_oscilloscope_smoke_packed_points(waveform, previous_waveform),
+            trace_alphas=((0.36, 1.0) if previous_waveform else (1.0,)),
+            flare=0.0 if not playing else 0.45,
+            drive=0.0 if not playing else 0.65,
+            tone=0.5,
             animation_time=0.25,
             parameters=freeze_render_fields(
                 _with_line_index_params(
@@ -1016,6 +1031,20 @@ def _oscilloscope_snapshot(case: str, presentation):
                         "rainbow_speed": 0.5,
                         "osc_ghosting_enabled": case == "ghost",
                         "osc_ghost_intensity": 0.9,
+                        # Synthetic test-owned frame values for the current
+                        # immutable Oscilloscope renderer contract.  Never
+                        # read or pin an operator-authored preset here.
+                        "osc_display": "Trace",
+                        "osc_flare": 1.0,
+                        "osc_pulse": 0.5,
+                        "osc_glow": 0.55,
+                        "osc_beam_width": 2.0,
+                        "osc_beam_color": (245, 250, 255, 255),
+                        "osc_beam_glow_color": (80, 210, 255, 230),
+                        "osc_spectral": 0.0,
+                        "osc_graticule": "Off",
+                        "osc_graticule_color": (80, 160, 160, 100),
+                        "osc_analog": 0.0,
                     }
                 )
             ),

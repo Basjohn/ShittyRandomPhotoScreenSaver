@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()
 from core.constants.extruded_bubble_world import WATER_SURFACE_Y, WORLD_HALF, WORLD_MARGIN

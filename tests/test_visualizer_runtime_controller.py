@@ -34,16 +34,17 @@ def _controller(*, generation: int = 0) -> VisualizerRuntimeController:
     )
 
 
-def test_current_modes_resolve_their_proven_carded_presentation_policy() -> None:
+def test_shell_and_clip_policies_remain_coherent_for_every_registered_mode() -> None:
+    # Actual capability is declared once by the mode descriptor; the real
+    # presentation contract is that retained chrome and clipping agree.
     for mode_id in VISUALIZER_MODE_IDS:
         policy = get_visualizer_mode_descriptor(mode_id).presentation_policy
-        if mode_id in ("sphere", "extruded_spectrum", "shockwave_grid"):   # the free-standing 3D modes
-            assert policy.shell_policy is VisualizerShellPolicy.FRAMELESS
+        if policy.shell_policy is VisualizerShellPolicy.FRAMELESS:
             assert policy.clip_policy is VisualizerClipPolicy.VIEWPORT_RECT
-        else:
-            # The five original modes retain their card presentation contract.
-            assert policy.shell_policy is VisualizerShellPolicy.CARD
+        elif policy.shell_policy is VisualizerShellPolicy.CARD:
             assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
+        else:
+            pytest.fail(f"Unsupported shell policy for {mode_id}: {policy.shell_policy}")
         assert policy.viewport_resize_capable is True
 
 

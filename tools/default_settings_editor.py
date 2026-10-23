@@ -63,6 +63,7 @@ from tools.defaults_foundry_core import (  # noqa: E402
     NON_IMPORTABLE_PREFIXES,
     atomic_write_many,
     filter_import_to_existing_schema,
+    load_literal_assignment as _load_literal_assignment,
     path_is_under,
     validate_model_schema_unchanged,
     validate_no_absolute_machine_paths,
@@ -236,27 +237,8 @@ def _profile_payload(overrides: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
-def _load_literal_assignment(path: Path, assignment_name: str) -> Mapping[str, Any]:
-    source = path.read_text(encoding="utf-8")
-    parsed = ast.parse(source, filename=str(path))
-    for node in parsed.body:
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if not any(
-            isinstance(target, ast.Name) and target.id == assignment_name
-            for target in targets
-        ):
-            continue
-        value = ast.literal_eval(node.value)
-        if isinstance(value, Mapping):
-            return value
-        break
-    raise ValueError(f"{path} does not define a literal {assignment_name} mapping")
-
-
 def load_default_settings_source(path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, Any]:
-    """Read the canonical literal without importing or executing its module."""
+    """Read canonical defaults without executing arbitrary source expressions."""
     return deepcopy(dict(_load_literal_assignment(path, "DEFAULT_SETTINGS")))
 
 

@@ -86,13 +86,37 @@ def scan_file(path: Path, defaults: dict[str, list[object]]) -> list[tuple[str, 
     scopes: list[ast.AST] = functions + [tree]
     seen_asserts: set[int] = set()
     for scope in scopes:
-        for node in ast.walk(scope):
-            if not isinstance(node, ast.Assert) or id(node) in seen_asserts:
+        # Index fixture mappings once per scope. The old helper rescanned the
+        # entire (sometimes huge) test function before *every* assertion and
+        # made review-mode auditing unnecessarily expensive.
+        authored_dicts: list[tuple[int, set[tuple[str, str]]]] = []
+        assertions: list[ast.Assert] = []
+        for item in ast.walk(scope):
+            if isinstance(item, ast.Dict):
+                pairs: set[tuple[str, str]] = set()
+                for key_node, value_node in zip(item.keys, item.values):
+                    if key_node is None:
+                        continue
+                    key = _literal_value(key_node)
+                    value = _literal_value(value_node)
+                    if isinstance(key, str):
+                        pairs.add((key, repr(value)))
+                authored_dicts.append((item.lineno, pairs))
+            elif isinstance(item, ast.Assert):
+                assertions.append(item)
+        authored_dicts.sort(key=lambda item: item[0])
+        assertions.sort(key=lambda item: item.lineno)
+        fixture_pairs: set[tuple[str, str]] = set()
+        next_dict = 0
+        for node in assertions:
+            if id(node) in seen_asserts:
                 continue
             seen_asserts.add(id(node))
+            while next_dict < len(authored_dicts) and authored_dicts[next_dict][0] < node.lineno:
+                fixture_pairs.update(authored_dicts[next_dict][1])
+                next_dict += 1
             if _has_exact_marker(lines, node.lineno):
                 continue
-            fixture_pairs = _fixture_pairs_before(scope, node.lineno)
             consts = [n.value for n in ast.walk(node.test) if isinstance(n, ast.Constant)]
             keys = [c for c in consts if isinstance(c, str) and c in defaults]
             literals = [c for c in consts if not (isinstance(c, str) and c in defaults)]

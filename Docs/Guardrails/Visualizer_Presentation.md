@@ -486,3 +486,89 @@ Only consider localized native code if profiling of the current Quick implementa
 specific Python render callback materially limits the result.
 
 Keep the same logical contract and the same display `QQuickWindow`.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Architecture and retired physical presenter
+
+
+```text
+one selected physical display
+-> one standalone QQuickWindow
+-> threaded Quick scene graph
+-> one composed runtime scene
+```
+
+Do not reopen broad native/C++ presenter work without new evidence the accepted architecture cannot satisfy production.
+Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepen the deleted QRhiWidget/DisplayWidget architecture. The old physical presenter is retired and is not a fallback product or test convenience.
+
+## Retired presentation architecture
+
+The Qt Quick cutover is closed. The deleted QWidget/QRhiWidget/GLCompositor physical presentation path is not fallback architecture, test scaffolding or a continuity layer. Caller-dead residue is deleted outright with its test cascade in the same commit; historical reasoning belongs in `Docs/Historical_Bugs/` or source control. Do not recreate retired presenters merely to satisfy stale tests or prose.
+
+
+### Wallpaper alpha and native texture ownership
+
+
+Wallpaper pixels are opaque. The image-processing owners composite transparent source pixels over opaque black — the ImageWorker prescale right after decode (every display mode) and the in-process `AsyncImageProcessor` (every branch, including FILL perfect fit). The retained native background therefore labels its `QImage` `Format_RGBA8888_Premultiplied` and creates the texture `TextureIsOpaque`; for opaque pixels that is byte-identical to straight RGBA and spares Qt a full per-upload straight→premultiplied conversion (runtime audit PR-04: 8.1 → 0.15 ms blocking at 4K). Never route non-opaque pixels into the wallpaper path, never relabel straight alpha as premultiplied, and do not blanket-convert inside the generic `capture_qimage` boundary. The native branch wraps the `PresentationImage` bytes without a deep copy and the node keeps that `PresentationImage` for as long as its texture exists: Qt reads the bytes on the render thread after `updatePaintNode` returns (`tests/test_qtquick_native_image_lifetime.py`). Never drop that ownership or reintroduce a per-change deep copy.
+
+### Presentation texture ownership (PR-04 native handoff)
+
+`PresentationTextureHost` is the only owner and deleter of presentation GL textures. The retained native background may
+borrow a resident texture only through `lend` and must `reclaim` it after `setTexture` has deleted the wrapper; a
+transition that ends retires with `release(keep_lent=True)`, and only a full `release` (the subtree is being torn down,
+context current) deletes lent textures. A `QSGTexture` made by `native_texture_bridge.wrap_gl_texture` never owns the GL
+name. Never add a second deletion registry, never delete a lent name while a wrapper can render it, never adopt across
+displays or sizes (`lend` checks identity and pixel size), and never let a fallback upload go unattributed
+(`native_background_*` telemetry). The bridge calls only Qt's exported `QSGOpenGLTexture::fromNative` on the loaded
+`Qt6Quick` module; do not widen it into a native presentation layer. No PySide release binds texture adoption, so a
+PySide upgrade is not a route to removing the bridge.
+
+
+### Visualizer preset and technical settings ownership
+
+
+Technical settings are ordinary Visualizer settings with shared usefulness, **not** a higher-priority authority above presets.
+A curated preset may author any mode-owned technical setting; Custom preserves the user's authored technical state. Resolution
+order is preset/custom-authored value first, then canonical product default only for a genuinely missing field. Runtime/DSP/tick
+consumers must consume the already-resolved technical mapping and must not carry their own numeric fallback tuning. Retired
+shared/global technical literals may remain only as explicit migration signatures and must never be refreshed to today's defaults
+or fed back into live runtime. Never flatten authored preset technical values into baseline defaults to simplify plumbing.
+
+
+### Visualizer viewport and geometry
+
+
+Keep these distinct:
+
+```text
+uniform_visual_scale   # wheel/corner whole-size scaling
+viewport_extent        # independent world/playroom width/height
+```
+
+Every registered mode must declare a viewport-resize-capable presentation policy. Modes using CARD + CARD_INTERIOR share the card geometry path; FRAMELESS + VIEWPORT_RECT modes use their frameless viewport path. Edge viewport resize is configuration, not a clock. Bubble
+must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
+remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
+non-baseline layout to canonical by confusing "no override" with "baseline".
+
+**R-69 golden rule:** viewport adaptation must not globally compress Bubble head/radius response, already-normalized Ghost/history displacement, or another Visualizer mode's authored musical response/freshness. Never add a second `baseline/current` or `1 / viewport_extent` compensation to state that is already projected into renderer content coordinates. If an extreme visual tail is too large, fix only that proven tail.
+
+
+### Active/inactive visualizer lifetimes
+
+
+
+One active Visualizer may own mode-specific logical work. Registered but inactive modes contribute zero per-tick function calls, zero renderer calls, zero simulation, zero compute, zero GPU allocations, zero wallpaper preparation, zero workers and zero recurring timing sources.
+
+Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
+owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
+
+
+### Qt render-thread / Python GIL blocking boundary
+
+**Never make Python on the GUI thread wait for a Quick render thread.** The PySide 6.9.1 reproducer proved that ordinary Qt calls can hold the GIL across synchronous render-loop waits; the 6.11.2 runtime upgrade does not waive this guardrail unless the threaded-Quick probe proves the behaviour changed. Some calls wait synchronously for the threaded render loop: `QCoreApplication.quit()` closes every window inside the call, and `QScreen.grabWindow` does the same for a rendering window. Such a call deadlocks against a render thread that is running Python (`updatePaintNode`, a Python scene-graph node, a `DirectConnection` render slot), and every thread wedges (R-96, reproduced 3/3). Quit only through `request_application_quit(reason)`. Hide or close windows through the existing queued window paths. Capture the desktop only before first show. Treat any new call that stops or synchronizes the render loop as unsafe until a threaded-GL probe proves it safe.
+
+Do not wrap `QQuickWindow.event()` in Python and call its C++ superclass for general delivery: startup/render
+events can synchronize the threaded scene graph while the bridge holds the GIL. Use a narrow, nonblocking
+event filter for pointer admission. Hidden-window input tests cannot establish visible startup safety.

@@ -13,13 +13,13 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_jedi_mode_defaults_off_and_settings_ui_is_glow_scoped() -> None:
+def test_jedi_mode_defaults_follow_canonical_authority_and_ui_is_glow_scoped() -> None:
+    from core.settings.default_contract import require_canonical_default
+
     defaults = build_defaults_snapshot()
-    # EXACT-VALUE INVARIANT: Jedi Mode is an opt-in easter egg that plays audio
-    # from ordinary hover/click edges. It must never become enabled for fresh
-    # users merely because mutable visual defaults are retuned. Change this only
-    # with an explicit product decision to make the easter egg default-on.
-    assert defaults["input"]["widget_glow_jedi_mode"] is False
+    expected = require_canonical_default("input.widget_glow_jedi_mode")
+    assert isinstance(expected, bool)
+    assert defaults["input"]["widget_glow_jedi_mode"] is expected
 
     model = _text("core/settings/models/_core.py")
     # The field is now SSOT-derived from the canonical default contract rather

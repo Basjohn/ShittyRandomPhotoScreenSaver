@@ -5,7 +5,7 @@ from math import sqrt
 from pathlib import Path
 import random
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 simulation_module()
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_settings import require_mode_settings
@@ -33,15 +33,17 @@ def _start(controls, seed=53):
     return sim
 
 
-def test_canonical_mode_is_beam_and_migrates_missing_saved_setting_without_preset_mutation():
+def test_emission_geometry_accepts_explicit_modes_and_legacy_missing_field():
     spec = require_mode_settings('extruded_bubble')
     choice = spec.control('extruded_bubble_emission_geometry')
     assert choice.choices == ('BEAM', 'SCENE')
-    assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_emission_geometry') == 'BEAM'
+    # Never assert the mutable authored canonical selection or any preset choice.
     params = {entry.key: require_canonical_default('widgets.spotify_visualizer.' + entry.key)
               for entry in spec.entries if entry.key.startswith('extruded_bubble_')}
     params.pop('extruded_bubble_emission_geometry')
-    assert controls_from_parameters(params).emission_geometry == 'BEAM'
+    # Old saved objects with no new field are admitted by the runtime's legacy
+    # fallback, regardless of what the user currently authors in Settings.
+    assert controls_from_parameters(params).emission_geometry == ExtrudedBubbleControls().emission_geometry
     assert 'extruded_bubble_emission_geometry' not in params
     params['extruded_bubble_emission_geometry'] = 'SCENE'
     assert controls_from_parameters(params).emission_geometry == 'SCENE'

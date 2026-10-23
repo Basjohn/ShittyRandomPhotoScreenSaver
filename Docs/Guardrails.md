@@ -1,249 +1,27 @@
 # SRPSS Guardrails
 
-## Architecture decision
-
-```text
-one selected physical display
--> one standalone QQuickWindow
--> threaded Quick scene graph
--> one composed runtime scene
-```
-
-Do not reopen broad native/C++ presenter work without new evidence the accepted architecture cannot satisfy production.
-Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepen the deleted QRhiWidget/DisplayWidget architecture. The old physical presenter is retired and is not a fallback product or test convenience.
-
-## Retired presentation architecture
-
-The Qt Quick cutover is closed. The deleted QWidget/QRhiWidget/GLCompositor physical presentation path is not fallback architecture, test scaffolding or a continuity layer. Caller-dead residue is deleted outright with its test cascade in the same commit; historical reasoning belongs in `Docs/Historical_Bugs/` or source control. Do not recreate retired presenters merely to satisfy stale tests or prose.
-
-## Priority
-
-1. visualizer fidelity/reactivity;
-2. lifecycle/resource safety;
-3. frame pacing/perceived smoothness;
-4. multi-display correctness;
-5. bounded resources;
-6. CPU/task efficiency;
-7. average FPS;
-8. elegance.
-
-Never improve counters by silently reducing authored work/fidelity.
-
-Performance-specific admission, telemetry semantics, load-class evidence and reference envelopes live in `Docs/Guardrails/Performance_Optimization_Contract.md`. Use that checklist before changing cadence, GC policy, scheduling, caching, resource lifetime or presentation for performance.
-
-## Operator-owned build acceptance
-
-Agents **do not run frozen builds** (Build Runner, Nuitka, helper compilation, installers or trial builds). The operator owns expensive build execution and frozen/physical acceptance and shares reports. Agents audit source and supplied results and may run only appropriate bounded focused non-build tests; do not call for the full chunked suite by default.
-
-## Read / scope discipline
-
-```text
-exact source
--> Current_Plan.md
--> Spec.md
--> Docs/Contracts.md
--> relevant focused contract/guardrail
--> tests/evidence
-```
-
-Preserve unrelated user work. Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint equality.
-Historical evidence is not current owner map.
-
-When current source contradicts a durable product contract, do not silently rewrite the contract to match the bug.
-Promote the missing behavior into `Current_Plan.md` unless explicit product intent changed it.
-
-### Authoritative working tree / operator-run focused verification
-
-Work from the **current operator-provided working tree**, not a guessed older source or unrelated checkout. Heavy Lab/Evidence assets may intentionally live outside the local tree; their absence does not void contracts, permit rebuilding invented evidence, or authorize replacing operator-authored state. Do not reset, clean, push or mutate a separate live checkout to reconcile documentation. Distribution/packaging mechanics are a separate workflow and are NOT visual architecture or validation evidence.
-
-Operator PowerShell tests use the **current tree's** `& '.\.venv\Scripts\python.exe'` (not the global `py -3.14`) and **never mutate environment variables**. The normal `tests/conftest.py` still violates that requirement by writing `APPDATA`/`LOCALAPPDATA`; treat it as an open harness bug, not permission to disable storage isolation. For narrow self-contained tests, prefer `--noconftest -p tools.pytest_qt_noenv` where the test actually owns its settings/lifetimes. Never claim this opt-in fixture provides full production-QML coverage. Specify `encoding='utf-8'` when source-reading in Windows tests; do not let locale-specific cp1252 decoding mask the assertion under test. A green Qt-free source string search does not establish a native Qt Settings callback, persisted camera eye or finished render.
-
-### Defaults test-authority guardrail
-
-Mutable product defaults are policy, not test goldens. Tests that validate a user-facing default must derive the expected
-value from canonical authority (`core/settings/default_settings.py` / the canonical default contract). Do not copy
-today’s default literal into unrelated Settings/runtime/UI tests. The same applies to presets and user-facing copy:
-anything the operator or user can edit is asserted by structure or derived from its owner, never pinned verbatim.
-
-A literal expectation may remain only when the **literal itself** is the contract (for example a migration signature, hard
-safety/technical bound, protocol/schema constant, or accepted behavior golden). Mark it adjacent to the assertion with
-`EXACT-VALUE INVARIANT:` and explain what authoritative contract would have to change before the test should change.
-Behavioral tests may intentionally choose non-default values; mark ambiguous cases as `TEST INPUT, NOT A DEFAULT GOLDEN`
-and derive downstream expectations from that fixture input. Never “fix” such a test by coupling it to the current product
-default.
-
-## Specific guardrail owners
-
-For Visualizer mode/preset lifecycle, GPU presentation, Sphere acoustic admission, and multi-display ownership, use [Visualizer Presentation](Guardrails/Visualizer_Presentation.md). For authored Bubble response, use [Bubble Temporal Fidelity](Guardrails/Bubble_Temporal_Fidelity.md). For rejected cadence, thread, memory, render or cache optimizations, use [Performance Optimization Contract](Guardrails/Performance_Optimization_Contract.md). These are existing subject owners; avoid replicating their detailed requirements in this top-level document.
-
-## Immediate stop conditions
-
-Stop/reassess when:
-
-- Bubble/Spectrum/another mode loses authored fidelity/reactivity or BTF fails;
-- visualizer wide/tall viewport support is replaced by final-pixel anisotropic stretch;
-- Bubble is re-gated/exempted from viewport reflow to avoid fixing a viewport ownership or spatial-domain defect;
-- source age rises while visuals continue;
-- physical p99/max worsens despite prettier averages;
-- producer waits for paint/present or second visualizer logical clock appears;
-- logical worker mutates GUI/Quick/GPU state;
-- valid generation 0 is lost or stale generation/request can publish/reveal;
-- resource ownership cannot be explained;
-- fallback silently changes presenter/renderer/capability/authored behavior;
-- a second accelerated runtime surface appears or `QQuickWidget` is introduced as a presentation shortcut;
-- common Quick imports eagerly resolve inactive family backend/runtime trees;
-- family port duplicates provider/controller/timer/cache/action authority;
-- architecture cleanup casually redesigns working family interaction/visual behavior without product intent.
-
-## Evidence, validation and fallback guardrails
-
-**Edit-lifetime and churn guard:** A family `customEditableChildRoles` model must depend on stable semantic identity only. Do not put a content-driven baseline, visibility, row count, sampling result or moving child geometry into its construction; Qt may rebuild the Repeater and retire an active drag. Read family-owned bindable normalization and applied transform properties inside the selected Edit delegate, verify the same delegate survives repeated changes, and compare its rectangle against the actual retained painted target. Never substitute a per-frame scene scan or timer for a missing dependency. A source-only check is not evidence of drag latency or lack of binding churn on installed Qt.
-
-**Work is to at most be marked `[~] AWAITING VALIDATION` until a log, the operator, or an extremely high-confidence test proves the required behavior.** Authored code, compilation, source inspection or a plausible mechanism is not `[x]` product closure by itself. If acceptance depends on physical Windows/Qt/GL/provider behavior, keep the item awaiting validation until that evidence exists.
-
-Prefer event-owned state and explicit lifecycle edges over polling, debounce timers, periodic probes or speculative safety fallbacks. Polling is a last resort only when the source genuinely exposes no usable event/notification contract; even then it must be low-cadence, bounded, observable, and documented as reconciliation rather than primary truth. Never add a silent fallback that can become the de-facto owner while logs continue to suggest the intended path is healthy. Any mechanism likely to increase `dt_max`, input latency, main-thread stalls, hidden wakeups, poison/stale ownership or cadence contention requires explicit evidence before admission.
-
-Programming defects are not reconciliation policy. A broad ``except Exception`` must never turn ``TypeError``, ``AttributeError``, bad call signatures, or other coding defects into an apparently legitimate teardown/rebuild/fallback. Expected stale/dead/incoherent-owner recovery must use an explicit classified exception/result owned by that seam. Unexpected defects must be surfaced loudly after any required terminal cleanup so they cannot silently train the runtime to depend on expensive recovery.
-
-Do not create a new generic `Expected_Behaviour.md` ledger by default. When a suspicious behavior is **proven expected**, record that fact at the nearest durable owner: the relevant historical-bug closeout, focused contract/guide, performance guardrail, or regression test. This prevents future agents from reopening already-cleared smells without adding another broad document that will drift.
-
-### Qt Quick presentation-clock guardrail
-
-Do not infer a Qt Quick surface/pacing policy from documentation or pre-Quick history alone. SRPSS owns multiple top-level Quick windows and may run mixed refresh rates; a 2026-09-14 installed two-display A/B **rejected forcing ``swapInterval=1``** because pacing, FPS/headroom and interaction smoothness became materially worse. The production Quick bootstrap therefore retains the known-good release-era ``swapInterval=0`` policy until a better architecture is proven on installed multi-display hardware. Never reintroduce VSync=1 as a generic "Quick-native" cleanup without that evidence.
-
-Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work must distinguish **logical work cadence**, **scene invalidation/update demand**, and **physical presentation**, and must be A/B tested against the known-good 5.0.0/5.0.1 Quick baseline. Never reduce Visualizer logical freshness/reactivity to make a display-pacing graph look cleaner. Any future removal/replacement of ``QuickFramePacer`` is a separate architecture change and requires installed evidence proving equivalent transition/widget-animation liveness and improved frame spacing across single- and mixed-refresh multi-display cases before it can be accepted.
-
-Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
-
-Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
-
-### Wallpaper pixel opacity guardrail
-
-Wallpaper pixels are opaque. The image-processing owners composite transparent source pixels over opaque black — the ImageWorker prescale right after decode (every display mode) and the in-process `AsyncImageProcessor` (every branch, including FILL perfect fit). The retained native background therefore labels its `QImage` `Format_RGBA8888_Premultiplied` and creates the texture `TextureIsOpaque`; for opaque pixels that is byte-identical to straight RGBA and spares Qt a full per-upload straight→premultiplied conversion (runtime audit PR-04: 8.1 → 0.15 ms blocking at 4K). Never route non-opaque pixels into the wallpaper path, never relabel straight alpha as premultiplied, and do not blanket-convert inside the generic `capture_qimage` boundary. The native branch wraps the `PresentationImage` bytes without a deep copy and the node keeps that `PresentationImage` for as long as its texture exists: Qt reads the bytes on the render thread after `updatePaintNode` returns (`tests/test_qtquick_native_image_lifetime.py`). Never drop that ownership or reintroduce a per-change deep copy.
-
-### Presentation texture ownership (PR-04 native handoff)
-
-`PresentationTextureHost` is the only owner and deleter of presentation GL textures. The retained native background may
-borrow a resident texture only through `lend` and must `reclaim` it after `setTexture` has deleted the wrapper; a
-transition that ends retires with `release(keep_lent=True)`, and only a full `release` (the subtree is being torn down,
-context current) deletes lent textures. A `QSGTexture` made by `native_texture_bridge.wrap_gl_texture` never owns the GL
-name. Never add a second deletion registry, never delete a lent name while a wrapper can render it, never adopt across
-displays or sizes (`lend` checks identity and pixel size), and never let a fallback upload go unattributed
-(`native_background_*` telemetry). The bridge calls only Qt's exported `QSGOpenGLTexture::fromNative` on the loaded
-`Qt6Quick` module; do not widen it into a native presentation layer. No PySide release binds texture adoption, so a
-PySide upgrade is not a route to removing the bridge.
-
-## Visualizer preset / technical-settings authority guardrail
-
-Technical settings are ordinary Visualizer settings with shared usefulness, **not** a higher-priority authority above presets.
-A curated preset may author any mode-owned technical setting; Custom preserves the user's authored technical state. Resolution
-order is preset/custom-authored value first, then canonical product default only for a genuinely missing field. Runtime/DSP/tick
-consumers must consume the already-resolved technical mapping and must not carry their own numeric fallback tuning. Retired
-shared/global technical literals may remain only as explicit migration signatures and must never be refreshed to today's defaults
-or fed back into live runtime. Never flatten authored preset technical values into baseline defaults to simplify plumbing.
-
-## Visualizer geometry guardrail
-
-Keep these distinct:
-
-```text
-uniform_visual_scale   # wheel/corner whole-size scaling
-viewport_extent        # independent world/playroom width/height
-```
-
-Every registered mode must declare a viewport-resize-capable presentation policy. Modes using CARD + CARD_INTERIOR share the card geometry path; FRAMELESS + VIEWPORT_RECT modes use their frameless viewport path. Edge viewport resize is configuration, not a clock. Bubble
-must receive changed spatial bounds without deforming circles or compromising BTF. Ordinary committed viewport extent
-remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
-non-baseline layout to canonical by confusing "no override" with "baseline".
-
-**R-69 golden rule:** viewport adaptation must not globally compress Bubble head/radius response, already-normalized Ghost/history displacement, or another Visualizer mode's authored musical response/freshness. Never add a second `baseline/current` or `1 / viewport_extent` compensation to state that is already projected into renderer content coordinates. If an extreme visual tail is too large, fix only that proven tail.
-
-
-## Ordinary widget extension guardrails
-
-Ordinary widgets share one normalization/session geometry system. Whole-card uniform scaling remains the default. A family may opt into shared CUSTOM `content_extent` axes only when presentation reflow is genuinely useful; that is an extension of the same CUSTOM session, not permission for family-local geometry persistence, timers, alternate normalization, or Settings mutation. Side gestures may use family-owned logical floors through the shared policy seam; an admitted diagonal content corner may change both logical axes through that same owner, while **square** corner/wheel resize remains uniform. Restore Size must use separately retained authored geometry and must never learn its target from a committed CUSTOM extent.
-
-Lazy family Settings/runtime teardown is an ownership boundary. Invalidate queued/coalesced UI work, close admission, clear retained child references before Qt deletion, and reject stale wrappers/completions. A future widget should extend the generic family lifetime contract rather than grow a widget-name unload exception.
-
-## CUSTOM child and semantic-flip admission
-
-A child Edit gesture is not permission to change outer parent dimensions or
-persist an inferred `content_extent`. Child motion/resize is hard-contained to
-its actual painted/card or separately declared accessory surface, whether peer
-collision is enabled or not. Only explicit **outer handles** can change parent
-size; authored dimensions remain Restore's baseline, not a second live child
-minimum. Clamp snap results after snapping and commit unchanged results without
-churn. Never turn a child overflow request into another Settings or geometry
-owner, even as a temporary selected-Edit requirement.
-
-Family-authored reflow remains live per axis after independent child edits.
-An X-only edit does not detach Y; a Y-only edit does not detach X. Avoid scalar
-`x+y` change detection, offset-dependent all-axis `onAuthoredRail` gates and
-subtraction of subsequent parent Column displacement. Flip exchanges placement,
-not pixels; choose a semantic text scaling origin in either orientation.
-Admission requires a real retained-scene/paint test of **saved customized** child
-records under Y-only/X-only resize, plus Reset -> Flip -> Save -> Edit -> shrink,
-checking painted bounds rather than model visibility. When a test passes but a
-physical flipped widget fails, its gate is insufficient and must be revised.
-Look for matching off-rail/clip/churn failure in other families, but do not apply
-a universal QML rewrite without family-level paint and owner-lifecycle proof.
-
-### Repeated list-column edit boundary
-
-A semantic rail swap must reorder **all rows of one retained list** using one
-widget-scoped order in the existing CUSTOM owner and payload. Reddit's age
-value, title and AGO are distinct semantic columns;
-Gmail has sender, subject and timestamp. Do not simulate swaps with per-row
-child positions, a second persisted column map, repeated-delegate rebuilds or
-new runtime observers. Commit one discrete reorder action, preserve both flip
-orientations and untouched-axis reflow, and prove Undo/Save/Reset/layout slots
-and fresh-generation paint before accepting it. The rail UI is Edit-only;
-ordinary runtime must not construct rail targets or watch their geometry.
-
-## Last-good cache guardrail
-
-A successful cache record does **not** expire merely because it becomes stale. Freshness controls refresh admission and stale labeling; it is not deletion permission. On source failure, keep rendering last-good intended data indefinitely unless an explicit account/cache reset, schema rejection/corruption, or proven identity change invalidates it. Never improve apparent freshness by blanking stale-but-valid data or substituting semantically different data.
-
-## Capability state
-
-Ordinary ON/OFF is not family/capability activation. CUSTOM X and layout slots may change ordinary ON/OFF only.
-A deactivated family remains deactivated even if a saved layout contained it.
-
-## Lifecycle
-
-
-One active Visualizer may own mode-specific logical work. Registered but inactive modes contribute zero per-tick function calls, zero renderer calls, zero simulation, zero compute, zero GPU allocations, zero wallpaper preparation, zero workers and zero recurring timing sources.
-
-Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
-owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
-
-**Network on the IO lane goes through `core/network`.** Never add a raw `requests.get`/`Session.get`, `urlopen` or socket-client connect on the IO lane: resolve through `bounded_request`, `bounded_urlopen` or `resolve_bounded` and pass the family's existing retirement fence (Contracts § Network transports). Never open direct-socket TLS without the shared `verified_client_context()`: no per-connection context, and never `imaplib`/`smtplib`'s unverified default. A stuck worker is not killed at exit; never answer a stall by weakening the exit barrier, extending timeouts, env flags or daemon pool threads.
-
-**Never make Python on the GUI thread wait for a Quick render thread.** The PySide 6.9.1 reproducer proved that ordinary Qt calls can hold the GIL across synchronous render-loop waits; the 6.11.2 runtime upgrade does not waive this guardrail unless the threaded-Quick probe proves the behaviour changed. Some calls wait synchronously for the threaded render loop: `QCoreApplication.quit()` closes every window inside the call, and `QScreen.grabWindow` does the same for a rendering window. Such a call deadlocks against a render thread that is running Python (`updatePaintNode`, a Python scene-graph node, a `DirectConnection` render slot), and every thread wedges (R-96, reproduced 3/3). Quit only through `request_application_quit(reason)`. Hide or close windows through the existing queued window paths. Capture the desktop only before first show. Treat any new call that stops or synchronizes the render loop as unsafe until a threaded-GL probe proves it safe.
-
-Do not wrap `QQuickWindow.event()` in Python and call its C++ superclass for general delivery: startup/render
-events can synchronize the threaded scene graph while the bridge holds the GIL. Use a narrow, nonblocking
-event filter for pointer admission. Hidden-window input tests cannot establish visible startup safety.
-
-**Memory owners release at the consumer boundary.**
-- A cache entry whose pixels a presentation now owns must leave the cache.
-- A retained or parked render object keeps only what its next use needs: warm GL programs, not the finished run's frames.
-- Measure retention with phase-locked samples and with `gc.freeze()` disabled; frozen objects hide their references from `gc.get_referrers` (R-99).
-- The only sanctioned environment writes are third-party load-time settings that have no other interface: the Qt render-loop bootstrap and `core/native_threads.py`.
-- **No thread churn in a GL process.** The NVIDIA OpenGL driver keeps ~70 KB of per-thread state for every thread the process ever creates and does not return it (R-97). Periodic or per-image work runs on a persistent thread or an existing lane: never a `threading.Timer` per tick, a thread per request, or a pool that retires idle threads and recreates them (Qt's image pool is kept by `core/native_threads.retain_qt_gui_pool_threads`). Measure churn from outside by counting new thread IDs per minute.
-
-**Release callbacks before deferred deletion.** A timer's callback usually holds its Qt parent (the owner) strongly. If
-`deleteLater()` leaves that release to the deferred delete, the owner's last reference can drop *inside the timer's own
-C++ destructor*; the owner's destructor then deletes the half-destroyed child again (a native abort in the next nested
-event loop). `ThreadManager.single_shot` (`_finish`) and `schedule_recurring` timers (`_GapTrackedTimer.deleteLater`)
-release their payload synchronously before queuing deletion; any new timer/callback owner must do the same.
-
-**System-audio dormancy.** The retired `core/media/system_mute.py` process-global poller must not return. Current endpoint ownership is the event-driven shared Core Audio source in `core/media/audio_shared_source.py`, leased by admitted consumers such as Media system-mute UI and the optional `system_audio_osd`. Keep one GUI-apartment callback owner across overlapping generations; when the final live consumer retires, unregister/release it on the owning apartment. Do not create per-display endpoint registrations, a background poll, or keep the endpoint alive merely because Settings/registry metadata is imported. Keyboard volume/mute actions remain action ingress and do not justify an always-live presentation consumer. Obtain COM interfaces with `QueryInterface`, never `ctypes.cast`: cast shares the raw pointer without `AddRef` and ties the source into a ctypes reference cycle, so retiring the endpoint freed it and a later garbage collection released it again (native access violation during runtime replacement, found 2026-09-23).
-
-The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
-
-
-## Manual diagnostic screenshot and glyph-hover boundary (R38, unaccepted)
-
-- A diagnostic screenshot is a **single explicit operator key edge** (`\`) in Python source or the exact dedicated diagnostic executable only. The standard frozen executable must not register a screenshot action, hook render/frame callbacks, create a screenshot worker at idle or write captures. One-off QScreen grabs may return QPixmap at the Qt boundary; convert to an owned QImage immediately, then perform PNG encoding away from the GUI thread. `captures/` is ignored and excluded from distributed source payloads. Verify actual OpenGL scene pixels on Windows instead of assuming a successful PNG is correct.
-- Glyph visibility is subject to **Interaction Mode or Ctrl-held admission**, never the ordinary exit-click path. Hover is event-driven and independent of Widget Glow on Hover/Jedi Mode. Every Edit-only glyph must eventually dispatch via the existing CustomLayoutSession and model, with one identity/generation, entry acknowledgment and fail-closed cancellation. Never duplicate Edit/session/geometry owner, use fake clicks, show the Edit Hide Controls wedge outside Edit, or install timers/polling. The initial R38 hover wiring covers the Camera Reset glyph only; do not infer full action parity until implemented and tested.
+This is the **short preflight**, not a second documentation authority. Use the focused owners below before changing their code. Active tasks and acceptance states belong only in `Current_Plan.md`.
+
+## Non-negotiable boundaries
+
+- Work from the operator-provided tree; never reset or overwrite unrelated changes, authored presets, themes or mutable Settings.
+- **Mutable authored content is never a test golden.** Test functionality, code-owned contracts, schema, SSOT, test-owned inputs and round-trips, never current authored values; code-owned geometry may warrant exact checks. No routine GUI/style tests for subjective side tools.
+- Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. No retired presenter fallback, duplicated scene authority or new presentation polling loop.
+- Qt Quick owns scheduling; preserve latest-wins state, transition admission, render-thread safety and bounded lifetime. No unnecessary dormant work or GUI blocking.
+- Keep visualizers musically faithful and geometrically correct. Performance changes cannot reduce authored fidelity.
+- Settings remembers only the active tab/pill editing path and necessary ancestors. Inactive buckets close; Settings values and presets remain freely editable.
+- Use the present virtual environment and bounded focused tests. **No test-command environment-variable writes, no local frozen builds.** Prefer agent-executable verification; subjective appearance requires operator acceptance.
+- Treat source-only validation as source evidence. Do not close an unverified functional or visual failure.
+
+## Focused owners (read the relevant ones)
+
+- [Contracts](Contracts.md): service owners, network/TLS, persisted capabilities, cache retention, callback retirement, system audio.
+- [Visualizer Presentation](Guardrails/Visualizer_Presentation.md): Quick architecture, texture lifetime, multi-display, geometry and preset/DSP ownership.
+- [Performance Optimization Contract](Guardrails/Performance_Optimization_Contract.md): scheduling, memory, frame pacing, priorities and rejected optimizations.
+- [Bubble Temporal Fidelity](Guardrails/Bubble_Temporal_Fidelity.md): Bubble responsiveness and visual fidelity.
+- [Presentation Change Preflight](Guardrails/Presentation_Change_Preflight.md): blockers, accepted evidence, fallback discipline.
+- [CUSTOM Child Geometry](Guides/Custom_Child_Geometry.md), [Widget Guidelines](Guides/10_WIDGET_GUIDELINES.md): Edit, reflow, containment and nested ownership.
+- [Documentation Maintenance](Guides/Documentation_Maintenance.md): source discipline, document roles and build delegation.
+- [Test Durability](Guides/Test_Durability.md) and [Test Suite](TestSuite.md): exact-value limits, prohibited tests and suite inventory.
+- [Logging Guide](Guides/Logging_Guide.md): diagnostic captures and evidence logging.
+- [Settings Bucket Persistence](Architecture/Settings_Bucket_Persistence_Contract.md): active editing-path ownership.

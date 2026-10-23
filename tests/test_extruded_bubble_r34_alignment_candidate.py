@@ -7,7 +7,7 @@ import math
 from core.constants.extruded_bubble_world import WORLD_HALF, WATER_SURFACE_Y
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_settings import require_mode_settings
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()
 from rendering.gl_programs.extruded_bubble_scene import camera, physical_camera, scene_knobs
@@ -21,13 +21,14 @@ def _parameter_defaults():
             if entry.key.startswith('extruded_bubble_')}
 
 
-def test_bubble_and_particle_spread_are_independent_with_original_width_defaults():
+def test_bubble_and_particle_spread_have_independent_authored_controls():
     spec = require_mode_settings('extruded_bubble')
     for key, bucket in [('extruded_bubble_bubble_spread', 'bubbles'),
                         ('extruded_bubble_particle_spread', 'particles')]:
         descriptor = spec.control(key)
         assert descriptor.bucket == bucket
-        assert require_canonical_default('widgets.spotify_visualizer.' + key) == 1.0
+        default = require_canonical_default('widgets.spotify_visualizer.' + key)
+        assert descriptor.admit(default, default) == default
         assert descriptor.admit(4.0, 1.0) == 4.0
     mod = simulation_module()
     path = (0., -1., 0., 0., 1., 0.)

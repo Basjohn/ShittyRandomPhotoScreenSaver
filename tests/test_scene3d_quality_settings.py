@@ -194,7 +194,11 @@ def test_an_activation_carries_each_modes_tier_from_the_3d_settings(tmp_path):
     assert kwargs["spectrum"]["scene3d_detail"] == "Performance"
     for mode, parameters in (("extruded_spectrum", extruded_spectrum_parameters),
                              ("shockwave_grid", shockwave_grid_parameters)):
-        host = SimpleNamespace(_view_orbit_motion=None)
+        # Production installs the mode on the presentation runtime controller
+        # before admitting its mode-owned terrain. The isolated fake must obey
+        # that same admission contract rather than bypassing the guard.
+        host = SimpleNamespace(_view_orbit_motion=None,
+                               runtime_controller=SimpleNamespace(mode_id=mode))
         apply_presentation_vis_mode_kwargs(host, kwargs[mode])
         assert parameters(host)["scene3d_detail"] == kwargs[mode]["scene3d_detail"]
 
