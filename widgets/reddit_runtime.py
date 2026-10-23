@@ -42,6 +42,7 @@ from core.reddit_preparation import (
     touch_reddit_marker,
 )
 from core.runtime_flags import automatic_service_updates_enabled
+from core.settings.storage_paths import resolve_app_data_dir
 from core.settings.default_contract import require_canonical_default
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from core.threading.manager import ThreadManager
@@ -60,7 +61,8 @@ def _positive_delay_ms(seconds: float) -> int:
     return max(1, int(math.ceil(value * 1000.0)))
 
 
-_REDDIT_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "reddit"
+# Shared data root, not the code folder (an install directory may be read-only).
+_REDDIT_CACHE_DIR = resolve_app_data_dir() / "cache" / "reddit"
 _REDDIT_PROVIDER_SORT = "hot"  # Provider request policy, not a persisted product setting.
 
 

@@ -127,3 +127,15 @@ def test_steam_clear_does_not_delete_pinned_friends_even_if_only_cache_state_is_
     second = clear_cache_families(("steam",), descriptors=descriptors)
     assert second.complete and second.removed_files == 0
     assert pinned.read_bytes() == b"private-user-state"
+
+
+def test_reddit_cache_lives_in_the_data_root_and_matches_its_writer(tmp_path: Path) -> None:
+    import widgets.reddit_runtime as reddit_runtime
+    from core.settings.storage_paths import resolve_app_data_dir
+
+    root = tmp_path / "SRPSS"
+    families = {entry.family_id: entry for entry in get_cache_family_descriptors(app_data_dir=root)}
+    assert families["reddit"].targets[0].path == root / "cache" / "reddit"
+    # The runtime writer resolves the same production data root, not the code folder.
+    assert reddit_runtime._REDDIT_CACHE_DIR == resolve_app_data_dir() / "cache" / "reddit"
+    assert reddit_runtime._REDDIT_CACHE_DIR != Path(reddit_runtime.__file__).resolve().parents[1] / "cache" / "reddit"

@@ -53,11 +53,7 @@ def get_cache_family_descriptors(
 
     app_root = Path(app_data_dir) if app_data_dir is not None else get_app_data_dir()
     cache_root = app_root / "cache"
-    reddit_root = (
-        Path(reddit_cache_dir)
-        if reddit_cache_dir is not None
-        else Path(__file__).resolve().parents[1] / "cache" / "reddit"
-    )
+    reddit_root = Path(reddit_cache_dir) if reddit_cache_dir is not None else cache_root / "reddit"
     return (
         CacheFamilyDescriptor(
             "rss",
