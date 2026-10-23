@@ -570,7 +570,8 @@ Provider/model/resource retirement assertions stay at the actual neutral owner; 
 opens the real `SettingsDialog` against an isolated copy of the saved profile and records every top-level
 window this process creates/shows through an out-of-context WinEvent hook (catches single-frame flashes that
 polling misses; `--self-test` proves detection first). `--launch [--launch-script run.py --profile-folder SRPSS_MC]`
-hooks a real `main.py /c` or MC run-script process tree from outside, backing up and restoring the profile file.
+hooks a real `main.py /c` or MC run-script process tree from outside, backing up and restoring the profile file;
+pass `--exit-wait-s` with a self-exiting (`--exit-after`) run script so it is never force-closed mid-run.
 The dialog is visible on screen. 2026-10-24 receipts: `logs/run_matrix/2026-10-24_settings_transient_windows/`.
 
 ### 8.4 Current broad routing

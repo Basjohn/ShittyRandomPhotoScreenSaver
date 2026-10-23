@@ -218,6 +218,10 @@ def run_launch(args) -> int:
                 tree |= {proc.pid for proc in psutil.Process(child.pid).children(recursive=True)}
             except psutil.Error:
                 pass
+        exit_deadline = time.perf_counter() + args.exit_wait_s
+        while child.poll() is None and time.perf_counter() < exit_deadline:
+            _pump_native(0.25)
+        self_exited = child.poll() is not None
         visible = [hwnd for pid in tree for hwnd in _visible_toplevels(pid)]
         recorder.phase = "close"
         for hwnd in visible:
@@ -233,10 +237,12 @@ def run_launch(args) -> int:
 
     recorder.events = [event for event in recorder.events if event["pid"] in tree]
     shows = [event for event in recorder.events if event["event"] == "show"]
-    report = {"mode": "launch", "pid": child.pid, "process_tree": sorted(tree), "visible_at_close": visible,
+    report = {"mode": "launch", "pid": child.pid, "process_tree": sorted(tree),
+              "self_exited": self_exited, "visible_at_close": visible,
               "shows": shows, "events": recorder.events}
     Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"launch pid={child.pid} top-level shows={len(shows)} visible at close={len(visible)}")
+    print(f"launch pid={child.pid} self_exited={self_exited} top-level shows={len(shows)} "
+          f"visible at close={len(visible)}")
     for event in shows:
         print(f"  {event['t_ms']:9.1f}ms {event['class']:<36} {event['title']!r} {event['rect']}")
     return 0
@@ -257,6 +263,9 @@ def main() -> int:
     parser.add_argument("--launch", action="store_true",
                         help="hook a real `main.py /c` child process instead")
     parser.add_argument("--launch-s", type=float, default=12.0)
+    parser.add_argument("--exit-wait-s", type=float, default=0.0,
+                        help="after --launch-s, wait this long for a self-exiting run (e.g. an "
+                             "--exit-after run script) to exit on its own before any forced close")
     parser.add_argument("--launch-script", default=None,
                         help="python script to launch instead of `main.py /c` (e.g. an MC run "
                              "script that requests Settings in the running saver)")
