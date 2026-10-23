@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 # Purposefully different handles, so a missing low or high branch is conspicuous.
 # Stream Speed in snapshots is PHYSICAL units; other rate controls are normalized.
@@ -44,8 +44,8 @@ def controlled_probe(*, playing: bool, bands: tuple[float, float, float], frames
         "drift": round(snapshot.drift, 5), "particles_emission": round(snapshot.emission, 5),
         "large_body_driver": round(sim._body_big_envelope, 5),
         "small_body_driver": round(sim._body_small_envelope, 5),
-        "large_breath_radius_multiplier": round(mod._reaction_scale(_AUDIT["breathing"], sim._body_big_envelope, 4.0), 5),
-        "small_breath_radius_multiplier": round(mod._reaction_scale(_AUDIT["small_pulse"], sim._body_small_envelope, 3.0), 5),
+        "large_breath_radius_multiplier": round(mod._reaction_scale(_AUDIT["breathing"], sim._body_big_envelope, *mod._LARGE_REACTION), 5),
+        "small_breath_radius_multiplier": round(mod._reaction_scale(_AUDIT["small_pulse"], sim._body_small_envelope, *mod._SMALL_REACTION), 5),
         "ray_driver": round(snapshot.rays, 5),
         "ray_range_output_fraction": round((.2 + (.8 - .2) * snapshot.rays) * (.03 + .97 * snapshot.rays), 5),
     }

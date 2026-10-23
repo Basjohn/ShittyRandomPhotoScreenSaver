@@ -26,18 +26,19 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_hint_option_canonical_model_and_cached_scene_projection(qt_app, tmp_path):
     settings = SettingsManager(organization="Test", application="Hints_"+uuid.uuid4().hex,
                                storage_base_dir=tmp_path)
-    assert require_canonical_default("input.show_3d_control_hints") is True
-    assert InputSettings.from_settings(settings).show_3d_control_hints is True
-    settings.set("input.show_3d_control_hints", False)
+    original = bool(require_canonical_default("input.show_3d_control_hints"))
+    assert InputSettings.from_settings(settings).show_3d_control_hints == original
+    desired = not original  # test-authored edit, independent of current defaults
+    settings.set("input.show_3d_control_hints", desired)
     options = InputSettings.from_settings(settings)
-    assert options.to_dict()["input.show_3d_control_hints"] is False
+    assert options.to_dict()["input.show_3d_control_hints"] == desired
 
     from rendering.quick.input_controller import QuickInputController
     controller = QuickInputController(screen_index=0, runtime_generation=1)
     cached = dict(on_hover=False, on_click=False, intensity=0., color=(0,0,0,0),
                   show_3d_control_hints=options.show_3d_control_hints)
     assert controller.configure_widget_glow(**cached)
-    assert controller.input_state.show_3d_control_hints is False
+    assert controller.input_state.show_3d_control_hints == desired
     assert not controller.configure_widget_glow(**cached)
     controller.close_input()
     controller.deleteLater()
@@ -64,17 +65,21 @@ def test_general_controls_defer_save_and_survive_reopen_reset(qt_app, tmp_path):
                                storage_base_dir=tmp_path)
     def open_tab():
         return WidgetsTab(settings, lazy_sections=True, initial_view_state={"subtab_id":"defaults"})
+    default_glyphs = bool(require_canonical_default("input.always_show_glyphs"))
+    default_hints = bool(require_canonical_default("input.show_3d_control_hints"))
+    edited_glyphs, edited_hints = not default_glyphs, not default_hints
     tab = open_tab()
     try:
-        assert tab.always_show_glyphs_check.isChecked()
-        assert tab.show_3d_control_hints_check.isChecked()
-        tab.always_show_glyphs_check.setChecked(False)
-        tab.show_3d_control_hints_check.setChecked(False)
-        assert settings.get_bool("input.show_3d_control_hints") is True
-        assert settings.get_bool("input.always_show_glyphs") is True
+        assert tab.always_show_glyphs_check.isChecked() == default_glyphs
+        assert tab.show_3d_control_hints_check.isChecked() == default_hints
+        tab.always_show_glyphs_check.setChecked(edited_glyphs)
+        tab.show_3d_control_hints_check.setChecked(edited_hints)
+        # Deferred save must not change stored values until flush.
+        assert settings.get_bool("input.show_3d_control_hints") == default_hints
+        assert settings.get_bool("input.always_show_glyphs") == default_glyphs
         tab.flush_pending_changes()
-        assert settings.get_bool("input.show_3d_control_hints") is False
-        assert settings.get_bool("input.always_show_glyphs") is False
+        assert settings.get_bool("input.show_3d_control_hints") == edited_hints
+        assert settings.get_bool("input.always_show_glyphs") == edited_glyphs
     finally:
         tab.deleteLater()
         qt_app.processEvents()
@@ -82,23 +87,23 @@ def test_general_controls_defer_save_and_survive_reopen_reset(qt_app, tmp_path):
     try:
         assert not hasattr(display, "always_show_glyphs_check")
         display._save_settings()
-        assert settings.get_bool("input.always_show_glyphs") is False
+        assert settings.get_bool("input.always_show_glyphs") == edited_glyphs
     finally:
         display.deleteLater()
         qt_app.processEvents()
     assert settings.flush(timeout=2.)
     reopened = SettingsManager(organization="Test", application=settings.get_application_name(),
                                storage_base_dir=tmp_path)
-    assert InputSettings.from_settings(reopened).show_3d_control_hints is False
-    assert InputSettings.from_settings(reopened).always_show_glyphs is False
+    assert InputSettings.from_settings(reopened).show_3d_control_hints == edited_hints
+    assert InputSettings.from_settings(reopened).always_show_glyphs == edited_glyphs
     tab = open_tab()
     try:
-        assert not tab.always_show_glyphs_check.isChecked()
-        assert not tab.show_3d_control_hints_check.isChecked()
+        assert tab.always_show_glyphs_check.isChecked() == edited_glyphs
+        assert tab.show_3d_control_hints_check.isChecked() == edited_hints
         settings.reset_to_defaults()
         tab.load_from_settings()
-        assert tab.always_show_glyphs_check.isChecked()
-        assert tab.show_3d_control_hints_check.isChecked()
+        assert tab.always_show_glyphs_check.isChecked() == default_glyphs
+        assert tab.show_3d_control_hints_check.isChecked() == default_hints
     finally:
         tab.deleteLater()
         qt_app.processEvents()

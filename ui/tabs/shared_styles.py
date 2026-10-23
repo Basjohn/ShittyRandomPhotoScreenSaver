@@ -99,11 +99,11 @@ def _theme_rgba255(token: str) -> str:
     return render_qss_rgba255(_SETTINGS_THEME.color(token))
 
 
-def _theme_gradient(token: str) -> str:
+def _theme_gradient(token: str, theme: SettingsThemeSpec | None = None) -> str:
     """Render only gradient stops; direction and geometry remain component-owned."""
 
     parts: list[str] = []
-    for stop in _SETTINGS_THEME.gradient(token).stops:
+    for stop in (theme or _SETTINGS_THEME).gradient(token).stops:
         position = f"{stop.position:g}"
         color = stop.color
         if color.a == 255:
@@ -117,20 +117,23 @@ def _theme_gradient(token: str) -> str:
     return ",\n        ".join(parts)
 
 
-def _theme_qss(template: str) -> str:
+def _theme_qss(template: str, *, theme: SettingsThemeSpec | None = None) -> str:
     """Resolve semantic colour placeholders while leaving QSS structure untouched."""
 
     def replace(match: re.Match[str]) -> str:
         mode = match.group("mode")
         token = match.group("token")
         if mode == "color":
-            return _theme_qss_color(token)
+            return render_qss_color(theme.color(token)) if theme is not None else _theme_qss_color(token)
         if mode == "rgba":
-            return _theme_rgba(token)
+            if theme is None:
+                return _theme_rgba(token)
+            value = theme.color(token)
+            return f"rgba({value.r}, {value.g}, {value.b}, {_unit_alpha_text(value.a)})"
         if mode == "rgba255":
-            return _theme_rgba255(token)
+            return render_qss_rgba255(theme.color(token)) if theme is not None else _theme_rgba255(token)
         if mode == "gradient":
-            return _theme_gradient(token)
+            return _theme_gradient(token, theme)
         raise AssertionError(f"Unhandled theme QSS mode: {mode}")
 
     resolved = _THEME_QSS_TOKEN_RE.sub(replace, template)
@@ -687,7 +690,7 @@ class RecommendedMarkSlider(NoWheelSlider):
         )
         painter.end()
 
-def _build_spinbox_style() -> str:
+def _build_spinbox_style(theme: SettingsThemeSpec | None = None) -> str:
     return _theme_qss("""
     /* Rounded inputs with opaque borders + circular stepper controls */
     QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
@@ -775,7 +778,7 @@ def _build_spinbox_style() -> str:
         height: 0px;
         border: none;
     }
-    """)
+    """, theme=theme)
 
 
 SPINBOX_STYLE = _build_spinbox_style()
@@ -783,7 +786,7 @@ SPINBOX_STYLE = _build_spinbox_style()
 _CIRCLE_INDICATORS = ("unchecked", "unchecked_hover", "checked", "checked_hover")
 
 
-def _circle_indicator_urls() -> dict[str, str]:
+def _circle_indicator_urls(theme: SettingsThemeSpec | None = None) -> dict[str, str]:
     """Circle indicator images that contrast with the theme's checkbox text.
 
     The shipped SVGs are white rings (for light-on-dark text).  A theme with
@@ -792,7 +795,7 @@ def _circle_indicator_urls() -> dict[str, str]:
     never per frame).  Light-text themes keep the original resources.
     """
 
-    text = _SETTINGS_THEME.color("control.checkbox.text")
+    text = (theme or _SETTINGS_THEME).color("control.checkbox.text")
     resources = {name: f":/srpss/ui/icons/circle_checkbox_{name}.svg" for name in _CIRCLE_INDICATORS}
     if QColor(text.r, text.g, text.b).lightnessF() >= 0.5:
         return resources
@@ -820,8 +823,8 @@ def _circle_indicator_urls() -> dict[str, str]:
         return resources
 
 
-def _build_circle_checkbox_style() -> str:
-    urls = _circle_indicator_urls()
+def _build_circle_checkbox_style(theme: SettingsThemeSpec | None = None) -> str:
+    urls = _circle_indicator_urls(theme)
     style = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
 QCheckBox[circleIndicator='true'] {
@@ -879,10 +882,18 @@ QCheckBox[circleIndicator='true']::indicator:disabled:checked {
     return style
 
 
+def render_circle_checkbox_style(theme: SettingsThemeSpec) -> str:
+    """Render the real shared circle indicator for a tool-local Settings theme.
+
+    Does not mutate process-global Settings theme selection.
+    """
+    return _build_circle_checkbox_style(theme)
+
+
 CIRCLE_CHECKBOX_STYLE = _build_circle_checkbox_style()
 
 
-def _build_combobox_style() -> str:
+def _build_combobox_style(theme: SettingsThemeSpec | None = None) -> str:
     # Qt 6.11's Windows 11 menu-indicator metric reads pointSize(), even for a
     # pixel font. Equivalent point units keep the authored 14/13/12 logical-px
     # text at Windows' 96 logical DPI and give the native metric a valid size.
@@ -969,12 +980,12 @@ def _build_combobox_style() -> str:
         margin-top: 1px;
         margin-bottom: 10px;
     }
-    """)
+    """, theme=theme)
 
 
 COMBOBOX_STYLE = _build_combobox_style()
 
-def _build_combobox_popup_view_style() -> str:
+def _build_combobox_popup_view_style(theme: SettingsThemeSpec | None = None) -> str:
     return _theme_qss("""
     QListView[customComboPopup='true'],
     QListWidget[customComboPopup='true'] {
@@ -1000,7 +1011,7 @@ def _build_combobox_popup_view_style() -> str:
         border-radius: 8px;
         background: transparent;
     }
-    """)
+    """, theme=theme)
 
 
 COMBOBOX_POPUP_VIEW_STYLE = _build_combobox_popup_view_style()
@@ -1459,7 +1470,7 @@ def _build_info_label_style_disabled() -> str:
 
 INFO_LABEL_STYLE_DISABLED = _build_info_label_style_disabled()
 
-def _build_slider_style() -> str:
+def _build_slider_style(theme: SettingsThemeSpec | None = None) -> str:
     return _theme_qss("""
     /* Dark glass indented slider with pill-shaped notch handle */
     QSlider {
@@ -1548,10 +1559,29 @@ def _build_slider_style() -> str:
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
             @@gradient:slider.handle.active_surface@@);
     }
-    """)
+    """, theme=theme)
 
 
 SLIDER_STYLE = _build_slider_style()
+
+
+def render_settings_preview_control_styles(theme: SettingsThemeSpec) -> str:
+    """Render the *real* Settings control skins against a tool-local theme.
+
+    Unlike ``set_active_settings_theme``, this pure renderer does not change the
+    product Settings theme, subscribers, authored values or process-global QSS.
+    Keep these templates shared with the actual Settings implementation: the
+    Sorter must not drift into approximated generic Qt widgets again.
+    """
+    return "\n".join((
+        f"QCheckBox[circleIndicator='true'] {{ color: {render_qss_color(theme.color('control.checkbox.text'))}; }}",
+        _build_spinbox_style(theme),
+        _build_combobox_style(theme),
+        _build_combobox_popup_view_style(theme),
+        _build_slider_style(theme),
+        _build_circle_checkbox_style(theme),
+    ))
+
 
 
 def _build_accessibility_title_style() -> str:
@@ -1767,6 +1797,46 @@ def set_bucket_toggle_checked(
     del blocker
 
 
+def close_unrelated_settings_buckets(opened: QToolButton) -> None:
+    """Keep one live open disclosure path, even across different accordion owners.
+
+    Scope registries prevent sibling overlap locally; this second layer ensures
+    cached/lazily nested buckets elsewhere in the same Settings dialog do not
+    remain checked invisibly. Actual QWidget ancestry (not name prefixes)
+    identifies the required parent disclosures of the newly opened bucket.
+    """
+    if not _is_live_qobject(opened):
+        return
+    ancestors: set[QWidget] = set()
+    owner = opened.parentWidget()
+    while owner is not None:
+        ancestors.add(owner)
+        owner = owner.parentWidget()
+    root = opened.window()
+    for peer in root.findChildren(QToolButton):
+        if peer is opened or not peer.isChecked():
+            continue
+        peer_body = getattr(peer, "_srpss_bucket_body", None)
+        if peer_body is None or peer_body in ancestors:
+            continue
+        if getattr(peer, "_srpss_bucket_apply_visual_state", None) is not None:
+            set_bucket_toggle_checked(peer, False, coordinate=False)
+
+
+def collapse_settings_bucket_tree(root: QWidget) -> None:
+    """Silently close every constructed disclosure inside one retiring context.
+
+    Persisted state is retired separately by the tab owner. Blocking toggle
+    signals here prevents visual cleanup from saving presets or re-opening peers.
+    Children are visited first so nested rails/bodies cannot retain open state.
+    """
+    if not _is_live_qobject(root):
+        return
+    for toggle in reversed(root.findChildren(QToolButton)):
+        if getattr(toggle, "_srpss_bucket_apply_visual_state", None) is not None:
+            set_bucket_toggle_checked(toggle, False, coordinate=False)
+
+
 def finalize_bucket_body(toggle: QToolButton, body: QWidget) -> None:
     """Reveal one deferred bucket body only after its controls are fully built.
 
@@ -1822,16 +1892,24 @@ def build_bucket_toggle(
     host_layout.addLayout(toggle_row)
 
     from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
+    # Never make an unparented QWidget visible. On Windows that can create a
+    # short-lived native top-level window during Settings construction (the
+    # historical Settings flash/ghost family). Hide first, let Qt's layout
+    # assign the actual QWidget parent, then reveal only parented children.
     body = BucketTreeBody()
+    body.hide()
+    toggle._srpss_bucket_body = body
     body_layout = QVBoxLayout(body)
     body_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 8)
     body_layout.setSpacing(4)
-    if not defer_initial_visibility:
-        body.setVisible(expanded)
     host_layout.addWidget(body)
+    if expanded and not defer_initial_visibility and body.parentWidget() is not None:
+        body.show()
 
     def _apply_visual_state(checked: bool) -> None:
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        if not checked:
+            collapse_settings_bucket_tree(body)
         if body.isHidden() == bool(checked):
             body.setVisible(checked)
 
@@ -1847,6 +1925,7 @@ def build_bucket_toggle(
     def _apply_state(checked: bool) -> None:
         if checked:
             close_bucket_accordion_peers(toggle)
+            close_unrelated_settings_buckets(toggle)
         _apply_visual_state(checked)
         if on_toggle is not None:
             on_toggle(checked)

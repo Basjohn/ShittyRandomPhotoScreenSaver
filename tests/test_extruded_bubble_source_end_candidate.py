@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_settings import ScenePath, require_mode_settings
 from core.settings.visualizer_paths import (admit_path, direction_of, world_point, square_to_disc, disc_to_square)
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 
 def test_legacy_eb_preset_angles_migrate_without_clobbering_presets():

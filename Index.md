@@ -2,6 +2,12 @@
 
 ## Start here
 
+- **Settings active bucket-path source repair candidate:** [source audit and native validation](Docs/Audits/Settings_Bucket_Persistence_Repair_Candidate_2026-10-23.md), [durable contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md), and [authoritative live task](Current_Plan.md). Native visual acceptance remains open.
+
+- **Current 23 October operator evidence and new/open scopes:** [EB / Neon Lake / Settings reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md); [Settings bucket persistence contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md). The one authoritative task/status queue remains [Current Plan](Current_Plan.md).
+- **Settings transient-window regression after bucket persistence candidate:** [Native-window source audit and agent falsifiers](Docs/Audits/Settings_Transient_Window_Regression_2026-10-23.md); original Windows root-cause evidence in [R-18](Docs/Historical_Bugs/R-18_Settings_Dialog_Taskbar_Ghost.md). This candidate is **not native-accepted**.
+- **23 October 102 archived pytest failures (32 file groups):** [source-oriented test triage and exact selectors](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md); native visual/runtime regressions remain open.
+
 ```text
 exact current source
 -> Current_Plan.md
@@ -146,3 +152,5 @@ Any production change that touches Bubble reaction/timing requires active-music 
 Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Extensible catalogs are registry-owned: live docs and harnesses say "every registered mode" / "canonical transition registry" rather than freezing today's membership count into prose. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same change.
 
 R43 current candidate investigation: `Docs/Reference/R43_EB_Breach_Inlet_And_Glyph_Checkpoint.md` (R42 premature EOL, population burst, actual radius spacing; all unaccepted).
+
+- [2026-10-23 Test Oracle Repair: no authored preset/Settings value pins](Docs/Audits/Test_Oracle_Repair_2026-10-23.md) (cross-linked to [Test Durability](Docs/Guides/Test_Durability.md) and [Test Suite](Docs/TestSuite.md)); preserve all unresolved native and visual gates.

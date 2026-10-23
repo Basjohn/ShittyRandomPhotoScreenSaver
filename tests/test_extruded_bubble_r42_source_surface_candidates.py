@@ -1,7 +1,7 @@
 """R42 deterministic source->surface and birth spacing falsifiers, not visual acceptance."""
 from __future__ import annotations
 
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()
 from widgets.spotify_visualizer.extruded_bubble_simulation import (

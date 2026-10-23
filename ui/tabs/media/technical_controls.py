@@ -867,24 +867,42 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
 
     from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
     group = BucketTreeBody()
+    toggle._srpss_bucket_body = group
     layout = QVBoxLayout(group)
     layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     layout.setSpacing(12)
     host_layout.addWidget(group)
 
-    def _apply_toggle_state(checked: bool) -> None:
+    def _apply_toggle_state(checked: bool, *, persist: bool = True) -> None:
+        if checked and persist:
+            shared_styles.close_bucket_accordion_peers(toggle)
+            shared_styles.close_unrelated_settings_buckets(toggle)
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        if not checked:
+            shared_styles.collapse_settings_bucket_tree(group)
         group.setVisible(checked)
         helper.setVisible(not checked)
         setter = getattr(tab, "set_visualizer_tech_state", None)
-        if callable(setter):
+        if callable(setter) and persist:
             try:
                 setter(mode_key, checked)
             except Exception:
                 pass
 
+    toggle._srpss_bucket_apply_visual_state = lambda checked: (
+        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow),
+        (shared_styles.collapse_settings_bucket_tree(group) if not checked else None),
+        group.setVisible(checked), helper.setVisible(not checked)
+    )
+    toggle._srpss_outer_kind = "technical"
+    toggle._srpss_outer_mode = mode_key
+    shared_styles.bind_bucket_accordion(
+        toggle, scope_owner=tab,
+        apply_visual_state=toggle._srpss_bucket_apply_visual_state,
+        scope_key=("visualizer_outer", mode_key),
+    )
     toggle.toggled.connect(_apply_toggle_state)
-    _apply_toggle_state(default_expanded)
+    _apply_toggle_state(default_expanded, persist=False)
 
     sections, toggles = _build_bucket_sections(tab, layout, mode_key)
     section_layouts: Dict[str, QVBoxLayout] = {

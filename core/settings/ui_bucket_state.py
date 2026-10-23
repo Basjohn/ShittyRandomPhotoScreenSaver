@@ -1,9 +1,9 @@
 """Canonical Settings bucket persistence semantics.
 
 Collapsible Settings buckets are schema-enumerated by canonical defaults, but
-persisted user state is intentionally sparse: at most one open bucket is stored
-per local accordion scope.  Closed buckets are represented by absence rather
-than one persisted boolean per bucket.
+persisted user state is intentionally sparse. A dialog-wide projection retains
+only the active tab/pill's editing path; local accordion scopes do not grant
+separate inactive contexts permission to persist. Closed buckets are absent.
 """
 from __future__ import annotations
 
@@ -139,3 +139,165 @@ def widget_bucket_scope(key: str, canonical_keys: Iterable[str]) -> str:
         return section
     parent = max(parents, key=len)
     return f"{section}:{parent}"
+
+
+def widget_bucket_parent(key: str, canonical_keys: Iterable[str]) -> str | None:
+    """Resolve canonical parent for legacy nested Widget bucket identities."""
+    scope = widget_bucket_scope(key, canonical_keys)
+    return scope if scope != str(key).partition(":")[0] else None
+
+
+def set_active_widget_bucket_path(
+    states: MutableMapping[str, bool], key: str, expanded: bool,
+) -> None:
+    """Remember a single Widget editing path, not independent pill accordions.
+
+    A nested leaf preserves its ancestor; opening another root/leaf retires the
+    entire previous path. Closing an ancestor also closes hidden descendants.
+    """
+    if key not in states:
+        raise KeyError(f"Unknown canonical Settings bucket: {key}")
+    parent = widget_bucket_parent(key, states)
+    if expanded:
+        keep = {key}
+        while parent is not None:
+            keep.add(parent)
+            parent = widget_bucket_parent(parent, states)
+        for candidate in states:
+            states[candidate] = candidate in keep
+    else:
+        states[key] = False
+        # A hidden descendant must never remain persisted open under a closed parent.
+        for candidate in states:
+            ancestor = widget_bucket_parent(candidate, states)
+            while ancestor is not None:
+                if ancestor == key:
+                    states[candidate] = False
+                    break
+                ancestor = widget_bucket_parent(ancestor, states)
+
+
+def normalize_active_widget_bucket_path(
+    canonical_keys: Iterable[str], raw: object, active_section: str | None,
+) -> dict[str, bool]:
+    """Migrate full/sparse old maps to one path of the currently selected pill."""
+    keys = tuple(str(key) for key in canonical_keys)
+    state = dict.fromkeys(keys, False)
+    if not isinstance(raw, Mapping) or not active_section:
+        return state
+    candidates = [str(key) for key, value in raw.items()
+                  if str(key) in state and str(key).partition(":")[0] == active_section
+                  and bool(value)]
+    if candidates:
+        # A nested child is more specific than its ancestor regardless of
+        # legacy mapping order. For equally deep leaves, the last wins.
+        winner = max(enumerate(candidates), key=lambda pair: (
+            _widget_bucket_depth(pair[1], keys), pair[0]
+        ))[1]
+        set_active_widget_bucket_path(state, winner, True)
+    return state
+
+
+def _widget_bucket_depth(key: str, canonical: Iterable[str]) -> int:
+    depth = 0
+    parent = widget_bucket_parent(key, canonical)
+    while parent is not None:
+        depth += 1
+        parent = widget_bucket_parent(parent, canonical)
+    return depth
+
+
+def normalize_active_visualizer_leaf_path(
+    custom_keys: Iterable[str], technical_keys: Iterable[str],
+    custom_raw: object, technical_raw: object, active_mode: str | None,
+) -> tuple[dict[str, bool], dict[str, bool]]:
+    """Only one active-mode Custom/Technical leaf survives legacy persistence."""
+    custom = dict.fromkeys(tuple(str(k) for k in custom_keys), False)
+    technical = dict.fromkeys(tuple(str(k) for k in technical_keys), False)
+    if active_mode:
+        winner = None
+        for raw, state in ((custom_raw, custom), (technical_raw, technical)):
+            if isinstance(raw, Mapping):
+                for raw_key, value in raw.items():
+                    key = str(raw_key)
+                    if key in state and key.partition(":")[0] == active_mode and bool(value):
+                        winner = key
+        if winner is not None:
+            (custom if winner in custom else technical)[winner] = True
+    return custom, technical
+
+
+# One active editing context is retained across the entire Settings dialog.
+# Existing maps remain the canonical per-control schemas; this function only
+# projects their saved *open* values to the selected tab/pill at navigation.
+def project_settings_bucket_context(settings, tab: str, pill: str | None = None) -> None:
+    from core.settings.defaults import get_default_settings
+
+    canonical = get_default_settings(settings.get_application_name())["ui"]
+    tab = str(tab or "")
+    pill = str(pill or "")
+    widget = normalize_active_widget_bucket_path(
+        canonical["widget_bucket_states"],
+        settings.get("ui.widget_bucket_states"),
+        pill if tab == "widgets" else None,
+    )
+    custom, technical = normalize_active_visualizer_leaf_path(
+        canonical["visualizer_bucket_states"],
+        canonical["visualizer_tech_bucket_states"],
+        settings.get("ui.visualizer_bucket_states"),
+        settings.get("ui.visualizer_tech_bucket_states"),
+        pill if tab == "visualizers" else None,
+    )
+    requested = {
+        "ui.widget_bucket_states": sparse_open_bucket_states(widget),
+        "ui.gmail_bucket_states": sparse_open_bucket_states(
+            normalize_single_open_bucket_states(
+                canonical["gmail_bucket_states"],
+                settings.get("ui.gmail_bucket_states") if tab == "widgets" and pill == "gmail" else {},
+                scope_for_key=flat_bucket_scope,
+            )
+        ),
+        "ui.visualizer_bucket_states": sparse_open_bucket_states(custom),
+        "ui.visualizer_tech_bucket_states": sparse_open_bucket_states(technical),
+    }
+    for leaf in ("visualizer_adv_states", "visualizer_tech_states"):
+        raw = settings.get("ui." + leaf)
+        requested["ui." + leaf] = {
+            str(key): True for key, expanded in (raw.items() if isinstance(raw, Mapping) else ())
+            if tab == "visualizers" and str(key) == pill and bool(expanded)
+            and key in canonical[leaf]
+        }
+    # Legacy profiles could leave both outer disclosures open independently.
+    # Technical owns its root if a Technical leaf is the chosen editing path.
+    if requested["ui.visualizer_adv_states"] and requested["ui.visualizer_tech_states"]:
+        if requested["ui.visualizer_tech_bucket_states"]:
+            requested["ui.visualizer_adv_states"] = {}
+        else:
+            requested["ui.visualizer_tech_states"] = {}
+    if requested["ui.visualizer_tech_bucket_states"] and pill in canonical["visualizer_tech_states"]:
+        requested["ui.visualizer_tech_states"] = {pill: True}
+    raw_simple = settings.get("ui.basic_bucket_path")
+    if tab == "sources" and raw_simple in ("sources:folders", "sources:feeds"):
+        basic = raw_simple
+    elif (tab == "transitions" and raw_simple == "transitions:"
+          + pill.strip().lower().replace(" ", "_")):
+        basic = raw_simple
+    else:
+        basic = ""
+    requested["ui.basic_bucket_path"] = basic
+    for name, value in requested.items():
+        raw = settings.get(name)
+        # Avoid startup writes when an all-false canonical legacy map already
+        # represents the same all-closed state. Only changed open keys matter.
+        if isinstance(value, dict):
+            previous = sparse_open_bucket_states(raw) if isinstance(raw, Mapping) else {}
+            if previous == value:
+                continue
+        elif raw == value:
+            continue
+        settings.set(name, value, emit_change=False)
+
+
+def retire_settings_bucket_context(settings) -> None:
+    """On successful leave, no earlier pill/tab retains an expanded bucket."""
+    project_settings_bucket_context(settings, "", "")

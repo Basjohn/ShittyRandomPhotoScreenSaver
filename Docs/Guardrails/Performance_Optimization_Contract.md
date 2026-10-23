@@ -332,3 +332,44 @@ prove worker completion, GUI delivery, cancellation and generation retirement,
 including the case where a worker completion cannot reach the GUI dispatcher.
 Do not fence unrelated cache persistence, audio DSP, QML painting or passive
 sampling. Do not add polling, speculative work or a second cache/cadence owner.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Admission priority
+
+
+1. visualizer fidelity/reactivity;
+2. lifecycle/resource safety;
+3. frame pacing/perceived smoothness;
+4. multi-display correctness;
+5. bounded resources;
+6. CPU/task efficiency;
+7. average FPS;
+8. elegance.
+
+Never improve counters by silently reducing authored work/fidelity.
+
+Performance-specific admission, telemetry semantics, load-class evidence and reference envelopes live in `Docs/Guardrails/Performance_Optimization_Contract.md`. Use that checklist before changing cadence, GC policy, scheduling, caching, resource lifetime or presentation for performance.
+
+
+### Qt Quick pacing and hot paths
+
+
+Do not infer a Qt Quick surface/pacing policy from documentation or pre-Quick history alone. SRPSS owns multiple top-level Quick windows and may run mixed refresh rates; a 2026-09-14 installed two-display A/B **rejected forcing ``swapInterval=1``** because pacing, FPS/headroom and interaction smoothness became materially worse. The production Quick bootstrap therefore retains the known-good release-era ``swapInterval=0`` policy until a better architecture is proven on installed multi-display hardware. Never reintroduce VSync=1 as a generic "Quick-native" cleanup without that evidence.
+
+Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work must distinguish **logical work cadence**, **scene invalidation/update demand**, and **physical presentation**, and must be A/B tested against the known-good 5.0.0/5.0.1 Quick baseline. Never reduce Visualizer logical freshness/reactivity to make a display-pacing graph look cleaner. Any future removal/replacement of ``QuickFramePacer`` is a separate architecture change and requires installed evidence proving equivalent transition/widget-animation liveness and improved frame spacing across single- and mixed-refresh multi-display cases before it can be accepted.
+
+Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
+
+Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
+
+
+### Resource ownership and thread-churn containment
+
+**Memory owners release at the consumer boundary.**
+- A cache entry whose pixels a presentation now owns must leave the cache.
+- A retained or parked render object keeps only what its next use needs: warm GL programs, not the finished run's frames.
+- Measure retention with phase-locked samples and with `gc.freeze()` disabled; frozen objects hide their references from `gc.get_referrers` (R-99).
+- The only sanctioned environment writes are third-party load-time settings that have no other interface: the Qt render-loop bootstrap and `core/native_threads.py`.
+- **No thread churn in a GL process.** The NVIDIA OpenGL driver keeps ~70 KB of per-thread state for every thread the process ever creates and does not return it (R-97). Periodic or per-image work runs on a persistent thread or an existing lane: never a `threading.Timer` per tick, a thread per request, or a pool that retires idle threads and recreates them (Qt's image pool is kept by `core/native_threads.retain_qt_gui_pool_threads`). Measure churn from outside by counting new thread IDs per minute.

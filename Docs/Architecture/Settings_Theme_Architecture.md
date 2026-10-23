@@ -1,5 +1,7 @@
 # Settings Theme Architecture
 
+**Expansion persistence clarification (2026-10-23):** connector rail styling/geometry is distinct from [single-current-context Settings bucket persistence](Settings_Bucket_Persistence_Contract.md). Existing per-scope sparse maps do not enforce the operator's one-active-pill/tab editing-path requirement; native navigation/reopen validation remains open.
+
 Durable contract for the QWidget Settings theme system, native backdrop ownership and theme authoring. This document owns the current Settings-theme architecture. Historical investigation belongs under `Docs/Historical_Bugs/`; temporary theme migration notes do not override this contract.
 
 ## Product boundary
@@ -41,7 +43,7 @@ A complete `.srtheme` owns:
 
 `ui/settings_theme_io.py` admits a file whole or rejects it whole. Current parsing is schema-v6-only after the explicit `ui.settings_theme_input_compat` boundary has promoted an exact supported schema-v5 user file. Unknown/missing roles, wrong format/schema or invalid values do not partially merge into a theme. Compiled Default Dark remains the unconditional no-file/failure fallback.
 
-Schema v6 owns `about.art.liquid`, the Settings-only colour authority for the explicitly masked liquid/background field in `:/srpss/branding/about/Logo.png` and `:/srpss/branding/about/Shoogle300W.png` (sources in `ui/assets/branding/about/`). The companion masks preserve source shading/alpha and leave bubbles, text, outlines, fish shading and drop shadows untouched. Every shipped theme seeds `about.art.liquid` from that theme's primary accent (`chrome.outer_border` RGB at full alpha), so Nocturne Split resolves to its pink-red primary while blue/silver/etc. themes use their own primary colour. The role remains explicit/editable in Theme Foundry; this is value alignment, not a second runtime inheritance mechanism. Supported schema-v5 user themes are admitted only by `ui.settings_theme_input_compat`: the v5 colour-role set must be exact, then `about.art.liquid` is seeded from `chrome.outer_border` RGB at full alpha and the payload becomes v6 before strict current parsing. No arbitrary missing/unknown role is default-merged.
+Schema v6 owns `about.art.liquid`, the Settings-only colour authority for the explicitly masked liquid/background field in `:/srpss/branding/about/Logo.png` and `:/srpss/branding/about/Shoogle300W.png` (sources in `ui/assets/branding/about/`). The companion masks preserve source shading/alpha and leave bubbles, text, outlines, fish shading and drop shadows untouched. New theme generation may seed `about.art.liquid` from `chrome.outer_border` RGB, but these are **independently operator-editable artistic roles** after authoring. Never assert all current themes match one another or pin a named theme's current palette. The role remains explicit/editable in Theme Foundry, not a second runtime inheritance mechanism. Supported schema-v5 user themes are admitted only by `ui.settings_theme_input_compat`: the v5 colour-role set must be exact, then `about.art.liquid` is seeded from `chrome.outer_border` RGB at full alpha and the payload becomes v6 before strict current parsing. No arbitrary missing/unknown role is default-merged.
 
 The persisted theme selection is resolved and validated before first Settings construction. Persistence must never deliberately flash Default Dark before a valid saved custom theme.
 
@@ -280,3 +282,7 @@ inspect exact current source
 ```
 
 Do not fix a native-material problem by perturbing stylesheet order, and do not fix a QSS-role problem by changing the native compositor.
+
+## Theme sorting (standalone tool)
+
+[Theme Sorter Foundry](../Guides/Theme_Sorter_Foundry.md) previews editable Settings themes on itself and performs explicit paired Widget/Settings theme file rename/delete using `linked_settings_theme_id`. It does not change product theme selection. [Mutable test-oracle audit](../Audits/Mutable_Test_Oracle_Theme_Sorter_2026-10-23.md) prevents freezing current curated colours, file names or pack count in tests.

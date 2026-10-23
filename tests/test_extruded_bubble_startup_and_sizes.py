@@ -2,21 +2,21 @@
 from __future__ import annotations
 
 import pytest
-from tools.visualizer_replay import extruded_bubble_startup_probe as probe
+from tools.visualizer_replay import eb_simulation_support as probe
 
 
 def test_large_startup_avoids_false_song_start_on_both_join_and_engine_play_ramp():
     mod = probe.simulation_module()
-    for slot in (1, 7):
-        controls = probe.controls_from_authored_preset(mod, slot)
+    for profile in ("gentle", "strong"):
+        controls = probe.synthetic_controls(mod, profile)
         for scenario in ("already_hot", "play_ramp", "play_ramp_untagged"):
             result = probe.summary(probe.trace(mod, controls, scenario))["big"]
-            assert result["peak_to_final"] < 1.30, (slot, scenario, result)
+            assert result["peak_to_final"] < 1.30, (profile, scenario, result)
 
 
 def test_startup_recovery_does_not_erase_a_real_post_idle_musical_step():
     mod = probe.simulation_module()
-    controls = probe.controls_from_authored_preset(mod, 1)
+    controls = probe.synthetic_controls(mod, "strong")
     result = probe.summary(probe.trace(mod, controls, "quiet_then_hot"))["big"]
     assert result["peak_to_final"] > 1.8  # distinct from the 1-second artificial ramp
 

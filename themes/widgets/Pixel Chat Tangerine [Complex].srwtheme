@@ -1,0 +1,345 @@
+{
+  "format": "srpss.widget-theme",
+  "schema_version": 3,
+  "theme_id": "mirror:file:Pixel Chat Tangerine [Complex] [Acrylic].srtheme",
+  "name": "Pixel Chat Tangerine [Complex]",
+  "linked_settings_theme_id": "file:Pixel Chat Tangerine [Complex] [Acrylic].srtheme",
+  "colors": {
+    "card.background": [
+      247,
+      228,
+      212,
+      242
+    ],
+    "card.border": [
+      143,
+      81,
+      64,
+      255
+    ],
+    "card.text": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.menu.surface": [
+      240,
+      216,
+      195,
+      255
+    ],
+    "context.menu.border": [
+      23,
+      31,
+      39,
+      230
+    ],
+    "context.menu.text": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.menu.selected_surface": [
+      238,
+      210,
+      195,
+      255
+    ],
+    "context.menu.disabled_text": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "context.menu.separator": [
+      23,
+      31,
+      39,
+      165
+    ],
+    "context.submenu.surface": [
+      240,
+      216,
+      195,
+      255
+    ],
+    "context.submenu.border": [
+      23,
+      31,
+      39,
+      230
+    ],
+    "context.submenu.text": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.submenu.selected_surface": [
+      238,
+      210,
+      195,
+      255
+    ],
+    "context.submenu.checked_text": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.submenu.checked_surface": [
+      238,
+      210,
+      195,
+      255
+    ],
+    "header.fill": [
+      238,
+      210,
+      195,
+      255
+    ],
+    "header.border": [
+      143,
+      81,
+      64,
+      255
+    ],
+    "header.text": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "widget.panel": [
+      247,
+      228,
+      212,
+      255
+    ],
+    "widget.panel.alt": [
+      249,
+      231,
+      216,
+      242
+    ],
+    "widget.outline": [
+      143,
+      81,
+      64,
+      255
+    ],
+    "widget.separator": [
+      143,
+      81,
+      64,
+      165
+    ],
+    "widget.icon": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "widget.muted": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "widget.accent": [
+      48,
+      103,
+      155,
+      215
+    ],
+    "widget.gradient.start": [
+      240,
+      216,
+      195,
+      242
+    ],
+    "widget.gradient.middle": [
+      247,
+      228,
+      212,
+      217
+    ],
+    "widget.gradient.end": [
+      242,
+      217,
+      202,
+      179
+    ],
+    "media.transport.surface": [
+      247,
+      228,
+      212,
+      255
+    ],
+    "media.transport.border": [
+      143,
+      81,
+      64,
+      255
+    ],
+    "media.transport.separator": [
+      143,
+      81,
+      64,
+      165
+    ],
+    "media.transport.icon": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "media.mute.surface": [
+      244,
+      222,
+      204,
+      255
+    ],
+    "media.mute.border": [
+      48,
+      103,
+      155,
+      255
+    ],
+    "media.mute.inner_border": [
+      143,
+      81,
+      64,
+      235
+    ],
+    "media.mute.icon": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "media.mute.muted_icon": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "media.volume.track": [
+      247,
+      228,
+      212,
+      255
+    ],
+    "media.volume.fill": [
+      48,
+      103,
+      155,
+      215
+    ],
+    "media.volume.outline": [
+      143,
+      81,
+      64,
+      235
+    ],
+    "media.progress.track": [
+      249,
+      231,
+      216,
+      242
+    ],
+    "media.progress.fill": [
+      48,
+      103,
+      155,
+      215
+    ],
+    "media.progress.glow": [
+      48,
+      103,
+      155,
+      155
+    ],
+    "media.progress.shadow": [
+      55,
+      60,
+      65,
+      143
+    ],
+    "abandonment_issues.accent": [
+      48,
+      103,
+      155,
+      215
+    ],
+    "gmail.sender": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "gmail.read_sender": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "gmail.read_subject": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "gmail.timestamp": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "reddit.age": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "reddit2.age": [
+      55,
+      60,
+      65,
+      255
+    ],
+    "context.menu.indicator.border": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.menu.indicator.fill": [
+      48,
+      103,
+      155,
+      215
+    ],
+    "context.menu.arrow": [
+      23,
+      31,
+      39,
+      230
+    ],
+    "context.submenu.indicator.border": [
+      23,
+      31,
+      39,
+      255
+    ],
+    "context.submenu.indicator.fill": [
+      48,
+      103,
+      155,
+      215
+    ]
+  }
+}

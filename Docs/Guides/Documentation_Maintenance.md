@@ -23,6 +23,7 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Future_Work.md` | deferred ideas, their admission rules and dormant ordering (the single future-work router) |
 
 Keep only the small routing authorities at `Docs/` root plus generated evidence with a stable path contract.
+Do not create a catch-all `Guardrails_Detailed.md` or equivalent second rules ledger. Put each durable restriction directly into the existing subject owner and link to that owner from the short `Docs/Guardrails.md` preflight.
 
 ## Historical-document policy
 
@@ -122,3 +123,39 @@ Before calling a documentation tranche coherent:
 - Historical Bugs preserve the important negative controls;
 - test and cleanup/schema-migration ledgers remain truthful;
 - cross-references to deleted/moved files are reconciled.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Operator build boundaries and source review discipline
+
+
+Agents **do not run frozen builds** (Build Runner, Nuitka, helper compilation, installers or trial builds). The operator owns expensive build execution and frozen/physical acceptance and shares reports. Agents audit source and supplied results and may run only appropriate bounded focused non-build tests; do not call for the full chunked suite by default.
+
+## Read / scope discipline
+
+```text
+exact source
+-> Current_Plan.md
+-> Spec.md
+-> Docs/Contracts.md
+-> relevant focused contract/guardrail
+-> tests/evidence
+```
+
+Preserve unrelated user work. Do not reset/checkout/clean/stash/revert merely to manufacture checkpoint equality.
+Historical evidence is not current owner map.
+
+When current source contradicts a durable product contract, do not silently rewrite the contract to match the bug.
+Promote the missing behavior into `Current_Plan.md` unless explicit product intent changed it.
+
+### Authoritative working tree / operator-run focused verification
+
+Work from the **current operator-provided working tree**, not a guessed older source or unrelated checkout. Heavy Lab/Evidence assets may intentionally live outside the local tree; their absence does not void contracts, permit rebuilding invented evidence, or authorize replacing operator-authored state. Do not reset, clean, push or mutate a separate live checkout to reconcile documentation. Distribution/packaging mechanics are a separate workflow and are NOT visual architecture or validation evidence.
+
+Operator PowerShell tests use the **current tree's** `& '.\.venv\Scripts\python.exe'` (not the global `py -3.14`) and **never mutate environment variables**. The normal `tests/conftest.py` still violates that requirement by writing `APPDATA`/`LOCALAPPDATA`; treat it as an open harness bug, not permission to disable storage isolation. For narrow self-contained tests, prefer `--noconftest -p tools.pytest_qt_noenv` where the test actually owns its settings/lifetimes. Never claim this opt-in fixture provides full production-QML coverage. Specify `encoding='utf-8'` when source-reading in Windows tests; do not let locale-specific cp1252 decoding mask the assertion under test. A green Qt-free source string search does not establish a native Qt Settings callback, persisted camera eye or finished render.
+
+
+### Expected behavior record ownership
+
+Do not create a new generic `Expected_Behaviour.md` ledger by default. When a suspicious behavior is **proven expected**, record that fact at the nearest durable owner: the relevant historical-bug closeout, focused contract/guide, performance guardrail, or regression test. This prevents future agents from reopening already-cleared smells without adding another broad document that will drift.

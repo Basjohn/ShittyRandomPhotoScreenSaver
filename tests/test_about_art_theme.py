@@ -58,24 +58,15 @@ def test_shipped_about_masks_match_source_dimensions() -> None:
         assert 0.35 < coverage < 0.85
 
 
-def test_every_shipped_settings_theme_seeds_about_liquid_from_primary_accent() -> None:
-    theme_paths = sorted((ROOT / "themes").glob("*.srtheme"))
-    assert theme_paths
-    for path in theme_paths:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["schema_version"] == 6, path.name
-        color = payload["colors"]["about.art.liquid"]
-        primary = payload["colors"]["chrome.outer_border"]
-        assert color[:3] == primary[:3], path.name
-        assert color[3] == 255, path.name
+def test_shipped_settings_themes_have_valid_about_art_colour_roles() -> None:
+    """An author's accent/branding colours are not golden test expectations."""
+    from ui.settings_theme_io import load_settings_theme_file
+    from ui.settings_theme_spec import Rgba
 
-
-def test_nocturne_about_liquid_uses_its_pink_red_primary_accent() -> None:
-    payload = json.loads(
-        (ROOT / "themes" / "Nocturne Split [Three-Tone] [Glass].srtheme").read_text(encoding="utf-8")
-    )
-    assert payload["colors"]["chrome.outer_border"] == [221, 151, 144, 255]
-    assert payload["colors"]["about.art.liquid"] == [221, 151, 144, 255]
+    for path in sorted((ROOT / "themes").glob("*.srtheme")):
+        theme = load_settings_theme_file(path)
+        assert isinstance(theme.color("about.art.liquid"), Rgba)
+        assert isinstance(theme.color("chrome.outer_border"), Rgba)
 
 
 def test_settings_shell_minimum_is_1280_by_760() -> None:

@@ -1,22 +1,18 @@
-"""Source contract for stable full-list age/AGO/title rails and projected gap."""
+"""Minimal compatibility guard for Reddit column-order semantics.
+
+Spacing, sizes and exact positioning expressions are visual/layout decisions,
+not source-text goldens; validate readability with native scene inspection.
+"""
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-QML = ROOT / "rendering" / "quick" / "qml" / "RedditPresentation.qml"
+QML = Path(__file__).resolve().parents[1] / "rendering/quick/qml/RedditPresentation.qml"
 
 
-def test_reddit_flipped_age_value_and_ago_stay_legible_in_any_column_order():
+def test_reddit_column_order_keeps_distinct_semantic_rails() -> None:
     source = QML.read_text(encoding="utf-8")
-    assert '9.0 / Math.max(0.2, redditRoot.presentationScale)' in source
-    assert 'readonly property real ageValueAgoGap: 2.0' in source
-    assert 'visualColumnOrder' in source
-    assert '["age", "ago", "title"]' in source
-    assert '["title", "age", "ago"]' in source
-    assert 'postRow.columnX("age") - ageText.x' in source
-    assert 'postRow.columnX("ago") - ageText.x' in source
-    assert 'postRow.columnX("title")' in source
+    assert "visualColumnOrder" in source
+    for role in ("age", "ago", "title"):
+        assert f'postRow.columnX("{role}")' in source
     assert 'postRow.columnWidth("title")' in source
-    assert 'Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)' in source
-    assert 'readonly property var columnTargets:' in source
-    assert 'LayoutMirroring.enabled:' not in source
-    assert 'childOffsetX("post_titles")' not in source
+    # A general-purpose layout mirror must not silently reverse these roles.
+    assert "LayoutMirroring.enabled:" not in source

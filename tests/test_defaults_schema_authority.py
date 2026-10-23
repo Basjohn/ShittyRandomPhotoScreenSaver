@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+from core.settings.default_settings import DEFAULT_SETTINGS
 
 import ast
 import json
@@ -15,6 +16,10 @@ def _text(relative: str) -> str:
 
 
 def _literal(relative: str, name: str) -> dict:
+    # DEFAULT_SETTINGS is legitimate executable canonical Python (terrain seed).
+    # A literal-only AST reader wrongly fails on basin_profile(), masking schema checks.
+    if relative == "core/settings/default_settings.py" and name == "DEFAULT_SETTINGS":
+        return DEFAULT_SETTINGS
     parsed = ast.parse(_text(relative))
     for node in parsed.body:
         if not isinstance(node, ast.Assign):

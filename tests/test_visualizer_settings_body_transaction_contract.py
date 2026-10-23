@@ -68,41 +68,38 @@ def test_dynamic_accessory_bootstrap_does_not_consult_incompatible_active_mode()
     assert "initial_expanded=False" in dynamic
 
 
-def test_c6_3d_bucket_defaults_match_current_builder_contract() -> None:
+def test_3d_builder_bucket_identities_are_declared_by_their_current_owners() -> None:
+    """Builder/spec bucket identities must resolve to the canonical UI schema.
+
+    The inventory is an extensible code-owned schema, not an immutable list of
+    yesterday's bucket names or the operator's currently expanded state.
+    """
+    import ast
+
     from core.settings.default_settings import DEFAULT_SETTINGS
+    from core.settings.visualizer_mode_settings import require_mode_settings
 
-    keys = set(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
-    assert {key for key in keys if key.startswith("extruded_spectrum:")} == {
-        "extruded_spectrum:appearance",
-        "extruded_spectrum:bar_appearance",
-        "extruded_spectrum:effects",
-        "extruded_spectrum:response",
-        "extruded_spectrum:shape",
-    }
-    assert {key for key in keys if key.startswith("shockwave_grid:")} == {
-        "shockwave_grid:appearance",
-        "shockwave_grid:render",
-        "shockwave_grid:response",
-        "shockwave_grid:waves",
-    }
-
-
-def test_sphere_bucket_defaults_match_current_isolated_builder_contract() -> None:
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    sphere_keys = {
-        key
-        for key in DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]
-        if key.startswith("sphere:")
-    }
-    assert sphere_keys == {
-        "sphere:analysis",
-        "sphere:appearance",
-        "sphere:particle_flow",
-        "sphere:reaction",
-        "sphere:rotation",
-        "sphere:effects",
-    }
+    canonical = set(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
+    for mode in ("extruded_spectrum", "shockwave_grid", "sphere"):
+        spec_keys = {f"{mode}:{bucket.key}" for bucket in require_mode_settings(mode).buckets}
+        builder = ROOT / "ui" / "tabs" / "media" / f"{mode}_builder.py"
+        builder_keys = set()
+        if builder.exists():
+            tree = ast.parse(builder.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                    continue
+                if node.func.id != "build_collapsible_bucket":
+                    continue
+                args = {kw.arg: kw.value for kw in node.keywords if kw.arg}
+                bucket = args.get("bucket_key")
+                owner = args.get("mode_key")
+                if (isinstance(bucket, ast.Constant) and isinstance(owner, ast.Constant)
+                        and owner.value == mode and isinstance(bucket.value, str)):
+                    builder_keys.add(f"{mode}:{bucket.value}")
+        declared = spec_keys | builder_keys
+        assert declared, f"No real UI buckets registered for {mode}"
+        assert declared <= canonical, f"Unregistered {mode} bucket identities: {sorted(declared-canonical)}"
 
 
 def test_sphere_builder_default_lookups_exist_in_canonical_visualizer_defaults() -> None:

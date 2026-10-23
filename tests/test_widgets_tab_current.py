@@ -1552,55 +1552,55 @@ def test_clock_calendar_controls_are_conditioned_and_save_canonical_keys(
 
 
 def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
-    """Each Widget page remembers only its last open local bucket across reloads."""
+    """Only the current pill's leaf survives switching and Settings reopening."""
     tab = WidgetsTab(settings_manager)
     try:
+        sections = {descriptor.section_id: index for index, descriptor in enumerate(tab._widget_section_descriptors)}
+        tab._on_subtab_changed(sections["clock"])
         clock_time = _find_toggle(tab._clock_controls_container, "Time Content")
         clock_layout = _find_toggle(tab._clock_controls_container, "Layout")
-        media_controls = _find_toggle(tab._media_controls_container, "Transport Controls")
-        reddit1 = _find_toggle(tab._reddit_controls_container, "Reddit 1")
-        reddit2 = _find_toggle(tab._reddit_controls_container, "Reddit 2")
-        for toggle in (clock_time, clock_layout, media_controls, reddit1, reddit2):
-            assert toggle is not None
-            assert toggle.isChecked() is False
-
+        assert clock_time is not None and clock_layout is not None
         clock_time.click()
-        qt_app.processEvents()
         clock_layout.click()
-        qt_app.processEvents()
-        assert clock_time.isChecked() is False
         assert clock_layout.isChecked() is True
 
+        tab._on_subtab_changed(sections["media"])
+        media_controls = _find_toggle(tab._media_controls_container, "Transport Controls")
+        assert media_controls is not None
         media_controls.click()
-        qt_app.processEvents()
+        assert clock_layout.isChecked() is False
+
+        tab._on_subtab_changed(sections["reddit"])
+        reddit1 = _find_toggle(tab._reddit_controls_container, "Reddit 1")
+        reddit2 = _find_toggle(tab._reddit_controls_container, "Reddit 2")
+        assert reddit1 is not None and reddit2 is not None
         reddit1.click()
-        qt_app.processEvents()
         reddit2.click()
         qt_app.processEvents()
         assert reddit1.isChecked() is False
         assert reddit2.isChecked() is True
-
-        assert tab.get_widget_bucket_state("clock", "time") is False
-        assert tab.get_widget_bucket_state("clock", "layout") is True
-        assert tab.get_widget_bucket_state("media", "controls") is True
-        assert tab.get_widget_bucket_state("reddit", "reddit1") is False
+        assert tab.get_widget_bucket_state("clock", "layout") is False
+        assert tab.get_widget_bucket_state("media", "controls") is False
         assert tab.get_widget_bucket_state("reddit", "secondary") is True
+        assert settings_manager.get("ui.widget_bucket_states") == {"reddit:secondary": True}
+
+        settings_manager.set("ui.tab_state", {"widgets": {"view_state": {
+            "subtab": sections["reddit"], "subtab_id": "reddit"
+        }}})
     finally:
         tab.deleteLater()
 
     reloaded = WidgetsTab(settings_manager)
     try:
-        checks = (
-            (reloaded._clock_controls_container, "Time Content", False),
-            (reloaded._clock_controls_container, "Layout", True),
-            (reloaded._media_controls_container, "Transport Controls", True),
-            (reloaded._reddit_controls_container, "Reddit 1", False),
+        for container, text, expected in (
+            (reloaded._clock_controls_container, "Layout", False),
+            (reloaded._media_controls_container, "Transport Controls", False),
             (reloaded._reddit_controls_container, "Reddit 2", True),
-        )
-        for container, text, expected in checks:
+        ):
             toggle = _find_toggle(container, text)
-            assert toggle is not None, f"Missing bucket toggle after reload: {text}"
+            assert toggle is not None
             assert toggle.isChecked() is expected
     finally:
         reloaded.deleteLater()
+
 

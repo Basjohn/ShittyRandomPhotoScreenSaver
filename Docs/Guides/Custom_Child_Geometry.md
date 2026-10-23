@@ -122,3 +122,49 @@ The shared child editor and `content_extent` owner serve the admitted ordinary f
 The current source exposes descriptor-limited resize and movement, live selected-parent containment, shared Settings locks, Save/Cancel/Restore/slot round-trips and event-only edit input. The accepted cross-family Qt gate covers retained geometry/lifetime, and the System Stats three-role physical editor has been accepted. For new changes, validate the *affected* resize directions, role movement/reflow, flip, collision on/off, **parent extent stability**, Save/Cancel/Restore/slots and retained delegate identity with focused native Qt tests; reserve operator visual testing for pixel/interaction properties that those tests cannot observe. Normal runtime must not gain a timer, polling, provider wake, collision scan or extra geometry-publishing cadence. See [CUSTOM Child Placement](Custom_Child_Placement_And_Headers.md) for the gesture and admission contracts.
 
 Artwork quality escalation is conditional, not a mandatory refetch: resolve a larger source only on committed geometry when an existing image owner can actually supply better pixels. In particular, do not invent a Media artwork refetch when the present source has no higher-resolution variant.
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Retained edit delegate / churn admission
+
+**Edit-lifetime and churn guard:** A family `customEditableChildRoles` model must depend on stable semantic identity only. Do not put a content-driven baseline, visibility, row count, sampling result or moving child geometry into its construction; Qt may rebuild the Repeater and retire an active drag. Read family-owned bindable normalization and applied transform properties inside the selected Edit delegate, verify the same delegate survives repeated changes, and compare its rectangle against the actual retained painted target. Never substitute a per-frame scene scan or timer for a missing dependency. A source-only check is not evidence of drag latency or lack of binding churn on installed Qt.
+
+
+### Child containment and per-axis reflow
+
+
+A child Edit gesture is not permission to change outer parent dimensions or
+persist an inferred `content_extent`. Child motion/resize is hard-contained to
+its actual painted/card or separately declared accessory surface, whether peer
+collision is enabled or not. Only explicit **outer handles** can change parent
+size; authored dimensions remain Restore's baseline, not a second live child
+minimum. Clamp snap results after snapping and commit unchanged results without
+churn. Never turn a child overflow request into another Settings or geometry
+owner, even as a temporary selected-Edit requirement.
+
+Family-authored reflow remains live per axis after independent child edits.
+An X-only edit does not detach Y; a Y-only edit does not detach X. Avoid scalar
+`x+y` change detection, offset-dependent all-axis `onAuthoredRail` gates and
+subtraction of subsequent parent Column displacement. Flip exchanges placement,
+not pixels; choose a semantic text scaling origin in either orientation.
+Admission requires a real retained-scene/paint test of **saved customized** child
+records under Y-only/X-only resize, plus Reset -> Flip -> Save -> Edit -> shrink,
+checking painted bounds rather than model visibility. When a test passes but a
+physical flipped widget fails, its gate is insufficient and must be revised.
+Look for matching off-rail/clip/churn failure in other families, but do not apply
+a universal QML rewrite without family-level paint and owner-lifecycle proof.
+
+
+### Repeated list-column edit authority
+
+
+A semantic rail swap must reorder **all rows of one retained list** using one
+widget-scoped order in the existing CUSTOM owner and payload. Reddit's age
+value, title and AGO are distinct semantic columns;
+Gmail has sender, subject and timestamp. Do not simulate swaps with per-row
+child positions, a second persisted column map, repeated-delegate rebuilds or
+new runtime observers. Commit one discrete reorder action, preserve both flip
+orientations and untouched-axis reflow, and prove Undo/Save/Reset/layout slots
+and fresh-generation paint before accepting it. The rail UI is Edit-only;
+ordinary runtime must not construct rail targets or watch their geometry.

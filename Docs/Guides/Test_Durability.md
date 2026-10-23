@@ -4,6 +4,22 @@ SRPSS tests should be strict about **contracts** and tolerant of **authored data
 
 This guide owns test-authoring durability policy. `Docs/TestSuite.md` owns current suite/acceptance routing. Production source and canonical settings/registries remain the authorities that tests consume.
 
+## Hard pre-creation prohibition: authored means mutable
+
+No test may take a current operator-authored theme, preset, Settings value, position,
+visual number, shade, slider, selector, or chosen default as a pinned expected answer.
+There are **no protected artistic presets or palettes**. Even tests purportedly protecting
+curated quality must exercise test-owned samples or real functional/geometry properties,
+not require yesterday's authored content. An author's normal changes to a theme should
+never break a test. When the test fails after a routine art edit, the test is defective.
+
+The red guard is `tools/test_durability_audit.py`, with adversarial self-tests in
+`tests/test_test_suite_durability.py`. It catches copied canonical defaults through
+aliases, certain named shipped preset/theme art oracles, mutable registry copies and
+prose-as-runtime-oracle tests. Static analysis is *not complete*: agents must review new
+assertions for illicit expected-value provenance before writing them. Never use an
+`EXACT-VALUE INVARIANT` comment to exempt editable artistic contents.
+
 ## Archived visualizer oracle trap (R-112)
 
 Do not regenerate synthetic/golden expected data from the *current* curated Organs/Sphere/other editable preset and call the result a regression oracle. Own the fixture explicitly and test behavior against that independent source; shipped preset files receive schema, ownership, parse and preservation checks only. An intentional operator edit is not an error.
@@ -17,6 +33,36 @@ Before writing an exact assertion, ask what owns the expected value.
 - If the value is a deliberate protocol, compatibility, golden, safety or negative-control invariant, **assert it exactly and say why**.
 
 Changing a test every time normal product authoring progresses is a smell unless the changed product contract is exactly what that test exists to guard.
+
+## Ownership test before creating or deleting an assertion
+
+**Do not classify an assertion as good or bad merely because it contains a
+literal number, pixel value, string, enum or colour. Identify who can change
+that value without editing code.**
+
+- **Operator-authored:** Defaults Foundry selections, current canonical defaults,
+  mutable presets, theme roles, fonts and Settings selections are *inputs*, never
+  hardcoded expected artistic answers. Test canonical producer/consumer agreement,
+  explicit test-owned changes, state preservation, propagation, schema and
+  round-trip. Editing the authored value must not require editing a test.
+- **Code-owned:** Geometry calculations, orientation mappings, clipping boundaries,
+  pointer hit targets, collision guards, animation/lifetime semantics and
+  protocol constants can legitimately require exact numerical assertions when
+  they detect a meaningful functional defect. A code-defined 4 px offset is
+  **not** operator-authored merely because it is hardcoded. Prefer measuring the
+  resulting behavior to searching for one exact source expression.
+- **Test-owned:** An explicitly created sample can and should be checked exactly
+  for save/reload, transformation, migration and nonmutation; its numbers are
+  deliberately controlled by the test, not copied from the live authored state.
+- **Disposable presentation:** A specific decorative colour or font multiplier
+  is not automatically a worthwhile assertion even if it is code-owned. Remove
+  low-signal implementation pins only after verifying that no geometry,
+  containment, contrast, safety or meaningful behavior contract is lost.
+
+Before deleting an existing test, state the failure it was designed to catch,
+find overlapping coverage, and preserve behavioral checks such as crossfade
+stacking/clipping and one-shot Lock handoff. A currently failing test that
+checks native pixels or music response is *not* stale by default.
 
 ## 2. Mutable authorities must not be copied
 
@@ -264,3 +310,52 @@ When adding a mode, transition, provider, preset family or Settings surface:
 - use self-owned fixtures for parser/round-trip tests;
 - keep shipped-asset validation separate from behavior validation;
 - run the blocking durability audit before handoff.
+
+## 2026-10-23: explicit operator restriction on authored-test oracles
+
+Tests must not assert **any operator-authored preset value or mutable current Settings value**. The operator edits them freely, including lighting BEAM/SCENE and widths. For deterministic behavior, create test-owned synthetic configuration and assert functional behavior or correct load/save/round-trip. For reset/authority tests, compare against the *current* canonical source dynamically; never pin its present artistic number or boolean. Test shipped preset files only for schema/admission/ownership and preserving authored choices. The [October 23 oracle repair audit](../Audits/Test_Oracle_Repair_2026-10-23.md) records violations found and corrected. **Do not adjust production code, current presets, or canonical defaults to placate a copied test expectation.**
+
+## Additional binding safeguards by subject
+These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
+
+### Mutable authored-data and optional-tool test creation guardrails
+
+
+**Before creating or modifying a test**, determine where its expected result comes from.
+Operator-authored presets, theme files, current Settings, editable defaults, visual colours,
+sliders, geometric choices, and catalog membership are mutable **by definition**. A test
+must NEVER assert their currently authored contents, filenames, exact values, colours,
+hashes, count, ordering or preferred mode as a fixed truth. This prohibition also covers
+"known" curated presets 1–7 and themes chosen by their current names. An exact-value
+annotation cannot turn mutable authoring into an immutable contract.
+
+**Permitted:** test-owned temporary configuration; the exact round-trip of a value the
+test itself wrote; schema/type/range/parse contracts; migration from an explicitly owned
+historical fixture; a functional change in response to chosen inputs; consumers agreeing
+with the canonical default authority *without copying its present value*; genuinely
+fixed wire/protocol/safety invariants. Authored theme accessibility/readability may be
+explored as optional visual review, never as a test that blocks legitimate art changes.
+
+**Forbidden repair strategy:** overwrite a preset/theme/default, restore old authored
+values, weaken a functional assertion, or freeze an editable file to placate a test.
+Delete or rewrite the *invalid assertion* while retaining real functional coverage.
+The compiler's built-in fallback and protocol schemas are separate technical contracts;
+they do not authorize pinning optional authored theme files or selected styles.
+
+**Mandatory preflight RED guard:** execute `python tools/test_durability_audit.py` and
+`python -m pytest --noconftest tests/test_test_suite_durability.py -q` before submitting
+new tests, then examine the advisory `python tools/default_pin_scan.py` results. The
+blocking audit emits the test file, line, and violation. If a new authored-data pin
+is missed by the blocking rules, add a narrow adversarial example and detection rule;
+do not blindly promote all advisory hints into blockers. See
+[the durability guide](Test_Durability.md) and [TestSuite](../TestSuite.md).
+
+### Optional-tool test scope (pre-creation restriction)
+
+Do **not** create routine GUI, styling, geometry, control-interaction, usability,
+artistic-preview, or visual-golden tests for subjective/disposable side tools
+(such as Theme Sorter or Theme Foundry). A tool deserves maintained tests only
+when it changes critical project state or data; those tests must protect schema,
+SSOT ownership, correctness of its transformations, and data/rollback integrity
+using test-owned inputs. Do not pin authored themes, their current names or
+appearance. Do not add tooling side work to the active implementation queue.

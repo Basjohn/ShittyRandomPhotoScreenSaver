@@ -1,0 +1,1490 @@
+{
+  "format": "srpss.settings-theme",
+  "schema_version": 6,
+  "name": "Basilisk Velvet [Complex] [Glass]",
+  "backdrop": {
+    "mode": "glass",
+    "tint": [
+      37,
+      28,
+      42,
+      0
+    ]
+  },
+  "colors": {
+    "window.dialog_glass": [
+      37,
+      28,
+      42,
+      36
+    ],
+    "window.titlebar.surface": [
+      37,
+      28,
+      42,
+      248
+    ],
+    "window.titlebar.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "window.titlebar.button.surface": [
+      54,
+      40,
+      57,
+      0
+    ],
+    "window.titlebar.button.hover": [
+      101,
+      100,
+      96,
+      188
+    ],
+    "window.titlebar.button.pressed": [
+      101,
+      100,
+      96,
+      218
+    ],
+    "window.titlebar.close.hover": [
+      101,
+      100,
+      96,
+      230
+    ],
+    "navigation.sidebar.surface": [
+      46,
+      34,
+      50,
+      242
+    ],
+    "navigation.tab.surface": [
+      46,
+      34,
+      50,
+      255
+    ],
+    "navigation.tab.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "navigation.tab.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "navigation.tab.hover_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "navigation.tab.selected_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "navigation.tab.selected_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "navigation.subtab.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "navigation.subtab.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "navigation.subtab.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "navigation.subtab.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "navigation.subtab.selected_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "bucket.closed.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "bucket.closed.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "bucket.closed.border": [
+      183,
+      199,
+      164,
+      165
+    ],
+    "bucket.closed.hover_surface": [
+      89,
+      82,
+      86,
+      242
+    ],
+    "bucket.closed.hover_border": [
+      89,
+      82,
+      86,
+      205
+    ],
+    "bucket.open.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "bucket.open.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "bucket.open.border": [
+      183,
+      199,
+      164,
+      215
+    ],
+    "bucket.open.hover_surface": [
+      89,
+      82,
+      86,
+      246
+    ],
+    "content.surface": [
+      37,
+      28,
+      42,
+      0
+    ],
+    "panel.group.surface": [
+      54,
+      40,
+      57,
+      242
+    ],
+    "panel.subsection.surface": [
+      59,
+      43,
+      61,
+      242
+    ],
+    "panel.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "text.primary": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "text.disabled": [
+      148,
+      137,
+      149,
+      255
+    ],
+    "text.secondary": [
+      210,
+      206,
+      211,
+      255
+    ],
+    "text.tertiary": [
+      189,
+      182,
+      190,
+      255
+    ],
+    "text.helper": [
+      210,
+      206,
+      211,
+      170
+    ],
+    "text.helper_disabled": [
+      148,
+      137,
+      149,
+      255
+    ],
+    "control.input.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "control.input.hover_surface": [
+      66,
+      57,
+      67,
+      255
+    ],
+    "control.input.focus_surface": [
+      86,
+      61,
+      83,
+      255
+    ],
+    "control.input.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.input.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "control.input.disabled_text": [
+      148,
+      137,
+      149,
+      125
+    ],
+    "control.input.disabled_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "control.stepper.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "control.stepper.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "control.stepper.pressed_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "control.stepper.disabled_surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "combo.popup.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "combo.popup.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "combo.popup.selection_surface": [
+      229,
+      160,
+      196,
+      62
+    ],
+    "combo.popup.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "combo.popup.selection_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "tooltip.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "tooltip.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "tooltip.border": [
+      183,
+      199,
+      164,
+      220
+    ],
+    "control.list.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "control.list.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.list.border": [
+      183,
+      199,
+      164,
+      165
+    ],
+    "control.list.selected_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "control.list.selected_accent": [
+      229,
+      160,
+      196,
+      215
+    ],
+    "control.list.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "control.button.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "control.button.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.button.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "control.button.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "control.button.pressed_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "control.button.pressed_border": [
+      101,
+      100,
+      96,
+      205
+    ],
+    "control.setup_action.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "control.setup_action.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.setup_action.border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "control.setup_action.hover_surface": [
+      89,
+      82,
+      86,
+      230
+    ],
+    "control.setup_action.pressed_surface": [
+      101,
+      100,
+      96,
+      230
+    ],
+    "control.ghost_action.surface": [
+      46,
+      34,
+      50,
+      255
+    ],
+    "control.ghost_action.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.ghost_action.border": [
+      183,
+      199,
+      164,
+      100
+    ],
+    "control.ghost_action.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "control.ghost_action.hover_border": [
+      89,
+      82,
+      86,
+      140
+    ],
+    "control.ghost_action.pressed_surface": [
+      101,
+      100,
+      96,
+      230
+    ],
+    "control.ghost_action.disabled_text": [
+      148,
+      137,
+      149,
+      95
+    ],
+    "control.ghost_action.disabled_surface": [
+      229,
+      160,
+      196,
+      230
+    ],
+    "control.ghost_action.disabled_border": [
+      229,
+      160,
+      196,
+      40
+    ],
+    "control.mode.surface": [
+      46,
+      34,
+      50,
+      255
+    ],
+    "control.mode.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.mode.border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "control.mode.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "control.mode.checked_surface": [
+      99,
+      70,
+      94,
+      255
+    ],
+    "control.mode.checked_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "control.mode.disabled_text": [
+      148,
+      137,
+      149,
+      255
+    ],
+    "control.mode.disabled_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "control.checkbox.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "control.checkbox.indicator.surface": [
+      54,
+      40,
+      57,
+      205
+    ],
+    "control.checkbox.indicator.highlight_border": [
+      229,
+      160,
+      196,
+      195
+    ],
+    "control.checkbox.indicator.right_shadow_border": [
+      37,
+      28,
+      42,
+      175
+    ],
+    "control.checkbox.indicator.bottom_shadow_border": [
+      37,
+      28,
+      42,
+      190
+    ],
+    "control.checkbox.checked.surface": [
+      101,
+      100,
+      96,
+      225
+    ],
+    "control.checkbox.checked.highlight_border": [
+      229,
+      160,
+      196,
+      220
+    ],
+    "control.checkbox.checked.right_shadow_border": [
+      37,
+      28,
+      42,
+      175
+    ],
+    "control.checkbox.checked.bottom_shadow_border": [
+      37,
+      28,
+      42,
+      190
+    ],
+    "panel.group.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "panel.group.title_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "sources.ratio.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "sources.ratio.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "sources.ratio.disabled_surface": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "sources.ratio.disabled_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "sources.rss_input.surface": [
+      54,
+      40,
+      57,
+      220
+    ],
+    "sources.rss_input.border": [
+      183,
+      199,
+      164,
+      170
+    ],
+    "sources.rss_input.focus_border": [
+      229,
+      160,
+      196,
+      215
+    ],
+    "shadow.direction.surface": [
+      46,
+      34,
+      50,
+      228
+    ],
+    "shadow.direction.border": [
+      183,
+      199,
+      164,
+      220
+    ],
+    "shadow.direction.hover_surface": [
+      89,
+      82,
+      86,
+      235
+    ],
+    "shadow.direction.hover_border": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "shadow.direction.pressed_surface": [
+      101,
+      100,
+      96,
+      242
+    ],
+    "shadow.direction.checked_surface": [
+      99,
+      70,
+      94,
+      74
+    ],
+    "shadow.direction.checked_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "slider.groove.border": [
+      183,
+      199,
+      164,
+      235
+    ],
+    "slider.groove.top_border": [
+      229,
+      160,
+      196,
+      180
+    ],
+    "slider.groove.bottom_border": [
+      229,
+      160,
+      196,
+      80
+    ],
+    "slider.fill.border": [
+      183,
+      199,
+      164,
+      220
+    ],
+    "slider.fill.top_border": [
+      229,
+      160,
+      196,
+      185
+    ],
+    "slider.fill.bottom_border": [
+      229,
+      160,
+      196,
+      95
+    ],
+    "slider.handle.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "slider.handle.hover_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "slider.handle.pressed_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "slider.handle.disabled_surface": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "slider.handle.active_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "slider.recommended_mark": [
+      229,
+      160,
+      196,
+      185
+    ],
+    "about.card.surface": [
+      54,
+      40,
+      57,
+      190
+    ],
+    "about.card.border": [
+      183,
+      199,
+      164,
+      255
+    ],
+    "about.blurb.text": [
+      210,
+      206,
+      211,
+      255
+    ],
+    "about.hotkeys.text": [
+      210,
+      206,
+      211,
+      255
+    ],
+    "about.link.surface": [
+      54,
+      40,
+      57,
+      230
+    ],
+    "about.link.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "about.link.border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "about.link.hover_surface": [
+      89,
+      82,
+      86,
+      230
+    ],
+    "about.link.pressed_surface": [
+      101,
+      100,
+      96,
+      230
+    ],
+    "about.link.pressed_border": [
+      101,
+      100,
+      96,
+      215
+    ],
+    "about.more.surface": [
+      54,
+      40,
+      57,
+      230
+    ],
+    "about.more.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "about.more.border": [
+      183,
+      199,
+      164,
+      165
+    ],
+    "about.more.hover_surface": [
+      89,
+      82,
+      86,
+      230
+    ],
+    "about.notice.surface": [
+      99,
+      70,
+      94,
+      225
+    ],
+    "about.notice.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "about.art.liquid": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "popup.container.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "popup.container.border": [
+      183,
+      199,
+      164,
+      190
+    ],
+    "popup.icon.info": [
+      91,
+      179,
+      239,
+      255
+    ],
+    "popup.icon.warning": [
+      244,
+      188,
+      86,
+      255
+    ],
+    "popup.icon.error": [
+      234,
+      102,
+      115,
+      255
+    ],
+    "popup.icon.success": [
+      94,
+      204,
+      149,
+      255
+    ],
+    "popup.icon.question": [
+      180,
+      146,
+      246,
+      255
+    ],
+    "popup.title.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "popup.message.text": [
+      210,
+      206,
+      211,
+      255
+    ],
+    "popup.button.surface": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "popup.button.border": [
+      183,
+      199,
+      164,
+      195
+    ],
+    "popup.button.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "popup.button.hover_surface": [
+      89,
+      82,
+      86,
+      255
+    ],
+    "popup.button.pressed_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "popup.input.surface": [
+      54,
+      40,
+      57,
+      225
+    ],
+    "popup.input.border": [
+      183,
+      199,
+      164,
+      100
+    ],
+    "popup.input.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "popup.input.focus_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "swatch.hover_mix": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "swatch.pressed_mix": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "swatch.inner_highlight": [
+      229,
+      160,
+      196,
+      30
+    ],
+    "swatch.inner_shade": [
+      37,
+      28,
+      42,
+      35
+    ],
+    "swatch.border": [
+      229,
+      160,
+      196,
+      235
+    ],
+    "swatch.light_accent": [
+      229,
+      160,
+      196,
+      70
+    ],
+    "swatch.dark_accent": [
+      37,
+      28,
+      42,
+      100
+    ],
+    "color_picker.window": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "color_picker.window_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "color_picker.base": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "color_picker.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "color_picker.button": [
+      54,
+      40,
+      57,
+      255
+    ],
+    "color_picker.button_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "context.menu.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "context.menu.border": [
+      246,
+      245,
+      247,
+      230
+    ],
+    "context.menu.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "context.menu.selected_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "context.menu.disabled_text": [
+      148,
+      137,
+      149,
+      160
+    ],
+    "context.menu.separator": [
+      246,
+      245,
+      247,
+      165
+    ],
+    "context.submenu.surface": [
+      37,
+      28,
+      42,
+      255
+    ],
+    "context.submenu.border": [
+      246,
+      245,
+      247,
+      230
+    ],
+    "context.submenu.text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "context.submenu.selected_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "context.submenu.checked_text": [
+      246,
+      245,
+      247,
+      255
+    ],
+    "context.submenu.checked_surface": [
+      101,
+      100,
+      96,
+      255
+    ],
+    "chrome.outer_border": [
+      229,
+      160,
+      196,
+      255
+    ],
+    "chrome.size_grip": [
+      229,
+      160,
+      196,
+      215
+    ]
+  },
+  "shadows": {
+    "input.spin_combo": {
+      "blur_radius": 0.0,
+      "offset_x": 6.0,
+      "offset_y": 8.0,
+      "color": [
+        60,
+        44,
+        60,
+        102
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "button.pill": {
+      "blur_radius": 0.0,
+      "offset_x": 5.0,
+      "offset_y": 6.0,
+      "color": [
+        60,
+        44,
+        60,
+        81
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "navigation.tab": {
+      "blur_radius": 0.0,
+      "offset_x": 5.0,
+      "offset_y": 6.0,
+      "color": [
+        60,
+        44,
+        60,
+        94
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "bucket.closed": {
+      "blur_radius": 0.0,
+      "offset_x": 3.0,
+      "offset_y": 4.0,
+      "color": [
+        60,
+        44,
+        60,
+        51
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "bucket.open": {
+      "blur_radius": 0.0,
+      "offset_x": 5.0,
+      "offset_y": 6.0,
+      "color": [
+        60,
+        44,
+        60,
+        89
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "text.section": {
+      "blur_radius": 0.0,
+      "offset_x": 2.0,
+      "offset_y": 2.0,
+      "color": [
+        60,
+        44,
+        60,
+        106
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "text.page": {
+      "blur_radius": 0.0,
+      "offset_x": 2.0,
+      "offset_y": 3.0,
+      "color": [
+        60,
+        44,
+        60,
+        119
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "text.title": {
+      "blur_radius": 0.0,
+      "offset_x": 3.0,
+      "offset_y": 4.0,
+      "color": [
+        60,
+        44,
+        60,
+        119
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "shell.panel": {
+      "blur_radius": 0.0,
+      "offset_x": 6.0,
+      "offset_y": 8.0,
+      "color": [
+        60,
+        44,
+        60,
+        82
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "scrollbar": {
+      "blur_radius": 0.0,
+      "offset_x": 4.0,
+      "offset_y": 5.0,
+      "color": [
+        60,
+        44,
+        60,
+        94
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "panel.group": {
+      "blur_radius": 0.0,
+      "offset_x": 6.0,
+      "offset_y": 8.0,
+      "color": [
+        60,
+        44,
+        60,
+        76
+      ],
+      "disabled_alpha_scale": 0.4
+    },
+    "popup.dialog": {
+      "blur_radius": 20.0,
+      "offset_x": 0.0,
+      "offset_y": 4.0,
+      "color": [
+        60,
+        44,
+        60,
+        128
+      ],
+      "disabled_alpha_scale": 0.4
+    }
+  },
+  "gradients": {
+    "slider.groove.surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            37,
+            28,
+            42,
+            242
+          ]
+        },
+        {
+          "position": 0.35,
+          "color": [
+            46,
+            34,
+            50,
+            230
+          ]
+        },
+        {
+          "position": 0.65,
+          "color": [
+            54,
+            40,
+            57,
+            217
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            89,
+            82,
+            86,
+            179
+          ]
+        }
+      ]
+    },
+    "slider.fill.surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            156,
+            187,
+            142,
+            232
+          ]
+        },
+        {
+          "position": 0.5,
+          "color": [
+            172,
+            209,
+            156,
+            220
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            192,
+            192,
+            170,
+            198
+          ]
+        }
+      ]
+    },
+    "slider.handle.surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            229,
+            160,
+            196,
+            255
+          ]
+        },
+        {
+          "position": 0.85,
+          "color": [
+            54,
+            40,
+            57,
+            255
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            37,
+            28,
+            42,
+            255
+          ]
+        }
+      ]
+    },
+    "slider.handle.hover_surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            234,
+            179,
+            208,
+            255
+          ]
+        },
+        {
+          "position": 0.85,
+          "color": [
+            229,
+            160,
+            196,
+            255
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            101,
+            100,
+            96,
+            255
+          ]
+        }
+      ]
+    },
+    "slider.handle.pressed_surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            229,
+            160,
+            196,
+            255
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            172,
+            209,
+            156,
+            255
+          ]
+        }
+      ]
+    },
+    "slider.handle.active_surface": {
+      "stops": [
+        {
+          "position": 0.0,
+          "color": [
+            229,
+            160,
+            196,
+            255
+          ]
+        },
+        {
+          "position": 0.85,
+          "color": [
+            200,
+            184,
+            176,
+            255
+          ]
+        },
+        {
+          "position": 1.0,
+          "color": [
+            172,
+            209,
+            156,
+            255
+          ]
+        }
+      ]
+    }
+  }
+}

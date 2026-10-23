@@ -184,3 +184,41 @@ def test_explanatory_and_live_stack_captions_do_not_extend_parent_rail(qt_app, m
         host.close()
         host.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_initially_open_bucket_is_parented_before_any_show(qt_app, monkeypatch):
+    """Opening Settings must not show orphan BucketTreeBody native windows.
+
+    This catches the historical R-18 flicker family: even a transient QWidget
+    setVisible(True) *before* its layout obtains a parent may create a separate
+    native Windows HWND that flashes and closes during dialog construction.
+    """
+    seen = []
+    real_set_visible = BucketTreeBody.setVisible
+    real_show = BucketTreeBody.show
+
+    def recording_visibility(body, visible):
+        if visible:
+            seen.append(body.parentWidget())
+            assert body.parentWidget() is not None, "Unparented bucket body exposed"
+        return real_set_visible(body, visible)
+
+    def recording_show(body):
+        seen.append(body.parentWidget())
+        assert body.parentWidget() is not None, "Unparented bucket body shown"
+        return real_show(body)
+
+    monkeypatch.setattr(BucketTreeBody, "setVisible", recording_visibility)
+    monkeypatch.setattr(BucketTreeBody, "show", recording_show)
+    host = QWidget()  # Deliberately never show the parent window.
+    try:
+        toggle, body, layout = build_bucket_toggle(QVBoxLayout(host), "Remembered", expanded=True)
+        assert toggle.isChecked()
+        assert body.parentWidget() is host
+        assert not body.isWindow()
+        assert seen and all(parent is host for parent in seen)
+        assert not host.isVisible()
+    finally:
+        host.close()
+        host.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

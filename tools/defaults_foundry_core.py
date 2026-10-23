@@ -112,23 +112,68 @@ def walk_private_paths(value: Any, prefix: tuple[str, ...] = ()) -> tuple[str, .
     return tuple(matches)
 
 
+def _literal_default_expression(node: ast.AST, assignment_name: str) -> Any:
+    """Parse source data, allowing only the canonical terrain factory at its owned path.
+
+    No user-provided Python expressions are evaluated.  The one sanctioned
+    ``basin_profile()`` call is expanded into literal AST *before* literal_eval;
+    all other calls remain forbidden, including calls in profile overrides.
+    """
+    if assignment_name != "DEFAULT_SETTINGS":
+        return ast.literal_eval(node)
+
+    # The canonical source may use the Qt-free, parameterless basin generator
+    # for its Neon Lake terrain field.  Require the exact structural location.
+    if isinstance(node, ast.Dict):
+        def child(mapping: ast.AST, key: str) -> ast.AST | None:
+            if not isinstance(mapping, ast.Dict):
+                return None
+            for key_node, value_node in zip(mapping.keys, mapping.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == key:
+                    return value_node
+            return None
+
+        terrain = child(child(child(node, "widgets"), "spotify_visualizer"),
+                        "shockwave_grid_terrain")
+        if (isinstance(terrain, ast.Call) and isinstance(terrain.func, ast.Name)
+                and terrain.func.id == "basin_profile" and not terrain.args
+                and not terrain.keywords):
+            from rendering.gl_programs.heightfield import basin_profile
+
+            # Replace just this known canonical data source with literal data.
+            # There must be no other executable calls anywhere in the tree.
+            terrain_expression = ast.parse(repr(basin_profile()), mode="eval").body
+            class TerrainCallExpander(ast.NodeTransformer):
+                def visit_Call(self, call: ast.Call) -> ast.AST:
+                    if call is terrain:
+                        return ast.copy_location(terrain_expression, call)
+                    return self.generic_visit(call)
+            node = TerrainCallExpander().visit(node)
+
+    return ast.literal_eval(node)
+
+
 def load_literal_assignment(path: Path, assignment_name: str) -> Mapping[str, Any]:
+    """Read source-authored mappings safely, including the single terrain factory."""
     source = Path(path).read_text(encoding="utf-8")
     parsed = ast.parse(source, filename=str(path))
     for node in parsed.body:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if not any(
-            isinstance(target, ast.Name) and target.id == assignment_name
-            for target in targets
-        ):
+        if not any(isinstance(target, ast.Name) and target.id == assignment_name
+                   for target in targets):
             continue
-        value = ast.literal_eval(node.value)
+        try:
+            value = _literal_default_expression(node.value, assignment_name)
+        except (ValueError, TypeError, SyntaxError, MemoryError) as exc:
+            raise ValueError(
+                f"{path}: {assignment_name} contains an unsupported expression"
+            ) from exc
         if isinstance(value, Mapping):
             return value
         break
-    raise ValueError(f"{path} does not define a literal {assignment_name} mapping")
+    raise ValueError(f"{path} does not define an editable {assignment_name} mapping")
 
 
 def iter_leaf_settings(

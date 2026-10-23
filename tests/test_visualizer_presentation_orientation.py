@@ -135,17 +135,18 @@ def test_rotation_changes_logical_domain_without_changing_physical_custom_geomet
     assert rotated.current_aspect_ratio == pytest.approx(280.0 / 630.0)
 
 
-def test_content_rotation_capability_tracks_carded_presentation_policy() -> None:
+def test_quarter_turn_capability_never_admits_frameless_scene() -> None:
     from core.settings.visualizer_mode_registry import (
         VisualizerShellPolicy,
         iter_visualizer_mode_descriptors,
     )
 
+    # Being carded is necessary, not sufficient: some framed 3D cards orbit
+    # their *contents* and must not receive the planar quarter-turn affordance.
     for descriptor in iter_visualizer_mode_descriptors():
         policy = descriptor.presentation_policy
-        assert policy.content_rotation_capable is (
-            policy.shell_policy is VisualizerShellPolicy.CARD
-        ), descriptor.mode_id
+        if policy.content_rotation_capable:
+            assert policy.shell_policy is VisualizerShellPolicy.CARD, descriptor.mode_id
 
 
 def test_per_mode_rotation_roundtrip_stays_on_existing_custom_layout_owner() -> None:

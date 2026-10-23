@@ -10,6 +10,22 @@ self-terminating RUN sessions. It is operator tooling, not a test-runner facade 
 
 **Execution owner:** Frozen-product builds, installer compilation and lengthy whole-suite Windows acceptance are operator-run only, with logs delivered to the agent. A source/documentation agent must **never attempt a build**, and should return only affected focused tests unless asked to request or run a full suite.
 
+**Optional tool testing policy:** Disposable or subjective preview/authoring tools do
+not need GUI/style/usability tests. Only tools capable of changing critical
+state or data warrant tests, limited to schema, SSOT, transformation correctness,
+and transactional/data-integrity behavior using test-owned fixtures. Theme
+visuals and authored content are never test goldens. Keep experimental tooling
+out of the project's active visualizer/workstream acceptance queue.
+
+**Exact-value provenance preflight:** For every added or rewritten assertion,
+classify the expected value as operator-authored, code-owned, test-owned, or
+protocol/safety-owned. Mutable authored presets, fonts, themes, Settings and
+Defaults Foundry values cannot be pinned. Legitimate code-owned dimensions and
+pixel offsets may be asserted when their resulting geometry matters. Never
+remove functional/physical visual falsifiers merely to reduce failures. The
+[durability guide](Guides/Test_Durability.md#ownership-test-before-creating-or-deleting-an-assertion)
+owns the examples and required review.
+
 ## 1. Current authority and inventory
 
 The maintained product profile is `destination` in `tests/run_chunked.py`.
@@ -205,6 +221,30 @@ height/splash as actual geometry and world-space spray (not just capped crest lu
 brush authoring and falloff with preserved wet/dry distinction, and independent real-contour Water Edge Glow
 colour/intensity without changing existing Water Line Glow. The deferred contract is in
 `Docs/Reference/Neon_Lake_Basin.md` and `Future_Work.md`.
+
+## Mandatory authored-data test prohibition (pre-creation gate)
+
+**STOP before writing a test which assumes an operator theme/preset/default/setting
+currently has any particular artistic value or identity.** Every authored option remains
+freely mutable. Tests may prove controls, serialization, compatibility, schema and test-owned
+fixtures; they may not require a particular current preset colour, beam type, list of
+named themes, luminance, volume, number, geometry, hash or authored appearance.
+Assertions copied from curated content are themselves regressions and must be removed,
+not made green by restoring operator art. Source-level tests may compare runtime consumers
+to the canonical default authority, but must never duplicate the authority's current number.
+
+Preflight (all agents creating or changing tests):
+
+```powershell
+& '.\.venv\Scripts\python.exe' tools/test_durability_audit.py
+& '.\.venv\Scripts\python.exe' -m pytest --noconftest tests/test_test_suite_durability.py -q
+& '.\.venv\Scripts\python.exe' tools/default_pin_scan.py --summary
+```
+
+The last scanner is review-only; existing fixture-written values are legitimate.
+The blocking audit must go RED with a source location for new high-confidence pins.
+The machine/runtime-dependent checks remain separate and agent-executable on Windows.
+See [Guardrails](Guardrails.md) and [Test Durability](Guides/Test_Durability.md).
 
 ## 1.1 Test durability and authority hygiene
 
@@ -1220,3 +1260,7 @@ for water glow, shaft compositing and caustics in Surface/Deep, preserving ambie
 World-GPU tests additionally cover ordinary subpixel, stable bead and marine-snow glints, retaining ambient and
 opacity. Renderer-upload checks protect specks1/proxies0 admission. Investigation §61 records exact prior-source
 P1/P7 native scope. These do not prove positional distance falloff, physical emitter size or final preset fidelity.
+
+### Current operator-authored-state prohibition (2026-10-23)
+
+All behavior tests must use test-owned configurations or current dynamically resolved authorities. A test asserting the present contents of a curated preset (or current mutable Settings) as its expected artistic state is invalid. See [Test oracle repair audit](Audits/Test_Oracle_Repair_2026-10-23.md) and [Test durability guide](Guides/Test_Durability.md).

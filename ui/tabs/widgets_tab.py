@@ -78,6 +78,7 @@ from core.settings.ui_bucket_state import (
     flat_bucket_scope,
     normalize_single_open_bucket_states,
     normalize_widget_bucket_states,
+    set_active_widget_bucket_path,
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     widget_bucket_scope,
@@ -274,7 +275,16 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             pass
     
     def load_from_settings(self) -> None:
-        """Reload all UI controls from settings manager (called after preset change)."""
+        """Reload controls and retire stale accordion caches after reset/import."""
+        latest_widgets = self._load_widget_bucket_states()
+        latest_gmail = self._load_gmail_bucket_states()
+        if (latest_widgets != self._widget_bucket_state
+                or latest_gmail != self._gmail_bucket_state):
+            # A profile replacement has changed the state authority. Do not
+            # resurrect stale checked descendants in already-constructed pills.
+            shared_styles.collapse_settings_bucket_tree(self)
+            self._widget_bucket_state = latest_widgets
+            self._gmail_bucket_state = latest_gmail
         self._loading = True
         try:
             self._load_settings()
@@ -378,6 +388,18 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             sparse_open_bucket_states(states),
         )
 
+    def retire_bucket_context(self) -> None:
+        """Retire the previous pill's cached and saved disclosures together."""
+        shared_styles.collapse_settings_bucket_tree(self)
+        for states, path in (
+            (self._widget_bucket_state, self._WIDGET_BUCKET_STATE_KEY),
+            (self._gmail_bucket_state, self._GMAIL_BUCKET_STATE_KEY),
+        ):
+            if any(states.values()):
+                for key in states:
+                    states[key] = False
+                self._settings.set(path, {}, emit_change=False)
+
     def get_widget_bucket_state(
         self,
         section: str,
@@ -391,14 +413,8 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         states = getattr(self, "_widget_bucket_state", None)
         if not isinstance(states, dict):
             raise RuntimeError("Widget bucket state was not initialized")
-        canonical_keys = tuple(states)
         key = f"{section}:{bucket}"
-        set_single_open_bucket_state(
-            states,
-            key,
-            bool(expanded),
-            scope_for_key=lambda candidate: widget_bucket_scope(candidate, canonical_keys),
-        )
+        set_active_widget_bucket_path(states, key, bool(expanded))
         self._settings.set(
             self._WIDGET_BUCKET_STATE_KEY,
             sparse_open_bucket_states(states),
@@ -1268,6 +1284,9 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             if redirect_button is not None:
                 redirect_button.setChecked(True)
         subtab_id = admitted
+        if (not getattr(self, "_loading", False)
+                and int(subtab_id) != getattr(self, "_current_subtab", -1)):
+            self.retire_bucket_context()
         if self._lazy_sections:
             self._build_lazy_subtab_content(int(subtab_id))
         sa = getattr(self, '_scroll_area', None)

@@ -553,6 +553,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # ------------------------------------------------------------------
 
     def _select_setup_page(self, _checked: bool = False) -> None:
+        if (not getattr(self, "_loading", False)
+                and self._page_stack.currentWidget() is self._mode_page):
+            self.retire_bucket_context()
         self._park_custom_accessories()
         self._setup_pill.setChecked(True)
         self._page_stack.setCurrentWidget(self._setup_page)
@@ -567,6 +570,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         previous = self._get_active_visualizer_mode()
         if previous != target:
             self._flush_pending_visualizer_save()
+            if not getattr(self, "_loading", False):
+                self.retire_bucket_context()
 
         self._active_visualizer_mode_id = target
         resolved = self._prepare_mode_hydration_config(target)
@@ -848,8 +853,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._flush_pending_visualizer_save()
         self._loading = True
         try:
+            # UI state is independently replaceable by reset/SST import. Do
+            # not leave constructed disclosures checked against changed maps.
+            self._initialize_visualizer_settings_context_state()
+            shared_styles.collapse_settings_bucket_tree(self)
             self._load_settings(construct_active_body=False)
+            self._select_setup_page()
         finally:
             self._loading = False
-        self._select_setup_page()
         logger.debug("[VISUALIZERS_TAB] Reloaded from settings")

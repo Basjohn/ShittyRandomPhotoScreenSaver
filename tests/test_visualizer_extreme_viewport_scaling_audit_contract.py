@@ -27,13 +27,20 @@ def test_no_generic_larger_axis_temporal_compensator_in_visualizer_runtime() -> 
 
 
 def test_line_mode_pixel_thickness_is_uniform_scale_owned() -> None:
+    """The live renderers must use presentation scale, not authored viewport dimensions.
+
+    The two modes use different beam architectures: Sine has a layout width,
+    Oscilloscope takes a beam-width setting into a shader. Neither should
+    reintroduce an arbitrary larger-axis compensation or viewport-size pin.
+    """
     osc = _read("rendering/quick/visualizer/implementations/oscilloscope.py")
     sine = _read("rendering/quick/visualizer/implementations/sine_wave.py")
-    for source in (osc, sine):
-        assert "line_width=2.0 * scale" in source
-        assert "glow_sigma=8.0 * scale" in source
-        assert "20.0 * scale * height_scale" in source
-        assert "80.0 * scale * height_scale" in source
+    assert "presentation.uniform_visual_scale" in osc
+    assert 'parameter(parameters, "osc_beam_width")' in osc
+    assert 'gl.glUniform1f(beam_uniforms["uCore"], core)' in osc
+    assert "visual_scale=presentation.uniform_visual_scale" in sine
+    assert "line_width=" in sine and "glow_sigma=" in sine
+    assert "* scale" in sine
 
 
 def test_line_mode_authored_frame_runtimes_do_not_read_viewport_geometry() -> None:

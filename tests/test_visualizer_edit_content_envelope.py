@@ -25,11 +25,10 @@ def _presentation(mode: str, *, extent=(420.0, 280.0)):
 
 
 def _parameters() -> dict[str, object]:
-    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
     values = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
-    pres = SimpleNamespace()
-    apply_presentation_vis_mode_kwargs(pres, values)
-    values["shockwave_grid_terrain"] = pres._shockwave_grid_terrain
+    # Terrain is an authored scene input already supplied by canonical settings.
+    # The presentation applier no longer invents a private terrain attribute.
+    assert isinstance(values["shockwave_grid_terrain"], dict)
     return values
 
 

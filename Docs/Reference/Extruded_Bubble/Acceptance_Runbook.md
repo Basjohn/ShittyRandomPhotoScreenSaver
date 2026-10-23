@@ -1,5 +1,7 @@
 # Extruded Bubble | Execution & visual acceptance runbook
 
+**23 October additional live falsifiers:** [operator reconciliation](../2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) and [Current Plan](../../../Current_Plan.md). Track existing bubbles versus newly admitted bubbles across tempo changes for Stream/Drift (G19/G20), pair separation and repeated collisions for Bounce (G10); do not disturb restored BEAM while experimenting in Lighting SCENE (G05/G06). P1 idle appearance is accepted, musical breathing parity and other preset fidelity remain open. Original 2D Bubble with Dynamic Floor ON is a visual response benchmark for EB with Dynamic Floor OFF; compare changing-song sections. Visual-native operator/agent acceptance required.
+
 **Read alongside `Current_Plan.md` §4B, `Target.md`, and `Investigation.md`.** This is the test-and-evidence protocol for the **single live queue** in §4B, not a second backlog or a declaration that any candidate is accepted. Original D/B/C/A/S/F/L/P and other issue records remain authoritative for symptoms, specific constraints, failed approaches and source details. Every `[ ]` / `[~]` remains open until the operator or a capable local visual agent examines the required evidence and explicitly accepts the result. Keep all existing rejection details visible; don't replace them with a shorter success story.
 
 ## A. Evidence protocol: must pass before a visual claim
@@ -172,3 +174,30 @@ Use existing bounded diagnostic tools. A gate's evidence folder should contain: 
 **Suggested next-agent first move:** run **G00** when a failing Settings transition is reproducible; otherwise do **G02 and G03/G04/G06** as a bounded paired evidence pass before changing more size, ray or count curves. Then address G07/G08 and G13/G14 using matching events. Record the first stage where a hypothesis disagrees with evidence, repair only that owner and retest connected gates. Geometry and lighting can be audited in parallel with the strict lifecycle attribution, but source/clock correctness precedes claims about physical response.
 
 **22 October additional source-audit falsifiers (not another checklist):** For G22/G23 independently sweep quiet and high Breathing endpoints and record *silent* per-ID radius; for G04/G09 contrast Deep/Surface `_outside` vs world/plane EOL reasons; for G07/G09 include SCENE→BEAM first-fade reason for inherited identities; for G07/G21 separate SCENE world XYZ coverage from camera/light-relative speck brightness and HDR/bloom; for G19–G21 record pre/post-activity Range signals; for G24/G27 log `_rays` cap vs authored high; for G27/G32 measure disabled-ray draw/blur GPU cost before optimizing. Synthetic source receipts are in [`Additional_Source_Audit_2026-10-22.md`](Additional_Source_Audit_2026-10-22.md). **No native visual sign-off is implied; every existing gate remains open.**
+
+
+## 2026-10-23 targeted native agent comparisons (OPEN)
+
+- **SCENE lighting editor:** compare physical face/region/edge targeting with
+  Motion SCENE controls at identical camera and world box poses. Drag/select
+  each face, change depth, reset/reopen/persist, then capture illumination from
+  up/down/side/near-flat observer positions. The coverage must follow actual
+  world coordinates, not a screen-space imitation; verify independent
+  Lighting vs Motion selections, stable BEAM appearance and GPU cost.
+- **Breathing temporal parity:** synchronously play **all** relevant recordings
+  from `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`
+  through 2D Bubble (Dynamic Floor ON) and EB (Dynamic Floor OFF). Track several
+  large and small *persistent IDs* through attack, crest, contractions, held
+  notes, quiet gaps and tempo changes. Measure displayed radius, per-ID
+  step-to-step continuity, contraction/expansion granularity, normalized
+  time-aligned expressive range and **at-maximum-size** judder. Inspect
+  actual rendered pixels and audio time alignment, not just numeric followers.
+  Operator now calls P1 big/small reactivity generally good, but smoothness,
+  peak judder and granularity still visibly below 2D. Do not close G13/G14.
+- **Speed and drift live-cohort response:** mark ages of bubbles already in
+  view before a slow→fast→slow segment and of newly born bubbles. Confirm
+  both groups accelerate/decelerate and gain/lose lateral drift progressively,
+  without sudden travelling newcomers, teleports, artificial synchronization
+  or repeated collision recontacts. Distinguish screen projection from world
+  velocities. Lighting and particle speed already show meaningful response;
+  this does **not** establish bubble velocity parity.

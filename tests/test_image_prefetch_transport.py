@@ -132,6 +132,8 @@ def test_worker_startup_admits_speculation_only_for_selected_quality_and_budget(
     engine = SimpleNamespace(
         _process_supervisor=SimpleNamespace(start=lambda role: started.append(role) or True),
         _prefetch_ahead=ahead,
+        _display_selection_suspended=lambda: False,
+        _workers_waiting_for_display=False,
         settings_manager=SimpleNamespace(get=values.__getitem__, get_bool=values.__getitem__,
                                          get_application_name=lambda: "Screensaver"),
     )

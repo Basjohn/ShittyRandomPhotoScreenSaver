@@ -1,23 +1,12 @@
-#!/usr/bin/env python3
-"""Trace EB logical body start/release without Qt, OpenGL, EB Lab, or audio files.
+"""Shared Qt-free EB simulation and synthetic startup fixtures for tests/audits.
 
-This diagnostic imports the real simulation and the authored P1/P7 controls,
-then compares source/start scenarios on the sole simulation tick. It does not
-change production controls or accept any visual behavior.
-
-    py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py
-    py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py --json
-    py -3.14 tools/visualizer_replay/extruded_bubble_startup_probe.py --gate
-
---gate was RED on the original 2026-10-20 source. A green candidate must
-not be described as live visual acceptance, musical quality or judder repair.
+No one-off command-line probe: the startup-overshoot regression is asserted by
+normal pytest tests/test_extruded_bubble_startup_and_sizes.py and the dedicated
+recovery tests. These fixtures are NOT native/audio/visual acceptance.
 """
 from __future__ import annotations
 
-import argparse
 import importlib
-import json
-import math
 import sys
 import types
 from pathlib import Path
@@ -41,17 +30,23 @@ def simulation_module():
     return importlib.import_module("widgets.spotify_visualizer.extruded_bubble_simulation")
 
 
-def controls_from_authored_preset(mod, slot):
-    from core.settings.default_settings import DEFAULT_SETTINGS
-    from core.settings.visualizer_mode_settings import require_mode_settings
-    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import controls_from_parameters
-    preset = ROOT / "presets/visualizer_modes/extruded_bubble" / (
-        "preset_1_sunlit_surface.json" if slot == 1 else "preset_7_ember_drift.json")
-    values = json.loads(preset.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
-    defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    parameters = {c.key: c.admit(values.get(c.key, defaults[c.key]), defaults[c.key])
-                  for c in require_mode_settings("extruded_bubble").controls}
-    return controls_from_parameters(parameters)
+def synthetic_controls(mod, profile: str):
+    """Fixed, test-owned input profiles; NEVER read shipped presets or settings.
+
+    These two cases cover different respiratory intensities and population sizes.
+    They are not aliases for operator Preset 1/7 and never claim to pin art.
+    """
+    profiles = {
+        "gentle": dict(large_count=(3., 3.), mid_count=(4., 4.),
+                       breathing=(.04, .18), small_pulse=(.02, .10),
+                       sustained=.6, smoothing=.5),
+        "strong": dict(large_count=(5., 5.), mid_count=(8., 8.),
+                       breathing=(.12, .45), small_pulse=(.10, .42),
+                       sustained=.7, smoothing=.35),
+    }
+    return mod.ExtrudedBubbleControls(**profiles[profile],
+                                      collision_scope="off",
+                                      stream_speed=(0., 0.), drift=(0., 0.), sway=0.)
 
 
 def input_bands(scenario, i):
@@ -114,43 +109,3 @@ def summary(rows):
             "first": {name: round(rows[0][name], 5)
                       for name in ("big_reference", "big_envelope", "small_reference", "small_envelope")}}
 
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--json", action="store_true", help="Print machine-readable summaries and selected 10Hz samples")
-    parser.add_argument("--gate", action="store_true", help="Fail on genuine source-start and source-ramp overshoot")
-    args = parser.parse_args()
-    mod = simulation_module()
-    output = {"source": "production simulation + authored P1/P7 controls",
-              "input": "synthetic fixed bands; quadratic playback ramp plus source-owned ramp metadata mirrors beat_engine",
-              "scenarios": {}}
-    for slot in (1, 7):
-        controls = controls_from_authored_preset(mod, slot)
-        for scenario in ("already_hot", "play_ramp", "play_ramp_untagged", "quiet_then_hot"):
-            for seeded in (False, True):
-                name = f"P{slot}/{scenario}/" + ("seed_references_only" if seeded else "current_source")
-                rows = trace(mod, controls, scenario, reference_seed=seeded)
-                output["scenarios"][name] = summary(rows)
-    if args.json:
-        print(json.dumps(output, indent=2))
-    else:
-        print("EB logical activation probe (synthetic music, not visual/native acceptance)")
-        for name, item in output["scenarios"].items():
-            big, small = item["big"], item["small"]
-            print(f"{name:43s}  large peak/final {big['peak']:.3f}/{big['final']:.3f}"
-                  f" ({big['peak_to_final']:.2f}x), small {small['peak']:.3f}/{small['final']:.3f}")
-    if args.gate:
-        failing = [(name, lane, value[lane]["peak_to_final"])
-                   for name, value in output["scenarios"].items()
-                   if name.endswith("/current_source") and
-                   any(key in name for key in ("/already_hot/", "/play_ramp/", "/play_ramp_untagged/"))
-                   for lane in (("big",) if "/play_ramp_untagged/" in name else ("big", "small"))
-                   if value[lane]["peak_to_final"] > 1.30]
-        if failing:
-            print("GATE RED: held-input startup overshoot " + str(failing), file=sys.stderr)
-            return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

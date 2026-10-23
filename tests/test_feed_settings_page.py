@@ -96,8 +96,11 @@ def test_one_bucket_is_open_per_level_and_parents_stay_open(feeds_tab):
     assert custom.isChecked() and not news.isChecked()
 
     stored = {key for key, value in tab._widget_bucket_state.items() if value and key.startswith("feeds:")}
-    # One remembered bucket per scope: the group, each card's last leaf.
-    assert stored == {"feeds:custom", "feeds:news_us", "feeds:news_world_content"}
+    # One active editing PATH, not one bucket per previously visited scope.
+    # The News branch and its nested descendants must be retired on switching
+    # to Custom, despite cached/lazy child widgets having existed already.
+    assert stored == {"feeds:custom"}
+    assert not world.isChecked() and not us.isChecked() and not content.isChecked()
 
 
 def test_one_refresh_control_for_the_whole_family(feeds_tab):

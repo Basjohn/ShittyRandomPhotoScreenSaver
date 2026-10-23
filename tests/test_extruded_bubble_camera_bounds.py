@@ -10,7 +10,7 @@ from core.settings.default_contract import require_canonical_default
 from core.settings.extruded_bubble_camera import (
     CAMERA_CLEARANCE, CAMERA_INPUT_KEYS, admit_camera_parameters, camera_baseline, resolve_camera_position,
 )
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()
 from rendering.gl_programs.extruded_bubble_scene import physical_camera

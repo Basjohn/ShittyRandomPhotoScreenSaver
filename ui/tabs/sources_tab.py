@@ -146,6 +146,17 @@ class SourcesTab(QWidget):
         self._load_sources()
         logger.debug("[SOURCES_TAB] Reloaded from settings")
 
+    def _set_source_bucket(self, bucket: str, checked: bool) -> None:
+        key = "sources:" + bucket
+        previous = self._settings.get("ui.basic_bucket_path")
+        if checked or previous == key:
+            self._settings.set("ui.basic_bucket_path", key if checked else "", emit_change=False)
+
+    def retire_bucket_context(self) -> None:
+        shared_styles.collapse_settings_bucket_tree(self)
+        if str(self._settings.get("ui.basic_bucket_path") or "").startswith("sources:"):
+            self._settings.set("ui.basic_bucket_path", "", emit_change=False)
+
     def _setup_ui(self) -> None:
         """Setup tab UI."""
         # Use a scroll area so this tab behaves consistently with the other
@@ -170,7 +181,11 @@ class SourcesTab(QWidget):
 
         # Folders and Online Wallpaper Feeds: one accordion of buckets, closed by
         # default like every Settings bucket; titles carry the counts.
-        self.folders_toggle, _folder_body, folder_layout = shared_styles.build_bucket_toggle(layout, "Folders")
+        self.folders_toggle, _folder_body, folder_layout = shared_styles.build_bucket_toggle(
+            layout, "Folders",
+            expanded=self._settings.get("ui.basic_bucket_path") == "sources:folders",
+            on_toggle=lambda checked: self._set_source_bucket("folders", checked),
+        )
         folder_layout.setSpacing(12)
 
         # Folder list
@@ -190,7 +205,9 @@ class SourcesTab(QWidget):
         folder_layout.addLayout(folder_buttons)
 
         self.feeds_toggle, _feeds_body, rss_layout = shared_styles.build_bucket_toggle(
-            layout, "Online Wallpaper Feeds"
+            layout, "Online Wallpaper Feeds",
+            expanded=self._settings.get("ui.basic_bucket_path") == "sources:feeds",
+            on_toggle=lambda checked: self._set_source_bucket("feeds", checked),
         )
         rss_layout.setSpacing(12)
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rendering.transition_registry import get_transition_setting_names
-from tools.test_durability_audit import audit_test_file, audit_tests
+from tools.test_durability_audit import (
+    _TRANSITION_CATALOG_TOKENS, audit_test_file, audit_tests,
+)
 
 
 def _rules(tmp_path: Path, source: str) -> set[str]:
@@ -28,7 +29,7 @@ def test_audit_detects_copied_canonical_default_literal(tmp_path: Path) -> None:
 
 def test_audit_detects_large_extensible_catalog_copies(tmp_path: Path) -> None:
     # Eight current transition names copied into a literal, as a hand-copied catalog would be.
-    copied = ", ".join(repr(name) for name in get_transition_setting_names()[:8])
+    copied = ", ".join(repr(name) for name in sorted(_TRANSITION_CATALOG_TOKENS)[:8])
     rules = _rules(
         tmp_path,
         '''\ndef test_bad_catalogs():\n    modes = {\n        "spectrum": 1, "oscilloscope": 2, "sine_wave": 3,\n        "bubble": 4, "devcurve": 5,\n    }\n'''
@@ -84,3 +85,39 @@ def test_audit_follows_transitive_canonical_snapshot_aliases(tmp_path: Path) -> 
         '''\nfrom core.settings.defaults_snapshot_builder import build_defaults_snapshot\n\ndef test_bad_alias():\n    payload = build_defaults_snapshot()\n    widgets = payload["widgets"]\n    media = widgets["media"]\n    assert media["spotify_volume_track_color"] == [35, 35, 35, 255]\n''',
     )
     assert "canonical-snapshot-literal" in rules
+
+
+def test_audit_rejects_raw_canonical_defaults_pinned_to_artistic_literal(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+from core.settings.default_contract import get_raw_default_settings
+
+def test_bad():
+    defaults = get_raw_default_settings()
+    visualizer = defaults['widgets']['spotify_visualizer']
+    assert visualizer['sphere_spin_direction'] == 'Default'
+''')
+    assert 'canonical-snapshot-literal' in rules
+
+
+def test_audit_rejects_named_curated_theme_artistic_value_golden(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+from pathlib import Path
+import json
+ROOT = Path(__file__).resolve().parent
+
+def test_bad_theme():
+    theme = json.loads((ROOT / 'themes' / 'Named Art.srtheme').read_text())
+    assert theme['colors']['card.border'] == [15, 20, 30, 255]
+''')
+    assert 'named-shipped-theme-art-oracle' in rules
+
+
+def test_audit_allows_test_owned_theme_round_trip(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_theme(tmp_path):
+    spec = {'colors': {'card.border': [15, 20, 30, 255]}}
+    theme = tmp_path / 'Synthetic.srtheme'
+    theme.write_text(serialize(spec))
+    assert deserialize(theme.read_text()) == spec
+''')
+    assert not rules

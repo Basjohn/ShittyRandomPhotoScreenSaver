@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+from core.settings.default_settings import DEFAULT_SETTINGS
 
 import ast
 import json
@@ -14,19 +15,9 @@ def _text(relative: str) -> str:
 
 
 def _canonical_defaults() -> dict:
-    parsed = ast.parse(_text("core/settings/default_settings.py"))
-    for node in parsed.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if any(
-            isinstance(target, ast.Name) and target.id == "DEFAULT_SETTINGS"
-            for target in node.targets
-        ):
-            value = ast.literal_eval(node.value)
-            assert isinstance(value, dict)
-            return value
-    raise AssertionError("DEFAULT_SETTINGS literal not found")
-
+    # Read the actual canonical Python expression tree, including basin_profile().
+    assert isinstance(DEFAULT_SETTINGS, dict)
+    return DEFAULT_SETTINGS
 
 def test_settings_theme_selection_is_canonical_and_snapshotted() -> None:
     defaults = _canonical_defaults()

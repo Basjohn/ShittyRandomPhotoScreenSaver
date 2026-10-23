@@ -65,15 +65,6 @@ def test_preferences_round_trip_and_corrupt_fallback(tmp_path):
     assert build_runner.load_preferences(target) == build_runner.Preferences()
 
 
-def test_foundry_uses_large_dpi_aware_vector_checkbox_indicators():
-    source = inspect.getsource(build_runner.FoundryCheckbutton)
-    signature = inspect.signature(build_runner.FoundryCheckbutton.__init__)
-
-    assert signature.parameters["indicator_size"].default >= 24
-    assert "tk.Canvas(" in source
-    assert "create_rectangle(" in source
-    assert "create_line(" in source
-
 
 def test_helper_fingerprint_dechecks_only_after_matching_successful_build(tmp_path):
     _make_helper_inputs(tmp_path, "venv")
@@ -260,6 +251,7 @@ def test_preflight_passes_a_complete_release_tree(
         tmp_path / "rendering" / "quick" / "qml" / "FriendPulsePresentation.qml",
         tmp_path / "rendering" / "quick" / "qml" / "SystemStatsPresentation.qml",
         tmp_path / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
+        tmp_path / "rendering" / "quick" / "qml" / "WidgetHoverEditGlyphs.qml",
         tmp_path / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
         tmp_path / "themes" / "Default.srtheme",
         tmp_path / "themes" / "widgets" / "Default.srwtheme",

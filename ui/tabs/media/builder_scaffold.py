@@ -141,6 +141,7 @@ def _build_collapsible_bucket_core(
     host_layout.addWidget(helper)
 
     body = BucketTreeBody()
+    toggle._srpss_bucket_body = body
     body_layout = QVBoxLayout(body)
     body_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     body_layout.setSpacing(12)
@@ -161,6 +162,7 @@ def _build_collapsible_bucket_core(
     def _apply_state(checked: bool) -> None:
         if checked:
             shared_styles.close_bucket_accordion_peers(toggle)
+            shared_styles.close_unrelated_settings_buckets(toggle)
         _apply_visual_state(checked)
         setter = getattr(tab, "set_visualizer_bucket_state", None)
         if callable(setter):
@@ -306,6 +308,7 @@ def build_mode_scaffold(
     advanced_host_layout.addWidget(helper)
 
     advanced_widget = BucketTreeBody()
+    toggle._srpss_bucket_body = advanced_widget
     advanced_layout = QVBoxLayout(advanced_widget)
     advanced_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
     advanced_layout.setSpacing(12)
@@ -314,19 +317,36 @@ def build_mode_scaffold(
 
     preset_slider.set_advanced_container(advanced_host)
 
-    def _apply_advanced_toggle_state(checked: bool) -> None:
+    def _apply_advanced_toggle_state(checked: bool, *, persist: bool = True) -> None:
+        if checked and persist:
+            shared_styles.close_bucket_accordion_peers(toggle)
+            shared_styles.close_unrelated_settings_buckets(toggle)
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        if not checked:
+            shared_styles.collapse_settings_bucket_tree(advanced_widget)
         advanced_widget.setVisible(checked)
         helper.setVisible(not checked)
         setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter):
+        if callable(setter) and persist:
             try:
                 setter(mode_key, checked)
             except Exception:
                 pass
 
+    toggle._srpss_bucket_apply_visual_state = lambda checked: (
+        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow),
+        (shared_styles.collapse_settings_bucket_tree(advanced_widget) if not checked else None),
+        advanced_widget.setVisible(checked), helper.setVisible(not checked)
+    )
+    toggle._srpss_outer_kind = "advanced"
+    toggle._srpss_outer_mode = mode_key
+    shared_styles.bind_bucket_accordion(
+        toggle, scope_owner=tab,
+        apply_visual_state=toggle._srpss_bucket_apply_visual_state,
+        scope_key=("visualizer_outer", mode_key),
+    )
     toggle.toggled.connect(_apply_advanced_toggle_state)
-    _apply_advanced_toggle_state(toggle.isChecked())
+    _apply_advanced_toggle_state(toggle.isChecked(), persist=False)
 
     def _handle_preset_visibility(is_custom: bool) -> None:
         normal_widget.setVisible(is_custom)

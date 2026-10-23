@@ -708,6 +708,27 @@ class SettingsDialog(QDialog):
         self._setup_window()
         self._load_theme()
         self._determine_initial_tab()
+        # One remembered editing path, scoped to the admitted initial tab/pill.
+        # Prune legacy states *before* lazy Qt bodies read their expanded flags.
+        from core.settings.ui_bucket_state import project_settings_bucket_context
+        initial_key = self._tab_key_for_index(self._initial_tab_index)
+        initial_state = self._initial_view_state_for_tab(initial_key) or {}
+        if initial_key == "widgets":
+            initial_pill = str(initial_state.get("subtab_id") or "setup")
+        elif initial_key == "visualizers":
+            initial_pill = (str(initial_state.get("mode_id") or "")
+                            if initial_state.get("page") == "mode" else "")
+        elif initial_key == "transitions":
+            initial_pill = str(initial_state.get("pill") or "")
+        else:
+            initial_pill = ""
+        # Explicit launch targets and capability redirects must not resurrect a
+        # previously inactive tab's old buckets from a legacy profile.
+        remembered_key = self._tab_key_for_index(self._read_persisted_tab_index())
+        if remembered_key != initial_key:
+            project_settings_bucket_context(self._settings, "", "")
+        else:
+            project_settings_bucket_context(self._settings, initial_key, initial_pill)
         _ui_start = time.perf_counter()
         self._setup_ui()
         self._log_perf_event("SettingsDialog._setup_ui", _ui_start)
@@ -1398,10 +1419,21 @@ class SettingsDialog(QDialog):
             for position, button in enumerate(self.tab_buttons):
                 button.setChecked(position == current_index)
             return
+        # Build the admitted target before mutating the current editing context:
+        # a failed lazy builder must not discard the user's remembered bucket.
         self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
         if previous_index >= 0:
             self._capture_tab_view_state(previous_index)
+        if previous_index >= 0 and previous_index != index:
+            retiring = self.content_stack.widget(previous_index)
+            retire = getattr(retiring, "retire_bucket_context", None)
+            if callable(retire):
+                retire()
+            else:
+                shared_styles.collapse_settings_bucket_tree(retiring)
+            from core.settings.ui_bucket_state import retire_settings_bucket_context
+            retire_settings_bucket_context(self._settings)
         if index < 0 or index >= len(self.tab_buttons):
             return
         # Uncheck all buttons
@@ -1743,7 +1775,22 @@ class SettingsDialog(QDialog):
             self._on_exit_without_sources()
     
     def _reload_all_tab_settings(self) -> None:
-        """Reload settings in already-built tabs after preset change."""
+        """Reload settings in already-built tabs after preset change/reset/import."""
+        current = self.content_stack.currentWidget()
+        tab_key = self._tab_key_for_index(self.content_stack.currentIndex())
+        view_getter = getattr(current, "get_view_state", None)
+        view = view_getter() if callable(view_getter) else {}
+        view = view if isinstance(view, dict) else {}
+        if tab_key == "widgets":
+            pill = str(view.get("subtab_id") or "setup")
+        elif tab_key == "visualizers":
+            pill = str(view.get("mode_id") or "") if view.get("page") == "mode" else ""
+        elif tab_key == "transitions":
+            pill = str(view.get("pill") or "")
+        else:
+            pill = ""
+        from core.settings.ui_bucket_state import project_settings_bucket_context
+        project_settings_bucket_context(self._settings, tab_key, pill)
         for key in (
             "sources",
             "display",

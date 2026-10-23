@@ -1,5 +1,7 @@
 # Extruded Bubble: target contract and shared-primitive inventory (§4A G0)
 
+**23 October operator correction:** [reconciliation](../2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) separates accepted P1 idle appearance from partly good but still unaccepted big/small musical breathing; existing alive-bubble stream/drift response from new-birth behavior; weak repetitive Bounce; restored BEAM lighting from still inadequate SCENE control. Preserve true 3D architecture, original mock parity, useful controls and all mutable presets. Dynamic Floor OFF for EB should ideally visually match/exceed 2D Bubble Dynamic Floor ON. No source-side note is native visual acceptance.
+
 Status: **implemented but operator-rejected on physical fidelity** (2026-10-18); §10 records the first live review
 (D → B → C → A), and §11 records additional operator failures and their source audit. The G0 requirements and historical
 primitive inventory below are preserved as the design provenance, **not** as a claim that no renderer exists.

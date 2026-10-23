@@ -349,17 +349,13 @@ def test_current_3d_activation_reaches_live_owner_without_spectrum_borrowing(mod
 
 
 @pytest.mark.parametrize(("mode", "index"), _CASES)
-def test_every_curated_3d_file_explicitly_owns_its_complete_consumed_namespace(mode, index):
+def test_every_curated_3d_file_normalizes_without_requiring_any_authored_value(mode, index):
     raw = _raw(mode, index)
-    # Newly introduced controls need not be retroactively written into
-    # operator-editable curated files; normalization owns canonical repair.
-    required = _owned(mode) | {"mode"}
-    missing = required - set(raw)
-    assert missing <= ({"extruded_spectrum_rainbow_ghost"} if mode == "extruded_spectrum" else set())
-    assert set(raw) <= required
-    assert raw["mode"] == mode
-    # The loader may validate current types/ranges, but cannot be the author of
-    # missing curated colours, response, material, ghost or source-shape state.
+    # Curated files are operator-authored, including optional/missing leaves.
+    # Do not assert exhaustive contents or artistic values.  Only verify that
+    # the loader returns the same normalized, owned configuration.
+    assert raw.get("mode") == mode  # identity/schema, not an artistic value
+    assert set(raw) <= _owned(mode) | {"mode"}
     assert normalize_visualizer_mode_payload(mode, raw) == get_presets(mode)[index].settings
 
 

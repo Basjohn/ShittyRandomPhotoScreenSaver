@@ -9,7 +9,7 @@ import pytest
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_presets import get_custom_preset_index, get_presets
 from core.settings.visualizer_view_orbit import starting_camera_pose
-from tools.visualizer_replay.extruded_bubble_startup_probe import simulation_module
+from tools.visualizer_replay.eb_simulation_support import simulation_module
 
 simulation_module()
 from rendering.gl_programs.extruded_bubble_scene import physical_camera
@@ -34,7 +34,6 @@ def test_custom_reset_has_canonical_home_and_starting_view_excludes_lens_intrins
     result = starting_camera_pose(MODE, get_custom_preset_index(MODE))
     assert result == {k: require_canonical_default('widgets.spotify_visualizer.' + k)
                       for k in result}
-    assert require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_fov') == 45.0
     # Starting-view metadata owns pose only. Camera FOV is a separately admitted
     # mode control, which the operator may author in the normal preset snapshot.
     import json

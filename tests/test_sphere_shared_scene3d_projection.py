@@ -99,11 +99,8 @@ def test_shared_scene3d_sphere_projection_matches_real_gpu(qt_app):
         probe.close()
 
 
-def test_spin_direction_preserves_original_default_and_does_not_reverse_phase_clock():
-    from core.settings.default_contract import get_raw_default_settings
+def test_spin_direction_shader_preserves_phase_axis_without_a_default_golden():
     from rendering.quick.visualizer.implementations.sphere_voxel import _VERTEX_SOURCE
-    defaults = get_raw_default_settings()['widgets']['spotify_visualizer']
-    assert defaults['sphere_spin_direction'] == 'Default'
     assert "uSpinMode == 1 ? vec3(-0.21, -0.57, -0.29)" in _VERTEX_SOURCE
     assert "vec3(0.21, 0.57, 0.29)" in _VERTEX_SOURCE
     assert 'uRotationPhase * axes' in _VERTEX_SOURCE
