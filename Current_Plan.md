@@ -1098,10 +1098,6 @@ high quality and no arbitrary 10 MB cap. Outputs remain outside runtime QRCs.
 - [ ] **SC2 — Blinds Flat endpoint discrepancy, nonblocking.** Reproduce the prior capture endpoint mismatch at the exact
   production endpoint before deciding whether the defect is in capture or rendering. Landed transitions are accepted;
   do not reopen broad appearance work, change authored behavior or demand another build absent a reproduced defect.
-- [ ] **SC3 — Retire unused Spectrum fill/border-link state.** Current source finds `spectrum_link_fill_border` only in
-  defaults/model serialization and authored preset/fixture payloads, with no UI or renderer consumer. After the Settings
-  migration, confirm current caller absence and forward-strip it at canonical input/save boundaries without linking
-  the independent fill/border controls. Preserve frozen historical fixtures; prove current import/save cannot resurrect it.
 
 
 ### SC4. Just Make It Work Pools | provider selection, independently scoped

@@ -145,7 +145,6 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_visual_smoothing_enabled": bool,
     "spectrum_visual_smoothing": float,
-    "spectrum_link_fill_border": bool,
     "spectrum_mirrored": bool,
     "spectrum_shape_nodes": lambda value: value,
     "spectrum_notch_positions_mirrored": lambda value: value,
@@ -195,7 +194,6 @@ _CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
 _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_visual_smoothing_enabled': bool,
     'spectrum_visual_smoothing': float,
-    'spectrum_link_fill_border': bool,
     'spectrum_mirrored': bool,
     'spectrum_shape_nodes': list,
     'spectrum_notch_positions_mirrored': list,
@@ -880,7 +878,6 @@ class SpotifyVisualizerSettings:
     )
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
-    spectrum_link_fill_border: bool = field(default_factory=lambda: _visualizer_default('spectrum_link_fill_border'))
     spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
     spectrum_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('spectrum_shape_nodes'))
     spectrum_notch_positions_mirrored: List[List] = field(default_factory=lambda: _visualizer_default('spectrum_notch_positions_mirrored'))

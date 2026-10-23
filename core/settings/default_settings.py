@@ -1496,7 +1496,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                          'Mid': 0.6,
                                                                          'Vocal': 0.64},
                                     'spectrum_lane_transient_mix': 0.65,
-                                    'spectrum_link_fill_border': False,
                                     'spectrum_manual_floor': 0.12,
                                     'spectrum_mirrored': True,
                                     'spectrum_notch_positions_linear': [[0.0, 'Bass'],

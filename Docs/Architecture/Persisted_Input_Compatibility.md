@@ -132,6 +132,16 @@ without the safe path below.
   *Blocked:* resurrecting a retired transition's settings to satisfy an old
   profile, or keeping its section "just in case".
 
+- **Retired visualizer keys** (`core/settings/visualizer_retired_modes.py`,
+  `strip_retired_visualizer_settings`, run on settings load/repair, import,
+  snapshot/preset restore and default normalization). Includes
+  `spectrum_link_fill_border` (retired 2026-10-24, SC3): it was serialized but
+  never read; Spectrum Fill and Border stay independent. Authored presets and
+  frozen fixtures may still carry the leaf; input strips it
+  (`tests/test_spectrum_link_state_retired.py`).
+  *Blocked:* re-adding the leaf to defaults/model, or linking Fill and Border
+  to give it a consumer.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry
