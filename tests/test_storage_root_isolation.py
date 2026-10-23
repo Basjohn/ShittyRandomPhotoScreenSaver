@@ -112,3 +112,16 @@ def test_guided_setup_account_hints_use_the_isolated_root(
 
     (isolated_settings.get_settings_dir() / "gmail_imap_creds.enc").write_bytes(b"isolated")
     assert saved_account_states(isolated_settings)["gmail"] is True
+
+
+def test_cache_maintenance_targets_the_data_root_not_the_settings_folder(real_profile, isolated_settings) -> None:
+    from ui.tabs.widgets_tab_defaults import _cache_data_root
+
+    class _McSettings:
+        def get_storage_root(self):
+            return None  # Production manager, e.g. Screensaver_MC with settings in SRPSS_MC.
+
+    assert _cache_data_root(SimpleNamespace(_settings=_McSettings())) == (real_profile / "SRPSS").resolve()
+    assert _cache_data_root(SimpleNamespace(_settings=isolated_settings)) == (
+        isolated_settings.get_settings_dir().resolve()
+    )
