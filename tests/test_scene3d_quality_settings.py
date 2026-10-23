@@ -231,7 +231,7 @@ def _snapshot(mode, **parameters):
 @pytest.mark.parametrize("tier", SCENE3D_DETAIL_NAMES)
 def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
     from rendering.gl_programs.scene3d import scene3d_detail
-    from rendering.gl_programs.shockwave_grid_program import shockwave_grid_cells
+    from rendering.quick.visualizer.implementations.shockwave_grid import shockwave_quality
 
     from tests.test_qtquick_extruded_spectrum import _wallpaper
 
@@ -245,9 +245,12 @@ def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
         expected = max(1, detail.overlay_samples * (2 if smooth else 1))
         assert extruded._target.allocation[2] == expected, (tier, smooth)
         assert extruded._backdrop.has_resources == detail.reflections   # Mirror Faces off at KAK
-    target.render(host, _snapshot("shockwave_grid", scene3d_detail=tier, shockwave_grid_glow=0.8))
+    snapshot = _snapshot("shockwave_grid", scene3d_detail=tier, shockwave_grid_glow=0.8)
+    target.render(host, snapshot)
     shockwave = host._implementations["shockwave_grid"]
     assert shockwave._target.allocation[2] == max(1, detail.overlay_samples)
     assert bool(shockwave._target._names["emission"]) == detail.post_effects        # glow only with post effects
-    columns, rows = shockwave_grid_cells(detail.grid_cells)
-    assert shockwave._resources.has_mesh(f"grid {columns}x{rows}")
+    # Neon tessellation includes its style/density lever on the one basin mesh.
+    _, _, (columns, rows) = shockwave_quality(snapshot.logical.mode_state.parameters)
+    assert shockwave._resources.has_mesh(f"basin {columns}x{rows}")
+    assert shockwave._mesh_cells == (columns, rows)

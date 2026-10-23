@@ -1072,12 +1072,13 @@ Source detail and exact local diagnostic coverage: `Docs/Reference/R43_EB_Breach
   defect, and repair at its owner. Keep this bounded, not an implicit full-suite campaign. Remaining recorded areas:
   `test_3d_curated_preset_ownership`, `test_defaults_schema_authority`, `test_default_settings_editor`
   (`ast.literal_eval` versus `basin_profile()`), `test_defaults_projection`, `test_engine_lifecycle`,
-  `test_image_prefetch_transport`, `test_qt611_shader_admission`, `test_scene3d_foundation`,
-  `test_scene3d_quality_settings`, `test_sphere_shared_scene3d_projection`, `test_theme_defaults_authority`,
-  `test_transition_distribution`, `test_visualizer_3d_reach`, `test_visualizer_custom_route_contract`,
-  `test_visualizer_edit_content_envelope`, `test_visualizer_presentation_orientation`,
-  `test_visualizer_runtime_controller`, `test_visualizer_settings_body_transaction_contract`, and the stale
-  rear/translucent-body/depth cases in `test_neon_scene_materials` with no visible Sun/Moon in the reference render.
+  `test_image_prefetch_transport`, `test_qt611_shader_admission`, `test_theme_defaults_authority`,
+  `test_transition_distribution`, `test_visualizer_custom_route_contract`, `test_visualizer_edit_footprint`,
+  `test_visualizer_presentation_orientation`, `test_visualizer_runtime_controller`,
+  `test_visualizer_settings_body_transaction_contract`, startup/harness and hover-chrome boundaries.
+  Focused native geometry/material results and the corrected intended Sun/Moon occlusion contract are recorded
+  in [Archived Failure Triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md); do not reopen those
+  renderer semantics to satisfy retired foreground/transmission oracles.
 
 - [ ] **Nonblocking tooling housekeeping:** investigate the repeated `.venv` launcher warning
   `Failed to find real location of ...pythoncore-3.14-64\\python.exe`. The forensic commands still completed with
