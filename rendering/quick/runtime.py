@@ -185,6 +185,7 @@ class QuickDisplayRuntime(QObject):
         self._window.binding_lost.connect(self._on_window_binding_lost)
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
+        self._window.orbit_cleanup_completed.connect(self._maybe_queue_window_deletion)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
         self._scene.custom_layout_save_requested.connect(
             self.custom_layout_save_requested.emit
@@ -537,6 +538,8 @@ class QuickDisplayRuntime(QObject):
         """Begin exact retirement without blocking Python on the render thread."""
 
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            if self._window is not None and self._window.orbit_cleanup_pending:
+                self._window.cancel_plain_orbit()
             return False
 
         self._set_phase(QuickRuntimePhase.RETIRING)
@@ -695,7 +698,7 @@ class QuickDisplayRuntime(QObject):
         scene = self._scene
         if window is None or scene is None:
             return
-        if window.isSceneGraphInitialized():
+        if window.orbit_cleanup_pending or window.isSceneGraphInitialized():
             return
         scene.finalize_retirement()
         self._retired_scene_state = scene.describe_scene_state()

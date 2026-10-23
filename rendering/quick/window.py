@@ -6,8 +6,8 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
-from PySide6.QtCore import QMetaObject, QPointF, QRect, QRectF, Signal, Qt
-from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
+from PySide6.QtCore import QEvent, QMetaObject, QObject, QPointF, QRect, QRectF, Signal, SIGNAL, Slot, Qt
+from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPointingDevice, QScreen
 from PySide6.QtQuick import QQuickWindow
 
 from .bootstrap import validate_or_quit_current_opengl_context
@@ -31,6 +31,7 @@ class QuickDisplayWindow(QQuickWindow):
     display_identity_changed = Signal(object)
     binding_lost = Signal(object)
     close_queued = Signal()
+    orbit_cleanup_completed = Signal()
     # The window's on-desktop rectangle (for the R-63 window, exactly its
     # monitor) in logical coordinates; the scene root is laid out on it.
     scene_rect_changed = Signal(object)
@@ -70,6 +71,15 @@ class QuickDisplayWindow(QQuickWindow):
         self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
         self._semantic_middle_click_hit_test: Callable[[QPointF], bool] | None = None
         self._custom_layout_input_blocked = False
+        self._plain_orbit_target = None
+        self._plain_orbit_grabber_blocks = None
+        self._plain_orbit_pending = None
+        self._plain_orbit_press_device = None
+        self._plain_orbit_capture = None
+        self._plain_orbit_card = None
+        self._plain_orbit_releasing = False
+        self._plain_orbit_acquiring = False
+        self._plain_orbit_acquire_cancel = None
         self._framed_scene_filter_installed = False
         self._desired_visible = False
         self._close_queued = False
@@ -97,6 +107,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._bind_screen(screen, apply_geometry=False)
         self.screenChanged.connect(self._on_window_screen_changed)
         self.visibleChanged.connect(self._on_window_visibility_changed)
+        self.activeChanged.connect(self._cancel_orbit_on_deactivation)
         # This is the first actual context boundary even when the retained
         # background has no image/node yet. Direct delivery keeps the scene
         # graph context current for the one startup validation query.
@@ -108,6 +119,10 @@ class QuickDisplayWindow(QQuickWindow):
         # whether the scene sits on the monitor or fills the window.
         for changed in (self.xChanged, self.yChanged, self.widthChanged, self.heightChanged):
             changed.connect(self._refresh_scene_rect)
+        # A filter returns to C++ before normal window/render event delivery.
+        # Overriding event() and forwarding to QQuickWindow can hold the GIL
+        # across its blocking scene-graph startup synchronization.
+        self.installEventFilter(self)
 
     @property
     def screen_index(self) -> int:
@@ -154,6 +169,8 @@ class QuickDisplayWindow(QQuickWindow):
             raise ValueError("Quick input identity does not match its display window")
         self._input_controller = controller
         controller.scene_transform_admission_changed.connect(self._refresh_framed_scene_input_filter)
+        controller.plain_orbit_cancel_requested.connect(self.cancel_plain_orbit)
+        controller.input_state_changed.connect(self._cancel_orbit_on_input_state)
         self._refresh_framed_scene_input_filter()
 
     def _validate_scene_graph_opengl(self) -> None:
@@ -200,8 +217,209 @@ class QuickDisplayWindow(QQuickWindow):
         editor/global context-menu authority rather than leaking into family QML.
         """
 
+        if blocked:
+            self.cancel_plain_orbit()
         self._custom_layout_input_blocked = bool(blocked)
         self._refresh_framed_scene_input_filter()
+
+    def bind_plain_orbit_target(self, target, *, grabber_blocks=None) -> None:
+        """Retained scene supplies actual card ownership, not a second hit map."""
+        self.cancel_plain_orbit()
+        self._plain_orbit_target = target
+        self._plain_orbit_grabber_blocks = grabber_blocks
+
+    def watch_plain_orbit_card(self, card) -> None:
+        for name in ('visibleChanged', 'enabledChanged', 'xChanged', 'yChanged', 'widthChanged', 'heightChanged'):
+            getattr(card, name).connect(self._cancel_plain_orbit_card)
+        card.destroyed.connect(self._cancel_plain_orbit_card)
+        # QML-declared property notification is not a Python attribute on every
+        # PySide-created root; use its real Qt signal, once at root creation.
+        self.connect(card, SIGNAL('cardShellEnabledChanged()'), self._cancel_plain_orbit_card)
+        self.connect(card, SIGNAL('presentationActiveChanged()'), self._cancel_plain_orbit_card)
+
+    def _cancel_plain_orbit_card(self, *_args) -> None:
+        if self._plain_orbit_pending is None and self._plain_orbit_capture is None:
+            return
+        card = self.sender()
+        if self._plain_orbit_card is card or (self._plain_orbit_pending is not None
+                                            and self._plain_orbit_pending[1] is card):
+            self.cancel_plain_orbit()
+
+    def _cancel_orbit_on_input_state(self, _state) -> None:
+        if not self._input_controller.plain_orbit_admitted:
+            self.cancel_plain_orbit()
+
+    def _cancel_orbit_on_deactivation(self) -> None:
+        if not self.isActive():
+            self.cancel_plain_orbit()
+
+    def cancel_plain_orbit(self, *_args) -> None:
+        """One idempotent unwind for pending press, native resources and orbit."""
+        if self._plain_orbit_pending is not None or self._plain_orbit_card is not None or self._plain_orbit_acquiring:
+            logger.debug('[ORBIT_CAPTURE] Cancel reason=%r acquiring=%s', _args, self._plain_orbit_acquiring)
+        if self._plain_orbit_acquiring:
+            # Native calls can synchronously deliver cancellation. Let their
+            # atomic acquisition return, then unwind its actual resource state.
+            self._plain_orbit_acquire_cancel = _args or ('cancel',)
+            return
+        active = self._plain_orbit_card is not None
+        self._clear_plain_orbit_pending()
+        self._plain_orbit_card = None
+        capture = self._plain_orbit_capture
+        if capture is None or self._plain_orbit_releasing:
+            return
+        self._plain_orbit_releasing = True
+        try:
+            capture.release()
+        except Exception:
+            logger.exception('[ORBIT_CAPTURE] Native release failed; cleanup retained until next cancel/close')
+        else:
+            self._plain_orbit_capture = None
+        finally:
+            self._plain_orbit_releasing = False
+            if active:
+                if self._cursor_controller is not None:
+                    self._cursor_controller.end_orbit_fade()
+                if self._input_controller is not None:
+                    self._input_controller.finish_plain_orbit(settle=not (_args and _args[0] == 'reset'))
+        if self._plain_orbit_capture is None and not active:
+            self.orbit_cleanup_completed.emit()
+
+    @property
+    def orbit_cleanup_pending(self) -> bool:
+        return self._plain_orbit_capture is not None
+
+    def _new_plain_orbit_capture(self):
+        from .pointer_capture import NativeOrbitCapture
+        return NativeOrbitCapture(self)
+
+    def _clear_plain_orbit_pending(self):
+        self._plain_orbit_pending = None
+        device, self._plain_orbit_press_device = self._plain_orbit_press_device, None
+        if device is not None:
+            device.grabChanged.disconnect(self._plain_orbit_retained_grab)
+
+    @Slot(QObject, QPointingDevice.GrabTransition)
+    def _plain_orbit_retained_grab(self, grabber, transition):
+        # PySide exposes grabChanged but not QPointerEvent.passiveGrabbers.
+        # Observe real passive/exclusive first refusal during this press only;
+        # never retain the transient native event or point objects.
+        if (self._plain_orbit_pending is not None and grabber is not None
+                and transition in (QPointingDevice.GrabTransition.GrabPassive,
+                                   QPointingDevice.GrabTransition.GrabExclusive)):
+            if not self._plain_orbit_grab_blocks(grabber):
+                return
+            logger.debug('[ORBIT_CAPTURE] Retained press owned by %s name=%r transition=%s',
+                         grabber.metaObject().className(), grabber.objectName(), transition)
+            self._clear_plain_orbit_pending()
+
+    def _plain_orbit_grab_blocks(self, grabber):
+        if grabber is None:
+            return False
+        policy = self._plain_orbit_grabber_blocks
+        return policy is None or policy(grabber, self._plain_orbit_pending[1])
+
+    def _promote_plain_orbit(self, event) -> bool:
+        pending = self._plain_orbit_pending
+        if pending is None:
+            return False
+        if not event.buttons() & Qt.MouseButton.LeftButton:
+            self.cancel_plain_orbit()
+            return False
+        origin, card, threshold = pending
+        if (event.position() - origin).manhattanLength() < threshold:
+            return False
+        controller = self._input_controller
+        target = self._plain_orbit_target
+        if (controller is None or not controller.plain_orbit_admitted or target is None
+                or self._plain_orbit_grab_blocks(self.mouseGrabberItem())
+                or self._plain_orbit_grab_blocks(event.exclusiveGrabber(event.point(0)))
+                or target(origin) is not card):
+            self.cancel_plain_orbit()
+            return False
+        cursor = self._cursor_controller
+        if cursor is None or not cursor.begin_orbit_fade():
+            self.cancel_plain_orbit()
+            return False
+        capture = None
+        # Only lower retained branches can still hold passive grabs here; all
+        # card/above-card controls have already declined this gesture.
+        event.clearPassiveGrabbers(event.point(0))
+        self._clear_plain_orbit_pending()
+        try:
+            self._plain_orbit_acquiring = True
+            try:
+                capture = self._new_plain_orbit_capture()
+                # Own acquisition before it can partially succeed. Native acquire
+                # makes its one immediate unwind attempt; failed cleanup stays here.
+                self._plain_orbit_capture = capture
+                rect = card.mapRectToScene(QRectF(0., 0., card.width(), card.height()))
+                capture.acquire(rect)
+            finally:
+                self._plain_orbit_acquiring = False
+            if self._plain_orbit_acquire_cancel is not None:
+                reason, self._plain_orbit_acquire_cancel = self._plain_orbit_acquire_cancel, None
+                self.cancel_plain_orbit(*reason)
+                cursor.end_orbit_fade()
+                return False
+            self._plain_orbit_card = card
+            self._plain_orbit_pending = None
+            if not controller.begin_plain_orbit(origin):
+                self.cancel_plain_orbit()
+                return False
+        except Exception:
+            logger.exception('[ORBIT_CAPTURE] Held-left orbit declined: capture/confinement failed')
+            self._plain_orbit_pending = None
+            self._plain_orbit_card = None
+            self._plain_orbit_acquire_cancel = None
+            if capture is None or not capture.cleanup_pending:
+                self._plain_orbit_capture = None
+            cursor.end_orbit_fade()
+            return False
+        return True
+
+    def eventFilter(self, watched, event):
+        if watched is not self:
+            return False
+        kind = event.type()
+        if kind == QEvent.Type.MouseMove:
+            if (self._plain_orbit_pending is not None or self._plain_orbit_card is not None):
+                if not event.buttons() & Qt.MouseButton.LeftButton:
+                    self.cancel_plain_orbit()
+                else:
+                    if self._plain_orbit_pending is not None:
+                        self._promote_plain_orbit(event)
+                    if self._plain_orbit_card is not None:
+                        # The window now owns this gesture. Retained hover
+                        # cursors (e.g. a glyph's pointing hand) must not override
+                        # its fading/hidden native cursor while crossing them.
+                        self.mouseMoveEvent(event)
+                        return True
+        if kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if self._plain_orbit_card is not None:
+                self.mouseReleaseEvent(event)
+                return True
+            self.cancel_plain_orbit()
+        if kind in (QEvent.Type.MouseButtonDblClick, QEvent.Type.UngrabMouse, QEvent.Type.WindowDeactivate,
+                            QEvent.Type.Hide, QEvent.Type.Close, QEvent.Type.DeferredDelete,
+                            QEvent.Type.PlatformSurface):
+            if hasattr(self, '_plain_orbit_pending'):
+                self.cancel_plain_orbit(kind.name)
+        return False
+
+    def nativeEvent(self, event_type, message):
+        # Qt does not promise an UngrabMouse event for a native capture stolen
+        # by another HWND; observe only this discrete cancellation edge.
+        if getattr(self, '_plain_orbit_capture', None) is not None and not self._plain_orbit_releasing:
+            import ctypes
+            from ctypes import wintypes
+            native = ctypes.cast(int(message), ctypes.POINTER(wintypes.MSG)).contents
+            if native.message in (0x0215, 0x001F, 0x0002):  # CAPTURECHANGED / CANCELMODE / DESTROY
+                self.cancel_plain_orbit(f'native-{native.message:x}')
+        # Leave native delivery unhandled, as QWindow's default does. Calling
+        # the protected PySide wrapper rejects otherwise-valid MSG pointers on
+        # the current binding; no native default work is needed here.
+        return False, 0
 
     def _refresh_framed_scene_input_filter(self, _enabled=None) -> None:
         controller = self._input_controller
@@ -234,12 +452,14 @@ class QuickDisplayWindow(QQuickWindow):
     def queue_hide(self) -> None:
         """Hide through Qt's event loop so Python never waits on the render thread."""
 
+        self.cancel_plain_orbit()
         self._desired_visible = False
         self._queue_meta_call("hide")
 
     def queue_close(self) -> None:
         """Queue render-safe scene invalidation and native-window retirement once."""
 
+        self.cancel_plain_orbit()
         if self._close_queued:
             return
         self._close_queued = True
@@ -306,6 +526,7 @@ class QuickDisplayWindow(QQuickWindow):
             ),
             "input_controller_bound": self._input_controller is not None,
             "cursor_controller_bound": self._cursor_controller is not None,
+            "orbit_cleanup_pending": self.orbit_cleanup_pending,
             "geometry": [rect.x(), rect.y(), rect.width(), rect.height()],
             "display_identity": self.display_identity.as_dict(),
         }
@@ -325,6 +546,8 @@ class QuickDisplayWindow(QQuickWindow):
         super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self._plain_orbit_pending is not None or self._plain_orbit_capture is not None:
+            self.cancel_plain_orbit()
         # CUSTOM is an explicit pointer owner. The short-lived runtime-recreation
         # guard suppresses product actions, not editor chrome; checking it first
         # can swallow a resize-handle press before QML receives it.
@@ -349,12 +572,27 @@ class QuickDisplayWindow(QQuickWindow):
                 event.accept()
                 return
         controller = self._input_controller
+        candidate = None
+        if (self._plain_orbit_capture is None and controller is not None
+                and controller.plain_orbit_admitted and self._plain_orbit_target is not None
+                and event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ControlModifier)):
+            candidate = self._plain_orbit_target(event.position())
         if controller is not None and controller.handle_mouse_press(event):
             event.accept()
             return
         super().mousePressEvent(event)
+        # Retained controls get first refusal. Their exclusive grab, including
+        # PointerHandler grabs, must never be stolen by camera orbit.
+        if candidate is not None:
+            self._plain_orbit_pending = (QPointF(event.position()), candidate,
+                                         QGuiApplication.styleHints().startDragDistance())
+            self._plain_orbit_press_device = event.pointingDevice()
+            self._plain_orbit_press_device.grabChanged.connect(self._plain_orbit_retained_grab)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._plain_orbit_card is not None and not event.buttons() & Qt.MouseButton.LeftButton:
+            self.cancel_plain_orbit()
         # Halo motion is a native-cursor timestamp only.  In interaction/Ctrl
         # mode the input controller is deliberately bypassed, so passive mouse
         # movement does not query Settings/providers or publish semantic state.
@@ -377,6 +615,12 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            active = self._plain_orbit_card is not None
+            self.cancel_plain_orbit()
+            if active:
+                event.accept()
+                return
         if self._custom_layout_input_blocked:
             # Ordinary right-click opened the retained context menu. Alt-right
             # may instead be grabbed by Edit's move area; finish that same QML
@@ -409,6 +653,7 @@ class QuickDisplayWindow(QQuickWindow):
         super().wheelEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        self.cancel_plain_orbit()
         if self._custom_layout_input_blocked:
             super().mouseDoubleClickEvent(event)
             return
@@ -474,6 +719,7 @@ class QuickDisplayWindow(QQuickWindow):
                 pass
 
     def _on_window_screen_changed(self, screen: QScreen | None) -> None:
+        self.cancel_plain_orbit()
         if (
             screen is self._bound_screen
             or self._close_queued
@@ -655,6 +901,7 @@ class QuickDisplayWindow(QQuickWindow):
         return sys.platform == "win32"
 
     def _refresh_scene_rect(self, *_args: object) -> None:
+        self.cancel_plain_orbit()
         """Publish the window's on-desktop rect: exactly the monitor for the R-63 window.
 
         The R-63 overscan lies off the virtual desktop and is never visible, so
@@ -676,6 +923,7 @@ class QuickDisplayWindow(QQuickWindow):
             self.scene_rect_changed.emit(scene)
 
     def _on_screen_metrics_changed(self, *_args: object) -> None:
+        self.cancel_plain_orbit()
         screen = self._bound_screen
         if screen is None or self._close_queued or self._binding_loss is not None:
             return

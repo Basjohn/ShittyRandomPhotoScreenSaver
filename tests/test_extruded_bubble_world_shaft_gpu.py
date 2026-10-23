@@ -38,7 +38,8 @@ void main() {
         FragColor = vec4(sceneTransmittance(uTestPoint));
     } else {
         float distance;
-        float integral = worldShafts(uTestRay, uTestJitter, distance);
+        float coverage;
+        float integral = worldShafts(uTestRay, uTestJitter, distance, coverage);
         FragColor = vec4(integral, distance, 0., 1.);
     }
 }
@@ -73,7 +74,7 @@ void main(){
             program = programs[int(controlled)]
             gl.glUseProgram(program)
             values = dict(uSurfaceShaft=0., uRaySource=(0., 0., 0.), uRayEnd=(0., 0., -20.),
-                          uBeamWidth=1., uLightingScene=0., uWorldCenter=(0.,0.,0.), uWorldHalf=(18.,8.,18.),
+                          uBeamWidth=1., uLightingScene=1., uWorldCenter=(0.,0.,0.), uWorldHalf=(18.,8.,18.),
                           uRayAcross=(1., 0., 0.), uRayUp=(0., 1., 0.), uRayRadius=.9,
                           uFanReach=.3, uShaftSoft=.5, uShaftScale=.55, uShaftY=8.,
                           uSunBelow=(.6, .8, 0.), uEye=(0., 0., 2.), uTime=.7,
@@ -120,36 +121,17 @@ def test_production_world_coords_and_noise_do_not_move_with_camera(world_shaft, 
 
 
 @pytest.mark.qt
-def test_production_surface_pattern_follows_parallel_refracted_light(world_shaft):
-    source = np.array([2., 3., -1.])
-    point = source + np.array([1., -2., 3.])
-    uniforms = dict(uSurfaceShaft=1., uRaySource=tuple(source))
-    baseline = world_shaft(point, uniforms=uniforms)
-    assert baseline[:2] == pytest.approx((2.5, 3.), abs=2e-6)
-    for distance in (-4., 7.):
-        actual = world_shaft(point + np.array([.6, .8, 0.]) * distance, uniforms=uniforms)
-        assert actual == pytest.approx(baseline, abs=2e-6, rel=2e-5)
-    offset = np.array([-4., 2., 6.])
-    assert world_shaft(point + offset, uniforms={**uniforms, 'uRaySource': tuple(source + offset)}) == pytest.approx(
-        baseline, abs=2e-6, rel=2e-5)
-
-
-@pytest.mark.qt
-def test_production_deep_projector_preserves_normalized_cone_coordinates(world_shaft):
-    from widgets.spotify_visualizer.extruded_bubble_geometry import stream_basis
-    axis = np.array([.6, 0., -.8])
-    across, up = map(np.asarray, stream_basis(axis))
-    source = np.array([2., -1., 3.])
-    uniforms = dict(uSurfaceShaft=0., uRaySource=tuple(source), uRayEnd=tuple(source + axis * 20.),
-                    uRayAcross=tuple(across), uRayUp=tuple(up))
-    results = []
-    for distance in (1., 5., 12.):
-        radius = .9 + distance * math.tan(.3)
-        point = source + axis * distance + across * (.2 * radius) - up * (.1 * radius)
-        results.append(world_shaft(point, uniforms=uniforms))
-    for result in results:
-        assert result[:2] == pytest.approx((.18, -.09), abs=2e-6)
-        assert result == pytest.approx(results[0], abs=2e-6, rel=2e-5)
+def test_scene_surface_pattern_backprojects_to_actual_water_plane(world_shaft):
+    point=np.array([1.2,-2.3,-5.4])
+    uniforms=dict(uSurfaceShaft=1.,uShaftY=8.)
+    baseline=world_shaft(point,uniforms=uniforms)
+    assert baseline[:2]==pytest.approx((8.925,-5.4),abs=2e-6)
+    for distance in (-4.,7.):
+        actual=world_shaft(point+np.array([.6,.8,0.])*distance,uniforms=uniforms)
+        assert actual==pytest.approx(baseline,abs=2e-6,rel=2e-5)
+    offset=np.array([-4.,2.,6.])
+    shifted=world_shaft(point+offset,uniforms={**uniforms,'uWorldCenter':tuple(offset),'uShaftY':10.})
+    assert shifted==pytest.approx(baseline,abs=2e-6,rel=2e-5)
 
 
 @pytest.mark.qt
@@ -188,9 +170,6 @@ def test_scene_lighting_ignores_beam_end_and_width_but_is_fixed_world_bounded(wo
     outside = world_shaft(controlled=True, integrate=True,
                           uniforms={**uniforms, 'uEye': (100., 0., 2.)})
     assert outside[0] == 0.
-    beam = world_shaft(controlled=True, integrate=True,
-                       uniforms={**uniforms, 'uLightingScene': 0., 'uRayEnd': (0., 0., 0.)})
-    assert beam[0] == 0.  # same degenerate End still disables an authored BEAM
 
 
 def _smooth(a, b, x):
@@ -211,6 +190,16 @@ def test_deep_scene_blocker_behind_emitter_cannot_shadow_forward_sample(world_sh
 
 
 @pytest.mark.qt
+def test_deep_scene_pattern_radiates_from_light_source_not_parallel_planes(world_shaft):
+    origin = np.asarray((2.,-1.,3.))
+    direction = np.asarray((.4,.7,-.6))
+    uniforms = dict(uLightingScene=1.,uSurfaceShaft=0.,uLightSource=tuple(origin))
+    near = world_shaft(tuple(origin+direction*2.), uniforms=uniforms)
+    far = world_shaft(tuple(origin+direction*9.), uniforms=uniforms)
+    np.testing.assert_allclose(near,far,rtol=2e-6,atol=2e-6)
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize('light_type', ['Sunlit Surface', 'Deep Light'])
 def test_scene_integral_uses_canonical_light_and_ignores_authored_beam_nodes(world_shaft, light_type):
     from core.settings.default_contract import require_canonical_default
@@ -225,7 +214,7 @@ def test_scene_integral_uses_canonical_light_and_ignores_authored_beam_nodes(wor
         mapped = _common(knobs, view_to_world=np.eye(3).ravel(), tan=(1.,1.),
                          time=.7, surface_travel=0., rays=1., streak=(1.,0.))
         keys = ('uSurfaceShaft','uLightingScene','uBeamWidth','uWorldCenter','uWorldHalf',
-                'uLightSource','uSunBelow','uShaftY','uRayAcross','uRayUp','uRayRadius',
+                'uLightSource','uSunBelow','uShaftY',
                 'uFanReach','uShaftSoft','uShaftScale')
         uniforms = {key: mapped[key] for key in keys}
         uniforms.update(uRaySource=knobs['ray_source'], uRayEnd=knobs['ray_end'], uEye=(0.,-2.,2.))
@@ -239,44 +228,34 @@ def test_scene_integral_uses_canonical_light_and_ignores_authored_beam_nodes(wor
     assert not np.array_equal(changed_light, expected)
 
 
-def _controlled_integral(surface, eye, source, end, ray, shaft_y, jitter):
-    eye, source, end, ray = map(lambda value: np.asarray(value, dtype=float), (eye, source, end, ray))
-    length = float(np.linalg.norm(end - source))
-    if length < .001:
-        return 0., 0.
-    axis = (end - source) / length
-    total = moment = 0.
-    step = 45. / 40.
+def _controlled_integral(surface,eye,source,ray,shaft_y,jitter):
+    """Independent box/medium quadrature, without the retired cone model."""
+    eye,source,ray=(np.asarray(v,dtype=float) for v in (eye,source,ray))
+    total=moment=0.
+    step=45./40.
     for index in range(40):
-        distance = (index + jitter) * step
-        p = eye + ray * distance
-        below = shaft_y - p[1]
-        if surface and below <= 0.:
-            break
-        delta = p - source
-        along = float(delta @ axis)
-        lateral = float(np.linalg.norm(delta - along * axis))
-        outer = .9 + max(along, 0.) * math.tan(.3)
-        extent = (_smooth(-1.8, 1.2, along) * (1. - _smooth(length - 2., length + 1.5, along))
-                  * (1. - _smooth(outer * .6, outer, lateral)))
-        light_distance = below if surface else float(np.linalg.norm(delta))
-        weight = extent * math.exp(-light_distance * .07) * math.exp(-distance * .035)
-        total += weight
-        moment += distance * weight
-    return total * step, moment / total if total > 0. else 0.
+        distance=(index+jitter)*step
+        p=eye+ray*distance
+        below=shaft_y-p[1]
+        if surface and below<=0.:break
+        if np.any(np.abs(p)>=np.array((18.,8.,18.))):continue
+        light_distance=below if surface else float(np.linalg.norm(p-source))
+        weight=math.exp(-light_distance*.07)*math.exp(-distance*.035)
+        total+=weight;moment+=distance*weight
+    return total*step,moment/total if total>0. else 0.
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize('surface,eye,end,ray,shaft_y', [
-    (0., (0., 0., 2.), (0., 0., -20.), (0., 0., -1.), 8.),
-    (1., (0., 0., 0.), (0., 20., 0.), (0., 1., 0.), 5.),
+@pytest.mark.parametrize('surface,eye,ray,shaft_y', [
+    (0., (0., 0., 2.), (0., 0., -1.), 8.),
+    (1., (0., 0., 0.), (0., 1., 0.), 5.),
 ])
-def test_production_march_and_scalar_centroid_match_controlled_density_oracle(world_shaft, surface, eye, end, ray, shaft_y):
+def test_production_march_and_scalar_centroid_match_controlled_density_oracle(world_shaft, surface, eye, ray, shaft_y):
     for jitter in (.25, .75):
-        uniforms = dict(uSurfaceShaft=surface, uEye=eye, uRayEnd=end, uTestRay=ray,
+        uniforms = dict(uSurfaceShaft=surface, uEye=eye, uTestRay=ray,
                         uShaftY=shaft_y, uTestJitter=jitter)
         actual = world_shaft(controlled=True, integrate=True, uniforms=uniforms)
-        expected = _controlled_integral(surface, eye, (0., 0., 0.), end, ray, shaft_y, jitter)
+        expected = _controlled_integral(surface, eye, (0., 0., 0.), ray, shaft_y, jitter)
         assert actual[:2] == pytest.approx(expected, abs=2e-6, rel=2e-5)
         assert actual[0] > 0. and 0. < actual[1] < 45.
         assert abs(actual[1] - 18.) > 1.  # Real contribution, not the former fixed-depth sample.
@@ -284,65 +263,36 @@ def test_production_march_and_scalar_centroid_match_controlled_density_oracle(wo
 
 @pytest.mark.qt
 @pytest.mark.parametrize('uniforms', [
-    {'uRayEnd': (0., 0., 0.)},
-    {'uRayEnd': (0., 0., -.0005)},
     {'uEye': (100., 0., 2.)},
     {'uSurfaceShaft': 1., 'uEye': (0., 9., 0.), 'uTestRay': (0., 1., 0.)},
 ])
-def test_production_empty_march_and_degenerate_projector_are_finite(world_shaft, uniforms):
+def test_scene_empty_march_is_finite(world_shaft, uniforms):
     result = world_shaft(controlled=True, integrate=True, uniforms=uniforms)
     assert result[:2] == pytest.approx((0., 0.), abs=0.)
-    if 'uRayEnd' in uniforms:
-        world_shaft((1., 2., 3.), uniforms=uniforms)  # Actual projector/noise must also remain finite.
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize('light_type,surface', [('Sunlit Surface', 1.), ('Deep Light', 0.)])
-def test_production_mode_and_basis_come_from_canonical_effective_ray_path(world_shaft, light_type, surface):
+@pytest.mark.parametrize('light_type,surface',[('Sunlit Surface',1.),('Deep Light',0.)])
+def test_canonical_scene_light_geometry_does_not_depend_on_strength(world_shaft,light_type,surface):
     from core.settings.default_contract import require_canonical_default
-    from core.settings.visualizer_mode_settings import require_mode_settings
     from rendering.gl_programs.extruded_bubble_scene import scene_knobs
     from rendering.quick.visualizer.implementations.extruded_bubble import _common
-    from widgets.spotify_visualizer.extruded_bubble_geometry import stream_basis
-
-    params = {entry.key: require_canonical_default('widgets.spotify_visualizer.' + entry.key)
-              for entry in require_mode_settings('extruded_bubble').entries
-              if entry.key.startswith('extruded_bubble_')}
-    params.update(extruded_bubble_light_type=light_type,
-                  extruded_bubble_light_direction=(-.8, .2, .25, .8, -.7, .9),
-                  extruded_bubble_ray_path=(.4, -.5, -.2, .5, .6, -.6))
-    for strength in (0., 1.):
-        params['extruded_bubble_light_strength'] = strength
-        knobs = scene_knobs(params)
-        axis = np.asarray(knobs['ray_end']) - knobs['ray_source']
-        axis /= np.linalg.norm(axis)
-        across, up = stream_basis(axis)
-        assert knobs['surface_shaft'] == surface
-        assert knobs['ray_across'] == pytest.approx(across)
-        assert knobs['ray_up'] == pytest.approx(up)
-        uniforms = _common(knobs, view_to_world=np.eye(3).ravel(), tan=(1., 1.), time=.7,
-                           surface_travel=0., rays=1., streak=(1., 0.))
-        assert uniforms['uSurfaceShaft'] == surface
-        assert uniforms['uRayAcross'] == pytest.approx(across)
-        assert uniforms['uRayUp'] == pytest.approx(up)
-        # The camera-derived Deep uSunBelow must not steer its fixed projector.
-        native = {key: uniforms[key] for key in ('uSurfaceShaft', 'uRaySource', 'uRayEnd',
-                  'uRayAcross', 'uRayUp', 'uRayRadius', 'uFanReach', 'uSunBelow') if key in uniforms}
-        # Endpoint upload currently belongs to the renderer's shafts block,
-        # while _common publishes the mode and canonical transverse basis.
-        native.update(uRaySource=knobs['ray_source'], uRayEnd=knobs['ray_end'])
-        point = np.asarray(knobs['ray_source']) + axis * 4. + np.asarray(across) * .2
-        baseline = world_shaft(point, uniforms=native)
-        if not surface:
-            expected_q = (.2 * knobs['ray_radius'] /
-                          (knobs['ray_radius'] + 4. * math.tan(knobs['fan_reach'])), 0.)
-            assert baseline[:2] == pytest.approx(expected_q, abs=2e-6)
-        if not surface:
-            assert world_shaft(point, uniforms={**native, 'uSunBelow': (1., 0., 0.)}) == pytest.approx(baseline, abs=0.)
+    parameters={**require_canonical_default('widgets.spotify_visualizer'),
+                'extruded_bubble_light_type':light_type,'extruded_bubble_lighting_coverage':'SCENE'}
+    results=[]
+    for strength in (0.,1.):
+        knobs=scene_knobs({**parameters,'extruded_bubble_light_strength':strength})
+        values=_common(knobs,view_to_world=np.eye(3).ravel(),tan=(1.,1.),time=.7,
+                       surface_travel=0.,rays=1.,streak=(1.,0.))
+        keys=('uSurfaceShaft','uLightingScene','uLightSource','uSunBelow','uShaftY','uWorldCenter','uWorldHalf')
+        native={key:values[key] for key in keys}
+        assert native['uSurfaceShaft']==surface
+        results.append(world_shaft((1.,-2.,-3.),uniforms=native))
+    np.testing.assert_array_equal(results[0],results[1])
 
 
 @pytest.mark.qt
-def test_production_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app):
+def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app):
     from OpenGL import GL as gl
     from rendering.gl_programs.extruded_bubble_program import FULL_VERTEX, SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
@@ -377,11 +327,12 @@ def test_production_main_shadows_actual_contribution_centroid_not_fixed_depth(qt
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False, np.eye(3, dtype='f4'))
             gl.glUniform2f(loc('uTan'), 1., 1.); gl.glUniform2f(loc('uLensShift'), 0., 0.)
             for name, value in (('uSurfaceShaft', 0.), ('uRayRadius', .9), ('uFanReach', .3),
-                                ('uBeamWidth', 1.), ('uLightingScene', 0.),
+                                ('uBeamWidth', 1.), ('uLightingScene', 1.), ('uPositionalLight', 1.),
                                 ('uShaftSoft', .5), ('uParticleAtten', 0.)):
                 gl.glUniform1f(loc(name), value)
             for name, value in (('uEye', (0., 0., 2.)), ('uRaySource', (0., 0., 0.)),
-                                ('uRayEnd', (0., 0., -20.)), ('uSunBelow', (0., 0., -1.))):
+                                ('uRayEnd', (0., 0., -20.)), ('uSunBelow', (0., 0., -1.)),
+                                ('uWorldCenter', (0.,0.,0.)), ('uWorldHalf', (18.,8.,18.))):
                 gl.glUniform3f(loc(name), *value)
             # At z=-12 this blocker is AFTER the real lit centroid, but BEFORE
             # the former z=-16 sample. Only the latter should inherit its shadow.
@@ -391,8 +342,11 @@ def test_production_main_shadows_actual_contribution_centroid_not_fixed_depth(qt
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             values = np.frombuffer(gl.glReadPixels(0, 0, 1, 1, gl.GL_RGBA, gl.GL_FLOAT), dtype='f4')
             assert np.isfinite(values).all(); results.append(values.copy())
-        integral, distance = _controlled_integral(0., (0., 0., 2.), (0., 0., 0.),
-                                                    (0., 0., -20.), (0., 0., -1.), 8., .25)
+        distances = (np.arange(40)+.25)*(45./40.)
+        weights = np.exp(-np.abs(2.-distances)*.07)*np.exp(-distances*.035)
+        weights *= np.abs(2.-distances)<18.
+        integral = weights.sum()*(45./40.)
+        distance = (weights*distances).sum()/weights.sum()
         assert 2. - distance > -12.
         expected = integral * .13 * 1.25
         assert results[0] == pytest.approx([expected] * 4, rel=2e-5)

@@ -587,7 +587,13 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uRayCut"), settings.get("ray_cut", 0.25))
         gl.glUniform1f(u("uShaftScale"), settings.get("shaft_scale", 1.0))
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
-        gl.glUniform1f(u("uRayRadius"), settings["ray_radius"])
+        # Historical recipes describe the accepted BEAM look. MC owns current
+        # full-runtime acceptance; these recipes do not silently select SCENE.
+        gl.glUniform1f(u("uLightingScene"), 0.0)
+        gl.glUniform1f(u("uBeamWidth"), 1.0)
+        gl.glUniform1f(u("uShaftFan"), float(settings["mode"] == "surface"))
+        gl.glUniform1f(u("uFanRays"), settings.get("fan_rays", 70.0))
+        gl.glUniform2f(u("uFanMix"), settings.get("fan_contrast", 0.7), settings.get("fan_march", 0.2))
         gl.glUniform1f(u("uSurfaceShaft"), float(settings["mode"] == "surface"))
         gl.glUniform1f(u("uLightStrength"), 1.0)  # historical recipes contain already-calibrated light gains
         gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))

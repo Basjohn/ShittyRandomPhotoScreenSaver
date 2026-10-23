@@ -146,5 +146,5 @@ def test_ray_shader_uses_physical_path_and_bounded_opaque_proxy():
     render = (ROOT/'rendering/quick/visualizer/implementations/extruded_bubble.py').read_text()
     for uniform in ('uRaySource', 'uRayEnd', 'uBlock0', 'uParticleAtten'):
         assert uniform in shader and (uniform in render or (uniform == 'uBlock0' and 'f"uBlock{i}"' in render))
-    assert 'beamExtent(p)' in shader and 'sceneTransmittance' in shader
+    assert 'acceptedBeamExtent(p)' in shader and 'sceneTransmittance' in shader
     assert '[:4]' in render and '0.08 * float(state.emission)' in render

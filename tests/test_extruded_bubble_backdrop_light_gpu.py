@@ -106,3 +106,27 @@ def test_deep_scene_scattering_survives_side_and_away_views(backdrop_light, ligh
     assert deltas['SCENE'].sum() > .001
     if light_direction != (0.,0.,-1.):
         np.testing.assert_array_equal(deltas['BEAM'], np.zeros(3))
+
+
+@pytest.mark.qt
+def test_deep_beam_width_changes_angular_coverage_without_changing_scene(backdrop_light):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _common
+    for coverage in ('BEAM','SCENE'):
+        deltas=[]
+        for width in (.25,1.,3.):
+            knobs=scene_knobs({**require_canonical_default('widgets.spotify_visualizer'),
+                              'extruded_bubble_light_type':'Deep Light',
+                              'extruded_bubble_lighting_coverage':coverage,
+                              'extruded_bubble_beam_width':width})
+            values=_common(knobs,view_to_world=(1.,0.,0.,0.,1.,0.,0.,0.,1.),
+                           tan=(.4,.4),time=.7,surface_travel=.7,rays=.6,streak=(.6,.8))
+            values.update(uSunBelow=(.6,0.,-.8),uMist=0.,uDust=0.,uGlow=0.,uVeils=0.,
+                          uProbeMode=0.,uLightPower=0.,uGlintPower=0.,uProbeFill=0.)
+            deltas.append(backdrop_light(values)-backdrop_light({**values,'uRays':0.}))
+        if coverage=='BEAM':
+            assert deltas[0].sum()<deltas[1].sum()<deltas[2].sum()
+        else:
+            np.testing.assert_array_equal(deltas[0],deltas[1])
+            np.testing.assert_array_equal(deltas[1],deltas[2])

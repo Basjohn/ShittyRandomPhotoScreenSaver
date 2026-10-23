@@ -26,6 +26,7 @@ class QuickInputController(RuntimeInputOwner):
     custom_layout_undo_requested = Signal()
     custom_layout_lock_requested = Signal()
     diagnostic_capture_requested = Signal()
+    plain_orbit_cancel_requested = Signal(str)
 
     def __init__(
         self,
@@ -64,6 +65,7 @@ class QuickInputController(RuntimeInputOwner):
         mode_id = str(mode_id) if enabled else ""
         changed = self._scene_transform_enabled != enabled or self._scene_transform_mode != mode_id
         if self._scene_transform_enabled and (not enabled or self._scene_transform_mode != mode_id):
+            self.plain_orbit_cancel_requested.emit('mode')
             self._end_visualizer_gesture()
             if self._view_orbit_drag is not None:
                 self._view_orbit_drag = None
@@ -76,6 +78,36 @@ class QuickInputController(RuntimeInputOwner):
     @property
     def scene_transform_enabled(self) -> bool:
         return self._scene_transform_enabled
+
+    @property
+    def plain_orbit_admitted(self) -> bool:
+        state = self._state
+        return bool(state.admission_open and not state.exiting and not state.context_menu_active
+                    and self._scene_transform_enabled and self._view_orbit_enabled
+                    and (state.interaction_mode_enabled or state.ctrl_held))
+
+    def begin_plain_orbit(self, position) -> bool:
+        """Promote a retained-UI-declined press into the single orbit owner."""
+        if not self.plain_orbit_admitted:
+            return False
+        from PySide6.QtCore import QPointF
+        self._view_orbit_drag = QPointF(position)
+        return True
+
+    def finish_plain_orbit(self, *, settle: bool = True) -> None:
+        if self._view_orbit_drag is not None:
+            self._view_orbit_drag = None
+            if settle:
+                self._finish_view_orbit_if_idle()
+
+    def cancel_view_orbit_for_camera_reset(self) -> None:
+        self.plain_orbit_cancel_requested.emit('reset')
+        super().cancel_view_orbit_for_camera_reset()
+
+    def set_view_orbit_enabled(self, enabled: bool) -> None:
+        if not enabled:
+            self.plain_orbit_cancel_requested.emit('admission')
+        super().set_view_orbit_enabled(enabled)
 
     def eventFilter(self, watched, event) -> bool:
         # Installed only while Edit is active on a framed scene. Qt Quick's
@@ -335,6 +367,7 @@ class QuickInputController(RuntimeInputOwner):
 
         if not self._state.admission_open:
             return False
+        self.plain_orbit_cancel_requested.emit('close')
         super().cleanup()
         self.set_scene_transform_enabled(False)
         self._custom_layout_active_provider = None
