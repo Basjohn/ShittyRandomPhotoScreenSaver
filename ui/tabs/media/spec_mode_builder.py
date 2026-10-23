@@ -603,11 +603,17 @@ def _refresh_eb_volume(tab):
         if not isinstance(widget, SceneVolumeMapper):
             continue
         ghosts = {other: effective[other] for other in keys if other != role}
+        try:
+            scene_direction = direction_of(effective[role])
+        except ValueError:
+            # A Deep linked Ray Source can coincide with its independent End.
+            # The effective empty path has no boundary guides, as in rendering.
+            scene_direction = (0., 0., 0.)
         widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera,
                                   camera_angles=angles,
                                   linked_source=light[:3] if deep and role == 'rays' else None,
                                   coverage_geometry=emission_geometry if role == 'stream' else lighting_coverage,
-                                  scene_direction=direction_of(effective[role]),
+                                  scene_direction=scene_direction,
                                   scene_source=effective[role][:3])
     widget = getattr(tab, 'extruded_bubble_camera_position', None)
     if isinstance(widget, SceneVolumeMapper):
