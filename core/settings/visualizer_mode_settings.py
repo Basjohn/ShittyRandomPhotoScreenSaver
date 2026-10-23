@@ -1499,7 +1499,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Colour("extruded_bubble_light_colour", "Light Colour:", "Light Colour", bucket="light", alpha=False,
                tooltip='Choose the colour of the scene light; it also tints the illuminated water and bubble highlights.'),
         Slider("extruded_bubble_light_strength", "Light Strength:", 0.0, 2.0, bucket="light",
-               tooltip='Set the intended overall intensity of the scene light and illuminated bubble surfaces. [NEEDS AUDIT] Analytic specular and other lighting passes may respond differently; compare the visible pixels at low and high values.'),
+               tooltip='Set direct light intensity on bubbles, shafts, water glow and particles. Ambient water and faint resting particles remain visible at zero.'),
         Toggle("extruded_bubble_rays_enabled", "", "Light Rays", bucket="rays",
                tooltip='Show or hide the light shafts. Ray intensity, fan shape and musical response are configured in the rest of this bucket.'),
         Range("extruded_bubble_rays", "Ray Strength:", 0.0, 1.0, percent=True, bucket="rays", when=_EB_RAYS,

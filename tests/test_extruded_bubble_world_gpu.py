@@ -49,7 +49,7 @@ def sphere_pixels(qt_app, request):
         for option in (gl.GL_BLEND,gl.GL_DEPTH_TEST,gl.GL_CULL_FACE):gl.glDisable(option)
 
         def draw(kind,centre=(0.,0.,-6.),radius=.6,alpha=1.,second=None,alphas=None,diag=5,
-                 circle=False,composite=False,orientation=None,**uniforms):
+                 circle=False,composite=False,orientation=None,extra=(.3,0.),**uniforms):
             from rendering.quick.scene3d.defocus import DefocusLayer
             budget=_near_spread(height)
             layer=DefocusLayer('native EB lens protection') if composite else None
@@ -82,7 +82,7 @@ def sphere_pixels(qt_app, request):
             gl.glUniformMatrix4fv(loc('uProjection'),1,False,projection)
             gl.glVertexAttrib4f(0,*centre,radius)
             if kind in ('ordinary','near'):
-                gl.glVertexAttrib2f(1,.3,0.);gl.glVertexAttrib1f(2,alpha)
+                gl.glVertexAttrib2f(1,*extra);gl.glVertexAttrib1f(2,alpha)
             else:
                 gl.glVertexAttrib4f(1,*(second or (*centre,1e-6)))
                 gl.glVertexAttrib4f(2,0,0,0,0)
@@ -192,7 +192,7 @@ def test_deep_glass_tracks_source_at_physical_points_and_ignores_directional_end
                 uniforms = {key: material[key] for key in
                             ('uLightDir', 'uSpecColour', 'uSpecShape', 'uSpecThrough', 'uReflect')}
                 uniforms.update(uLightSource=knobs['light_source'],
-                                uPositionalLight=material['uPositionalLight'])
+                                uPositionalLight=float(knobs['mode'] == 'deep'))
                 if kind.startswith('near'):
                     uniforms.update(uFocus=10., uAperture=1.)
                 lit, _ = sphere_pixels(kind, diag=diag, **uniforms)
@@ -285,6 +285,35 @@ def test_authored_light_strength_reaches_reflected_and_transmitted_pixels(sphere
                 energies.append(float(pixels[:, :, :3].sum()))
             assert energies[1] > energies[0] + .001
             assert energies[2] - energies[0] == pytest.approx(2. * (energies[1] - energies[0]), rel=.002)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('light_type', ('Sunlit Surface', 'Deep Light'))
+@pytest.mark.parametrize('material', (0., 1., 3.))
+def test_small_shell_bead_and_snow_glints_obey_strength_without_erasing_ambient(sphere_pixels, light_type, material):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _common, _glass
+
+    parameters = {**require_canonical_default('widgets.spotify_visualizer'),
+                  'extruded_bubble_light_type': light_type}
+    samples = []
+    for strength in (0., .5, 1.):
+        knobs = scene_knobs({**parameters, 'extruded_bubble_light_strength': strength})
+        common = _common(knobs, view_to_world=np.eye(3).ravel(), tan=(1., 1.), time=0.,
+                         surface_travel=0., rays=0., streak=(0., 1.))
+        # This radius is fully in the ordinary subpixel fallback. Kind3 is
+        # stable bead glass; kind1 is marine snow's seeded sparkle branch.
+        pixels, _ = sphere_pixels('ordinary', radius=.0125, diag=0, extra=(.912, material),
+                                  uLightStrength=common['uLightStrength'], uSparkle=.7,
+                                  uSkyTint=(.3, .4, .5), uShaftColour=(.5, .6, .7),
+                                  uSpeckGlow=_glass(knobs, False)['uSpeckGlow'])
+        samples.append(pixels)
+    assert samples[0][:, :, :3].sum() > .001  # transmitted/probe/snow ambient is retained
+    delta = samples[2] - samples[0]
+    assert delta[:, :, :3].sum() > .001
+    np.testing.assert_allclose(samples[1] - samples[0], delta * .5, atol=1e-6, rtol=2e-5)
+    np.testing.assert_array_equal(samples[0][:, :, 3], samples[2][:, :, 3])
 
 
 @pytest.mark.qt

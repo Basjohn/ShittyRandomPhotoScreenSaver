@@ -27,7 +27,7 @@ This is an **EB prerequisite**, not deferred generic ray tracing or G2 shadow wo
 | Rays have distinct Ray Source → Ray End authoring | `SHAFT_FRAGMENT` has `uRaySource`, `uRayEnd`; Surface allows a separate authored segment; Deep currently forcibly aligns the ray *start* with the Light Source while the ray end remains its authored destination | Ray controls may shape light/scattering extent, but cannot silently become a second emitter. Preserve existing authored choices and explicitly distinguish Surface/Deep semantics. |
 | Shaft density is now world-space | `shaftPatternCoords` projects parallel refracted sunlight for Surface and the canonical effective Source→End basis/cone for Deep. The old angular fan and two fixed fan depths are deleted. Phase remains view-dependent gain; Surface has an explicit2.2 art calibration. Native fixed-world coordinates/noise and four-view images are scoped proof (§60), not complete visual acceptance | Holding the light/volume fixed while orbiting and looking downward must **not** move or reverse the beam volume; anisotropic scattering may vary brightness by view angle, but not physical placement. |
 | A finite length is mistaken for a finite 3D beam | `SHAFT_FRAGMENT:beamExtent(p)` now gates longitudinal `along` distance and perpendicular separation from a finite cone. Fixed source radius is0.1*WORLD_UNIT (0.9 physical units); existing angular reach widens it and softness feathers inward. The old infinite slab and view-fan/two-depth mask are removed; moving boundaries and complete physical-light coherence remain open | Use a bounded radial (or directionally widening conical) cross-section with soft edges, not the infinite slab between two planes. |
-| Emitter intensity had independent glass/proxy gains | Analytic glass and glint-proxy power now both consume existing Light Strength in `scene_knobs`; zero strength retains ambient but no proxy emission. Native isolated glass and HDR probe tests cover Surface/Deep 0/0.5/1 | Check authored art and bloom together; directional coherence alone cannot establish small-shell visibility or shared positional falloff. |
+| Direct illumination bypassed Light Strength in several consumers | Analytic glass/proxy/core gain already consumed strength; water glow/caustics, shaft compositing, particle scattering and small-shell/bead/snow sparkle now do so exactly once too. The shared particle vertex bypasses another gain for CPU-lit proxies. Deep particles use Source at the actual particle; ambient water/faint specks remain. Native linear-delta and exact prior-source comparisons are in §61 | Review moving authored art and bloom together; intensity coherence alone cannot establish finite-emitter appearance, small-shell visibility or shared positional falloff. |
 | Attenuation is an approximation of four physical bubbles | `uBlock0..uBlock3` and `sceneTransmittance()` use at most four proxy blockers plus aggregate particles, evaluated once at the contribution-weighted centroid of actual marched samples. One scalar distance moment suffices along a ray. This is selective shadowing; a centroid between separate lit lobes need not itself be lit | Verify coherent attenuation along **the actual field**. Bounded selective occlusion can remain; no demand for expensive shadow maps or full multiple scattering, but no false claim of complete volumetric shadowing. |
 
 These are **source findings**, not proofs that every bright/clumped pixel comes from
@@ -78,6 +78,16 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    silently assuming the emission default dictates light coverage.
 
 ## Delivery sequence and gates (not another task queue)
+
+**Bounded Step B intensity candidate (§61), before distance.** Existing Light Strength now reaches analytic glass,
+glint proxies, visible Deep core/probe sun, water glow/caustics, shaft compositing, particle direct scattering
+and tiny-shell/bead/snow glints. Ambient water and particles'0.3 ambient phase survive at zero strength.
+Proxies are already lit on the CPU and bypass another strength factor in the shared particle vertex. Deep
+particle phase uses Source at each physical particle. P1 authors strength1 and remains the frozen nonregression
+control; P7 is still materially unaccepted. Distance/finite emitter remain a separate required slice:
+the shared `scenePointLight` inverse-square-like law describes received
+illumination; multiplying it into a finite emitter's shrinking angular radiance would double-count dilution.
+Do not claim shared falloff or finite-source compliance from the intensity correction alone.
 
 **Step A — G05: authority map, instrumentation, disagreement A/B.** Trace Settings
 → normalized world coordinates → uniform upload → water background → light core

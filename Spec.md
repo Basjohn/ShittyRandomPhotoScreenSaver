@@ -359,8 +359,10 @@ The water-plane exit applies only to Sunlit Surface. Deep Light retains physical
 for BEAM emission, its authored End; an invisible Surface ceiling must not retire Deep identities.
 SCENE procedural opacity fades at physical entry/exit and wall crossing over distances tied to the actor's
 footprint. A broad fraction of the tank's transverse width must not hide valid interior populations.
-Existing Light Strength owns glint-proxy radiance and the analytic emitter reflected and transmitted by glass;
-independent environmental fill is not removed when that emitter strength is zero.
+Existing Light Strength owns glint-proxy radiance, analytic and tiny-shell/bead/snow glints, water glow/caustics,
+shaft compositing and particle direct scattering exactly once. Already-lit proxies bypass a second particle gain.
+Independent environmental fill and the particles' faint ambient phase remain when direct strength is zero.
+Deep particle phase uses Source at each physical particle; the eye's source direction cannot substitute for it.
 Surface analytic glass highlights share the refracted sunlight direction used by particle lighting
 and probe glint placement. Translating directional-light endpoints together must not move that emitter.
 Deep analytic glass uses Source direction at each local traced interface or matching homogeneous

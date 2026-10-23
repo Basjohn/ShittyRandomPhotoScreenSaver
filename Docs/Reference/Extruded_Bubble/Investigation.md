@@ -2620,3 +2620,52 @@ normal retirement/exit0 and unchanged operator profile hash are recorded using i
 image grab or synthetic audio is involved. The same single startup animation warning remains in Qt session
 ba5361b7a644/pid42156; the timeout stack file stays empty. This is native idle source integration, not music,
 dual-display or a clean-zero-warning acceptance claim.
+
+## 61. One direct-light gain across the existing consumers (2026-10-23)
+
+The reused Medium source audit confirmed that Light Strength reached analytic glass, CPU glint proxies,
+visible Deep core and probe sun, while water glow/caustics, shaft compositing and particle scattering bypassed
+it. The shared scene mapping now publishes the authored strength; common upload applies it to the musical
+shaft gain once and the shader applies it to water-derived light. Particle direct phase consumes it while
+retaining its0.3 ambient floor. Deep particles use Source at the actual point instead of the eye's source
+direction. CPU-lit glint proxies explicitly bypass another strength factor in the shared particle vertex.
+The follow-up audit found two additional tiny-shell/bead sparkle terms; their shared speck-glow owner now
+scales once, and marine snow's seeded sparkle consumes strength separately from its ambient appearance.
+
+Zero strength therefore preserves ambient water, environmental probe fill, faint particles, transmitted
+background/probe light and snow opacity. Counts, physical radii/positions, source geometry, simulation/audio
+timing, ranges and presets do not change. Existing historical lab recipes publish strength1 because their
+gains are already calibrated; this does not resolve their separate missing physical Source/End uniforms.
+
+The final connected gate passes76 tests: production particle vertex HDR diagnostics, scene/uniform mapping,
+full production backdrop main for water glow/shaft compositing/caustics, actual renderer admission for
+specks1/proxies0, and ordinary subpixel/stable-bead/marine-snow branches. Strength0/.5/1 (backdrop also2)
+retains ambient and yields linear direct deltas with unchanged coverage. The Medium's doubled-strength
+mutation fails its direct-delta cases. Large-shell diagnostics alone would have missed the tiny-material bypass.
+
+`Evidence/2026-10-23_light_strength/` retains exactb256036f shader strings and common/glass uniform factories
+as baseline, identical current settings/world snapshots, recorded5s active at four legal views and47s→pause60s
+settled idle. Main-agent visual inspection preserves P1: authored/down/away active are byte-identical, side
+differs at one channel step in one pixel; idle differs at one step in two pixels. This preserves the shown
+accepted quiet look without claiming byte-identical whole-pipeline arithmetic. P7 authors strength0.12:
+the excessive broad glow decreases substantially (authored mean RGB change50.73/255; idle16.71/255), but
+its visible bubble depth/readability, directional stream structure, material and target match still fail.
+This is shared control authority, not a completed P7 artistic repair or permission to freeze the other presets.
+
+The work adds uniform arithmetic and one coherent positional direction calculation per Deep particle vertex;
+Surface skips that branch. No pass, timer, sampling loop, resource owner or logical follower is added.
+The saved interleaved query samples are diagnostic only: a focused GPU test process overlapped this capture
+producer, so these timings must not establish performance neutrality. Moving/dual-display/G32 cost remains open.
+
+Distance and finite-emitter optics remain the next required physical-light slice. Existing Deep core/glass
+angular widths still do not follow a finite world radius, and the remaining medium/decorative field still
+has angular placement debt. The canonical `scenePointLight` falloff describes received illumination;
+applying it again to an already shrinking finite-emitter radiance footprint could double-count distance
+dilution. Choose and verify that distinction before implementing attenuation or adding Lighting Coverage.
+
+Final source integration also completes MC with normal updates, every useful diagnostic flag and20s self-exit:
+`logs/run_matrix/2026-10-23_light_strength_final/bound_receipt.json`. The isolated profile selects P7 on ALL
+currently available displays; one physical display/EB owner retires normally, exit0, original profile hash
+unchanged,72675 trace records/no drops or write errors. Qt sessionfb232812e3ed still reports the same single
+startup animation-driver warning; it is not a zero-warning pass. Native host captures above prove the visual
+comparison; idle MC integration does not establish live music, dual-display or operator art acceptance.
