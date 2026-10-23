@@ -1218,6 +1218,11 @@ live in `Docs/Reference/Extruded_Bubble/Investigation.md` §57; other-preset and
 test-owned independent paths/choices, Surface/Deep, reverse lazy construction, actual widget pixels, Qt handle
 drag and save/hydration. It preserves BEAM authoring and does not establish rendered lighting-volume parity.
 
+Neon material tests retain celestial-body occlusion behind land/water even at zero material alpha. A body-only
+control and independent painted coverage mask prevent black-only/vacuous passes. Body alpha blending is tested
+in unobstructed sky, not by placing the distant Sun/Moon in front of terrain. The shared geometry tests use
+`basin_project`, the actual style/density-dependent basin mesh, framed card clipping and live Sphere Edit orbit.
+
 `test_extruded_bubble_accepted_beam_gpu.py` compiles the frozen a51aab8a custom shader body and production
 fragment against the same current shared GLSL. Surface/Deep, poses and softness values must match at default
 width1x, and a positive-energy guard rejects black-only comparisons. The fixture records the explicitly

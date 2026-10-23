@@ -339,7 +339,8 @@ def test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection():
     import random
 
     from rendering.gl_programs.extruded_spectrum_program import EXTRUDED_CAMERA, EXTRUDED_PIVOT, extruded_project
-    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH, shockwave_project
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
+    from rendering.gl_programs.neon_lake_basin_program import basin_project
 
     def former_extruded(point, tilt, turn):
         x, y, z = point
@@ -365,5 +366,5 @@ def test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection():
         point = (rng.uniform(-3, 3), rng.uniform(-1, 1), rng.uniform(-2.4, 0))
         tilt, turn, camera = rng.uniform(0, math.pi / 2), rng.uniform(-math.pi, math.pi), rng.uniform(2.6, 6)
         assert extruded_project(point, tilt, turn) == pytest.approx(former_extruded(point, tilt, turn), abs=1e-12)
-        assert shockwave_project(point, tilt, turn, camera) == pytest.approx(
+        assert basin_project(point, tilt, turn, camera) == pytest.approx(
             former_shockwave(point, tilt, turn, camera), abs=1e-12)

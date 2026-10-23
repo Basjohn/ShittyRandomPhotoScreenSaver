@@ -106,9 +106,21 @@ def test_spin_direction_shader_preserves_phase_axis_without_a_default_golden():
     assert 'uRotationPhase * axes' in _VERTEX_SOURCE
 
 def test_sphere_edit_cage_uses_live_presentation_orbit_even_with_accepted_logical_frame():
-    import inspect
-    from engine.display_manager import DisplayManager
-    source = inspect.getsource(DisplayManager._refresh_quick_visualizer_edit_content_envelope)
-    assert "logical.mode_id == 'sphere'" in source
-    assert "if accepted_parameters is not None and logical.mode_id == 'sphere':" in source
-    assert 'accepted_parameters.update(view_orbit_values(' in source
+    from types import SimpleNamespace
+    from rendering.quick.visualizer.edit_content_envelope import resolve_owner_edit_content_envelope
+    from tests.test_visualizer_edit_content_envelope import _presentation
+
+    accepted = dict(sphere_fragment_strength=1., sphere_particle_distance=1., sphere_perspective_strength=1.,
+                    sphere_turn=0., sphere_tilt=0., sphere_shadow_enabled=False,
+                    sphere_shadow_softness=.2, sphere_shadow_size=1., sphere_shadow_distance=1.)
+    live = SimpleNamespace(_sphere_turn=0., _sphere_tilt=0.)
+    owner = SimpleNamespace(controller=SimpleNamespace(mode_id='sphere', presentation_state=live,
+                            logical_tick_state=SimpleNamespace(_sphere_parameters=accepted)))
+    logical = SimpleNamespace(mode_id='sphere', mode_state=SimpleNamespace(parameters=accepted))
+    presentation = _presentation('sphere')
+    front = resolve_owner_edit_content_envelope(owner, presentation, now=1., logical=logical)
+    live._sphere_turn, live._sphere_tilt = .37, .21
+    turned = resolve_owner_edit_content_envelope(owner, presentation, now=2., logical=logical)
+    assert front['cage_points'] != turned['cage_points']
+    assert accepted['sphere_turn'] == accepted['sphere_tilt'] == 0.
+    assert presentation == _presentation('sphere')

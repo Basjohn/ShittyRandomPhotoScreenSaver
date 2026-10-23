@@ -205,36 +205,57 @@ def test_actual_qsg_glass_volume_pixels_respect_local_and_inherited_card_clip(ne
         assert report['incoming_scissor'] is True
 
 
+def _unoccluded_body_reference(target, snapshot, monkeypatch):
+    """Actual body shader/camera, with only basin triangles omitted as a control."""
+    capture, host = target
+    capture.render(host, snapshot)
+    program = host._implementations['shockwave_grid']._resources._programs['basin']
+    draw = gl.glDrawArrays
+    def omit_basin(mode, first, count):
+        if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) != program:
+            return draw(mode, first, count)
+    with monkeypatch.context() as patch:
+        patch.setattr(gl, 'glDrawArrays', omit_basin)
+        return capture.render(host, snapshot)
+
+
 @pytest.mark.parametrize('style', ['Vertices', 'Glass'])
-def test_actual_body_depth_is_occluded_by_solid_terrain(target, style):
+def test_actual_celestial_body_is_occluded_by_solid_terrain(target, monkeypatch, style):
     from rendering.gl_programs.heightfield import heightfield_surface_bytes
     capture, host = target
     snapshot = _base(shockwave_grid_wire_display=style, shockwave_grid_sky_enabled=False,
         shockwave_grid_sun_enabled=True, shockwave_grid_sun_x=0., shockwave_grid_sun_y=.1,
         shockwave_grid_sun_z=-1.2, shockwave_grid_sun_size=.25, shockwave_grid_floor=1.,
         shockwave_grid_terrain_height=1.5)
-    def body_contribution(height):
+    def body_frame(height):
         state = snapshot.logical.mode_state
         size = 9
         terrain = {'size': size, 'maximum': height,
                    'data': heightfield_surface_bytes({'size': size, 'heights': [height] * size**2})}
         frame = _change(snapshot, shockwave_grid_terrain=terrain)
-        on = capture.render(host, frame)
-        off = capture.render(host, _change(frame, shockwave_grid_sun_enabled=False))
-        return np.count_nonzero(np.max(np.abs(on-off), axis=2) > 3)
-    unobstructed = body_contribution(0.)
-    blocked = body_contribution(.8)
+        return frame
+    # The Sun is celestial background, not an in-lake sphere. A flat lake also
+    # masks it, so an allegedly unobstructed height=0 render was a false oracle.
+    reference = _unoccluded_body_reference(target, body_frame(0.), monkeypatch)
+    unobstructed = np.count_nonzero(reference[...,0] > 40)
+    frame = body_frame(.8)
+    on = capture.render(host, frame)
+    off = capture.render(host, _change(frame, shockwave_grid_sun_enabled=False))
+    blocked = np.count_nonzero(np.max(np.abs(on-off), axis=2) > 3)
     assert unobstructed > 20 and blocked < unobstructed * .1
 
 
 @pytest.mark.parametrize('mode', ['Sun', 'Moon'])
-def test_translucent_body_blends_over_opaque_terrain_instead_of_revealing_sky(target, mode):
+def test_translucent_celestial_body_blends_over_unobstructed_sky(target, mode):
     from rendering.gl_programs.heightfield import heightfield_surface_bytes
     capture, host = target
     snapshot = _base(shockwave_grid_wire_display='Vertices', shockwave_grid_sun_mode=mode,
         shockwave_grid_sky_enabled=True, shockwave_grid_sun_enabled=True,
-        shockwave_grid_sun_x=0., shockwave_grid_sun_y=.4, shockwave_grid_sun_z=.8,
-        shockwave_grid_sun_size=.7, shockwave_grid_floor=1., shockwave_grid_terrain_height=1.,
+        shockwave_grid_sun_x=0., shockwave_grid_sun_y=.8, shockwave_grid_sun_z=-2.,
+        shockwave_grid_sun_size=.4, shockwave_grid_floor=1., shockwave_grid_terrain_height=1.,
+        shockwave_grid_sky_color=[0, 210, 20, 255], shockwave_grid_sky_strength=1.,
+        shockwave_grid_volumetric_clouds=False, shockwave_grid_nebula_enabled=False,
+        shockwave_grid_star_color=[0,0,0,0], shockwave_grid_celestial_glow_enabled=False,
         shockwave_grid_line_color=[0, 0, 0, 0], shockwave_grid_crest_color=[0, 0, 0, 0],
         shockwave_grid_water_color=[0, 210, 20, 255], shockwave_grid_terrain_fill_color=[0, 210, 20, 255],
         shockwave_grid_moon_phase=.5)
@@ -246,16 +267,17 @@ def test_translucent_body_blends_over_opaque_terrain_instead_of_revealing_sky(ta
     clear = capture.render(host, _change(snapshot, **{key: [240, 10, 20, 0]}))
     half = capture.render(host, _change(snapshot, **{key: [240, 10, 20, 128]}))
     opaque = capture.render(host, _change(snapshot, **{key: [240, 10, 20, 255]}))
-    # Select only opaque green land behind the body, not sky or a limb edge.
-    land = (clear[..., 3] == 255) & (clear[..., 1] > 150) & (clear[..., 0] < 20)
-    body_centre = land & (opaque[..., 0] > 100) & (opaque[..., 1] < 30)
+    # Alpha is still a real blending contract, but the celestial background
+    # must never be put in front of land to exercise it.
+    sky = (clear[..., 3] == 255) & (clear[..., 0] < 20)
+    body_centre = sky & (opaque[..., 0] > 100) & (opaque[..., 1] < 30)
     assert np.count_nonzero(body_centre) > 20
     factor = 128./255.
     expected = opaque[..., :3]*factor + clear[..., :3]*(1.-factor)
     error = np.abs(half[..., :3]-expected)
     assert np.quantile(error[body_centre], .95) <= 2.
     assert np.all(half[..., 3][body_centre] == 255)
-    limb = land & (opaque[..., 0] > 20) & (opaque[..., 1] > 30) & (opaque[..., 1] < 150)
+    limb = sky & (opaque[..., 0] > 20) & (opaque[..., 1] > 30) & (opaque[..., 1] < 150)
     assert np.count_nonzero(limb) > 20
     assert np.quantile(error[limb], .95) <= 2.
     assert np.all(half[..., 3][limb] == 255)
@@ -264,7 +286,7 @@ def test_translucent_body_blends_over_opaque_terrain_instead_of_revealing_sky(ta
 @pytest.mark.parametrize('mode', ['Sun', 'Moon'])
 @pytest.mark.parametrize('style', ['Vertices', 'Glass'])
 @pytest.mark.parametrize('body_alpha', [128, 255])
-def test_rear_body_survives_zero_alpha_surface_and_attenuates_through_water_or_glass(target, monkeypatch, mode, style, body_alpha):
+def test_celestial_body_stays_hidden_behind_water_or_glass_at_any_alpha(target, monkeypatch, mode, style, body_alpha):
     from rendering.gl_programs.heightfield import heightfield_surface_bytes
     capture, host = target
     snapshot = _base(shockwave_grid_wire_display=style, shockwave_grid_sun_mode=mode,
@@ -279,37 +301,31 @@ def test_rear_body_survives_zero_alpha_surface_and_attenuates_through_water_or_g
     terrain = {'size': size, 'maximum': 0.,
                'data': heightfield_surface_bytes({'size': size, 'heights': [0.] * size**2})}
     snapshot = _change(snapshot, shockwave_grid_terrain=terrain)
-    capture.render(host, snapshot)
-    renderer = host._implementations['shockwave_grid']
-    basin_program = renderer._resources._programs['basin']
-    actual_draw = gl.glDrawArrays
-    def body_only(mode, first, count):
-        # Reference is the real production body pass: omit only surface triangles
-        # (including any depth prepass), without replacing its shader or camera.
-        if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) != basin_program:
-            return actual_draw(mode, first, count)
-    with monkeypatch.context() as patch:
-        patch.setattr(gl, 'glDrawArrays', body_only)
-        reference = capture.render(host, snapshot)
-    transparent = capture.render(host, snapshot)
+    reference = _unoccluded_body_reference(target, snapshot, monkeypatch)
     body_centres = (reference[..., 3] >= body_alpha-3) & (reference[..., 0] > 40)
     assert np.count_nonzero(body_centres) > 20
-    # A depth-writing zero-alpha surface must not cut away the rear hemisphere.
-    assert np.quantile(np.abs(transparent-reference)[body_centres], .95) <= 2.
+    # Independent geometric mask: the same surface with no body, painted opaque
+    # green. It identifies coverage without deriving expected occlusion from the
+    # body-on result we are testing. Markers and skyline cannot supply this mask.
+    mask = capture.render(host, _change(snapshot, shockwave_grid_sun_enabled=False,
+        shockwave_grid_floor=1., shockwave_grid_water_color=[0,255,0,255],
+        shockwave_grid_terrain_fill_color=[0,255,0,255], shockwave_grid_glass_strength=0.,
+        shockwave_grid_vertex_color=[0,0,0,0], shockwave_grid_vertex_accent_color=[0,0,0,0],
+        shockwave_grid_vertex_outline_color=[0,0,0,0], shockwave_grid_horizon_thickness=0.))
+    hidden = body_centres & (mask[...,1] > 40) & (mask[...,0] < 20)
+    assert np.count_nonzero(hidden) > 20
     key = 'shockwave_grid_floor' if style == 'Vertices' else 'shockwave_grid_glass_strength'
-    signals = []
     for opacity in (0., .5, 1.):
         frame = _change(snapshot, **{key: opacity})
         on = capture.render(host, frame)
-        off = capture.render(host, _change(frame,
-            shockwave_grid_sun_color=[240, 10, 20, 0], shockwave_grid_moon_color=[240, 10, 20, 0]))
-        signals.append((on-off)[..., 0].astype(float))
-    # Locate actual rear-body pixels attenuated by the surface; front body pixels
-    # remain invariant and do not establish the transparency contract.
-    rear = body_centres & (signals[0]-signals[2] > 20)
-    assert np.count_nonzero(rear) > 20
-    medians = [np.median(signal[rear]) for signal in signals]
-    assert medians[0] > medians[1] > medians[2] > 3.
-    # Water's canonical fill reaches alpha .55 at Floor1, not opaque alpha1.
-    if style == 'Vertices':
-        assert medians[2] / medians[0] == pytest.approx(.45, abs=.03)
+        # Omit only the visible body draw, retaining exactly the same material
+        # illumination/reflections. Sky and shaft backgrounds are disabled here.
+        sky_program = host._implementations['shockwave_grid']._resources._programs['sky']
+        draw = gl.glDrawArrays
+        def omit_visible_body(mode, first, count):
+            if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) != sky_program:
+                return draw(mode, first, count)
+        with monkeypatch.context() as patch:
+            patch.setattr(gl, 'glDrawArrays', omit_visible_body)
+            off = capture.render(host, frame)
+        assert np.quantile(np.abs(on-off)[hidden], .95) <= 2.

@@ -341,6 +341,9 @@ Canonical camera/fit inputs are required; there is no alternate
 tilt-only projection. Terrain and solid celestial coverage still mask hidden stars.
 The terrain coverage pass erases both sky colour and star emission, so transparent
 terrain materials cannot leave hidden stars feeding bloom.
+Sun/Moon are also celestial background: the same depth coverage hides them behind land and water regardless
+of material alpha. Their authored analytic spheres still govern apparent pose, phase, reflection and lighting;
+they must not be composited as foreground lake objects or revealed through zero-alpha/glass surfaces.
 Moon/Sun halo reactivity consumes already captured midband/onset signals rather than
 introducing a new vocal detector. A smooth bounded drive retains pulse contrast at
 high Reactivity instead of pinning most musical frames at a hard gain ceiling.

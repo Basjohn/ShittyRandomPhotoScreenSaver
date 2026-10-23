@@ -6,6 +6,23 @@ The source handoff is the 23 October `e692801bb9` godzip. Archived log source: o
 
 ## Immediate priorities and diagnosis
 
+### Native rerun on the later checkout
+
+The currently available `logs/pytest_chunk_*.log` files contain42 failed selectors (5/15/12/10), rather than
+the original archive's102. Neither count is a current full-suite result. Focused reruns established:
+
+- Shared projection/mesh/Edit checks and Neon material checks:105 pass, excluding the two separately scoped
+  QSG clip subprocesses. Obsolete Shockwave projection/mesh/frameless assumptions now target the actual framed
+  basin; Sphere Edit verifies live presentation orbit behavior instead of old method-body strings.
+- **Neon Sun/Moon occlusion is intended.** The operator explicitly requires celestial bodies to stay hidden
+  behind land/water, including transparent materials. The old rear-body transmission and foreground-sphere
+  assertions contradicted the accepted far-plane/depth contract. Replacement native tests use an independent
+  body-only control and surface coverage mask, check hidden bodies at zero/half/full material alpha, and verify
+  body alpha blending in unobstructed sky. Pixel tolerances are unchanged. No Neon renderer change is retained.
+
+Input hover/drag, shader harness admission, Settings/SST and presentation-host boundaries remain separate
+verification slices. Refer to `Current_Plan.md` §2A for actionable remainder; these results do not close art gates.
+
 1. **Repair/validate the new Settings native transient-window regression first**, then native single-active bucket path behavior. The shared builder now hides the unparented bucket body and only shows it after attachment; [native HWND validation](Settings_Transient_Window_Regression_2026-10-23.md) is still open.
 2. **Run real behavior falsifiers before weakening any oracle:** EB recorded breathing, pause release and fused camera/projection, Neon Lake Moon/Sun and terrain occlusion, 3D defocus image energy, engine/image speculative admission, Sphere projection, and full shader/GL admission. Failures with actual native pixels or recorded curves cannot be dismissed by observing a renamed class elsewhere.
 3. **Upgrade unambiguous test harness/API drift** in small ownership clusters: OscilloscopeFrame smoke factory, 3D/Neon `shockwave_project` and `_initialize` assumptions, required EB `body_bands`, fake Settings hosts missing required methods, and executable defaults readers. Preserve each test's behavioral intent and assertions.

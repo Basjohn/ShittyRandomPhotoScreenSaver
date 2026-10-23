@@ -1,6 +1,4 @@
-"""3D + frameless Visualizers are not contained to their frame (operator 2026-10-04): with
-overflow on, Extruded Spectrum and Shockwave Grid draw past their item wherever the view takes them,
-up to the window, and their scene target never cuts what they draw."""
+"""Freeform 3D overflow and the framed Neon Basin retain distinct clip contracts."""
 from __future__ import annotations
 
 import dataclasses
@@ -64,15 +62,13 @@ def _target_rect(window, snapshot):
     parameters = snapshot.logical.mode_state.parameters
     if snapshot.logical.mode_id == "extruded_spectrum":
         return item_pixel_rect(renderer._target_frame(frame, renderer._scene(frame)))
-    return item_pixel_rect(renderer._target_frame(frame, parameters))   # Shockwave Grid, Sphere
+    return item_pixel_rect(renderer._target_frame(frame, parameters))   # Sphere
 
 
 @pytest.mark.parametrize("mode, views", [
     ("extruded_spectrum", [dict(extruded_spectrum_tilt=1.0, extruded_spectrum_turn=0.9,
                                 extruded_spectrum_depth=1.0, extruded_spectrum_reflection=1.0),
                            dict(extruded_spectrum_tilt=-1.0, extruded_spectrum_turn=-0.6)]),
-    ("shockwave_grid", [dict(shockwave_grid_tilt=0.0, shockwave_grid_turn=0.5, shockwave_grid_wave_height=1.0),
-                        dict(shockwave_grid_tilt=1.0, shockwave_grid_turn=-0.8, shockwave_grid_horizon=1.0)]),
     ("sphere", [dict(sphere_particle_distance=2.25, sphere_fragment_strength=3.6, sphere_shadow_enabled=True,
                      sphere_shadow_distance=2.5, sphere_shadow_size=1.6),
                 dict(sphere_particle_distance=0.5, sphere_shadow_enabled=False)]),
@@ -94,6 +90,19 @@ def test_a_3d_frameless_mode_leaves_its_frame_and_its_target_never_cuts_it(windo
         assert top < ty + th or ty + th == WH, view
         left_item |= left < item[0] or bottom < item[1] or right > item[2] or top > item[3]
     assert left_item                                       # not contained to its frame
+
+
+@pytest.mark.parametrize('turn,tilt,scale,pan', [(.2,.17,1.,0.),(-.2,.58,3.8,1.7)])
+def test_framed_neon_basin_keeps_extreme_scene_inside_card(window, turn, tilt, scale, pan):
+    snapshot = _snapshot('shockwave_grid', shockwave_grid_turn=turn, shockwave_grid_tilt=tilt,
+                         shockwave_grid_scene_scale=scale, shockwave_grid_scene_pan_x=pan,
+                         shockwave_grid_scene_pan_y=-pan)
+    pixels = _render(window, snapshot)
+    drawn = np.argwhere(pixels[...,3] > 0)
+    assert drawn.size
+    bottom, left = drawn.min(axis=0)
+    top, right = drawn.max(axis=0)+1
+    assert left >= W and bottom >= H and right <= 2*W and top <= 2*H
 
 
 def test_without_overflow_the_scene_stays_in_its_item(window):
