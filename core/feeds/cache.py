@@ -199,6 +199,12 @@ class FeedCacheStore:
     def __init__(self, root: Path | None = None, *, profile: ProfileRef = None) -> None:
         # Snapshots are shared data: both canonical profiles resolve one root.
         self.root = Path(root) if root is not None else get_feed_cache_dir(profile)
+        if root is None and profile is None:
+            # Canonical shared root: adopt MC's pre-shared-root snapshots once,
+            # before the first read, so MC keeps its offline last-good content.
+            from core.feeds.mc_snapshot_bridge import adopt_canonical_mc_feed_snapshots_once
+
+            adopt_canonical_mc_feed_snapshots_once(self.root)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, cache_key: str) -> Path:

@@ -142,6 +142,18 @@ without the safe path below.
   *Blocked:* re-adding the leaf to defaults/model, or linking Fill and Border
   to give it a consumer.
 
+- **MC Feeds snapshot adoption** (`core/feeds/mc_snapshot_bridge.py`, run once per
+  process by `FeedCacheStore` on the canonical shared root). Before the
+  2026-10-24 shared data-root rule, MC wrote Feeds snapshots/artwork to
+  `SRPSS_MC/cache/feeds`. The bridge merge-moves them into `SRPSS/cache/feeds`
+  (missing files move; a collision keeps the newer mtime), then removes the
+  emptied MC cache folders and an empty `SRPSS_MC/steam`. The MC folder is
+  derived from the same base as the shared root, so relocated/isolated roots
+  never reach a real profile. Tests: `tests/test_feeds_mc_snapshot_bridge.py`.
+  *Horizon:* remove one release after 5.0.8, with its tests.
+  *Blocked:* copying instead of moving (two live copies), touching per-profile
+  files, or keeping per-profile Feeds caches to avoid the bridge.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry
