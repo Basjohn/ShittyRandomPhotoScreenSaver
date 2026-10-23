@@ -1051,20 +1051,6 @@ Source detail and exact local diagnostic coverage: `Docs/Reference/R43_EB_Breach
   assess per-mode AA/Bloom via `resolve_scene_quality` as for transitions, never duplicated persisted settings.
   The speculative Settings live-preview feature belongs to `Future_Work.md`.
 
-## 6. Reddit cache durability | active, independently actionable
-
-- [ ] **Persistent Reddit candidate reservoir.** Retain a deduplicated, subreddit-isolated pool of every valid
-  previously retrieved post independently of the displayed 5–25-post window. Valid historical posts must not
-  expire merely because they are old; a blocked, empty or sparse fetch must never shrink the retained pool.
-  Reuse existing cache persistence and refresh ownership.
-- [ ] **Merge before display selection for every Reddit provider.** Merge incoming RSS and HTML results with
-  retained candidates before selecting the display window, regardless of incoming count or source. Successive
-  small batches must accumulate rather than overwrite one another; HTTP 403/429, empty results and partial
-  responses retain prior usable posts. Keep subreddit identities separate, and preserve generation fencing.
-  Focused tests: successive three-post batches, a one-post RSS response, fetch failures, restart persistence
-  and a 25-post cache surviving a three-post fallback. **Why:** provider instability must not reduce an otherwise
-  full widget to three posts. This is an active source-integrity repair, not a low-priority watchlist item.
-
 ## 2A. Focused pre-existing regression triage | independent of EB acceptance
 
 The supplied failed-selector set is closed by focused reruns; current evidence, contract-correct replacements

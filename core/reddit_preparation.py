@@ -1,4 +1,4 @@
-"""Qt-free Reddit result preparation and post-cache persistence.
+"""Qt-free Reddit result preparation and per-subreddit reservoir persistence.
 
 The Reddit widget owns provider selection and visible Qt state.  This module
 owns the detached data work which can safely run on the shared I/O pool after
@@ -26,7 +26,12 @@ from core.logging.tags import LOG_FAMILY_CACHE
 logger = get_logger(__name__, families=LOG_FAMILY_CACHE)
 
 TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
-_HTML_SOURCE_IDS = frozenset({"html_old", "html_www"})
+RESERVOIR_SCHEMA = 2
+# Capacity bound only: posts never expire by age, and a sparse or failed fetch
+# never shrinks the reservoir. Eviction happens only when newer valid posts
+# would grow it past this size.
+REDDIT_RESERVOIR_CAPACITY = 1000
+_RESERVOIR_SLUG_RE = re.compile(r"[^a-z0-9_+-]")
 _CACHE_LOCKS_GUARD = threading.Lock()
 _CACHE_LOCKS: dict[str, threading.RLock] = {}
 _TIMESTAMP_REGISTRY_GUARD = threading.Lock()
@@ -188,19 +193,49 @@ def normalize_reddit_rows(rows: Iterable[Mapping[str, object]]) -> tuple[RedditP
     return tuple(posts)
 
 
-def read_reddit_post_cache(cache_path: Path) -> tuple[RedditPost, ...]:
-    """Read the persisted candidate window, failing closed on malformed data."""
+def subreddit_identity(subreddit: object) -> str:
+    """Return the case-insensitive identity that owns one reservoir."""
+
+    return str(subreddit or "").strip().casefold()
+
+
+def reddit_reservoir_path(cache_dir: Path, cache_key: str, subreddit: object) -> Path:
+    """Return one member's reservoir file for one subreddit identity.
+
+    The file also records the identity it belongs to; the filename is only a
+    sanitized locator, so a sanitizing collision fails closed on read.
+    """
+
+    identity = subreddit_identity(subreddit)
+    slug = _RESERVOIR_SLUG_RE.sub("_", identity) or "_"
+    return Path(cache_dir) / f"{cache_key}__{slug}_posts.json"
+
+
+def read_reddit_post_cache(cache_path: Path, subreddit: object) -> tuple[RedditPost, ...]:
+    """Read one subreddit's persisted reservoir, failing closed on malformed data.
+
+    Payloads without a matching subreddit identity (including the retired
+    unidentified list format) are not attributed to ``subreddit``.
+    """
 
     path = Path(cache_path)
+    identity = subreddit_identity(subreddit)
     try:
         with _cache_lock(path):
             if not path.exists():
                 return ()
             with path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
-        if not isinstance(data, list):
+        if (
+            not isinstance(data, dict)
+            or data.get("schema") != RESERVOIR_SCHEMA
+            or not identity
+            or data.get("subreddit") != identity
+            or not isinstance(data.get("posts"), list)
+        ):
+            logger.debug("[REDDIT] Ignored unidentified post cache: %s", path)
             return ()
-        posts = tuple(RedditPost(**item) for item in data)
+        posts = tuple(RedditPost(**item) for item in data["posts"])
         logger.debug("[REDDIT] Loaded %d posts from cache: %s", len(posts), path)
         return posts
     except Exception:
@@ -208,16 +243,28 @@ def read_reddit_post_cache(cache_path: Path) -> tuple[RedditPost, ...]:
         return ()
 
 
-def write_reddit_post_cache(cache_path: Path, posts: Iterable[RedditPost]) -> bool:
-    """Persist a detached candidate window without exposing Qt state."""
+def write_reddit_post_cache(
+    cache_path: Path,
+    posts: Iterable[RedditPost],
+    subreddit: object,
+) -> bool:
+    """Persist one subreddit's detached reservoir without exposing Qt state."""
 
     path = Path(cache_path)
     snapshot = tuple(posts)
+    identity = subreddit_identity(subreddit)
+    if not identity:
+        logger.debug("[REDDIT] Refused post cache without subreddit identity: %s", path)
+        return False
     temp_path: Path | None = None
     try:
         with _cache_lock(path):
             path.parent.mkdir(parents=True, exist_ok=True)
-            data = [asdict(post) for post in snapshot]
+            data = {
+                "schema": RESERVOIR_SCHEMA,
+                "subreddit": identity,
+                "posts": [asdict(post) for post in snapshot],
+            }
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
@@ -248,10 +295,14 @@ def write_reddit_post_cache(cache_path: Path, posts: Iterable[RedditPost]) -> bo
 def load_reddit_startup_snapshot(
     cache_path: Path,
     service_gate_path: Path,
+    *,
+    subreddit: object,
+    candidate_limit: int,
 ) -> RedditStartupSnapshot:
-    """Load posts and persisted timing metadata for one startup decision."""
+    """Load the display window and persisted timing metadata for one startup decision."""
 
-    posts = sort_reddit_candidates(read_reddit_post_cache(cache_path))
+    limit = max(1, int(candidate_limit))
+    posts = sort_reddit_candidates(read_reddit_post_cache(cache_path, subreddit))[:limit]
     return RedditStartupSnapshot(
         candidates=posts,
         cache_timestamp=refresh_reddit_cached_timestamp(cache_path),
@@ -287,9 +338,17 @@ def prepare_reddit_feed(
     current_candidates: Iterable[RedditPost],
     cache_path: Path | None,
     cache_key: str,
+    subreddit: object,
     candidate_limit: int,
 ) -> PreparedRedditFeed:
-    """Prepare, merge, sort, and persist one provider result off the GUI thread."""
+    """Merge one provider result into the subreddit reservoir off the GUI thread.
+
+    Every source merges before display selection: incoming rows join the
+    persisted reservoir and the accepted in-memory window, so successive small
+    batches accumulate instead of replacing one another. ``candidates`` is the
+    newest ``candidate_limit`` posts of the merged reservoir. An empty result
+    neither writes nor freshens the reservoir.
+    """
 
     raw_rows = tuple(rows)
     attempts = tuple(str(item) for item in attempted_sources)
@@ -306,31 +365,27 @@ def prepare_reddit_feed(
     path = Path(cache_path) if cache_path is not None else None
     cache_guard = _cache_lock(path) if path is not None else nullcontext()
     with cache_guard:
-        candidates = dedupe_reddit_candidates(incoming)
-        source = str(source_id or "")
-        is_html_fallback = source in _HTML_SOURCE_IDS or bool(
-            _HTML_SOURCE_IDS.intersection(attempts)
-        )
-        if is_html_fallback and len(incoming) < limit:
-            persisted = read_reddit_post_cache(path) if path is not None else ()
-            existing = dedupe_reddit_candidates((*tuple(current_candidates), *persisted))
-            if len(existing) > len(incoming):
-                candidates = dedupe_reddit_candidates((*incoming, *existing))
-                candidates = sort_reddit_candidates(candidates)[:limit]
-                logger.info(
-                    "[CACHE][REDDIT] Sparse fallback merged cache_key=%s source=%s attempted=%s "
-                    "incoming=%d existing=%d merged=%d",
-                    cache_key,
-                    source_id or "<unknown>",
-                    ",".join(attempts) or "<unknown>",
-                    len(incoming),
-                    len(existing),
-                    len(candidates),
-                )
-
-        candidates = sort_reddit_candidates(candidates)[:limit]
+        persisted = read_reddit_post_cache(path, subreddit) if path is not None else ()
+        retained = dedupe_reddit_candidates((*persisted, *tuple(current_candidates)))
+        # Incoming rows come last so a re-fetched post keeps its newest snapshot.
+        reservoir = sort_reddit_candidates(
+            dedupe_reddit_candidates((*retained, *incoming))
+        )[:REDDIT_RESERVOIR_CAPACITY]
         if path is not None:
-            write_reddit_post_cache(path, candidates)
+            write_reddit_post_cache(path, reservoir, subreddit)
+        candidates = reservoir[:limit]
+        logger.info(
+            "[CACHE][REDDIT] Reservoir merged cache_key=%s subreddit=%s source=%s attempted=%s "
+            "incoming=%d retained=%d reservoir=%d window=%d",
+            cache_key,
+            subreddit_identity(subreddit) or "<none>",
+            source_id or "<unknown>",
+            ",".join(attempts) or "<unknown>",
+            len(incoming),
+            len(retained),
+            len(reservoir),
+            len(candidates),
+        )
 
     return PreparedRedditFeed(
         candidates=tuple(candidates),
@@ -342,6 +397,8 @@ def prepare_reddit_feed(
 
 __all__ = [
     "PreparedRedditFeed",
+    "REDDIT_RESERVOIR_CAPACITY",
+    "RESERVOIR_SCHEMA",
     "RedditPost",
     "RedditStartupSnapshot",
     "TITLE_FILTER_RE",
@@ -352,8 +409,10 @@ __all__ = [
     "normalize_reddit_rows",
     "prepare_reddit_feed",
     "read_reddit_post_cache",
+    "reddit_reservoir_path",
     "refresh_reddit_cached_timestamp",
     "sort_reddit_candidates",
+    "subreddit_identity",
     "touch_reddit_marker",
     "write_reddit_post_cache",
 ]

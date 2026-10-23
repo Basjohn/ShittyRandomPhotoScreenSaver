@@ -340,7 +340,8 @@ def test_real_reddit_runtime_drives_current_scene_host_actions_and_geometry_in_p
         assert len(provider.requests) == 1
         assert provider.requests[0].subreddit == "wallpapers"
         assert service.accepted_revision == 1
-        assert model.row_model.rowCount() == 1
+        # A one-post refresh merges into the accepted posts instead of replacing them.
+        assert model.row_model.rowCount() == 3
         assert model.row_model.rows[0].title == "Runtime Refreshed Post"
         assert model.refreshing is False
 
