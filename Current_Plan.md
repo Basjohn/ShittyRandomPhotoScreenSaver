@@ -306,6 +306,11 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 - [ ] **G24 Ray Strength Range** (EB-C; R33/R34): record driver→shaft uniform→HDR pixels in continuous songs. **Must see** reachable range, repeated transient-linked gentle brightening/slow dimming without flicker or pinning.
 - [ ] **G25 role separation/sensitivity/idle motion** (EB-D/C): source-to-pixel lane breakdown at quiet/loud/fast/silence. **Must see** large body versus small details/rays/flow remain musically distinct; the +10% resting-motion candidate excludes water.
 - [ ] **G13/G14/G25 asymmetrical breathing parity gate (operator 2026-10-22, still OPEN):** pair visually approved 2D Bubble **Dynamic Floor ON** against EB **Dynamic Floor OFF** at the same recording timestamps, normal sensitivities, current mutable presets, and annotated settings. Large and small EB bubbles must show at least comparable expressive per-ID radius excursions, attacks, downward contractions and releases through contrasting passages *within a song*, not only start/stop. Distinguish the dynamic floor's song-dependent deterioration in 2D from acceptable musical response: do not force EB to inherit it. EB Dynamic Floor ON/maximum sensitivity is a diagnostic negative control only. Native operator/visual-agent acceptance required; no source candidate can close this item.
+  - [~] **Floor-independent EB body feed + large knee/timing + per-ID response — Awaiting Validation (24 Oct):**
+    EB's floor-OFF input was pinned at its ceilings (`_raw_bass_avg` = manual floor). EB now reads raw lanes on a
+    fixed scale; across four full songs large range is 0.71–1.20 vs 2D-ON 0.73–1.02 (before 0.22–0.73), no
+    top-of-range judder, small Parity+. Still open: large extremes (p95/p05 2.1–2.6× vs 2D 2.6–9×), native
+    installed motion and 256/512. Population/flow now follow passages (visible density change). `Investigation.md` §65.
 
 #### P4 | Optical/material fidelity after underlying world and motion truth
 

@@ -50,6 +50,15 @@ _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
 # These are response calibrations, not optical/physical constants or 2D mechanics.
 _LARGE_REACTION = (4.0, 5.8)
 _SMALL_REACTION = (4.0, 1.45)
+# Large held-body knee/span on the fixed-scale EB body feed (beat_engine.get_extruded_bubble_body_bands):
+# about p10 and p95 of bass + .28 mid + .10 high pooled over four full songs (2026-10-24).
+_LARGE_HELD_KNEE = 0.45
+_LARGE_HELD_SPAN = 0.62
+_LARGE_HELD_SOFTNESS = 0.08
+# Per-identity excursion (amplitude at the class's smallest size, spread to its largest):
+# large 1.12 -> 0.88, small 1.18 -> 0.82, around the authored class response.
+_PER_ID_LARGE = (1.12, 0.24)
+_PER_ID_SMALL = (1.18, 0.36)
 _MINIMUM_REACTION_RADIUS = .13
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
@@ -164,6 +173,15 @@ def _soft_top(value: float, top: float = 1.0, knee: float = 0.8) -> float:
         return value
     room = top - start
     return start + room * (1.0 - math.exp(-(value - start) / room))
+
+
+def _softplus(x: float) -> float:
+    return x + math.log1p(math.exp(-x)) if x > 0.0 else math.log1p(math.exp(x))
+
+
+def _smooth_above(value: float, knee: float, softness: float) -> float:
+    """``max(0, value - knee)`` with a softplus corner ``softness`` wide, exactly 0 at value 0."""
+    return max(0.0, softness * (_softplus((value - knee) / softness) - _softplus(-knee / softness)))
 
 
 def _follow(current: float, target: float, dt: float, attack: float, release: float) -> float:
@@ -353,7 +371,8 @@ class ExtrudedBubbleSimulation:
         # it can remain at 1 through music and must not manufacture body motion or an idle sine.
         bass, mid, high = (max(0.0, min(1.0, float(v))) if music.playing else 0.0
                            for v in music.body_bands)
-        big_body = _soft_top(bass + 0.28 * mid + 0.10 * high)
+        body_sum = bass + 0.28 * mid + 0.10 * high
+        big_body = _soft_top(body_sum)
         vocal_body = 0.70 * mid + 0.35 * high
         small_body = _soft_top(vocal_body)
         intensity = min(1.0, max(bass, vocal_body))  # population/motion retain their existing normalized driver
@@ -397,8 +416,18 @@ class ExtrudedBubbleSimulation:
         # the previous .01 threshold abruptly changed release by 7.5x inside music.
         quiet = max(0.0, 1.0 - intensity / 0.10)
         body_release = (0.10 + 1.40 * quiet * quiet) * soft
+        # Large bodies carry the phrase, not the beat: release over ~0.3 s inside
+        # music like accepted 2D's large decay (2.85-3.85/s), so kick-rate body
+        # changes no longer wobble them near the top. Small keeps body_release.
+        large_release = (0.30 + 1.20 * quiet * quiet) * soft
+        # Held body spans the passage, as accepted 2D's sustained knee does: softer
+        # phrases (body below the knee) contract and full ones expand. The knee is
+        # smooth (softplus), so steady quiet music still sits just above silence
+        # without lifting louder levels. It reads the unsquashed body sum;
+        # big_body's soft top compresses its upper half.
+        held_body = _soft_top(_smooth_above(body_sum, _LARGE_HELD_KNEE, _LARGE_HELD_SOFTNESS) / _LARGE_HELD_SPAN)
         self._body_big_envelope = _follow(self._body_big_envelope,
-            _soft_top((0.22 + 0.70 * sustain) * big_body + 3.0 * big_change), dt, 0.06 * soft, body_release)
+            _soft_top((0.22 + 0.70 * sustain) * held_body + 2.2 * big_change), dt, 0.12 * soft, large_release)
         # Small bubbles open on changing vocal/body energy, with restrained held support.
         # A hot mid/high plateau must not inflate the whole small field to hero size.
         # The small lane had the same zero-reference hot-start problem as large,
@@ -568,17 +597,30 @@ class ExtrudedBubbleSimulation:
         across, depth_axis = stream_basis(direction)
         big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, *_LARGE_REACTION)
         small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, *_SMALL_REACTION)
+        # Authored rest (drive 0): per-identity variation never moves it.
+        big_rest = _reaction_scale(controls.breathing, 0.0, *_LARGE_REACTION)
+        small_rest = _reaction_scale(controls.small_pulse, 0.0, *_SMALL_REACTION)
         # Per-identity visual radius is display-only: no oscillators, no threshold hold/deadband,
         # no smoothing of music or of the instantaneous physical collision radius.
         visual_smoothing = max(0.0, min(1.0, float(controls.smoothing)))
         attack = 0.010 + 0.085 * visual_smoothing
         release = 0.012 + 0.165 * visual_smoothing
         for b in self._bubbles:
-            b.current_radius = b.radius * (big_scale if b.large else small_scale)
+            # Per-identity response, as accepted 2D sizes each bubble's sensitivity and
+            # timing by its own size: within its class a smaller bubble swings a little
+            # further above the authored rest and settles a little faster, so identities
+            # stop breathing in lockstep. The rest itself is shared and unchanged.
+            # Deterministic from nominal size; no oscillator or randomness.
+            low, high = _LARGE_RADIUS if b.large else _MID_RADIUS
+            size_t = max(0.0, min(1.0, (b.radius / self._applied_sizes[b.large] - low) / (high - low)))
+            amplitude, spread = _PER_ID_LARGE if b.large else _PER_ID_SMALL
+            class_scale, rest = (big_scale, big_rest) if b.large else (small_scale, small_rest)
+            b.current_radius = b.radius * (rest + (class_scale - rest) * (amplitude - spread * size_t))
+            pace = 0.75 + 0.5 * size_t
             if b.visual_radius <= 0.0:
                 b.visual_radius = b.current_radius
             else:
-                b.visual_radius = _follow(b.visual_radius, b.current_radius, dt, attack, release)
+                b.visual_radius = _follow(b.visual_radius, b.current_radius, dt, attack * pace, release * pace)
         t = self._motion_phase
         for b in self._bubbles:
             if b.cluster >= 0:

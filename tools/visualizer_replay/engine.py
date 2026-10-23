@@ -225,6 +225,12 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def get_bubble_energy_bands(self) -> EnergyBands:
         return self._replay_bubble
 
+    def get_extruded_bubble_body_bands(self) -> EnergyBands:
+        # Recordings carry no raw lanes, so ordinary replay serves EB the recorded
+        # shared feed it historically consumed. PCM reanalysis
+        # (tools/visualizer_replay/pcm_reanalysis.py) exercises the production feed.
+        return self._replay_bubble
+
     def get_transient_energy_bands(self) -> TransientEnergyBands:
         return self._replay_transient
 

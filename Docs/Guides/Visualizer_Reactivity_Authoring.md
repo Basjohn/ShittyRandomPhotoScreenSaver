@@ -296,7 +296,10 @@ Treat these as warning signs:
 - visual smoothing added to hide scheduler/presentation holes;
 - viewport/domain scaling applied twice;
 - `playing` used as acoustic admission;
-- a new timer/poller/FFT/audio worker created because the mode wants a different response signal.
+- a new timer/poller/FFT/audio worker created because the mode wants a different response signal;
+- normalising by `_raw_bass_avg` or any level that only adapts while Dynamic Floor is ON: with the floor OFF it
+  is the manual-floor setting, so the lane pins at its ceiling (§13A);
+- relying on Dynamic Floor for good reactions: it learns a level from the track and degrades as the song continues (§13A).
 
 ---
 
@@ -323,7 +326,7 @@ Then:
 4. choose attack/release/refractory times from the visual meaning, not from one global smoothing constant;
 5. establish neutral, weak, medium, strong and maximum synthetic cases and assert monotonic ordering;
 6. explicitly test **silence**, a quiet song, ordinary material, a hot chorus/dense passage, and isolated strong kick/vocal events over a loud bed;
-7. inspect output occupancy/distribution, not only averages;
+7. inspect output occupancy/distribution, not only averages, including the **share of frames at each lane's ceiling** with the mode's floor OFF (§13A);
 8. test preset/runtime source configuration reachability, not only already-built feature frames;
 9. test canonical/wide/tall geometry without changing authored response amplitude;
 10. run installed eyes-on validation; synthetic tests do not prove musical feel.
@@ -358,6 +361,99 @@ Bounded diagnostics must use existing cadence/owners. Do not add a diagnostic ti
 
 ---
 
+## 13A. Reacting well without Dynamic Floor (Extruded Bubble, 2026-10-24)
+
+The operator's standard: a mode must react at least as well as accepted **2D Bubble with Dynamic Floor ON**
+(*Parity+*: never worse; better where genuinely smooth and accurate) **with its own floor OFF**. Dynamic Floor
+produces good reactions early in a song and then degrades as the song continues, so no mode may depend on it.
+Extruded Bubble (EB) was brought to that standard by the method below; reuse the method, not EB's constants.
+
+### What Dynamic Floor actually does (read the code before blaming the music)
+
+`beat_engine.get_bubble_energy_bands()` shapes Bubble's body bands by dividing raw lanes (mid, high and part
+of bass) by `worker._raw_bass_avg`. `bar_computation` updates that average **only while Dynamic Floor is ON**,
+where it tracks the music: a level *learned from the track*, which is exactly why it drifts and degrades. With
+the floor OFF it is reset to, and stays at, the **manual-floor setting** (`audio_worker.set_floor_config`). The
+floor-OFF bands are then "raw level ÷ a configuration knob": at ordinary gain they sit on their soft ceilings.
+Measured on native PCM of four full songs at EB's authored gain: band mid at ≥ 0.96 for **52–78%** of playing
+frames, band bass at ≥ 0.76 for **30–73%**, while the raw lanes underneath had healthy contrast (raw bass
+p10/p50/p90 ≈ 1.3/2.8/3.7). The floor "makes reactivity good" only because its learned average restores that
+contrast. Do not copy that mechanism; it is the unreliable part.
+
+### Rule: read raw lanes on a fixed real scale, per mode
+
+- Give the mode its **own body feed** that reads the same raw lanes (`_last_raw_bass/_mid/_treble`, after the
+  gate floor) against **fixed references**: EB uses `get_extruded_bubble_body_bands()` with references
+  (bass, mid, treble) = (5.0, 3.0, 1.2), linear below 0.8 and an exponential approach to 1 above it, times the
+  play ramp. Pick references from pooled raw percentiles over several full songs so about **p90 maps near
+  0.75** and loud crests keep soft headroom (§4). No learned level, no dependence on the floor mode or the
+  manual floor; Sensitivity/input gain still scale the raw lanes, so the controls stay meaningful.
+- Do **not** change a shared feed that an accepted mode depends on (accepted 2D presets run floor OFF on
+  `get_bubble_energy_bands`); add the mode-owned getter beside it. Replay engines must serve the new getter too
+  (`ReplayBeatEngine` returns the recorded shared feed in ordinary replay; PCM reanalysis runs production).
+- **Unpinning the input changes every downstream consumer.** EB's population, stream speed, drift, emission
+  and rays read the same bands; with pinned input they sat near their loud ends (bubble count 47–52 throughout
+  a song). After the fix they follow passages (count median 34, speed p10 1.03 → 0.22). Expect it, measure it,
+  and report the visible density change instead of discovering it later.
+
+### Shape the sustained (large/body) lane after unpinning
+
+- A linear held term (`k × body`) compresses phrase contrast. Accepted 2D uses a **knee** (sustained support is
+  zero below it). EB's held body is `soft_top(smooth_above(body_sum, knee=0.45, softness=0.08) / span=0.62)`:
+  knee ≈ pooled **p10** and knee + span ≈ pooled **p95** of `bass + .28 mid + .10 high`.
+- Apply the knee to the **unsquashed** sum. EB's old `soft_top(sum)` already compressed the upper half of all
+  samples into 0.8–1.0, so a knee on top of it bought almost nothing (measured).
+- Use a **smooth** knee (softplus) anchored to **exactly 0 at silence**, so steady quiet music sits a little
+  above silence (synthetic "moderate" no longer equals silence) and silence still returns to the authored rest
+  exactly. A small linear base instead raised every level and cost ~15% of breathing range (measured).
+- Timing follows the passage role (operator: large = phrase body; small/flow/rays = changes inside loud
+  passages). EB large: release ~**0.30 s** in music (2D's large decay 2.85–3.85/s; 0.10 s produced beat-rate
+  wobble near the top), attack **0.12 s** (inside 2D's 0.09–0.125 s; 0.06 s followed per-frame band noise),
+  change-term weight 2.2 (3.0 pumped). Small keeps its faster release.
+- Measured and rejected: an even ease of the held body (τ 0.4 s) lowered range and did **not** reduce swings —
+  the swings came from the change term and the attack, not the held term. Measure before keeping a smoother.
+
+### Per-identity response (granularity)
+
+A single class envelope makes every bubble breathe in lockstep. Accepted 2D varies sensitivity and timing by each
+bubble's own size. EB now scales each identity's **excursion above the authored rest** by its normalized size
+within its class (large 1.12 → 0.88, small 1.18 → 0.82) and its display-follower time constants by
+0.75–1.25. Never move the **rest** itself: idle/rest tests caught the first attempt, which scaled the deviation
+from 1.0 and changed resting shells.
+
+### How to measure Parity+ (all tools are sidecars; production never imports them)
+
+```powershell
+# Floor-ON 2D reference vs the mode's own floor-OFF feed, both recomputed from recorded PCM:
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/<song>.jsonl --output <new dir> --duration 60 --window 0,60 --reanalyze-pcm --set bubble.bubble_dynamic_floor=true
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_breathing_continuity <dir> --report <dir>/continuity.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_breathing_overlay <dir> --window 10,20 --output <dir>/overlay.png
+```
+
+- Use **≥ 4 full songs** with native PCM (soft acoustic, quiet→loud, heavy, mixed); one song overfits.
+  Schema-1 short clips without capture history cannot be reanalysed.
+- Plain replay feeds recorded *post-DSP* bands, so floor/Sensitivity changes cannot show; `--reanalyze-pcm`
+  recomputes body DSP from the recorded PCM (hybrid: recorded onsets/cadence). Check the per-mode input
+  actually differs (`actual_body_input_mismatch_count`).
+- Read several metrics together: per-segment `range` ((max−min)/median), `swings_per_s` (prominent turns;
+  beat pumping vs phrase breathing), `reversals`/`top_reversals` (judder, especially at maximum), `flat`
+  (sitting between states). `range` divides by the median, so lifting the median shrinks it even when the
+  absolute swing is unchanged — also compare **absolute p05/median/p95** of radius/nominal.
+- Plot curves before trusting medians: the first EB overlay showed the *input* was pinned, which no
+  simulation metric revealed. Then render native pixels (`extruded_bubble_forensics --capture --reanalyze-pcm`)
+  for the same window before and after.
+- Compare against the previous revision from a temporary `git worktree` with the current sidecar tools copied in.
+- Tests should state Parity as a **relative** oracle (mode vs 2D on the same clip and window, e.g.
+  `test_active_recorded_phrase_breathes_at_least_like_accepted_2d_in_each_class`), with a negative control on
+  the old code. An absolute threshold tuned on a non-production feed (EB's old `> 1.8`) exceeded what accepted
+  2D itself reaches (1.22) and only passed against the pinned feed.
+
+Remaining EB gap (2026-10-24): large dynamic span 2.1–2.6× (p95/p05) vs 2D's 2.6–9×. 2D adds crest boosts at
+peaks and contracts very deeply in quiet passages; reaching that needs a deliberate change to EB's authored
+response curve, not more input gain. Evidence: `Docs/Reference/Extruded_Bubble/Investigation.md` §65.
+
+---
+
 ## 14. Evidence / negative-control map
 
 Read these for the cases behind this guide rather than copying their old implementation literally:
@@ -367,5 +463,6 @@ Read these for the cases behind this guide rather than copying their old impleme
 - `Docs/Historical_Bugs/Sphere_2026-09-10_Acoustic_Admission_And_Cohort_Motion_Investigation.md` — consolidated acoustic intake and detached-cohort mistakes: playing state, loudness, saturated event confidence, and one global decay are **not** interchangeable admission/population/velocity authorities.
 - R-69 / Bubble viewport evidence — viewport adaptation may not globally damp authored reaction.
 - R-76 / tall Spectrum evidence — physical-pixel flicker caused by delivery/temporal scaling must not be “fixed” by reducing response.
+- `Docs/Reference/Extruded_Bubble/Investigation.md` §65 — floor-independent fixed-scale body feed, sustained-lane knee/timing and per-identity breathing measured against 2D with Dynamic Floor ON (§13A).
 
 Historical files are evidence and negative controls. Current source + `Spec.md` + current guardrails remain implementation authority.

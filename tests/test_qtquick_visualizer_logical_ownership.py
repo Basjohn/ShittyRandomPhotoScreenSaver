@@ -23,6 +23,8 @@ class _Engine:
     def get_bubble_energy_bands(self):
         return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
 
+    get_extruded_bubble_body_bands = get_bubble_energy_bands
+
     def get_energy_bands(self):
         return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
 

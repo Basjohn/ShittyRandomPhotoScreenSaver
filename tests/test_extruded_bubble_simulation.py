@@ -190,7 +190,10 @@ def test_soft_large_breathes_downward_instead_of_carrying_a_generic_hold():
         sustained=1.,stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
     sim=ExtrudedBubbleSimulation(26)
     for _ in range(360):sim.advance(MusicInput(STEP,True,1.,(),(.1,.1,.05)),controls)
-    peak=max(1.+sim.advance(MusicInput(STEP,True,1.,(),(.35,.4,.2)),controls).bubbles[5] for _ in range(24))
+    # EB's body feed is a fixed real scale (beat_engine.get_extruded_bubble_body_bands):
+    # (.35,.4,.2) is now about p5-p10 of real playing music, where large deliberately
+    # stays contracted. The onset step uses the pooled real-music median passage.
+    peak=max(1.+sim.advance(MusicInput(STEP,True,1.,(),(.6,.55,.35)),controls).bubbles[5] for _ in range(24))
     held=_run(sim,controls,6.,intensity=.2)
     assert peak>1.5 and 1.+held.bubbles[5]<.5
     assert held.sustain<.01  # soft music never acquires loud-passage hold

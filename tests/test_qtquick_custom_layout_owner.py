@@ -1056,6 +1056,8 @@ class _LiveCommitEngine(ReplayBeatEngine):
     def get_waveform_count(self): return 4
     def get_energy_bands(self): return SimpleNamespace(bass=.2, mid=.1, high=.05, overall=.15)
     def get_bubble_energy_bands(self): return self.get_energy_bands()
+
+    get_extruded_bubble_body_bands = get_bubble_energy_bands
     def get_transient_energy_bands(self): return SimpleNamespace(bass_transient=0., mid_transient=0., high_transient=0., onset_detected=False, onset_type="", onset_strength=0.)
     def get_event_scheduler(self): return None
     def get_floor_snapshot(self): return None

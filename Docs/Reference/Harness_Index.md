@@ -405,7 +405,17 @@ response comparator, then quiet→loud/heavy/soft recordings.
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output Docs/Reference/Extruded_Bubble/Evidence/new_coverage
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_world --preset 7 --at 4 --size 1672x941
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_paired_body --duration 12
+# Parity+ against 2D with Dynamic Floor ON, each mode's bands recomputed from PCM with its own floor:
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output <new dir> --duration 60 --window 0,60 --reanalyze-pcm --set bubble.bubble_dynamic_floor=true
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_breathing_continuity <dir> --report <dir>/continuity.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_breathing_overlay <dir> --window 10,20 --output <dir>/overlay.png
 ```
+
+`pcm_reanalysis.reanalyzed_bubble_bands()` is the one PCM-reanalysis seam for these tools and the recorded-reactivity
+tests: it recomputes body DSP from each frame's native PCM with the replay worker's configured floor/Sensitivity and
+routes both Bubble's and EB's production getters. `bubble_breathing_continuity` reports per-segment range, swings/s,
+reversals (incl. at maximum) and flat share; `bubble_breathing_overlay` plots per-ID curves with each mode's actual
+body input (PIL only). Method and pitfalls: `Docs/Guides/Visualizer_Reactivity_Authoring.md` §13A.
 
 Capture directories must be new. Without `--capture`, the EB tool records the full logical/instance custody trace
 without GL. Stable IDs, alpha/cluster/pop exclusions and body followers distinguish actual response from population
