@@ -206,6 +206,8 @@ The Settings builder supplies each editor's own path and coverage: Motion uses E
 use Lighting Coverage. Selector changes and lazy hydration refresh built controls without opening other buckets.
 SCENE guides mark the authored Source/End boundary regions; BEAM omits those guides. The same coordinate
 editing and save boundary is retained in both Light Types. No new setting, renderer path or preset rewrite.
+If Deep's linked Ray Source meets its independent End, the effective empty path has no face direction or
+boundary guide. The editor preserves the authored path and does not turn that legal linkage into an exception.
 
 These shared guides establish controller parity, not a new light-volume crop: Surface remains directional and
 Deep has a located emitter. Motion's particle birth policy must not become light admission. SCENE light extent,

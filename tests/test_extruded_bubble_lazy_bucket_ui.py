@@ -361,3 +361,22 @@ def test_scene_lighting_guides_use_own_coverage_and_path_with_lazy_hydration(
     assert editor._coverage_geometry == 'BEAM'
     assert motion._coverage_geometry == 'SCENE'
     assert collect_extruded_bubble_mode_settings(tab)['extruded_bubble_light_direction'] == saved['extruded_bubble_light_direction']
+
+
+def test_deep_linked_empty_ray_has_no_face_direction_or_settings_exception(eb_tab):
+    tab, config = eb_tab
+    payload = {**config, 'extruded_bubble_light_type': 'Deep Light',
+               'extruded_bubble_lighting_coverage': 'SCENE',
+               'extruded_bubble_light_direction': [0.,-1.,0.,0.,1.,0.],
+               'extruded_bubble_ray_path': [1.,1.,1.,0.,-1.,0.]}
+    load_extruded_bubble_mode_settings(tab, payload)
+    toggle_bucket(tab, 'rays')
+    toggle_bucket(tab, 'light')
+    from ui.tabs.media.spec_mode_builder import _refresh_eb_volume
+    _refresh_eb_volume(tab)
+    rays = tab.extruded_bubble_ray_path
+    assert rays._scene_direction == (0.,0.,0.)
+    assert rays._linked_source == tuple(payload['extruded_bubble_light_direction'][:3])
+    assert rays.grab().isNull() is False
+    saved = collect_extruded_bubble_mode_settings(tab)
+    assert saved['extruded_bubble_ray_path'] == payload['extruded_bubble_ray_path']
