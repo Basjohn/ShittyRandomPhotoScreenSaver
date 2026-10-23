@@ -45,6 +45,27 @@ refracted background, merged bubbles with continuous surfaces, wide soft shafts,
 | T9 | Water volume | Blue absorption and in-scattering with distance; darker abyss | Distance fog in the medium's colour, deeper = darker |
 | T10 | Camera | Framed internal camera that can look up, level or down | Shared FC capability with Bubble-specific bounds |
 
+**Renamed goal reading (23 October).** The supplied `*Goal.png` images refine composition and material targets;
+they do not transfer P1's scoped idle acceptance to other presets. The image itself remains authoritative for
+appearance, while the existing no-seabed/no-ribbon rulings below retain their explicit scope.
+
+| Current goal | Distinct requirement | Authoring versus shared architecture |
+| --- | --- | --- |
+| P1 achieved goal | Preserve readable quiet rings/dust and the generally good current scene | Shown idle accepted; remaining specific motion, lifetime, optical and cost defects stay open |
+| P2 | Neutral silver glass, dark water, bright overhead opening | Existing light/water/surface controls; clear front/back shell optics must remain legible |
+| P4 | Brighter blue water, broad descending shafts, varied shell depth | Physical ray geometry and coherent medium first; authored reach/softness and lens composition afterwards |
+| P5 | Deep blue contrast, violet film, diagonal streams, restrained particles | Existing film/stream/spread/band controls over correct material and world population |
+| P6 | Cyan/violet glass and caustic-looking background | Existing colours/glass/veils do not provide rocky geometry. Its pictured floor is outside the current explicit no-seabed contract; do not claim that haze substitutes for it |
+| P7 | Copper-lit clear shells, diagonal microbubble streams, broad warm upper-right illumination over dark teal water | Shared light/optics first; substantial particle, stream, camera and glass-emphasis authoring remains |
+
+P7's current strength-corrected capture is still dominated by orange point/bokeh populations. The goal instead
+uses clear spherical shells, separated highlights, readable interiors and dark space between streams. Reducing
+washout does not establish this structure. Existing authoring strongly favours dust (Particles0.85–1, Size1.6,
+Glow0.6, Warm Share0.9, Band Contrast1, Light Strength0.12); do not infer a need for more global population or
+brightness from the mismatch. Compare isolated glass and particulate layers before changing controls. Goals2/4/5/6/7
+also need blurred foreground, crisp focal glass and finer distance populations; match camera/focus composition
+before attributing every still-image difference to DoF. Stills establish no musical or lifecycle acceptance.
+
 Not in the target: hard cast shadows without a demonstrated receiver, GTAO or screen-space reflections without
 an actual target need. **Operator clarification 2026-10-20:** the fiery example's debris/gas/smoky appearance,
 proper stream source points and useful EB camera control/centring are in scope. Add whatever bounded runtime/shared

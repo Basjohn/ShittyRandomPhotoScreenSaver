@@ -260,7 +260,13 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
     migrate its manual common upload to admitted physical Light/Ray Source/End. It currently omits those uniforms;
     shared shader bytes alone do not establish current lab/product parity. Use the production-host producers meanwhile.
   - [~] **Authored small-shell wall candidate — Awaiting Validation:** tracing now retains the authored 3% wall instead of thickening it to 1.5 pixels. Native ordinary/union tests fail under the former substitution and pass with material thickness authority restored; a fixed-world idle P1 camera sweep gives clearer small rings across subpixel movement. **Next:** inspect radius-changing musical identities, latest Custom after camera repair and Deep/near art. P1 shown idle is now accepted (§57); remaining presets/lifecycle stay open. No physical radius/count/pass change; initial full-frame GPU queries show a small median increase and variable tails, so cost neutrality is unproved. Producer/limits: `Investigation.md` §50; `Evidence/2026-10-22_authored_wall_motion/`. The separate identity-hash correction stays at G14.
-- [ ] **G29 P7 and seven-preset art registry** (EB-A): compare moving full-resolution targets and current mutable artwork. **Must see** lively controlled specks, gas/debris/film and correct orientation, without deleting requested effects or treating presets as frozen.
+- [ ] **G29 P7 and seven-preset art registry** (EB-A): use the renamed-goal requirements in `Target.md` §1
+  to compare moving full-resolution targets and current mutable artwork. P7 still requires substantial clear-shell,
+  dark-water, diagonal microbubble and broad warm illumination work; reduced glow is not parity. Preserve the
+  accepted P1 shown idle while inspecting remaining P1 flaws and other presets. Separate glass/particle layers
+  and match lens composition before authoring. **Must see** controlled specks, gas/debris/film, spherical depth and
+  correct orientation without deleting requested effects or treating presets as frozen. P6's pictured floor remains
+  outside the current explicit no-seabed scope; a new receiver/geometry feature needs its own scope before implementation.
 
 #### P5 | Native presentation, bounded costs, operator acceptance
 
