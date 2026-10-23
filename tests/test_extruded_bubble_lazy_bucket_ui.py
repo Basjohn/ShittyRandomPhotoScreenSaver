@@ -284,17 +284,80 @@ def test_scene_emission_choice_and_volume_face_repaint_use_one_settings_owner(eb
     selector = tab.extruded_bubble_emission_geometry
     assert isinstance(editor, SceneVolumeMapper)
     assert selector.currentText() == 'BEAM'
-    assert editor._emission_geometry == 'BEAM'
+    assert editor._coverage_geometry == 'BEAM'
     selector.setCurrentText('SCENE')
-    assert editor._emission_geometry == 'SCENE'
+    assert editor._coverage_geometry == 'SCENE'
     assert editor._scene_direction[1] != 0
     assert collect_extruded_bubble_mode_settings(tab)['extruded_bubble_emission_geometry'] == 'SCENE'
     # The operator can toggle back without losing the authored Stream nodes.
     prior_path = tuple(editor.value())
     selector.setCurrentText('BEAM')
-    assert editor._emission_geometry == 'BEAM'
+    assert editor._coverage_geometry == 'BEAM'
     assert tuple(editor.value()) == prior_path
     # Saving/hydrating must keep the current choice under the same Settings body.
     load_extruded_bubble_mode_settings(tab, {**config, 'extruded_bubble_emission_geometry': 'SCENE'})
     assert selector.currentText() == 'SCENE'
-    assert editor._emission_geometry == 'SCENE'
+    assert editor._coverage_geometry == 'SCENE'
+
+
+@pytest.mark.parametrize('light_type', ['Sunlit Surface', 'Deep Light'])
+@pytest.mark.parametrize('first_bucket', ['motion', 'light'])
+def test_scene_lighting_guides_use_own_coverage_and_path_with_lazy_hydration(
+        eb_tab, qt_app, tmp_path, light_type, first_bucket):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from core.settings.visualizer_paths import direction_of
+
+    tab, config = eb_tab
+    light_path = [-1., 1., -.4, .5, -.7, .5]
+    stream_path = [0., -1., 0., 0., 1., 0.]
+    payload = {**config, 'extruded_bubble_light_type': light_type,
+               'extruded_bubble_lighting_coverage': 'SCENE',
+               'extruded_bubble_emission_geometry': 'BEAM',
+               'extruded_bubble_light_direction': light_path,
+               'extruded_bubble_stream_direction': stream_path}
+    load_extruded_bubble_mode_settings(tab, payload)
+    toggle_bucket(tab, first_bucket)
+    toggle_bucket(tab, 'light' if first_bucket == 'motion' else 'motion')
+    editor = tab.extruded_bubble_light_direction
+    motion = tab.extruded_bubble_stream_direction
+    assert editor._coverage_geometry == 'SCENE'
+    assert motion._coverage_geometry == 'BEAM'
+    assert editor._scene_source == tuple(light_path[:3])
+    assert editor._scene_direction == pytest.approx(direction_of(light_path))
+    scene_image = editor.grab().toImage()
+    assert scene_image.save(str(tmp_path / 'scene_light.png'))
+    selector = tab.extruded_bubble_lighting_coverage
+    selector.setCurrentText('BEAM')
+    beam_image = editor.grab().toImage()
+    assert beam_image.save(str(tmp_path / 'beam_light.png'))
+    assert scene_image != beam_image  # real painter, not only a cached selector
+    assert tuple(editor.value()) == tuple(light_path)
+    selector.setCurrentText('SCENE')
+    tab.extruded_bubble_emission_geometry.setCurrentText('SCENE')
+    assert motion._coverage_geometry == 'SCENE'
+    assert editor._scene_direction != motion._scene_direction
+
+    # Edit the actual light handle with Qt events. The same coordinate/persistence
+    # boundary must update the guides, without moving the Motion path or camera.
+    point = editor._marker(light_path[:3])
+    origin = QPoint(round(point.x()), round(point.y()))
+    QTest.mousePress(editor, Qt.MouseButton.LeftButton, pos=origin)
+    QTest.mouseMove(editor, origin + QPoint(12, 9))
+    QTest.mouseRelease(editor, Qt.MouseButton.LeftButton, pos=origin + QPoint(12, 9))
+    qt_app.processEvents()
+    changed = collect_extruded_bubble_mode_settings(tab)
+    assert changed['extruded_bubble_light_direction'] != light_path
+    assert changed['extruded_bubble_stream_direction'] == stream_path
+    assert editor._scene_source == tuple(editor.value()[:3])
+    assert editor._scene_direction == pytest.approx(direction_of(editor.value()))
+    # Rehydration and reverse coverage switches preserve each authored path.
+    tab._save_settings_now()
+    saved = tab._settings.get('widgets')['spotify_visualizer']
+    load_extruded_bubble_mode_settings(tab, saved)
+    assert editor._coverage_geometry == 'SCENE'
+    assert editor._scene_source == tuple(saved['extruded_bubble_light_direction'][:3])
+    selector.setCurrentText('BEAM')
+    assert editor._coverage_geometry == 'BEAM'
+    assert motion._coverage_geometry == 'SCENE'
+    assert collect_extruded_bubble_mode_settings(tab)['extruded_bubble_light_direction'] == saved['extruded_bubble_light_direction']

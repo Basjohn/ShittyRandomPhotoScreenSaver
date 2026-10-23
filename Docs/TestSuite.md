@@ -1214,6 +1214,10 @@ live in `Docs/Reference/Extruded_Bubble/Investigation.md` §57; other-preset and
 
 ### EB restored BEAM and independent SCENE lighting
 
+`test_extruded_bubble_lazy_bucket_ui.py` exercises shared SCENE boundary-guide parity for Light and Motion:
+test-owned independent paths/choices, Surface/Deep, reverse lazy construction, actual widget pixels, Qt handle
+drag and save/hydration. It preserves BEAM authoring and does not establish rendered lighting-volume parity.
+
 `test_extruded_bubble_accepted_beam_gpu.py` compiles the frozen a51aab8a custom shader body and production
 fragment against the same current shared GLSL. Surface/Deep, poses and softness values must match at default
 width1x, and a positive-energy guard rejects black-only comparisons. The fixture records the explicitly

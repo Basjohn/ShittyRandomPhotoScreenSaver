@@ -339,7 +339,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
             bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)
         else:
             widget.setCurrentText(control.admit(default, default))
-            if control.key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry'):
+            if control.key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry',
+                               'extruded_bubble_lighting_coverage'):
                 widget.currentTextChanged.connect(lambda *_: _refresh_eb_volume(tab))
             bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
         content.addWidget(widget)
@@ -537,7 +538,8 @@ def _eb_live_value(tab, key):
     widget = getattr(tab, key, None)
     if isinstance(widget, SceneVolumeMapper):
         return tuple(widget.value())
-    if key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry') and widget is not None and hasattr(widget, 'currentText'):
+    if key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry',
+               'extruded_bubble_lighting_coverage') and widget is not None and hasattr(widget, 'currentText'):
         return widget.currentText()
     return cache.get(key, tab._widget_default('spotify_visualizer', key))
 
@@ -594,8 +596,8 @@ def _refresh_eb_volume(tab):
     if deep:
         effective['rays'] = tuple(light[:3]) + tuple(effective['rays'][3:])
     from core.settings.visualizer_paths import direction_of
-    scene_geometry = _eb_live_value(tab, 'extruded_bubble_emission_geometry')
-    scene_direction = direction_of(effective['stream'])
+    emission_geometry = _eb_live_value(tab, 'extruded_bubble_emission_geometry')
+    lighting_coverage = _eb_live_value(tab, 'extruded_bubble_lighting_coverage')
     for role, key in keys.items():
         widget = getattr(tab, key, None)
         if not isinstance(widget, SceneVolumeMapper):
@@ -604,9 +606,9 @@ def _refresh_eb_volume(tab):
         widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera,
                                   camera_angles=angles,
                                   linked_source=light[:3] if deep and role == 'rays' else None,
-                                  emission_geometry=scene_geometry if role == 'stream' else 'BEAM',
-                                  scene_direction=scene_direction,
-                                  scene_source=effective['stream'][:3])
+                                  coverage_geometry=emission_geometry if role == 'stream' else lighting_coverage,
+                                  scene_direction=direction_of(effective[role]),
+                                  scene_source=effective[role][:3])
     widget = getattr(tab, 'extruded_bubble_camera_position', None)
     if isinstance(widget, SceneVolumeMapper):
         widget.setSceneReferences(paths=effective,

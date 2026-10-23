@@ -799,7 +799,7 @@ class SceneVolumeMapper(_VisualControl):
         self._base_eye = (0., 0., 0.)
         self._camera_angles = (0., 0.)
         self._linked_source = None
-        self._emission_geometry = 'BEAM'
+        self._coverage_geometry = 'BEAM'
         self._scene_direction = (0., 1., 0.)
         self._scene_source = (0., -1., 0.)
         self._references = {}
@@ -830,10 +830,10 @@ class SceneVolumeMapper(_VisualControl):
 
     def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.),
                            camera_angles=(0., 0.), linked_source=None,
-                           emission_geometry='BEAM', scene_direction=(0., 1., 0.),
+                           coverage_geometry='BEAM', scene_direction=(0., 1., 0.),
                            scene_source=(0., -1., 0.)):
         self._references = dict(paths or {})
-        self._emission_geometry = emission_geometry
+        self._coverage_geometry = coverage_geometry
         self._scene_direction = tuple(float(v) for v in scene_direction)
         self._scene_source = tuple(float(v) for v in scene_source)
         self._base_eye = tuple(float(x) for x in base_eye)
@@ -907,10 +907,10 @@ class SceneVolumeMapper(_VisualControl):
         for x,z in ((-1.,0.),(1.,0.),(0.,-1.),(0.,1.)):
             p.drawLine(self._point((x,-1.,z)), self._point((x,1.,z)))
         self._paint_wire(p, 0.)
-        if not self._camera_only and self._emission_geometry == 'SCENE':
-            # These are real box inlet/outlet FACES, not a fabricated point
-            # source. Direction, area and volume come from the existing stream
-            # path and normalized world cube. Pure UI paint; no extra owner.
+        if not self._camera_only and self._coverage_geometry == 'SCENE':
+            # Boundary regions of this editor's own authored path. Motion uses
+            # them for inlet/outlet faces; light uses them as source/end guides,
+            # not particle admission or a crop of positional light scattering.
             from widgets.spotify_visualizer.extruded_bubble_geometry import scene_source_face_weights
             faces = scene_source_face_weights(self._scene_source, self._scene_direction)
             for axis, component in enumerate(self._scene_direction):
